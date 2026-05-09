@@ -375,8 +375,9 @@ async function loadRecent(){
 }
 
 function searchFor(serverId){
-  document.getElementById('q').value=serverId;
-  doSearch();
+  // Deep-link to the per-MCP detail page so URLs are shareable and
+  // browser back works as a real navigation.
+  window.location.href = `${BASE}/mcp/${encodeURIComponent(serverId)}`;
 }
 
 async function doSearch(){
@@ -546,12 +547,57 @@ def _home_html() -> str:
 </body></html>"""
 
 
+def _detail_html(server_id: str) -> str:
+    """Per-MCP detail page. Pre-loads the same payload returned by /api/search
+    so the renderResult() flow can be reused unchanged."""
+    safe_id = (server_id or "").replace("\\", "\\\\").replace("'", "\\'")
+    return f"""<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<title>ZO-SENTINEL — {server_id}</title>
+<style>{_BASE_CSS}</style>
+</head><body>
+<header>
+  <h1>ZO-SENTINEL</h1>
+  <div class="sub">← <a href="/">Back to home</a> &nbsp;·&nbsp; ASSESSMENT &nbsp;·&nbsp; {server_id}</div>
+  <a href="/admin-threats">Admin · Threats</a>
+  <a href="/admin-risk">Admin · Risk</a>
+</header>
+<div class="search">
+  <input id="q" value="{server_id}" placeholder="MCP name · npm package · URL · server_id" onkeydown="if(event.key==='Enter')doSearch()">
+  <button id="btn" onclick="doSearch()">Re-assess →</button>
+</div>
+<div id="landing"></div>
+<div id="result"><div class="spinner">Loading {server_id}…</div></div>
+<script>{_INLINE_JS}
+// Pre-load the assessment payload for this server_id and render it once.
+(async function(){{
+  try{{
+    const r = await fetch(`${{BASE}}/api/search?q=${{encodeURIComponent('{safe_id}')}}`);
+    const d = await r.json();
+    renderResult(d);
+  }}catch(e){{
+    document.getElementById('result').innerHTML =
+      `<div class="card">Error loading detail: ${{(e && e.message)||e}}</div>`;
+  }}
+}})();
+</script>
+</body></html>"""
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return HTMLResponse(content=_home_html())
+
+
+@app.get("/mcp/{server_id}", response_class=HTMLResponse)
+async def mcp_detail(server_id: str):
+    """Per-MCP detail page — renders the same JS surface as /, but
+    pre-loaded for one server_id and deep-linkable."""
+    return HTMLResponse(content=_detail_html(server_id))
 
 
 @app.get("/healthz")

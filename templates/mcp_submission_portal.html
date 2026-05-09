@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" class="dark-brutalist">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZO-SENTINEL</title>
+  <style>
+    /* dark brutalist style */
+    body {
+      background-color: #0d0f14;
+      color: #e0e0e0;
+      font-family: monospace;
+    }
+    
+    p {
+      margin-bottom: 0.5em;
+    }
+    
+    code {
+      white-space: pre-wrap;
+    }
+    
+    .accent {
+      color: #00e5ff;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="accent">ZO-SENTINEL</h1>
+  <p>Approval Workflow MCP Server Submission Form</p>
+  <form action="/api/submit" method="post">
+    <label for="mcp_name">MCP Name:</label>
+    <input type="text" id="mcp_name" name="mcp_name"><br><br>
+    <label for="endpoint_url">Endpoint URL:</label>
+    <input type="url" id="endpoint_url" name="endpoint_url"><br><br>
+    <label for="tool_description">Tool Description:</label>
+    <textarea id="tool_description" name="tool_description"></textarea><br><br>
+    <label for="requested_by">Requested By:</label>
+    <input type="text" id="requested_by" name="requested_by"><br><br>
+    <label for="requested_permission_scope">Requested Permission Scope:</label>
+    <select id="requested_permission_scope" name="requested_permission_scope">
+      <!-- options go here -->
+    </select><br><br>
+    <button type="submit">Submit</button>
+  </form>
+  <script>
+    const form = document.querySelector('form');
+    const submitButton = document.querySelector('button[type="submit"]');
+    
+    submitButton.addEventListener('click', async (e) => {
+      e.preventDefault();
+      
+      const data = new FormData(form);
+      const response = await fetch('/api/submit', {
+        method: 'POST',
+        body: data,
+      }).catch((error) => console.error(error));
+      
+      if (response.ok) {
+        alert('MCP submission successful!');
+      } else {
+        alert('Error submitting MCP:', response.statusText);
+      }
+    });
+  </script>
+</body>
+</html>

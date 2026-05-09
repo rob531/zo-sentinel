@@ -1,0 +1,89 @@
+name: audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  smoke-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Boot ui_server.py in the background
+        run: |
+          nohup python ui_server.py > ui_server.log 2>&1 &
+          echo $! > ui_server.pid
+          echo "started ui_server pid $(cat ui_server.pid)"
+
+      - name: Wait for /healthz
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8790/healthz || true)
+            if [ "$code" = "200" ]; then
+              echo "healthz returned 200 after ${i} attempt(s)"; exit 0
+            fi
+            sleep 1
+          done
+          echo "healthz never became 200"; cat ui_server.log; exit 1
+
+      - name: Run smoke audit
+        id: smoke
+        env:
+          SMOKE_OUT: ${{ runner.temp }}/smoke
+        run: |
+          set +e
+          python tests/smoke_audit.py | tee smoke_run.log
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "log<<EOF" >> "$GITHUB_OUTPUT"
+          tail -120 smoke_run.log >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          exit $rc
+
+      - name: Stop ui_server
+        if: always()
+        run: |
+          if [ -f ui_server.pid ]; then kill "$(cat ui_server.pid)" 2>/dev/null || true; fi
+
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: |
+            ${{ runner.temp }}/smoke/smoke_results.json
+            smoke_run.log
+            ui_server.log
+
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          status="passed"
+          if [ "${{ steps.smoke.outputs.rc }}" != "0" ]; then status="FAILED"; fi
+          {
+            echo "### zo-sentinel smoke audit: $status"
+            echo
+            echo '```'
+            echo "${{ steps.smoke.outputs.log }}"
+            echo '```'
+          } > comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file comment.md

@@ -161,6 +161,35 @@ async def catch_all_errors(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
+# Security headers — applied to every response.
+#
+# `unsafe-inline` is grudgingly allowed for the inline <script> and <style>
+# blocks the rich UI ships today.
+# TODO: move _BASE_CSS and _INLINE_JS into static files and tighten the CSP
+# (drop both `unsafe-inline` allowances) in a follow-up commit.
+# ---------------------------------------------------------------------------
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:"
+    ),
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Optional admin auth — only used if email_guid_auth is importable
 # ---------------------------------------------------------------------------
 def _try_admin_gate(request: Request) -> Optional[str]:

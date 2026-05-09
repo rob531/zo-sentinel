@@ -106,12 +106,37 @@ def probe(route: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+REQUIRED_HEADERS = (
+    "Content-Security-Policy",
+    "X-Frame-Options",
+    "Referrer-Policy",
+    "X-Content-Type-Options",
+)
+
+
+def check_security_headers() -> Dict[str, Any]:
+    """Confirm every required security header is set on the home page."""
+    try:
+        r = requests.get(BASE + "/", timeout=TIMEOUT)
+    except Exception as e:  # noqa: BLE001
+        return {"path": "/  [headers]", "method": "GET", "ok": False, "error": str(e)}
+    missing = [h for h in REQUIRED_HEADERS if h not in r.headers]
+    return {
+        "path": "/  [headers]",
+        "method": "GET",
+        "status": r.status_code,
+        "ok": not missing,
+        "snippet": "missing=" + ",".join(missing) if missing else "all required headers present",
+    }
+
+
 def main() -> int:
     print(f"smoke_audit: waiting for {BASE}/healthz …")
     wait_for_healthz()
     print("smoke_audit: healthz ok, probing routes …\n")
 
     results = [probe(r) for r in ROUTES]
+    results.append(check_security_headers())
     failed = [r for r in results if not r.get("ok")]
 
     for r in results:

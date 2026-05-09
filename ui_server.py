@@ -787,28 +787,345 @@ async def api_submit(request: Request):
     }
 
 
+# ---------------------------------------------------------------------------
+# Admin: threats and risk-register data endpoints + HTML views
+# ---------------------------------------------------------------------------
+def _admin_error_html(title: str, msg: str) -> str:
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<title>ZO-SENTINEL — {title}</title>"
+        f"<style>{_BASE_CSS}</style></head><body>"
+        f"<header><h1>ZO-SENTINEL</h1><div class='sub'>"
+        f"← <a href='/'>Back to home</a> &nbsp;·&nbsp; ADMIN &nbsp;·&nbsp; {title}</div>"
+        "</header>"
+        f"<div class='card'><div class='emptystate'>{msg}</div></div>"
+        "</body></html>"
+    )
+
+
+@app.get("/api/admin/threats")
+async def api_admin_threats(severity: Optional[str] = None, limit: int = 500):
+    """Threats joined to MCP names. Filterable by severity."""
+    try:
+        limit = max(1, min(int(limit), 2000))
+        where = ""
+        if severity:
+            sev = _sql_quote(severity)
+            where = f"WHERE LOWER(t.severity) = LOWER('{sev}')"
+        rows = ws_query(
+            f"""
+            SELECT t.server_id, m.name AS mcp_name, t.title, t.indicator,
+                   t.severity, t.description, t.source, t.reported_at
+            FROM mcp_threat_associations t
+            LEFT JOIN mcp_server_registry m ON m.server_id = t.server_id
+            {where}
+            ORDER BY t.reported_at DESC
+            LIMIT {limit}
+            """
+        ).get("rows", []) or []
+        return {"count": len(rows), "rows": rows}
+    except Exception as e:
+        log.exception("api_admin_threats failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": str(e), "rows": []})
+
+
+@app.get("/api/admin/risk")
+async def api_admin_risk(tier: Optional[str] = None, limit: int = 500):
+    """Risk register joined to MCP names. Filterable by tier."""
+    try:
+        limit = max(1, min(int(limit), 2000))
+        where = ""
+        if tier:
+            t = _sql_quote(tier)
+            where = f"WHERE LOWER(r.risk_tier) = LOWER('{t}')"
+        rows = ws_query(
+            f"""
+            SELECT r.server_id, m.name AS mcp_name, r.risk_tier, r.risk_rank,
+                   r.threat_count, r.staleness_hours, r.computed_at
+            FROM mcp_risk_register r
+            LEFT JOIN mcp_server_registry m ON m.server_id = r.server_id
+            {where}
+            ORDER BY r.risk_rank DESC NULLS LAST
+            LIMIT {limit}
+            """
+        ).get("rows", []) or []
+        return {"count": len(rows), "rows": rows}
+    except Exception as e:
+        log.exception("api_admin_risk failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": str(e), "rows": []})
+
+
+_ADMIN_THREATS_JS = r"""
+const rows = window.__rows || [];
+const tbody = document.getElementById('rows');
+let sortKey = 'reported_at';
+let sortDir = -1;          // -1 desc, 1 asc
+let filterSev = '';
+
+function sevRank(s){ const t=String(s||'').toLowerCase();
+  if(t.startsWith('crit')) return 4;
+  if(t.startsWith('high')) return 3;
+  if(t.startsWith('med'))  return 2;
+  return 1;
+}
+function safe(s){ if(s==null) return ''; return String(s).replace(/[&<>"']/g,c=>(
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(s){ return s ? String(s).slice(0,16).replace('T',' ') : ''; }
+
+function render(){
+  let view = rows.slice();
+  if (filterSev) {
+    view = view.filter(r => String(r.severity||'').toLowerCase().startsWith(filterSev));
+  }
+  view.sort((a,b)=>{
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === 'severity') { va = sevRank(va); vb = sevRank(vb); }
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (va < vb) return -1*sortDir;
+    if (va > vb) return  1*sortDir;
+    return 0;
+  });
+  document.getElementById('count').textContent = view.length + ' threat(s)';
+  tbody.innerHTML = view.map(r => {
+    const sev = String(r.severity||'low').toLowerCase();
+    let sevCls = 'sev-low';
+    if (sev.startsWith('crit')) sevCls = 'sev-crit';
+    else if (sev.startsWith('high')) sevCls = 'sev-high';
+    else if (sev.startsWith('med')) sevCls = 'sev-med';
+    return `<tr>
+      <td><span class="sev-tag ${sevCls}">${safe(r.severity||'low')}</span></td>
+      <td><a href="/mcp/${encodeURIComponent(r.server_id||'')}">${safe(r.mcp_name||r.server_id||'—')}</a></td>
+      <td>${safe(r.title||r.indicator||'')}</td>
+      <td class="muted">${safe(r.source||'')}</td>
+      <td class="muted">${fmt(r.reported_at)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="emptystate">No threats match the filter.</td></tr>';
+}
+
+function setSort(k){
+  if (sortKey === k) sortDir = -sortDir;
+  else { sortKey = k; sortDir = -1; }
+  render();
+}
+document.getElementById('sev').addEventListener('change', e => {
+  filterSev = e.target.value;
+  render();
+});
+render();
+"""
+
+
 @app.get("/admin-threats", response_class=HTMLResponse)
 async def admin_threats(request: Request):
+    """Functional threats admin view — sortable + severity-filterable table."""
     try:
         denied = _try_admin_gate(request)
         if denied is not None:
             return HTMLResponse(content=denied, status_code=403)
-        return HTMLResponse(content=_admin_placeholder_html("Threats"))
+        try:
+            data = await api_admin_threats()
+            if isinstance(data, JSONResponse):
+                raise RuntimeError("admin threats API returned 500")
+            rows = data.get("rows", [])
+        except Exception as e:
+            log.warning("admin-threats data fetch failed: %s", e)
+            return HTMLResponse(
+                content=_admin_error_html(
+                    "Threats",
+                    "Couldn't load admin data right now. Try again in a minute.",
+                ),
+                status_code=200,
+            )
+        rows_json = json.dumps(rows)
+        html = f"""<!doctype html><html><head>
+<meta charset="utf-8">
+<title>ZO-SENTINEL — Threats</title>
+<style>{_BASE_CSS}
+table{{width:100%;border-collapse:collapse}}
+th{{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);
+  cursor:pointer;color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase}}
+th:hover{{color:var(--text)}}
+td{{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}}
+.controls{{display:flex;gap:14px;align-items:center;margin-bottom:14px}}
+select{{background:var(--bg);color:var(--text);border:1px solid var(--line);
+  padding:6px 10px;border-radius:6px;font-size:13px}}
+</style></head><body>
+<header>
+  <h1>ZO-SENTINEL</h1>
+  <div class="sub">← <a href="/">Back to home</a> &nbsp;·&nbsp; ADMIN &nbsp;·&nbsp; Threats</div>
+  <a href="/admin-risk">Admin · Risk</a>
+</header>
+<div id="landing"><div class="card">
+  <div class="controls">
+    <strong>Filter severity:</strong>
+    <select id="sev">
+      <option value="">all</option>
+      <option value="crit">critical</option>
+      <option value="high">high</option>
+      <option value="med">medium</option>
+      <option value="low">low</option>
+    </select>
+    <span class="muted" id="count">0 threat(s)</span>
+  </div>
+  <table>
+    <thead><tr>
+      <th onclick="setSort('severity')">Severity</th>
+      <th onclick="setSort('mcp_name')">MCP</th>
+      <th>Title / indicator</th>
+      <th>Source</th>
+      <th onclick="setSort('reported_at')">Reported</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div></div>
+<script>window.__rows = {rows_json};</script>
+<script>{_ADMIN_THREATS_JS}</script>
+</body></html>"""
+        return HTMLResponse(content=html)
     except Exception as e:
-        log.warning("admin-threats fell back to placeholder: %s", e)
-        return HTMLResponse(content=_admin_placeholder_html("Threats"))
+        log.exception("admin-threats unhandled: %s", e)
+        return HTMLResponse(
+            content=_admin_error_html(
+                "Threats", "Couldn't load admin data right now. Try again in a minute."
+            ),
+            status_code=200,
+        )
+
+
+_ADMIN_RISK_JS = r"""
+const rows = window.__rows || [];
+const tbody = document.getElementById('rows');
+let sortKey = 'risk_rank';
+let sortDir = -1;
+let filterTier = '';
+
+function safe(s){ if(s==null) return ''; return String(s).replace(/[&<>"']/g,c=>(
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(s){ return s ? String(s).slice(0,16).replace('T',' ') : ''; }
+
+function tierClass(t){
+  const x=String(t||'').toUpperCase();
+  if(x.includes('CRIT')) return 'b-threat';
+  if(x.includes('HIGH')) return 'b-risk';
+  if(x.includes('MED'))  return 'b-caution';
+  if(x.includes('LOW'))  return 'b-trusted';
+  return 'b-unknown';
+}
+
+function render(){
+  let view = rows.slice();
+  if (filterTier) {
+    view = view.filter(r => String(r.risk_tier||'').toUpperCase().startsWith(filterTier));
+  }
+  view.sort((a,b)=>{
+    let va = a[sortKey], vb = b[sortKey];
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (va < vb) return -1*sortDir;
+    if (va > vb) return  1*sortDir;
+    return 0;
+  });
+  document.getElementById('count').textContent = view.length + ' entr' + (view.length===1?'y':'ies');
+  tbody.innerHTML = view.map(r => `<tr>
+    <td><span class="badge ${tierClass(r.risk_tier)}">${safe(r.risk_tier||'—')}</span></td>
+    <td><a href="/mcp/${encodeURIComponent(r.server_id||'')}">${safe(r.mcp_name||r.server_id||'—')}</a></td>
+    <td>${r.risk_rank!=null?Number(r.risk_rank).toFixed(2):'—'}</td>
+    <td>${r.threat_count!=null?r.threat_count:0}</td>
+    <td class="muted">${r.staleness_hours!=null?Math.round(r.staleness_hours)+'h':''}</td>
+    <td class="muted">${fmt(r.computed_at)}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="emptystate">No risk register entries match the filter.</td></tr>';
+}
+
+function setSort(k){
+  if (sortKey === k) sortDir = -sortDir;
+  else { sortKey = k; sortDir = -1; }
+  render();
+}
+document.getElementById('tier').addEventListener('change', e => {
+  filterTier = e.target.value;
+  render();
+});
+render();
+"""
 
 
 @app.get("/admin-risk", response_class=HTMLResponse)
 async def admin_risk(request: Request):
+    """Functional risk-register admin view — sortable + tier-filterable table."""
     try:
         denied = _try_admin_gate(request)
         if denied is not None:
             return HTMLResponse(content=denied, status_code=403)
-        return HTMLResponse(content=_admin_placeholder_html("Risk register"))
+        try:
+            data = await api_admin_risk()
+            if isinstance(data, JSONResponse):
+                raise RuntimeError("admin risk API returned 500")
+            rows = data.get("rows", [])
+        except Exception as e:
+            log.warning("admin-risk data fetch failed: %s", e)
+            return HTMLResponse(
+                content=_admin_error_html(
+                    "Risk register",
+                    "Couldn't load admin data right now. Try again in a minute.",
+                ),
+                status_code=200,
+            )
+        rows_json = json.dumps(rows)
+        html = f"""<!doctype html><html><head>
+<meta charset="utf-8">
+<title>ZO-SENTINEL — Risk register</title>
+<style>{_BASE_CSS}
+table{{width:100%;border-collapse:collapse}}
+th{{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);
+  cursor:pointer;color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase}}
+th:hover{{color:var(--text)}}
+td{{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}}
+.controls{{display:flex;gap:14px;align-items:center;margin-bottom:14px}}
+select{{background:var(--bg);color:var(--text);border:1px solid var(--line);
+  padding:6px 10px;border-radius:6px;font-size:13px}}
+</style></head><body>
+<header>
+  <h1>ZO-SENTINEL</h1>
+  <div class="sub">← <a href="/">Back to home</a> &nbsp;·&nbsp; ADMIN &nbsp;·&nbsp; Risk register</div>
+  <a href="/admin-threats">Admin · Threats</a>
+</header>
+<div id="landing"><div class="card">
+  <div class="controls">
+    <strong>Filter tier:</strong>
+    <select id="tier">
+      <option value="">all</option>
+      <option value="CRIT">critical</option>
+      <option value="HIGH">high</option>
+      <option value="MED">medium</option>
+      <option value="LOW">low</option>
+    </select>
+    <span class="muted" id="count">0 entries</span>
+  </div>
+  <table>
+    <thead><tr>
+      <th onclick="setSort('risk_tier')">Tier</th>
+      <th onclick="setSort('mcp_name')">MCP</th>
+      <th onclick="setSort('risk_rank')">Risk rank</th>
+      <th onclick="setSort('threat_count')">Threats</th>
+      <th onclick="setSort('staleness_hours')">Staleness</th>
+      <th onclick="setSort('computed_at')">Computed</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div></div>
+<script>window.__rows = {rows_json};</script>
+<script>{_ADMIN_RISK_JS}</script>
+</body></html>"""
+        return HTMLResponse(content=html)
     except Exception as e:
-        log.warning("admin-risk fell back to placeholder: %s", e)
-        return HTMLResponse(content=_admin_placeholder_html("Risk register"))
+        log.exception("admin-risk unhandled: %s", e)
+        return HTMLResponse(
+            content=_admin_error_html(
+                "Risk register", "Couldn't load admin data right now. Try again in a minute."
+            ),
+            status_code=200,
+        )
 
 
 # ---------------------------------------------------------------------------

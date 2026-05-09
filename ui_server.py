@@ -534,6 +534,7 @@ def _home_html() -> str:
 <header>
   <h1>ZO-SENTINEL</h1>
   <div class="sub">MCP TRUST INTELLIGENCE · NON-BINDING ASSESSMENT</div>
+  <a href="/submit">Submit MCP</a>
   <a href="/admin-threats">Admin · Threats</a>
   <a href="/admin-risk">Admin · Risk</a>
 </header>
@@ -591,6 +592,151 @@ def _detail_html(server_id: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return HTMLResponse(content=_home_html())
+
+
+def _submit_html() -> str:
+    """Submit-an-MCP form whose field names map exactly to SubmitRequest.
+    Posts JSON to /api/submit and shows inline success or per-field errors."""
+    return f"""<!doctype html><html><head>
+<meta charset="utf-8">
+<title>ZO-SENTINEL — Submit MCP for review</title>
+<style>{_BASE_CSS}
+form{{display:flex;flex-direction:column;gap:14px;max-width:640px}}
+label{{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);
+  letter-spacing:.5px;text-transform:uppercase}}
+label .hint{{text-transform:none;letter-spacing:0;color:var(--muted);font-size:11px;
+  margin-top:2px}}
+input,select,textarea{{padding:10px 12px;background:var(--bg);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit;
+  outline:none}}
+textarea{{min-height:88px;resize:vertical}}
+input:focus,select:focus,textarea:focus{{border-color:var(--accent-2)}}
+.field-error{{color:var(--danger);font-size:12px;margin-top:4px;display:none}}
+.field-error.show{{display:block}}
+button.primary{{padding:11px 22px;background:var(--accent);color:#001b10;border:0;
+  border-radius:6px;font-weight:700;cursor:pointer;align-self:flex-start;font-size:14px}}
+button.primary:disabled{{opacity:.5;cursor:not-allowed}}
+.submit-result{{margin-top:14px;padding:12px;border-radius:6px;font-size:13px}}
+.submit-result.ok{{background:rgba(0,201,141,.12);color:var(--accent);
+  border:1px solid var(--accent)}}
+.submit-result.err{{background:rgba(245,99,66,.12);color:var(--danger);
+  border:1px solid var(--danger)}}
+</style></head><body>
+<header>
+  <h1>ZO-SENTINEL</h1>
+  <div class="sub">← <a href="/">Back to home</a> &nbsp;·&nbsp; SUBMIT MCP FOR INFOSEC REVIEW</div>
+  <a href="/admin-threats">Admin · Threats</a>
+  <a href="/admin-risk">Admin · Risk</a>
+</header>
+<div id="landing"><div class="card">
+  <form id="sub" novalidate>
+    <label>MCP IDENTIFIER
+      <span class="hint">npm package name, server_id, or canonical URL (1–512 chars)</span>
+      <input id="mcp_identifier" name="mcp_identifier" required maxlength="512"
+        placeholder="e.g. @vendor/mcp-server  or  https://mcp.example.com">
+      <span class="field-error" id="err_mcp_identifier"></span>
+    </label>
+    <label>YOUR NAME
+      <input id="requester_name" name="requester_name" required maxlength="256"
+        placeholder="First Last">
+      <span class="field-error" id="err_requester_name"></span>
+    </label>
+    <label>TEAM
+      <input id="requester_team" name="requester_team" required maxlength="256"
+        placeholder="e.g. platform-eng">
+      <span class="field-error" id="err_requester_team"></span>
+    </label>
+    <label>BUSINESS PURPOSE
+      <span class="hint">Why does your team need this MCP? (≤4000 chars)</span>
+      <textarea id="business_purpose" name="business_purpose" required maxlength="4000"
+        placeholder="One-paragraph description of the business problem this MCP solves."></textarea>
+      <span class="field-error" id="err_business_purpose"></span>
+    </label>
+    <label>ENVIRONMENT
+      <select id="environment" name="environment" required>
+        <option value="">— select —</option>
+        <option value="Production">Production</option>
+        <option value="Staging">Staging</option>
+        <option value="Research">Research</option>
+        <option value="Development">Development</option>
+      </select>
+      <span class="field-error" id="err_environment"></span>
+    </label>
+    <button type="submit" class="primary" id="btn">Submit for review →</button>
+    <div id="submit-result"></div>
+  </form>
+</div></div>
+<script>
+(function(){{
+  const FIELDS = ['mcp_identifier','requester_name','requester_team','business_purpose','environment'];
+  const form = document.getElementById('sub');
+  const btn  = document.getElementById('btn');
+  const out  = document.getElementById('submit-result');
+
+  function clearErrors(){{
+    FIELDS.forEach(f => {{
+      const el = document.getElementById('err_'+f);
+      el.textContent = ''; el.classList.remove('show');
+    }});
+    out.textContent = ''; out.className = '';
+  }}
+  function showError(field, msg){{
+    const el = document.getElementById('err_'+field);
+    if (el) {{ el.textContent = msg; el.classList.add('show'); }}
+  }}
+  function validate(payload){{
+    let ok = true;
+    FIELDS.forEach(f => {{
+      const v = String(payload[f]||'').trim();
+      if (!v) {{ showError(f, 'Required.'); ok = false; }}
+    }});
+    return ok;
+  }}
+  form.addEventListener('submit', async (e) => {{
+    e.preventDefault();
+    clearErrors();
+    const payload = {{}};
+    FIELDS.forEach(f => payload[f] = document.getElementById(f).value);
+    if (!validate(payload)) return;
+    btn.disabled = true;
+    try {{
+      const r = await fetch('/api/submit', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(payload),
+      }});
+      if (r.status === 422) {{
+        const d = await r.json();
+        (d.errors || []).forEach(err => {{
+          const field = (err.loc||[]).slice(-1)[0];
+          if (FIELDS.indexOf(field) !== -1) showError(field, err.msg || 'Invalid.');
+        }});
+        out.textContent = 'Please fix the highlighted fields.';
+        out.className = 'submit-result err';
+      }} else if (!r.ok) {{
+        out.textContent = 'Server error: HTTP ' + r.status;
+        out.className = 'submit-result err';
+      }} else {{
+        const d = await r.json();
+        out.innerHTML = 'Submitted. ID: <strong>' + (d.submission_id||'—') + '</strong>';
+        out.className = 'submit-result ok';
+        form.reset();
+      }}
+    }} catch (e) {{
+      out.textContent = 'Network error: ' + (e && e.message || e);
+      out.className = 'submit-result err';
+    }}
+    btn.disabled = false;
+  }});
+}})();
+</script>
+</body></html>"""
+
+
+@app.get("/submit", response_class=HTMLResponse)
+async def submit_page():
+    """Working /submit portal — JSON-POSTs to /api/submit."""
+    return HTMLResponse(content=_submit_html())
 
 
 @app.get("/mcp/{server_id}", response_class=HTMLResponse)

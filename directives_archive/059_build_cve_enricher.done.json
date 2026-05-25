@@ -1,0 +1,15 @@
+{
+  "task": "build_cve_enricher",
+  "handler": "generate_file",
+  "output_file": "cve_enricher.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.57,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "CVE enricher daemon. Every 21600s: fetches recent CVEs from https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=mcp+model+context+protocol&resultsPerPage=50. For each CVE: extract affected package names, find matching servers in mcp_server_registry by name similarity, ws_write mcp_threat_associations {server_id,threat_type=cve,evidence=CVE-ID+description[:200],severity=from CVSS score: >=9=CRITICAL,>=7=HIGH,>=4=MEDIUM,else=LOW}. Also update known_threats HIGH_RISK_PATTERNS if new patterns emerge. Write CVE_ENRICHMENT_LOG.md. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

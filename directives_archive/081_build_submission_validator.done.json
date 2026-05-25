@@ -1,0 +1,16 @@
+{
+  "task": "build_submission_validator",
+  "handler": "generate_file",
+  "output_file": "submission_validator.py",
+  "complexity": "medium",
+  "phase": "4",
+  "priority": 0.82,
+  "reads": [
+    "schema.py",
+    "known_threats.py",
+    "url_analyser.py"
+  ],
+  "description": "Submission validator for approval_workflow. validate_submission(name,url,description,requested_by)->dict {valid:bool,errors:list,warnings:list,pre_checks:dict}. Checks: url is valid and reachable (HEAD request 5s timeout), not in KNOWN_MALICIOUS_PACKAGES, description not empty, url not localhost/internal IP, not duplicate submission (check mcp_submissions). pre_checks: url_analysis result, known_threat_check result. Returns structured result. Imported by approval_workflow POST /api/submit endpoint. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

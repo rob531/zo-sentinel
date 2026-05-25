@@ -1,0 +1,15 @@
+{
+  "task": "build_quick_seed",
+  "handler": "generate_file",
+  "output_file": "quick_seed.py",
+  "complexity": "medium",
+  "phase": "2",
+  "priority": 0.96,
+  "reads": [
+    "schema.py",
+    "db_utils.py"
+  ],
+  "description": "Quick seed script. Seeds exactly 25 well-known MCP servers directly into mcp_server_registry without scanning. Hardcoded list includes: @modelcontextprotocol/server-filesystem, @modelcontextprotocol/server-github, @modelcontextprotocol/server-slack, @modelcontextprotocol/server-postgres, @modelcontextprotocol/server-brave-search, @modelcontextprotocol/server-puppeteer, @modelcontextprotocol/server-google-maps, @modelcontextprotocol/server-sqlite, @modelcontextprotocol/server-memory, @modelcontextprotocol/server-sequential-thinking plus 15 more community MCPs. Each has name,url,description,registry_source=npm_official,scan_count=1. Run once: python3 quick_seed.py. Prints seeded count.",
+  "context": "",
+  "from": "claude_batch"
+}

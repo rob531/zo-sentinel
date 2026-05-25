@@ -1,0 +1,14 @@
+{
+  "task": "build_watch_mode",
+  "handler": "generate_file",
+  "output_file": "watch.py",
+  "complexity": "medium",
+  "phase": "10",
+  "priority": 0.65,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Watch mode CLI. python3 watch.py [--interval=30]. Clears terminal every interval seconds and prints live dashboard: (1) running daemon PIDs and status (2) last 5 build events from mesh_events (3) pipeline health counts (4) last 3 threats detected (5) assessment queue depth. Uses ANSI escape codes for colour and cursor positioning. Like htop but for ZO-SENTINEL. No daemon, runs interactively.",
+  "context": "",
+  "from": "claude_batch"
+}

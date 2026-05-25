@@ -1,0 +1,15 @@
+{
+  "task": "build_data_validator",
+  "handler": "generate_file",
+  "output_file": "data_validator.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.69,
+  "reads": [
+    "schema.py",
+    "verdict_taxonomy.py"
+  ],
+  "description": "Data validator daemon. Every 21600s: validates data integrity in mcp_server_registry: (1) servers with trust_score outside 0-100 range (2) invalid verdict values not in VERDICTS list (3) missing required fields (server_id,name,url) (4) mcp_signal_scores with score outside 0-100 (5) mcp_attestations with valid_until in past and status not expired. For each violation: ws_write corrections {agent_id=zo_sentinel.validator,action=data_integrity_violation,reason=description}. Log violations. ws_write validation_complete to mesh_events. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

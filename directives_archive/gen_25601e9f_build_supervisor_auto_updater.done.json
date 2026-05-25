@@ -1,0 +1,13 @@
+{
+  "task": "build_supervisor_auto_updater",
+  "handler": "generate_file",
+  "output_file": "supervisor_auto_updater.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Generate supervisor_auto_updater.py \u2014 daemon that watches build output and updates supervisord config when new daemons appear. MUST read /home/workspace/zo_sentinel/ directory for new .py files with daemon pattern (run() function). MUST update /home/workspace/zo_sentinel/supervisord_sentinel_full.conf only for files with heartbeat POST to 8772. MUST preserve existing entries. MUST emit heartbeat to service_health table every 60 seconds. Pattern: if __name__ == '__main__': run()",
+  "reads": [
+    "schema.py"
+  ],
+  "next_directive": {}
+}

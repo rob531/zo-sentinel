@@ -1,0 +1,14 @@
+{
+  "task": "wire_community_signal_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Complete wiring of the built community_signal_enrichment.py. Build evidence_gate.py to query mcp_signal_enrichments for community_signal cardinality before enabling integration. community_signal currently OK at 34 distinct values; enrichment should improve further. Module was built 2026-05-24T09:27:15. community_signal_enrichment_integration.py exists at 2026-05-24T03:17:15 \u2014 verify completeness and add missing verification checks.",
+  "reads": [
+    "community_signal_enrichment.py",
+    "community_signal_enrichment_integration.py"
+  ],
+  "next_directive": {}
+}

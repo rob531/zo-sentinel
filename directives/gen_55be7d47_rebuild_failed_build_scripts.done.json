@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_failed_build_scripts",
+  "handler": "generate_file",
+  "output_file": "rebuild_failed_build_scripts.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild wrapper for failed build modules: build_start_all_sh, build_graphql_schema, build_email_guid_auth, build_mcp_detail_view_ui, build_advanced_filter_api, build_forensic_detail_api, build_manual_override_api, build_compliance_export_service, build_supervisor_auto_updater, build_email_guid_auth_compact. Note: build_graphql_schema targets graphql_schema_builder.py which is dormant/out of scope per spec section 9 - skip this one. For others, generate fresh build scripts that: 1) Include correct top-level imports matching module dependencies. 2) Use requests.post() for write_service calls, not direct duckdb imports. 3) Follow naming invariants (no build_ prefix on output filenames). Ensure all scripts have correct function signatures and invoke write_service endpoints per spec section 5."
+}

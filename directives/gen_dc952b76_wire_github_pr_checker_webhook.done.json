@@ -1,0 +1,14 @@
+{
+  "task": "wire_github_pr_checker_webhook",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire github_pr_checker.py webhook integration. Daemon should: (1) listen on localhost for GitHub webhook events, (2) extract MCP server identifier from PR description or file changes, (3) query mcp_server_registry via write_service for lookup, (4) post status check back via GitHub API. Port: 8785. All DB access via write_service. No direct duckdb imports.",
+  "reads": [
+    "github_pr_checker.py",
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

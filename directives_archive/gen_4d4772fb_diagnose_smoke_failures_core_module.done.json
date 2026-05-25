@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_failures_core_modules",
+  "handler": "generate_file",
+  "output_file": "diagnose_smoke_failures_20260424.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Recent smoke failures on registry_api.py, rug_pull_monitor.py, signal_analyser.py all show similar traceback pattern at line 10 module import. Generate diagnostic module that: (1) inspects the actual import error via try/except around each failing module, (2) checks for circular import dependencies between modules, (3) verifies all # deps: comments can be resolved by auto_dependency_resolver, (4) outputs concrete fix recommendations per module. NOTE: rug_pull_monitor.py is PROTECTED \u2014 do NOT propose rebuild; diagnostic only."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_sentinel_operations_doc",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Document OPERATIONS.md covering: supervisord layout and service configuration, log locations for all daemons, recovery runbook for common failure modes (write_service unresponsive, daemon heartbeat stale >2h, enrichment harness failures), SLAs for freshness windows (24h first verdict, 7d re-verdict), retention policy for evidence_blob (30 days) vs verdict/attestation (indefinite). Reference write_service contract on :8772 and heartbeat contract (every 60s, stale >2h = dead)."
+}

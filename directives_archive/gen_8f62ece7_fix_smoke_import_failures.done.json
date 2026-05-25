@@ -1,0 +1,15 @@
+{
+  "task": "fix_smoke_import_failures",
+  "handler": "generate_file",
+  "output_file": "import_fixer.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Fixes importlib traceback failures in registry_api.py, rug_pull_monitor.py, signal_analyser.py. All three show identical line 10 import errors. Inspects Python path, dependency availability, and regenerates import statements. Run this to fix smoke test failures before retrying those modules.",
+  "reads": [
+    "registry_api.py",
+    "rug_pull_monitor.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

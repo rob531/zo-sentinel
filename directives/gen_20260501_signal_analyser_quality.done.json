@@ -1,0 +1,24 @@
+{
+  "task_name": "fix_signal_analyser_verdict_uniformity",
+  "output_file": "signal_analyser_v2.py",
+  "complexity": "medium",
+  "phase": 1,
+  "goal": "Fix verdict uniformity in signal_analyser. Currently over 95% of MCPs receive TRUSTED_RESEARCH verdict scoring 65-73. Diagnose why signals have near-zero variance then implement differentiated scoring: TLS certificate validity check, domain age lookup, GitHub star count bucketing, OTX threat intel hit detection, tool count from manifest, known-bad pattern matching. Each signal must produce meaningful variance. Thresholds: score below 30 = BLOCKED, 30-50 = HIGH_RISK, 50-70 = REVIEW, 70-85 = TRUSTED_RESEARCH, above 85 = TRUSTED.",
+  "constraints": [
+    "Read existing signal_analyser.py at /home/workspace/zo_sentinel/signal_analyser.py before writing",
+    "Preserve WriteService call pattern for all writes",
+    "Use ON CONFLICT DO NOTHING not INSERT OR IGNORE for DuckDB compat",
+    "Fall back to REVIEW verdict if any signal fetch fails",
+    "Never emit NULL scores"
+  ],
+  "success_criteria": [
+    "At least 3 distinct verdict types in any 50-MCP window",
+    "No single verdict exceeds 70% of output in any 100-MCP batch",
+    "Script passes smoke test without import errors"
+  ],
+  "antipatterns": [
+    "INSERT OR IGNORE - use ON CONFLICT DO NOTHING",
+    "Hardcoded scores that ignore actual signal data",
+    "Crashing on network fetch failure"
+  ]
+}

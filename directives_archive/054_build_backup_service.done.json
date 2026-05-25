@@ -1,0 +1,14 @@
+{
+  "task": "build_backup_service",
+  "handler": "generate_file",
+  "output_file": "backup_service.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.62,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Backup service daemon. Weekly: export mcp_server_registry,mcp_signal_scores,mcp_attestations,mcp_decisions to JSON files in /home/workspace/zo_sentinel/backups/YYYY-MM-DD/. Use ws_query to fetch all rows. Write one JSON file per table. Compress with gzip. Keep last 4 weekly backups (delete older). Write backup manifest BACKUP_MANIFEST.md. ws_write backup_complete to mesh_events with backup_path and row_counts. Poll 86400s check day_of_week==0. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

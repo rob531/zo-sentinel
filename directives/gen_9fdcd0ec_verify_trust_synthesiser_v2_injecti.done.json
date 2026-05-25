@@ -1,0 +1,14 @@
+{
+  "task": "verify_trust_synthesiser_v2_injection_dimension",
+  "handler": "generate_file",
+  "output_file": "verify_trust_synthesiser_v2_injection_dimension.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Verification test that confirms trust_synthesiser_v2.py correctly reads injection_resilience dimension from mcp_signal_scores table and applies weight 1.6 with threshold 0.80 as specified in Phase 8 spec. Query mcp_signal_scores WHERE dimension='injection_resilience' for any 3 server records; assert score exists and is in [0.0, 100.0]. Parse the source of trust_synthesiser_v2.py to verify: (1) it imports signal_analyser_v2, (2) it queries mcp_signal_scores with dimension filter, (3) it applies composite weighting that includes injection_resilience. Output pass/fail for each check. If any check fails, set exit code 1 and report which specific condition failed.",
+  "reads": [
+    "trust_synthesiser_v2.py",
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

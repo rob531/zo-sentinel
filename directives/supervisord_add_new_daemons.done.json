@@ -1,0 +1,9 @@
+{
+  "directive_id": "supervisord_add_new_daemons",
+  "goal": "Add two new daemons to /etc/zo/supervisord-user.conf so they survive pod restarts:\n\n[program:mcp_directory_ingestor]\ncommand=python3 /home/workspace/zo_sentinel/mcp_directory_ingestor.py\ndirectory=/home/workspace/zo_sentinel\nautostart=true\nautorestart=true\nstartretries=5\nstdout_logfile=/home/workspace/logs/mcp_directory_ingestor.log\nstderr_logfile=/home/workspace/logs/mcp_directory_ingestor.log\nstdout_logfile_maxbytes=50MB\n\nAlso verify these existing daemons are present with autorestart=true (add if missing):\n- candidate_github_promoter\n- candidate_npm_promoter\n- threat_intel_ingestor\n- signal_bridge\n\nAfter editing conf, run: supervisorctl -c /etc/zo/supervisord-user.conf reread && supervisorctl -c /etc/zo/supervisord-user.conf update\n\nThen confirm mcp_directory_ingestor shows as RUNNING.",
+  "output_path": "/etc/zo/supervisord-user.conf",
+  "constraints": ["Do not remove any existing entries", "autorestart=true on all new entries"],
+  "success_criteria": ["supervisorctl status shows mcp_directory_ingestor RUNNING", "mcp_directory_ingestor.log exists and has entries"],
+  "source": "cto_directive",
+  "generated_at": "2026-05-20T01:45:00"
+}

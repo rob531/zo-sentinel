@@ -1,0 +1,9 @@
+{
+  "task": "wire_scanner_fingerprint_integration",
+  "handler": "generate_file",
+  "output_file": "scanner_fingerprint_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire mcp_traffic_fingerprints.py library module into mcp_scanner daemon for MCP protocol confirmation during candidate server scanning. Must use write_service (port 8772) for DB access, not direct duckdb. Scanner calls detect_mcp_methods() and is_mcp_traffic() from fingerprint library on HTTP responses. Integration adds evidence to candidate server metadata. Do NOT rebuild mcp_scanner.py or mcp_traffic_fingerprints.py - both are ALREADY_BUILT. Only add the wiring/consumer logic."
+}

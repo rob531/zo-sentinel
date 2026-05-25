@@ -1,0 +1,14 @@
+{
+  "task": "github_pr_checker_wiring_v3",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_wiring_v3.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Rebuild github_pr_checker_wiring to fix cohort_12_n5 failure (last_error: failed in cohort_12_n5). The v2 file exists but smoke failed at the 1/3 attempt level. Reference: github_pr_checker.py is in ALREADY_BUILT. Must use write_service :8772 for DB reads/writes. Do NOT rebuild github_pr_checker.py itself.",
+  "reads": [
+    "github_pr_checker.py",
+    "github_pr_checker_wiring.py"
+  ],
+  "next_directive": {}
+}

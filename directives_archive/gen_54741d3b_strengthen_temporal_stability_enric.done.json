@@ -1,0 +1,9 @@
+{
+  "task": "strengthen_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Signal quality diagnostic shows temporal_stability has low variety (3 distinct scores). Replace or extend temporal_stability_enrichment.py to read MULTIPLE metadata fields and produce at least 20 distinct scores across 34 fingerprints. Must expose compute_score(metadata: dict) -> tuple[float, dict] per enrichment contract."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_attestation_refresher",
+  "handler": "generate_file",
+  "output_file": "attestation_refresher.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Retention daemon that re-generates attestations for MCPs whose current attestation will expire within 7 days. Pattern: SELECT from mcp_attestations WHERE expires_at < NOW() + INTERVAL '7 days'. On each row, calls trust_synthesiser (via direct function import, not HTTP) to recompute composite, then writes updated attestation row. Heartbeat every 60s to service_health. Must not DROP or DELETE any row. Follows base pattern from retention_sweeper.py."
+}

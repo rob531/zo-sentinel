@@ -1,0 +1,3 @@
+# decision_emitter_daemon.py STOPPED 2026-04-27T15:55:44.865831+00:00
+
+Stopped 2026-04-27. Built on wrong premise: mcp_decisions is the analyst-decision log (id, submission_id, analyst_name, decision, conditions, notes, expiry_days, expires_at, decided_at), NOT a verdict table. Verdicts live in mcp_server_registry.verdict and are computed by trust_synthesiser from mcp_signal_scores. Replacement: not yet planned. Registry verdicts already exist; the gap is making them DEFENSIBLE, not emitting more rows.

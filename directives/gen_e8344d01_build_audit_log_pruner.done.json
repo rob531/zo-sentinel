@@ -1,0 +1,9 @@
+{
+  "task": "build_audit_log_pruner",
+  "handler": "generate_file",
+  "output_file": "audit_log_pruner.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Retention daemon to expire old audit_log entries beyond 90-day retention window. Per section 4, verdict and attestation records are retained indefinitely but audit_log rows are not core state. Implements graceful degradation with exponential backoff (3 tries) when calling write_service. Uses heartbeat contract pattern: writes to service_health at least every 60s. Must complete within 30s timeout for each write_service call. Target table: audit_log."
+}

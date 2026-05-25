@@ -1,0 +1,10 @@
+{
+  "task": "build_registry_breadth_enrichment",
+  "handler": "generate_file",
+  "output_file": "registry_breadth_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "from": "cto_directive_2026-04-28",
+  "description": "Pure enrichment exposing compute_score(metadata: dict) -> tuple[float, dict]. Scores REGISTRY BREADTH: how many independent registries observed this MCP. Reads metadata fields: in_glama (bool), in_smithery (bool), in_pulse (bool), in_npm (bool), in_pypi (bool), in_github (bool), publisher_verified (bool), age_days (int). A server seen in only one registry = thin signal (low score, base 30). A server seen in 4+ registries with publisher verification = corroborated existence (high score, up to 95). Adds age decay floor: if age_days < 14 AND only 1 registry, cap at 25 (likely fresh and unattested). Pure function, no DB writes, no network, no imports of protected modules. Returns evidence dict with per-registry contributions and final cap reasons. Discriminates strongly across the live 3786 servers because registry overlap is highly variable and entirely uncorrelated with our existing flat signals -- this generates real distinct distinct_vals on first integration."
+}

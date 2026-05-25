@@ -1,0 +1,9 @@
+{
+  "task": "rug_pull_monitor_heartbeat_recovery",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_recovery_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic-only module targeting rug_pull_monitor heartbeat recovery. Queries write_service for service_health rows where service='rug_pull_monitor' and last_heartbeat > 600h (threshold per spec section 6). Reads rug_pull_monitor.py source to identify why heartbeat stopped. Checks PID file presence, supervisord status via /tmp directory, and whether the process is alive but not calling heartbeat. Produces a structured report: process_status (alive/dead/missing_pid), heartbeat_age_seconds, pid_file_present, last_import_error (if any from logs), and recommended_action (restart needed / configuration fix / dependency issue). Does NOT attempt to restart the daemon.rug_pull_monitor is protected; this file only generates diagnostic output."
+}

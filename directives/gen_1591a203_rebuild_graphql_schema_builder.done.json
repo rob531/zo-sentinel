@@ -1,0 +1,11 @@
+{
+  "task": "rebuild_graphql_schema_builder",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Rebuild graphql_schema_builder.py which is failing to build. Per Section 9 (strictly out of scope), GraphQL surface is dormant and should NOT be wired \u2014 this rebuild is only to make the module smoke-clean so it no longer appears in failed modules list. The module must: (1) Have correct Python syntax and no import errors; (2) Include a stub main() that exits 0 for smoke test; (3) Include dependency declarations as top comment (# deps: ...) for auto_dependency_resolver. Do NOT wire it to any daemon. Keep it as a dormant module that smoke tests pass on.",
+  "reads": [],
+  "next_directive": {}
+}

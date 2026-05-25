@@ -1,0 +1,9 @@
+{
+  "task": "write_service_heartbeat_investigator",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_investigator.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Investigate why write_service heartbeat is 3h50m stale (critical threshold is 2h). Query service_health table via write_service (:8772) for write_service row history. Check if service is responsive via GET /health endpoint. Report: last_heartbeat timestamp, consecutive_missed_beats, service_responsive boolean, likely_cause enum (crashed, hanging, network_isolation, config_error). write_service is PROTECTED - do NOT propose restart or rebuild. This diagnostic informs operator action only."
+}

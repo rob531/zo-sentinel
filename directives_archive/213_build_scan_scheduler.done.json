@@ -1,0 +1,9 @@
+{
+  "task": "build_scan_scheduler",
+  "handler": "generate_file",
+  "output_file": "scan_scheduler.py",
+  "complexity": "medium",
+  "phase": "20",
+  "priority": 0.8,
+  "description": "Python module. schedule_scan(server_id, priority=0.5) writes to mesh_memory via write_service /write with memory_type=scan_request. get_pending_scans(limit=20) queries mesh_memory WHERE memory_type=scan_request via write_service /query. mark_scan_complete(server_id) writes memory_type=scan_complete. No uvicorn. Uses requests.post to write_service."
+}

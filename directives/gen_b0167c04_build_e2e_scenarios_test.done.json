@@ -1,0 +1,15 @@
+{
+  "task": "build_e2e_scenarios_test",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Create end-to-end test suite exercising three canonical flows: (1) new MCP discovery through scanner, signal scoring, verdict assignment, attestation generation, UI visibility; (2) manual override via manual_override_api with audit trail verification; (3) threat intel correlation through risk_ranker and verdict adjustment. Must use write_service endpoints, not direct DB access. Include assertions for verdict tier boundaries per spec section 2. Exit 0 on success, non-zero on failure.",
+  "reads": [
+    "write_service.py",
+    "trust_synthesiser.py",
+    "attestation_engine.py"
+  ],
+  "next_directive": {}
+}

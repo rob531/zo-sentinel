@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_approval_workflow",
+  "handler": "generate_file",
+  "output_file": "snow_approval_integration.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Wire snow_connector.py into approval_workflow. Phase 9 integration. MUST rules: (1) MUST read verdict from mcp_server_registry before creating SNOW ticket, (2) MUST validate SNOW OAuth token freshness before each request, (3) MUST write audit_log entry for each SNOW sync action, (4) MUST handle SNOW timeout with exponential backoff (3 tries, 10s each), (5) MUST NOT accept unsigned webhooks from SNOW. Uses write_service :8772 for all DB access. References snow_connector.py for API contract."
+}

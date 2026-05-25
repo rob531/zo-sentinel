@@ -1,0 +1,10 @@
+{
+  "task": "self_diagnostics_stale_diagnostic",
+  "handler": "generate_file",
+  "output_file": "diagnose_self_diagnostics_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module for self_diagnostics daemon which has been stale for 18m (exceeding 600s threshold). Must check: (1) daemon startup time from logs, (2) any exceptions in recent output, (3) whether scheduled_run table has entries, (4) write_service connectivity. Do NOT rebuild self_diagnostics.py. Output structured diagnostic report.",
+  "reads": []
+}

@@ -1,0 +1,9 @@
+{
+  "task": "validate_permission_scope_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "permission_scope_discrimination_validator.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Validate that permission_scope_enrichment_v2.py produces >20 distinct scores across the 34 synthetic fingerprints in enrichment_harness.py. Query mcp_signal_enrichments WHERE signal_name='permission_scope', count distinct score values, and assert count >= 5 for production use. The signal currently has only 4 distinct values per the live diagnostic - this is a BAD SIGNAL per spec section Signal Quality. Generate diagnostic report with recommended adjustments to the enrichment weights or metadata field usage."
+}

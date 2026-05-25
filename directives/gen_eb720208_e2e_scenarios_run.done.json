@@ -1,0 +1,9 @@
+{
+  "task": "e2e_scenarios_run",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_runner.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "End-to-end scenario runner for three canonical flows: (1) new MCP submission \u2192 signal scored \u2192 verdict assigned \u2192 attestation generated \u2192 UI visible, (2) threat intel overlay \u2192 risk register updated, (3) analyst override \u2192 verdict changed \u2192 attestation revoked. e2e_scenarios.py is quarantined (3 consecutive fails in cohort_7_n4); propose runner as distinct file. MUST: (1) create synthetic MCP test entries in mcp_submissions, (2) trigger signal_analyser, (3) verify trust_synthesiser writes verdict to mcp_server_registry, (4) verify attestation_engine produces attestation, (5) verify search_api returns result. MUST NOT: use live production MCPs; use isolated synthetic data. Reads: e2e_scenarios.py (for flow definition patterns). This is the TEST for e2e_scenarios.py integration, not the spec itself."
+}

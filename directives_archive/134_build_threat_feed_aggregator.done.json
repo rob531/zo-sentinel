@@ -1,0 +1,16 @@
+{
+  "task": "build_threat_feed_aggregator",
+  "handler": "generate_file",
+  "output_file": "threat_feed_aggregator.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.9,
+  "reads": [
+    "schema.py",
+    "known_threats.py",
+    "cross_registry_correlator.py"
+  ],
+  "description": "Centralised threat feed aggregator daemon. Polls multiple free threat intel feeds: (1) CISA Known Exploited Vulnerabilities: GET https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json, (2) Abuse.ch URLhaus: GET https://urlhaus-api.abuse.ch/v1/urls/recent/ for malicious URLs, (3) OpenPhish: GET https://openphish.com/feed.txt for phishing URLs, (4) MalwareBazaar: POST https://mb-api.abuse.ch/api/v1/ with query=get_recent. For each feed item: cross-reference against mcp_server_registry URLs and IPs via ws_query. Match on: domain substring match, IP exact match, CVE ID in package dependencies. On match: ws_write mcp_threat_associations {threat_type=threat_feed_match, evidence=feed_name+indicator, severity=CRITICAL}. Immediately set verdict=KNOWN_THREAT via ws_write if CRITICAL match. Store raw feed data in world_articles table for historical reference. Poll 3600s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

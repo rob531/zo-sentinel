@@ -1,0 +1,116 @@
+{
+  "directive_id": "seed_threat_intel_enrichment",
+  "directive_version": "1.0",
+  "owner": "robinc",
+  "created_at": "2026-04-19",
+  "phase": "IV.a",
+  "title": "Threat Intelligence Enrichment Module",
+  "purpose": "For each MCP with known outbound endpoints, check those endpoints against daily-refreshed public threat feeds (URLhaus, PhishTank, OpenPhish, Spamhaus DBL). Produce a threat_intelligence_enrichment signal that dominates positive signals when triggered. This is Phase IV.a of the Sentinel Roadmap v2 (see /home/workspace/zo_sentinel/SENTINEL_ROADMAP_v2.md).",
+
+  "mode": "PATCH_MODULE",
+  "target_file": "/home/workspace/zo_sentinel/threat_intelligence_enrichment.py",
+  "target_type": "enrichment_module",
+
+  "pilot_first": true,
+  "pilot_spec": {
+    "description": "Before building the full daemon, run a one-shot pilot against 15 hand-picked candidate MCPs. The candidate set must include: (a) 5 known-good flagships from the Anthropic reference list as negative controls (expect NO matches), (b) 5 MCPs with random/unknown author domains, (c) 5 MCPs selected for having the newest/sketchiest-looking endpoint hostnames. Report how many candidates had threat-feed matches, false-positive rate on the flagship controls, and total feed-lookup cost. Write results to /home/workspace/zo_sentinel/fixes/pilot_threat_intel_results.json. Halt without committing full module if flagship controls show ANY matches (indicates feed pollution or bug).",
+    "candidate_selection_sql": "SELECT r.server_id, r.name, r.url FROM mcp_server_registry r WHERE r.name IN ('@modelcontextprotocol/sdk', '@modelcontextprotocol/server-filesystem', '@modelcontextprotocol/server-github', '@modelcontextprotocol/server-postgres', '@modelcontextprotocol/server-slack') UNION ALL SELECT r.server_id, r.name, r.url FROM mcp_server_registry r ORDER BY r.first_seen DESC LIMIT 10",
+    "success_criteria": [
+      "0 matches on 5 flagship control MCPs",
+      "at least 1 match OR clearly-enumerated 0-matches across the 10 random/new candidates (proves pipeline works)",
+      "total feed-lookup calls under 100 across the pilot",
+      "pilot runtime under 60 seconds"
+    ],
+    "abort_conditions": [
+      "any flagship control matches a feed (false positive — stop, investigate feed data)",
+      "rate limit hit on any feed during pilot (reduce cadence before committing)",
+      "more than 50% of candidates have unresolvable endpoints (means endpoint extraction hasn't happened yet — this directive is premature, defer until Phase III.a)"
+    ]
+  },
+
+  "interface_contract": {
+    "exported_functions": [
+      {
+        "name": "compute_score",
+        "signature": "compute_score(meta: dict) -> tuple[float, dict]",
+        "description": "Standard enrichment interface. meta dict must contain 'endpoints' key (list of hostname strings). Returns (score 0-100, evidence dict).",
+        "scoring_rules": [
+          "If any endpoint matches URLhaus: score = 0, evidence.threat_type = 'malware_c2'",
+          "If any endpoint matches PhishTank or OpenPhish: score = 0, evidence.threat_type = 'phishing'",
+          "If any endpoint matches Spamhaus DBL: score = 10, evidence.threat_type = 'spam_infrastructure'",
+          "If all endpoints pass all feeds: score = 100, evidence.threat_type = 'clean'",
+          "If no endpoints provided in meta: score = 50, evidence.threat_type = 'unknown_unassessed' (don't punish absence of data, but flag it)"
+        ]
+      },
+      {
+        "name": "refresh_feed_cache",
+        "signature": "refresh_feed_cache() -> dict",
+        "description": "Daily pull of all threat feeds into local cache. Returns counts per feed. Called by cron or scheduler, NOT at compute_score time."
+      }
+    ],
+    "database_writes": {
+      "threat_feed_cache": {
+        "purpose": "Local cache of daily-refreshed feed contents; queried at compute_score time for performance",
+        "schema": [
+          "id BIGINT PRIMARY KEY",
+          "feed_name VARCHAR NOT NULL",
+          "indicator VARCHAR NOT NULL",
+          "indicator_type VARCHAR",
+          "first_seen_in_feed TIMESTAMPTZ",
+          "last_refreshed TIMESTAMPTZ",
+          "UNIQUE (feed_name, indicator)"
+        ],
+        "expected_row_count": "500k-2M after full warm (aggregate of 5 feeds)"
+      },
+      "mcp_signal_enrichments": {
+        "purpose": "Standard enrichment output (existing table)",
+        "enrichment_name": "threat_intelligence_enrichment"
+      }
+    }
+  },
+
+  "rate_limit_discipline": {
+    "doctrine": "Low and slow per SENTINEL_ROADMAP_v2.md. Daily snapshots, not streaming. Polite User-Agent. Respect any per-feed ToS.",
+    "per_feed_limits": {
+      "urlhaus": "daily CSV download from urlhaus.abuse.ch/downloads/csv_recent/, no per-indicator API calls",
+      "phishtank": "daily JSON dump from phishtank.org/developer_info.php, no live queries",
+      "openphish": "daily text feed from openphish.com/feed.txt",
+      "spamhaus_dbl": "DNS-based query — RATE LIMITED to our own endpoint set, 1 req/second max, we do not bulk-enumerate",
+      "google_safe_browsing": "optional, requires API key; if enabled, 10k lookups/day free tier, stay under 5k"
+    },
+    "cache_ttl": "24 hours for feed contents; indicator matches cached for 6h so we don't re-query on every signal_bridge cycle"
+  },
+
+  "forbidden": [
+    "DO NOT use /write endpoint for threat_feed_cache table — use /execute with explicit INSERT ON CONFLICT (learned from Commit A auto-id bugs)",
+    "DO NOT query feeds during compute_score — only read from local threat_feed_cache",
+    "DO NOT enumerate threat feeds exhaustively against registry — only check endpoints we've already extracted",
+    "DO NOT share threat_feed_cache contents outside this module — some feeds have ToS restrictions on redistribution",
+    "DO NOT hard-block MCPs in this module — compute_score returns 0 and evidence; trust_synthesiser decides verdict dominance",
+    "DO NOT subclass BaseAgent; this is an enrichment module, same contract as community_signal_enrichment.py"
+  ],
+
+  "quarantine_integration": {
+    "gate_8_expected_contract": "signal variance check — threat_intelligence scores should show at least 2 distinct values across a population of 50+ scored MCPs to avoid being quarantined for uniformity",
+    "circuit_breaker_tripwire": "if >20% of scores are 0 in a single run, that's either a catastrophic feed-pollution event OR a valid widespread threat. Either way, trip the breaker and alert, don't auto-propagate."
+  },
+
+  "dependencies": [
+    "Phase III.a endpoint extraction should be complete OR at minimum the mcp_endpoints table schema should exist with pilot-worthy data for ~50 MCPs. If endpoints table is empty, this directive's compute_score degrades to 'unknown_unassessed' for every MCP, which is useless.",
+    "Registry must have an 'endpoints' field accessible via meta dict, populated by endpoint_extractor module"
+  ],
+
+  "acceptance_tests": [
+    "unit: compute_score with meta={'endpoints': ['urlhaus-known-bad.example']} returns (0.0, evidence with threat_type='malware_c2')",
+    "unit: compute_score with meta={'endpoints': ['api.anthropic.com', 'api.openai.com']} returns (100.0, evidence with threat_type='clean')",
+    "unit: compute_score with meta={'endpoints': []} returns (50.0, evidence with threat_type='unknown_unassessed')",
+    "integration: refresh_feed_cache() completes in under 120 seconds and populates threat_feed_cache with at least 100k rows after first call",
+    "integration: no feed lookups happen during compute_score (verify via packet-capture or mock)"
+  ],
+
+  "operator_review_checklist": [
+    "feed licenses allow operational use (URLhaus: CC0, PhishTank: requires attribution, OpenPhish: free tier OK for small volume, Spamhaus: free for up to 100k queries/day)",
+    "no feed contents leak into logs or signal_bridge evidence beyond the hostname + feed_name + date",
+    "pilot results inspected by operator before production run"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "task": "build_vendor_concentration_monitor",
+  "handler": "generate_file",
+  "output_file": "vendor_concentration_monitor.py",
+  "complexity": "medium",
+  "phase": "16",
+  "priority": 0.85,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Vendor concentration risk monitor daemon. Reads mcp_server_registry via ws_query. Groups servers by: (1) npm author/scope (extract from url), (2) GitHub org (extract from url github.com/{org}/), (3) domain (extract hostname from url). Risk thresholds: if single vendor has >5 APPROVED servers = concentration_warning, if top vendor provides >40% of all approved servers = concentration_high. Single point of failure scoring: if vendor_count=1 AND approval_count>3 = risk+=20. ws_write mesh_events {event_type=vendor_concentration_alert, payload={vendor, server_count, percentage}, severity=WARNING if >30% else INFO}. Write VENDOR_REPORT.md with concentration table. Poll 43200s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

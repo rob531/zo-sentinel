@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_rug_pull_monitor_staleness",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_staleness_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module for rug_pull_monitor.py stale heartbeat (age=618h35m, status=stale). Performs: (1) reads rug_pull_monitor.py source to check for deadlocks, infinite loops, unhandled exceptions, (2) queries write_service for last successful heartbeat timestamp and any error logs, (3) checks if the daemon process is still running via psutil or PID file, (4) attempts a soft-restart via signal (SIGUSR1) to trigger graceful reinitialization without losing state. rug_pull_monitor.py is a protected file \u2014 this diagnostic identifies whether the staleness is a code bug (requires human fix) or a recoverable condition (can be auto-restored). Writes diagnostic summary to service_health."
+}

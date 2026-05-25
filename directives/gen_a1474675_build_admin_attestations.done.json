@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_attestations",
+  "handler": "generate_file",
+  "output_file": "admin_attestations.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Admin UI surface for managing mcp_attestations records. Must include: view active attestations, revoke attestation (writes to audit_log), extend attestation expiry, view attestation history. Matches pattern of admin_exemptions.html and admin_policies.html already built. Binds localhost :8790. No new verdict tiers or signal shapes per spec section 10."
+}

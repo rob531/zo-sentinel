@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pid
+*.log
+.env
+*.env
+.goosehints
+.build_registry.json
+directives/done/
+directives/pending/
+*.bak.*

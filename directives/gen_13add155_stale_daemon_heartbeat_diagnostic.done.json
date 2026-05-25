@@ -1,0 +1,9 @@
+{
+  "task": "stale_daemon_heartbeat_diagnostic",
+  "handler": "generate_file",
+  "output_file": "stale_daemon_heartbeat_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic module that queries service_health table and identifies daemons with heartbeat age > their expected cycle threshold. Reads write_service via ws_query only. Produces a diagnostic report listing: (1) write_service stale at 5h27m, (2) mcp_scanner stale at 5h26m, (3) rug_pull_monitor stale at 637h37m, (4) anti_entropy stale at 5h27m, (5) wisdom_synthesiser stale at 5h27m. Does NOT attempt to restart anything \u2014 builder generates code, does not orchestrate services. Report is consumed by operator dashboard. Uses ws_query only, no direct DB access."
+}

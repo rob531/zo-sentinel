@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v3.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild signal_analyser.py to version 3 to address smoke failure (importlib error at line 10). Last error: Traceback in recent smoke failures shows File \"<string>\", line 10, in <module> File \"<frozen importlib\" pattern - indicates import-time failure. Must fix import statements or module loading. Protected file signal_analyser.py cannot be rewritten directly per idempotency protection; instead create signal_analyser_v3.py as companion module. Follow spec section 3 signal invariant: emit rows to mcp_signal_scores with evidence blob matching {\"signal_type\": \"<snake_case>\", \"confidence\": 0.0-1.0, \"evidence_blob\": {...}}. Must integrate the four new enrichment modules (temporal_stability_enrichment, tool_description_safety_enrichment, supply_chain_enrichment, community_signal_enrichment) once they land."
+}

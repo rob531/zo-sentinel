@@ -1,0 +1,12 @@
+{
+  "task": "fix_permission_scope_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Rewritten permission_scope enrichment that achieves 20+ distinct scores. Current version has only 3 distinct values. Must read MULTIPLE metadata fields: permission_flags, requested_permissions_count, dangerous_permission_count, has_network_access, has_filesystem_access, has_env_access, permission_rationale_provided. Use granular scoring: base score of 50, subtract 5 per dangerous permission, add 3 per rationale provided, add 2 for least-privilege principle. Break flat buckets with smaller penalty increments. Pure function compute_score(metadata). Must pass enrichment_harness.py with 20+ distinct score threshold.",
+  "reads": [
+    "permission_scope_enrichment.py"
+  ]
+}

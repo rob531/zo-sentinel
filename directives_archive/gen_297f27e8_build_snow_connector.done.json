@@ -1,0 +1,13 @@
+{
+  "task": "build_snow_connector",
+  "handler": "generate_file",
+  "output_file": "snow_connector.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Generate snow_connector.py \u2014 ServiceNow inbound webhook connector for Phase 9 enterprise integration. MUST follow numbered rules: (1) MUST authenticate via SNOW OAuth 2.0 using env vars SNOW_CLIENT_ID and SNOW_CLIENT_SECRET, (2) MUST validate request signature using HMAC-SHA256, (3) MUST reject unsigned webhooks with 401 response, (4) MUST parse SNOW incident JSON for MCP server approval requests, (5) MUST query write_service at 8772 for verdict status before responding, (6) MUST never commit MCP to APPROVED without human analyst sign-off, (7) MUST log all decisions to audit_log table with timestamp column, (8) MUST run on port 8784. Pattern: if __name__ == '__main__': run()",
+  "reads": [
+    "schema.py"
+  ],
+  "next_directive": {}
+}

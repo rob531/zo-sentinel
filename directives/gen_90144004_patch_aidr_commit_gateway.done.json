@@ -1,0 +1,12 @@
+{
+  "task": "patch_aidr_commit_gateway",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_integration_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Patch for aidr_commit_gateway.py verdict-check enforcement integration. aidr_commit_gateway.py built 2026-04-17; the verify_aidr_commit_gateway_verdict_check.py and aidr_verdict_enforcement_test_v2.py are both quarantined (6/3 and 3/3 attempts). This patch adds: explicit verdict-check function that reads mcp_server_registry.verdict for the target MCP, blocks commit for CAUTION_LIMITED (composite 30-45) and HIGH_RISK_ISOLATED (composite 15-30) unless override flag present, injects injection_resilience score into commit payload under key injection_resilience_score, logs all commit attempts with verdict to audit_log table. References aidr_commit_gateway.py existing functions.",
+  "reads": [
+    "aidr_commit_gateway.py"
+  ]
+}

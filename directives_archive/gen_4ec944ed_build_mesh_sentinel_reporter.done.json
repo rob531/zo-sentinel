@@ -1,0 +1,14 @@
+{
+  "task": "build_mesh_sentinel_reporter",
+  "handler": "generate_file",
+  "output_file": "mesh_sentinel_reporter.py",
+  "complexity": "low",
+  "phase": "9",
+  "priority": 0.85,
+  "description": "Write sentinel operational stats to mesh_memory every 6h: total assessed MCPs, approval rates, active threat alerts, signal score distribution. Daemon heartbeat to service_health table. Query mcp_submissions and mcp_signal_scores for metrics.",
+  "reads": [
+    "schema.py",
+    "mesh_bridge.py"
+  ],
+  "next_directive": {}
+}

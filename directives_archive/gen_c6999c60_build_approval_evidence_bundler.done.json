@@ -1,0 +1,13 @@
+{
+  "task": "build_approval_evidence_bundler",
+  "handler": "generate_file",
+  "output_file": "approval_evidence_bundler.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Generate approval_evidence_bundler.py \u2014 produce audit-ready artefact per approval decision for Phase 9. MUST follow numbered rules: (1) MUST bundle all 7 signal scores from mcp_signal_scores table, (2) MUST include attestation text from approval_decisions table, (3) MUST include pi_results summary from pi_corpus_ingest metadata if available, (4) MUST include corpus hash and analyst decision metadata, (5) MUST sign JSON bundle with HMAC-SHA256 using env var EVIDENCE_SECRET, (6) MUST store bundle in /home/workspace/zo_sentinel/audit/evidence/ directory, (7) MUST never include raw MCP server secrets or API keys in bundle, (8) MUST support retrieval via GET endpoint on port 8786. Pattern: if __name__ == '__main__': run()",
+  "reads": [
+    "schema.py"
+  ],
+  "next_directive": {}
+}

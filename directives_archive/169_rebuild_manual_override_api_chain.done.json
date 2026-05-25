@@ -1,0 +1,19 @@
+{
+  "task": "rebuild_manual_override_api",
+  "handler": "generate_file",
+  "output_file": "manual_override_api.py",
+  "complexity": "medium",
+  "phase": "17",
+  "priority": 0.82,
+  "description": "Manual override API for InfoSec analysts. FastAPI port 8786. POST /override/{server_id} with body {verdict, reason, analyst, duration_days} writes override to mcp_server_registry. GET /overrides lists active overrides. Overrides expire after duration_days. Audit logged to mcp_decisions. run() daemon.",
+  "next_directive": {
+    "task": "build_sentinel_status_page",
+    "handler": "generate_file",
+    "output_file": "sentinel_status.html",
+    "complexity": "high",
+    "phase": "19",
+    "priority": 0.8,
+    "description": "Single-page HTML status dashboard for ZO-SENTINEL. Shows: pipeline health (daemons up/down), registry stats (total MCPs, by verdict), recent threats (last 5), latest attestations, build manifest (last 10 builds). Polls /api/search, /v1/registry, /v1/threats every 30s. Dark brutalist style matching existing UI. Self-contained HTML with embedded JS."
+  },
+  "from": "chain_rebuild_compliance_export"
+}

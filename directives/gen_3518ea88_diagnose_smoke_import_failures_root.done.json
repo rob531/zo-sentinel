@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_import_failures_root_cause",
+  "handler": "generate_file",
+  "output_file": "smoke_import_failure_root_cause_probe_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Root-cause probe for smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. The traceback shows import failures from '<frozen importlib' which indicates stale .pyc cache or missing dependency. MUST: (1) query service_health for exact failure timestamps, (2) check sys.modules for partially-loaded modules, (3) verify all dependency imports are reachable, (4) report whether the failures are systemic (shared broken import) or file-specific. MUST NOT: propose rebuilds of protected files; this is a diagnostic-only module. Reads: import_failure_root_cause_v2.py (for patterns already attempted). Output: JSON diagnostic report written to service_health meta or dedicated diagnostic table."
+}

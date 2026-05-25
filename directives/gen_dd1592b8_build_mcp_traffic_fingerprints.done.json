@@ -1,0 +1,10 @@
+{
+  "task": "build_mcp_traffic_fingerprints",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Pure library module (NO daemon, NO network, NO DB writes) providing regex-based detection of JSON-RPC MCP traffic. Source: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14. Must export: (1) compiled regex patterns for MCP methods (initialize, tools/call, tools/list, resources/read, resources/list, prompts/list, prompts/get, sampling/createMessage, notifications/initialized, roots/list), (2) protocolVersion marker pattern (202[4-9]), (3) detect_mcp_methods(text) -> list of detected methods, (4) is_mcp_traffic(payload) -> bool, (5) extract_session_indicators(headers) -> dict. Patterns must tolerate whitespace variation per Cloudflare spec. Compile at module load. Include if __name__ == '__main__' self-smoke with 3 known-good inputs. No imports of protected modules.",
+  "reads": []
+}

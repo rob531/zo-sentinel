@@ -1,0 +1,9 @@
+{
+  "task": "verify_tool_description_enrichment_effectiveness",
+  "handler": "generate_file",
+  "output_file": "verify_tool_description_enrichment_effectiveness.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to verify tool_description_safety_enrichment.py produces sufficient signal discrimination. Query mcp_signal_scores for tool_description_safety signal, count distinct score values across all MCPs. If <10 distinct values, report as weak signal requiring enrichment update. Report findings to enrichment_evidence table via write_service. Reference signal invariant section 3 and weak signal diagnostic showing 3 distinct values."
+}

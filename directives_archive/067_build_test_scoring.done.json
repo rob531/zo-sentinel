@@ -1,0 +1,15 @@
+{
+  "task": "build_test_scoring",
+  "handler": "generate_file",
+  "output_file": "tests/test_scoring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.72,
+  "reads": [
+    "signal_weights.py",
+    "verdict_taxonomy.py"
+  ],
+  "description": "Unit tests for scoring functions. Tests: (1) score_to_verdict at boundary values (75,74,60,59,50,49,35,34,20,19) (2) compute_trust_score with known inputs returns expected output (3) weights sum to 1.0 (4) all VERDICTS in VERDICT_THRESHOLDS (5) attestation expiry days are positive integers. Uses stdlib unittest. Run: python3 -m pytest tests/test_scoring.py -v. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

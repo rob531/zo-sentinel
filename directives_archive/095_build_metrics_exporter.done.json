@@ -1,0 +1,14 @@
+{
+  "task": "build_metrics_exporter",
+  "handler": "generate_file",
+  "output_file": "metrics_exporter.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.6,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Prometheus-compatible metrics exporter. FastAPI port 8789 GET /metrics returns text/plain prometheus format. Metrics: zo_sentinel_servers_total{verdict} gauge, zo_sentinel_trust_score_avg gauge, zo_sentinel_threats_total{severity} counter, zo_sentinel_assessments_24h counter, zo_sentinel_pipeline_health{check} gauge (1=ok 0=degraded), zo_sentinel_api_latency_ms{service} gauge. Updates every 60s via background task. GET /health. Daemon uvicorn port 8789. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

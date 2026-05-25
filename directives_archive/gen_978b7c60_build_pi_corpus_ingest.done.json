@@ -1,0 +1,14 @@
+{
+  "task": "build_pi_corpus_ingest",
+  "handler": "generate_file",
+  "output_file": "pi_corpus_ingest.py",
+  "complexity": "medium",
+  "phase": "8",
+  "priority": 0.9,
+  "description": "Ingest prompt injection test payloads from Bordair v3 and AgentDojo datasets into pi_test_corpus table. Parse JSON/JSONL formats, deduplicate by hash, track source and ingestion timestamp. Run as daemon with run() + if __name__ == '__main__' pattern.",
+  "reads": [
+    "schema.py",
+    "data_validator.py"
+  ],
+  "next_directive": {}
+}

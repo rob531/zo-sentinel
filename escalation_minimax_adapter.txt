@@ -1,0 +1,43 @@
+"""MiniMax direct via api.minimax.io/v1/chat/completions.
+
+    v0.4 fix: removed reasoning_split=True from escalation adapter.
+    reasoning_split is appropriate for code generation (builder) where we need
+    to cleanly separate reasoning preamble from generated code. For general
+    inference calls (directive routing, classification, etc.) it causes empty
+    content on short prompts -- MiniMax puts everything into reasoning_details
+    and returns content='' which the adapter correctly rejects as empty.
+
+    The builder's minimax_generate() retains reasoning_split=True because it
+    always sends large prompts where content is never empty.
+
+    Reasoning tags in general responses are stripped by _strip_minimax_reasoning.
+    """
+    import re
+    import requests
+    key = os.environ.get("MINIMAX_API_KEY")
+    if not key:
+        return None, "MINIMAX_API_KEY not set"
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    try:
+        r = requests.post(
+            "https://api.minimax.io/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": spec.model_id, "messages": messages,
+                  "max_tokens": max_tokens, "temperature": temperature},
+            # NOTE: no reasoning_split=True -- causes empty content on short prompts
+            timeout=240,
+        )
+        r.raise_for_status()
+        choices = r.json().get("choices", [])
+        if not choices:
+            return None, "empty choices"
+        raw = choices[0].get("message", {}).get("content", "").strip()
+        # Strip any inline <think>...</think> reasoning tags
+        content = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+        content = content if content else raw  # fallback to raw if strip removes everything
+        return (content or None), (None if content else "empty content")
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"

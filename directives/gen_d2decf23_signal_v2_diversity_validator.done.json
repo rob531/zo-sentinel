@@ -1,0 +1,9 @@
+{
+  "task": "signal_v2_diversity_validator",
+  "handler": "generate_file",
+  "output_file": "signal_v2_diversity_validator.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Validates that the recently built v2 enrichment modules (temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py, permission_scope_enrichment_v2.py) produce more than 3 distinct score values when exercised against a synthetic corpus of 34 fingerprints. Queries mcp_signal_enrichments table via write_service to count distinct score values per signal_type. If any signal still has <=3 distinct values, report which module needs review. This is a diagnostic/validation script, not a build task."
+}

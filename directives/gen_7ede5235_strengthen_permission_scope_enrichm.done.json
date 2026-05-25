@@ -1,0 +1,9 @@
+{
+  "task": "strengthen_permission_scope_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.89,
+  "description": "Enhanced pure enrichment module for permission_scope signal. Must expose compute_score(metadata: dict) -> tuple[float, dict] conforming to signal invariant. Reads additional registry fields (requested_permissions, actual_permissions, permission_categories, scope_depth). Target: produce >=10 distinct scores across 34 synthetic fingerprints instead of current 3. Penalty for dangerous permissions (shell_exec, file_write, env_read) must be severe enough to create score separation. No DB writes, no network."
+}

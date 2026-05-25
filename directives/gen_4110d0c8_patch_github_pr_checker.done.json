@@ -1,0 +1,13 @@
+{
+  "task": "patch_github_pr_checker",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Patch for github_pr_checker.py webhook wiring. github_pr_checker.py built; github_pr_checker_wiring.py quarantined (4/3 attempts, failed cohort_1_n3). github_pr_checker_webhook_wiring.py built 2026-05-23 08:45 but may have integration gaps. This patch verifies: webhook endpoint receives GitHub PR event, extracts mcp_server_name from PR body via regex pattern, calls write_service query to fetch verdict from mcp_server_registry, posts check run result to GitHub API with verdict summary. Adds retry logic (3 tries, exponential backoff) for GitHub API calls. References github_pr_checker_webhook_wiring.py for existing ws_query pattern.",
+  "reads": [
+    "github_pr_checker_webhook_wiring.py",
+    "github_pr_checker.py"
+  ]
+}

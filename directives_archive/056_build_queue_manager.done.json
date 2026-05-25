@@ -1,0 +1,14 @@
+{
+  "task": "build_queue_manager",
+  "handler": "generate_file",
+  "output_file": "queue_manager.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.6,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Assessment queue manager. Manages prioritization of which MCPs to assess next. GET queue of unscored servers. Priority order: (1) servers explicitly submitted via approval_workflow (highest) (2) servers discovered from npm official scope (3) servers with high scan_count but no verdict (4) servers last assessed >7d ago. Writes ordered queue to ASSESSMENT_QUEUE.md. Exposes: get_next_batch(n=10)->list of server_ids in priority order. Used by signal_analyser to pick which servers to score. No daemon, utility module.",
+  "context": "",
+  "from": "claude_batch"
+}

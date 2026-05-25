@@ -1,0 +1,9 @@
+{
+  "task": "build_aidr_verdict_gate_wiring",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_enforcement.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Add verdict-check enforcement to aidr_commit_gateway integration. Must query mcp_server_registry for verdict via write_service before forwarding commits. MUST NOT forward CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override flag. Must include injection_resilience score in commit payload. Uses write_service at 127.0.0.1:8772 for verdict lookup. No direct DB access. Follows inter-daemon communication rules per spec section 5."
+}

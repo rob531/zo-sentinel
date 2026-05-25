@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_smoke_import_fixer_v2",
+  "handler": "generate_file",
+  "output_file": "smoke_import_diagnostics_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module (NOT a fix) for the three smoke failures: registry_api.py, rug_pull_monitor.py, signal_analyser.py all show identical import traceback at line 10. Must expose run() function that inspects PYTHONPATH, sys.modules, and importlib mechanics. Must write findings to service_health.meta as JSON diagnostic blob. Must NOT attempt to fix imports - only diagnose. No DB writes except to service_health. This is observational tooling per DO NOT GENERATE rules (meta-tasks rejected, but a diagnostic that documents findings is acceptable)."
+}

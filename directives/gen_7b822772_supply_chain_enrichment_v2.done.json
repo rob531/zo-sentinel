@@ -1,0 +1,11 @@
+{
+  "task": "supply_chain_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Build supply_chain enrichment module with richer signal discrimination. Current supply_chain signal is OK at 35 distinct values but can improve. Must read MULTIPLE metadata fields (registry_source, age_days, dependency_count, publisher_verified, stars, has_licenses, vulnerability_count). Must expose compute_score(metadata) returning (float, dict) per enrichment contract. No DB writes, no network, pure function. This is NOT a rebuild \u2014 supply_chain_enrichment.py not yet built per gaps map.",
+  "reads": [],
+  "next_directive": {}
+}

@@ -1,0 +1,11 @@
+{
+  "task": "register_zo_html_coder",
+  "handler": "run_script",
+  "output_file": "",
+  "complexity": "low",
+  "phase": "infra",
+  "priority": 0.99,
+  "command": "ollama create zo-html-coder -f /home/workspace/zo_mesh/Modelfiles/zo-html-coder.Modelfile",
+  "description": "Register zo-html-coder Ollama persona. Required before HTML files can be generated.",
+  "from": "builder_v191"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "github_pr_webhook_complete",
+  "handler": "generate_file",
+  "output_file": "github_pr_verdict_gate_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Complete GitHub PR webhook wiring for verdict-gating. Built github_pr_webhook_wiring.py on 2026-04-21 but webhook endpoint needs completion. MUST: (1) Expose POST /github-webhook that receives PR events. (2) Extract mcp_name from PR title/body using pattern matching. (3) Query write_service for current verdict. (4) Post status check back to GitHub API: green for TRUSTED_*, yellow for ENTERPRISE_CONTROLLED, red for CAUTION_LIMITED or below. (5) Authenticate webhook via HMAC-SHA256 signature header. (6) Write audit_log entry per PR event."
+}

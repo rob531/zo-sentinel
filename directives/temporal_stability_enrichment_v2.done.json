@@ -1,0 +1,20 @@
+{
+  "directive_id": "temporal_stability_enrichment_v2",
+  "description": "Build temporal_stability_enrichment_v2 enrichment module with multi-dimensional scoring",
+  "status": "done",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "created_at": "2026-05-24T22:56:22.224569+00:00",
+  "completed_at": "2026-05-24T23:04:00+00:00",
+  "verification": {
+    "import_clean": true,
+    "compute_score_contract": true,
+    "self_smoke_pass": true,
+    "distinct_scores": 5
+  },
+  "module_info": {
+    "SIGNAL_NAME": "temporal_stability",
+    "VERSION": "v2",
+    "dimensions": ["age_days", "update_frequency_days", "version_stability", "deprecation_notice_present", "dependency_count"],
+    "score_range": [10.0, 86.0]
+  }
+}

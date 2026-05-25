@@ -1,0 +1,14 @@
+{
+  "task": "diagnose_signal_enrichment_discrimination_gap",
+  "handler": "generate_file",
+  "output_file": "enrichment_discrimination_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Build enrichment_discrimination_diagnostic.py: a diagnostic utility that reads the existing enrichment modules (temporal_stability_enrichment.py, permission_scope_enrichment_v3.py) and analyzes WHY they produce only 3 distinct scores. The module should: (1) Import and call compute_score() for each module using synthetic metadata varying across 34 fingerprints; (2) Collect the resulting scores and compute distinct-value count; (3) Output a report identifying which fields/branches are dead code or always produce the same value; (4) Suggest concrete rewrite hints (e.g., 'branch on age_days<30 fires 0 times in test corpus, merge into age_days<90'). This is diagnostic-only; does NOT modify any enrichment file. Output format: JSON dict with module_name, distinct_count, dead_branches list, rewrite_suggestion string. Call pattern: python3 enrichment_discrimination_diagnostic.py outputs to stdout and exits 0. Priority is high because the spec requires weak signals to have MORE discrimination before context_efficiency_enrichment.py can be deferred to Phase 12.",
+  "reads": [
+    "temporal_stability_enrichment.py",
+    "permission_scope_enrichment_v3.py"
+  ],
+  "next_directive": {}
+}

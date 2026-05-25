@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_start_all_sh",
+  "handler": "generate_file",
+  "output_file": "start_all.sh",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rebuild the start_all.sh launcher script that failed to build. This script is critical for daemon startup - all 22 daemons show never-seen heartbeat because they were never launched. Script must: (1) iterate all declared daemons from KNOWN_DAEMONS, (2) launch each via 'python3 <daemon>.py &' in background, (3) write initial heartbeat to service_health for each within 10s of launch, (4) log startup sequence to sentinel_startup.log, (5) handle SIGTERM gracefully to stop all children. Must not use 'build_' prefix in output filename."
+}

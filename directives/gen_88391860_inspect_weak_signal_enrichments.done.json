@@ -1,0 +1,16 @@
+{
+  "task": "inspect_weak_signal_enrichments",
+  "handler": "generate_file",
+  "output_file": "inspect_weak_signal_quality.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Inspect the three WEAK signals (permission_scope, temporal_stability, tool_description_safety) which each show only 3 distinct values across 34 fingerprints. Run enrichment_harness.py against the v2 variants: tool_description_safety_enrichment_v2.py, temporal_stability_enrichment_v2.py, permission_scope_enrichment.py. Report: (a) how many distinct scores each produces, (b) which metadata fields are actually consumed, (c) whether the compute_score() calls are pure. Signals need 20+ distinct scores to pass the discrimination heuristic.",
+  "reads": [
+    "enrichment_harness.py",
+    "tool_description_safety_enrichment_v2.py",
+    "temporal_stability_enrichment_v2.py",
+    "permission_scope_enrichment.py"
+  ],
+  "next_directive": {}
+}

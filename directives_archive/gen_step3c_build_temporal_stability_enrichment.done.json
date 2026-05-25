@@ -1,0 +1,10 @@
+{
+  "task": "build_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment.py",
+  "complexity": "medium",
+  "phase": "sentinel.signal.unbucket",
+  "priority": 0.92,
+  "source": "manual_step3c_temporal_stability_20260427T1555",
+  "description": "Pure function module. Exposes EXACTLY: def compute_score(metadata: dict) -> tuple[float, dict]. Returns score in [0.0, 100.0]. This is the rug-pull detection signal -- the most unique signal in the seven-signal trust framework. Reads at LEAST 3 metadata fields: (1) version_string from metadata -- if NULL or absent, anchor at 50 and skip further adjustments. (2) first_seen and last_seen ISO-8601 strings -- compute age_days = (now - first_seen).days using datetime.fromisoformat; brand-new packages (<7 days old) get -25 (insufficient track record); 7-30 days get -10; 30-180 days get +5; 180-730 days get +15; >730 days get +10. (3) version semver shape -- parse version_string; pre-1.0 versions starting with '0.' get -10 (unstable); if metadata['previous_version'] is supplied and the major component differs, that's a major version bump -- get -20 (potential rug-pull substitution); same major across all observed gets +10. (4) status from metadata['status'] -- 'deprecated' = -30, 'archived' = -20, 'active' = +5, anything else (or NULL) = 0. Start score at 60. Apply adjustments only when version_string present. Clamp final to [0, 100]. Return (score, dict with per-field deltas: {'age_days': N, 'age_delta': X, 'version_unstable_delta': X, 'major_bump_delta': X, 'status_delta': X, 'fingerprint_present': bool}). Use datetime.fromisoformat to parse first_seen/last_seen; on parse failure, treat field as missing and skip its contribution. NO DB writes, NO network, NO file I/O at runtime, NO imports beyond stdlib + re + datetime. Under 2 seconds. NEVER write to mcp_signal_scores directly."
+}

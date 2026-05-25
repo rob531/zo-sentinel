@@ -1,0 +1,9 @@
+{
+  "task": "improve_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Current temporal_stability signal has only 4 distinct values - BAD SIGNAL per diagnostic. Create v2 enrichment module that reads MULTIPLE metadata fields (first_seen, last_updated, last_assessed, version_count, commit_frequency, release_regularity) to produce >20 distinct scores. Must expose compute_score(metadata: dict) -> tuple[float, dict]. Pure function, no DB, no network. This is the highest-priority signal improvement per the weak signal plateau warning in the signal quality diagnostic."
+}

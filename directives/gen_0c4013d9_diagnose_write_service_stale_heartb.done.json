@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_write_service_stale_heartbeat",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_diag.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Diagnostic module for write_service stale heartbeat (3h3m old). MUST: (1) query write_service /health endpoint, (2) check process liveness, (3) log findings to service_health meta field, (4) NOT propose rebuild \u2014 write_service is PROTECTED. MUST NOT: write to core tables, introduce HTTP between daemons. This is diagnostic only; repair must be human-orchestrated per section 10 execution rules."
+}

@@ -1,0 +1,11 @@
+{
+  "task": "build_compliance_export_service",
+  "handler": "generate_file",
+  "output_file": "compliance_export_service.py",
+  "complexity": "high",
+  "phase": "18",
+  "priority": 0.94,
+  "reads": ["schema.py"],
+  "description": "Compliance export service. FastAPI on port 8778. GET /api/export/csv: execute ws_query joining mcp_server_registry r LEFT JOIN mcp_risk_register rr ON r.server_id=rr.server_id LEFT JOIN (SELECT server_id, COUNT(*) threat_count, MAX(severity) max_severity FROM mcp_threat_associations GROUP BY server_id) t ON r.server_id=t.server_id. Fields: server_id, name, url, registry_source, verdict, trust_score, risk_tier, threat_count, max_severity, first_seen, last_assessed. Transform result to CSV in-memory using import csv + io.StringIO -- csv.DictWriter with fieldnames list. Return Response(content=csv_string, media_type='text/csv', headers={'Content-Disposition': 'attachment; filename=zo_mcp_risk_report.csv'}). GET /api/export/json: same query returns raw JSON array. GET /api/export/summary: returns {total_servers, by_verdict, by_risk_tier, high_risk_count, assessed_count, unassessed_count, generated_at}. GET /health. All DB via ws_query to write_service:8772. import csv. No duckdb. run() + uvicorn. Heartbeat.",
+  "from": "claude_manual"
+}

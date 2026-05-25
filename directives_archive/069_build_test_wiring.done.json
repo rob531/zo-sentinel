@@ -1,0 +1,12 @@
+{
+  "task": "build_test_wiring",
+  "handler": "generate_file",
+  "output_file": "tests/test_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.7,
+  "reads": [],
+  "description": "Wiring contract tests. Imports each sentinel module and checks: (1) no module imports duckdb directly (2) all daemons have run() function (3) all FastAPI apps have /health route defined (4) all modules have __name__==__main__ guard if they have run(). Uses importlib to load each module. Checks ast.parse for duckdb.connect pattern. Writes WIRING_TEST_REPORT.md with pass/fail per module. Run: python3 tests/test_wiring.py. sys.exit(1) on any failure.",
+  "context": "",
+  "from": "claude_batch"
+}

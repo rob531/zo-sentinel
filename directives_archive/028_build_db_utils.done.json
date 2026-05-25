@@ -1,0 +1,14 @@
+{
+  "task": "build_db_utils",
+  "handler": "generate_file",
+  "output_file": "db_utils.py",
+  "complexity": "medium",
+  "phase": "2",
+  "priority": 0.88,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Shared DB utility module. Functions: ws_query(sql,params=None)->list (POST write_service/query with retry 3x backoff), ws_write(table,row)->bool (POST write_service/write rows field), ws_execute(sql)->bool (POST write_service/execute), ws_heartbeat(service_name) (writes service_health), get_unscored_servers(limit=20)->list, get_server_by_id(server_id)->dict|None, get_server_signals(server_id)->list. All functions handle ConnectionError with 3 retries and 2s backoff. Module-level WRITE_SERVICE=http://127.0.0.1:8772. No daemon, pure utility.",
+  "context": "",
+  "from": "claude_batch"
+}

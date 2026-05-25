@@ -1,0 +1,14 @@
+{
+  "task": "build_registry_ingestor_remotes_patch",
+  "handler": "generate_file",
+  "output_file": "mcp_registry_ingestor_v2.py",
+  "complexity": "medium",
+  "priority": 0.8,
+  "description": "Build mcp_registry_ingestor_v2 that reads BOTH remotes[] and packages[] from registry entries (current ingestor only reads packages[], leaving raw_packages='[]' for HTTPS-served MCPs). Populates mcp_registry_facts with proper transport classification (stdio for packages, http/sse/ws for remotes). Idempotent re-run via ON CONFLICT DO NOTHING. After this lands and re-runs, signal_bridge will have real transport info as a backup data source for Signals 1 and 4.",
+  "constraints": [
+    "ws_write only",
+    "FileHandler only",
+    "ON CONFLICT DO NOTHING",
+    "Read remotes[] AND packages[]"
+  ]
+}

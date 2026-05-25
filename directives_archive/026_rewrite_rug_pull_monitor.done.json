@@ -1,0 +1,15 @@
+{
+  "task": "rewrite_rug_pull_monitor",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor.py",
+  "complexity": "high",
+  "phase": "5",
+  "priority": 0.9,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "Rug pull monitor daemon. For each server in mcp_server_registry with verdict=TRUSTED_GENERAL or TRUSTED_RESEARCH: fetch current tool definitions from server URL (GET /tools or /manifest). Compute SHA256 hash of tool definitions JSON. Compare to stored hash in mcp_tool_hashes table (ws_query). If hash changed: ws_write mcp_threat_associations {server_id,threat_type=tool_mutation,evidence=hash_changed:old->new,severity=HIGH,reported_at=now}. Update stored hash. If server unreachable 3x in a row: ws_write threat severity=MEDIUM evidence=server_unreachable. Also re-run check_domain() on all URLs. Poll 21600s. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

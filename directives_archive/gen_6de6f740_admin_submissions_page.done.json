@@ -1,0 +1,9 @@
+{
+  "task": "admin_submissions_page",
+  "handler": "generate_file",
+  "output_file": "admin_submissions.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.86,
+  "description": "Admin UI surface for triaging pending MCP submissions from mcp_submissions table. Must include: submission queue table (mcp_name, requested_by, submitted_at, current_status), approve/reject workflow actions, and notes field for conditional approvals. Ports to localhost:8790. Reads via write_service :8772 /query, writes decisions via :8772/write to mcp_submissions. Table columns: submission_id, mcp_name, mcp_identifier, requested_by, submitted_at, status, reviewer_notes."
+}

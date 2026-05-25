@@ -1,0 +1,9 @@
+{
+  "task": "verify_signal_analyser_scoring",
+  "handler": "generate_file",
+  "output_file": "verify_signal_analyser_scoring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Integration verification script to confirm signal_analyser.py reads from mcp_signal_enrichments and writes composite rows to mcp_signal_scores for all 8 signals. Must: (1) query mcp_signal_enrichments for recent rows, (2) verify corresponding entries exist in mcp_signal_scores with matching server_id and signal_type, (3) check that permission_scope, temporal_stability, tool_description_safety enrichments (v3/v4) are being consumed. Report any servers with enrichment rows but missing score rows (indicates wiring gap). Does not write to DB. Pure diagnostic. Service name: verify_signal_analyser_scoring."
+}

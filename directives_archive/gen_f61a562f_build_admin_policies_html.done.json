@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies_html",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Admin UI for managing mcp_policy_rules on port 8790. Reads mcp_policy_rules via write_service query. Provides CRUD operations for rule_type and pattern columns per DB schema. Audit log entry required for every policy create/update/delete per spec section 7. Binds localhost, no external exposure."
+}

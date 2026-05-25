@@ -1,0 +1,15 @@
+{
+  "task": "build_analyst_feedback_loop",
+  "handler": "generate_file",
+  "output_file": "analyst_feedback_loop.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.63,
+  "reads": [
+    "schema.py",
+    "signal_weights.py"
+  ],
+  "description": "Analyst feedback loop daemon. Every 86400s: reads mcp_decisions where analyst overrode system verdict. Adjusts signal weights based on which signals were most predictive of correct outcome. If domain_trust correctly predicted 80% of analyst decisions but permission_scope only 40%: suggest weight increase for domain_trust. Writes WEIGHT_SUGGESTIONS.md with recommended weight adjustments. Does NOT automatically change weights (human review required). ws_write feedback_processed to mesh_events. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

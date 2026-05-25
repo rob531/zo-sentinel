@@ -1,0 +1,9 @@
+{
+  "task": "wire_mcp_traffic_fingerprints_to_scanner",
+  "handler": "generate_file",
+  "output_file": "fingerprint_scanner_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Wire mcp_traffic_fingerprints.py into mcp_scanner.py for protocol confirmation. mcp_traffic_fingerprints.py was already built (2026-05-24T10:54:39 wiring module exists) but not yet integrated into the scanner. The module provides detect_mcp_methods(), is_mcp_traffic(), and extract_session_indicators() pure functions. Integration point: after mcp_scanner fetches a candidate server response, call fingerprint_fns.is_mcp_traffic(response_body) to confirm MCP protocol before writing to registry. Write_service communication only, no direct DB access. Protocol: POST :8772/write table=mcp_server_registry rows={confirmed_mcp: true}."
+}

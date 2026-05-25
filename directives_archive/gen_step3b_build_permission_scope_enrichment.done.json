@@ -1,0 +1,10 @@
+{
+  "task": "build_permission_scope_enrichment",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment.py",
+  "complexity": "medium",
+  "phase": "sentinel.signal.unbucket",
+  "priority": 0.93,
+  "source": "manual_step3b_permission_scope_20260427T1555",
+  "description": "Pure function module. Exposes EXACTLY: def compute_score(metadata: dict) -> tuple[float, dict]. Returns score in [0.0, 100.0]. Reads at LEAST 3 metadata fields: (1) permission_scope_hash from metadata -- if NULL or absent, anchor at 50 and skip further adjustments. (2) description -- scan for permission-implying keywords (case-insensitive substring match): high-risk terms {'filesystem', 'shell', 'exec', 'subprocess', 'eval', 'rm -', 'sudo', 'root access', 'kernel'} contribute -25 each, capped at total -50 from this group; medium-risk terms {'database', 'network', 'http', 'api key', 'credentials', 'env var'} contribute -10 each, capped at -30 from this group. (3) registry_source -- 'npm' and 'pypi' get +5 (more vetted distribution channels); 'github' gets -5 (lower bar for raw repo publication); 'oci' gets 0; anything else (or NULL) gets -10. (4) name -- presence of word 'admin' or 'root' or 'system' in name (case-insensitive substring) when description does NOT include the words 'administration' or 'system management' is -15. Start score at 75. Apply adjustments only when permission_scope_hash present. Clamp final to [0, 100]. Return (score, dict with per-field deltas: {'high_risk_keywords': N, 'medium_risk_keywords': N, 'registry_source_delta': X, 'name_admin_penalty': X, 'fingerprint_present': bool}). NO DB writes, NO network, NO file I/O at runtime, NO imports beyond stdlib + re. Under 2 seconds. NEVER write to mcp_signal_scores directly."
+}

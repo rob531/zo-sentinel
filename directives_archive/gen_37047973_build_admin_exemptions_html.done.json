@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_exemptions_html",
+  "handler": "generate_file",
+  "output_file": "admin_exemptions.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Admin UI for managing mcp_exemptions records on port 8790. Reads from mcp_exemptions via registry_api or direct write_service query. Provides create/expiry-view/revoke operations. Each admin-write action (create, revoke, extend) must insert a row in audit_log per spec section 7. Table columns: mcp_server_id, exemption_reason, valid_until, granted_by. Binds localhost only."
+}

@@ -1,0 +1,12 @@
+{
+  "task": "diagnose_self_diagnostics_stale",
+  "handler": "generate_file",
+  "output_file": "diagnose_self_diagnostics_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic-only daemon to diagnose why self_diagnostics heartbeat is 10m stale (threshold: 600s). Check if the daemon process is running, check PID file, verify health endpoint. Do NOT propose rebuild. Output diagnostic report identifying state (dead, hung, misconfigured). Use write_service query path to introspect health.",
+  "reads": [
+    "diagnose_stale_pipeline_daemons.py"
+  ]
+}

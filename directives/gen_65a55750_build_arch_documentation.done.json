@@ -1,0 +1,9 @@
+{
+  "task": "build_arch_documentation",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Documentation module for inter-daemon topology, write_service contract, and signal invariant. Must document: (1) all daemon names and ports from live wiring map, (2) write_service :8772 protocol (write/query/execute paths), (3) signal invariant contract per spec section 3, (4) protected files list, (5) naming conventions per section 8, (6) out-of-scope list per section 9. Target ~150 lines. Write to /home/workspace/zo_sentinel/ARCHITECTURE.md."
+}

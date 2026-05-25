@@ -1,0 +1,10 @@
+{
+  "task": "build_fingerprint_activator",
+  "handler": "generate_file",
+  "output_file": "fingerprint_activator.py",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.95,
+  "source": "manual_emit_20260427T1600_step2",
+  "description": "Long-running daemon that activates the existing mcp_fingerprinter against registry entries missing fingerprint rows. mcp_fingerprinter.py exposes generate_fingerprint(server_id) -> dict|None and a run() that walks the full registry; we want incremental, not whole-sweep. Every 600s: ws_query 'SELECT server_id FROM mcp_server_registry WHERE server_id NOT IN (SELECT server_id FROM mcp_fingerprints WHERE server_id IS NOT NULL) LIMIT 50'. For each server_id: import mcp_fingerprinter at top of file (sys.path.insert /home/workspace/zo_sentinel); call mcp_fingerprinter.generate_fingerprint(server_id); on success, log INFO 'fingerprinted server_id'; on None or exception, log WARNING with reason and continue. mcp_fingerprinter writes the row itself; this daemon does NOT write to mcp_fingerprints directly. Heartbeat thread every 30s writes to service_health{service='fingerprint_activator'}. Single-instance lockfile at /home/workspace/logs/fingerprint_activator.lock. NEVER imports duckdb or sqlite3 (mcp_fingerprinter handles its own DB access via its own ws_query helper). Uses requests + threading only at this layer. Per-batch INFO log line: fingerprinted_count, none_returned_count, exception_count, batch_duration_s. Try/except wraps each per-server generate_fingerprint call so one bad server never wedges the batch. Logging: logging.FileHandler only, no StreamHandler. Schema column for mcp_fingerprints (LIVE-VERIFIED): server_id, tool_name_hash, description_tokens, permission_scope_hash, domain_fingerprint, version_string, computed_at -- this daemon does not write these fields itself, mcp_fingerprinter does, but listing here so the daemon can validate result shape if useful for logging."
+}

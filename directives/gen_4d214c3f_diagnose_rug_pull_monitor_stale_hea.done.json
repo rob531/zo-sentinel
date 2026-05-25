@@ -1,0 +1,11 @@
+{
+  "task": "diagnose_rug_pull_monitor_stale_heartbeat",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic-only daemon (no rebuild of protected rug_pull_monitor.py). Queries service_health for rug_pull_monitor last_heartbeat age (currently 615h14m \u2014 stale by >28800s threshold). Checks: (1) process still running (ps aux | grep rug_pull_monitor), (2) supervisord config present, (3) log file has recent entries, (4) write_service reachable. Outputs structured diagnostic JSON to stdout. Does NOT write to database. Does NOT attempt to restart service. Preserves protected file invariant \u2014 diagnosis over rebuild per spec section 10 execution rules and Appendix A known-broken section. If heartbeat is recoverable via write_service ping, note it; if process is dead, report as requires ops intervention.",
+  "reads": [],
+  "next_directive": {}
+}

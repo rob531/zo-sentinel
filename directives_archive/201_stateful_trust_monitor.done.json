@@ -1,0 +1,12 @@
+{
+  "task": "build_stateful_trust_monitor",
+  "handler": "generate_file",
+  "output_file": "stateful_trust_monitor.py",
+  "complexity": "high",
+  "phase": "21",
+  "priority": 0.97,
+  "description": "Build stateful_trust_monitor.py. Implements Stateful Trust Inference from AI research. 1. Every 3600s: ws_query mcp_signal_scores WHERE scored_at > now() - INTERVAL 7 DAYS, GROUP BY server_id ORDER BY scored_at ASC. 2. For each server_id with >= 4 scores: compute volatility_index = count of direction changes in time-series score (TRUSTED->RISKY = +1 change, RISKY->TRUSTED = +1 change). A direction change is when score crosses the 50.0 threshold. 3. If volatility_index >= 3 within 7 days: ws_write mcp_risk_register {server_id, risk_tier='QUARANTINED', computed_at=now()} and ws_write audit_log {event_type='trust_volatility_quarantine', actor='stateful_trust_monitor', target_server_id=server_id, action='auto_quarantine', outcome='volatility_index=N', details_json=json.dumps({volatility_index, score_history})}. 4. ws_write mesh_events {event_type='trust_anomaly', agent_id='stateful_trust_monitor', severity='HIGH', payload=json.dumps({server_id, volatility_index})}. 5. GET /health port 8792. ws_write service_health heartbeat. run() uvicorn. All DB via write_service:8772. No duckdb. SMOKE TEST CONTRACT: Must perform time-series grouping calculation using a loop over sorted score rows.",
+  "pillar": "NLP",
+  "source_note": "research_kb:Stateful Trust Inference",
+  "from": "depth_injection_layer2"
+}

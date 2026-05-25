@@ -1,0 +1,9 @@
+{
+  "task": "aidr_gateway_verdict_enforcement_v3",
+  "handler": "generate_file",
+  "output_file": "aidr_gateway_verdict_enforcement_v3.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Enterprise integration: AiDr commit gateway verdict-check enforcement. MUST verify ZO-SENTINEL verdict before forwarding commits. MUST NOT auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED verdicts without explicit override. MUST include injection_resilience score in commit payload. Query verdict via write_service :8772. Use numbered constraints: (1) Check verdict tier from trust_synthesiser output, (2) Reject HIGH_RISK_ISOLATED/KNOWN_THREAT automatically, (3) Require override flag for CAUTION_LIMITED, (4) Include all signal scores in payload. Reference Phase 9 plan. No HTTP between daemons."
+}

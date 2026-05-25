@@ -1,0 +1,9 @@
+{
+  "task": "approval_evidence_bundler",
+  "handler": "generate_file",
+  "output_file": "approval_evidence_bundler.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Produce audit-ready evidence artefact per analyst decision. Bundles all 7 signal scores, attestation text, pi_results summary, corpus hash, and analyst decision metadata into a single signed JSON. Phase 9 enterprise integration. MUST: (1) query mcp_signal_scores for all 7 dimensions plus injection_resilience, (2) fetch attestation_engine output for the server_id, (3) include pi_scorer results if available (pi_corpus_ingest must be wired first), (4) generate deterministic bundle ID from SHA-256 of component hashes, (5) insert row into audit_log with bundle reference. MUST NOT: introduce interactive prompts; all decisions LLM-mediated. Priority: 0.88 per spec Phase 9 candidates."
+}

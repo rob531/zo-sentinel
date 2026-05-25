@@ -1,0 +1,9 @@
+{
+  "task": "quality_pass_trust_synthesiser_v2",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_review.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Quality pass: Review trust_synthesiser_v2.py for correct 7th dimension handling. Verify it reads mcp_signal_scores with dimension='injection_resilience' and applies weight 1.6 with threshold 0.80. If incorrect, queue rewrite. If correct, add self-test stub that verifies dimension integration."
+}

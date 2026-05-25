@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_failures_signal",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_smoke.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnose smoke failures in registry_api.py, rug_pull_monitor.py, signal_analyser.py (all showing similar traceback pattern: File importlib). These failures may be cascading from broken imports in enrichment modules recently built (temporal_stability_enrichment, tool_description_safety_enrichment). Diagnostic should: (1) test import of each recently-built enrichment module, (2) verify enrichment modules conform to pure-function contract, (3) check for circular imports, (4) report findings and recommend repair directive if needed. Do NOT propose rebuilds in this diagnostic; propose separate rebuild directive only if diagnostic confirms specific broken module."
+}

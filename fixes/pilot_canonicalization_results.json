@@ -1,0 +1,1367 @@
+{
+  "generated_at": "2026-04-19T21:45:23.616608+00:00",
+  "endpoint": "https://packages.ecosyste.ms/api/v1/packages/lookup",
+  "mode": "full",
+  "sample_size": 15,
+  "summary": {
+    "SOLO": 0,
+    "NPM_BRIDGE": 2,
+    "PYPI_BRIDGE": 4,
+    "OTHER_BRIDGE": 3,
+    "MULTI_BRIDGE": 6,
+    "ERROR": 0,
+    "NOT_FOUND": 0,
+    "RATE_LIMITED": 0
+  },
+  "bridges_found": 15,
+  "bridge_pct_effective": 100.0,
+  "verdict": "GO -- ecosyste.ms finds cross-registry bridges for majority",
+  "results": [
+    {
+      "server_id": "cda8ef146a11b8a981bba89c95770ad1",
+      "name": "arxiv-mcp-server",
+      "url": "https://github.com/blazickjp/arxiv-mcp-server",
+      "bucket": "PYPI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "pypi",
+          "name": "arxiv-mcp-server",
+          "purl": "pkg:pypi/arxiv-mcp-server",
+          "latest_version": "0.4.11",
+          "downloads": 39948
+        }
+      ]
+    },
+    {
+      "server_id": "2985330d030039b9b0deacaa7219030b",
+      "name": "browser-tools-mcp",
+      "url": "https://github.com/AgentDeskAI/browser-tools-mcp",
+      "bucket": "OTHER_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "go",
+          "name": "github.com/agentdeskai/browser-tools-mcp",
+          "purl": "pkg:golang/github.com/agentdeskai/browser-tools-mcp",
+          "latest_version": "v1.2.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "go",
+          "name": "github.com/AgentDeskAI/browser-tools-mcp",
+          "purl": "pkg:golang/github.com/%21agent%21desk%21a%21i/browser-tools-mcp",
+          "latest_version": "v1.2.0",
+          "downloads": null
+        }
+      ]
+    },
+    {
+      "server_id": "b4212d4b4d442e7efacb45d4bce01466",
+      "name": "chrome-devtools-mcp",
+      "url": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+      "bucket": "MULTI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40iflow-mcp/chrome-devtools-mcp",
+          "latest_version": "0.12.2",
+          "downloads": 2295
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@arikdpc/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40arikdpc/chrome-devtools-mcp",
+          "latest_version": "0.12.4",
+          "downloads": 50
+        },
+        {
+          "ecosystem": "npm",
+          "name": "chrome-devtools-mcp-customized",
+          "purl": "pkg:npm/chrome-devtools-mcp-customized",
+          "latest_version": "0.0.1",
+          "downloads": 29
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@skeksk91/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40skeksk91/chrome-devtools-mcp",
+          "latest_version": "0.20.3",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "ideamans-chrome-devtools-mcp",
+          "purl": "pkg:npm/ideamans-chrome-devtools-mcp",
+          "latest_version": "0.11.3",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@codebyai/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40codebyai/chrome-devtools-mcp",
+          "latest_version": "0.11.0",
+          "downloads": 304
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@privatewebai/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40privatewebai/chrome-devtools-mcp",
+          "latest_version": "0.12.7",
+          "downloads": 0
+        },
+        {
+          "ecosystem": "npm",
+          "name": "chrome-devtools-mcp",
+          "purl": "pkg:npm/chrome-devtools-mcp",
+          "latest_version": "0.20.3",
+          "downloads": 1941225
+        },
+        {
+          "ecosystem": "npm",
+          "name": "whale-devtools-mcp",
+          "purl": "pkg:npm/whale-devtools-mcp",
+          "latest_version": "0.20.4",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@syx0310/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40syx0310/chrome-devtools-mcp",
+          "latest_version": "0.20.5",
+          "downloads": 640
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@daohoangson/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40daohoangson/chrome-devtools-mcp",
+          "latest_version": "0.8.1-alpha.2",
+          "downloads": 11
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@getollie/chrome-devtools-mcp",
+          "purl": "pkg:npm/%40getollie/chrome-devtools-mcp",
+          "latest_version": "0.6.2",
+          "downloads": 996
+        },
+        {
+          "ecosystem": "homebrew",
+          "name": "chrome-devtools-mcp",
+          "purl": "pkg:brew/chrome-devtools-mcp",
+          "latest_version": "0.20.3",
+          "downloads": 380
+        },
+        {
+          "ecosystem": "npm",
+          "name": "crackion-devtools-mcp",
+          "purl": "pkg:npm/crackion-devtools-mcp",
+          "latest_version": "0.1.2",
+          "downloads": 7
+        }
+      ]
+    },
+    {
+      "server_id": "a1b2c3d4e5f60014",
+      "name": "claude-code-mcp",
+      "url": "https://github.com/anthropics/claude-code",
+      "bucket": "MULTI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "npm",
+          "name": "wsl-enabler",
+          "purl": "pkg:npm/wsl-enabler",
+          "latest_version": "0.1.0",
+          "downloads": 100
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "flightsim-mcp",
+          "purl": "pkg:pypi/flightsim-mcp",
+          "latest_version": "0.1.0",
+          "downloads": 14
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "anycode-ai",
+          "purl": "pkg:pypi/anycode-ai",
+          "latest_version": "1.3.0",
+          "downloads": 2081
+        },
+        {
+          "ecosystem": "spack",
+          "name": "claude-code",
+          "purl": "pkg:spack/claude-code",
+          "latest_version": "2.1.50",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@yuanzhixiang/claude-code",
+          "purl": "pkg:npm/%40yuanzhixiang/claude-code",
+          "latest_version": "0.0.2",
+          "downloads": 8
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@claudecode/cli",
+          "purl": "pkg:npm/%40claudecode/cli",
+          "latest_version": "0.0.2",
+          "downloads": 15
+        },
+        {
+          "ecosystem": "npm",
+          "name": "cl-claude-code",
+          "purl": "pkg:npm/cl-claude-code",
+          "latest_version": "1.0.1",
+          "downloads": 25
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "motd-claude-code-plugins-v3",
+          "purl": "pkg:pypi/motd-claude-code-plugins-v3",
+          "latest_version": "1.0.0",
+          "downloads": 13
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@chatclub1/claude-code",
+          "purl": "pkg:npm/%40chatclub1/claude-code",
+          "latest_version": "2.0.60",
+          "downloads": 12
+        },
+        {
+          "ecosystem": "npm",
+          "name": "handsomes-claude-code",
+          "purl": "pkg:npm/handsomes-claude-code",
+          "latest_version": "1.0.24",
+          "downloads": 2
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "life3d-rgb",
+          "purl": "pkg:pypi/life3d-rgb",
+          "latest_version": "0.7.4",
+          "downloads": 16
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "autocleaneeg-pubmedmcp",
+          "purl": "pkg:pypi/autocleaneeg-pubmedmcp",
+          "latest_version": "1.1.4",
+          "downloads": 78
+        },
+        {
+          "ecosystem": "npm",
+          "name": "zgmiai-claude-code",
+          "purl": "pkg:npm/zgmiai-claude-code",
+          "latest_version": "1.0.73",
+          "downloads": 35
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "motd-claude-code-plugins",
+          "purl": "pkg:pypi/motd-claude-code-plugins",
+          "latest_version": "1.0.2",
+          "downloads": 86
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "claude-code-plugins-v1",
+          "purl": "pkg:pypi/claude-code-plugins-v1",
+          "latest_version": "1.0.5",
+          "downloads": 46
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "motd-claude-code-plugins-v2",
+          "purl": "pkg:pypi/motd-claude-code-plugins-v2",
+          "latest_version": "1.0.0",
+          "downloads": 25
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "motd-claude-code-plugins-v4",
+          "purl": "pkg:pypi/motd-claude-code-plugins-v4",
+          "latest_version": "1.0.0",
+          "downloads": 29
+        },
+        {
+          "ecosystem": "npm",
+          "name": "claude-vip",
+          "purl": "pkg:npm/claude-vip",
+          "latest_version": "1.0.66",
+          "downloads": 43
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@handsomes/handsomes-claude-code",
+          "purl": "pkg:npm/%40handsomes/handsomes-claude-code",
+          "latest_version": "1.0.25",
+          "downloads": 5
+        },
+        {
+          "ecosystem": "npm",
+          "name": "mirra-cc-bridge",
+          "purl": "pkg:npm/mirra-cc-bridge",
+          "latest_version": "1.6.0",
+          "downloads": 161
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@umimoney/clawdbot-relay-plugin",
+          "purl": "pkg:npm/%40umimoney/clawdbot-relay-plugin",
+          "latest_version": "0.1.23",
+          "downloads": 107
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@bonsai-ai/claude-code",
+          "purl": "pkg:npm/%40bonsai-ai/claude-code",
+          "latest_version": "2.1.92",
+          "downloads": 1094
+        },
+        {
+          "ecosystem": "nixpkgs",
+          "name": "claude-code-bin",
+          "purl": "pkg:nix/claude-code-bin?channel=unstable",
+          "latest_version": "2.1.70",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "claude-code-cn",
+          "purl": "pkg:npm/claude-code-cn",
+          "latest_version": "1.0.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "ola-cc",
+          "purl": "pkg:npm/ola-cc",
+          "latest_version": "0.0.10",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "claude-code",
+          "purl": "pkg:npm/claude-code",
+          "latest_version": "1.0.0",
+          "downloads": 19279
+        },
+        {
+          "ecosystem": "go",
+          "name": "github.com/anthropics/claude-code",
+          "purl": "pkg:golang/github.com/anthropics/claude-code",
+          "latest_version": "v2.1.104+incompatible",
+          "downloads": null
+        },
+        {
+          "ecosystem": "nixpkgs",
+          "name": "claude-code",
+          "purl": "pkg:nix/claude-code?channel=unstable",
+          "latest_version": "2.1.59",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@zyzheal/ola-cc",
+          "purl": "pkg:npm/%40zyzheal/ola-cc",
+          "latest_version": "0.1.2",
+          "downloads": 0
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@anthropic-ai/claude-code",
+          "purl": "pkg:npm/%40anthropic-ai/claude-code",
+          "latest_version": "2.1.114",
+          "downloads": 49397091
+        }
+      ]
+    },
+    {
+      "server_id": "ae0aabd0ee7b34a7b917502cea9107f2",
+      "name": "context7",
+      "url": "https://github.com/upstash/context7",
+      "bucket": "MULTI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "npm",
+          "name": "context101",
+          "purl": "pkg:npm/context101",
+          "latest_version": "1.0.33",
+          "downloads": 109
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/context7-mcp",
+          "purl": "pkg:npm/%40iflow-mcp/context7-mcp",
+          "latest_version": "1.0.1",
+          "downloads": 780
+        },
+        {
+          "ecosystem": "go",
+          "name": "github.com/upstash/context7",
+          "purl": "pkg:golang/github.com/upstash/context7",
+          "latest_version": "v1.0.30",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/context7",
+          "purl": "pkg:npm/%40iflow-mcp/context7",
+          "latest_version": "1.0.0",
+          "downloads": 42
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@upstash/context7-chat-mcp",
+          "purl": "pkg:npm/%40upstash/context7-chat-mcp",
+          "latest_version": "0.0.3",
+          "downloads": 56
+        },
+        {
+          "ecosystem": "npm",
+          "name": "context7-mcp-server",
+          "purl": "pkg:npm/context7-mcp-server",
+          "latest_version": "1.0.1",
+          "downloads": 1320
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@wyim105/context7-mcp",
+          "purl": "pkg:npm/%40wyim105/context7-mcp",
+          "latest_version": "1.0.0",
+          "downloads": 13
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@mseep/context7-mcp",
+          "purl": "pkg:npm/%40mseep/context7-mcp",
+          "latest_version": "1.0.6",
+          "downloads": 11
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@buggyhunter/context7-mcp",
+          "purl": "pkg:npm/%40buggyhunter/context7-mcp",
+          "latest_version": "1.0.7",
+          "downloads": 39
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@upstash/context7-sdk",
+          "purl": "pkg:npm/%40upstash/context7-sdk",
+          "latest_version": "0.3.0",
+          "downloads": 1004
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@sebastiansala/context7-mcp",
+          "purl": "pkg:npm/%40sebastiansala/context7-mcp",
+          "latest_version": "2.1.10",
+          "downloads": 86
+        },
+        {
+          "ecosystem": "homebrew",
+          "name": "context7-mcp",
+          "purl": "pkg:brew/context7-mcp",
+          "latest_version": "2.1.6",
+          "downloads": 209
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@upstash/context7-mcp",
+          "purl": "pkg:npm/%40upstash/context7-mcp",
+          "latest_version": "2.1.7",
+          "downloads": 1221354
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@upstash/context7-tools-ai-sdk",
+          "purl": "pkg:npm/%40upstash/context7-tools-ai-sdk",
+          "latest_version": "0.2.3",
+          "downloads": 453
+        },
+        {
+          "ecosystem": "npm",
+          "name": "ctx7",
+          "purl": "pkg:npm/ctx7",
+          "latest_version": "0.3.10",
+          "downloads": 11366
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@pewterjakllc/context7-mcp",
+          "purl": "pkg:npm/%40pewterjakllc/context7-mcp",
+          "latest_version": "2.1.1",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@dooilabs/context101",
+          "purl": "pkg:npm/%40dooilabs/context101",
+          "latest_version": "1.0.33",
+          "downloads": 103
+        }
+      ]
+    },
+    {
+      "server_id": "f7410b5f9fe8a531862e9b41049648dd",
+      "name": "csharp-sdk",
+      "url": "https://github.com/modelcontextprotocol/csharp-sdk",
+      "bucket": "OTHER_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "nuget",
+          "name": "fastmcp.modelcontextprotocol.aspnetcore",
+          "purl": "pkg:nuget/fastmcp.modelcontextprotocol.aspnetcore",
+          "latest_version": "0.5.0-preview.2",
+          "downloads": null
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "rjo.modelcontextprotocol.testing",
+          "purl": "pkg:nuget/rjo.modelcontextprotocol.testing",
+          "latest_version": "1.0.0-preview.1",
+          "downloads": null
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "chillicream.modelcontextprotocol.core",
+          "purl": "pkg:nuget/chillicream.modelcontextprotocol.core",
+          "latest_version": "1.2.0",
+          "downloads": 17169
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "chillicream.modelcontextprotocol.aspnetcore",
+          "purl": "pkg:nuget/chillicream.modelcontextprotocol.aspnetcore",
+          "latest_version": "1.2.0",
+          "downloads": 17076
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "chillicream.modelcontextprotocol",
+          "purl": "pkg:nuget/chillicream.modelcontextprotocol",
+          "latest_version": "1.2.0",
+          "downloads": 17103
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "fastmcp.modelcontextprotocol.core",
+          "purl": "pkg:nuget/fastmcp.modelcontextprotocol.core",
+          "latest_version": "0.5.0-preview.2",
+          "downloads": null
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "fastmcp.modelcontextprotocol",
+          "purl": "pkg:nuget/fastmcp.modelcontextprotocol",
+          "latest_version": "0.5.0-preview.2",
+          "downloads": null
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "modelcontextprotocol.core",
+          "purl": "pkg:nuget/modelcontextprotocol.core",
+          "latest_version": "1.2.0",
+          "downloads": 6928617
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "modelcontextprotocol.testpackagepublishingignore",
+          "purl": "pkg:nuget/modelcontextprotocol.testpackagepublishingignore",
+          "latest_version": null,
+          "downloads": null
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "modelcontextprotocol.aspnetcore",
+          "purl": "pkg:nuget/modelcontextprotocol.aspnetcore",
+          "latest_version": "1.2.0",
+          "downloads": 4199290
+        },
+        {
+          "ecosystem": "nuget",
+          "name": "modelcontextprotocol",
+          "purl": "pkg:nuget/modelcontextprotocol",
+          "latest_version": "1.2.0",
+          "downloads": 7107065
+        }
+      ]
+    },
+    {
+      "server_id": "104de8c3c221bb1d6a60666d94b04d5d",
+      "name": "exa-mcp-server",
+      "url": "https://github.com/exa-labs/exa-mcp-server",
+      "bucket": "NPM_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "npm",
+          "name": "exa-mcp-server-test",
+          "purl": "pkg:npm/exa-mcp-server-test",
+          "latest_version": "3.0.6",
+          "downloads": 776
+        },
+        {
+          "ecosystem": "npm",
+          "name": "exa-test-ak",
+          "purl": "pkg:npm/exa-test-ak",
+          "latest_version": "1.0.5",
+          "downloads": 9
+        },
+        {
+          "ecosystem": "npm",
+          "name": "nm-mcp-exa-server",
+          "purl": "pkg:npm/nm-mcp-exa-server",
+          "latest_version": "0.3.5",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "jordy-exa-mcp-server",
+          "purl": "pkg:npm/jordy-exa-mcp-server",
+          "latest_version": "3.1.4",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "markov-exa-mcp-server",
+          "purl": "pkg:npm/markov-exa-mcp-server",
+          "latest_version": "2.0.20",
+          "downloads": 650
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@mcpflow.io/mcp-exa-mcp-server-",
+          "purl": "pkg:npm/%40mcpflow.io/mcp-exa-mcp-server-",
+          "latest_version": "1.0.1",
+          "downloads": 12
+        },
+        {
+          "ecosystem": "npm",
+          "name": "exa-mcp-server",
+          "purl": "pkg:npm/exa-mcp-server",
+          "latest_version": "3.2.0",
+          "downloads": 16627
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/exa-mcp-server",
+          "purl": "pkg:npm/%40iflow-mcp/exa-mcp-server",
+          "latest_version": "0.2.3",
+          "downloads": 14
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@199bio/exa-mcp-server",
+          "purl": "pkg:npm/%40199bio/exa-mcp-server",
+          "latest_version": "2.0.0",
+          "downloads": 32
+        }
+      ]
+    },
+    {
+      "server_id": "04d66bfa225e9a0dd3aab8123a0ad027",
+      "name": "excel-mcp-server",
+      "url": "https://github.com/haris-musa/excel-mcp-server",
+      "bucket": "OTHER_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "go",
+          "name": "github.com/haris-musa/excel-mcp-server",
+          "purl": "pkg:golang/github.com/haris-musa/excel-mcp-server",
+          "latest_version": "v0.1.7",
+          "downloads": null
+        }
+      ]
+    },
+    {
+      "server_id": "5dacf6cf3707eac4b03c3d049bbb1b04",
+      "name": "fast-agent",
+      "url": "https://github.com/evalstate/fast-agent",
+      "bucket": "PYPI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "pypi",
+          "name": "hf-inference-acp",
+          "purl": "pkg:pypi/hf-inference-acp",
+          "latest_version": "0.6.13",
+          "downloads": 2110
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "fast-agent-acp",
+          "purl": "pkg:pypi/fast-agent-acp",
+          "latest_version": "0.6.13",
+          "downloads": 3400
+        }
+      ]
+    },
+    {
+      "server_id": "542965ab7bd0bd5fd08f1b795d72e540",
+      "name": "fastmcp",
+      "url": "https://github.com/PrefectHQ/fastmcp",
+      "bucket": "PYPI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "pypi",
+          "name": "fastmcp",
+          "purl": "pkg:pypi/fastmcp",
+          "latest_version": "3.2.4",
+          "downloads": 80572733
+        }
+      ]
+    },
+    {
+      "server_id": "fa124b6a13f7335ffa5ec9eed8dbc2ab",
+      "name": "firecrawl-mcp-server",
+      "url": "https://github.com/firecrawl/firecrawl-mcp-server",
+      "bucket": "NPM_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/mendableai-firecrawl-mcp-server",
+          "purl": "pkg:npm/%40iflow-mcp/mendableai-firecrawl-mcp-server",
+          "latest_version": "3.7.4",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/cawstudios-mcp-server-firecrawl",
+          "purl": "pkg:npm/%40iflow-mcp/cawstudios-mcp-server-firecrawl",
+          "latest_version": "3.7.4",
+          "downloads": 16
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/firecrawl-mcp",
+          "purl": "pkg:npm/%40iflow-mcp/firecrawl-mcp",
+          "latest_version": "3.7.1",
+          "downloads": 112
+        },
+        {
+          "ecosystem": "npm",
+          "name": "firecrawl-mcp",
+          "purl": "pkg:npm/firecrawl-mcp",
+          "latest_version": "3.11.0",
+          "downloads": 77660
+        }
+      ]
+    },
+    {
+      "server_id": "8d49e667cf2061b43c72b154900a56e9",
+      "name": "gemini-cli",
+      "url": "https://github.com/google-gemini/gemini-cli",
+      "bucket": "MULTI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "nixpkgs",
+          "name": "vscode-extensions.Google.gemini-cli-vscode-ide-companion",
+          "purl": "pkg:nix/vscode-extensions.Google.gemini-cli-vscode-ide-companion?channel=unstable",
+          "latest_version": "0.30.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@naka1205/geminicli",
+          "purl": "pkg:npm/%40naka1205/geminicli",
+          "latest_version": "0.1.21",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@hahnd/gemini-dev-cli",
+          "purl": "pkg:npm/%40hahnd/gemini-dev-cli",
+          "latest_version": "0.0.2",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@hahnd/gemini-dev",
+          "purl": "pkg:npm/%40hahnd/gemini-dev",
+          "latest_version": "0.0.1",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@zuyzuygames/personalize-gemini-cli",
+          "purl": "pkg:npm/%40zuyzuygames/personalize-gemini-cli",
+          "latest_version": "0.39.0-nightly.20260408.e77b22e66",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@q78kg/gemini-cli-core",
+          "purl": "pkg:npm/%40q78kg/gemini-cli-core",
+          "latest_version": "0.1.19",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "gemini-cli-neovim",
+          "purl": "pkg:npm/gemini-cli-neovim",
+          "latest_version": "0.1.18",
+          "downloads": 23
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@felixtz/llama-cli",
+          "purl": "pkg:npm/%40felixtz/llama-cli",
+          "latest_version": "0.2.3",
+          "downloads": 5
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@anipleades/fashion-ai-cli",
+          "purl": "pkg:npm/%40anipleades/fashion-ai-cli",
+          "latest_version": "0.1.21",
+          "downloads": 5
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@halbekanne/gemini-cli-core",
+          "purl": "pkg:npm/%40halbekanne/gemini-cli-core",
+          "latest_version": "1.0.1",
+          "downloads": 211
+        },
+        {
+          "ecosystem": "nixpkgs",
+          "name": "gemini-cli",
+          "purl": "pkg:nix/gemini-cli?channel=unstable",
+          "latest_version": "0.34.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "nixpkgs",
+          "name": "gemini-cli-bin",
+          "purl": "pkg:nix/gemini-cli-bin?channel=unstable",
+          "latest_version": "0.34.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@felixtz/llama-cli-core",
+          "purl": "pkg:npm/%40felixtz/llama-cli-core",
+          "latest_version": "0.2.1",
+          "downloads": 9
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@oelite/arc-cli-core",
+          "purl": "pkg:npm/%40oelite/arc-cli-core",
+          "latest_version": "0.3.0",
+          "downloads": 119
+        },
+        {
+          "ecosystem": "npm",
+          "name": "gemini-cli-unofficial-core",
+          "purl": "pkg:npm/gemini-cli-unofficial-core",
+          "latest_version": "0.19.0-nightly.20251120.8e531dc02-u1",
+          "downloads": 2
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@davmoren/coco-cli",
+          "purl": "pkg:npm/%40davmoren/coco-cli",
+          "latest_version": "0.12.0-nightly.20251022.0542de95",
+          "downloads": 4
+        },
+        {
+          "ecosystem": "npm",
+          "name": "sixth-cli",
+          "purl": "pkg:npm/sixth-cli",
+          "latest_version": "0.16.4",
+          "downloads": 298
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@blocksuser/gemini-cli-core",
+          "purl": "pkg:npm/%40blocksuser/gemini-cli-core",
+          "latest_version": "0.1.15",
+          "downloads": 6
+        },
+        {
+          "ecosystem": "npm",
+          "name": "vertex-custom-cli",
+          "purl": "pkg:npm/vertex-custom-cli",
+          "latest_version": "0.1.1",
+          "downloads": 3
+        },
+        {
+          "ecosystem": "homebrew",
+          "name": "gemini-cli",
+          "purl": "pkg:brew/gemini-cli",
+          "latest_version": "0.36.0",
+          "downloads": 116876
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@blocksuser/gemini-cli",
+          "purl": "pkg:npm/%40blocksuser/gemini-cli",
+          "latest_version": "0.7.1",
+          "downloads": 8
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@oelite/arc-cli-a2a-server",
+          "purl": "pkg:npm/%40oelite/arc-cli-a2a-server",
+          "latest_version": "0.2.32",
+          "downloads": 16
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@anek-codes/gemini-cli",
+          "purl": "pkg:npm/%40anek-codes/gemini-cli",
+          "latest_version": "0.25.0-nightly.20260107.59a18e710",
+          "downloads": 14
+        },
+        {
+          "ecosystem": "npm",
+          "name": "aadish",
+          "purl": "pkg:npm/aadish",
+          "latest_version": "0.2.1",
+          "downloads": 54
+        },
+        {
+          "ecosystem": "npm",
+          "name": "log-parser-runner",
+          "purl": "pkg:npm/log-parser-runner",
+          "latest_version": "0.1.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "stiven-cli",
+          "purl": "pkg:npm/stiven-cli",
+          "latest_version": "1.0.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "brocode-ai",
+          "purl": "pkg:npm/brocode-ai",
+          "latest_version": "1.0.0",
+          "downloads": 5
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@kepoai/ai-file-tools",
+          "purl": "pkg:npm/%40kepoai/ai-file-tools",
+          "latest_version": "1.2.1",
+          "downloads": 20
+        },
+        {
+          "ecosystem": "npm",
+          "name": "gemini-cli-core-neovim",
+          "purl": "pkg:npm/gemini-cli-core-neovim",
+          "latest_version": "0.1.18",
+          "downloads": 9
+        },
+        {
+          "ecosystem": "npm",
+          "name": "guangzhi-llm-cli",
+          "purl": "pkg:npm/guangzhi-llm-cli",
+          "latest_version": "10.0.2",
+          "downloads": 76
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@valew/venom-cli",
+          "purl": "pkg:npm/%40valew/venom-cli",
+          "latest_version": "0.1.15",
+          "downloads": 5
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@google-dev/gemini-cli-core",
+          "purl": "pkg:npm/%40google-dev/gemini-cli-core",
+          "latest_version": "0.1.14",
+          "downloads": 20
+        },
+        {
+          "ecosystem": "npm",
+          "name": "lpaimi",
+          "purl": "pkg:npm/lpaimi",
+          "latest_version": "0.1.13",
+          "downloads": 4
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@i_am_kkk/gemini-cli-sdk",
+          "purl": "pkg:npm/%40i_am_kkk/gemini-cli-sdk",
+          "latest_version": "0.36.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "gemini-code",
+          "purl": "pkg:npm/gemini-code",
+          "latest_version": "0.3.2",
+          "downloads": 26
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@kds215/gemini-cli",
+          "purl": "pkg:npm/%40kds215/gemini-cli",
+          "latest_version": "0.1.17",
+          "downloads": 9
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@trukhinyuri/gemini-pp",
+          "purl": "pkg:npm/%40trukhinyuri/gemini-pp",
+          "latest_version": "0.28.0",
+          "downloads": 59
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@radna0/gemini-cli",
+          "purl": "pkg:npm/%40radna0/gemini-cli",
+          "latest_version": "0.1.9",
+          "downloads": 1
+        },
+        {
+          "ecosystem": "npm",
+          "name": "guangzhi-llm-cli-test1",
+          "purl": "pkg:npm/guangzhi-llm-cli-test1",
+          "latest_version": "0.44.0",
+          "downloads": 40
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@wxp212/gemini-cli",
+          "purl": "pkg:npm/%40wxp212/gemini-cli",
+          "latest_version": "0.28.5",
+          "downloads": 364
+        },
+        {
+          "ecosystem": "npm",
+          "name": "gemini-cli-unofficial",
+          "purl": "pkg:npm/gemini-cli-unofficial",
+          "latest_version": "0.19.0-nightly.20251120.8e531dc02-u1",
+          "downloads": 71
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@soulcloude/soulcloude-cli",
+          "purl": "pkg:npm/%40soulcloude/soulcloude-cli",
+          "latest_version": "0.1.7",
+          "downloads": 8
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@gacua/gemini-cli-core",
+          "purl": "pkg:npm/%40gacua/gemini-cli-core",
+          "latest_version": "0.0.1-alpha.10",
+          "downloads": 7
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@google-dev/gemini-cli",
+          "purl": "pkg:npm/%40google-dev/gemini-cli",
+          "latest_version": "0.1.14",
+          "downloads": 23
+        },
+        {
+          "ecosystem": "go",
+          "name": "github.com/google-gemini/gemini-cli",
+          "purl": "pkg:golang/github.com/google-gemini/gemini-cli",
+          "latest_version": "v0.36.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@q78kg/gemini-cli",
+          "purl": "pkg:npm/%40q78kg/gemini-cli",
+          "latest_version": "0.1.19",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "log-parser-core",
+          "purl": "pkg:npm/log-parser-core",
+          "latest_version": "0.1.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@peanut996/gemini-cli",
+          "purl": "pkg:npm/%40peanut996/gemini-cli",
+          "latest_version": "0.1.17",
+          "downloads": 7
+        },
+        {
+          "ecosystem": "npm",
+          "name": "log-parser-tools",
+          "purl": "pkg:npm/log-parser-tools",
+          "latest_version": "0.1.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@xinfei61/xinfei-cli",
+          "purl": "pkg:npm/%40xinfei61/xinfei-cli",
+          "latest_version": "0.1.17",
+          "downloads": 18
+        },
+        {
+          "ecosystem": "npm",
+          "name": "log-parser-cli",
+          "purl": "pkg:npm/log-parser-cli",
+          "latest_version": "1.0.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "log-parser-agents",
+          "purl": "pkg:npm/log-parser-agents",
+          "latest_version": "0.1.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@trukhinyuri/gemini-pp-core",
+          "purl": "pkg:npm/%40trukhinyuri/gemini-pp-core",
+          "latest_version": "0.27.0-nightly.20260121.97aac696f",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@xinfei61/xinfei-cli-core",
+          "purl": "pkg:npm/%40xinfei61/xinfei-cli-core",
+          "latest_version": "0.1.17",
+          "downloads": 2
+        },
+        {
+          "ecosystem": "npm",
+          "name": "bc-ai-cli",
+          "purl": "pkg:npm/bc-ai-cli",
+          "latest_version": "0.1.23",
+          "downloads": 7
+        },
+        {
+          "ecosystem": "npm",
+          "name": "opengemini-cli",
+          "purl": "pkg:npm/opengemini-cli",
+          "latest_version": "0.1.9",
+          "downloads": 6
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@unlikeotherai/gemini-cli-core",
+          "purl": "pkg:npm/%40unlikeotherai/gemini-cli-core",
+          "latest_version": "0.30.0-no-bother-0.6",
+          "downloads": 555
+        },
+        {
+          "ecosystem": "npm",
+          "name": "pasoma-cli-dev",
+          "purl": "pkg:npm/pasoma-cli-dev",
+          "latest_version": "0.1.0",
+          "downloads": 7
+        },
+        {
+          "ecosystem": "npm",
+          "name": "sixth-cli-core",
+          "purl": "pkg:npm/sixth-cli-core",
+          "latest_version": "0.13.1",
+          "downloads": 9
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@peanut996/gemini-cli-core",
+          "purl": "pkg:npm/%40peanut996/gemini-cli-core",
+          "latest_version": "0.1.17",
+          "downloads": 11
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@unlikeotherai/gemini-cli",
+          "purl": "pkg:npm/%40unlikeotherai/gemini-cli",
+          "latest_version": "0.30.0-no-bother-0.6",
+          "downloads": 546
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@google/gemini-cli-core",
+          "purl": "pkg:npm/%40google/gemini-cli-core",
+          "latest_version": "0.37.1",
+          "downloads": 3057593
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@google/gemini-cli-a2a-server",
+          "purl": "pkg:npm/%40google/gemini-cli-a2a-server",
+          "latest_version": "0.37.1",
+          "downloads": 11822
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@google/gemini-cli",
+          "purl": "pkg:npm/%40google/gemini-cli",
+          "latest_version": "0.37.1",
+          "downloads": 3160503
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@kds215/gemini-cli-core",
+          "purl": "pkg:npm/%40kds215/gemini-cli-core",
+          "latest_version": "0.2.0",
+          "downloads": 6
+        },
+        {
+          "ecosystem": "npm",
+          "name": "pasoma",
+          "purl": "pkg:npm/pasoma",
+          "latest_version": "1.2.3",
+          "downloads": 55
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@i_am_kkk/gemini-cli-core",
+          "purl": "pkg:npm/%40i_am_kkk/gemini-cli-core",
+          "latest_version": "0.36.0",
+          "downloads": null
+        },
+        {
+          "ecosystem": "openvsx",
+          "name": "Google/gemini-cli-vscode-ide-companion",
+          "purl": "pkg:openvsx/Google/gemini-cli-vscode-ide-companion",
+          "latest_version": "0.20.0",
+          "downloads": 1180334
+        }
+      ]
+    },
+    {
+      "server_id": "a1b2c3d4e5f60013",
+      "name": "mcp-server-browserbase",
+      "url": "https://github.com/browserbase/mcp-server-browserbase",
+      "bucket": "MULTI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "go",
+          "name": "github.com/browserbase/mcp-server-browserbase",
+          "purl": "pkg:golang/github.com/browserbase/mcp-server-browserbase",
+          "latest_version": "v3.0.0+incompatible",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@browserbasehq/mcp",
+          "purl": "pkg:npm/%40browserbasehq/mcp",
+          "latest_version": "3.0.0",
+          "downloads": 1387
+        }
+      ]
+    },
+    {
+      "server_id": "b894107a38803c1db33a2f468d722328",
+      "name": "mcp-server-docker",
+      "url": "https://github.com/ckreiling/mcp-server-docker",
+      "bucket": "PYPI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "pypi",
+          "name": "iflow-mcp-ckreiling-mcp-server-docker",
+          "purl": "pkg:pypi/iflow-mcp-ckreiling-mcp-server-docker",
+          "latest_version": "0.2.1",
+          "downloads": 33
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "mseep-mcp-server-docker",
+          "purl": "pkg:pypi/mseep-mcp-server-docker",
+          "latest_version": "0.2.2",
+          "downloads": 33
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "mcp-server-docker",
+          "purl": "pkg:pypi/mcp-server-docker",
+          "latest_version": "0.2.1",
+          "downloads": 6038
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "cgx-mcp-server-docker",
+          "purl": "pkg:pypi/cgx-mcp-server-docker",
+          "latest_version": "0.3.0",
+          "downloads": 26
+        }
+      ]
+    },
+    {
+      "server_id": "91f3202d5a83380f0f6725cd9b70126a",
+      "name": "mcp-server-kubernetes",
+      "url": "https://github.com/Flux159/mcp-server-kubernetes",
+      "bucket": "MULTI_BRIDGE",
+      "status": "ok",
+      "cousins": [
+        {
+          "ecosystem": "npm",
+          "name": "@mseep/mcp-server-kubernetes",
+          "purl": "pkg:npm/%40mseep/mcp-server-kubernetes",
+          "latest_version": "1.4.0",
+          "downloads": 15
+        },
+        {
+          "ecosystem": "npm",
+          "name": "mcp-server-kubernetes",
+          "purl": "pkg:npm/mcp-server-kubernetes",
+          "latest_version": "3.5.0",
+          "downloads": 43174
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@iflow-mcp/mcp-server-kubernetes",
+          "purl": "pkg:npm/%40iflow-mcp/mcp-server-kubernetes",
+          "latest_version": "2.8.1",
+          "downloads": 13
+        },
+        {
+          "ecosystem": "homebrew",
+          "name": "mcp-server-kubernetes",
+          "purl": "pkg:brew/mcp-server-kubernetes",
+          "latest_version": "3.5.0",
+          "downloads": 63
+        },
+        {
+          "ecosystem": "go",
+          "name": "github.com/flux159/mcp-server-kubernetes",
+          "purl": "pkg:golang/github.com/flux159/mcp-server-kubernetes",
+          "latest_version": "v3.3.0+incompatible",
+          "downloads": null
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@scaleops/mcp-server-kubernetes",
+          "purl": "pkg:npm/%40scaleops/mcp-server-kubernetes",
+          "latest_version": "2.9.7",
+          "downloads": 16
+        },
+        {
+          "ecosystem": "go",
+          "name": "github.com/Flux159/mcp-server-kubernetes",
+          "purl": "pkg:golang/github.com/%21flux159/mcp-server-kubernetes",
+          "latest_version": "v3.5.0+incompatible",
+          "downloads": null
+        }
+      ]
+    }
+  ]
+}

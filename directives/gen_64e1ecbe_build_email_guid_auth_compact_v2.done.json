@@ -1,0 +1,9 @@
+{
+  "task": "build_email_guid_auth_compact_v2",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_compact.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild email_guid_auth_compact.py fixing smoke failure. Compact variant of email GUID auth. Must expose compute_auth(guid: str, email: str) -> dict with keys {valid, reason}. Include dependency declaration comment at top. Do NOT prefix output filename with build_."
+}

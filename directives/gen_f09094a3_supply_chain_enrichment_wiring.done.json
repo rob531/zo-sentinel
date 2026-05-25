@@ -1,0 +1,9 @@
+{
+  "task": "supply_chain_enrichment_wiring",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Integration wiring to connect supply_chain_enrichment.py to signal_analyser_v2.py. Calls signal_analyser_v2 via ws_execute to register the enrichment as a new signal source. Updates mcp_signal_enrichments with supply_chain_enrichment records via ws_write. Uses write_service at :8772 for all DB operations. Follows inter-daemon communication rule \u2014 no HTTP between peers. Verifies enrichment produces >=20 distinct scores across 34 fingerprints before activating."
+}

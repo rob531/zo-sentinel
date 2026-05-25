@@ -1,0 +1,9 @@
+{
+  "task": "test_aidr_gateway_verdict_enforcement",
+  "handler": "generate_file",
+  "output_file": "aidr_gateway_verdict_test.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Write integration test for aidr_commit_gateway.py (built 2026-04-17) verifying verdict-check enforcement. Test that gateway: 1) FORWARDS commits for TRUSTED_GENERAL and TRUSTED_RESEARCH verdicts, 2) BLOCKS commits for CAUTION_LIMITED and HIGH_RISK_ISOLATED without explicit override, 3) INCLUDES injection_resilience score in commit payload. Use write_service query to fetch verdict state. Create synthetic test MCPs with known verdicts. Log results to test_results.jsonl."
+}

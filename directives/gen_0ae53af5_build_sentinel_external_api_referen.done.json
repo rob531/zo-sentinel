@@ -1,0 +1,9 @@
+{
+  "task": "build_sentinel_external_api_reference",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.85,
+  "description": "Generate sentinel_external_api.md documentation for the external API on port 8791. Must document: authentication via X-API-Key header, rate limiting (60 req/min/key), all GET endpoints for server lookup, verdict retrieval, signal scores, and attestations. Must include example requests and responses in JSON format. Must cite this as read-only API per spec section 7."
+}

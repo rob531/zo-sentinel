@@ -1,0 +1,9 @@
+{
+  "task": "build_manager_agent_diagnostic",
+  "handler": "generate_file",
+  "output_file": "diagnose_manager_agent_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to diagnose why manager_agent is stale at 14 minutes (threshold is 300s/5m). Should check: (1) service_health table entry, (2) manager_agent.py process status via PID file, (3) any recent exceptions in logs, (4) dependency imports. Should output actionable diagnostics. Do NOT propose rebuild - only diagnostics to surface the issue for human resolution."
+}

@@ -1,0 +1,12 @@
+{
+  "task": "build_knowledge_base_seed",
+  "handler": "generate_file",
+  "output_file": "KNOWLEDGE_BASE.md",
+  "complexity": "low",
+  "phase": "2",
+  "priority": 0.94,
+  "reads": [],
+  "description": "Seed the KNOWLEDGE_BASE.md file that all generation prompts inject. Content: CRITICAL RULES section: never import duckdb directly, always use write_service POST /write with rows field not row, all daemons need run() and __main__ guard, heartbeat pattern, port assignments (8772=write_service,8773=inference_router,8780=approval,8781=registry,8782=search,8783=dashboard,8784=bulk,8785=compare), verdict taxonomy, write_service query pattern. COMMON ERRORS section listing the top 5 wiring mistakes seen in failed builds. PATTERNS section with working code snippets for ws_query and ws_write.",
+  "context": "",
+  "from": "claude_batch"
+}

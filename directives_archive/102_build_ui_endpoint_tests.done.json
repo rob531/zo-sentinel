@@ -1,0 +1,12 @@
+{
+  "task": "build_ui_endpoint_tests",
+  "handler": "generate_file",
+  "output_file": "tests/ui_endpoint_tests.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.87,
+  "reads": ["schema.py", "registry_api.py", "approval_workflow.py"],
+  "description": "UI and API endpoint test suite. Uses only stdlib requests + no browser required. Test classes: (1) HealthTests: GET /health on ports 8780,8781,8782,8790 - assert 200 + {status:ok} in response. (2) RegistryAPITests: GET /v1/registry assert list response, GET /v1/threats assert list, GET /v1/assess?mcp=filesystem assert keys (verdict,trust_score,server_id) present, GET /health. (3) ApprovalWorkflowTests: GET /health 200, GET /api/registry returns list, POST /api/submit with valid body {mcp_name,url,description,requested_by} assert {submitted:true} or 422 with validation detail. (4) SearchAPITests: GET /search?q=filesystem assert results list, GET /stats assert verdict_breakdown dict. (5) UIServerTests: GET http://localhost:8790 assert HTML response with status 200. (6) DataIntegrityTests: if mcp_server_registry has rows: assert all have server_id+name+url, assert verdicts are valid taxonomy values. Each test: catch ConnectionError as SKIP not FAIL (service may not be running). Print: PASS/FAIL/SKIP per test with reason. Write results JSON to tests/last_ui_test_results.json. ws_write ui_test_complete to mesh_events with pass_count,fail_count,skip_count. Run: python3 tests/ui_endpoint_tests.py. sys.exit(1) if any FAIL (not SKIP).",
+  "context": "All tests use requests.get/post with timeout=5. Treat ConnectionRefusedError as SKIP. Tests should be idempotent and non-destructive. No test data should persist after run except last_ui_test_results.json.",
+  "from": "claude_manual"
+}

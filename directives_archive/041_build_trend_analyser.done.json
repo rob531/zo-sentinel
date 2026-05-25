@@ -1,0 +1,14 @@
+{
+  "task": "build_trend_analyser",
+  "handler": "generate_file",
+  "output_file": "trend_analyser.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.75,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Trend analyser daemon. Every 43200s: queries mcp_server_registry with last_assessed grouped by date. Computes: verdict distribution over time, avg trust_score trend (7d/14d/30d rolling), new servers per day, threat count trend, risk tier distribution change. Writes TREND_REPORT.md with ASCII bar charts using | characters. ws_write trend summary to mesh_events. Identifies: improving_security (trust_score trend +), degrading_security (trust_score trend -), rapid_growth (>5 new servers per day). Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

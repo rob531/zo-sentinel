@@ -1,0 +1,9 @@
+{
+  "task": "build_e2e_scenarios",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Build e2e_scenarios.py covering three canonical flows: (1) new MCP ingestion -> signal scoring -> verdict -> attestation -> UI visible, (2) submission portal -> approval workflow -> verdict update, (3) threat intel overlay -> risk rank change. Script must demonstrate end-to-end pipeline without actual network calls or DB writes. Pure test harness that validates signal flow logic. Refer to spec section 1 core loop and section 4 data contracts for expected state transitions."
+}

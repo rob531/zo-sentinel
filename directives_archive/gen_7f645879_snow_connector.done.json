@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector",
+  "handler": "generate_file",
+  "output_file": "snow_connector.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Build snow_connector.py: ServiceNow inbound webhook for MCP request tickets. MUST use numbered constraints: (1) MUST authenticate via SNOW OAuth token validation, (2) MUST validate request signature using SNOW webhook secret, (3) MUST reject unsigned webhooks with 401, (4) MUST parse SNOW ticket fields: short_description, description, u_mcp_server_name, u_requested_by, (5) MUST write to mcp_submissions via write_service at 8772, (6) MUST return SNOW acknowledgment within 30s, (7) MUST NOT log ticket content in plaintext. Cite PROMPT_INJECTION_PLAN.md if relevant."
+}

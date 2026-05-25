@@ -1,0 +1,11 @@
+{
+  "task": "OPERATIONS_runbook_review",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Review and update OPERATIONS.md to reflect current daemon inventory. Include: (1) full supervisord layout with all active daemons, (2) log file locations for each daemon, (3) recovery runbook for stale heartbeat scenarios (write_service at 9h53m, self_diagnostics stale, rug_pull_monitor at 627h), (4) restart procedures that do NOT require builder intervention. Document the 30-day evidence_blob expiry procedure and retention_sweeper validation. Mark recovery steps that require human action vs automated recovery.",
+  "reads": [],
+  "next_directive": {}
+}

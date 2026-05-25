@@ -1,0 +1,16 @@
+{
+  "task": "build_tool_schema_deep_scanner",
+  "handler": "generate_file",
+  "output_file": "tool_schema_deep_scanner.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.93,
+  "reads": [
+    "schema.py",
+    "known_threats.py",
+    "manifest_blast_radius.py"
+  ],
+  "description": "Deep tool schema scanner daemon. For each server in mcp_server_registry: fetch tool definitions GET {url}/tools timeout=5s. Parse tools[].inputSchema. Deep analysis: (1) Parameter type pollution: 'additionalProperties: true' on any schema = accepts arbitrary input = MEDIUM, (2) Missing parameter validation: no minLength/maxLength/pattern on string params = MEDIUM, (3) Recursive schema: $ref pointing to parent schema = potential DoS = HIGH, (4) Required params list longer than 10 = over-permissioned = CAUTION, (5) Tool description contains URL pattern with user-controlled input = SSRF_risk = HIGH, (6) Default values containing IP addresses or internal hostnames = internal_probe = CRITICAL. ws_write mcp_threat_associations for each finding. ws_write mcp_signal_scores tool_description_safety and permission_scope updates. Write SCHEMA_SCAN_REPORT.md. Poll 21600s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

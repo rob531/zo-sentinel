@@ -1,0 +1,10 @@
+{
+  "task": "build_mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view.html",
+  "complexity": "medium",
+  "phase": "19",
+  "priority": 0.91,
+  "description": "Forensic drill-down UI. Single-file HTML. Brutalist design: background #0d0f14, accent #00e5ff cyan, text #c8d0e0, monospace fonts, sharp borders no border-radius. Read mcp_name from URL: const params = new URLSearchParams(window.location.search); const mcpName = params.get('mcp'). Fetch from forensic API: fetch('/api/forensics/' + encodeURIComponent(mcpName)). If 404 show MCP NOT FOUND panel. Timeline rendering: each event in response.timeline as a row with timestamp (monospace), event_type badge colour-coded (THREAT_DETECTED=red, SIGNAL_UPDATE=cyan, ADMIN_ACTION=orange, ATTESTATION_ISSUED=green, DISCOVERED=grey), description and data summary. Trust score gauge: large number display coloured by range >=75 green >=50 amber >=25 red <25 dark red. Summary stats bar: total events, days monitored, threat count, assessment count. Page title ZO-SENTINEL FORENSIC ANALYSIS. Loading spinner while fetch pending. Error state. No external dependencies. Embedded style and script.",
+  "from": "claude_manual"
+}

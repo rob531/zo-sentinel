@@ -1,0 +1,9 @@
+{
+  "task": "build_exemption_expirer_daemon",
+  "handler": "generate_file",
+  "output_file": "exemption_expirer.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Build exemption_expirer.py daemon per spec Appendix A. Nightly check scans mcp_exemptions for records past valid_until. Updates status to 'EXPIRED' via write_service :8772. Query pattern: SELECT id, valid_until FROM mcp_exemptions WHERE status = 'ACTIVE' AND valid_until < NOW(). Heartbeat every 60s. Graceful shutdown handling. No direct DB access."
+}

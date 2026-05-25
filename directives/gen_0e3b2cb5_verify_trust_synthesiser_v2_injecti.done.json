@@ -1,0 +1,13 @@
+{
+  "task": "verify_trust_synthesiser_v2_injection_resilience",
+  "handler": "generate_file",
+  "output_file": "verify_trust_synthesiser_v2_injection_resilience.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Verification module. Checks trust_synthesiser_v2.py to confirm it reads mcp_signal_scores rows WHERE dimension='injection_resilience' and applies weight 1.6 with threshold 0.80. Queries the DB for injection_resilience score distribution across servers, validates that the composite scoring formula includes this dimension. Reports findings. If dimension is missing or weight is incorrect, outputs diagnostic blob noting the gap. Does NOT modify trust_synthesiser_v2.py (protected). Priority: quality pass per Phase 8 spec.",
+  "reads": [
+    "trust_synthesiser_v2.py"
+  ],
+  "next_directive": {}
+}

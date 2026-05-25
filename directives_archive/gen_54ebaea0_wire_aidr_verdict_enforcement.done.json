@@ -1,0 +1,9 @@
+{
+  "task": "wire_aidr_verdict_enforcement",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_enforcement_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.88,
+  "description": "Wire aidr_commit_gateway.py (built 2026-04-17) verdict-check enforcement into the commit pipeline. MUST rules: (1) aidr_commit_gateway MUST query write_service for verdict before forwarding any commit, (2) MUST reject commits for MCPs with CAUTION_LIMITED or HIGH_RISK_ISOLATED verdict without explicit override flag, (3) MUST include injection_resilience score in commit payload per Phase 8 integration, (4) MUST use write_service for all state, never direct HTTP. Add a verdict-check wrapper function to aidr_commit_gateway that consults mcp_server_registry.verdict column. Update any existing test at aidr_verdict_enforcement_test_v2.py (currently failing cohort_1_n3) or create new test."
+}

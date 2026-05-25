@@ -1,0 +1,11 @@
+{
+  "task": "diagnose_stale_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic daemon to diagnose why signal_analyser is stale at 32h6m. Must: (1) query write_service for last heartbeat of signal_analyser and downstream trust_synthesiser, (2) query mcp_signal_scores for most recent entry timestamps, (3) emit a JSON diagnostic blob to signal_diagnostics table with fields: daemon_name, last_heartbeat_ts, last_work_ts, hours_stale, probable_cause, recommended_action. Must NOT write to core tables mcp_*. Is diagnostic only; do NOT attempt to restart or repair. Reads: write_service at :8772 only.",
+  "reads": [],
+  "next_directive": {}
+}

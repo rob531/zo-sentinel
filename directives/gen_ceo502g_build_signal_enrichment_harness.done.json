@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_enrichment_harness",
+  "handler": "generate_file",
+  "output_file": "signal_enrichment_harness.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Build a harness that wires the existing pure-function enrichment modules (every file in /home/workspace/zo_sentinel/ matching *_enrichment.py that exposes compute_score(metadata) -> tuple[float, dict]) into the mcp_signal_scores pipeline. Discovery: importlib-load each *_enrichment.py module from /home/workspace/zo_sentinel/, verify it has compute_score with the right signature, run on a small synthetic batch (3 known good metadata dicts), reject any module that crashes or returns out-of-range scores. Apply the surviving enrichments per server: read mcp_server_registry rows that lack a row in mcp_signal_enrichments for the matching enrichment_name, for each new (server, enrichment) pair call compute_score(metadata) and ws_write to mcp_signal_enrichments with columns server_id, enrichment_name, score, evidence (JSON-stringified dict), computed_at (ISO-8601). Discrimination guardrail: after each batch of N=200 servers, query distinct score count for that enrichment_name; if distinct_vals == 1 across the full run, mark the enrichment as 'flat' in mesh_memory and skip on next pass. Run as a one-shot (single pass through pending servers, log final counts, exit 0). NOT a daemon. The 280-row mcp_signal_enrichments table vs 5088-row registry is the primary signal-quality bottleneck for the 20k goal. Constraints: FileHandler logging only, ws_write only (never direct duckdb.connect), ISO-8601 timestamps, idempotent."
+}

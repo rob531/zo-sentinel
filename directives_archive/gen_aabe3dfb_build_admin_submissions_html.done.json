@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_submissions_html",
+  "handler": "generate_file",
+  "output_file": "admin_submissions.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Admin triage view for pending MCP submissions. Reads mcp_submissions table (note: mcp_name and requested_by are correct column names per DB schema, NOT mcp_identifier or requester_name). Shows pending items with verdict context where available. Allows analyst to transition submissions through workflow. All state changes logged to audit_log. Binds localhost :8790."
+}

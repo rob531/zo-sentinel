@@ -1,0 +1,15 @@
+{
+  "task": "build_mcp_fingerprinter",
+  "handler": "generate_file",
+  "output_file": "mcp_fingerprinter.py",
+  "complexity": "medium",
+  "phase": "5",
+  "priority": 0.72,
+  "reads": [
+    "schema.py",
+    "text_patterns.py"
+  ],
+  "description": "MCP fingerprinter. generate_fingerprint(server_id)->dict: creates a stable behavioral fingerprint for an MCP server combining: tool_name_hash (SHA256 of sorted tool names), description_tokens (top 20 significant words), permission_scope_hash, domain_fingerprint, version_string. Fingerprints stored in mcp_fingerprints table. compare_fingerprints(fp_a,fp_b)->float 0-1 similarity. detect_impersonation(server_id)->list: finds existing servers with >0.8 fingerprint similarity. Used by rug_pull_monitor and behavioral_analyser. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "admin_attestations_page",
+  "handler": "generate_file",
+  "output_file": "admin_attestations.html",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Admin UI surface for revoking or extending attestations. Must include: attestation list (server_name, verdict, issued_at, expires_at), revoke button (writes to audit_log), extend validity action. Ports to localhost:8790. Reads via write_service :8772 /query mcp_attestations, writes via :8772/write. Each revoke action must insert audit_log row per section 7 security requirement."
+}

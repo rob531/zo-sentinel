@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_self_diagnostics_staleness",
+  "handler": "generate_file",
+  "output_file": "diagnose_self_diagnostics.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic module to investigate self_diagnostics daemon staleness (age=14m, threshold=600s). Must NOT propose rebuild of self_diagnostics (file is protected per spec section 8). Instead, diagnose via write_service health queries which tables/daemons self_diagnostics tracks, which dependencies might be failing, and what heartbeat pattern is broken. Output a diagnostic report as JSON to stdout. No DB writes to core tables."
+}

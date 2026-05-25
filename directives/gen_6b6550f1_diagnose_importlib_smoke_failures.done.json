@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_importlib_smoke_failures",
+  "handler": "generate_file",
+  "output_file": "importlib_import_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module to identify root cause of importlib errors causing smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. Read module dependency graph via write_service (:8772) query against information_schema. Check import chain for missing dependencies, circular imports, or version mismatches. Produce a report dict with: missing_modules list, circular_imports list, version_conflicts list. Do NOT modify any target files - this is diagnostic only. Protected files (registry_api.py, rug_pull_monitor.py, signal_analyser.py) are NOT to be rebuilt; output is a separate diagnostic report consumed by operators."
+}

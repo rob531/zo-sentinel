@@ -1,0 +1,9 @@
+{
+  "task": "build_integration_verification_suite",
+  "handler": "generate_file",
+  "output_file": "integration_verification_suite.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "End-to-end integration test that verifies the newly built enrichment modules (supply_chain_enrichment, community_signal_enrichment, permission_scope, temporal_stability, tool_description_safety) are properly wired into signal_analyser and trust_synthesiser. Test sequence: (1) invoke each enrichment's compute_score() with synthetic metadata dict; (2) verify output conforms to evidence blob shape {signal_type: str, confidence: float, evidence_blob: dict}; (3) verify signal_analyser calls enrichments and writes to mcp_signal_enrichments; (4) verify trust_synthesiser reads enrichment scores and applies weights. Queries write_service only \u2014 no direct DB access. Exits 0 on success, non-zero with diagnostic output on any failure."
+}

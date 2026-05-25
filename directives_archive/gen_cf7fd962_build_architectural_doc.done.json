@@ -1,0 +1,9 @@
+{
+  "task": "build_architectural_doc",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Create ARCHITECTURE.md documenting: (1) Inter-daemon topology with heartbeat ages shown, (2) write_service contract on :8772 for all state exchange, (3) Signal invariant contract - every enricher must emit {signal_type, confidence, evidence_blob}, (4) Port assignments and which bind localhost vs exposed, (5) Enforcer pattern for protected files (propose NEW companion, never rewrite), (6) Phase 8 PI harness components and their data flow, (7) Phase 9 enterprise integration targets (snow_connector, aidr_commit_gateway, approval_evidence_bundler). Reference spec version 4 date 2026-04-22."
+}

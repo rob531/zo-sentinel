@@ -1,0 +1,13 @@
+{
+  "task": "build_operations_runbook",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Document supervisord layout (sentinel_directive_generator, zo_sentinel_builder, pipeline_bridge, all daemons). Include log locations (/home/workspace/zo_sentinel/logs/), recovery runbook for stale daemons, write_service health checks, and enrichment_harness execution guide. Reference FRESHNESS_SLAS from ARCHITECTURE.md.",
+  "reads": [
+    "ARCHITECTURE.md"
+  ],
+  "next_directive": {}
+}

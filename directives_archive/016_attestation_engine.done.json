@@ -1,0 +1,12 @@
+{
+  "task": "attestation_engine",
+  "handler": "generate_file",
+  "output_file": "attestation_engine.py",
+  "complexity": "high",
+  "reads": ["schema.py", "schema_v2.py", "risk_ranker.py", "trust_synthesiser.py"],
+  "description": "Produces non-binding contextual attestation statements for MCP servers and writes them to a new mcp_attestations DuckDB table and ATTESTATION_REPORT.md. An attestation is NOT a certification. It is a probabilistic intelligence statement with explicit scope, confidence, and expiry. Function: generate_attestation(server_id) -> dict. Attestation fields: {server_id, name, attestation_text VARCHAR, scope VARCHAR, confidence_level VARCHAR, valid_until TIMESTAMPTZ, risk_tier VARCHAR, caveats TEXT, generated_at TIMESTAMPTZ}. Attestation language patterns (NEVER binary safe/unsafe): - CRITICAL risk: 'ZO-SENTINEL has identified active threat indicators associated with this MCP. Deployment in any environment carries significant risk pending independent verification.' - HIGH risk: 'Elevated risk signals detected. Suitable only for isolated research environments with no access to sensitive data or credentials.' - MEDIUM risk: 'Moderate confidence in safety for controlled use. Recommended for staging environments under explicit security review. Not validated for production systems processing PII.' - LOW risk: 'No significant threat indicators detected at time of assessment. Likely suitable for enterprise use under standard security controls. Assessment valid for 90 days.' Attestations expire: CRITICAL=7d, HIGH=30d, MEDIUM=60d, LOW=90d. Write ATTESTATION_REPORT.md with all current attestations. Daemon runs every 6 hours.",
+  "context": "The non-binding language is essential. ZO-SENTINEL produces intelligence not certification. Every attestation must include caveats field: 'This attestation reflects automated signal analysis only. It does not constitute a security audit or legal certification. Independent review is required before production deployment.'",
+  "priority": 0.88,
+  "from": "claude_directive",
+  "phase": "7"
+}

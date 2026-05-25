@@ -1,0 +1,11 @@
+{
+  "task": "sentinel_schema",
+  "handler": "generate_file",
+  "output_file": "schema.py",
+  "complexity": "low",
+  "description": "Python module that creates ZO-SENTINEL DuckDB tables via write_service execute endpoint. Tables needed: (1) mcp_server_registry: id BIGINT PK, server_id VARCHAR UNIQUE, name VARCHAR, registry_source VARCHAR, url VARCHAR, description TEXT, trust_score REAL, verdict VARCHAR, first_seen TIMESTAMPTZ, last_seen TIMESTAMPTZ, scan_count INTEGER DEFAULT 0; (2) mcp_signal_scores: id BIGINT PK, server_id VARCHAR, signal_name VARCHAR, score REAL, evidence TEXT, scored_at TIMESTAMPTZ; (3) mcp_definition_history: id BIGINT PK, server_id VARCHAR, snapshot_hash VARCHAR, snapshot_content TEXT, captured_at TIMESTAMPTZ - for rug-pull detection; (4) mcp_threat_associations: id BIGINT PK, server_id VARCHAR, threat_type VARCHAR, evidence TEXT, severity VARCHAR, reported_at TIMESTAMPTZ. Include a create_all() function that sends each CREATE TABLE IF NOT EXISTS via POST to http://127.0.0.1:8772/execute.",
+  "context": "Run this once on startup via phase2 scanner. Keep SQL compatible with DuckDB syntax.",
+  "priority": 0.95,
+  "from": "claude_bootstrap_directive",
+  "phase": "2"
+}

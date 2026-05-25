@@ -1,0 +1,9 @@
+{
+  "task": "signal_discrimination_auditor",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_auditor.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Auditor daemon that queries mcp_signal_scores table for all 8 signals and computes distinct score counts per signal_type. Targets signals flagged WEAK in diagnostic: permission_scope (3 distinct), temporal_stability (3 distinct), tool_description_safety (3 distinct). Must query SELECT DISTINCT signal_type, COUNT(DISTINCT score) FROM mcp_signal_scores GROUP BY signal_type. Outputs report to logs/signal_discrimination_<timestamp>.json with counts. If any signal has <10 distinct scores, flags as actionable. No DB writes, runs as one-shot daemon."
+}

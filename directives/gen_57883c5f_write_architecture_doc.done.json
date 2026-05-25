@@ -1,0 +1,9 @@
+{
+  "task": "write_architecture_doc",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Write ARCHITECTURE.md documenting: (1) inter-daemon topology showing write_service :8772 as the sole state bus, inference_router :8773 as the only direct external call; (2) signal invariant contract - every signal producer must emit {\"signal_type\", \"confidence\", \"evidence_blob\"}; (3) append-only immutability rules for core tables; (4) freshness SLA windows (24h first verdict, 7d re-verdict); (5) heartbeat requirements (60s intervals, 2h death threshold); (6) out-of-scope boundary (no gateway/proxy/enforcement). Must NOT duplicate DuckDB schema definitions - cite DB_SCHEMA.md instead."
+}

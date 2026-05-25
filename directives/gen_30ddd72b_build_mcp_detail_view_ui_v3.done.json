@@ -1,0 +1,9 @@
+{
+  "task": "build_mcp_detail_view_ui_v3",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild mcp_detail_view_ui.py fixing smoke failure. FastAPI UI surface on port 8790 showing MCP server details. Must expose routes: /mcp/{server_id} for detail view, /mcp/{server_id}/signals for signal scores, /mcp/{server_id}/attestation for attestation. Use write_service on :8772 for data access. Include dependency declaration comment at top. Do NOT prefix output filename with build_."
+}

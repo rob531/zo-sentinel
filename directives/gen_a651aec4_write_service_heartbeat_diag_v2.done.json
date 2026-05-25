@@ -1,0 +1,9 @@
+{
+  "task": "write_service_heartbeat_diag_v2",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_diag_v2.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnostic script to diagnose why write_service heartbeat is stale at 4h36m. Check: (1) service process alive, (2) startup import chain success, (3) heartbeat table reachable via :8772/query, (4) last_heartbeat column value in service_health. DO NOT attempt to restart or fix write_service (protected). Output diagnostic report to stdout. This is diagnostic only, not a daemon."
+}

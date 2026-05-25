@@ -1,0 +1,9 @@
+{
+  "task": "OPERATIONS_md",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Operations documentation for ZO-SENTINEL. Must include: (1) supervisord configuration locations and how to reload; (2) log file paths for each daemon (per daemon name pattern /var/log/sentinel/{daemon_name}.log); (3) recovery runbook for stale heartbeats: check service_health table, identify stale services, check PID file, kill -9 and restart via supervisorctl; (4) recovery runbook for write_service failures: exponential backoff behavior, when to restart write_service; (5) how to verify enrichment modules are scoring correctly using enrichment_harness.py; (6) how to check freshness SLAs in service_health meta."
+}

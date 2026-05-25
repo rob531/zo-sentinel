@@ -1,0 +1,9 @@
+{
+  "task": "extend_external_api_history",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api_v2_history.py",
+  "complexity": "medium",
+  "phase": "15",
+  "priority": 0.8,
+  "description": "EXTEND EXISTING sentinel_external_api.py with a new endpoint: GET /v1/mcp/{server_id}/history. Returns the verdict/definition change timeline for one MCP server. This is a READ-ONLY ADDITION -- produce a PATCH MODULE with register_routes(app) function, do NOT rewrite the external API. Follow the pattern from /v1/mcp/{id}/threats in /home/workspace/zo_sentinel/sentinel_external_api.py: (1) validate server_id ^[a-f0-9]{32}$ or 400; (2) verify server exists in mcp_server_registry, else 404; (3) query mcp_definition_history WHERE server_id=? ORDER BY captured_at DESC LIMIT N where N comes from a limit query param (default 20, max 100, same bounds as threats endpoint); (4) Pydantic model DefinitionHistoryRecord with fields: snapshot_type:Optional[str], captured_at:Optional[str], prev_verdict:Optional[str], new_verdict:Optional[str], change_reason:Optional[str], tool_count:Optional[int]; (5) Depends(enforce_rate_limit) on the route; (6) if no history rows exist, return empty list (not 404); (7) include the limit param with Query(20, ge=1, le=100). Use ws_query helper. Reference get_mcp_threats for the exact request-validation-query-response pattern."
+}

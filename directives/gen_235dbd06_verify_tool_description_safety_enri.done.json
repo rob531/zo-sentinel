@@ -1,0 +1,9 @@
+{
+  "task": "verify_tool_description_safety_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_verify.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module to verify tool_description_safety_enrichment.py (built 2026-05-03T16:35:37) is wired into signal_analyser.py. Query mcp_signal_enrichments for signal_type='tool_description_safety', check for >=20 distinct score values across the registry. If the enrichment module is not being invoked by signal_analyser, generate a wiring directive. Do NOT rebuild tool_description_safety_enrichment.py \u2014 it exists and passes smoke."
+}

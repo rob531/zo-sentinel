@@ -1,0 +1,9 @@
+{
+  "task": "retry_start_all_sh",
+  "handler": "generate_file",
+  "output_file": "start_all.sh",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.95,
+  "description": "Retry generation of supervisord startup wrapper script. Previous build failed. Must produce a shell script that starts all sentinel services in correct order: first DB service on 8772, then API daemons on 8773/8780/8781, then all worker daemons. Include log rotation and health check loop."
+}

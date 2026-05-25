@@ -1,0 +1,12 @@
+{
+  "task": "risk_ranker",
+  "handler": "generate_file",
+  "output_file": "risk_ranker.py",
+  "complexity": "high",
+  "reads": ["schema.py", "signal_analyser.py", "trust_synthesiser.py", "known_threats.py"],
+  "description": "Daemon that produces ranked risk output for all assessed MCPs and writes a RISK_REGISTER.md file plus a risk_register DuckDB table. Risk ranking dimensions: (1) trust_score inverted (lower score = higher risk rank). (2) threat_count: count of mcp_threat_associations records per server_id. (3) environment_exposure: count of APPROVED decisions in production environment from mcp_decisions. (4) time_since_assessed: MCPs not assessed in >7 days get staleness penalty. Composite risk_rank = weighted sum. Output table mcp_risk_register {server_id, name, risk_rank REAL, risk_tier VARCHAR, threat_count INT, last_assessed, environment_exposure INT, staleness_days INT, ranked_at TIMESTAMPTZ}. Risk tiers: CRITICAL (rank>80), HIGH (60-80), MEDIUM (40-60), LOW (<40). Write RISK_REGISTER.md to /home/workspace/zo_sentinel/ summarising top 20 risks. Run every 4 hours.",
+  "context": "risk_rank is the primary output consumed by attestation_engine.py. The RISK_REGISTER.md is human-readable for Robin to review. Tier names must match ZO-SENTINEL verdict language: contextual, never binary.",
+  "priority": 0.89,
+  "from": "claude_directive",
+  "phase": "7"
+}

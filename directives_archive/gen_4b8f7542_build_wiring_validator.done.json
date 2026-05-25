@@ -1,0 +1,9 @@
+{
+  "task": "build_wiring_validator",
+  "handler": "generate_file",
+  "output_file": "enrichment_wiring_validator.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Validation module that checks all built enrichment modules conform to the enrichment contract: (1) each has compute_score(metadata: dict) returning (float, dict), (2) evidence blob contains signal_type field, (3) each reads at least 5 distinct metadata fields, (4) each produces at least 20 distinct scores across synthetic corpus. Should query information_schema.columns and test each module with synthetic inputs. Output a validation report listing compliant and non-compliant enrichments. Do NOT write to DB - read-only validation."
+}

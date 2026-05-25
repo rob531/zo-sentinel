@@ -1,0 +1,9 @@
+{
+  "task": "community_signal_enrichment_integration_verify",
+  "handler": "generate_file",
+  "output_file": "community_signal_integration_verifier.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Verify community_signal_enrichment.py is properly wired into signal_analyser. Must query mcp_signal_enrichments WHERE signal_type='community_signal' and verify >=20 distinct scores across the 34 registry fingerprints. If cardinality <20, trace the wiring path through signal_analyser_enrichment_bridge.py and community_signal_enrichment_wiring.py to find the integration gap. Pure diagnostic only - no file writes, no DB writes except heartbeat."
+}

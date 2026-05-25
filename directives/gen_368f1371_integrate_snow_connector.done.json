@@ -1,0 +1,14 @@
+{
+  "task": "integrate_snow_connector",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Wire existing snow_connector.py (built 2026-04-16) into approval_workflow daemon on port 8780. MUST: (1) Register snow_connector as a write_service consumer watching mcp_decisions table for new rows with status='APPROVED' or 'REJECTED'; (2) Transform each decision into SNOW ticket payload with verdict, signal scores summary, and attestation reference; (3) POST to SNOW inbound webhook endpoint (configurable via SNOW_WEBHOOK_URL env var); (4) Handle 429/503 with exponential backoff (3 tries, max 30s per call); (5) Log all outbound calls to audit_log with action='snow_ticket_created'; (6) NEVER hardcode SNOW credentials \u2014 use os.environ.get() for all secrets; (7) Include X-API-Key header for SNOW auth if required. Do NOT rebuild snow_connector.py itself \u2014 it already exists.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_verdict_check_test",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_verdict_check_test.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Create integration test for aidr_commit_gateway.py (built 2026-04-17). Test that gateway correctly enforces verdict-check before forwarding commits: MUST reject CAUTION_LIMITED and HIGH_RISK_ISOLATED without explicit override, MUST forward TRUSTED_GENERAL and TRUSTED_RESEARCH, MUST include injection_resilience score in commit payload. aidr_commit_gateway.py is protected; do NOT modify it. Test file should be standalone script that mocks external calls and verifies gateway behavior via write_service queries against synthetic MCP registry entries. Include assertions with clear pass/fail output."
+}

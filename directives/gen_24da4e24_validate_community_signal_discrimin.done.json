@@ -1,0 +1,11 @@
+{
+  "task": "validate_community_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "community_signal_discrimination_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Validate community_signal scores have high cardinality across 10,140 MCPs. Query mcp_signal_scores for community_signal dimension, count distinct score values, assert >= 20. Query mcp_signal_enrichments for community_signal_enrichment entries, assert >= 20 distinct scores. If cardinality is low, flag which metadata fields are being underutilized. Pure diagnostic \u2014 no DB writes.",
+  "reads": [],
+  "next_directive": {}
+}

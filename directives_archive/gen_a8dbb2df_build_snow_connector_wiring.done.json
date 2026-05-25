@@ -1,0 +1,9 @@
+{
+  "task": "build_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_approval_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire snow_connector.py into approval_workflow. Reads ServiceNow MCP request tickets via snow_connector and creates mcp_submissions entries. Uses write_service at 127.0.0.1:8772 exclusively. MUST validate SNOW webhook signature before processing. No direct DB access per spec section 5."
+}

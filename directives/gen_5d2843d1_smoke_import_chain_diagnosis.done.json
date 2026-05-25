@@ -1,0 +1,9 @@
+{
+  "task": "smoke_import_chain_diagnosis",
+  "handler": "generate_file",
+  "output_file": "smoke_import_chain_debug.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.87,
+  "description": "Diagnose smoke failures in registry_api.py, rug_pull_monitor.py, signal_analyser.py (all show 'File \"<string>\", line 10' import traceback). The error location in <string> suggests the issue is in dynamically compiled code, likely from write_service or inference_router calls. Steps: (1) run python3 -c \"import registry_api\" to capture actual traceback, (2) check if these files import any modules that reference write_service or inference_router incorrectly, (3) verify sys.path includes /home/workspace/zo_sentinel, (4) check for circular import patterns. Output the actual Python traceback for each file. Do NOT propose fixes; output diagnosis only. Handler: diagnostic_report."
+}

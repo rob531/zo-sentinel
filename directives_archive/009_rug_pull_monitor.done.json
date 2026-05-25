@@ -1,0 +1,11 @@
+{
+  "task": "phase5c_rug_pull_monitor",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor.py",
+  "complexity": "high",
+  "description": "Daemon that detects MCP server definition mutations (rug-pull attacks). For each approved MCP in mcp_server_registry, periodically fetches fresh tool definitions from npm registry or GitHub, computes SHA256 hash of tool descriptions + permission scopes. Compares against last known hash stored in mcp_definition_history. If hash changes: (1) compute change severity (minor_version_bump vs tool_description_changed vs permissions_escalated vs new_exfil_pattern). (2) Write alert to mcp_threat_associations with threat_type='definition_mutation'. (3) For severity CRITICAL or HIGH: automatically update trust_score penalty (-25 points), trigger re-assessment. (4) Write mesh_event 'rug_pull_detected' with server_id, change_severity, diff_summary. (5) For previously-approved MCPs: write alert to mcp_decisions marking approval as 'REQUIRES_REVIEW'. Runs every 6 hours. Heartbeat to service_health.",
+  "context": "This is ZO-SENTINEL's most unique signal - continuous post-approval monitoring. No other tool does this continuously. The rug-pull detection answers: has an MCP I approved yesterday changed today? Critical for enterprise orgs that approved an MCP and assumed it stays safe.",
+  "priority": 0.87,
+  "from": "claude_directive",
+  "phase": "5"
+}

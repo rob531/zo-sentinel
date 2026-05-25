@@ -1,0 +1,9 @@
+{
+  "task": "attestation_engine_dynamic_evidence",
+  "handler": "generate_file",
+  "output_file": "attestation_engine_dynamic_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Review module for attestation_engine.py to verify it cites dynamic evidence in attestations. Reads attestation_engine.py source and queries mcp_attestations table via ws_query to check: (1) attestation text includes dynamic signal scores from mcp_signal_scores not just static templates; (2) attestation references injection_resilience dimension if available; (3) evidence_blob is referenced in attestation output. Produces a conformance report: dynamic_evidence_cited (bool per row), missing_injection_resilience (count), static_template_only (count). High priority pass per Phase 8 status note. attestation_engine.py is protected; propose companion module only if rewrite needed."
+}

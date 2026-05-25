@@ -1,0 +1,9 @@
+{
+  "task": "verify_mcp_traffic_fingerprints_wiring",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints_integration_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Build integration check for mcp_traffic_fingerprints_wiring.py (built 2026-05-24T10:54:39). Module must be verified as consuming mcp_traffic_fingerprints library (imports detect_mcp_methods, is_mcp_traffic). Must confirm: (1) import present, (2) compute_mcp_fingerprint called in scanning path, (3) no direct HTTP to peer daemons (uses write_service only per section 5 architecture). Pure diagnostic. No DB writes. Reference: mcp_traffic_fingerprints.py pure library spec section Appendix B."
+}

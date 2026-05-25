@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_wiring_for_weak_signals",
+  "handler": "generate_file",
+  "output_file": "enrichment_wiring_verifier.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.89,
+  "description": "Diagnostic module to verify that signal_analyser_v2.py correctly invokes the three v2 enrichment modules (permission_scope_enrichment_v2.py, temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py) and that their outputs flow into mcp_signal_enrichments. Performs a live query against write_service :8772 checking: (1) compute_score() is importable from each v2 module, (2) calling each with synthetic metadata produces (float, dict) in [0,100], (3) rows exist in mcp_signal_enrichments with signal_type matching these three signals. Reports distinct score distribution per signal to confirm discrimination has improved. Top comment '# deps: requests'. No DB direct access. Exits 0 on all checks passing, 1 with diagnostic output on any failure."
+}

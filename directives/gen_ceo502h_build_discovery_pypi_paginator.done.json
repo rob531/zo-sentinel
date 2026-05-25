@@ -1,0 +1,9 @@
+{
+  "task": "build_discovery_pypi_paginator",
+  "handler": "generate_file",
+  "output_file": "discovery_pypi_paginator.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.90,
+  "description": "Build a third discovery source paginator targeting PyPI for MCP-server packages. Mirror the structure of the existing discovery_npm_paginator.py and discovery_github_paginator.py: poll the PyPI JSON API for packages matching keyword filters ('mcp-server', 'mcp_server', 'model-context-protocol', 'mcp-tool'), paginate cleanly (PyPI doesn't paginate via cursor; use the simple search index at https://pypi.org/simple/ filtered by name regex, or the BigQuery-like search via https://pypi.org/search/?q= with HTML parsing as fallback), enrich each hit with package metadata (description, author, latest version, last upload, downloads if available via pypistats), and write rows to mcp_discovery_candidates via ws_write with discovery_source='pypi'. Run as a daemon: poll every 30 minutes, write rows_written count to log, heartbeat to service_health every 60s on a daemon thread (independent of main loop). Daily target ~200-500 new candidates from PyPI (vs npm/github already covered). Constraints: FileHandler only, ws_write only, ISO-8601 timestamps, idempotent on re-runs (skip candidates already in registry by name match), respect PyPI rate limits (max 1 req/sec, exponential backoff on 429). Closes carryover: third discovery source toward 20k MCP target."
+}

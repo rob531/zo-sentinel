@@ -1,0 +1,9 @@
+{
+  "task": "improve_tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Rebuild tool_description_safety_enrichment.py to improve weak signal discrimination (currently only 3 distinct values per signal quality diagnostic). Must expose compute_score(metadata: dict) -> tuple[float, dict]. Must read MULTIPLE fields: tool_count, description_length_avg, has_prompt_injection_patterns, has_credential_exfil_patterns, has_dangerous_capabilities, schema_completeness, doc_quality_score. Apply weighted scoring with partial scores for each dimension. Target >=20 distinct scores. No DB writes, no network, no imports of protected modules."
+}

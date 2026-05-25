@@ -1,0 +1,12 @@
+{
+  "task": "snow_connector_approval_wiring_v2",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rebuild snow_connector integration to wire it into the approval_workflow daemon. Quarantined at 2026-05-23T04:51:48.933301+00:00 after 3 consecutive failures (last_error: failed in cohort_4_n4 per quality map). MUST: (1) poll mcp_submissions for SNOW-sourced rows via write_service query; (2) call trust_synthesiser for verdict before any outbound; (3) write decision to mcp_decisions via write_service; (4) never auto-commit MCPs with CAUTION_LIMITED or HIGH_RISK_ISOLATED verdicts; (5) authenticate via SNOW OAuth environment variable, not hardcoded token; (6) write audit_log row for every state transition. Port binding NOT required; snow_connector.py is a library module that the approval_workflow daemon invokes. Ref: spec section 5 inter-daemon communication rules.",
+  "reads": [
+    "snow_connector.py"
+  ]
+}

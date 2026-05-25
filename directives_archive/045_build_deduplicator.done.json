@@ -1,0 +1,14 @@
+{
+  "task": "build_deduplicator",
+  "handler": "generate_file",
+  "output_file": "deduplicator.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.71,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Registry deduplicator daemon. Every 86400s: find duplicate MCPs in mcp_server_registry by (1) identical URL (2) name similarity >90% using simple character overlap ratio (3) same npm package different versions. For duplicates: keep highest scan_count entry, merge signal scores, merge threat associations to canonical server_id, delete duplicates via ws_write corrections noting dedup action. Write DEDUP_REPORT.md with actions taken. ws_write dedup_complete to mesh_events. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

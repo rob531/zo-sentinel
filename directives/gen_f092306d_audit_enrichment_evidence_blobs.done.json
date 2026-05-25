@@ -1,0 +1,11 @@
+{
+  "task": "audit_enrichment_evidence_blobs",
+  "handler": "generate_file",
+  "output_file": "audit_enrichment_blobs.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Audit script querying mcp_signal_enrichments table to verify all existing rows contain the required evidence_blob shape: {\"signal_type\": str, \"confidence\": float, \"evidence_blob\": dict}. Identify any malformed rows and report them. Also verify the 8 signal types match the spec contract (domain_trust, tool_description_safety, permission_scope, supply_chain, community_signal, temporal_stability, supply_chain_enrichment, community_signal_enrichment). Output JSON report of findings to stdout.",
+  "reads": [],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "retry_supervisor_auto_updater",
+  "handler": "generate_file",
+  "output_file": "supervisor_auto_updater.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Retry generation of supervisor auto-updater daemon. Previous build failed. Must watch /home/workspace/zo_sentinel/ for new .py files, auto-generate supervisord config entries for daemons following run() + if __name__ pattern, reload supervisord without restart. Use heartbeat POST to 8772. Must never restart services mid-flight."
+}

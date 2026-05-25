@@ -1,0 +1,11 @@
+{
+  "task": "phase4_approval_workflow_backend",
+  "handler": "generate_file",
+  "output_file": "approval_workflow.py",
+  "complexity": "high",
+  "description": "FastAPI backend for the InfoSec MCP approval workflow. This is the core enterprise workflow: a developer submits an MCP for InfoSec review, an analyst reviews the intelligence brief, makes a decision with conditions, and the record is stored. Endpoints: POST /api/submit {mcp_identifier, requester_name, requester_team, business_purpose, environment} -> returns submission_id + initial assessment. GET /api/submission/{id} -> full intelligence brief with signals, verdict, reasoning. POST /api/decision/{id} {analyst_name, decision: APPROVED|CONDITIONAL|REJECTED, conditions: str, expiry_days: int, notes: str} -> records decision. GET /api/registry -> paginated list of assessed MCPs with verdicts. GET /api/audit -> audit trail of all decisions. GET /api/health -> service health. Store submissions in DuckDB tables mcp_submissions and mcp_decisions via write_service:8772. On submit, trigger signal analysis inline (call signal_analyser logic). Run on port 8780.",
+  "context": "Enterprise InfoSec approval workflow. NOT a proxy/middleware tool. The analyst is a human making a judgement call. The API serves the UI. Decisions are final records for compliance. Conditions field is free text e.g. 'Pin to version 1.2.3, review in 90 days, do not use on systems processing PII'. The expiry_days field means the approval expires and must be re-reviewed.",
+  "priority": 0.92,
+  "from": "claude_directive",
+  "phase": "4"
+}

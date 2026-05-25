@@ -1,0 +1,12 @@
+{
+  "task": "build_rate_limiter",
+  "handler": "generate_file",
+  "output_file": "rate_limiter.py",
+  "complexity": "medium",
+  "phase": "10",
+  "priority": 0.81,
+  "reads": [],
+  "description": "Rate limiter middleware for FastAPI. RateLimiter class: __init__(requests_per_minute=60,requests_per_hour=500). check(client_ip)->bool: returns True if under limit. Uses in-memory dict with timestamp buckets (no external deps). FastAPI dependency: rate_limit_dependency=Depends(RateLimiter()). If limit exceeded: raise HTTPException(429). Importable by approval_workflow.py and registry_api.py. Also RateLimitMiddleware class for app.add_middleware(). No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

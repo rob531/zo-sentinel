@@ -1,0 +1,9 @@
+{
+  "task": "import_failure_diagnostic_probe",
+  "handler": "generate_file",
+  "output_file": "importlib_import_diagnostic_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic module to investigate the importlib traceback pattern in recent smoke failures (registry_api.py, rug_pull_monitor.py, signal_analyser.py). Use importlib.util.find_spec() and importlib.util.module_from_spec() to identify which import statement is failing. Log module dependency tree. Scan recently-built files for potential circular imports. Do NOT modify target files - only produce diagnostic report via write_service log."
+}

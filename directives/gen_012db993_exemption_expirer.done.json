@@ -1,0 +1,9 @@
+{
+  "task": "exemption_expirer",
+  "handler": "generate_file",
+  "output_file": "exemption_expirer.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Retention/lifecycle daemon that runs nightly to expire exemptions past their valid_until date. Reads mcp_exemptions table via write_service query endpoint. Marks expired exemptions by updating a status column or moving to a shadow table. Heartbeat to service_health every 60s. Pure Python daemon pattern: run() + if __name__ == '__main__': run(). No DB writes directly \u2014 all through write_service :8772. Dependencies: requests, datetime."
+}

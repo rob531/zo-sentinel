@@ -1,0 +1,11 @@
+{
+  "task": "schema_init",
+  "handler": "run_script",
+  "command": "python3 /home/workspace/zo_sentinel/schema.py && python3 /home/workspace/zo_sentinel/schema_v2.py",
+  "output_file": "",
+  "complexity": "low",
+  "priority": 0.99,
+  "phase": "2",
+  "from": "bootstrap",
+  "description": "Create all ZO-SENTINEL DuckDB tables via write_service. Must run before any data operations."
+}

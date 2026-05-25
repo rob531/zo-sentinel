@@ -1,0 +1,160 @@
+{
+  "directive_id": "seed_endpoint_extractor",
+  "directive_version": "1.0",
+  "owner": "robinc",
+  "created_at": "2026-04-19",
+  "phase": "III.a",
+  "title": "MCP Endpoint Extractor (static analysis)",
+  "purpose": "For each MCP with fetchable source, extract the set of external hostnames it connects to via static analysis. This is the foundational data for endpoint trust (Phase III.b/c), threat intelligence (Phase IV.a), and domain provenance (Phase IV.b). Without this, all endpoint-based signals degrade to 'unknown'. Phase III.a of SENTINEL_ROADMAP_v2.md.",
+
+  "mode": "PATCH_MODULE",
+  "target_file": "/home/workspace/zo_sentinel/endpoint_extractor.py",
+  "target_type": "t1_agent",
+
+  "pilot_first": true,
+  "pilot_spec": {
+    "description": "Run against 15 hand-picked candidate MCPs whose endpoint sets are KNOWN in advance (from reading their documentation). This is a ground-truth validation — we know what endpoints each SHOULD emit, so we can measure precision and recall of the extractor. Write results to /home/workspace/zo_sentinel/fixes/pilot_endpoint_extractor_results.json including for each candidate: expected_endpoints, extracted_endpoints, false_positives, false_negatives, extraction_method_breakdown.",
+    "candidate_selection": "15 hand-picked MCPs with diverse characteristics: (a) 5 Anthropic official servers — endpoints known from documentation (e.g., server-google-maps calls maps.googleapis.com). (b) 5 well-known community MCPs with published endpoint docs. (c) 5 MCPs where the endpoint is env-var configurable rather than hardcoded (tests whether we correctly flag 'user-configurable' vs 'baked-in').",
+    "ground_truth": {
+      "note": "Operator provides expected endpoints per candidate as a JSON input file before pilot run. Pilot reports precision/recall against this ground truth.",
+      "example": {
+        "@modelcontextprotocol/server-google-maps": {
+          "expected_endpoints": ["maps.googleapis.com"],
+          "expected_user_configurable": false,
+          "expected_tier": "TIER_FIRST_PARTY"
+        },
+        "@modelcontextprotocol/server-slack": {
+          "expected_endpoints": ["slack.com"],
+          "expected_user_configurable": false,
+          "expected_tier": "TIER_FIRST_PARTY"
+        }
+      }
+    },
+    "success_criteria": [
+      "precision >= 80% on pilot candidates (extracted endpoints match expected)",
+      "recall >= 70% (most expected endpoints are found)",
+      "zero false-positive hostnames resolving to test/localhost/example.com",
+      "extraction runtime under 60 seconds per MCP",
+      "source-fetching happens once per MCP and is cached"
+    ],
+    "abort_conditions": [
+      "recall < 50% — extraction strategy insufficient, needs operator review before scaling",
+      "precision < 60% — too much noise, rules need tightening",
+      "any MCP source fetch fails authentication (we should never hit private repos; pilot candidates are all public)",
+      "any MCP tarball exceeds 50MB — halt and reconsider strategy before engaging with large repos"
+    ]
+  },
+
+  "extraction_strategy": {
+    "description": "Multi-method extraction with evidence per finding. Each hostname has a detection_method field so we can tune rules.",
+    "methods": [
+      {
+        "name": "url_literal_grep",
+        "description": "Regex for 'https?://[a-z0-9.-]+' in all source files. High recall, moderate precision."
+      },
+      {
+        "name": "fetch_call_arg",
+        "description": "Parse AST/pattern-match for arg of fetch(), requests.get/post, axios.request, urllib.request.urlopen. Higher precision."
+      },
+      {
+        "name": "config_default",
+        "description": "Extract default values in .env.example, config.json, config.ts, settings.py."
+      },
+      {
+        "name": "readme_documented",
+        "description": "Parse README for 'connects to X' or 'API endpoint: Y' patterns. Lowest confidence but useful when code analysis finds nothing."
+      }
+    ],
+    "exclusions": [
+      "localhost, 127.0.0.1, 0.0.0.0 (dev / loopback)",
+      "*.example.com, *.test, *.local (reserved/test)",
+      "schema.org, docs.npmjs.com, semver.org (schema refs, not endpoints)",
+      "github.com URLs pointing at the MCP's own repo (self-reference)",
+      "package.json registry refs (these are the npm package itself, not an outbound endpoint)"
+    ],
+    "user_configurable_detection": {
+      "heuristic": "If a hostname only appears inside a process.env / os.getenv pattern, flag user_configurable=true. If it's both hardcoded AND env-overridable, flag baked_in_with_override=true. If only hardcoded, flag baked_in=true."
+    }
+  },
+
+  "interface_contract": {
+    "exported_functions": [
+      {
+        "name": "extract_endpoints",
+        "signature": "extract_endpoints(server_id: str, source_path: str) -> dict",
+        "description": "Run all extraction methods against a cloned/unpacked MCP source. Returns dict with endpoints (list of hostname objects), methods_used, source_stats."
+      },
+      {
+        "name": "fetch_mcp_source",
+        "signature": "fetch_mcp_source(server_id: str) -> str",
+        "description": "Given a server_id, resolve its source (github clone OR npm tarball OR pypi tarball), cache locally. Returns path to extracted source."
+      }
+    ],
+    "database_writes": {
+      "mcp_endpoints": {
+        "schema": [
+          "id BIGINT PRIMARY KEY",
+          "server_id VARCHAR NOT NULL",
+          "hostname VARCHAR NOT NULL",
+          "detection_method VARCHAR",
+          "evidence_file VARCHAR",
+          "evidence_line INTEGER",
+          "user_configurable BOOLEAN",
+          "baked_in BOOLEAN",
+          "extracted_at TIMESTAMPTZ DEFAULT now()",
+          "UNIQUE (server_id, hostname, detection_method)"
+        ]
+      },
+      "mcp_source_cache_log": {
+        "purpose": "Track which source trees have been fetched and when, so we don't re-fetch unchanged ones",
+        "schema": [
+          "server_id VARCHAR PRIMARY KEY",
+          "source_type VARCHAR",
+          "source_url VARCHAR",
+          "commit_or_version VARCHAR",
+          "fetched_at TIMESTAMPTZ",
+          "size_bytes BIGINT"
+        ]
+      }
+    }
+  },
+
+  "rate_limit_discipline": {
+    "doctrine": "Weekly extraction cycle in steady state. Source cache persists; we re-extract only when source changes.",
+    "source_fetch_limits": {
+      "github": "shallow clone depth=1, size cap 50MB per repo, respect GitHub API rate limits even for raw.githubusercontent fetches",
+      "npm": "registry.npmjs.org tarball, size cap 50MB, 1 req/second",
+      "pypi": "pypi.org source tarball, size cap 50MB, 1 req/second"
+    },
+    "cache_ttl": "7 days (sources change slowly); re-extract sooner only if fetcher detects a new version"
+  },
+
+  "forbidden": [
+    "DO NOT execute any fetched source code — this is STATIC analysis only. No npm install, no pip install, no node/python invocation of MCP code.",
+    "DO NOT fetch private repos — public only, require the repo to be publicly accessible",
+    "DO NOT cache fetched source beyond 7 days — storage discipline",
+    "DO NOT write to mcp_endpoints without evidence_file and evidence_line populated — we need to audit every finding",
+    "DO NOT use /write endpoint for new tables — auto-id bug (Commit A lessons). Use /execute with explicit INSERT."
+  ],
+
+  "security_considerations": [
+    "Fetched MCP source could be malicious. Extraction must happen in a read-only sandbox (no network during analysis, no code execution).",
+    "Some MCP sources contain credentials in example configs — endpoint extraction must strip credentials from evidence before writing to database.",
+    "Large tarballs could be a DoS vector — 50MB hard cap, timeout at 60 seconds per fetch."
+  ],
+
+  "acceptance_tests": [
+    "extract_endpoints on a known flagship MCP returns at least the documented endpoints",
+    "extracting from same source twice produces identical results (deterministic)",
+    "URLs containing credentials (https://user:pass@host) are stripped to just the hostname",
+    "localhost and *.example.com are excluded from results",
+    "pilot ground-truth validation run completes with precision >=80%, recall >=70%"
+  ],
+
+  "unlocks": [
+    "Phase III.b endpoint classification (tier assignment)",
+    "Phase III.c endpoint_trust_signal + operator_identity_signal",
+    "Phase IV.a threat_intelligence_enrichment (which needs endpoints to check)",
+    "Phase IV.b domain_provenance_enrichment"
+  ]
+}

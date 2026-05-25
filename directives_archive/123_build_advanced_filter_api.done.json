@@ -1,0 +1,11 @@
+{
+  "task": "build_advanced_filter_api",
+  "handler": "generate_file",
+  "output_file": "advanced_filter_api.py",
+  "complexity": "high",
+  "phase": "17",
+  "priority": 0.96,
+  "reads": ["schema.py"],
+  "description": "OLAP-style faceted discovery API. FastAPI on port 8777. POST /api/discover accepts JSON filter object. Supported filter keys: trust_score_lt (float), trust_score_gt (float), status (list of strings), verdict (list of strings), has_threats (bool), has_cve (bool), registry_source (str), risk_tier (str), age_days_lt (int). SAFE SQL CONSTRUCTION: build WHERE clauses by mapping each filter key to a DuckDB condition -- NEVER use f-string with user input directly, use parameterised approach: build conditions list and params list, join conditions with AND, pass to ws_query. has_threats=True: EXISTS (SELECT 1 FROM mcp_threat_associations t WHERE t.server_id=r.server_id). has_cve=True: EXISTS (SELECT 1 FROM mcp_threat_associations t WHERE t.server_id=r.server_id AND t.threat_type ILIKE '%cve%'). age_days_lt: first_seen > now() - INTERVAL ? DAYS. JOIN mcp_server_registry with mcp_risk_register on server_id. Return {results: [...], count: int, filters_applied: dict}. GET /api/discover/facets returns count breakdown by verdict, risk_tier, registry_source for UI filter panels. GET /health. All DB via ws_query at write_service:8772. No duckdb.connect. run() + uvicorn. Heartbeat.",
+  "from": "claude_manual"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Addresses signal quality weakness: only 4 distinct values, poor discrimination. Uses metadata fields: age_days, last_updated, update_frequency_days, version_stability, deprecation_notice_present, registry_source, dependency_count. Computes stability scores based on update cadence, version consistency, and temporal patterns. Penalizes erratic update schedules. No DB writes, no network, no imports of protected modules. Completes in <2s per call. Returns evidence dict listing fields used and partial scores derived from each."
+}

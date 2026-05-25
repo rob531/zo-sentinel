@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_discrimination_analyzer",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_analyzer.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic daemon to analyze all 8 signals for discrimination quality. Queries mcp_signal_scores and counts distinct values per signal_type. Reports signals with <10 distinct values as WEAK per signal quality heuristic. Writes findings to signal_quality_log table via write_service. Heartbeat every 60s. Target weak signals: permission_scope, temporal_stability, tool_description_safety. Expose run() with if __name__ == '__main__' guard."
+}

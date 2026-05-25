@@ -1,0 +1,9 @@
+{
+  "task": "build_inference_router_diagnostic",
+  "handler": "generate_file",
+  "output_file": "diagnose_inference_router_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to diagnose why inference_router is stale at 57 minutes (threshold is 900s/15m). Should check: (1) service_health table entry, (2) last successful inference call timestamp, (3) inference_router_service.py process status, (4) any recent exceptions in logs. Should output actionable diagnostics. Do NOT propose rebuild - inference_router is protected per SENTINEL_SCOPE_BOUNDARY.md. Only diagnostics to surface the issue for human resolution."
+}

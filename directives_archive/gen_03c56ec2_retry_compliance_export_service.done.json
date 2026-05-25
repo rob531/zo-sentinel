@@ -1,0 +1,9 @@
+{
+  "task": "retry_compliance_export_service",
+  "handler": "generate_file",
+  "output_file": "compliance_export_service_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Retry failed build_compliance_export_service. The compliance_export_service.py exists but build failed. Regenerate with correct export formats: CSV, JSON, PDF. Must query mcp_server_registry, mcp_signal_scores, mcp_attestations via write_service. Must format output per audit retention SLA (30d evidence_blob). Export endpoint on port 8780 or internal API surface only."
+}

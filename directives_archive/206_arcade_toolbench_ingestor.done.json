@@ -1,0 +1,11 @@
+{
+  "task": "arcade_toolbench_ingestor",
+  "handler": "generate_file",
+  "output_file": "arcade_toolbench_ingestor.py",
+  "complexity": "high",
+  "phase": "26",
+  "priority": 0.88,
+  "pillar": "ETL",
+  "description": "Build arcade_toolbench_ingestor.py. Setup: import sys; sys.path.insert(0, '/home/workspace/zo_mesh'); from zo_services import DataService; import requests, time, hashlib, json from bs4 import BeautifulSoup. Init: db = DataService('t1.arcade_toolbench_ingestor'); start = time.monotonic(). Read: rows = db.read(\"SELECT server_id, name, url FROM mcp_server_registry WHERE toolbench_grade IS NULL LIMIT 50\"). Loop: for row in rows: try: r = requests.get(f'https://arcade.dev/toolbench/search?q={row[\"name\"]}', headers={'User-Agent': 'ZO-SENTINEL-BOT/1.0'}, timeout=10); soup = BeautifulSoup(r.text, 'html.parser'); security_grade = soup.find(class_='security-grade') and soup.find(class_='security-grade').text.strip() or 'N/A'; compliance_grade = soup.find(class_='compliance-grade') and soup.find(class_='compliance-grade').text.strip() or 'N/A'; quality_grade = soup.find(class_='quality-grade') and soup.find(class_='quality-grade').text.strip() or 'N/A'; db.write('third_party_benchmarks', {'server_id': row['server_id'], 'source': 'arcade_toolbench', 'security_grade': security_grade, 'compliance_grade': compliance_grade, 'quality_grade': quality_grade, 'raw_html_hash': hashlib.md5(r.text.encode()).hexdigest(), 'fetched_at': __import__('datetime').datetime.utcnow().isoformat()}); time.sleep(3); except Exception as e: db.write('third_party_benchmarks', {'server_id': row['server_id'], 'source': 'arcade_toolbench', 'security_grade': 'ERROR', 'error': str(e)[:200], 'fetched_at': __import__('datetime').datetime.utcnow().isoformat()}); time.sleep(1). Teardown: db.log_run(status='ok', duration_ms=int((time.monotonic()-start)*1000)). Table third_party_benchmarks must be created via db.execute if not exists: CREATE TABLE IF NOT EXISTS third_party_benchmarks (server_id VARCHAR, source VARCHAR, security_grade VARCHAR, compliance_grade VARCHAR, quality_grade VARCHAR, raw_html_hash VARCHAR, error VARCHAR, fetched_at TIMESTAMPTZ DEFAULT now()). SMOKE TEST CONTRACT: Must import DataService and requests. Must call db.write. Must call db.log_run.",
+  "from": "user_directive_v1"
+}

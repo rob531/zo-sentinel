@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_verdict_enforcement_validate",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_verdict_enforcement_validate.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.84,
+  "description": "Validates aidr_commit_gateway.py verdict-check enforcement: NEVER auto-commits CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override. Checks for injection_resilience score inclusion in commit payload. Reads: aidr_commit_gateway.py. Pure validation, no DB writes, no network. Cites aidr_commit_gateway_verdict_test_v2.py last_error (failed in cohort_3_n3) per spec for retry reference."
+}

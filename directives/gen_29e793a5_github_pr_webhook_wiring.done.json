@@ -1,0 +1,13 @@
+{
+  "task": "github_pr_webhook_wiring",
+  "handler": "generate_file",
+  "output_file": "github_pr_webhook_handler_integration.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.85,
+  "description": "Wire github_pr_checker.py webhook handler into the pipeline. github_pr_checker.py exists but webhook wiring is incomplete. Create new daemon module that: (1) exposes FastAPI endpoint POST /webhook/github on localhost:8780 to receive GitHub PR events, (2) validates webhook signature using X-Hub-Signature-256 header, (3) extracts MCP server name from PR title/body using regex patterns, (4) queries mcp_server_registry via write_service to check if server exists, (5) posts verdict summary as PR comment via GitHub API (10s timeout). Heartbeat to service_health every 60s. Follow inter-daemon rules: no HTTP between peer daemons, all state via write_service.",
+  "reads": [
+    "github_pr_checker.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "smoke_failure_diagnostic",
+  "handler": "generate_file",
+  "output_file": "smoke_import_diagnostic_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Diagnostic for failing smoke tests on registry_api.py, rug_pull_monitor.py, signal_analyser.py. All show 'File <string>, line 10, in <module> File <frozen importlib' traceback pattern suggesting import-time failures. Read each file, identify exact import at line 10 context, and report dependency resolution status. Do NOT propose rebuilds of protected files. Output: list of specific import failures and recommended dependency additions to keys file."
+}

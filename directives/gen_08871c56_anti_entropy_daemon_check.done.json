@@ -1,0 +1,9 @@
+{
+  "task": "anti_entropy_daemon_check",
+  "handler": "generate_file",
+  "output_file": "anti_entropy_diagnosis.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Check anti_entropy daemon (stale 5h22m, threshold 14400s) and wisdom_synthesiser daemon (stale 5h21m). Query service_health for both. Verify the daemon files exist on disk (anti_entropy.py, wisdom_synthesiser.py). Inspect logs for recent errors. These are NOT protected daemons (only rug_pull_monitor is protected among entropy-type daemons). Output: heartbeat age, running status, error indicators. Recommendation: restart if dead, or flag if stuck in loop. Handler: diagnostic_report."
+}

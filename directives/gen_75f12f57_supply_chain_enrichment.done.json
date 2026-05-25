@@ -1,0 +1,9 @@
+{
+  "task": "supply_chain_enrichment",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Build supply_chain_enrichment.py as pure enrichment module. Expose compute_score(metadata: dict) -> tuple[float, dict]. Must read MULTIPLE fields: dependency_count, registry_source, publisher_verified, age_days, download_count. Scoring: dependency_count penalty (min(dependency_count * 0.8, 25) deducted), publisher_verified (+20), age_days bonus (min(age_days/30*10, 15)), registry_source multiplier (PyPI=1.2, npm=1.1, GitHub=1.0), download_count bonus (up to 15). Output evidence dict. No DB writes, no network, no imports of protected modules. Complements existing supply_chain signal (currently 35 distinct values, range 0-75.9) with additional discriminators. Spec reference: Section 3 signal invariant, Appendix A integration wiring."
+}

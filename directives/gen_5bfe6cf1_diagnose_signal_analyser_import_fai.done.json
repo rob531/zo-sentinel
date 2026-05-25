@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_signal_analyser_import_failure",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_import.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic module to identify root cause of import failures in signal_analyser.py. Smoke failures show traceback ending at '<frozen importlib' for registry_api.py, rug_pull_monitor.py, and signal_analyser.py. Must: (1) read source of signal_analyser.py to identify imports, (2) check whether dependency modules export expected symbols, (3) query DuckDB schema to verify table/column existence referenced by signal_analyser imports. NOT a rebuild \u2014 output a diagnostic report only."
+}

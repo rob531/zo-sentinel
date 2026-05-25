@@ -1,0 +1,13 @@
+{
+  "task": "fix_supply_chain_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rewrite supply_chain_enrichment.py to produce discriminated scores. Current module is flat (same score for all inputs) per signal quality diagnostic. MUST: (1) compute_score(metadata: dict) returns tuple[float, dict] with score in [0.0, 100.0], (2) use ALL of: registry_source, age_days, download_count, dependency_count, publisher_verified, stars, (3) assign partial scores to evidence dict for each field, (4) use non-linear transformations (thresholds, log scales) to ensure at least 20 distinct score values across synthetic fingerprints, (5) no DB writes, no network calls, no imports of project modules. Will be validated by enrichment_harness.py. Cite supply_chain signal type in evidence blob.",
+  "reads": [
+    "supply_chain_enrichment.py"
+  ],
+  "next_directive": {}
+}

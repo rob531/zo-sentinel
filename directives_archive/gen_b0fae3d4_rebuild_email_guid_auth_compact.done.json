@@ -1,0 +1,14 @@
+{
+  "task": "rebuild_email_guid_auth_compact",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_compact.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Generate email_guid_auth_compact.py \u2014 lightweight variant of email_guid_auth.py for environments with limited SMTP. MUST include auth_token generation, GUID validation, and expiry check. MUST use write_service at 8772. MUST NOT duplicate email_guid_auth.py logic \u2014 keep to core functions only. Pattern: if __name__ == '__main__': run()",
+  "reads": [
+    "email_guid_auth.py",
+    "schema.py"
+  ],
+  "next_directive": {}
+}

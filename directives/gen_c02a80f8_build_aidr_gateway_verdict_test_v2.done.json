@@ -1,0 +1,9 @@
+{
+  "task": "build_aidr_gateway_verdict_test_v2",
+  "handler": "generate_file",
+  "output_file": "aidr_gateway_verdict_test_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild the AIDR gateway verdict test (quarantined: aidr_gateway_verdict_test.py last failed cohort_3_n3). This tests that aidr_commit_gateway.py checks ZO-SENTINEL verdict before forwarding commits. The spec section 9 Phase 9 requirements: MUST NOT auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override. Use a mock verdict check that verifies the gateway reads from mcp_server_registry.verdict before commit payload construction. Reference SPEC: Phase 9 candidates - aidr_commit_gateway.py. Include 3 test cases: TRUSTED_GENERAL (allow), CAUTION_LIMITED (block without override), override flag present (allow)."
+}

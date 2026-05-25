@@ -1,0 +1,15 @@
+{
+  "task": "rewrite_risk_ranker",
+  "handler": "generate_file",
+  "output_file": "risk_ranker.py",
+  "complexity": "high",
+  "phase": "7",
+  "priority": 0.93,
+  "reads": [
+    "schema.py",
+    "signal_analyser.py"
+  ],
+  "description": "Risk ranker daemon. Reads mcp_server_registry+mcp_signal_scores+mcp_threat_associations via ws_query. Computes risk_rank 0-100: (100-trust_score)*0.4 + threat_count*10*0.3 + staleness_penalty*0.2 + permission_scope_raw*0.1. Clamp 0-100. Map to risk_tier: >=80=CRITICAL,>=60=HIGH,>=40=MEDIUM,else=LOW. ws_write to mcp_risk_register {server_id,name,risk_rank,risk_tier,threat_count,staleness_days,computed_at}. Write RISK_REGISTER.md sorted by risk_rank desc. Poll 14400s. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

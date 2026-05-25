@@ -1,0 +1,9 @@
+{
+  "task": "wire_community_signal_enrichment_to_synthesiser",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_synthesiser_wiring.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Wire community_signal_enrichment_integration.py (built 2026-05-24T10:54:21) output into trust_synthesiser_v2.py composite calculation. Query mcp_signal_enrichments WHERE signal_name='community_signal_enrichment' and verify the rows conform to signal invariant: {signal_type, confidence, evidence_blob}. Ensure synthesiser reads community_signal_enrichment dimension with correct weight. No new daemon - add wiring logic to existing synthesiser or signal_analyser flow."
+}

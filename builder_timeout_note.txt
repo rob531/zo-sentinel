@@ -1,0 +1,1 @@
+OLLAMA_TIMEOUT = 150   # raised from 90s — covers the long tail of llama3.2:3b generation

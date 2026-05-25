@@ -1,0 +1,9 @@
+{
+  "task": "write_architecture_md",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Document the inter-daemon topology for ZO-SENTINEL. Must include: (1) write_service (:8772) as the single DB access point \u2014 no peer HTTP between daemons. (2) inference_router (:8773) as the only direct LLM call target. (3) heartbeat contract \u2014 every daemon writes service_health at least every 60s, stale >2h = dead. (4) signal invariant \u2014 all signal producers write to mcp_signal_scores or mcp_signal_enrichments with shape {signal_type, confidence, evidence_blob}. (5) enricher contract \u2014 pure function compute_score(metadata) returns (float, evidence dict), no DB writes, no network, no protected module imports, at least 20 distinct scores across 34 fingerprints. (6) Freshness SLAs: new MCP verdict within 24h of first_seen, re-verdict within 7 days of last_assessed. (7) Out-of-scope boundary: Sentinel is intelligence only, no proxy/gateway/enforcement at runtime."
+}

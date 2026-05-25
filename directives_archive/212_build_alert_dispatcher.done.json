@@ -1,0 +1,9 @@
+{
+  "task": "build_alert_dispatcher",
+  "handler": "generate_file",
+  "output_file": "alert_dispatcher.py",
+  "complexity": "medium",
+  "phase": "20",
+  "priority": 0.85,
+  "description": "Python module. dispatch_alert(level, agent_id, message, metadata=None) posts to write_service /write table=mesh_events with event_type=alert. get_recent_alerts(limit=10) queries mesh_events WHERE event_type=alert via write_service /query. No uvicorn. Pure utility. Uses requests.post to write_service."
+}

@@ -1,0 +1,15 @@
+{
+  "task": "build_bulk_assess_api",
+  "handler": "generate_file",
+  "output_file": "bulk_assess_api.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.67,
+  "reads": [
+    "schema.py",
+    "registry_api.py"
+  ],
+  "description": "Bulk assessment API. FastAPI port 8784. POST /v1/bulk/assess body={mcps:[list of name or url strings]} -> triggers scoring for up to 20 MCPs per request. Returns {submitted:int,job_id:str}. GET /v1/bulk/status/{job_id} -> {status:pending|complete,results:[{mcp,verdict,trust_score}]}. POST /v1/bulk/import body={servers:[{name,url,description}]} -> bulk import to mcp_server_registry. GET /v1/export/csv -> streams CSV of full registry. GET /health. Daemon with uvicorn port 8784. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

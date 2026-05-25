@@ -1,0 +1,9 @@
+{
+  "task": "verify_graphql_schema_builder_wired",
+  "handler": "generate_file",
+  "output_file": "verify_graphql_schema_builder_wired.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic verification module for graphql_schema_builder.py. File exists but is dormant per spec section 9 (GraphQL surface is out of scope). Verify: (1) file is not imported by any active daemon, (2) no HTTP routes mount it, (3) supervisord does not load it. Report findings to confirm it's properly dormant. Do NOT propose rebuild or re-activation."
+}

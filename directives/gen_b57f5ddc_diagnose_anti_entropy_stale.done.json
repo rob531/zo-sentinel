@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_anti_entropy_stale",
+  "handler": "generate_file",
+  "output_file": "diagnose_anti_entropy_stale.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Diagnostic module for anti_entropy daemon staleness (4h1m). anti_entropy is NOT a protected file \u2014 diagnostic is appropriate. Module must: (1) get_service_health for anti_entropy, (2) tail log file for last activity, (3) check if anti_entropy work queue (entropy check targets) is accumulating faster than daemon processes them, (4) write_diagnostic_blob with findings and staleness gap. Exposes: run()."
+}

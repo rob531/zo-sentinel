@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies_ui",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Admin UI for managing mcp_policy_rules table. Provides CRUD interface for rule_type and pattern fields. Calls internal APIs (:8780 approval_workflow) for reads and write_service (:8772) for writes. No external exposure. Follows existing HTML pattern from admin_exemptions.html. Includes audit_log insertion stub for policy rule changes."
+}

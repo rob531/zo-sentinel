@@ -1,0 +1,14 @@
+{
+  "task": "diagnose_smoke_import_failures",
+  "handler": "generate_file",
+  "output_file": "smoke_import_diagnosis.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to identify root cause of smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py which all show identical traceback pattern: File \"<string>\", line 10, in <module> File \"<frozen importlib. Query write_service to inspect recent smoke test logs and identify which import statement at line 10 is failing in each file. Output diagnosis summary to stdout/log but do NOT propose rebuilds; this is diagnostic only.",
+  "reads": [
+    "registry_api.py",
+    "rug_pull_monitor.py",
+    "signal_analyser.py"
+  ]
+}

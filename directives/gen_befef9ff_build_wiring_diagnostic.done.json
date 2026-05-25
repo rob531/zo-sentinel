@@ -1,0 +1,11 @@
+{
+  "task": "build_wiring_diagnostic",
+  "handler": "generate_file",
+  "output_file": "wiring_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic daemon that inspects service_health table via write_service query and reports which daemons have never heartbeat (status=never-seen) vs expected. Lists orphaned and missing heartbeats. Does NOT write to any table. Runs once, outputs diagnostic JSON, exits 0. Target: identify why all 22 daemons show never-seen status despite 749 build OK. Diagnostic only - no repair actions.",
+  "reads": [],
+  "next_directive": {}
+}

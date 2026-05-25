@@ -1,0 +1,13 @@
+{
+  "task": "build_retention_sweeper_replacement",
+  "handler": "generate_file",
+  "output_file": "retention_sweeper_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Replaces quarantined retention_sweeper.py. Retention/lifecycle daemon for age-based expiry of evidence_blob columns (30-day window). Queries mcp_server_registry via write_service, identifies rows where evidence is stale, marks for expiry via update (never DELETE). Must declare heartbeat to service_health. Uses write_service :8772 for all DB access. Implements exponential backoff on 5xx. Does NOT target protected files; is a new named module per spec section 8 naming invariant.",
+  "reads": [
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

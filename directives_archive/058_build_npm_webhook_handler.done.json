@@ -1,0 +1,15 @@
+{
+  "task": "build_npm_webhook_handler",
+  "handler": "generate_file",
+  "output_file": "npm_webhook_handler.py",
+  "complexity": "medium",
+  "phase": "14",
+  "priority": 0.58,
+  "reads": [
+    "schema.py",
+    "mcp_scanner.py"
+  ],
+  "description": "npm webhook handler. FastAPI port 8786. POST /webhook/npm receives npm registry change notifications. Parses {name,version,description,dist.tarball}. If name contains modelcontextprotocol or mcp-server: ws_write to mcp_server_registry as new entry. Trigger signal scoring by ws_write mesh_memory directive. Returns {accepted:true,server_id:str}. GET /health. Validates X-npm-Signature header if WEBHOOK_SECRET env var set. Daemon uvicorn port 8786. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

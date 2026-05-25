@@ -1,0 +1,9 @@
+{
+  "task": "wire_attestation_refresher_into_scheduler",
+  "handler": "generate_file",
+  "output_file": "assessment_scheduler_integration.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.78,
+  "description": "Patch assessment_scheduler.py to call attestation_refresher.py for attestations approaching expiry. Reads attestation_refresher.py interface: fns include get_write_url, get_query_url, remove_pid_file, signal_handler, check_single_instance. Adds a scheduled check (within existing run loop) that queries mcp_attestations where valid_until - current_date <= 7 days and triggers attestation_refresher via write_service execute. Does NOT introduce new schedulers. References spec section 4 freshness SLA (7-day re-verdict window) and attestation_refresher.py which is already built."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "wire_mcp_scanner_traffic_fingerprints",
+  "handler": "generate_file",
+  "output_file": "scanner_traffic_fingerprint_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration glue module. Consumes mcp_traffic_fingerprints.py (built 2026-04-22T15:52:17) and wires it into mcp_scanner.py for MCP protocol confirmation during server scanning. MUST call detect_mcp_methods() and is_mcp_traffic() from fingerprints module. Writes results to mcp_signal_scores with signal_type='protocol_confidence'. Uses write_service on :8772. Does NOT rebuild mcp_scanner.py (protected). No DB writes directly \u2014 uses write_service. No peer HTTP."
+}

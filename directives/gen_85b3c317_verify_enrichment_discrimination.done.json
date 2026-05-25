@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "verify_enrichment_discrimination.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Verification script to confirm all three enrichment modules (permission_scope_enrichment_v2, tool_description_safety_enrichment_v3, temporal_stability_enrichment_v3) produce at least 20 distinct scores across 34 synthetic fingerprints. Uses enrichment_harness.py logic internally. Reports PASS/FAIL per module. This validates the weak-signal work is complete per spec section 3 enrichment contract."
+}

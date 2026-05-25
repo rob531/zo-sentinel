@@ -1,0 +1,9 @@
+{
+  "task": "gate_orchestrator_error_diagnostic",
+  "handler": "generate_file",
+  "output_file": "gate_orchestrator_error_probe.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnose gate_orchestrator error state. Queries service_health for status='error' entries for this daemon. Reads gate_scheduler.py source to identify startup dependencies (signal_analyser, trust_synthesiser). Checks inter-daemon communication via write_service connectivity. NOT a rebuild \u2014 no direct file modification of protected daemon. Output diagnostic summary to diagnostic_report table with recommended recovery actions."
+}

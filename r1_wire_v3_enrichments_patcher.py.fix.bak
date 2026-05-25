@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""
+r1_wire_v3_enrichments_patcher.py
+Wires v3 enrichment modules into signal_analyser.py with version probing and rollback.
+"""
+import sys
+import os
+import ast
+import re
+import shutil
+import subprocess
+import datetime
+
+ENRICHMENT_NAMES = [
+    'tool_description_safety_enrichment',
+    'permission_scope_enrichment',
+    'temporal_stability_enrichment',
+    'community_signal_enrichment',
+    'supply_chain_enrichment',
+]
+
+VERSION_SUFFIXES = ['', '_v2', '_v3', '_v4']
+
+SIGNAL_ANALYSER_PATH = '/home/workspace/zo_sentinel/signal_analyser.py'
+BACKUP_GLOB = 'signal_analyser.py.bak.'
+MARKER = '# _zo_v3_wire_v1'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+
+
+def load_source(path):
+    with open(path, 'r', encoding='utf-8') as fh:
+        return fh.read()
+
+
+def save_source(path, content):
+    with open(path, 'w', encoding='utf-8') as fh:
+        fh.write(content)
+
+
+def backup_path():
+    ts = utc_now()
+    return os.path.join(SCRIPT_DIR, f'signal_analyser.py.bak.{ts}Z')
+
+
+def clean_old_backups():
+    base = os.path.join(SCRIPT_DIR, BACKUP_GLOB)
+    for f in os.listdir(SCRIPT_DIR):
+        if f.startswith('signal_analyser.py.bak.'):
+            p = os.path.join(SCRIPT_DIR, f)
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+class ImportProbe:
+    def __init__(self, name, suffixes):
+        self.name = name
+        self.suffixes = list(suffixes)
+        self.found_suffix = None
+        self.found_module = None
+        self.failed_suffixes = []
+
+    def resolve(self):
+        for suf in self.suffixes:
+            candidate = f'{self.name}{suf}' if suf else self.name
+            full_name = f'zo_sentinel.{candidate}' if os.path.basename(SCRIPT_DIR) == 'zo_sentinel' else candidate
+            if os.path.isfile(os.path.join(SCRIPT_DIR, f'{candidate}.py')):
+                self.found_suffix = suf
+                self.found_module = candidate
+                break
+            if os.path.isfile(os.path.join('/home/workspace/zo_sentinel', f'{candidate}.py')):
+                self.found_suffix = suf
+                self.found_module = candidate
+                break
+        return self.found_module is not None
+
+    def import_code(self, base_name, suffix):
+        mod = f'{base_name}{suffix}' if suffix else base_name
+        return f'from {mod} import compute_score as {base_name}_compute_score, get_score_band as {base_name}_get_score_band'
+
+
+def parse_enrichment_imports(source):
+    imports = {}
+    for line in source.splitlines():
+        m = re.match(r'^from\s+(\S+)\s+import.*compute_score', line)
+        if m:
+            mod = m.group(1)
+            for en in ENRICHMENT_NAMES:
+                if mod.startswith(en):
+                    suffix = mod[len(en):]
+                    imports[en] = (mod, suffix)
+    return imports
+
+
+def find_import_block(source):
+    block_lines = []
+    in_block = False
+    start = None
+    end = None
+    for i, line in enumerate(source.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith('from tool_description_safety_enrichment') or \
+           stripped.startswith('from permission_scope_enrichment') or \
+           stripped.startswith('from temporal_stability_enrichment') or \
+           stripped.startswith('from community_signal_enrichment') or \
+           stripped.startswith('from supply_chain_enrichment'):
+            if not in_block:
+                start = i
+                in_block = True
+            end = i
+        elif in_block and not stripped:
+            continue
+        elif in_block and not (stripped.startswith('#') and i <= end + 2):
+            pass
+    if start is not None:
+        lines = source.splitlines()
+        return '\n'.join(lines[start:end+1]), start, end
+    return None, None, None
+
+
+def compute_patch(source, probes):
+    new_lines = []
+    for en in ENRICHMENT_NAMES:
+        probe = probes[en]
+        suf = probe.found_suffix or ''
+        mod = f'{en}{suf}' if suf else en
+        fallback_note = ''
+        if probe.failed_suffixes:
+            fallback_note = f'  # fell back from: {", ".join(probe.failed_suffixes)}'
+        new_lines.append(f'from {mod} import compute_score as {en}_compute_score, get_score_band as {en}_get_score_band{fallback_note}')
+    return '\n'.join(new_lines)
+
+
+def patch_source(source, probes):
+    marker_injected = False
+    lines = source.splitlines()
+    result_lines = []
+
+    probe_map = {en: probes[en] for en in ENRICHMENT_NAMES}
+
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        is_enrichment_import = any(
+            stripped.startswith(f'from {en}') for en in ENRICHMENT_NAMES
+        )
+        if is_enrichment_import:
+            break
+        result_lines.append(lines[i])
+        i += 1
+
+    new_block = compute_patch(source, probes)
+    result_lines.append('')
+    result_lines.append(new_block)
+    marker_injected = True
+
+    while i < len(lines):
+        stripped = lines[i].strip()
+        is_enrichment_import = any(
+            stripped.startswith(f'from {en}') for en in ENRICHMENT_NAMES
+        )
+        if not is_enrichment_import:
+            result_lines.append(lines[i])
+            i += 1
+        else:
+            while i < len(lines):
+                stripped_next = lines[i].strip()
+                is_next_enrich = any(
+                    stripped_next.startswith(f'from {en}') for en in ENRICHMENT_NAMES
+                )
+                if not is_next_enrich:
+                    break
+                i += 1
+
+    if marker_injected:
+        marker_idx = None
+        for idx, line in enumerate(result_lines):
+            if 'from supply_chain_enrichment' in line:
+                marker_idx = idx
+                break
+        if marker_idx is not None:
+            result_lines.insert(marker_idx + 1, f'{MARKER}')
+
+    return '\n'.join(result_lines) + '\n'
+
+
+def run_smoke_test(mod_path):
+    env = os.environ.copy()
+    env['PYTHONPATH'] = '/home/workspace/zo_sentinel'
+    code = f'''
+import sys
+sys.path.insert(0, '/home/workspace/zo_sentinel')
+import signal_analyser
+result = signal_analyser.score_supply_chain('test_id', 'test_name')
+assert isinstance(result, tuple), f"Expected tuple, got {{type(result)}}"
+assert isinstance(result[0], float), f"Expected float, got {{type(result[0])}}"
+assert isinstance(result[1], str), f"Expected str, got {{type(result[1])}}"
+print("SMOKE_OK")
+'''
+    proc = subprocess.run(
+        [sys.executable, '-c', code],
+        capture_output=True,
+        text=True,
+        cwd='/home/workspace/zo_sentinel',
+        env=env,
+        timeout=30,
+    )
+    return proc.returncode == 0, proc.stdout, proc.stderr
+
+
+def probe_version_for(name, suffixes):
+    for suf in suffixes:
+        mod = f'{name}{suf}' if suf else name
+        if os.path.isfile(os.path.join('/home/workspace/zo_sentinel', f'{mod}.py')):
+            return suf
+    return None
+
+
+def resolve_versions():
+    results = {}
+    for en in ENRICHMENT_NAMES:
+        found_suf = probe_version_for(en, VERSION_SUFFIXES)
+        results[en] = {
+            'suffix': found_suf,
+            'module': f'{en}{found_suf}' if found_suf else en,
+            'tried': [],
+        }
+    return results
+
+
+def main():
+    dry_run = '--dry-run' in sys.argv
+
+    source = load_source(SIGNAL_ANALYSER_PATH)
+
+    if MARKER in source:
+        print('NOOP: already wired')
+        return 0
+
+    try:
+        versions = resolve_versions()
+    except Exception as e:
+        print(f'[FATAL] version resolution failed: {e}', file=sys.stderr)
+        return 3
+
+    report_lines = []
+    for en in ENRICHMENT_NAMES:
+        suf = versions[en]['suffix']
+        mod = versions[en]['module']
+        if suf:
+            report_lines.append(f'  {en}: {mod} (selected suffix=_v{suf.strip("_")})')
+        else:
+            report_lines.append(f'  {en}: {en} (selected base, no vN found)')
+
+    print('Version resolution plan:')
+    for rl in report_lines:
+        print(rl)
+
+    probes = {}
+    for en in ENRICHMENT_NAMES:
+        p = ImportProbe(en, VERSION_SUFFIXES)
+        p.resolve()
+        probes[en] = p
+
+    if dry_run:
+        print('[DRY-RUN] would write patched signal_analyser.py, not doing it')
+        return 0
+
+    bak = backup_path()
+    save_source(bak, source)
+    clean_old_backups()
+    print(f'[PATCH] backup saved to {bak}')
+
+    patched = patch_source(source, probes)
+
+    save_source(SIGNAL_ANALYSER_PATH, patched)
+    print('[PATCH] written to signal_analyser.py')
+
+    ok, stdout, stderr = run_smoke_test(SIGNAL_ANALYSER_PATH)
+    if not ok:
+        print('[SMOKE] FAILED -- rolling back', file=sys.stderr)
+        print(f'  stdout: {stdout}', file=sys.stderr)
+        print(f'  stderr: {stderr}', file=sys.stderr)
+        shutil.copy(bak, SIGNAL_ANALYSER_PATH)
+        print('[ROLLBACK] restored from backup')
+        return 2
+
+    print('[SMOKE] PASSED')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

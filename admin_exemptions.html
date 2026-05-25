@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Admin - Exemptions Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0d0f14;
+            --accent: #00e5ff;
+            --text: #e0e0e0;
+            --danger: #ff3b5c;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --surface: #161a22;
+            --border: #2a3140;
+            --muted: #5a6270;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--surface);
+            border-bottom: 2px solid var(--accent);
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            color: var(--accent);
+            font-size: 24px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+        .header .nav {
+            display: flex;
+            gap: 20px;
+        }
+        .header .nav a {
+            color: var(--text);
+            text-decoration: none;
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        .header .nav a:hover, .header .nav a.active {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .container { padding: 30px; max-width: 1400px; margin: 0 auto; }
+        .section { margin-bottom: 40px; }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .section-title { font-size: 18px; color: var(--accent); text-transform: uppercase; }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--accent);
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 12px 15px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        input::placeholder, textarea::placeholder { color: var(--muted); }
+        textarea { min-height: 100px; resize: vertical; }
+        .btn {
+            padding: 12px 24px;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: 2px solid;
+            transition: all 0.2s;
+            background: transparent;
+        }
+        .btn-primary {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        .btn-primary:hover {
+            background: var(--accent);
+            color: var(--bg);
+        }
+        .btn-danger {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+        .btn-danger:hover {
+            background: var(--danger);
+            color: var(--bg);
+        }
+        .btn-success {
+            color: var(--success);
+            border-color: var(--success);
+        }
+        .btn-success:hover {
+            background: var(--success);
+            color: var(--bg);
+        }
+        .btn-small { padding: 8px 16px; font-size: 12px; }
+        .table-wrapper { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: var(--bg);
+            color: var(--accent);
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        tr:hover { background: rgba(0, 229, 255, 0.05); }
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 11px;
+            text-transform: uppercase;
+            border: 1px solid;
+        }
+        .badge-active { color: var(--success); border-color: var(--success); }
+        .badge-revoked { color: var(--danger); border-color: var(--danger); }
+        .badge-expired { color: var(--warning); border-color: var(--warning); }
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .filter-bar input, .filter-bar select {
+            width: auto;
+            min-width: 200px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-value { font-size: 36px; color: var(--accent); margin-bottom: 5px; }
+        .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 15px 25px;
+            background: var(--surface);
+            border: 2px solid var(--accent);
+            color: var(--text);
+            font-size: 14px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { border-color: var(--danger); }
+        .toast.success { border-color: var(--success); }
+        .loading {
+            display: none;
+            color: var(--accent);
+            text-align: center;
+            padding: 40px;
+        }
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            stroke: var(--muted);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: var(--surface);
+            border: 2px solid var(--accent);
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .modal-title { font-size: 18px; color: var(--accent); }
+        .modal-close { background: none; border: none; color: var(--text); font-size: 24px; cursor: pointer; }
+        .confirm-actions { display: flex; gap: 15px; justify-content: flex-end; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Sentinel Admin // Exemptions</h1>
+        <nav class="nav">
+            <a href="admin_submissions.html">Submissions</a>
+            <a href="admin_policies.html">Policies</a>
+            <a href="admin_attestations.html">Attestations</a>
+            <a href="admin_exemptions.html" class="active">Exemptions</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalExemptions">-</div>
+                <div class="stat-label">Total Exemptions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="activeExemptions">-</div>
+                <div class="stat-label">Active</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="revokedExemptions">-</div>
+                <div class="stat-label">Revoked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="expiringCount">-</div>
+                <div class="stat-label">Expiring Soon</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Create Exemption</h2>
+            </div>
+            <div class="card">
+                <form id="createExemptionForm">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="form-group">
+                            <label for="serverId">MCP Server ID *</label>
+                            <input type="text" id="serverId" name="server_id" required placeholder="Server identifier">
+                        </div>
+                        <div class="form-group">
+                            <label for="validUntil">Valid Until *</label>
+                            <input type="datetime-local" id="validUntil" name="valid_until" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="grantedBy">Granted By *</label>
+                            <input type="text" id="grantedBy" name="granted_by" required placeholder="Admin name or email">
+                        </div>
+                        <div class="form-group">
+                            <label for="riskTier">Risk Tier Override</label>
+                            <select id="riskTier" name="risk_tier_override">
+                                <option value="">-- None --</option>
+                                <option value="NONE">None</option>
+                                <option value="LOW">Low</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="HIGH">High</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="reason">Reason *</label>
+                        <textarea id="reason" name="reason" required placeholder="Business justification for exemption"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Exemption</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Active Exemptions</h2>
+                <button class="btn btn-small" onclick="refreshExemptions()">Refresh</button>
+            </div>
+            <div class="filter-bar">
+                <input type="text" id="searchFilter" placeholder="Search server ID, reason, granted by..." onkeyup="filterExemptions()">
+                <select id="statusFilter" onchange="filterExemptions()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="revoked">Revoked</option>
+                    <option value="expired">Expired</option>
+                </select>
+            </div>
+            <div id="loading" class="loading">Loading</div>
+            <div id="exemptionsTable" class="table-wrapper"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="revokeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Revoke Exemption</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <p style="margin-bottom: 20px;">Are you sure you want to revoke this exemption? This action cannot be undone.</p>
+            <div class="form-group">
+                <label for="revokeReason">Revocation Reason</label>
+                <textarea id="revokeReason" placeholder="Reason for revoking this exemption"></textarea>
+            </div>
+            <div class="confirm-actions">
+                <button class="btn btn-danger" onclick="confirmRevoke()">Revoke</button>
+                <button class="btn btn-primary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const QUERY_URL = 'http://127.0.0.1:8772/query';
+        let exemptionsData = [];
+        let pendingRevokeId = null;
+
+        function sanitize(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show ' + type;
+            setTimeout(() => { toast.className = 'toast'; }, 4000);
+        }
+
+        async function query(sql) {
+            try {
+                const res = await fetch(QUERY_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sql })
+                });
+                const data = await res.json();
+                return data.rows || [];
+            } catch (e) {
+                console.error('Query error:', e);
+                return [];
+            }
+        }
+
+        async function execute(sql) {
+            try {
+                const res = await fetch(QUERY_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sql })
+                });
+                return await res.json();
+            } catch (e) {
+                console.error('Execute error:', e);
+                return { error: e.message };
+            }
+        }
+
+        async function loadExemptions() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('exemptionsTable').innerHTML = '';
+
+            try {
+                const rows = await query("SELECT exemption_id, server_id, reason, granted_by, valid_until, status, risk_tier_override, created_at, revoked_at, revoked_by, revocation_reason FROM mcp_exemptions ORDER BY created_at DESC");
+                exemptionsData = rows;
+                renderExemptionsTable(rows);
+                updateStats(rows);
+            } catch (e) {
+                showToast('Failed to load exemptions: ' + sanitize(e.message), 'error');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function updateStats(rows) {
+            const now = new Date();
+            const active = rows.filter(r => r.status === 'active' && new Date(r.valid_until) > now).length;
+            const revoked = rows.filter(r => r.status === 'revoked').length;
+            const expiring = rows.filter(r => {
+                const exp = new Date(r.valid_until);
+                const diff = (exp - now) / (1000 * 60 * 60 * 24);
+                return r.status === 'active' && diff > 0 && diff <= 7;
+            }).length;
+
+            document.getElementById('totalExemptions').textContent = rows.length;
+            document.getElementById('activeExemptions').textContent = active;
+            document.getElementById('revokedExemptions').textContent = revoked;
+            document.getElementById('expiringCount').textContent = expiring;
+        }
+
+        function renderExemptionsTable(rows) {
+            const container = document.getElementById('exemptionsTable');
+            if (!rows.length) {
+                container.innerHTML = '<div class="empty-state"><p>No exemptions found</p></div>';
+                return;
+            }
+
+            let html = '<table><thead><tr>';
+            html += '<th>Server ID</th>';
+            html += '<th>Reason</th>';
+            html += '<th>Granted By</th>';
+            html += '<th>Valid Until</th>';
+            html += '<th>Status</th>';
+            html += '<th>Risk Override</th>';
+            html += '<th>Actions</th>';
+            html += '</tr></thead><tbody>';
+
+            const now = new Date();
+            rows.forEach(row => {
+                const expiryDate = new Date(row.valid_until);
+                const isExpired = expiryDate < now;
+                let status = row.status || 'active';
+                if (status === 'active' && isExpired) status = 'expired';
+
+                let statusBadge = '<span class="badge badge-' + status + '">' + sanitize(status) + '</span>';
+                if (status === 'expired') statusBadge = '<span class="badge badge-expired">Expired</span>';
+
+                html += '<tr data-id="' + sanitize(row.exemption_id) + '">';
+                html += '<td>' + sanitize(row.server_id || '') + '</td>';
+                html += '<td title="' + sanitize(row.reason || '') + '">' + sanitize((row.reason || '').substring(0, 50)) + (row.reason && row.reason.length > 50 ? '...' : '') + '</td>';
+                html += '<td>' + sanitize(row.granted_by || '') + '</td>';
+                html += '<td>' + formatDate(row.valid_until) + '</td>';
+                html += '<td>' + statusBadge + '</td>';
+                html += '<td>' + sanitize(row.risk_tier_override || '-') + '</td>';
+                html += '<td>';
+                if (status === 'active') {
+                    html += '<button class="btn btn-small btn-danger" onclick="openRevokeModal(\'' + sanitize(row.exemption_id) + '\')">Revoke</button>';
+                }
+                html += '</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function formatDate(iso) {
+            if (!iso) return '-';
+            const d = new Date(iso);
+            return d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function filterExemptions() {
+            const search = document.getElementById('searchFilter').value.toLowerCase();
+            const status = document.getElementById('statusFilter').value;
+            const now = new Date();
+
+            const filtered = exemptionsData.filter(row => {
+                const searchMatch = !search ||
+                    (row.server_id || '').toLowerCase().includes(search) ||
+                    (row.reason || '').toLowerCase().includes(search) ||
+                    (row.granted_by || '').toLowerCase().includes(search);
+
+                let rowStatus = row.status || 'active';
+                const expiryDate = new Date(row.valid_until);
+                if (rowStatus === 'active' && expiryDate < now) rowStatus = 'expired';
+
+                const statusMatch = !status || rowStatus === status;
+                return searchMatch && statusMatch;
+            });
+
+            renderExemptionsTable(filtered);
+        }
+
+        document.getElementById('createExemptionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const serverId = document.getElementById('serverId').value.trim();
+            const validUntil = document.getElementById('validUntil').value;
+            const grantedBy = document.getElementById('grantedBy').value.trim();
+            const reason = document.getElementById('reason').value.trim();
+            const riskTier = document.getElementById('riskTier').value;
+
+            if (!serverId || !validUntil || !grantedBy || !reason) {
+                showToast('All required fields must be filled', 'error');
+                return;
+            }
+
+            const now = new Date().toISOString();
+            const validUntilISO = new Date(validUntil).toISOString();
+
+            const sql = `INSERT INTO mcp_exemptions (exemption_id, server_id, reason, granted_by, valid_until, status, risk_tier_override, created_at) VALUES (lower(hex(randomblob(16))), '${sanitize(serverId)}', '${sanitize(reason)}', '${sanitize(grantedBy)}', '${validUntilISO}', 'active', ${riskTier ? "'" + sanitize(riskTier) + "'" : 'NULL'}, '${now}')`;
+
+            const result = await execute(sql);
+            if (result.error) {
+                showToast('Failed to create exemption: ' + sanitize(result.error), 'error');
+            } else {
+                showToast('Exemption created successfully', 'success');
+                this.reset();
+                loadExemptions();
+            }
+        });
+
+        function openRevokeModal(exemptionId) {
+            pendingRevokeId = exemptionId;
+            document.getElementById('revokeModal').classList.add('show');
+        }
+
+        function closeModal() {
+            pendingRevokeId = null;
+            document.getElementById('revokeModal').classList.remove('show');
+            document.getElementById('revokeReason').value = '';
+        }
+
+        async function confirmRevoke() {
+            if (!pendingRevokeId) return;
+
+            const revokeReason = document.getElementById('revokeReason').value.trim() || 'Revoked by administrator';
+            const now = new Date().toISOString();
+
+            const sql = `UPDATE mcp_exemptions SET status = 'revoked', revoked_at = '${now}', revoked_by = 'admin', revocation_reason = '${sanitize(revokeReason)}' WHERE exemption_id = '${sanitize(pendingRevokeId)}'`;
+
+            const result = await execute(sql);
+            if (result.error) {
+                showToast('Failed to revoke exemption: ' + sanitize(result.error), 'error');
+            } else {
+                showToast('Exemption revoked successfully', 'success');
+                closeModal();
+                loadExemptions();
+            }
+        }
+
+        function refreshExemptions() {
+            loadExemptions();
+        }
+
+        const minFutureDate = new Date();
+        minFutureDate.setHours(minFutureDate.getHours() + 1);
+        document.getElementById('validUntil').min = minFutureDate.toISOString().slice(0, 16);
+
+        loadExemptions();
+    </script>
+</body>
+</html>

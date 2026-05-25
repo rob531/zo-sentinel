@@ -1,0 +1,11 @@
+{
+  "task": "r1_wire_v3_enrichments_patcher",
+  "handler": "generate_file",
+  "output_file": "r1_wire_v3_enrichments_patcher.py",
+  "complexity": "medium",
+  "phase": "14",
+  "priority": 0.92,
+  "description": "Build a standalone Python patcher script `r1_wire_v3_enrichments_patcher.py`. When run, it edits /home/workspace/zo_sentinel/signal_analyser.py to import each enrichment module from the latest available version: tool_description_safety_enrichment_v4 if present else _v3 else _v2 else base, same probe-order for permission_scope_enrichment, temporal_stability_enrichment, community_signal_enrichment, supply_chain_enrichment. Wrap each module-level import in try/except (ImportError, AttributeError); on failure of vN, fall back to vN-1 with logging.warning. STRICT IDEMPOTENCE: at top of patcher, read signal_analyser.py and check for marker '# _zo_v3_wire_v1'. If present, print 'NOOP: already wired' and exit 0. Otherwise: write timestamped backup signal_analyser.py.bak.<UTC>Z, perform import-block replacement (use AST or careful regex around 'from X import Y' lines), insert the marker comment '# _zo_v3_wire_v1' near the imports, write the result, run `python3 -c \"import signal_analyser; signal_analyser.score_supply_chain('test_id', 'test_name')\"` to smoke-test that the rewired file imports cleanly and score_supply_chain still returns a (float, str) tuple, and on smoke failure restore from backup and exit 2 with a diagnostic message. Patcher exit codes: 0=applied or noop, 1=structural shape unrecognized, 2=smoke failed and rolled back, 3=any other fatal. Include a `--dry-run` flag that does the read+plan+print but does NOT write. Output report to stdout: which version was selected for each of the five enrichments, and which fell back. Touch ONLY signal_analyser.py. No DB writes. No network. No daemon shape (this is a one-shot script). Pure-function patch logic.",
+  "reads": ["signal_analyser.py"],
+  "next_directive": {}
+}

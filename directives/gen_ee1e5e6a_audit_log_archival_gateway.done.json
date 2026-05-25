@@ -1,0 +1,9 @@
+{
+  "task": "audit_log_archival_gateway",
+  "handler": "generate_file",
+  "output_file": "audit_log_archival_gateway.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Daemon to periodically archive audit_log entries older than 90 days into an immutable archive table (mcp_audit_archive). Spec section 4 defines raw evidence_blob expires at 30 days; audit_log entries are retained indefinitely per spec but archive table enables query performance. MUST: (1) SELECT from audit_log WHERE timestamp < NOW() - INTERVAL 90 days, (2) INSERT INTO mcp_audit_archive with same columns, (3) DELETE from audit_log only after successful archive insert (preserve audit_log integrity), (4) write heartbeat to service_health, (5) handle write_service 5xx with exponential backoff 3 retries. MUST NOT: use DuckDB directly; use write_service only. Reads: audit_trail.py (for schema patterns)."
+}

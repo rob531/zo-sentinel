@@ -1,0 +1,9 @@
+{
+  "task": "build_community_signal_enrichment",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). CRITICAL: community_signal is flat 80.0 across all servers \u2014 provides zero discrimination. Must read MULTIPLE fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars. Must NOT simply return 80.0 for all inputs. Derive varying scores based on metadata variation. No DB writes, no network, no imports of protected modules. Returns evidence dict listing fields used and partial scores for auditability."
+}

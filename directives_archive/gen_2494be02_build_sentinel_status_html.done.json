@@ -1,0 +1,13 @@
+{
+  "task": "build_sentinel_status_html",
+  "handler": "generate_file",
+  "output_file": "sentinel_status.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "New HTML dashboard that polls /v1/registry and /v1/threats endpoints. Display server count, recent verdicts, risk distribution chart. Auto-refresh every 30s. Minimal JS, no external deps.",
+  "reads": [
+    "dashboard.html"
+  ],
+  "next_directive": {}
+}

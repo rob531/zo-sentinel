@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_graphql_schema",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild graphql_schema_builder.py. Per spec section 9, GraphQL surface is dormant \u2014 do not wire it, but the module itself should be kept buildable. The file exists (per gaps map) but was in the failed modules list. Must keep module structurally valid with proper FastAPI endpoint definitions, even if endpoint remains unwired. Do not add any new GraphQL resolvers that weren't in the original design."
+}

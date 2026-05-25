@@ -1,0 +1,9 @@
+{
+  "task": "build_sentinel_external_api_md",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Documentation from Appendix A. External API reference for port 8791. Must document: authentication via X-API-Key header, rate limiting 60 req/min/key, all GET endpoints (search MCP by name, get verdict, get signals, get attestation), JSON response shapes, error codes (401, 403, 429, 500). Reference signal_analyser.py, trust_synthesiser.py, attestation_engine.py for data sources."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "verify_tool_description_safety_enrichment_effectiveness",
+  "handler": "generate_file",
+  "output_file": "verify_tool_description_enrichment.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Verification daemon for tool_description_safety_enrichment.py (built 2026-04-30T02:52:05). Signal quality diagnostic still shows tool_description_safety at WEAK (3 distinct values). This directive queries enrichment_evidence.sql or mcp_signal_enrichments to count distinct scores produced by the enrichment. If <20 distinct scores across 34 fingerprints, the enrichment is not effective and a revised version must be proposed. If >=20 distinct scores, the signal weakness may be in signal_analyser aggregation, not the enrichment itself. Report findings only; do not modify any protected files."
+}

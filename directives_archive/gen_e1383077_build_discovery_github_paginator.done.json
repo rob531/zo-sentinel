@@ -1,0 +1,9 @@
+{
+  "task": "build_discovery_github_paginator",
+  "output_file": "discovery_github_paginator.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.78,
+  "description": "Long-running daemon. Every 1800s, queries GitHub Search API at https://api.github.com/search/repositories?q=topic:mcp-server+OR+topic:model-context-protocol&per_page=100&page=<n>. Reads GH token from os.environ.get('GITHUB_TOKEN'); falls back to unauthenticated rate limit. Tracks page cursor in /home/workspace/zo_sentinel/state/github_pagination_cursor.txt. For each new repo, ws_write mcp_discovery_candidates {candidate_name=full_name, candidate_url=html_url, candidate_description=description[:500], discovered_in_directory='github_topic', discovered_status='active', last_seen=now}. Dedup via the table's (discovered_in_directory, candidate_name) UNIQUE constraint on conflict update last_seen. Heartbeat. Lockfile. Respects GitHub rate-limit headers (parse X-RateLimit-Remaining; sleep until X-RateLimit-Reset if <5)."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_v2_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "enrichment_v2_discrimination_audit.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Audit the three weak signals (permission_scope, temporal_stability, tool_description_safety) whose enrichment_v2 modules were recently built but still show only 4 distinct values. Script reads from mcp_signal_enrichments using write_service, queries cardinality per signal_type, and outputs a discrimination report. If any enrichment_v2 module produces fewer than 10 distinct scores across the corpus, propose a targeted calibration directive referencing the specific module and its weak field usage. This prevents context_efficiency_enrichment from being blocked by the deferral rule unnecessarily. References: Appendix B context_efficiency_enrichment deferral condition."
+}

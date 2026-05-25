@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_e2e_scenarios_run",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_run_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Rebuild e2e_scenarios_run.py targeting last_error: 'failed in cohort_6_n5' per quality map (attempts=4/3, quarantined). This file tests the canonical flow: new MCP \u2192 signal scored \u2192 verdict \u2192 attestation \u2192 UI visible. Must: (1) use existing interface (log, ws_write, ws_query, ws_execute, verify_table_exists); (2) ensure all 7 signal enrichments are called before verdict computation; (3) verify attestation_engine creates attestation row after verdict; (4) verify search_api surfaces the new MCP within 5 seconds of attestation; (5) fix whatever caused cohort_6_n5 failure (likely timing issue or missing signal row write). Spec reference: section 4 freshness SLAs, section 6 graceful degradation with heartbeat."
+}

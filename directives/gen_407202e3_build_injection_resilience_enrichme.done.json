@@ -1,0 +1,9 @@
+{
+  "task": "build_injection_resilience_enrichment",
+  "handler": "generate_file",
+  "output_file": "injection_resilience_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Required as the 7th signal for the composite. Phase 8 built pi_scorer.py for injection_resilience dimension but no enrichment module exists to compute scores from registry metadata (download_count, stars, age_days, registry_source, publisher_verified). No DB writes, no network, no imports of protected modules. Must follow signal invariant contract: returns score 0-100 and evidence blob with signal_type and confidence."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "wire_weak_signal_enrichments_to_analyser_v2",
+  "handler": "generate_file",
+  "output_file": "enrichment_wiring_for_weak_signals.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Wires the three v3/v4 enrichment modules (temporal_stability_enrichment_v4.py, tool_description_safety_enrichment_v4.py, permission_scope_enrichment_v3.py) into signal_analyser_v2 pipeline. Diagnostic shows these signals have only 3 distinct values each \u2014 they exist but are not being consumed. Creates a wiring module that invokes compute_score() for all 5118 servers across all three enrichments and writes results to mcp_signal_enrichments. Uses write_service :8772 only. No direct duckdb. Exposes run() + if __name__ == '__main__': run(). Must call send_heartbeat every 60s."
+}

@@ -1,0 +1,14 @@
+{
+  "task": "rebuild_compliance_export_service",
+  "handler": "generate_file",
+  "output_file": "compliance_export_service.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Report daemon that reads mcp_decisions + mcp_risk_register to generate compliance exports. Exports to CSV/JSON formats. Scheduled run via cron or internal scheduler. Uses query service at 127.0.0.1:8772, writes export files to /home/workspace/zo_sentinel/exports/. Implements run() + heartbeat pattern.",
+  "reads": [
+    "compliance_reporter.py",
+    "schema.py"
+  ],
+  "next_directive": {}
+}

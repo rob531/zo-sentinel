@@ -1,0 +1,14 @@
+{
+  "task": "snow_connector_wiring_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire snow_connector.py (built 2026-04-16) into the approval_workflow daemon per Section 5 inter-daemon communication rules. This is wiring work, NOT a rewrite of snow_connector.py. Must use write_service on :8772 for all state exchange. The wiring module MUST: (1) poll mcp_submissions for rows needing SNOW ticket creation; (2) call snow_connector to create ServiceNow inbound ticket; (3) write SNOW ticket ID back to mcp_submissions via write_service; (4) handle 5xx from snow_connector with exponential backoff (3 tries); (5) write heartbeat to service_health every 60s. Do NOT wire directly to approval_workflow \u2014 only to write_service.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

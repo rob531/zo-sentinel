@@ -1,0 +1,9 @@
+{
+  "task": "build_email_guid_auth_compact_v2",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_compact.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Rebuild of email_guid_auth_compact.py which failed during last build cycle. Follow the exact pattern from email_guid_auth.py (already built and smoking clean per recently built list). Expose the same interface: ws_write, ws_query, send_heartbeat, check_single_instance. Ensure # deps comment includes all required imports. This is NOT a protected file; rebuild is permitted for failed modules."
+}

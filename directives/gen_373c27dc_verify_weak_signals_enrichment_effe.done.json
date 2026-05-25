@@ -1,0 +1,9 @@
+{
+  "task": "verify_weak_signals_enrichment_effect",
+  "handler": "generate_file",
+  "output_file": "verify_weak_signals_enrichment_effect.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Quality diagnostic: the live signal quality shows permission_scope (3 distinct), temporal_stability (3 distinct), tool_description_safety (3 distinct) as WEAK \u2014 same score across all 34 fingerprints. Despite permission_scope_enrichment_v3.py, temporal_stability_enrichment_v4.py, and tool_description_safety_enrichment_v4.py being recently built, the diagnostic still shows weak signals. This verifier must: (1) query mcp_signal_scores for each of the three signals; (2) compute distinct score count per signal; (3) compute range spread; (4) cross-reference against mcp_signal_enrichments to confirm enricher runs have executed; (5) output a report identifying whether the issue is in scoring logic, missing enricher execution, or signal evaluator calibration. Must not write to DB. Pure diagnostic. Exit 0 if signals are now discriminative (>=10 distinct values), exit 1 with diagnostic report if still weak."
+}

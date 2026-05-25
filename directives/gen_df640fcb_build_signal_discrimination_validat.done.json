@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_discrimination_validator_v2",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_validator_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Validate signal quality improvements from recently built enrichments (temporal_stability_enrichment.py, permission_scope_enrichment.py, tool_description_safety_enrichment.py, community_signal_enrichment.py \u2014 all built 2026-05-22). Query mcp_signal_enrichments for distinct score counts per signal_type; assert each weak signal (permission_scope, temporal_stability, tool_description_safety) now exceeds 20 distinct scores across 34+ fingerprints. Must write discrimination floor breach rows to dedicated table via write_service. Replaces quarantined verify_tool_description_enrichment.py. Spec reference: Section 3 Signal Invariant and Signal Quality Diagnostic showing these three signals at 4 distinct values."
+}

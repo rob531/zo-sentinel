@@ -1,0 +1,13 @@
+{
+  "task": "verify_supply_chain_enrichment_wired",
+  "handler": "generate_file",
+  "output_file": "verify_supply_chain_enrichment_wired.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Quality pass: verify supply_chain_enrichment.py (already built) is called by signal_analyser.py and produces >20 distinct score values across the MCP registry. Query mcp_signal_enrichments for signal_type='supply_chain' and verify score distribution. If the module is not wired, emit diagnostic. This is a read-only verification; do NOT rewrite signal_analyser.py.",
+  "reads": [
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

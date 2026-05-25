@@ -1,0 +1,600 @@
+#!/usr/bin/env python3
+"""
+goose_runner.py - Goose Tier 1 Autonomous Builder Runner
+Polls mesh_memory for low-complexity directives and executes them with Goose AI.
+Falls back to MiniMax/zo_builder tier on Goose failure.
+"""
+
+import os
+import sys
+import time
+import json
+import subprocess
+import signal
+import requests
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import Thread
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+SERVICE_NAME = "goose_runner"
+SERVICE_PORT = 8799
+PID_FILE = Path(f"/tmp/{SERVICE_NAME}.pid")
+WRITE_SERVICE_URL = "http://127.0.0.1:8772"
+QUERY_URL = "http://127.0.0.1:8772/query"
+INFERENCE_ROUTER_URL = "http://127.0.0.1:8773"
+NL_QUERY_URL = "http://127.0.0.1:8784"
+
+POLL_SECS = 60
+HEARTBEAT_INTERVAL = 30
+GOOSE_TIMEOUT = 300
+
+PROJECT_DIR = Path("/home/workspace/zo_sentinel")
+LOGS_DIR = Path("/home/workspace/logs")
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOGS_DIR / "goose_runner.log"
+
+SHARED_OUTPUTS = Path("/home/workspace/shared/outputs/goose")
+TASK_FILE = Path("/tmp/goose_task.txt")
+
+DIRECTIVES_PATH = Path("/home/workspace/zo_sentinel/directives")
+PENDING_DIR = DIRECTIVES_PATH / "pending"
+DONE_DIR = DIRECTIVES_PATH / "done"
+
+# OpenAI API key (MiniMax is OpenAI-compatible)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY", "")
+MINIMAX_API_BASE = "https://api.minimax.chat/v1"
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+def log(msg):
+    """Write to log file."""
+    ts = datetime.now(timezone.utc).isoformat()
+    with open(LOG_FILE, "a") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{ts}] {msg}", flush=True)
+
+def get_utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+def send_heartbeat():
+    """Send heartbeat to service_health table."""
+    try:
+        payload = {
+            "table": "service_health",
+            "rows": {
+                "service": SERVICE_NAME,
+                "last_heartbeat": get_utc_now()
+            }
+        }
+        requests.post(WRITE_SERVICE_URL + "/query", json=payload, timeout=5)
+    except Exception as e:
+        log(f"Heartbeat failed: {e}")
+
+def heartbeat_loop():
+    """Background heartbeat thread."""
+    while True:
+        send_heartbeat()
+        time.sleep(HEARTBEAT_INTERVAL)
+
+def check_single_instance():
+    """Ensure only one instance runs."""
+    if PID_FILE.exists():
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            os.kill(pid, 0)
+            log(f"Instance already running with PID {pid} - exiting")
+            sys.exit(0)
+        except (ValueError, OSError):
+            pass
+    PID_FILE.write_text(str(os.getpid()))
+    log(f"PID written: {os.getpid()}")
+
+def remove_pid_file():
+    """Remove PID file on shutdown."""
+    if PID_FILE.exists():
+        PID_FILE.unlink()
+        log("PID file removed")
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals."""
+    log(f"Received signal {signum} - shutting down")
+    remove_pid_file()
+    sys.exit(0)
+
+def ensure_directories():
+    """Create required directories."""
+    SHARED_OUTPUTS.mkdir(parents=True, exist_ok=True)
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    DONE_DIR.mkdir(parents=True, exist_ok=True)
+
+def ws_query(sql):
+    """Query write service."""
+    try:
+        resp = requests.post(QUERY_URL, json={"sql": sql}, timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        log(f"Query failed: {e}")
+        return {"rows": [], "count": 0}
+
+def ws_write(table, rows):
+    """Write to write service."""
+    try:
+        payload = {"table": table, "rows": rows, "wait": True}
+        resp = requests.post(WRITE_SERVICE_URL + "/query", json=payload, timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        log(f"Write failed: {e}")
+        return {"ok": False}
+
+# =============================================================================
+# DIRECTIVE LOADING
+# =============================================================================
+
+def load_directives_from_mesh():
+    """Load eligible directives from mesh_memory via write_service query."""
+    try:
+        result = ws_query("""
+            SELECT id, content, agent_id, memory_type, importance, created_at
+            FROM mesh_memory
+            WHERE agent_id = 'zo_sentinel.directive'
+            AND memory_type = 'build_directive'
+            ORDER BY importance DESC, created_at ASC
+            LIMIT 20
+        """)
+        if result and result.get("rows"):
+            log(f"Found {len(result['rows'])} eligible directives from mesh_events")
+            return result["rows"]
+    except Exception as e:
+        log(f"Failed to query mesh_events: {e}")
+    
+    # Fallback: scan pending directory
+    directives = []
+    if PENDING_DIR.exists():
+        for f in sorted(PENDING_DIR.glob("*.json")):
+            try:
+                d = json.loads(f.read_text())
+                directives.append(d)
+            except Exception as e:
+                log(f"Failed to read {f}: {e}")
+    
+    log(f"Loaded {len(directives)} directives from pending dir")
+    return directives
+
+def is_goose_eligible(directive):
+    """Check if directive is eligible for Goose execution."""
+    content = directive.get("content", directive.get("description", ""))
+    complexity = directive.get("complexity", "")
+    source = directive.get("source", "")
+    
+    # Accept all directives -- Goose handles any complexity
+    # Only skip if already built (idempotent check)
+    directive_id_val = directive.get("directive_id") or directive.get("id", "unknown")
+    done_file = Path("/home/workspace/zo_sentinel/directives") / f"{directive_id_val}.done.json"
+    if done_file.exists():
+        return False  # Already built
+    eligible = True  # Accept all complexities
+    
+    # Never route high complexity to Goose
+    if complexity == "high":
+        return False
+        
+    return eligible
+
+# =============================================================================
+# GOOSE EXECUTION
+# =============================================================================
+
+def write_task_spec(directive):
+    """Write directive spec to task file for Goose."""
+    directive_id = directive.get("id", "unknown_" + str(time.time()))
+    content = directive.get("content", directive.get("description", ""))
+    
+    task_spec = {
+        "directive_id": directive_id,
+        "description": directive.get("description", content[:200]),
+        "content": content,
+        "complexity": directive.get("complexity", "low"),
+        "source": "goose_tier1",
+        "created_at": get_utc_now()
+    }
+    
+    TASK_FILE.write_text(json.dumps(task_spec, indent=2))
+    log(f"Task spec written to {TASK_FILE}")
+    return directive_id
+
+def check_goose_installed():
+    """Check if Goose CLI is available."""
+    try:
+        result = subprocess.run(
+            ["goose", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            log(f"Goose version: {result.stdout.strip()}")
+            return True
+    except FileNotFoundError:
+        log("Goose CLI not found in PATH")
+    except Exception as e:
+        log(f"Goose check failed: {e}")
+    return False
+
+def run_goose_task(directive_id, content):
+    """Execute Goose on task file with timeout."""
+    log(f"Executing Goose for directive: {directive_id}")
+    
+    try:
+        result = subprocess.run(
+            ["goose", "run", "--instructions", str(TASK_FILE)],
+            capture_output=True,
+            text=True,
+            timeout=GOOSE_TIMEOUT,
+            cwd=str(PROJECT_DIR)
+        )
+        
+        if result.returncode == 0:
+            log(f"Goose execution succeeded for {directive_id}")
+            return {
+                "success": True,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "directive_id": directive_id
+            }
+        else:
+            log(f"Goose execution failed (exit {result.returncode}): {result.stderr}")
+            return {
+                "success": False,
+                "error": result.stderr or "Unknown error",
+                "directive_id": directive_id
+            }
+            
+    except subprocess.TimeoutExpired:
+        log(f"Goose timeout exceeded for {directive_id}")
+        return {
+            "success": False,
+            "error": f"Timeout after {GOOSE_TIMEOUT}s",
+            "directive_id": directive_id
+        }
+    except FileNotFoundError:
+        log("Goose not installed - using fallback")
+        return {
+            "success": False,
+            "error": "Goose not installed",
+            "directive_id": directive_id
+        }
+    except Exception as e:
+        log(f"Goose execution error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "directive_id": directive_id
+        }
+
+def call_minimax_fallback(directive):
+    """Call MiniMax API directly when Goose fails."""
+    directive_id = directive.get("id", "unknown")
+    content = directive.get("content", directive.get("description", ""))
+    
+    log(f"Routing to MiniMax fallback for directive: {directive_id}")
+    
+    messages = [
+        {
+            "role": "system",
+            "content": "You are an autonomous builder for zo-sentinel. Complete tasks efficiently following best practices."
+        },
+        {
+            "role": "user", 
+            "content": f"Complete this task: {content}\n\nOutput only the completed code/results."
+        }
+    ]
+    
+    # Try MiniMax first
+    if MINIMAX_API_KEY:
+        try:
+            resp = requests.post(
+                f"{MINIMAX_API_BASE}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {MINIMAX_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "MiniMax-Text-01",
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 4000
+                },
+                timeout=180
+            )
+            if resp.status_code == 200:
+                result_data = resp.json()
+                return {
+                    "success": True,
+                    "result": result_data.get("choices", [{}])[0].get("message", {}).get("content", ""),
+                    "fallback": "minimax",
+                    "directive_id": directive_id
+                }
+        except Exception as e:
+            log(f"MiniMax API failed: {e}")
+    
+    # Try OpenAI-compatible fallback
+    if OPENAI_API_KEY:
+        try:
+            resp = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 4000
+                },
+                timeout=180
+            )
+            if resp.status_code == 200:
+                result_data = resp.json()
+                return {
+                    "success": True,
+                    "result": result_data.get("choices", [{}])[0].get("message", {}).get("content", ""),
+                    "fallback": "openai",
+                    "directive_id": directive_id
+                }
+        except Exception as e:
+            log(f"OpenAI API failed: {e}")
+    
+    # Try inference router as last resort
+    try:
+        resp = requests.post(
+            f"{INFERENCE_ROUTER_URL}/route",
+            json={"prompt": content, "tier": "medium"},
+            timeout=180
+        )
+        if resp.status_code == 200:
+            return {
+                "success": True,
+                "result": resp.json().get("response", ""),
+                "fallback": "inference_router",
+                "directive_id": directive_id
+            }
+    except Exception as e:
+        log(f"Inference router failed: {e}")
+    
+    return {
+        "success": False,
+        "error": "All fallback methods exhausted",
+        "directive_id": directive_id
+    }
+
+# =============================================================================
+# RESULT HANDLING
+# =============================================================================
+
+def write_result(directive_id, success, result_text="", error="", fallback_used=False):
+    """Write execution result to shared outputs."""
+    SHARED_OUTPUTS.mkdir(parents=True, exist_ok=True)
+    output_file = SHARED_OUTPUTS / f"{directive_id}.result"
+    
+    result_data = {
+        "directive_id": directive_id,
+        "success": success,
+        "timestamp": get_utc_now(),
+        "result": result_text,
+        "error": error,
+        "fallback_used": fallback_used,
+        "source": "goose_tier1" if not fallback_used else "minimax_fallback"
+    }
+    
+    output_file.write_text(json.dumps(result_data, indent=2))
+    log(f"Result written to {output_file}")
+    return output_file
+
+def mark_directive_completed(directive):
+    """Mark directive as completed in mesh_events table."""
+    directive_id = directive.get("id", "unknown")
+    
+    try:
+        # Update mesh_events table
+        ws_write("mesh_events", {
+            "event_id": directive.get("event_id", directive_id),
+            "status": "completed",
+            "completed_at": get_utc_now(),
+            "completed_by": "goose_tier1"
+        })
+        log(f"Marked directive {directive_id} as completed in mesh_events")
+    except Exception as e:
+        log(f"Failed to mark directive completed: {e}")
+    
+    # Move file from pending to done if exists
+    pending_file = PENDING_DIR / f"{directive_id}.json"
+    if pending_file.exists():
+        done_file = DONE_DIR / f"{directive_id}.json"
+        try:
+            content = pending_file.read_text()
+            data = json.loads(content)
+            data["status"] = "completed"
+            data["completed_at"] = get_utc_now()
+            data["completed_by"] = "goose_tier1"
+            done_file.write_text(json.dumps(data, indent=2))
+            pending_file.unlink()
+            log(f"Moved {directive_id} to done directory")
+        except Exception as e:
+            log(f"Failed to move directive file: {e}")
+
+def log_directive_routed(directive_id, source, complexity, method):
+    """Log directive routing decision."""
+    log(f"[ROUTE] directive_id={directive_id} complexity={complexity} source={source} method={method}")
+    
+    try:
+        ws_write("audit_log", {
+            "event_type": "goose_route",
+            "actor": "goose_runner",
+            "target_server_id": directive_id,
+            "detail": json.dumps({
+                "complexity": complexity,
+                "source": source,
+                "method": method
+            }),
+            "created_at": get_utc_now()
+        })
+    except Exception as e:
+        log(f"Failed to log routing: {e}")
+
+# =============================================================================
+# MAIN LOOP
+# =============================================================================
+
+def run():
+
+    # Wire Gemini as alternative to MiniMax
+    import os
+    gemini_key = os.environ.get('RcGeminiAPIKey', '') or os.environ.get('GEMINI_API_KEY', '')
+    minimax_key = os.environ.get('MINIMAX_API_KEY', '') or os.environ.get('OPENAI_API_KEY', '')
+    if minimax_key and not os.environ.get('OPENAI_API_KEY'):
+        os.environ['OPENAI_API_KEY'] = minimax_key
+        os.environ['OPENAI_BASE_URL'] = 'https://api.minimax.chat/v1'
+    if gemini_key and not os.environ.get('GOOGLE_API_KEY'):
+        os.environ['GOOGLE_API_KEY'] = gemini_key
+    """Main daemon loop."""
+    log(f"=== Goose Runner starting ===")
+    log(f"Service: {SERVICE_NAME}, Port: {SERVICE_PORT}")
+    
+    ensure_directories()
+    check_single_instance()
+    
+    # Setup signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # Start heartbeat thread
+    heartbeat_thread = Thread(target=heartbeat_loop, daemon=True)
+    heartbeat_thread.start()
+    log("Heartbeat thread started")
+    
+    # Check Goose installation
+    goose_installed = check_goose_installed()
+    if goose_installed:
+        log("Goose CLI verified")
+    else:
+        log("Goose CLI not available - will use fallback on first directive")
+    
+    cycle_count = 0
+    
+    while True:
+        try:
+            cycle_count += 1
+            send_heartbeat()
+            log(f"=== Cycle {cycle_count} ===")
+            
+            # Load eligible directives
+            directives = load_directives_from_mesh()
+            
+            if not directives:
+                log("No eligible directives found")
+            else:
+                log(f"Processing {len(directives)} directives")
+            
+            for directive in directives:
+                directive_id = directive.get("id", "unknown")
+                complexity = directive.get("complexity", "unknown")
+                source = directive.get("source", "unknown")
+                
+                if not is_goose_eligible(directive):
+                    log(f"Skipping non-eligible directive: {directive_id} (complexity={complexity})")
+                    continue
+                
+                log(f"Processing directive: {directive_id} (complexity={complexity})")
+                log_directive_routed(directive_id, source, complexity, "goose_tier1")
+                
+                # Write task spec
+                write_task_spec(directive)
+                
+                # Try Goose first
+                if goose_installed:
+                    result = run_goose_task(directive_id, directive.get("content", ""))
+                    
+                    if result.get("success"):
+                        write_result(directive_id, True, result.get("stdout", ""))
+                        mark_directive_completed(directive)
+                    else:
+                        # Goose failed - try fallback
+                        log(f"Goose failed for {directive_id}: {result.get('error')}")
+                        fallback_result = call_minimax_fallback(directive)
+                        
+                        if fallback_result.get("success"):
+                            write_result(
+                                directive_id, 
+                                True, 
+                                fallback_result.get("result", ""),
+                                fallback_used=True
+                            )
+                            mark_directive_completed(directive)
+                        else:
+                            write_result(
+                                directive_id,
+                                False,
+                                error=fallback_result.get("error", "All methods failed"),
+                                fallback_used=True
+                            )
+                            # Requeue to zo_builder
+                            try:
+                                ws_write("mesh_events", {
+                                    "event_type": "directive",
+                                    "content": directive.get("content", ""),
+                                    "complexity": "medium",
+                                    "source": "zo_builder",
+                                    "retry_count": 1,
+                                    "created_at": get_utc_now()
+                                })
+                                log(f"Requeued to zo_builder: {directive_id}")
+                            except Exception as e:
+                                log(f"Failed to requeue: {e}")
+                else:
+                    # Goose not installed - go straight to fallback
+                    fallback_result = call_minimax_fallback(directive)
+                    
+                    if fallback_result.get("success"):
+                        write_result(
+                            directive_id,
+                            True,
+                            fallback_result.get("result", ""),
+                            fallback_used=True
+                        )
+                        mark_directive_completed(directive)
+                    else:
+                        write_result(
+                            directive_id,
+                            False,
+                            error=fallback_result.get("error", "All methods failed"),
+                            fallback_used=True
+                        )
+                
+                # Small delay between directives
+                time.sleep(2)
+            
+            log(f"Cycle {cycle_count} complete, sleeping {POLL_SECS}s")
+            time.sleep(POLL_SECS)
+            
+        except Exception as e:
+            log(f"Error in main loop: {e}")
+            import traceback
+            traceback.print_exc()
+            time.sleep(POLL_SECS)
+
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
+if __name__ == "__main__":
+    run()

@@ -1,0 +1,9 @@
+{
+  "task": "temporal_stability_enrichment_v2_quality_pass",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Rewrite temporal_stability_enrichment.py to achieve signal discrimination. Current version produces flat scores (BAD signal quality). MUST: read at least 4 metadata fields (age_days, last_updated_days, release_frequency, commit_activity) and apply time-based decay and volatility scoring. MUST NOT produce identical scores across different MCPs. MUST follow the pure function contract: compute_score(metadata: dict) -> tuple[float, dict], no DB writes, no network, no imports of other project modules. Score range [0.0, 100.0]. Evidence dict must list each partial score for auditability."
+}

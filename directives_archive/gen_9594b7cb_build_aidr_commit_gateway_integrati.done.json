@@ -1,0 +1,14 @@
+{
+  "task": "build_aidr_commit_gateway_integration",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_integration.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Wire aidr_commit_gateway.py (built 2026-04-17) to enforce verdict-check before forwarding commits. Phase 9 enterprise integration.\n\nMUST: Query trust_synthesiser for composite verdict via write_service before forwarding any commit.\nMUST: Reject CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts automatically; only forward TRUSTED_GENERAL, TRUSTED_RESEARCH, or ENTERPRISE_CONTROLLED.\nMUST: Include injection_resilience dimension score in commit payload to AiDr.\nMUST: Log all commit decisions to audit_log table with target_server_id, action, timestamp.\nMUST NOT: Auto-commit verdicts below ENTERPRISE_CONTROLLED without explicit override in mcp_decisions table.\nMUST NOT: Make direct DB writes; all state via write_service :8772.\nPhase 9 per ZO-SENTINEL Product Specification section 1.",
+  "reads": [
+    "aidr_commit_gateway.py",
+    "trust_synthesiser.py",
+    "write_service.py"
+  ]
+}

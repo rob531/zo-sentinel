@@ -1,0 +1,9 @@
+{
+  "task": "wire_attestation_refresher_to_scheduler",
+  "handler": "generate_file",
+  "output_file": "wire_attestation_refresher_to_scheduler.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Integration module to wire attestation_refresher.py into assessment_scheduler. attestation_refresher was built 2026-04-16 but gaps map shows spec-named file exists but may not be scheduled. Verify attestation_refresher.py run() function, add to assessment_scheduler pending-work query pattern, ensure scheduler queries mcp_attestations WHERE next_refresh_due < NOW(). Add heartbeat to service_health. Per spec section 4: attestation_engine must refresh attestations on schedule. Do NOT rebuild attestation_refresher."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "permission_scope_enrichment",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Addresses signal quality weakness: only 4 distinct values currently, needs to discriminate across a broader range. Uses metadata fields: permission_scope, registry_source, age_days, dependency_count, publisher_verified, tool_count, request_strategy. Computes granular permission risk scores (READ vs WRITE vs ADMIN), scope breadth penalties, and temporal decay. No DB writes, no network, no imports of protected modules. Completes in <2s per call. Returns evidence dict with partial scores per field for audit."
+}

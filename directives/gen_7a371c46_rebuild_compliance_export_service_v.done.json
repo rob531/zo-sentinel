@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_compliance_export_service_v2",
+  "handler": "generate_file",
+  "output_file": "compliance_export_service_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild compliance_export_service.py to fix smoke failure. The module exports compliance reports but has importlib issues. Create v2 with clean import chain. Must use write_service for DB access, expose export_compliance_report() function with parameters: server_ids list, format ('json'|'csv'), date_range tuple. No direct duckdb imports."
+}

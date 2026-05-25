@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "verify_enrichment_discrimination.py",
+  "complexity": "low",
+  "description": "After enrichment rebuilds, run discrimination check: query mcp_signal_enrichments for each signal, assert DISTINCT COUNT >= 10. If <10, the enrichment is not discriminating and must be fixed before wiring into trust_synthesiser.",
+  "from": "chain_rebuild_tool_description_safety_enrichment",
+  "priority": 0.83
+}

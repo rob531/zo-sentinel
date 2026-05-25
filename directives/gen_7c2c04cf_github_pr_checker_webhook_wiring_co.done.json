@@ -1,0 +1,9 @@
+{
+  "task": "github_pr_checker_webhook_wiring_complete",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_webhook_wiring_complete.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire github_pr_checker.py (built, exists in recently built) to receive GitHub webhook events. github_pr_checker_webhook_wiring.py was built 2026-05-23T08:45:50 but integration may be incomplete. Create new module that: registers webhook endpoint handler, parses GitHub PR event payload, extracts MCP server references, calls github_pr_checker.check_pr_safety() for each MCP, posts verdict back to GitHub via check run API. Use write_service at :8772. Do NOT modify github_pr_checker.py directly (protected). Include heartbeat to service_health."
+}

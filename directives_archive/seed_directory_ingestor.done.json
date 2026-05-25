@@ -1,0 +1,112 @@
+{
+  "directive_id": "seed_directory_ingestor",
+  "directive_version": "1.0",
+  "owner": "robinc",
+  "created_at": "2026-04-19",
+  "phase": "II",
+  "title": "MCP Directory Ingestor",
+  "purpose": "Enrich mcp_server_registry with mentions from known authoritative and community-curated MCP directories. Presence in Anthropic's reference list (modelcontextprotocol.io/servers) is the single strongest trust signal in the ecosystem; presence in multiple community aggregators is weaker but additive. Phase II of SENTINEL_ROADMAP_v2.md.",
+
+  "mode": "PATCH_MODULE",
+  "target_file": "/home/workspace/zo_sentinel/mcp_directory_ingestor.py",
+  "target_type": "t1_agent",
+
+  "pilot_first": true,
+  "pilot_spec": {
+    "description": "Ingest ONLY the Anthropic reference list (modelcontextprotocol.io/servers) as pilot. Parse the HTML or JSON, extract MCP names and repo URLs, match to existing server_ids in mcp_server_registry via name or URL fuzzy match. Write to mcp_directory_mentions table. Report: how many entries found in the reference list, how many matched existing registry entries, how many are NEW (i.e., Anthropic lists MCPs we don't yet have in our registry — these are high-value imports). Halt before adding other directories if Anthropic ingestion doesn't produce at least 15 matches.",
+    "candidate_selection": "N/A — single-directory pilot rather than candidate MCPs",
+    "success_criteria": [
+      "at least 15 entries parsed from the reference list",
+      "at least 10 of those match existing registry entries (sanity check on name normalization)",
+      "any new-to-us MCPs are written to a 'discovery_candidate' queue for operator review before being added to the main registry",
+      "total runtime under 30 seconds",
+      "no more than 3 HTTP requests to modelcontextprotocol.io (one for the page; two for retries if needed)"
+    ],
+    "abort_conditions": [
+      "modelcontextprotocol.io returns non-200 — assume temporary outage, retry once, then abort cleanly",
+      "parse yields <5 entries (page structure changed — needs operator review of the parser before reruns)",
+      "any attempt to fetch more than 3 URLs — pilot is strictly the one index page"
+    ]
+  },
+
+  "interface_contract": {
+    "exported_functions": [
+      {
+        "name": "ingest_anthropic_reference",
+        "signature": "ingest_anthropic_reference() -> dict",
+        "description": "One-shot pilot function. Fetches the reference list once, parses, matches, writes. Returns summary dict with counts."
+      },
+      {
+        "name": "ingest_all_directories",
+        "signature": "ingest_all_directories() -> dict",
+        "description": "Full daemon cycle — iterates all configured directories. NOT called during pilot. Only invoked after pilot success and operator approval."
+      }
+    ],
+    "database_writes": {
+      "mcp_directory_mentions": {
+        "schema": [
+          "id BIGINT PRIMARY KEY",
+          "server_id VARCHAR",
+          "directory_name VARCHAR NOT NULL",
+          "mention_url VARCHAR",
+          "mention_context VARCHAR",
+          "mention_rank INTEGER",
+          "first_seen TIMESTAMPTZ DEFAULT now()",
+          "last_seen TIMESTAMPTZ DEFAULT now()",
+          "UNIQUE (server_id, directory_name)"
+        ]
+      },
+      "mcp_discovery_candidates": {
+        "purpose": "MCPs mentioned in directories but not yet in our registry. Operator reviews before promotion.",
+        "schema": [
+          "id BIGINT PRIMARY KEY",
+          "candidate_name VARCHAR NOT NULL",
+          "candidate_url VARCHAR",
+          "discovered_in_directory VARCHAR",
+          "first_seen TIMESTAMPTZ DEFAULT now()",
+          "reviewed_at TIMESTAMPTZ",
+          "promoted BOOLEAN DEFAULT FALSE"
+        ]
+      }
+    }
+  },
+
+  "rate_limit_discipline": {
+    "doctrine": "Weekly refresh for directories. Directory contents change slowly; no value in daily hammering.",
+    "per_directory_limits": {
+      "anthropic_reference": "1 fetch per week, User-Agent identifying us, respect any robots.txt directive",
+      "awesome_mcp_servers": "github raw.githubusercontent.com README fetch, weekly",
+      "mcp_so": "weekly; if they have an API, use it; otherwise HTML parse politely",
+      "pulsemcp": "weekly",
+      "glama_ai": "weekly"
+    },
+    "cycle_interval": "7 days in production; pilot is one-shot"
+  },
+
+  "matching_logic": {
+    "strategy": "Match directory entry to registry by: (1) exact name match, (2) name match modulo scope prefix (@owner/pkg vs pkg), (3) exact repo URL match, (4) repo URL normalization (strip .git suffix, www. prefix, trailing slash). If no match found, entry goes to mcp_discovery_candidates for operator review — DO NOT auto-insert into mcp_server_registry.",
+    "normalization_examples": [
+      "'@modelcontextprotocol/server-filesystem' matches 'modelcontextprotocol/server-filesystem' and 'server-filesystem' when ecosystem context is npm",
+      "'https://github.com/foo/bar' matches 'https://github.com/foo/bar.git' and 'http://github.com/foo/bar/' (case insensitive)",
+      "case-sensitive match should be preferred; case-insensitive match is fallback with evidence noting the case mismatch"
+    ]
+  },
+
+  "forbidden": [
+    "DO NOT write new MCPs directly to mcp_server_registry — all new discoveries go through mcp_discovery_candidates for operator approval",
+    "DO NOT cache HTML — extract structured data and discard the raw",
+    "DO NOT ignore robots.txt on any directory source",
+    "DO NOT assume URL stability — accept that directories will restructure, fail gracefully with clear parser error"
+  ],
+
+  "quarantine_integration": {
+    "gate_8_expected_contract": "directory_presence_signal should show at least 4 distinct values across 50+ MCPs (presence in 0, 1, 2-3, 4+ directories). If all MCPs land in the same bucket, directory enrichment is broken."
+  },
+
+  "acceptance_tests": [
+    "ingest_anthropic_reference() completes under 30 seconds with pilot candidates",
+    "mcp_directory_mentions has at least 10 rows after pilot",
+    "ingesting twice produces no duplicates (upsert semantics honored)",
+    "if modelcontextprotocol.io returns 404 mid-parse, module exits cleanly with no partial writes"
+  ]
+}

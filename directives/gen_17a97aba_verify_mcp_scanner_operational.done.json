@@ -1,0 +1,9 @@
+{
+  "task": "verify_mcp_scanner_operational",
+  "handler": "generate_file",
+  "output_file": "diagnose_mcp_scanner_stale.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Build diagnose_mcp_scanner_stale.py to diagnose the mcp_scanner daemon which is currently 5h3m stale (heartbeat threshold 4h). This is a diagnostic-only file per Appendix A (KNOWN_BROKEN section \u2014 prefer diagnosis over rebuild; file is protected). The module must: (1) Query service_health for mcp_scanner last_heartbeat via write_service. (2) Tail the mcp_scanner log to find the last successful activity line. (3) Run get_pending_scans_count to check if work queue is accumulating. (4) Parse log for ERROR/WARNING patterns indicating failure mode. (5) Write a diagnostic blob to a dedicated diagnostics table via write_service. (6) Include a run() entrypoint with if __name__ == '__main__'. Uses: write_service on :8772 (Section 5 inter-daemon rule \u2014 no direct DB access). Do NOT propose service restart; diagnostics only."
+}

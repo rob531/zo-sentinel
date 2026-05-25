@@ -1,0 +1,12 @@
+{
+  "task": "build_shodan_exposure_correlator",
+  "handler": "generate_file",
+  "output_file": "shodan_exposure_correlator.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.92,
+  "reads": ["schema.py", "db_utils.py"],
+  "description": "Passive Shodan exposure correlator daemon. Reads mcp_server_registry via ws_query for servers with a resolvable URL. For each: extract IP via socket.gethostbyname(). Query Shodan API: GET https://api.shodan.io/shodan/host/{ip}?key={SHODAN_API_KEY}. Extract: open_ports list, vulns dict (CVE IDs), tags. Risk scoring: any CRITICAL CVE -> downgrade trust_score by 20, open Docker socket port 2375/2376 -> severity=CRITICAL, open Redis 6379 with no auth -> HIGH, default SSH on non-standard IP -> MEDIUM. ws_write to shodan_results {server_id, ip_address, open_ports=json, cves_found=json, exposure_score, scanned_at}. If exposure_score > 60: ws_write mcp_threat_associations {server_id, threat_type=shodan_exposure, evidence=CVE IDs + ports, severity}. Also update trust_score in mcp_server_registry via ws_write. Graceful: if SHODAN_API_KEY not set log warning and skip. Poll 86400s. Heartbeat.",
+  "context": "SHODAN_API_KEY=os.environ.get('SHODAN_API_KEY','') -- skip if not set. Use socket.gethostbyname() for IP resolution. Shodan free tier: 1 req/sec, add time.sleep(1) between calls. All DB via write_service:8772 never duckdb directly.",
+  "from": "threat_matrix"
+}

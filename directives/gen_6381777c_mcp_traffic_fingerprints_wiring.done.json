@@ -1,0 +1,14 @@
+{
+  "task": "mcp_traffic_fingerprints_wiring",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire mcp_traffic_fingerprints.py into mcp_scanner for MCP protocol confirmation. Pure library module already built \u2014 this directive only adds consumption logic to scanner daemon. Must NOT create daemon; scanner already runs. Attributi on required: source 'Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14.' Compiles regex patterns at module load. Smoke test must pass.",
+  "reads": [
+    "mcp_traffic_fingerprints.py",
+    "mcp_scanner.py"
+  ],
+  "next_directive": {}
+}

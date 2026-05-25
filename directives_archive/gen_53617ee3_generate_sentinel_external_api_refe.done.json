@@ -1,0 +1,9 @@
+{
+  "task": "generate_sentinel_external_api_reference",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "External API reference document for port 8791. Documents: authentication via X-API-Key header, rate limiting (60 req/min/key), read-only endpoints for verdict lookup (GET /verdict/{mcp_name}), signal scores (GET /signals/{mcp_name}), threat associations (GET /threats/{mcp_name}). Includes example curl commands, JSON response shapes per mcp_server_registry columns, and error codes. Does not document write or admin endpoints (internal only)."
+}

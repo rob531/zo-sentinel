@@ -1,0 +1,11 @@
+{
+  "directive_id": "build_community_signal_enrichment",
+  "description": "Build community_signal_enrichment.py - enrichment module scoring registry trust, package age, download volume, dependencies, publisher verification, stars, forks, subscribers, and issue resolution ratio",
+  "complexity": "low",
+  "source": "goose_tier1",
+  "output": "community_signal_enrichment.py",
+  "verdict": "SUCCESS",
+  "notes": "Module passes all Gate 8 checks: static_safety✅ import✅ enrichment_contract✅. compute_score() returns (float in [0,100], dict) per signal invariant PRODUCT_SPEC §3.",
+  "created_at": "2026-05-24T23:46:52.169201+00:00",
+  "completed_at": "2026-05-24T23:49:00.000000+00:00"
+}

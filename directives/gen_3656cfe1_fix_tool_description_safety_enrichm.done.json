@@ -1,0 +1,12 @@
+{
+  "task": "fix_tool_description_safety_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Rewritten tool_description_safety enrichment that achieves 20+ distinct scores. Current version has only 3 distinct values. Must read MULTIPLE metadata fields: description_length, param_count, return_doc_present, example_count, has_deprecation_notice, schema_complexity_score. Weight these features with finer granularity using additive scoring bands (<50 chars = 0, 50-200 = 5, etc.) and small increments per param documented (2 points each). Add subtle scoring for schema validation presence. Pure function compute_score(metadata). Must pass enrichment_harness.py with 20+ distinct score threshold.",
+  "reads": [
+    "tool_description_safety_enrichment_v2.py"
+  ]
+}

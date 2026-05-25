@@ -1,0 +1,9 @@
+{
+  "task": "approval_evidence_bundler_phase9",
+  "handler": "generate_file",
+  "output_file": "approval_evidence_bundler.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.88,
+  "description": "Phase 9: Produce audit-ready artefacts per approval decision. MUST: (1) Bundle all 7 signal scores from mcp_signal_scores; (2) Include attestation text from approval_workflow; (3) Include pi_results summary and corpus hash if available; (4) Package analyst decision metadata with expiry; (5) Sign JSON output with HMAC-SHA256; (6) Write to approval_evidence table. Priority 0.88."
+}

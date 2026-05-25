@@ -1,0 +1,9 @@
+{
+  "task": "fix_signal_v2_weak_discrimination",
+  "handler": "generate_file",
+  "output_file": "signal_v2_discrimination_boost.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "The signal diagnostic shows permission_scope (3 distinct, 30-100 range), temporal_stability (3 distinct, 40-90 range), and tool_description_safety (3 distinct, 50-100 range) all have only 3 distinct values \u2014 BAD SIGNAL per spec section. The v2 enrichments (permission_scope_enrichment_v2.py, temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py) are already built but apparently not achieving discrimination. Read the existing v2 files, identify the scoring formula limitations, and create a companion module that boosts discrimination by reading additional metadata fields (publisher_verified, registry_source, dependency_count, download_count, stars) and applying tiered scoring that yields >20 distinct scores across 34 fingerprint inputs. Must expose compute_score(metadata) -> tuple[float, dict]. Must NOT rewrite the v2 files (protected)."
+}

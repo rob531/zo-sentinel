@@ -1,0 +1,15 @@
+{
+  "task": "integrate_supply_chain_enrichment",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Wire supply_chain_enrichment module into signal_analyser_v2. Currently supply_chain shows 35 distinct values (OK) but may not be using the enrichment layer. Must: (1) Query mcp_signal_enrichments for supply_chain_enrichment rows per MCP; (2) Merge enrichment scores with base supply_chain signal in trust_synthesiser_v2 weighting; (3) Follow write_service :8772 protocol for DB access, never direct duckdb; (4) Add heartbeat to service_health every 60s; (5) Do NOT rewrite supply_chain_enrichment.py itself - that module is protected by spec section 8 companion rule. The enrichment module supply_chain_enrichment.py exists (built 2026-05-24); this integration wires it into the signal pipeline.",
+  "reads": [
+    "supply_chain_enrichment.py",
+    "signal_analyser_v2.py",
+    "trust_synthesiser_v2.py"
+  ],
+  "next_directive": {}
+}

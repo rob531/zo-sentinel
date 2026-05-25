@@ -1,0 +1,9 @@
+{
+  "task": "wire_mcp_traffic_fingerprints_integration",
+  "handler": "generate_file",
+  "output_file": "wire_traffic_fingerprints_to_scanner.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Integration module to wire mcp_traffic_fingerprints.py into mcp_scanner.py for MCP protocol confirmation. The library module was built 2026-04-28 and smokes clean; this directive connects it so scanner uses detect_mcp_methods and is_mcp_traffic when scanning candidate server responses. Use write_service at :8772 for any state ops, per spec section 5. No direct DuckDB access. Must call ws_write/ws_query for state."
+}

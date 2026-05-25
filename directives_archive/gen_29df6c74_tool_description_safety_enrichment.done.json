@@ -1,0 +1,9 @@
+{
+  "task": "tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Reads metadata fields: tool_count, has_description, description_length, schema_complete_count, registry_source, has_examples. Computes tool description safety score by penalizing incomplete schemas, missing descriptions, and suspiciously high tool counts while rewarding well-documented tool surfaces. No DB writes, no network, no imports of protected modules. Returns evidence dict with per-field partial scores."
+}

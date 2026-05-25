@@ -1,0 +1,10 @@
+{
+  "directive_id": "goose_test_hello",
+  "goal": "Create a simple health check script at /home/workspace/zo_sentinel/goose_hello.py that prints the current registry count by querying http://127.0.0.1:8772/query with SQL SELECT COUNT(*) as n FROM mcp_server_registry and prints the result. Add a shebang line. Make it runnable standalone.",
+  "output_path": "/home/workspace/zo_sentinel/goose_hello.py",
+  "constraints": ["Single file", "No external dependencies beyond stdlib"],
+  "success_criteria": ["python3 goose_hello.py prints a number"],
+  "complexity": "low",
+  "source": "goose_tier1",
+  "generated_at": "2026-05-21T18:30:00"
+}

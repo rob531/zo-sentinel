@@ -1,0 +1,11 @@
+{
+  "task": "architecture_documentation",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.78,
+  "description": "Create ARCHITECTURE.md documenting the inter-daemon topology, write_service contract (:8772), and signal invariant requirements. Include: (1) daemon list with ports and responsibilities, (2) write_service read/write/execute API contract, (3) signal invariant shape with evidence_blob requirements, (4) heartbeat SLA per daemon type, (5) out-of-scope boundary summary (gateway/proxy/portal exclusion). This is documentation only \u2014 no code generation. Spec reference: Sections 1, 3, 5, 6, 9.",
+  "reads": [],
+  "next_directive": {}
+}

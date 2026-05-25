@@ -1,0 +1,9 @@
+{
+  "task": "verify_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_wiring.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow on port 8780. Must use write_service at :8772 for state, not HTTP between daemons. Adds an endpoint or callback that checks for incoming ServiceNow MCP request tickets, validates verdict status, and writes approval_state to mcp_decisions. snow_connector.py exists; this directive completes the integration gap flagged in Appendix A integration wiring."
+}

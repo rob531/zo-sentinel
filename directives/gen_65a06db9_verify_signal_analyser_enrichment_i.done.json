@@ -1,0 +1,13 @@
+{
+  "task": "verify_signal_analyser_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_enrichment_bridge.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Verify signal_analyser.py (protected) reads from mcp_signal_enrichments and applies enrichment scores when computing composite signal values. The three weak signals (permission_scope, temporal_stability, tool_description_safety) all show only 4 distinct values despite v2 enrichments being built at ~20:27 UTC. This bridge module will query enrichment evidence rows and emit diagnostic logs showing whether enrichments are being consumed. Writes nothing to DB; only reads via ws_query and emits structured log entries. If enrichments are not being consumed, this diagnostic will identify the gap for manual fix.",
+  "reads": [
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

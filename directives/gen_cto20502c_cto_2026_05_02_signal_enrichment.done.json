@@ -1,0 +1,22 @@
+{
+  "task": "cto_2026_05_02_signal_enrichment_harness",
+  "handler": "generate_file",
+  "output_file": "signal_enrichment_harness.py",
+  "complexity": "medium",
+  "description": "Build the signal enrichment harness daemon - the missing piece that wires the three pure-function enrichment modules (tool_description_safety, permission_scope, temporal_stability) into mcp_signal_scores. Runs every 600 seconds. For each row in mcp_server_registry not already enriched today (track via mcp_signal_enrichments.last_enriched_at), reads the row's metadata + matching mcp_fingerprints fields (description_tokens, permission_scope_hash, version_string, first_seen, last_seen). Calls each of the three enrichment modules with the assembled context. Writes the resulting score + evidence dict to mcp_signal_scores via signal_bridge.score(). Inserts/updates mcp_signal_enrichments with last_enriched_at = now. Pure additive - never modifies existing rows in mcp_server_registry or mcp_fingerprints. Catches per-MCP exceptions and continues. Logs FileHandler only to /home/workspace/logs/signal_enrichment_harness.log. ws_write for all writes. Imports the three enrichment modules from /home/workspace/zo_sentinel/ (already built and pure-functional verified).",
+  "context": {
+    "author": "CTO/CEO direct (Claude)",
+    "date": "2026-05-02",
+    "goal_link": "PROJECT_GOALS.md top-of-queue #1 - HIGHEST YIELD",
+    "why_now": "Three bucketed signals (Signal 2 Tool Description Safety, Signal 3 Permission Scope, Signal 5 Temporal Stability) are stuck at 3 distinct values across the population because the enrichment modules exist but are not wired to mcp_signal_scores. This harness closes that gap - unbuckets all three signals in one ship.",
+    "constraints": [
+      "FileHandler ONLY for logging",
+      "ws_write via WriteService - never direct DuckDB",
+      "ISO 8601 string timestamps - never time.time() floats",
+      "Pure additive - never UPDATE registry or fingerprints",
+      "Per-MCP try/except so one bad row does not halt the cycle",
+      "signal_bridge import path: from signal_bridge import score as bridge_score",
+      "Three enrichment modules to import: tool_description_safety, permission_scope_enrichment, temporal_stability_enrichment"
+    ]
+  }
+}

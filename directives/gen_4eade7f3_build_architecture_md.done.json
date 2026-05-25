@@ -1,0 +1,9 @@
+{
+  "task": "build_architecture_md",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Create ARCHITECTURE.md documenting: (1) Inter-daemon topology with all daemons, their ports, and dependencies; (2) write_service contract at :8772 \u2014 write path /query path /execute path with examples; (3) Signal invariant \u2014 the exact shape {signal_type, confidence, evidence_blob} that every signal producer must write to mcp_signal_scores or mcp_signal_enrichments; (4) Heartbeat contract \u2014 every daemon writes to service_health at least every 60s, stale > 2h is dead; (5) No HTTP between peer daemons rule with correct pattern diagram. Cross-reference DB_SCHEMA.md for table names. This is the canonical architecture reference for the system."
+}

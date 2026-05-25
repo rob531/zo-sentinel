@@ -1,0 +1,9 @@
+{
+  "task": "phase6b_sentinel_supervisor",
+  "handler": "write_raw",
+  "output_file": "supervisord_sentinel_full.conf",
+  "content": "\n[program:zo_sentinel_scanner]\ncommand=python3 /home/workspace/zo_sentinel/mcp_scanner.py\ndirectory=/home/workspace/zo_sentinel\nautostart=true\nautorestart=true\nstartretries=5\nstdout_logfile=/home/workspace/logs/sentinel_scanner.log\nstderr_logfile=/home/workspace/logs/sentinel_scanner.log\nstdout_logfile_maxbytes=5MB\n\n[program:zo_sentinel_analyser]\ncommand=python3 /home/workspace/zo_sentinel/signal_analyser.py\ndirectory=/home/workspace/zo_sentinel\nautostart=true\nautorestart=true\nstartretries=5\nstdout_logfile=/home/workspace/logs/sentinel_analyser.log\nstderr_logfile=/home/workspace/logs/sentinel_analyser.log\nstdout_logfile_maxbytes=5MB\n\n[program:zo_sentinel_rug_pull]\ncommand=python3 /home/workspace/zo_sentinel/rug_pull_monitor.py\ndirectory=/home/workspace/zo_sentinel\nautostart=true\nautorestart=true\nstartretries=5\nstdout_logfile=/home/workspace/logs/sentinel_rug_pull.log\nstderr_logfile=/home/workspace/logs/sentinel_rug_pull.log\nstdout_logfile_maxbytes=5MB\n\n[program:zo_sentinel_api]\ncommand=python3 /home/workspace/zo_sentinel/approval_workflow.py\ndirectory=/home/workspace/zo_sentinel\nautostart=true\nautorestart=true\nstartretries=5\nstdout_logfile=/home/workspace/logs/sentinel_api.log\nstderr_logfile=/home/workspace/logs/sentinel_api.log\nstdout_logfile_maxbytes=5MB\n\n[program:zo_sentinel_registry_api]\ncommand=python3 /home/workspace/zo_sentinel/registry_api.py\ndirectory=/home/workspace/zo_sentinel\nautostart=true\nautorestart=true\nstartretries=5\nstdout_logfile=/home/workspace/logs/sentinel_registry_api.log\nstderr_logfile=/home/workspace/logs/sentinel_registry_api.log\nstdout_logfile_maxbytes=5MB\n",
+  "priority": 0.75,
+  "from": "claude_directive",
+  "phase": "6"
+}

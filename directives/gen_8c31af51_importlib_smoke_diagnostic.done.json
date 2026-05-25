@@ -1,0 +1,9 @@
+{
+  "task": "importlib_smoke_diagnostic",
+  "handler": "generate_file",
+  "output_file": "importlib_smoke_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module to investigate the importlib traceback failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. The traceback shows line 10 in <module> with File '<frozen importlib...' which suggests a frozen module import issue. Parse the actual error from the smoke output, identify which import is failing, and log findings. Reads smoke log files from /home/workspace/zo_sentinel/logs/ or equivalent. Writes diagnostic results to service_health with meta field. Does NOT modify any protected files - this is read-only diagnostics."
+}

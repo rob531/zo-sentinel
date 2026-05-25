@@ -1,0 +1,14 @@
+{
+  "task": "inspect_domain_trust_enrichment",
+  "handler": "generate_file",
+  "output_file": "domain_trust_enrichment_inspection.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Inspect the current domain_trust signal producer to determine why it only yields 4 distinct values. Query DuckDB: SELECT DISTINCT score FROM mcp_signal_scores WHERE signal_type='domain_trust' LIMIT 50. If the cardinality is below 20, generate a domain_trust_enrichment.py companion module that reads multiple metadata fields (registry_source, age_days, publisher_verified, stars, download_count, dependency_count) to produce richer score discrimination. The enrichment must expose compute_score(metadata) -> tuple[float, dict] conforming to the signal invariant contract. This targets the same plateau as permission_scope/temporal_stability/tool_description_safety but via the primary domain_trust signal which the spec does not defer.",
+  "reads": [
+    "trust_synthesiser_v2.py",
+    "enrichment_harness.py"
+  ],
+  "next_directive": {}
+}

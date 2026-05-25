@@ -1,0 +1,9 @@
+{
+  "task": "retention_sweeper_validation",
+  "handler": "generate_file",
+  "output_file": "retention_sweeper_validation.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Validate retention_sweeper.py (exists on disk per gaps map but was quarantined 2026-04-19). The quarantined version failed cohort_1_n1 three times. Create a fresh validation harness that tests evidence_blob expiry logic: verify rows older than 30 days in mcp_signal_scores and mcp_signal_enrichments would be flagged for cleanup. Uses write_service query with date filters. Produces a report of rows that WOULD be expired, without executing DELETE. No DB writes except to service_health for heartbeat."
+}

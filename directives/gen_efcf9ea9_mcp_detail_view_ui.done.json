@@ -1,0 +1,9 @@
+{
+  "task": "mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Admin-facing HTML page for detailed MCP server view. Must include: server name, all 7 signal scores with visual indicators, composite verdict badge, last_assessed timestamp, attestation status, threat associations list, risk register entries. Must fetch data from registry_api.py on localhost:8781. Must render verdict in correct color: TRUSTED_GENERAL=green, TRUSTED_RESEARCH=teal, ENTERPRISE_CONTROLLED=blue, CAUTION_LIMITED=yellow, HIGH_RISK_ISOLATED=orange, KNOWN_THREAT=red, INSUFFICIENT=gray. Include link to mcp_fingerprints view. Part of admin UI surface set alongside admin_submissions.html, admin_policies.html, admin_exemptions.html, admin_attestations.html."
+}

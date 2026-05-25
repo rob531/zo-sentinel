@@ -1,0 +1,9 @@
+{
+  "task": "wire_exemption_expirer_health",
+  "handler": "generate_file",
+  "output_file": "diagnose_exemption_expirer_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to verify exemption_expirer.py is properly registered in supervisord and has recent heartbeats. Queries service_health for exemption_expirer entry age, checks for log file existence at expected path, and verifies the module's compute_score or run() function signature is intact. Exports run() that writes diagnostic blob to service_health meta column. Does NOT rebuild or modify exemption_expirer.py (file is protected). Reports wiring status: 'unregistered', 'stale', or 'healthy'."
+}

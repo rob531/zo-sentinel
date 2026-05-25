@@ -1,0 +1,13 @@
+{
+  "task": "build_admin_attestations_ui",
+  "handler": "generate_file",
+  "output_file": "admin_attestations.html",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Admin surface for revoking/ extending attestations. Reads mcp_attestations via write_service :8772/query. Must include server_id filter, status badge, valid_until date, and action buttons for revoke/extend. No direct DB access.",
+  "reads": [
+    "registry_api.py"
+  ],
+  "next_directive": {}
+}

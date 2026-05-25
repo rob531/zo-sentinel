@@ -1,0 +1,15 @@
+{
+  "task": "build_compliance_reporter",
+  "handler": "generate_file",
+  "output_file": "compliance_reporter.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.74,
+  "reads": [
+    "schema.py",
+    "attestation_engine.py"
+  ],
+  "description": "Compliance reporter. Generates COMPLIANCE_REPORT.md. Sections: (1) Executive Summary: total MCPs, approved count, blocked count, pending review (2) Risk Distribution: CRITICAL/HIGH/MEDIUM/LOW counts with percentages (3) Expired Attestations: servers where valid_until < now() (4) Policy Violations: BLOCK decisions from mcp_decisions (5) Recommendations: top 3 actions based on data. Also: generate_csv() exports mcp_server_registry+verdicts as CSV to reports/registry_export.csv. Run via python3 compliance_reporter.py --report or --csv. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

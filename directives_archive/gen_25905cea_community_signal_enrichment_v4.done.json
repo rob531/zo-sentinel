@@ -1,0 +1,13 @@
+{
+  "task": "community_signal_enrichment_v4",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_v4.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Pure enrichment module for community_signal. Signal quality shows WEAK (3 distinct scores, range 60-80). community_signal_enrichment_v3.py exists (built 2026-04-18 22:45:33). If the existing v3 produces flat output, this must improve discrimination by reading MULTIPLE fields: registry_source, download_count, star_count, fork_count, open_issue_count, has_readme, has_security_policy, contributor_count. Score based on community health indicators. No DB writes, no network, no imports of protected modules.",
+  "reads": [
+    "community_signal_enrichment_v3.py",
+    "enrichment_harness.py"
+  ]
+}

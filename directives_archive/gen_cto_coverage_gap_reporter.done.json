@@ -1,0 +1,10 @@
+{
+  "task": "build_coverage_gap_reporter",
+  "handler": "generate_file",
+  "output_file": "coverage_gap_reporter.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.93,
+  "from": "cto_directive_2026-04-28",
+  "description": "Daemon that runs every 30 minutes and writes a coverage_gap_summary record to mesh_memory (importance 0.85). Queries: (1) total rows in mcp_server_registry, (2) DISTINCT server_id count in mcp_registry_facts, (3) per-registry-source breakdown of mcp_server_registry, (4) per-signal distinct_vals from mcp_signal_scores. Writes ONE summary row per cycle with fields: registered_total, evidenced_total, evidence_coverage_pct (= evidenced/registered), per_source_breakdown JSON, signals_with_one_distinct_value count, generated_at ISO timestamp. Imports requests, json, datetime, time -- no project imports. Talks to write_service at http://127.0.0.1:8772 via the same /query and /write endpoints all other daemons use. Includes _start_heartbeat_thread pattern from sentinel_directive_generator. This module is the official KPI tracker for the path to 20k MCPs with defensible signals -- reading mesh_memory for memory_type='coverage_gap_summary' gives anyone the live progress number without coupling to the dashboard HTML."
+}

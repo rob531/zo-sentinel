@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_e2e_scenarios_v2",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_v2.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild e2e_scenarios.py addressing last failure in cohort_7_n4. The file was quarantined after 3 consecutive fails. Implements three canonical flows: (1) new MCP -> signal scored -> verdict -> attestation -> UI visible. Must use write_service (:8772) for all DB access. Uses correct table names: mcp_server_registry, mcp_signal_scores, mcp_attestations. Must include heartbeat loop. References spec section 4 freshness SLA. Explicitly reference last_error: failed in cohort_7_n4 (spec section 4 freshness SLA). Must complete within 30s per flow. No direct duckdb imports."
+}

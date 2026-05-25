@@ -1,0 +1,9 @@
+{
+  "task": "build_write_service_heartbeat_wiring",
+  "handler": "generate_file",
+  "output_file": "write_service_startup.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Bootstrap script that initializes write_service heartbeat and creates core DuckDB tables (mcp_server_registry, mcp_signal_scores, mcp_signal_enrichments, mcp_threat_associations, mcp_risk_register, mcp_attestations, mcp_definition_history, mcp_submissions, mcp_exemptions, mcp_decisions, mcp_policy_rules, mcp_fingerprints, mcp_tool_hashes, service_health, audit_log). Executes via write_service admin path POST :8772/execute. All daemons depend on these tables existing. Priority: all heartbeats currently show never-seen because tables are missing."
+}

@@ -1,0 +1,15 @@
+{
+  "task": "build_assessment_scheduler",
+  "handler": "generate_file",
+  "output_file": "assessment_scheduler.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.73,
+  "reads": [
+    "schema.py",
+    "queue_manager.py"
+  ],
+  "description": "Assessment scheduler daemon. Coordinates reassessment timing to avoid all daemons running simultaneously. Maintains SCHEDULE.md with next_run times per daemon. Priority reassessment: servers with expired attestations, servers with new threat intel since last assessment, servers where verdict=INSUFFICIENT and 24h have passed. Emits schedule_trigger mesh_events that signal_analyser and trust_synthesiser listen to. Poll 900s. Ensures max 5 concurrent assessments. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

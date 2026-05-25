@@ -1,0 +1,15 @@
+{
+  "task": "build_sft_adapter_loader",
+  "handler": "generate_file",
+  "output_file": "sft_adapter_loader.py",
+  "complexity": "medium",
+  "priority": 0.75,
+  "description": "Build an adapter loader service that integrates the trained ZoMesh LoRA adapter (Qwen2.5-3B + student_v1 from rob531/zomesh-sentinel-sft GitHub adapters/student-v1) into the inference router as a mesh_specialist tier. Loads adapter at startup with peft.PeftModel.from_pretrained. Exposes /generate POST endpoint on port 8793 (FastAPI + uvicorn). Routes task_type=sentinel_assess to the adapter; falls back to MiniMax if adapter inference exceeds 10s or errors. Logs adapter latency per request to mesh_memory.",
+  "constraints": [
+    "Read inference_router_service.py before writing",
+    "NO 4-bit quantization (bitsandbytes set_submodule bug)",
+    "Graceful fallback to MiniMax tier",
+    "FileHandler only",
+    "ISO 8601 timestamps"
+  ]
+}

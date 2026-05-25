@@ -1,0 +1,11 @@
+{
+  "task": "build_supervisor_auto_updater",
+  "handler": "generate_file",
+  "output_file": "supervisor_auto_updater.py",
+  "complexity": "high",
+  "phase": "21",
+  "priority": 0.99,
+  "description": "Build supervisor_auto_updater.py. Daemon that monitors /home/workspace/zo_sentinel/ for newly built daemons and auto-registers them in supervisord. 1. Scan for files ending in '_daemon.py', '_monitor.py', '_analyser.py', '_synthesiser.py', '_ranker.py' -- exclude files in tests/ and __pycache__. 2. Parse /etc/zo/supervisord-user.conf as INI using configparser. 3. For each found daemon not already in config: append [program:daemon_name] block with command=python3 /path/to/daemon.py, directory=/home/workspace/zo_sentinel, autostart=true, autorestart=true, startretries=3, stdout_logfile=/home/workspace/logs/daemon_name.log, stderr_logfile same. 4. After appending, execute subprocess.run(['supervisorctl', '-c', '/etc/zo/supervisord-user.conf', 'reread'], capture_output=True) then subprocess.run(['supervisorctl', '-c', '/etc/zo/supervisord-user.conf', 'update'], capture_output=True). 5. Log each registration. 6. Poll every 300s. Port 8791 GET /health. ws_write service_health heartbeat. run() uvicorn. SMOKE TEST CONTRACT: Must import configparser and subprocess. Must NOT use shell=True.",
+  "pillar": "SOA",
+  "from": "depth_injection_layer1"
+}

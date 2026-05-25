@@ -1,0 +1,14 @@
+{
+  "task": "build_pypi_discovery_paginator_v2",
+  "handler": "generate_file",
+  "output_file": "discovery_pypi_paginator_v2.py",
+  "complexity": "medium",
+  "priority": 0.9,
+  "description": "Build a PyPI discovery paginator daemon as a third discovery source beyond npm + github. Search PyPI JSON API for keywords mcp-server, model-context-protocol, mcp-tools. Paginate 5 pages of 100 per 600s cycle. Insert candidates into mcp_discovery_candidates via WriteService ON CONFLICT DO NOTHING. server_id = blake2s('pypi:' + name).hexdigest()[:16]. Logs FileHandler only. ISO 8601 timestamps. Rate limit 60 calls/min.",
+  "constraints": [
+    "ws_write only",
+    "FileHandler only",
+    "ON CONFLICT DO NOTHING",
+    "ISO 8601 timestamps"
+  ]
+}

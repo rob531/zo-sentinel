@@ -1,0 +1,9 @@
+{
+  "task": "registry_api_import_diagnostic",
+  "handler": "generate_file",
+  "output_file": "registry_api_import_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.86,
+  "description": "Diagnostic companion for registry_api.py (protected, smoke-failing with importlib error at line 10). Reads the source of registry_api.py via file I/O, extracts all import statements, attempts each import in an isolated subprocess, and reports which import fails. Also checks if any recently built file (within last 24h) has a conflicting import that could affect registry_api's startup. Writes diagnostic results to service_health via ws_write. Does NOT modify registry_api.py. This is an investigation tool only; if the fix requires modifying the protected file, that must be handled externally."
+}

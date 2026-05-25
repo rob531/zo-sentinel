@@ -1,0 +1,9 @@
+{
+  "task": "generate_signal_analyser_v2",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Bayesian confidence weighting across mcp_signal_scores. Enhance signal_analyser.py with posterior probability updates based on analyst feedback. Use db_utils query on mcp_signal_scores table, compute weighted confidence intervals, emit VERDICT_CHANGED events to mesh_events. Runs as daemon with run() + if __name__ pattern."
+}

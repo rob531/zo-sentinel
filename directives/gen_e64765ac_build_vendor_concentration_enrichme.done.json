@@ -1,0 +1,9 @@
+{
+  "task": "build_vendor_concentration_enrichment",
+  "output_file": "vendor_concentration_enrichment.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.signals.v3",
+  "priority": 0.74,
+  "description": "PURE FUNCTION. def compute_score(metadata: dict) -> tuple[float, dict]. Reads multiple metadata fields: author, maintainer_count, registry_source, organisation (from npm scope or github owner). Computes vendor concentration penalty based on (1) maintainer_count == 1 -> -20 (single point of failure); (2) author/owner appears on a known-disposable-vendor watchlist (hardcoded list of 10 patterns: '<email>@gmail.com' authors with no profile, 'test', 'tmp', 'demo', 'example' substrings in author) -> -15; (3) registry_source diversity bonus: if metadata reports observed_in_registries count >= 3 -> +15 (corroborated). Reads NO DB. Reads NO files. NO project imports. <2s. Returns evidence dict listing each penalty/bonus with magnitude. Distinct from vendor_concentration_monitor.py (which is a daemon). Naming: this is _enrichment to follow the compute_score(metadata) contract."
+}

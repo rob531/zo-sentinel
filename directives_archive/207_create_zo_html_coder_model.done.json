@@ -1,0 +1,11 @@
+{
+  "task": "create_zo_html_coder_model",
+  "handler": "run_script",
+  "output_file": "zo_html_coder_ready.txt",
+  "complexity": "low",
+  "phase": "infra",
+  "priority": 0.99,
+  "command": "ollama create zo-html-coder -f /home/workspace/zo_mesh/Modelfiles/zo-html-coder.Modelfile && echo 'zo-html-coder ready' > /home/workspace/zo_sentinel/zo_html_coder_ready.txt",
+  "description": "Register zo-html-coder Ollama persona from Modelfile. Fixes HTML syntax failures.",
+  "from": "skill_integration_v1"
+}

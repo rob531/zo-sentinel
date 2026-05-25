@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_flatness_alarm",
+  "output_file": "signal_flatness_alarm.py",
+  "handler": "generate_file",
+  "complexity": "low",
+  "phase": "sentinel.quality.v3",
+  "priority": 0.76,
+  "description": "Long-running daemon. Every 1800s, queries: SELECT signal_name, COUNT(DISTINCT score) AS dv, MIN(score) AS lo, MAX(score) AS hi, COUNT(*) AS n FROM mcp_signal_scores GROUP BY signal_name HAVING n > 100. For each row with dv < 3: ws_write mesh_events with agent_id='t2.signal_flatness_alarm', event_type='signal_flat_detected', tier='T2', severity='WARNING', payload=json.dumps({signal_name, distinct_vals, min_score, max_score, scored_count, observed_at}). Also ws_write a single mesh_memory row per cycle with agent_id='signal_flatness_alarm', memory_type='flatness_snapshot', content=full breakdown JSON, importance=0.7. Heartbeat. Lockfile. Requests + json + datetime + threading; no project imports. This is a quality-gate companion that ensures the system warns about signal degeneration without a human re-running the diagnostic SQL."
+}

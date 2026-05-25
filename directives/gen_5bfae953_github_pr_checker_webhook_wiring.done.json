@@ -1,0 +1,13 @@
+{
+  "task": "github_pr_checker_webhook_wiring",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_webhook_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.85,
+  "description": "Rebuild of github_pr_checker wiring. Last failures: 4 attempts exhausted with 'failed in cohort_1_n3'. Root cause: webhook endpoint registration or payload parsing. This rebuild MUST: (1) expose POST /webhook endpoint binding to localhost:8795 or appropriate port, (2) parse GitHub PR webhook payload extracting repo, PR number, and MCP server name from labels/title, (3) query mcp_server_registry.verdict via write_service for the identified MCP, (4) post GitHub PR status check (pending/success/failure) via GitHub API with verdict summary, (5) handle HMAC signature validation for webhook authenticity. MUST use requests library for GitHub API calls with 10s timeout. MUST NOT store GitHub tokens in code \u2014 read from environment. Spec reference: Section 7 security rules.",
+  "reads": [
+    "github_pr_checker.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_wiring_diagnostic",
+  "handler": "generate_file",
+  "output_file": "enrichment_wiring_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic to verify that the three weak signals (permission_scope, temporal_stability, tool_description_safety) have their v3/v4 enrichments properly wired into the signal pipeline. Must: (1) query mcp_signal_enrichments for signal_type IN ('permission_scope', 'temporal_stability', 'tool_description_safety'), (2) COUNT DISTINCT scores per signal_type, (3) assert each has >=20 distinct score values (per enrichment contract), (4) report which enricher versions (v3/v4) are producing rows. Does NOT write to DB. Pure diagnostic \u2014 no rebuild directive unless wiring gap is confirmed. Service name: enrichment_wiring_diagnostic, port: none (CLI script)."
+}

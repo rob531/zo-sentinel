@@ -1,0 +1,9 @@
+{
+  "task": "build_e2e_scenarios",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "End-to-end test suite with three canonical flows scripted: (1) new MCP ingestion \u2192 signal scored \u2192 verdict \u2192 UI visible, (2) full approval loop: submission \u2192 verdict \u2192 analyst APPROVE/REJECT \u2192 attestation issued, (3) supply_chain/temporal_stability signal flat-discriminator diagnostic run verifying scores vary across at least 20 distinct metadata fingerprints. Uses synthetic MCPs with controlled metadata fields. Reports PASS/FAIL per scenario. Does not require live external APIs."
+}

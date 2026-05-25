@@ -1,0 +1,13 @@
+{
+  "task": "build_mcp_submission_portal",
+  "handler": "generate_file",
+  "output_file": "mcp_submission_portal.html",
+  "complexity": "low",
+  "phase": "9",
+  "priority": 0.85,
+  "description": "HTML form capturing MCP server submission fields: mcp_name, endpoint_url, tool_description, requested_by, requested_permission_scope. POSTs to approval_workflow :8780. Includes input validation, loading state, success/error feedback. Self-contained single-file.",
+  "reads": [
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

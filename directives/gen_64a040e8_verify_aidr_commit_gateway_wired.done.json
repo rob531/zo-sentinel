@@ -1,0 +1,9 @@
+{
+  "task": "verify_aidr_commit_gateway_wired",
+  "handler": "generate_file",
+  "output_file": "verify_aidr_commit_gateway_verdict_check.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Integration verification for aidr_commit_gateway.py (built 2026-04-17). According to spec section 1 core loop, must wire verdict-check enforcement test. Verify that gateway: 1) queries mcp_server_registry.verdict before forwarding commits, 2) blocks CAUTION_LIMITED or HIGH_RISK_ISOLATED verdicts unless explicit override present, 3) includes injection_resilience score in commit payload per Phase 8 status. Generate verification module that calls ws_query to confirm verdict enforcement logic. Must not modify existing files."
+}

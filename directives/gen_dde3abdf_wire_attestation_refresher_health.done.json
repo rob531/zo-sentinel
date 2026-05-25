@@ -1,0 +1,9 @@
+{
+  "task": "wire_attestation_refresher_health",
+  "handler": "generate_file",
+  "output_file": "diagnose_attestation_refresher_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to verify attestation_refresher.py is properly registered in supervisord and has recent heartbeats. Queries service_health for attestation_refresher entry age, checks for log file existence, and verifies module integrity. Exports run() that writes diagnostic blob to service_health meta column. Does NOT rebuild or modify attestation_refresher.py (file is protected). Reports wiring status: 'unregistered', 'stale', or 'healthy'. Related to freshness SLA enforcement per spec section 4."
+}

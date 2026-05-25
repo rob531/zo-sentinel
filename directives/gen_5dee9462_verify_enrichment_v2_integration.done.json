@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_v2_integration",
+  "handler": "generate_file",
+  "output_file": "enrichment_v2_integration_check.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Quality pass. Verify that signal_analyser.py imports and calls compute_score from permission_scope_enrichment_v2.py and temporal_stability_enrichment_v2.py (both built 2026-05-24). Query mcp_signal_enrichments table to confirm rows with signal_name='permission_scope' and signal_name='temporal_stability' exist. If enrichments not flowing, diagnose whether the import path is broken or the write path to mcp_signal_enrichments is missing in the integration layer. Do NOT modify signal_analyser.py directly \u2014 if fix needed, propose a companion patch module."
+}

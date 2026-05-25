@@ -1,0 +1,13 @@
+{
+  "task": "admin_submissions_html",
+  "handler": "generate_file",
+  "output_file": "admin_submissions.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Builds admin_submissions.html for port 8790 admin UI. Interface for triage of pending mcp_submissions records (table currently empty but spec-named). Must use write_service POST :8772/query for SQL and POST :8772/execute for admin actions (APPROVE, REJECT, REQUEST_INFO). Must insert audit_log rows for every admin action. Table columns: mcp_name, requested_by, submitted_at, registry_source, status (PENDING/REVIEWING/APPROVED/REJECTED). Include filter bar by status, sort by submitted_at DESC. No DB writes directly; all through write_service. Follow pattern of admin_exemptions.html.",
+  "reads": [
+    "admin_exemptions.html"
+  ],
+  "next_directive": {}
+}

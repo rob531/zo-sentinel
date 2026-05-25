@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_failed_build_scripts",
+  "handler": "generate_file",
+  "output_file": "build_diagnostic_report.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnose why build_start_all_sh, build_graphql_schema, build_email_guid_auth, build_mcp_detail_view_ui, build_advanced_filter_api, build_forensic_detail_api, build_manual_override_api, build_compliance_export_service, build_supervisor_auto_updater, and build_email_guid_auth_compact failed. Produce a diagnostic JSON report listing each file, its failure mode, whether it is protected or out-of-scope (graphql_schema), and a recommendation (retry, skip, or quarantine). Run as standalone diagnostic; do NOT write to DB."
+}

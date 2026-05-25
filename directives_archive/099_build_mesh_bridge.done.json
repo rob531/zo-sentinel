@@ -1,0 +1,14 @@
+{
+  "task": "build_mesh_bridge",
+  "handler": "generate_file",
+  "output_file": "mesh_bridge.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.69,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Mesh bridge for ZO-SENTINEL to ZOMesh integration. Reads mcp_server_registry verdict changes and emits GateObjects to ZOMesh RAW_OUTPUT topic. Functions: emit_verdict_gate(server_id,verdict,trust_score,reasoning)->bool: creates GateObject with payload_type=mcp_verdict_update and emits to mesh via requests POST to mesh_guardian API. subscribe_to_assessments(): polls mesh_events for assessment_requested events. Bridges ZO-SENTINEL assessments into the broader ZOMesh governance pipeline. Daemon polls 300s. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

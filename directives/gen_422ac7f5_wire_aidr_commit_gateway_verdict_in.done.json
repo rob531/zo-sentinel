@@ -1,0 +1,9 @@
+{
+  "task": "wire_aidr_commit_gateway_verdict_integration",
+  "handler": "generate_file",
+  "output_file": "verify_aidr_commit_gateway_verdict_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Integration verification module for aidr_commit_gateway.py verdict-check enforcement. Must verify: (1) gateway reads verdict from mcp_server_registry before forwarding commits, (2) CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts trigger rejection without explicit override flag, (3) injection_resilience score is included in commit payload. Checks that gate_orchestrator is called for verdict validation (not bypassed). Verifies write_service endpoints at :8772 used for all DB access. Includes test simulating commits at each verdict tier and asserting correct allow/block behavior."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "permission_scope_enrichment_v3",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Signal enrichment module for permission_scope. Current diagnostic shows only 4 distinct values (range 30-100) across 34 fingerprints \u2014 BAD SIGNAL per spec section Signal Quality Diagnostic. Must: (1) expose compute_score(metadata: dict) -> tuple[float, dict] exactly. (2) read MULTIPLE metadata fields to achieve >4 distinct scores: requested_permissions, permission_risk_vector, scope_creep_indicators, is_read_only, has_filesystem_access, has_network_access, has_env_vars, permission_count. (3) implement granular risk scoring: read-only=100, filesystem_without_network=60, env_vars_present=40, network+filesystem=20, dangerous_combinations=0. (4) pure function \u2014 no DB writes, no network, no imports of protected modules. (5) evidence dict must list each field used and partial score contribution. (6) complete each call in under 2 seconds. (7) self-smoke: if __name__ == '__main__' tests against 5 synthetic inputs covering read_only, filesystem_only, network_only, dangerous_combo, missing_fields. Assert >4 distinct score values."
+}

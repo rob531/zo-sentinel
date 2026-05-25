@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Integration module for wiring snow_connector.py (built 2026-04-16) into approval_workflow. MUST: 1) Use write_service on :8772 for state exchange, never HTTP to daemons. 2) Query mcp_decisions for pending tickets to process. 3) Write results back via write_service /write. 4) Include ServiceNow OAuth token refresh. 5) Validate SNOW request signatures. 6) Never accept unsigned webhooks. Priority 0.92 per spec."
+}

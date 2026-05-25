@@ -1,0 +1,15 @@
+{
+  "task": "build_schema_runner",
+  "handler": "generate_file",
+  "output_file": "run_schema.py",
+  "complexity": "low",
+  "phase": "2",
+  "priority": 0.98,
+  "reads": [
+    "schema.py",
+    "schema_v2.py"
+  ],
+  "description": "Schema runner one-shot script. Imports and calls schema.create_all() then schema_v2.create_v2() then schema_v2.seed_default_policies(). Prints count of tables created. Then verifies: ws_query information_schema for all expected table names. Prints PASS/FAIL for each table. sys.exit(0) if all tables exist else sys.exit(1). Run once after fresh deployment: python3 run_schema.py. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

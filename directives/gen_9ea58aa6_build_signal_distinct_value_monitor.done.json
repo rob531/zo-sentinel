@@ -1,0 +1,14 @@
+{
+  "task": "build_signal_distinct_value_monitor",
+  "handler": "generate_file",
+  "output_file": "signal_distinct_value_monitor.py",
+  "complexity": "low",
+  "priority": 0.65,
+  "description": "Build a signal-quality monitor daemon that runs every 1800s and computes the distinct-value count for each of the 7 trust framework signals across mcp_signal_scores. Emits a mesh_event severity=WARNING when any signal has < 5 distinct values across the population (the 'bad signal = same signal' gate from PROJECT_GOALS.md defensibility section). Writes per-signal distinct counts to mesh_memory for trend visibility. Pure read; never modifies signal_scores.",
+  "constraints": [
+    "ws_query for reads",
+    "ws_write for mesh_events / mesh_memory",
+    "FileHandler only",
+    "ISO 8601 timestamps"
+  ]
+}

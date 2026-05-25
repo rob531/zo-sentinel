@@ -1,0 +1,9 @@
+{
+  "task": "complete_snow_integration_smoke",
+  "handler": "generate_file",
+  "output_file": "snow_integration_smoke.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Build smoke test for snow_connector wiring. Verifies that ServiceNow inbound webhook endpoint is reachable and that snow_connector.py can be imported without errors. Tests write_service query paths used by snow_connector. Does NOT wire new functionality; validates existing snow_connector_wiring.py integration. References last_error 'failed in cohort_4_n4' per quality map rules."
+}

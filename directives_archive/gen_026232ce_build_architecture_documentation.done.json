@@ -1,0 +1,9 @@
+{
+  "task": "build_architecture_documentation",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.72,
+  "description": "Build ARCHITECTURE.md per spec Appendix A documentation requirement. Documents: (1) inter-daemon topology with write_service :8772 as central hub, (2) signal invariant contract (8 signals with evidence_blob shape requirement), (3) write_service read/write/execute contract, (4) verdict taxonomy (6 tiers + INSUFFICIENT), (5) freshness SLA windows (24h first verdict, 7d re-verdict). No code. Markdown format. Target ~160 lines."
+}

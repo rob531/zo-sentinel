@@ -1,0 +1,9 @@
+{
+  "task": "check_supply_chain_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "check_enrichment_integration.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Verify that supply_chain_enrichment.py and community_signal_enrichment.py (built recently) are properly integrated. Query mcp_signal_enrichments table for rows with signal_type in ['supply_chain_enrichment', 'community_signal_enrichment']. Report count per signal_type and sample evidence_blob shapes. Identify if these enrichments are being called by signal_analyser or if integration wiring is missing. Output findings as JSONL. Do NOT modify any existing files."
+}

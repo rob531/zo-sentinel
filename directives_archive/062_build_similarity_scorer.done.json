@@ -1,0 +1,15 @@
+{
+  "task": "build_similarity_scorer",
+  "handler": "generate_file",
+  "output_file": "similarity_scorer.py",
+  "complexity": "medium",
+  "phase": "15",
+  "priority": 0.54,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "Similarity scorer utility. Uses character n-gram overlap (no ML dependencies) to find suspicious similarities. Functions: name_similarity(a,b)->float 0-1, description_similarity(a,b)->float, find_similar_to_known_threats(server_id)->list of matches with score. find_namespace_squatting(threshold=0.85)->list of (server_a,server_b,similarity) pairs. Called by behavioral_analyser and signal_analyser. No daemon, utility module. No numpy/sklearn required.",
+  "context": "",
+  "from": "claude_batch"
+}

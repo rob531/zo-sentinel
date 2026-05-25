@@ -1,0 +1,13 @@
+{
+  "task": "build_architecture_documentation",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Generate ARCHITECTURE.md documenting: (1) inter-daemon topology showing all daemons, their ports, and their write_service (:8772) dependencies, (2) write_service contract details for /write, /query, /execute endpoints with JSON shapes, (3) signal invariant contract specifying the required evidence_blob shape with signal_type, confidence (0.0-1.0), evidence_blob fields, (4) heartbeat SLA thresholds per daemon type, (5) scope boundary summary referencing SENTINEL_SCOPE_BOUNDARY.md. Do NOT duplicate DuckDB schema - reference DB_SCHEMA.md instead.",
+  "reads": [
+    "diagnose_signal_analyser_import_chain.py"
+  ],
+  "next_directive": {}
+}

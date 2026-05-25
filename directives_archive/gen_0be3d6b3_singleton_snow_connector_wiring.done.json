@@ -1,0 +1,9 @@
+{
+  "task": "singleton_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Wiring module for existing snow_connector.py into approval_workflow daemon. Phase 9 enterprise integration with numbered constraints: (1) MUST validate SNOW OAuth token freshness before each request; (2) MUST verify request signature using SNOW shared secret from keys file; (3) MUST reject unsigned webhooks with 401; (4) MUST write inbound tickets to mcp_submissions table via write_service :8772; (5) MUST NOT call write_service more than once per incoming webhook; (6) MUST implement 10s strict timeout on SNOW API calls. Reads snow_connector.py and approval_workflow.py from src/. Outputs integration_patch.py daemon that runs alongside existing snow_connector.py."
+}

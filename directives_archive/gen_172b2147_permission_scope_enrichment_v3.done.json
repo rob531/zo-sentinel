@@ -1,0 +1,9 @@
+{
+  "task": "permission_scope_enrichment_v3",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). CRITICAL: Signal diagnostic shows permission_scope is WEAK with only 3 distinct values across 34 fingerprints. existing permission_scope_enrichment_v2.py (built 2026-04-20) is likely reading insufficient fields. Must read MULTIPLE metadata fields (requested_permissions list, env_vars_count, filesystem_paths list, network_endpoints list, process_spawn_allowed, has_shell_access, dangerous_api_count) to produce high discrimination. Score must range from 0 (dangerous) to 100 (minimal permissions). No DB writes, no network, no imports of protected modules. Returns evidence dict with per-field partial scores for auditability."
+}

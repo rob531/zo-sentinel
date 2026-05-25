@@ -1,0 +1,14 @@
+{
+  "task": "rewrite_lookup_cli",
+  "handler": "generate_file",
+  "output_file": "lookup.py",
+  "complexity": "medium",
+  "phase": "8",
+  "priority": 0.88,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "CLI lookup tool. python3 lookup.py <mcp_name_or_url>. Args: positional=name_or_url, --threats=show threat associations, --risks=show risk register entry, --stats=show signal scores table, --json=output raw JSON, --all=show everything. Queries write_service for registry+signals+threats+risk+attestation. Terminal output: colour-coded using ANSI codes (red=HIGH_RISK/KNOWN_THREAT,yellow=CAUTION,green=TRUSTED). Print: name, verdict badge, trust_score bar, top 3 signals, latest attestation summary, threat count. Graceful if no data found.",
+  "context": "",
+  "from": "claude_batch"
+}

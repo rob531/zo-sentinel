@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_exemptions_page",
+  "handler": "generate_file",
+  "output_file": "admin_exemptions.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Admin UI surface for managing mcp_exemptions records in the Search-Driven UI (port 8790). Must read existing exemptions via registry_api on :8781, present as HTML table with columns: exemption_id, server_id, granted_by, valid_from, valid_until, rationale. Must include form for admin to create new exemption or extend existing. Write actions go through approval_workflow daemon via write_service, never directly to database."
+}

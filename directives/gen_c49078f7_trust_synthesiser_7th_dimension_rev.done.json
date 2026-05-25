@@ -1,0 +1,9 @@
+{
+  "task": "trust_synthesiser_7th_dimension_review",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_dimension_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Review trust_synthesiser_v2.py for Phase 8 7th-dimension integration. Query mcp_signal_scores table WHERE dimension='injection_resilience' to confirm pi_scorer.py is writing injection_resilience rows. Verify trust_synthesiser_v2.py applies weight 1.6 and threshold 0.80 for injection_resilience dimension per Phase 8 spec. Report findings: (1) count of injection_resilience rows in mcp_signal_scores, (2) whether trust_synthesiser_v2 applies correct weighting, (3) any servers with incomplete 7-signal composites. MUST read trust_synthesiser_v2.py source to verify logic, not guess."
+}

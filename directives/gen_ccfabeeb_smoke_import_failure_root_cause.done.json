@@ -1,0 +1,9 @@
+{
+  "task": "smoke_import_failure_root_cause",
+  "handler": "generate_file",
+  "output_file": "import_failure_root_cause_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to resolve the 3 recent smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py (traceback shows importlib import failures). Reads the Python source of each failed file to identify missing or circular import dependencies. Checks sys.path entries, verifies all imported modules exist on disk in /home/workspace/zo_sentinel/. Queries write_service to confirm which exact import statements fail per file. Produces a per-file report: missing_imports list, circular_dependency_chain if detected, and fix_recommendation. Uses ws_query for evidence only, no ws_write. Does NOT auto-install or patch files. Targets the root cause of import failures rather than proposing rebuilds."
+}

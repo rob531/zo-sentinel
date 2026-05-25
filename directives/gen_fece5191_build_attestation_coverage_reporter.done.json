@@ -1,0 +1,9 @@
+{
+  "task": "build_attestation_coverage_reporter_v3",
+  "output_file": "attestation_coverage_reporter_v3.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.observability.v3",
+  "priority": 0.88,
+  "description": "Long-running daemon. Every 300s, queries via WriteService /query: (a) SELECT COUNT(*) FROM mcp_server_registry; (b) SELECT COUNT(DISTINCT server_id) FROM mcp_attestations; (c) SELECT attestation_type, COUNT(*) FROM mcp_attestations GROUP BY attestation_type ORDER BY 2 DESC; (d) SELECT risk_tier, COUNT(*) FROM mcp_server_registry GROUP BY risk_tier. Writes ONE summary row per cycle to mesh_memory with agent_id='attestation_coverage_reporter_v3', memory_type='attestation_coverage_v3', importance=0.85, content=JSON containing registered_total, attested_distinct, coverage_pct, by_type breakdown, by_risk_tier breakdown, generated_at. Imports requests + json + datetime + threading only. Talks to write_service at http://127.0.0.1:8772 via /query and /write. Includes _start_heartbeat_thread pattern from sentinel_directive_generator. Pure aggregation; NO writes to attestation tables themselves. NO project imports. Single-instance lockfile at /home/workspace/logs/attestation_coverage_reporter_v3.lock. Critical because trust verdicts without supporting attestations are not defensible to enterprise buyers; this gives us the live KPI for attestation completeness."
+}

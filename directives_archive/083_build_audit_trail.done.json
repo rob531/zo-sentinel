@@ -1,0 +1,14 @@
+{
+  "task": "build_audit_trail",
+  "handler": "generate_file",
+  "output_file": "audit_trail.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.63,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Immutable audit trail module. record_event(event_type,actor,target_server_id,action,outcome,details={})->str: writes to audit_log table via ws_write {event_id=uuid,event_type,actor,target_server_id,action,outcome,details_json,timestamp,immutable=True}. get_server_history(server_id)->list: full chronological history for one server. get_actor_history(actor)->list: all actions by one actor. export_audit_csv(start_date,end_date)->str: CSV of audit log. Used by approval_workflow for all decisions and by all agents making verdict changes. No daemon, utility module.",
+  "context": "",
+  "from": "claude_batch"
+}

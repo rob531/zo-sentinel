@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_daemon_zo_sentinel_builder",
+  "handler": "generate_file",
+  "output_file": "diagnose_zo_sentinel_builder_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic daemon that inspects the stale zo_sentinel_builder service (last heartbeat 7h14m ago, threshold=600s). This is a DIAGNOSTIC-ONLY file, not a restart or fix. The directive must: (1) POST to write_service to read the service_health row for zo_sentinel_builder, (2) compute the gap between last_heartbeat and now, (3) query recent logs for ERROR/EXCEPTION patterns in the last 2h, (4) write a diagnostic blob to a dedicated table mcp_daemon_diagnostics (create if not exists) with {daemon, stale_seconds, probable_causes[], last_error_excerpt, recommendation}. Do NOT propose restarting, patching, or replacing the service. Export heartbeat and diagnose() functions. Reference SPEC.md section 6 heartbeat contract. This is a companion diagnostic module, not a rebuild of the protected zo_sentinel_builder.py."
+}

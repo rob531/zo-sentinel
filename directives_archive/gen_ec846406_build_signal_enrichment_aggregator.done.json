@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_enrichment_aggregator",
+  "handler": "generate_file",
+  "output_file": "signal_enrichment_aggregator.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Companion module to read all signal enrichment outputs (supply_chain_enrichment, community_signal_enrichment, domain_trust_enrichment, tool_description_safety_enrichment, permission_scope_enrichment, temporal_stability_enrichment) and produce an aggregate discrimination_report dict listing how many distinct score values each enricher produces across the current mcp_server_registry corpus. Diagnostics-only: reads mcp_signal_enrichments via write_service, computes variance/stddev per signal_type, flags enrichers producing <5 distinct scores as BAD. Does not write to DB. Named output_file avoids build_ prefix."
+}

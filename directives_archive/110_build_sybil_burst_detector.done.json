@@ -1,0 +1,15 @@
+{
+  "task": "build_sybil_burst_detector",
+  "handler": "generate_file",
+  "output_file": "sybil_burst_detector.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.94,
+  "reads": [
+    "schema.py",
+    "db_utils.py"
+  ],
+  "description": "Sybil / burst request detector daemon. Reads mesh_events WHERE event_type IN (assessment_requested, build_complete) grouped by json_extract_string(payload, '$.server_id') AND date_trunc('minute', created_at) via ws_query. Detect: >20 assessment requests for same server_id within 60s = burst_attack. Also detect: 10+ NEW server_ids registered within 5 minutes from same registry_source = coordinated_registration (classic Sybil seeding). For burst: ws_write mcp_threat_associations {threat_type=sybil_burst, severity=HIGH, evidence=request_count+window}. For coordinated_registration: ws_write with threat_type=coordinated_registration, severity=HIGH. Also: check if multiple servers share identical description text (copy-paste Sybil) via ws_query mcp_server_registry self-join on TRIM(description). Poll 300s (5min for near-realtime detection). Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

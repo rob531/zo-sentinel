@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_registry_api_smoke_import",
+  "handler": "generate_file",
+  "output_file": "diagnose_registry_api_smoke_import.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module for registry_api.py recent smoke failure at line 10 (import error pattern same as signal_analyser.py and rug_pull_monitor.py). Check imports at line 10, verify all dependency modules exist and are importable, validate dynamic import statements or module-level requires. registry_api.py is PROTECTED \u2014 do NOT propose rebuild. Output diagnostic blob identifying the specific import that fails and recommended repair path."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_candidate_smithery_promoter",
+  "output_file": "candidate_smithery_promoter.py",
+  "handler": "generate_file",
+  "complexity": "high",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.85,
+  "description": "Long-running daemon. Every 600s, queries via WriteService /query: SELECT id, candidate_name, candidate_url, candidate_description FROM mcp_discovery_candidates WHERE (promoted IS FALSE OR promoted IS NULL) AND candidate_name LIKE 'ai.smithery/%' LIMIT 50. For each: parse Smithery slug from candidate_name (the part after 'ai.smithery/'); attempt to fetch metadata from Smithery's public API at https://smithery.ai/api/server/<slug> (research the actual API endpoint shape first via a one-shot web fetch and document in a comment block). If 404, skip and mark candidate as promoted=TRUE with reviewed_at=now and a note in metadata.skip_reason='not_found_in_smithery_api'. If 200, mint server_id = hashlib.md5(('smithery|' + slug).encode()).hexdigest(); ws_write mcp_server_registry with the row; UPDATE candidate promoted=TRUE. Heartbeat. Lockfile. NO DB drivers. Polite 250ms inter-fetch. IF the Smithery API endpoint cannot be determined, this directive should NOT generate code; instead skip with a log line 'smithery_api_undocumented' so a human can research first. Robustness over ambition."
+}

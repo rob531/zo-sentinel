@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_snow_connector_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Rebuild of snow_connector wiring to complete ServiceNow inbound webhook integration. Reference last_error from snow_integration_completion.py: failed in cohort_4_n4 with 3/3 attempts exhausted. snow_connector.py exists (built 2026-04-16) but needs complete wiring into approval_workflow. Must wire to POST :8772/write for mcp_decisions table, validate SNOW OAuth tokens, never accept unsigned webhooks. Spec section 5 inter-daemon communication rules apply."
+}

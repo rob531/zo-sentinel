@@ -1,0 +1,22 @@
+{
+  "id": "81cc78ae",
+  "source": "zo-sentinel-audit",
+  "category": "reliability",
+  "severity": "high",
+  "summary": "ui_server.py worker likely crashed after admin route hit",
+  "details": "Sequence observed during the audit: 16:32 UTC the home page loaded cleanly; 16:33 UTC visited /admin-threats and received Cloudflare 521; 16:33 UTC visited /admin-risk and received Cloudflare 521; 16:33-16:34 UTC the root URL also began returning 521. The UI is single-process (PID 131 from earlier zo_agent_health check) and there is no supervisor restart configured, so an unhandled exception in any one route handler tears down the entire worker and the site stays down until manual intervention. This is a reliability gap independent of whichever specific bug brought the admin routes down today.",
+  "suggested_fix": "Three layered changes: (a) add a global exception middleware to the FastAPI app that logs the traceback and returns a JSON 5xx response instead of letting the exception propagate and kill the process; (b) configure supervisord (or equivalent) with autorestart=true for the ui_server.py process so a crash recovers within seconds without operator action; (c) add a /healthz route that returns 200 with a minimal body so an external watchdog can detect crashes promptly and alert. Note: change (b) requires editing the supervisord config file as well as ui_server.py - the builder may need to handle that, or a follow-up directive should be filed targeting the supervisord config specifically.",
+  "observed_at": "2026-05-09T16:34:50Z",
+  "evidence": {
+    "url": "https://zo-sentinel.example/",
+    "process_pid": 131,
+    "process_model": "single-process, no supervisor restart",
+    "timeline": [
+      "16:32 UTC - / loaded fine",
+      "16:33 UTC - /admin-threats -> CF 521",
+      "16:33 UTC - /admin-risk -> CF 521",
+      "16:33-16:34 UTC - / -> CF 521 (worker did not recover)"
+    ]
+  },
+  "output_file": "ui_server.py"
+}

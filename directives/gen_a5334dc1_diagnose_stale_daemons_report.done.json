@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_daemons_report",
+  "handler": "generate_file",
+  "output_file": "diagnose_stale_daemons_report.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Produce a diagnostic report of stale daemons: write_service (3h23m), mcp_scanner (4h31m), rug_pull_monitor (602h4m), anti_entropy (4h35m), wisdom_synthesiser (4h35m). Query service_health table to confirm last_heartbeat timestamps. Identify which are dead vs merely slow. For rug_pull_monitor (602h), check if PID file exists and process is running. Output JSON report with daemon_name, status, age_seconds, likely_cause, recommended_action (restart vs investigate). This is diagnostic only \u2014 do NOT restart daemons. Spec reference: Section 6 heartbeat contract, Section 10 execution rules (diagnostic preferred over rebuild for protected files)."
+}

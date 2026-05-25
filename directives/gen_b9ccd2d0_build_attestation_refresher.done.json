@@ -1,0 +1,9 @@
+{
+  "task": "build_attestation_refresher",
+  "handler": "generate_file",
+  "output_file": "attestation_refresher.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Retention/lifecycle daemon from Appendix A. Regenerate attestations approaching expiry. Reads mcp_attestations table for entries where expires_at within 7 days and regenerated_at older than 90 days. Calls attestation_engine logic via write_service to regenerate. Must not DELETE existing attestation rows \u2014 archive old ones with regenerated_at timestamp. Write heartbeat to service_health. Use write_service at :8772 for all DB access. Scan interval: daily."
+}

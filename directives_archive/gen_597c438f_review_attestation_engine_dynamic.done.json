@@ -1,0 +1,9 @@
+{
+  "task": "review_attestation_engine_dynamic",
+  "handler": "generate_file",
+  "output_file": "attestation_dynamic_evidence_review.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Quality pass: inspect attestation_engine.py for dynamic evidence language in attestation text. Check mcp_attestations rows for evidence_blob fields referencing signal scores, pi_results, or enrichments. Report whether dynamic evidence is present and correctly cited. Does NOT rebuild attestation_engine.py \u2014 only reports findings. If evidence is missing, log a remediation directive for the next cycle."
+}

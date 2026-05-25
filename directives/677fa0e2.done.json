@@ -1,0 +1,22 @@
+{
+  "id": "677fa0e2",
+  "source": "zo-sentinel-audit",
+  "category": "bug",
+  "severity": "critical",
+  "summary": "/admin-threats and /admin-risk routes return Cloudflare 521 (backend not implemented or crashing)",
+  "details": "Both header navigation links point to /admin-threats and /admin-risk. Visiting either route returns a Cloudflare 521 error page (origin web server is down). After visiting these routes the entire UI subsequently returned 521 as well, including the home page that had loaded cleanly minutes earlier. This strongly suggests the routes raise an unhandled exception that takes the worker process down rather than just 404'ing. The header links therefore both break navigation and risk taking the whole UI offline.",
+  "suggested_fix": "In ui_server.py choose one of: (a) add stub handlers for /admin-threats and /admin-risk that return a 200 with a 'Coming Soon' placeholder body and a back-to-home anchor; (b) remove the corresponding <a> tags from the header until the admin views are built; or (c) wrap the route handlers in a try/except that returns a clean 503 response instead of crashing the worker. Whichever path is chosen, ensure every error response includes a back-to-home link so users are never stranded.",
+  "observed_at": "2026-05-09T16:34:50Z",
+  "evidence": {
+    "url": "https://zo-sentinel.example/admin-threats",
+    "secondary_url": "https://zo-sentinel.example/admin-risk",
+    "http_status": 521,
+    "timeline": [
+      "16:32 UTC - / loaded successfully",
+      "16:33 UTC - /admin-threats returned Cloudflare 521",
+      "16:33 UTC - /admin-risk returned Cloudflare 521",
+      "16:33-16:34 UTC - / also returns 521 (entire UI down)"
+    ]
+  },
+  "output_file": "ui_server.py"
+}

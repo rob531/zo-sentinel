@@ -1,0 +1,11 @@
+{
+  "task": "phase3_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser.py",
+  "complexity": "high",
+  "description": "T2 ZOMesh agent that reads raw mcp_server_registry records and scores them across 6 signal dimensions. For each unscored server, computes: (1) domain_trust 0-100: check domain age via whois-json heuristics, TLS presence in URL, known-safe domains list; (2) tool_description_safety 0-100: regex scan for prompt injection patterns (<IMPORTANT>, ignore previous, read ~/.ssh, exfiltrate) in description field; (3) permission_scope 0-100: keyword analysis of what the server claims to access vs typical MCP scope; (4) supply_chain 0-100: npm download count if available, repo age from GitHub first_seen, star count; (5) community_signal 0-100: check server name/domain against a hardcoded known_threats list, score 100 if unknown; (6) temporal_stability 0-100: based on how long server has been in registry, starts at 50 for new entries. Writes scores to mcp_signal_scores table. Writes composite trust_score (weighted average) to mcp_server_registry. Runs every 30 minutes as daemon.",
+  "context": "Phase 3 of ZO-SENTINEL. Feeds the trust synthesiser. The known_threats list should include domains/packages known to be malicious from the research: fake-postmark-mcp, any package with sudden star spikes. Weight the signals: domain_trust 0.20, tool_description_safety 0.20, permission_scope 0.15, supply_chain 0.15, community_signal 0.15, temporal_stability 0.15. Map composite score to verdict: >75=TRUSTED_GENERAL, 60-75=TRUSTED_RESEARCH, 45-60=ENTERPRISE_CONTROLLED, 30-45=CAUTION_LIMITED, 15-30=HIGH_RISK_ISOLATED, <15=KNOWN_THREAT, null_data=INSUFFICIENT.",
+  "priority": 0.85,
+  "from": "claude_bootstrap_directive",
+  "phase": "3"
+}

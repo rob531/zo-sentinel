@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_integration_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integrate snow_connector.py (built 2026-04-16) into approval_workflow. File already exists, do NOT rebuild. Add a new module snow_inbound_handler.py that: (1) reads ServiceNow ticket events from mcp_submissions table; (2) calls registry_api to lookup MCP by name; (3) retrieves current verdict from trust_synthesiser via mcp_signal_scores query; (4) writes approval recommendation to mcp_decisions. MUST use write_service at :8772 for all DB access. MUST NOT make direct DuckDB connections. Port 8780 interface unchanged. Add to supervisord only after integration test passes."
+}

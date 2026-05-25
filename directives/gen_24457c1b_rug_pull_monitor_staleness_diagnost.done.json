@@ -1,0 +1,9 @@
+{
+  "task": "rug_pull_monitor_staleness_diagnostic",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_staleness_probe.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnostic probe for rug_pull_monitor.py staleness (currently 623h55m stale per heartbeat map). MUST use write_service :8772 to query service_health table for current last_heartbeat and status. MUST NOT propose rebuild or restart of protected file rug_pull_monitor.py. Output diagnostic report with: (1) parsed heartbeat timestamp, (2) staleness duration, (3) connectivity check to rug_pull_monitor PID if PID file exists, (4) recommendation for human operator (restart vs service file review). Pure observation only \u2014 no DB writes beyond what write_service already handles."
+}

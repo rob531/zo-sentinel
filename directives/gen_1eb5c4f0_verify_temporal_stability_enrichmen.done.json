@@ -1,0 +1,9 @@
+{
+  "task": "verify_temporal_stability_enrichment_quality",
+  "handler": "generate_file",
+  "output_file": "verify_temporal_stability_enrichment_quality.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Quality verification harness for temporal_stability_enrichment.py. Loads the enricher module, calls compute_score() against a synthetic corpus of 20+ metadata dicts with varied age_days, first_seen, last_updated, last_verdict fields. Asserts that output scores produce at least 10 distinct values (signal quality floor per spec). Logs score distribution to LOG_PATH. Does NOT modify the enricher itself. Reads temporal_stability_enrichment.py directly. This is a diagnostic tool, not a rebuild. Referenced spec section 3 (signal invariant) and the weak signal diagnostic showing 4 distinct values."
+}

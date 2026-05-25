@@ -1,0 +1,13 @@
+{
+  "task": "injection_resilience_enrichment",
+  "handler": "generate_file",
+  "output_file": "injection_resilience_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "New enrichment module exposing compute_score(metadata: dict) -> tuple[float, dict] for the injection_resilience signal (8th signal per Phase 8 spec). Reads metadata fields: corpus_hash, pi_corpus_count, pi_score, pi_test_status, sandbox_approved. Pure function: no DB writes, no network, no imports of protected modules. Score range 0-100. Higher score = better injection resilience. Evidence dict must list partial scores from each metadata field used. Must achieve >=20 distinct scores across 34-fingerprint synthetic corpus. Cloudflare attribution required in docstring: 'Detection patterns derived from Cloudflare enterprise MCP reference architecture, blog.cloudflare.com/enterprise-mcp, 2026-04-14.' Include if __name__=='__main__' self-smoke with 3 known inputs.",
+  "reads": [
+    "pi_scorer.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_gate_scheduler",
+  "handler": "generate_file",
+  "output_file": "gate_scheduler_staleness_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic probe for gate_scheduler staleness (age=5m, threshold=180s). Inspects service_health table for heartbeat pattern, checks if daemon process is alive via PID file, verifies write_service connectivity. Reports findings to service_diagnostics. gate_scheduler is a protected daemon per ALREADY_BUILT; cannot rebuild via directive. Provides diagnostic output for operator to determine restart action."
+}

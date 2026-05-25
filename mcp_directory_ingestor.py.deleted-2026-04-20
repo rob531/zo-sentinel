@@ -1,0 +1,18 @@
+# This file was the original LLM-generated mcp_directory_ingestor.py,
+# written by the builder on 2026-04-19 against a speculative target
+# (modelcontextprotocol.io/servers) that turned out to be:
+#   (a) deprecated by Anthropic in favor of the Registry API
+#   (b) a JavaScript-rendered SPA that the LLM's CSS selectors couldn't parse
+#
+# Known bugs in the original:
+#   - Used /write instead of /execute for new tables (would fail on first run)
+#   - Missing CREATE TABLE IF NOT EXISTS statements
+#   - Column names didn't match directive spec
+#   - f-string SQL interpolation (injection risk on quotes)
+#   - CSS selectors targeted structure that doesn't exist on the page
+#
+# Replaced by two separate ingestors:
+#   - mcp_reference_servers_ingestor.py (Anthropic's 20 trust anchors)
+#   - mcp_registry_ingestor.py (full registry enumeration via /v0/servers API)
+#
+# Kept as .deleted for reference. Safe to remove anytime.

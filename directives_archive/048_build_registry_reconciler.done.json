@@ -1,0 +1,15 @@
+{
+  "task": "build_registry_reconciler",
+  "handler": "generate_file",
+  "output_file": "registry_reconciler.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.68,
+  "reads": [
+    "schema.py",
+    "mcp_scanner.py"
+  ],
+  "description": "Registry reconciler daemon. Every 43200s: fetches fresh package list from npm @modelcontextprotocol scope. Compares against mcp_server_registry. New packages not in registry -> ws_write as new entries. Packages in registry but removed from npm -> set status=deprecated in registry. Version updates -> increment scan_count, update last_scanned. Also reconcile GitHub topic:mcp-server list. Log new/deprecated/updated counts. ws_write reconciliation_complete event. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

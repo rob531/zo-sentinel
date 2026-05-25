@@ -1,0 +1,11 @@
+{
+  "task": "diagnose_import_failure_pattern",
+  "handler": "generate_file",
+  "output_file": "importlib_error_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic daemon to investigate the repeated importlib error pattern affecting registry_api.py, rug_pull_monitor.py, signal_analyser.py (all show traceback at line 10, File \"<frozen importlib\"). Since these files are protected and cannot be rebuilt directly, this diagnostic: (1) attempts to import each file via subprocess with detailed error capture, (2) checks Python sys.path for corruption, (3) verifies __pycache__ consistency, (4) reports which specific import statement is failing. Does NOT modify any file. Does NOT write to database. Output is structured JSON for ops review. This is a diagnostic-only companion module per spec section 10 rule: prefer diagnosis over rebuild for protected files.",
+  "reads": [],
+  "next_directive": {}
+}

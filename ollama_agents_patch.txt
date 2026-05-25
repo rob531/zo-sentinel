@@ -1,0 +1,6 @@
+OLLAMA_AGENTS = {
+    "backend":  "zo-backend-coder",
+    "frontend": "zo-html-coder",        # patched: was zo-frontend-coder -- produces invalid HTML
+    "infra":    "zo-mesh-architect",
+    "default":  "zo-backend-coder",
+}

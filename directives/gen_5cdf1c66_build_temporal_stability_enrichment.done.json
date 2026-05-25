@@ -1,0 +1,9 @@
+{
+  "task": "build_temporal_stability_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Build improved temporal_stability enrichment module to fix BAD SIGNAL (4 distinct values across 34 fingerprints). Current temporal_stability signal has only 4 distinct values, range 30-90 \u2014 this discriminates poorly and must be improved. New module must expose compute_score(metadata: dict) -> tuple[float, dict] using multiple fields: first_seen (compute age_days), last_modified (compute update_cadence_days), commit_frequency (if present), registry_source (NPM vs GitHub vs PyPI has different stability expectations), download_count (proxy for maturity). Score range [0-100]. Pure function, no DB writes, no network, no imports of protected modules. Must yield >20 distinct scores across 34 synthetic fingerprints. Reference: signal model section 3, enrichment contract section 7."
+}

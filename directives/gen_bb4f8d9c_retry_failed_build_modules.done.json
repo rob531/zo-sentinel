@@ -1,0 +1,9 @@
+{
+  "task": "retry_failed_build_modules",
+  "handler": "generate_file",
+  "output_file": "retry_failed_build_modules.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Re-queues the following failed module builds that had import-related tracebacks (File \"<frozen importlib\" at line 10): build_start_all_sh, build_graphql_schema, build_email_guid_auth, build_mcp_detail_view_ui, build_advanced_filter_api, build_forensic_detail_api, build_manual_override_api, build_compliance_export_service, build_supervisor_auto_updater, build_email_guid_auth_compact. This is a meta-retry trigger \u2014 generates individual retry directives for each. The builder auto-install loop should have resolved deps; if import still fails, those individual files need specific dependency investigation."
+}

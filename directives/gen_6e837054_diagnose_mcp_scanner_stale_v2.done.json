@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_mcp_scanner_stale_v2",
+  "handler": "generate_file",
+  "output_file": "diagnose_mcp_scanner_stale_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic-only module. Reads service_health for mcp_scanner heartbeat age, reads scanner log for last activity timestamp, queries write_service for pending_scan queue depth, and reports findings. Diagnoses why mcp_scanner is stale (4h1m old, threshold 14400s). Does NOT rebuild mcp_scanner.py (protected file). Does NOT restart the service (builder does not orchestrate services). Outputs diagnostic blob to service_health.meta or a dedicated diagnostics table. Targets: heartbeat failure, log file corruption, queue starvation, or external API timeout.",
+  "reads": [
+    "mcp_scanner.py"
+  ],
+  "next_directive": {}
+}

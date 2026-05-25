@@ -1,0 +1,9 @@
+{
+  "task": "write_service_heartbeat_investigator_for_daemons",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_monitor.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Investigate why write_service heartbeat is 6h6m stale while service remains responsive per write_service_heartbeat_investigator.py from 2026-05-23T17:26:19. Query write_service :8772 health endpoint directly to distinguish service liveness from heartbeat table staleness. Query mcp_* tables to confirm DB access still works. Generate diagnostic showing: (1) direct health check vs heartbeat table age, (2) DuckDB access verification, (3) write_service last_seen vs service_health last_heartbeat discrepancy. MUST NOT propose rebuild of protected write_service.py. This is diagnostic-only output for operator review."
+}

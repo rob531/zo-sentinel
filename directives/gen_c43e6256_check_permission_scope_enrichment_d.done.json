@@ -1,0 +1,9 @@
+{
+  "task": "check_permission_scope_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_discrimination_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Verify that permission_scope_enrichment_v2.py (built 2026-05-24T14:13:11) is producing more than 4 distinct scores across the synthetic corpus. Current signal quality diagnostic shows permission_scope at only 4 distinct values - a plateau. The v2 enrichment must be reading multiple metadata fields (registry_source, age_days, download_count, dependency_count, publisher_verified, stars) to break this plateau. Diagnostic should query mcp_signal_enrichments for signal_type='permission_scope' and report distinct score count."
+}

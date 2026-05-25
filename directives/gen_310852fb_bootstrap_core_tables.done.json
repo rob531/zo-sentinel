@@ -1,0 +1,9 @@
+{
+  "task": "bootstrap_core_tables",
+  "handler": "generate_file",
+  "output_file": "schema_bootstrap.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.95,
+  "description": "Creates all core DuckDB tables per DB_SCHEMA.md: mcp_server_registry, mcp_signal_scores, mcp_signal_enrichments, mcp_threat_associations, mcp_risk_register, mcp_attestations, mcp_definition_history, mcp_submissions, mcp_exemptions, mcp_decisions, mcp_policy_rules, mcp_fingerprints, mcp_tool_hashes, service_health, audit_log. Uses write_service POST :8772/execute for DDL. Exits 0 on success. No direct duckdb imports. This is prerequisite for all daemons to function."
+}

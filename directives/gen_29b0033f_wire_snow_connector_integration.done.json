@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_completion.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Integration wiring for snow_connector.py (built 2026-05-23 11:07) into approval_workflow. Must: (1) query mcp_submissions for pending status, (2) call snow_connector to fetch ticket metadata, (3) correlate ticket priority with registry entry, (4) write correlation result to mcp_submissions.snow_ticket_id. Must NOT: call write_service directly between daemons (use write_service :8772), hardcode credentials, or introduce HTTP between peer daemons. Read: snow_connector.py interface, approval_workflow.py interface. Previously failed files in quarantine: snow_integration_completion.py. New file uses different name to avoid quarantine collision."
+}

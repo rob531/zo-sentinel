@@ -1,0 +1,14 @@
+{
+  "task": "build_false_positive_tracker",
+  "handler": "generate_file",
+  "output_file": "false_positive_tracker.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.64,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "False positive tracker. Every 43200s: finds servers where analyst decision=APPROVED but verdict was HIGH_RISK_ISOLATED or KNOWN_THREAT (false positives) or REJECTED but verdict was TRUSTED_GENERAL (false negatives). For each: ws_write corrections {action=false_positive_detected or false_negative_detected, reason=verdict vs decision mismatch}. Compute precision and recall metrics. Write FALSE_POSITIVE_REPORT.md. These metrics feed back to signal_weights.py tuning. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

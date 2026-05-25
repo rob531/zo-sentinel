@@ -1,0 +1,15 @@
+{
+  "task": "build_comparison_api",
+  "handler": "generate_file",
+  "output_file": "comparison_api.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.66,
+  "reads": [
+    "schema.py",
+    "registry_api.py"
+  ],
+  "description": "MCP comparison API. FastAPI port 8785. GET /v1/compare?a={server_id_or_name}&b={server_id_or_name} -> side-by-side comparison of two MCPs: both registry records, signal scores per dimension, verdicts, risk tiers, attestation status, threat count. Returns structured JSON with winner per signal dimension and overall_recommendation (prefer_a|prefer_b|equivalent|both_risky). GET /v1/rank?tier={risk_tier}&limit=10 -> ranked list within tier. GET /health. Daemon uvicorn port 8785. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

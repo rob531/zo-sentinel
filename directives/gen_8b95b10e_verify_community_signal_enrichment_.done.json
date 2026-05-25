@@ -1,0 +1,9 @@
+{
+  "task": "verify_community_signal_enrichment_quality",
+  "handler": "generate_file",
+  "output_file": "verify_community_signal_enrichment_quality.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Quality verification harness for community_signal_enrichment.py. Loads the enricher module, calls compute_score() against a synthetic corpus of 20+ metadata dicts with varied stars, registry_source, download_count, dependency_count fields. Asserts that output scores produce at least 15 distinct values (signal quality floor). The signal diagnostic shows community_signal at 34 distinct values which is OK, but this harness verifies the enricher specifically. Logs score distribution. Does NOT modify the enricher. Diagnostic tool. References spec section 3 signal invariant."
+}

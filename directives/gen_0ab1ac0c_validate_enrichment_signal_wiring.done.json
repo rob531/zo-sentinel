@@ -1,0 +1,9 @@
+{
+  "task": "validate_enrichment_signal_wiring",
+  "handler": "generate_file",
+  "output_file": "enrichment_wiring_validator.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Validates that recently-built enrichment modules (temporal_stability_enrichment, permission_scope_enrichment, tool_description_safety_enrichment) are wired into the signal_analyser pipeline and producing outputs with >20 distinct scores across 34 fingerprints. Reads: temporal_stability_enrichment.py, permission_scope_enrichment.py, tool_description_safety_enrichment.py, signal_analyser.py. Runs compute_score() against synthetic corpus, asserts discrimination. Pure library, no DB writes."
+}

@@ -1,0 +1,15 @@
+{
+  "task": "snow_integration_final_verification",
+  "handler": "generate_file",
+  "output_file": "snow_integration_final_verify.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Final verification and wiring completion for ServiceNow inbound webhook. snow_connector_approval_wiring.py built 2026-05-23T23:30:40 and snow_connector_approval_verify.py built 2026-05-24T07:58:15. Must verify webhook registration status, validate write_service connectivity, and confirm approval_workflow integration path per spec section 5. NOT a rebuild \u2014 adds verification harness only.",
+  "reads": [
+    "snow_connector_approval_wiring.py",
+    "snow_connector_approval_verify.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

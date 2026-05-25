@@ -1,0 +1,14 @@
+{
+  "task": "integrate_temporal_stability_wiring",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Integration wiring to connect temporal_stability_enrichment.py output into signal_analyser_v2.py pipeline. Reads enrichment output from mcp_signal_enrichments table (where signal_type='temporal_stability') and ensures it feeds the composite calculation. Uses write_service query to validate data flow. MUST NOT modify signal_analyser_v2.py directly \u2014 add as companion module per spec section 8 protected-file rule.",
+  "reads": [
+    "signal_analyser_v2.py",
+    "temporal_stability_enrichment.py"
+  ],
+  "next_directive": {}
+}

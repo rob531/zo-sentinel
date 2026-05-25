@@ -1,0 +1,9 @@
+{
+  "task": "wire_mcp_traffic_fingerprints_into_scanner",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints_scanner_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire mcp_traffic_fingerprints (already built per directive 2026-04-22) into mcp_scanner for MCP protocol confirmation during candidate server response scanning. The pure library module exposes detect_mcp_methods(), is_mcp_traffic(), extract_session_indicators(). MUST: (1) import mcp_traffic_fingerprints (verify it exists on disk), (2) call is_mcp_traffic() against HTTP response bodies from candidate servers, (3) write MCP_PROTOCOL_CONFIRMED signal to mcp_signal_scores with confidence 0.0-1.0, (4) follow signal invariant: evidence_blob must include {signal_type, confidence, evidence_blob}. Source: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14. This is integration wiring, NOT a new library module. Reads: mcp_scanner.py, mcp_traffic_fingerprints.py (when it lands)."
+}

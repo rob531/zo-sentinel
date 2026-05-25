@@ -1,0 +1,14 @@
+{
+  "task": "build_daily_digest",
+  "handler": "generate_file",
+  "output_file": "daily_digest.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.76,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Daily digest generator daemon. Runs at 07:00 UTC daily (check hour in loop). Generates DAILY_DIGEST.md with: new MCPs discovered (24h), verdicts changed, new threat intel, risk tier changes, top 5 highest risk servers, pipeline health summary, build activity summary. ws_write digest summary to mesh_events event_type=daily_digest. Attempt email to robin.craib@gmail.com via api.zo.computer/zo/notify best-effort. Poll 3600s checking hour==7 UTC. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

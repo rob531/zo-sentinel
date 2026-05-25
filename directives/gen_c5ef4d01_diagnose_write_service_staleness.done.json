@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_write_service_staleness",
+  "handler": "generate_file",
+  "output_file": "write_service_staleness_probe.py",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.72,
+  "description": "Diagnostic-only probe for write_service staleness (heartbeat age 45m >300s threshold). Do NOT propose rebuild of write_service (protected). Instead, create a diagnostic that: (1) calls write_service health endpoint to confirm responsiveness; (2) queries service_health for write_service last_heartbeat and age; (3) checks for recent service_restart events in audit_log; (4) emits a structured diagnostic report with severity assessment (STALE vs DEAD vs HEALTHY). Report should be written to /tmp/write_service_diagnostic.json. This file will be reviewed by human operators. Do NOT auto-restart or auto-repair. Do NOT issue DELETE or DROP on any table.",
+  "reads": [
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

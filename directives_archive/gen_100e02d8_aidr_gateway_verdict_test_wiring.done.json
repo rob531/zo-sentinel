@@ -1,0 +1,14 @@
+{
+  "task": "aidr_gateway_verdict_test_wiring",
+  "handler": "generate_file",
+  "output_file": "aidr_gateway_verdict_test_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Integration test for aidr_commit_gateway.py verdict-check enforcement. Must: (1) call aidr_commit_gateway with VERDICT_REQUIRED payload (trust_synthesiser output); (2) assert it REFUSES commit for CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts; (3) assert it ALLOWS commit for TRUSTED_GENERAL and TRUSTED_RESEARCH; (4) assert injection_resilience score (weight 1.6) is included in commit payload when forwarded. This is NOT a rebuild of aidr_gateway_verdict_test.py (which is quarantined) \u2014 this is new integration wiring. Must use write_service (:8772).",
+  "reads": [
+    "aidr_commit_gateway.py",
+    "trust_synthesiser_v2_pi_audit.py"
+  ],
+  "next_directive": {}
+}

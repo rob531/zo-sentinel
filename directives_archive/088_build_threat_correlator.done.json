@@ -1,0 +1,15 @@
+{
+  "task": "build_threat_correlator",
+  "handler": "generate_file",
+  "output_file": "threat_correlator.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.56,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "Threat correlator daemon. Every 43200s: finds clusters of related threats across servers. If 3+ servers share the same npm author AND have threat_type=tool_mutation: emit supply_chain_compromise event. If same CVE affects multiple servers: emit coordinated_vulnerability event. If servers from same GitHub org show HIGH_RISK_ISOLATED verdict: emit org_risk_pattern event. ws_write correlated threats to mcp_threat_associations with threat_type=correlated_*. Write CORRELATION_REPORT.md. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

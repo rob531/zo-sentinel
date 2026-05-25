@@ -1,0 +1,9 @@
+{
+  "task": "sentinel_external_api_reference",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Document the external API surface on port 8791. Must cover: authentication via X-API-Key header; rate limiting (60 req/min per key); all GET endpoints (servers list, server detail, signal scores, verdict, threat intel, risk register, attestation); request/response shapes in JSON; error codes; freshness indicators. Do NOT document internal APIs (:8790, :8780, :8781, :8792, :8795) \u2014 those are internal only. Must cite version v1.0 and port 8791 explicitly."
+}

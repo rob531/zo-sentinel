@@ -1,0 +1,16 @@
+# ZO-Sentinel External API keys
+# Format:
+#   (optional) # <human comment>
+#   (optional) # expires: <ISO-8601 UTC timestamp>
+#   <key-on-its-own-line>
+#
+# Keys past their expiry are silently skipped at load time.
+# Daemon must be restarted to pick up file changes.
+# File should be chmod 600.
+
+# robin local test key -- no expiry, for internal curl tests
+test-key-robin-apr18
+
+# colleague trial key -- 36h window issued 2026-04-18T17:30Z
+# expires: 2026-04-20T05:30:00Z
+7EoNrWTPnB4gEFQyFvxoUKgDY3tUNLnrSxsgSH8YOzU

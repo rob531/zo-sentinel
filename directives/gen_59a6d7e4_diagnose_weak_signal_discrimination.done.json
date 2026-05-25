@@ -1,0 +1,15 @@
+{
+  "task": "diagnose_weak_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_plateau.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic module to analyze why permission_scope, temporal_stability, and tool_description_safety signals each produce only 4 distinct scores (signal plateau). Query mcp_signal_scores for each signal, compute score distribution entropy, identify which metadata fields are being read vs ignored. Output a JSON report of field coverage per signal to guide enrichment improvements. No DB writes, no network. Pure analysis function.",
+  "reads": [
+    "permission_scope_enrichment.py",
+    "temporal_stability_enrichment.py",
+    "tool_description_safety_enrichment.py"
+  ],
+  "next_directive": {}
+}

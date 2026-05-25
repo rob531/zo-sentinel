@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_tool_description_safety_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "diagnose_tool_description_safety_enrichment.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Diagnostic module to analyze why tool_description_safety_enrichment.py produces only 4 distinct scores. Tests compute_score() across tool definitions with varying entropy, parameter documentation coverage, example presence, warning tags, and version tags. Reports the discrimination cliff where output stops varying. Per spec section 3 signal invariant and section 10: emit findings for directive generator to propose improved enrichment."
+}

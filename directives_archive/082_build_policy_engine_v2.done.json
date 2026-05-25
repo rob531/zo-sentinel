@@ -1,0 +1,15 @@
+{
+  "task": "build_policy_engine_v2",
+  "handler": "generate_file",
+  "output_file": "policy_engine_v2.py",
+  "complexity": "high",
+  "phase": "4",
+  "priority": 0.85,
+  "reads": [
+    "schema_v2.py",
+    "verdict_taxonomy.py"
+  ],
+  "description": "Enhanced policy engine v2. evaluate_policy(server_id,trust_score,verdict,context={})->PolicyDecision. PolicyDecision dataclass: decision=BLOCK|ESCALATE|CONDITIONAL_ALLOW|ALLOW, conditions=list, rationale=str, policy_ids_matched=list. Loads active policy rules from mcp_policy_rules via ws_query. Rules evaluated in priority order. Default rules: KNOWN_THREAT->BLOCK, HIGH_RISK_ISOLATED+no_analyst_override->ESCALATE, trust_score<35->ESCALATE, TRUSTED_GENERAL->ALLOW. Context can include: environment=production|staging|research, data_sensitivity=high|medium|low. Store decision to mcp_decisions via ws_write. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

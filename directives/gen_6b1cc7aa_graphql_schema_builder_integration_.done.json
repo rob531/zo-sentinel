@@ -1,0 +1,9 @@
+{
+  "task": "graphql_schema_builder_integration_check",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder_integration_check.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.78,
+  "description": "graphql_schema_builder.py is listed as exists but dormant per spec (section 9: GraphQL surface is out of scope for v1.0 \u2014 graphql_schema_builder.py is dormant; do not wire it). This diagnostic must verify that graphql_schema_builder.py is not wired into any supervisor daemon config, not called by any integration file, and has no active route registration in port configs. Must emit a compliance report: (1) scan supervisord config for graphql references; (2) scan all integration files for graphql imports; (3) scan port bindings for graphql routes. If any wiring is found, log it as a spec violation. Do not build or enable the GraphQL surface \u2014 only audit compliance. Exit 0 with confirmation of dormancy."
+}

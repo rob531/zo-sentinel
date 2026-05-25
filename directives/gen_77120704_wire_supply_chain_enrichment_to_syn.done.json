@@ -1,0 +1,9 @@
+{
+  "task": "wire_supply_chain_enrichment_to_synthesiser",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_synthesiser_wiring.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Wire supply_chain_enrichment_integration.py (built 2026-05-24T18:45:19) output into trust_synthesiser_v2.py. Verify mcp_signal_enrichments has rows for signal_name='supply_chain_enrichment' with correct evidence_blob shape. Ensure the composite calculation applies supply_chain_enrichment as dimension 8 per spec section 3. No new daemon - integration only."
+}

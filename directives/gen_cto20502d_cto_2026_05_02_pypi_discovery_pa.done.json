@@ -1,0 +1,23 @@
+{
+  "task": "cto_2026_05_02_pypi_discovery_paginator",
+  "handler": "generate_file",
+  "output_file": "discovery_pypi_paginator.py",
+  "complexity": "medium",
+  "description": "Build a PyPI discovery paginator daemon - the third discovery source after npm and github. Searches PyPI via the JSON API for packages matching keywords mcp-server, model-context-protocol, anthropic-mcp, mcp-tools, and similar. Paginates with cursor persistence at /home/workspace/zo_sentinel/state/pypi_paginator_cursor.json. Per cycle (every 600s), processes up to 5 pages of 100 results = 500 candidates. For each PyPI package, extracts: name, version, summary, project_urls.Homepage, project_urls.Repository, classifiers, author. Computes server_id = blake2s(transport='pypi:' + name).hexdigest()[:16]. Inserts into mcp_discovery_candidates with status PENDING_SCAN via WriteService ON CONFLICT DO NOTHING. Logs FileHandler only. ws_write for all writes. ISO 8601 timestamps. Rate limits to 60 PyPI API calls per minute. Emits a discovery_batch mesh_event each cycle with counts.",
+  "context": {
+    "author": "CTO/CEO direct (Claude)",
+    "date": "2026-05-02",
+    "goal_link": "PROJECT_GOALS.md - 20k MCP target. Currently at 5088/20000 = 25.4 percent. Need additional discovery sources beyond npm + github paginators.",
+    "why_now": "At v2 candidate_promoter rate (500/cycle, 600s interval) the official MCP registry exhausts in ~2h. npm and github paginators add breadth. PyPI is the third major package registry hosting MCP servers and is currently uncovered.",
+    "constraints": [
+      "FileHandler ONLY for logging",
+      "ws_write via WriteService - ON CONFLICT DO NOTHING",
+      "ISO 8601 string timestamps - never time.time() floats",
+      "Rate limit 60 PyPI calls/min",
+      "Cursor persistence in /home/workspace/zo_sentinel/state/pypi_paginator_cursor.json",
+      "server_id = blake2s('pypi:' + package_name).hexdigest()[:16]",
+      "Use pypi.org/pypi/{name}/json and pypi.org/search/?q={kw} (HTML scrape fallback if needed)",
+      "Graceful continue on per-package exception"
+    ]
+  }
+}

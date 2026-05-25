@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_phase9",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Phase 9 enterprise integration: CrowdStrike AI Defense Runtime commit bridge. MUST: (1) Check ZO-SENTINEL verdict before forwarding; (2) NEVER auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override; (3) Include injection_resilience score in commit payload; (4) Audit log all commit attempts to audit_log table; (5) Run on available port 8784. Priority 0.90. Cite PROMPT_INJECTION_PLAN.md."
+}

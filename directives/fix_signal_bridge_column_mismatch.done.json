@@ -1,0 +1,9 @@
+{
+  "directive_id": "fix_signal_bridge_column_mismatch",
+  "goal": "Fix signal_bridge.py: two column name bugs causing 400s on every cycle.\n\nBUG 1: signal_bridge uses enrich_row.get('created_at') but mcp_signal_enrichments column is 'computed_at'. Replace all .get('created_at') with .get('computed_at') in enrichment row handling.\n\nBUG 2: write_score() inserts with column 'created_at' but mcp_signal_scores uses 'scored_at'. Fix the INSERT to use 'scored_at'.\n\nBUG 3: __harness_* server_ids polluting enrichments table are being processed. Add filter: WHERE server_id NOT LIKE '__harness_%' AND server_id IN (SELECT server_id FROM mcp_server_registry) to the enrichments query.\n\nAfter fix: signal_bridge should bridge >0 records per cycle, eventually covering all 1125 scored servers.",
+  "output_path": "/home/workspace/zo_sentinel/signal_bridge.py",
+  "constraints": ["Idempotent", "Do not change ENRICHMENT_TO_SIGNAL mapping", "Preserve all existing logic except column name bugs"],
+  "success_criteria": ["No 400 errors in signal_bridge.log", "bridged N this cycle where N > 0", "signal_scores coverage increases toward registry count"],
+  "source": "cto_directive",
+  "generated_at": "2026-05-20T01:30:00"
+}

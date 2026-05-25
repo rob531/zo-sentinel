@@ -1,0 +1,9 @@
+{
+  "task": "build_wisdom_synthesiser_diagnosis",
+  "handler": "generate_file",
+  "output_file": "wisdom_synthesiser_diagnosis.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module for wisdom_synthesiser daemon staleness. Current age=6h7m (stale threshold=14400s per gaps map). Module must diagnose why daemon is stale without proposing rebuild (wisdom_synthesiser is not a protected file per idempotency list, but diagnostic-first approach preferred per spec Appendix A). Functions: query write_service for service_health entry, calculate heartbeat age, diagnose potential causes (crash loop, network timeout, dead process), send heartbeat if process is alive but not updating. Outputs actionable findings without touching write_service or database schema."
+}

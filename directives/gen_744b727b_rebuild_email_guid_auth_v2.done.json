@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_email_guid_auth_v2",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rebuild email_guid_auth.py to fix importlib failure. Current error: Traceback shows importlib import failure in smoke test. Must expose same function signatures (generate_email_guid, validate_guid) but fix the import chain. Do NOT introduce new dependencies; use only requests, duckdb (via write_service), hashlib, secrets. The original file is in ALREADY_BUILT but quarantined; create email_guid_auth_v2.py as the new working version."
+}

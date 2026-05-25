@@ -1,0 +1,9 @@
+{
+  "task": "diagnostic_enrichment_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "diagnostic_enrichment_signal_discrimination.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic to diagnose why permission_scope_enrichment.py, temporal_stability_enrichment.py, and tool_description_safety_enrichment.py each produce only 3 distinct scores across 34 synthetic fingerprints. Must: (1) import compute_score from each enrichment module; (2) generate 34 diverse synthetic fingerprints using the same pattern as supply_chain_enrichment.py (registry_source variation, age_days range 1-365, download_count range 0-10000, dependency_count range 0-50, publisher_verified bool, stars range 0-5000); (3) call each compute_score() with each fingerprint; (4) report score distribution, distinct count, and min/max for each module; (5) identify if the issue is insufficient input diversity or formula coarse-graining; (6) output findings as structured dict. This addresses the weak-signal plateau blocking context_efficiency_enrichment deferral removal per Appendix B rules."
+}

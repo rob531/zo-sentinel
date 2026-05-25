@@ -1,0 +1,9 @@
+{
+  "task": "permission_scope_enrichment",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Reads metadata fields: permission_count, permission_types_list, requests_admin_access, requests_network_access, registry_source, permission_risk_profile. Computes permission scope score by penalizing excessive permissions, admin access requests, and network access while rewarding minimal scope. No DB writes, no network, no imports of protected modules. Returns evidence dict with per-field partial scores."
+}

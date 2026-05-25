@@ -1,0 +1,14 @@
+{
+  "task": "verify_aidr_gateway_verdict_integration",
+  "handler": "generate_file",
+  "output_file": "verify_aidr_gateway_verdict_integration.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.86,
+  "description": "Integration verification for aidr_commit_gateway.py (built 2026-04-17). Verify the gateway reads verdicts from mcp_server_registry and refuses to commit MCPs with TRUSTED_GENERAL or TRUSTED_RESEARCH only. MCPs with CAUTION_LIMITED, HIGH_RISK_ISOLATED, or INSUFFICIENT verdicts must be blocked. Query write_service for gateway logs and validate the verdict-check enforcement. Report pass/fail per verdict tier. This is an integration test, not a rebuild of the gateway (aidr_commit_gateway.py is built).",
+  "reads": [
+    "aidr_commit_gateway.py",
+    "aidr_commit_gateway_verdict_check.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_retention_sweeper_integration",
+  "handler": "generate_file",
+  "output_file": "retention_sweeper_integration.py",
+  "complexity": "medium",
+  "phase": "10",
+  "priority": 0.75,
+  "description": "Integration module to wire retention_sweeper.py into the assessment_scheduler. retention_sweeper.py exists (built 2026-04-19) but is not integrated. Must add cron-style trigger in assessment_scheduler that calls retention_sweeper every 24h. Must verify sweeper reads evidence_blob columns with age >30 days and filters them in queries (no DELETE on core tables per spec section 4). Must emit heartbeat to service_health."
+}

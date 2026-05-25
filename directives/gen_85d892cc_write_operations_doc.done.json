@@ -1,0 +1,9 @@
+{
+  "task": "write_operations_doc",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Write OPERATIONS.md covering: (1) supervisord layout - which daemons run, restart policies, log file locations; (2) recovery runbook for stale write_service (restart via supervisorctl), stale rug_pull_monitor (check PID, service file), broken import chain (re-run builder with --reinstall-deps); (3) how to check queue depth, failed module count, smoke failure rate; (4) how to trigger a manual re-verdict cycle for a specific MCP. Keep dense. Reference specific file paths and table names."
+}

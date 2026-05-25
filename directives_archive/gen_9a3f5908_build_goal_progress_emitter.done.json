@@ -1,0 +1,9 @@
+{
+  "task": "build_goal_progress_emitter",
+  "output_file": "goal_progress_emitter.py",
+  "handler": "generate_file",
+  "complexity": "low",
+  "phase": "sentinel.observability",
+  "priority": 0.65,
+  "description": "Long-running daemon. Every 60s, queries six counts: mcp_server_registry, mcp_attestations, mcp_signal_scores, mcp_decisions, mcp_fingerprints, mcp_discovery_candidates (separated by promoted=TRUE vs FALSE). Computes progress percentages against target_total of 20000. POSTs to /write table='service_health' with service='goal_progress', last_heartbeat=now, payload structured as JSON in metadata field if schema supports it OR write to a separate mesh_events row with event_type='goal_progress_snapshot'. Heartbeat is the row write itself. Lockfile. This is the single-row truth source for how close ZO-Sentinel is to v1.0 readiness. Render-friendly format."
+}

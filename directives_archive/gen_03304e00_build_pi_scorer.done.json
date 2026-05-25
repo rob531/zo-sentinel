@@ -1,0 +1,15 @@
+{
+  "task": "build_pi_scorer",
+  "handler": "generate_file",
+  "output_file": "pi_scorer.py",
+  "complexity": "medium",
+  "phase": "8",
+  "priority": 0.9,
+  "description": "Compute injection_resilience signal (0-100) from pi_test_results aggregated per MCP server. Threshold 0.80 = BLOCKING. Update mcp_signal_scores table. Integrate with trust_synthesiser verdict recalculation on threshold breach. Uses write_service at :8772.",
+  "reads": [
+    "pi_harness_runner.py",
+    "trust_synthesiser.py",
+    "schema.py"
+  ],
+  "next_directive": {}
+}

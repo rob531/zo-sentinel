@@ -1,0 +1,14 @@
+{
+  "task": "build_behavioral_analyser",
+  "handler": "generate_file",
+  "output_file": "behavioral_analyser.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.56,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Behavioral analyser daemon. Every 43200s: analyses patterns in mcp_server_registry over time. Detects: (1) rapid_name_change: servers that changed names between scans (2) description_injection: descriptions containing HTML/JS/SQL injection patterns (3) permission_escalation: tool_definitions requesting more permissions than initial scan (4) namespace_squatting: names very similar to popular trusted MCPs (edit distance <3) (5) phantom_packages: npm packages with 0 downloads but >5 stars (unusual ratio). ws_write detected behaviors to mcp_threat_associations. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

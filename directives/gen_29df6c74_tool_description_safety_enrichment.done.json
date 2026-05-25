@@ -1,0 +1,10 @@
+{
+  "task": "tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Enrichment module for tool_description_safety signal, which currently scores WEAK with only 3 distinct values. Must expose compute_score(metadata: dict) -> tuple[float, dict] with these requirements: (1) Read MULTIPLE metadata fields including tool_count, avg_tool_description_length, has_risky_permissions flag, tool_name_patterns, schema_complexity_score. (2) Score must discriminate across a wider range than current plateau. (3) No DB writes, no network, no imports of protected modules. (4) Pure function with evidence dict listing all fields used. (5) Complete in under 2 seconds per call. (6) Include if __name__ == '__main__' self-smoke with at least 5 test cases covering distinct score outputs.",
+  "reads": []
+}

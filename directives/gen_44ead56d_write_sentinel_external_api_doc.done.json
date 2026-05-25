@@ -1,0 +1,9 @@
+{
+  "task": "write_sentinel_external_api_doc",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Write sentinel_external_api.md for the read-only :8791 API. Must document: (1) X-API-Key auth header requirement; (2) rate limit 60 req/min/key; (3) GET /servers endpoint (params: name, verdict, registry_source); (4) GET /verdict/{server_id} (returns composite score, all signal dimensions, last_assessed timestamp); (5) GET /attestation/{server_id} (returns attestation text, issuer, expiry); (6) example curl commands for each endpoint. Does NOT document write operations - :8791 is read-only per spec section 7."
+}

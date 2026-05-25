@@ -1,0 +1,9 @@
+{
+  "task": "verify_trust_synthesiser_v2_7th_dimension",
+  "handler": "generate_file",
+  "output_file": "verify_trust_synthesiser_v2_dimension.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Quality pass for trust_synthesiser_v2.py. Verify it reads mcp_signal_scores with dimension='injection_resilience' and applies weight 1.6 with threshold 0.80. Query signal_scores table for injection_resilience rows. If dimension not present or weight incorrect, output diagnostic showing current state. Do NOT propose rewrite - if fix needed, propose a companion module trust_synthesiser_v3.py per section 8 naming rules."
+}

@@ -1,0 +1,13 @@
+{
+  "task": "build_admin_submissions_html",
+  "handler": "generate_file",
+  "output_file": "admin_submissions.html",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.84,
+  "description": "Admin triage view for pending mcp_submissions. Portal exists at mcp_submission_portal.html but admin review surface does not. Must: (1) query pending submissions via :8781 registry_api, (2) display mcp_name, requested_by, submission_date, current_verdict, (3) allow analyst to APPROVE/CONDITIONAL/REJECT with reason field, (4) write to mcp_decisions table via write_service. Target port 8790. X-API-Key auth required.",
+  "reads": [
+    "registry_api.py"
+  ],
+  "next_directive": {}
+}

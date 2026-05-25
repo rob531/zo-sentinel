@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_workflow_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_workflow_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow.py. snow_connector.py exposes ServiceNow integration functions. approval_workflow.py is protected (do NOT modify directly). Create a new module that acts as integration bridge: imports snow_connector functions, hooks into approval_workflow via its existing extension points (check for on_decision_made callback or equivalent). On APPROVED verdict, trigger snow_connector to update ServiceNow ticket. Must use write_service at :8772 for DB access. Never call ServiceNow directly from approval_workflow. Include heartbeat to service_health."
+}

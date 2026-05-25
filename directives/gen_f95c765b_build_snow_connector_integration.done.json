@@ -1,0 +1,14 @@
+{
+  "task": "build_snow_connector_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Wire snow_connector.py into approval_workflow. MUST: (1) validate SNOW OAuth token on inbound webhook, (2) check ZO-SENTINEL verdict before processing, (3) never auto-approve CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override, (4) write audit_log entry for every inbound ticket. Uses write_service at :8772 for all DB ops. snow_connector.py already exists at /home/workspace/zo_sentinel/snow_connector.py. Reads approval_workflow.py to understand existing workflow states. Priority per Phase 9 spec.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

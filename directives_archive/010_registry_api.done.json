@@ -1,0 +1,11 @@
+{
+  "task": "phase6_registry_api",
+  "handler": "generate_file",
+  "output_file": "registry_api.py",
+  "complexity": "high",
+  "description": "Production FastAPI REST API serving the ZO-SENTINEL registry. Runs on port 8781. Endpoints: GET /v1/assess?mcp={identifier} -> instant assessment from registry if known, or triggers fresh analysis. Response: {server_id, verdict, trust_score, confidence, reasoning, signals:[{name,score,desc}], use_cases:[{type,label,desc}], last_assessed, data_age_hours}. GET /v1/registry?page=1&limit=20&verdict=filter -> paginated registry. GET /v1/registry/{server_id} -> full record. GET /v1/threats -> list of known threat indicators. POST /v1/report {server_id, report_type, evidence, reporter} -> community threat report. GET /v1/stats -> registry stats (total assessed, verdict distribution, recent threats). GET /health -> service health. All responses include: data_freshness field, caveats array, confidence_level string. Rate limit: 100 req/hour per IP. CORS enabled for UI access.",
+  "context": "Phase 6 API. This is what enterprise security tooling integrates with - SIEM, ticketing systems, Slack bots. The /v1/assess endpoint is the most important: fast lookup for known MCPs, triggers fresh analysis for unknown ones. Keep response times <500ms for cached assessments.",
+  "priority": 0.82,
+  "from": "claude_directive",
+  "phase": "6"
+}

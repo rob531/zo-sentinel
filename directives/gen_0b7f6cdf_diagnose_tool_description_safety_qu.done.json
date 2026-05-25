@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_tool_description_safety_quarantine",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic module to identify why tool_description_safety_enrichment.py is quarantined (3 consecutive fails: failed in cohort_7_n4). Performs: (1) imports the module and calls compute_score with synthetic metadata dict, (2) verifies returned type is tuple[float, dict], (3) verifies score is in [0.0, 100.0], (4) verifies evidence dict has non-empty keys, (5) checks that multiple metadata fields were read (not just one). Writes results to service_health via write_service. Do NOT propose a rebuild of tool_description_safety_enrichment.py \u2014 that file is quarantined. If this diagnostic finds a fixable issue, the next directive will be a named version (_v2) of the enrichment."
+}

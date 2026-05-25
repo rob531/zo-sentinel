@@ -1,0 +1,9 @@
+{
+  "task": "service_now_inbound_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_inbound_webhook.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "ServiceNow inbound webhook handler for MCP request tickets. MUST: (1) Authenticate via SNOW OAuth token validation, not API key. (2) Validate request signature on every inbound POST. (3) Never accept unsigned webhooks - reject with 401. (4) Write incoming ticket data to mcp_submissions via write_service :8772. (5) Extract mcp_name, requested_by, request_timestamp. (6) Include audit_log entry for every inbound. Priority 0.92 per Phase 9 spec. Do NOT implement outbound ServiceNow calls - only inbound receives."
+}

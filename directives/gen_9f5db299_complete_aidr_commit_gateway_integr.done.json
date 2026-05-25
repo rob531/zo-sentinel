@@ -1,0 +1,9 @@
+{
+  "task": "complete_aidr_commit_gateway_integration",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Complete integration for aidr_commit_gateway.py (built 2026-04-17) per Appendix A. This daemon is the AiDr commit bridge and MUST: (1) accept commit request via POST, (2) query trust_synthesiser_v2 for verdict, (3) compute injection_resilience score via pi_scorer, (4) include injection_resilience score in commit payload to AiDr, (5) NEVER auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override flag. MUST NOT route traffic or act as proxy. Commit payload must include full signal summary. Write audit log entry for every commit decision. Use write_service :8772. Heartbeat every 60s. Priority 0.90 per Phase 9 directive candidates."
+}

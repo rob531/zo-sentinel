@@ -1,0 +1,9 @@
+{
+  "task": "extend_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_completeness.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.82,
+  "description": "Complete ServiceNow connector wiring per spec Appendix A. snow_connector.py was built 2026-04-23 but integration into approval_workflow.py is incomplete. Must: (1) verify snow_connector.py exposes correct write_service interface, (2) add webhook endpoint on :8780 for incoming SNOW ticket callbacks, (3) add ServiceNow OAuth token refresh mechanism with 1h expiry handling, (4) add signed-payload validation per spec section 7 (never accept unsigned webhooks), (5) create audit_log entries for all incoming webhooks. Numbered constraints: MUST validate request signature; MUST store SNOW ticket correlation ID; MUST NOT auto-approve servers from webhooks without analyst review. Phase 9 integration work. See Phase 9 MUST/MUST NOT rules in spec."
+}

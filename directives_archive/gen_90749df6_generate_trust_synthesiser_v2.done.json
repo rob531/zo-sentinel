@@ -1,0 +1,9 @@
+{
+  "task": "generate_trust_synthesiser_v2",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Dynamic weight configuration for trust synthesis. Read weights from mcp_policy_rules or config table, support runtime adjustment via write_service :8772. Emit VERDICT_CHANGED events to mesh_events table. Extend current trust_synthesiser.py logic with configurable signal weights and confidence thresholds."
+}

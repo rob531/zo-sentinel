@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_build",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Phase 9 enterprise integration. CrowdStrike AI Defense Runtime commit bridge. MUST/MUST NOT rules: (1) MUST check ZO-SENTINEL verdict before forwarding commit to AiDr. (2) MUST NOT auto-commit MCPs with verdict CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override. (3) MUST include injection_resilience score in commit payload. (4) MUST route verdict-check through inference_router on :8773. (5) MUST NOT call AiDr API directly from daemons \u2014 all external I/O through this gateway. (6) MUST log all commit decisions to audit_log. Cites PROMPT_INJECTION_PLAN.md explicitly. No blocking input() calls."
+}

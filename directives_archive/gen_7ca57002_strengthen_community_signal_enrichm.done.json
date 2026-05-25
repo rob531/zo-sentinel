@@ -1,0 +1,9 @@
+{
+  "task": "strengthen_community_signal_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Improved version of community_signal_enrichment addressing signal quality WEAK verdict. Must produce highly distinct scores (currently low variety). Uses community metrics: stars count, download velocity, GitHub activity signals if available, npm weekly downloads trend. Reads at minimum 5 distinct metadata fields. Must generate >20 distinct score values across synthetic test corpus. Pure function, no DB writes, no network. Explicit output_file field required per chain directive safety rule."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "complete_sentinel_external_api_doc",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Complete the external API reference documentation. MUST document: (1) :8791 read-only surface, (2) X-API-Key authentication, (3) rate-limit 60 req/min/key, (4) all endpoints with request/response shapes matching DB schema (audit_log.timestamp, mcp_submissions.mcp_name, mcp_risk_register.computed_at, mcp_policy_rules.rule_type+pattern per DB_SCHEMA.md). Priority 0.85 \u2014 already declared as remaining high-value target."
+}

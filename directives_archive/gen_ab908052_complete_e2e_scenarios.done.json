@@ -1,0 +1,9 @@
+{
+  "task": "complete_e2e_scenarios",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Quality pass: complete e2e_scenarios.py per spec Appendix A. Must include three canonical flows: (1) new MCP submission \u2192 signal scored \u2192 verdict \u2192 attestation \u2192 UI visible, (2) smoke test chain validation, (3) approval_workflow \u2192 manual_override \u2192 attestation_engine lifecycle. Each scenario must use write_service queries to verify state transitions. Must log scenario results to audit_log. Test all six verdict tiers and INSUFFICIENT state."
+}

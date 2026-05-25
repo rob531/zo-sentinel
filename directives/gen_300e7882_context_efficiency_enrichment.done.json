@@ -1,0 +1,9 @@
+{
+  "task": "context_efficiency_enrichment",
+  "handler": "generate_file",
+  "output_file": "context_efficiency_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Pure enrichment module consuming mcp_tool_schema_patterns.py output. Computes context_efficiency score for MCP servers based on progressive-disclosure vs brute-force enumeration patterns. Expose compute_score(metadata) returning (float, dict). Score progressive-disclosure servers higher. Reads tool_count, pattern type, schema_complexity from metadata. No DB writes, no network, no imports of protected modules. Must produce >=20 distinct scores. Attribution required: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14."
+}

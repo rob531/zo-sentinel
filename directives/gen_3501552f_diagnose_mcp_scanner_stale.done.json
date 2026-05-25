@@ -1,0 +1,11 @@
+{
+  "task": "diagnose_mcp_scanner_stale",
+  "handler": "generate_file",
+  "output_file": "diagnose_mcp_scanner_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to diagnose why mcp_scanner daemon is 5h26m stale (heartbeat >14400s threshold). Check: (1) process still running via psutil, (2) last log entry timestamp, (3) pending work in queue, (4) write_service connectivity. Output JSON with findings: {process_alive: bool, last_log: str, last_heartbeat: str, queue_depth: int, recommendations: []}. No fixes \u2014 diagnostic only. mcp_scanner is protected, do not rebuild.",
+  "reads": [],
+  "next_directive": {}
+}

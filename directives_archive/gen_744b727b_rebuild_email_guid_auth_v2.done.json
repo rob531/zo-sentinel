@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_email_guid_auth_v2",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_v2.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Rebuild email_guid_auth_v2.py addressing import chain failures. The module has failed smoke tests due to import errors in dependency chain. Verify all imports resolve correctly. Must expose check_single_instance, remove_pid_file, signal_handler, ws_write, ws_query functions. Uses WRITE_SERVICE_URL on PORT. Protected file email_guid_auth_v2.py exists but needs verification. Reference: failed build_email_guid_auth and build_email_guid_auth_compact in this cycle."
+}

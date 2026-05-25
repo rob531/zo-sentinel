@@ -1,0 +1,10 @@
+{
+  "directive_id": "sentinel_auth_api_keys",
+  "goal": "Add token-based auth + API key management to Zo Sentinel (Phase 2).\n\nBACKEND (ui_server.py):\n1. Auth middleware: check Authorization: Bearer <token> header on all /api/* routes\n   - Query auth_tokens WHERE token_id=<token> AND used=false AND expires_at > now()\n   - If missing/invalid: return 401 {error: unauthorized}\n   - Public routes (no auth): /health, /app/*, /api/submissions (POST only)\n\n2. New routes:\n   POST /api/auth/token: generate new token\n     Body: {action, mcp_name?, admin_email, scope: admin|analyst|viewer}\n     Returns: {token_id, expires_at, scope}\n   GET /api/auth/tokens: list all active tokens (admin only)\n   DELETE /api/auth/tokens/{token_id}: revoke token (admin only)\n\n3. auth_tokens table (already exists):\n   token_id(PK), action, mcp_name, submission_id, admin_email, expires_at, used, used_at\n   Add column: scope VARCHAR DEFAULT analyst\n   Add column: created_at TIMESTAMP DEFAULT now()\n\nFRONTEND (ui_react/src/pages/Settings.tsx):\n- API Keys section: list tokens, generate new, revoke\n- Token display: show once on creation, then masked\n- Scope selector: admin / analyst / viewer\n- Expiry: 30d / 90d / never\n\nAUTH FLOW:\n- First visit: show setup wizard to generate admin token\n- Store token in localStorage (warn: for dev only)\n- All fetch() calls in zo-bridge.ts include Authorization header",
+  "output_path": "/home/workspace/zo_sentinel/ui_server.py",
+  "constraints": ["auth_tokens table already exists -- do not recreate", "Public routes must remain public", "Never log token values", "scope column may need migration"],
+  "success_criteria": ["Unauthenticated /api/servers returns 401", "Valid token returns 200", "Token generation endpoint works", "UI settings page lists tokens"],
+  "complexity": "high",
+  "source": "cto_directive",
+  "generated_at": "2026-05-20T23:00:00"
+}

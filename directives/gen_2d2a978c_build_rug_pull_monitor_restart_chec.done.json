@@ -1,0 +1,12 @@
+{
+  "task": "build_rug_pull_monitor_restart_check",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_stale_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module that checks rug_pull_monitor.py heartbeat age (currently 650h50m stale, threshold 28800s). Queries service_health for last_heartbeat timestamp. Inspects the daemon source to verify it has a heartbeat loop and is configured in supervisord_sentinel_full.conf. Outputs recommendation: whether the daemon needs manual restart, service file correction, or if heartbeat logic is missing. DO NOT generate a restart directive or rebuild the file (rug_pull_monitor is protected).",
+  "reads": [
+    "rug_pull_monitor.py"
+  ]
+}

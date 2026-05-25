@@ -1,0 +1,9 @@
+{
+  "task": "temporal_stability_signal_auditor",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_signal_auditor.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Diagnostic module to audit temporal_stability signal discrimination. Reads mcp_signal_scores table via write_service /query WHERE dimension='temporal_stability'. Computes distinct score count and range. Reports back with verdict: OK if >20 distinct scores, WEAK if fewer. Signal quality diagnostic shows temporal_stability as WEAK with range 40-90 but low variety. This auditor identifies exactly which MCPs share identical scores and why. Does NOT write to database. Used by signal_discrimination_auditor.py pattern but focused specifically on temporal_stability enrichment gap."
+}

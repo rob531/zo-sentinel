@@ -1,0 +1,15 @@
+{
+  "task": "build_runtime_behaviour_profiler",
+  "handler": "generate_file",
+  "output_file": "runtime_behaviour_profiler.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.88,
+  "reads": [
+    "schema.py",
+    "mesh_bridge.py"
+  ],
+  "description": "Runtime behaviour profiler daemon. Reads mesh_events for MCP-related events via ws_query WHERE event_type IN (assessment_requested, mcp_tool_called, mcp_verdict_update) AND created_at > now()-24h. Profile per server_id: call_frequency (calls/hour), unique_callers, time_of_day_distribution (suspicious if only 2-4am calls), payload_size_variance (consistent large payloads = data exfiltration signal). Anomaly detection: call_frequency > 100/hr = rate_abuse, only_after_hours_calls (>90% between 0:00-6:00 UTC) = evasion_pattern, payload_size > 10x median = bulk_exfiltration_attempt. ws_write mcp_threat_associations for each anomaly. ws_write mcp_signal_scores temporal_stability and community_signal updates. Write BEHAVIOUR_PROFILE.md. Poll 3600s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

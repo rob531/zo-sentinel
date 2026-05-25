@@ -1,0 +1,9 @@
+{
+  "task": "e2e_scenarios_py",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "End-to-end test scenarios for three canonical flows. Scenario 1 (new MCP): submit new MCP via mcp_scanner, verify signal_analyser runs all enrichments, verify trust_synthesiser assigns verdict, verify attestation_engine writes attestation, verify UI shows result. Scenario 2 (threat match): ingest known-threat signal via threat_intel_ingestor, verify risk_ranker elevates score, verify verdict downgrades. Scenario 3 (admin override): set manual verdict via manual_override_api, verify audit_log entry, verify UI reflects override. Each scenario uses write_service /query to verify DB state at each step. Exits 0 on success, non-zero with diagnostic output on failure."
+}

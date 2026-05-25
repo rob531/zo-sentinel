@@ -1,0 +1,11 @@
+{
+  "task": "cto_2026_05_07_sentinel_ui_evidence_drawer_route",
+  "handler": "generate_file",
+  "output_file": "sentinel_ui_evidence_drawer_route.py",
+  "complexity": "low",
+  "phase": "15",
+  "priority": 0.85,
+  "description": "Build a FastAPI APIRouter module exposing GET /evidence/<server_id>/<signal_name> and GET /evidence/<server_id>. Returns the evidence dict that signal_analyser stored when scoring this MCP-on-this-signal so reviewers can SEE why a verdict was reached. Query via WriteService /query endpoint (POST http://127.0.0.1:8772/query, 5s httpx timeout). For /evidence/<server_id>/<signal_name>: SQL `SELECT signal_name, score_value, evidence, scored_at FROM mcp_signal_scores WHERE server_id = ? AND signal_name = ? ORDER BY scored_at DESC LIMIT 1` parameterised. If no row found return 404 {error: 'no_evidence'}. If row found return {server_id, signal_name, score_value, evidence: <parsed_dict>, scored_at}. The evidence column is stored as JSON text - parse it with json.loads inside try/except that on parse failure returns {error: 'evidence_parse_failed', raw: <first 500 chars>}. For /evidence/<server_id>: returns ALL signals' latest evidence for that server as {server_id, signals: [{signal_name, score_value, evidence, scored_at}]} ordered by signal_name. Set Cache-Control: 'public, max-age=120'. 503 when WriteService unavailable with body {error: 'writeservice_unavailable'}. FileHandler logging to /home/workspace/logs/sentinel_ui_evidence.log at INFO per request. Module exports `router`. WHY NOW: signal_diversity_panel tells you THAT signals discriminate; evidence drawer tells you WHY any specific score was assigned. Together these two routes let a customer drill from 'show me distribution' to 'show me reasoning for this exact MCP-signal cell'. Defensibility lives in the drilldown. CONSTRAINTS: FileHandler ONLY for logging. Read-only - no writes. Parameterise server_id and signal_name via the WriteService params payload - never string-interpolate. Truncate raw evidence preview to 500 chars on parse failure. Module exports `router`. 503 on WriteService unavailable. No import-time network calls.",
+  "reads": [],
+  "next_directive": {}
+}

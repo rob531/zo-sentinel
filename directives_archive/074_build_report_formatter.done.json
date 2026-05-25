@@ -1,0 +1,12 @@
+{
+  "task": "build_report_formatter",
+  "handler": "generate_file",
+  "output_file": "report_formatter.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.68,
+  "reads": [],
+  "description": "Markdown report formatter utility. Functions: header(text,level=1)->str, table(headers,rows)->str (markdown table), badge(text,style)->str (CRITICAL/HIGH/MEDIUM/LOW emoji badges), progress_bar(value,max_val,width=20)->str (ASCII \u2588\u2588\u2588\u2588\u2591\u2591\u2591 bar), section(title,content)->str. verdict_badge(verdict)->str: maps verdict to emoji+text (TRUSTED_GENERAL=\u2705,TRUSTED_RESEARCH=\ud83d\udd35,ENTERPRISE_CONTROLLED=\ud83d\udfe1,CAUTION_LIMITED=\ud83d\udfe0,HIGH_RISK_ISOLATED=\ud83d\udd34,KNOWN_THREAT=\ud83d\udc80,INSUFFICIENT=\u26aa). Used by all report-generating daemons. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

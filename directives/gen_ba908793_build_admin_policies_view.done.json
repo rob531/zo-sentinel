@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies_view",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Admin UI surface for managing mcp_policy_rules records. Must interface with write_service at :8772 for CRUD operations. Table: mcp_policy_rules with columns rule_type (PRIORITY_OVERRIDE, RISK_FLOOR, SIGNAL_WEIGHT_ADJUST, EXEMPTION_CONDITION) and pattern (regex string). Must include create, read, update, delete operations with audit_log entries for all mutations. Binds localhost port 8790. Do not propose GraphQL or any out-of-scope surface per section 9."
+}

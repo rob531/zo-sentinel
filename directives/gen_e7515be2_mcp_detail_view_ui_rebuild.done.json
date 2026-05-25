@@ -1,0 +1,9 @@
+{
+  "task": "mcp_detail_view_ui_rebuild",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild mcp_detail_view_ui.html module that failed in build. Was built at 14:25:04 but failed smoke. Check for template syntax errors or missing static asset references. Interface: module type, exposes mcp_detail_view_ui component for port 8790. Ensure all data-bindings reference correct signal field names from DB_SCHEMA.md. Re-test against enrichment_evidence.sql gating."
+}

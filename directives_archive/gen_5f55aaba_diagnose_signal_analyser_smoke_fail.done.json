@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_signal_analyser_smoke_failure",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_smoke.py",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.85,
+  "description": "Diagnostic module to investigate why signal_analyser.py smoke test is failing. The traceback shows import errors at line 10 in <frozen importlib>. Common causes: circular import, missing dependency, wrong module path. Check signal_analyser.py imports vs available modules. DO NOT modify signal_analyser.py directly - protected file. Instead output a diagnostic report of what imports are failing and why. Write report to a temporary diagnostic output for human review."
+}

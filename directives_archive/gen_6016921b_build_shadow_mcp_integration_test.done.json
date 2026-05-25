@@ -1,0 +1,9 @@
+{
+  "task": "build_shadow_mcp_integration_test",
+  "handler": "generate_file",
+  "output_file": "shadow_mcp_indicators_test.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.78,
+  "description": "Test module for shadow_mcp_indicators.py. Exercises detection against known URLs (mcp.stripe.com, mcp.cloudflare.com, /mcp/sse paths) and negative cases (non-MCP endpoints). Uses pytest. No network calls. No DB access. Pure library test. Follows pattern of existing test files in the project."
+}

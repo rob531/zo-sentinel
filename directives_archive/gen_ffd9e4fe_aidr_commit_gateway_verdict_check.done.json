@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_verdict_check",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_enforcer.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Enforce ZO-SENTINEL verdict check before AiDr commit. Phase 9 integration. MUST rules: (1) Query mcp_server_registry.verdict via write_service :8772 before any commit. (2) MUST block CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts unless mcp_exemptions has explicit override row. (3) MUST include injection_resilience dimension score in commit payload. (4) Log all commit decisions to audit_log with target_server_id, decision, and reason. (5) NEVER auto-commit KNOWN_THREAT servers. Read aidr_commit_gateway.py and trust_synthesiser_v2.py as inputs."
+}

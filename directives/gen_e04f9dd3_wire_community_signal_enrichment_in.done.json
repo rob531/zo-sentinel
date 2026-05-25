@@ -1,0 +1,14 @@
+{
+  "task": "wire_community_signal_enrichment_into_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Wire community_signal_enrichment_v2.py into signal_analyser.py so it computes and writes community_signal_enrichment rows to mcp_signal_enrichments. Must use compute_score(metadata) signature, write via write_service :8772, read metadata fields (stars, community_size, download_count, registry_source). Community_signal has 34 distinct values \u2014 ensure wiring does not degrade this. Add to signal_analyser polling loop for MCPs missing community_signal_enrichment.",
+  "reads": [
+    "signal_analyser.py",
+    "community_signal_enrichment_v2.py"
+  ],
+  "next_directive": {}
+}

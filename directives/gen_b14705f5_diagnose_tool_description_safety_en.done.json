@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_tool_description_safety_enrichment_effectiveness",
+  "handler": "generate_file",
+  "output_file": "diagnose_tool_description_safety_enrichment_effectiveness.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnose why tool_description_safety signal has only 3 distinct values despite tool_description_safety_enrichment.py being built 2026-04-30. Reads mcp_signal_enrichments table filtered by signal_type='tool_description_safety', counts distinct scores, checks sample evidence blobs, and reports on metadata field usage. Does NOT import signal_analyser.py or any protected module. Exports run() that writes diagnostic to service_health. Priority HIGH because weak signal blocks context_efficiency_enrichment (Appendix B deferred work)."
+}

@@ -1,0 +1,741 @@
+{
+  "run_at": "2026-04-15T16:43:28.620448+00:00",
+  "level_reached": 4,
+  "summary": {
+    "passed": 171,
+    "failed": 11,
+    "skipped": 3
+  },
+  "failed": [
+    {
+      "test": "smoke/RETIRED_fix_sequence_tables_restart_pipeline.py",
+      "detail": "wiring violation: forbidden duckdb.connect() -- use write_service"
+    },
+    {
+      "test": "smoke/RETIRED_run_architect_test.py",
+      "detail": "wiring violation: write_service() called as function -- use requests.post"
+    },
+    {
+      "test": "smoke/build_watchdog.py",
+      "detail": "wiring violation: executescript() not supported in DuckDB"
+    },
+    {
+      "test": "smoke/builder_test_hooks.py",
+      "detail": "wiring violation: write_service() called as function -- use requests.post"
+    },
+    {
+      "test": "smoke/config_validator.py",
+      "detail": "wiring violation: write_service() called as function -- use requests.post"
+    },
+    {
+      "test": "smoke/gen_directives.py",
+      "detail": "wiring violation: write_service() called as function -- use requests.post"
+    },
+    {
+      "test": "smoke/queue_maturation.py",
+      "detail": "wiring violation: forbidden duckdb.connect() -- use write_service"
+    },
+    {
+      "test": "smoke/sentinel_director.py",
+      "detail": "wiring violation: write_service() called as function -- use requests.post"
+    },
+    {
+      "test": "smoke/run_gen.sh",
+      "detail": "too short (53b) -- likely stub"
+    },
+    {
+      "test": "smoke/zo_sentinel_test_runner.py",
+      "detail": "wiring violation: write_service() called as function -- use requests.post"
+    },
+    {
+      "test": "pipeline/threat_write",
+      "detail": "[]"
+    }
+  ],
+  "passed": [
+    {
+      "test": "smoke/RETIRED_run_schema_bootstrap_now.py",
+      "detail": "12479b"
+    },
+    {
+      "test": "smoke/__init__.py",
+      "detail": "275b"
+    },
+    {
+      "test": "smoke/add_auth_table.py",
+      "detail": "628b"
+    },
+    {
+      "test": "smoke/add_dedup_to_factory.py",
+      "detail": "2091b"
+    },
+    {
+      "test": "smoke/advanced_filter_api.py",
+      "detail": "9448b"
+    },
+    {
+      "test": "smoke/alert_manager.py",
+      "detail": "13771b"
+    },
+    {
+      "test": "smoke/analyst_feedback_loop.py",
+      "detail": "17643b"
+    },
+    {
+      "test": "smoke/anomaly_detector.py",
+      "detail": "19024b"
+    },
+    {
+      "test": "smoke/api_gateway.py",
+      "detail": "11745b"
+    },
+    {
+      "test": "smoke/approval_anomaly_detector.py",
+      "detail": "14092b"
+    },
+    {
+      "test": "smoke/approval_workflow.py",
+      "detail": "10084b"
+    },
+    {
+      "test": "smoke/arcade_toolbench_ingestor.py",
+      "detail": "4309b"
+    },
+    {
+      "test": "smoke/assessment_auditor.py",
+      "detail": "12365b"
+    },
+    {
+      "test": "smoke/assessment_scheduler.py",
+      "detail": "12715b"
+    },
+    {
+      "test": "smoke/attestation_engine.py",
+      "detail": "12404b"
+    },
+    {
+      "test": "smoke/audit_trail.py",
+      "detail": "17217b"
+    },
+    {
+      "test": "smoke/backup_service.py",
+      "detail": "10904b"
+    },
+    {
+      "test": "smoke/behavioral_analyser.py",
+      "detail": "11859b"
+    },
+    {
+      "test": "smoke/bootstrap_missing.py",
+      "detail": "5769b"
+    },
+    {
+      "test": "smoke/build_watcher_api.py",
+      "detail": "3943b"
+    },
+    {
+      "test": "smoke/bulk_assess_api.py",
+      "detail": "13738b"
+    },
+    {
+      "test": "smoke/certificate_analyser.py",
+      "detail": "17407b"
+    },
+    {
+      "test": "smoke/chain_patch.py",
+      "detail": "1049b"
+    },
+    {
+      "test": "smoke/comparison_api.py",
+      "detail": "10689b"
+    },
+    {
+      "test": "smoke/compliance_export_service.py",
+      "detail": "5436b"
+    },
+    {
+      "test": "smoke/compliance_reporter.py",
+      "detail": "18645b"
+    },
+    {
+      "test": "smoke/context_injector.py",
+      "detail": "5268b"
+    },
+    {
+      "test": "smoke/context_manipulation_detector.py",
+      "detail": "14020b"
+    },
+    {
+      "test": "smoke/create_auth_tokens.py",
+      "detail": "685b"
+    },
+    {
+      "test": "smoke/cross_registry_correlator.py",
+      "detail": "13375b"
+    },
+    {
+      "test": "smoke/cve_enricher.py",
+      "detail": "13714b"
+    },
+    {
+      "test": "smoke/daily_digest.py",
+      "detail": "20092b"
+    },
+    {
+      "test": "smoke/dashboard_api.py",
+      "detail": "7746b"
+    },
+    {
+      "test": "smoke/data_validator.py",
+      "detail": "10956b"
+    },
+    {
+      "test": "smoke/db_utils.py",
+      "detail": "9548b"
+    },
+    {
+      "test": "smoke/deduplicator.py",
+      "detail": "11877b"
+    },
+    {
+      "test": "smoke/dependency_chain_auditor.py",
+      "detail": "20564b"
+    },
+    {
+      "test": "smoke/directive_factory.py",
+      "detail": "17476b"
+    },
+    {
+      "test": "smoke/directive_validator.py",
+      "detail": "2385b"
+    },
+    {
+      "test": "smoke/email_guid_auth.py",
+      "detail": "6501b"
+    },
+    {
+      "test": "smoke/emergency_fix.py",
+      "detail": "6981b"
+    },
+    {
+      "test": "smoke/enterprise_architect_loop.py",
+      "detail": "26188b"
+    },
+    {
+      "test": "smoke/env_config.py",
+      "detail": "842b"
+    },
+    {
+      "test": "smoke/error_reporter.py",
+      "detail": "12975b"
+    },
+    {
+      "test": "smoke/exemption_manager.py",
+      "detail": "7911b"
+    },
+    {
+      "test": "smoke/false_positive_tracker.py",
+      "detail": "13193b"
+    },
+    {
+      "test": "smoke/fix_sequence_tables.py",
+      "detail": "2336b"
+    },
+    {
+      "test": "smoke/fix_write_service_pk.py",
+      "detail": "1765b"
+    },
+    {
+      "test": "smoke/forensic_detail_api.py",
+      "detail": "11367b"
+    },
+    {
+      "test": "smoke/full_schema_bootstrap.py",
+      "detail": "9647b"
+    },
+    {
+      "test": "smoke/github_pr_checker.py",
+      "detail": "14569b"
+    },
+    {
+      "test": "smoke/github_repo_velocity.py",
+      "detail": "18018b"
+    },
+    {
+      "test": "smoke/graphql_schema.py",
+      "detail": "10322b"
+    },
+    {
+      "test": "smoke/http_retry.py",
+      "detail": "3386b"
+    },
+    {
+      "test": "smoke/incident_webhook_dispatcher.py",
+      "detail": "10102b"
+    },
+    {
+      "test": "smoke/inject_directive.py",
+      "detail": "12242b"
+    },
+    {
+      "test": "smoke/integration_test.py",
+      "detail": "9070b"
+    },
+    {
+      "test": "smoke/known_threats.py",
+      "detail": "4707b"
+    },
+    {
+      "test": "smoke/live_threat_cross_referencer.py",
+      "detail": "10079b"
+    },
+    {
+      "test": "smoke/lookup.py",
+      "detail": "14761b"
+    },
+    {
+      "test": "smoke/make_modelfiles.py",
+      "detail": "2863b"
+    },
+    {
+      "test": "smoke/manifest_blast_radius.py",
+      "detail": "18194b"
+    },
+    {
+      "test": "smoke/manual_override_api.py",
+      "detail": "13375b"
+    },
+    {
+      "test": "smoke/mcp_age_risk_scorer.py",
+      "detail": "13303b"
+    },
+    {
+      "test": "smoke/mcp_bootstrap.py",
+      "detail": "6900b"
+    },
+    {
+      "test": "smoke/mcp_fingerprinter.py",
+      "detail": "19075b"
+    },
+    {
+      "test": "smoke/mcp_impersonation_detector.py",
+      "detail": "18177b"
+    },
+    {
+      "test": "smoke/mcp_profiler.py",
+      "detail": "21353b"
+    },
+    {
+      "test": "smoke/mcp_scanner.py",
+      "detail": "12488b"
+    },
+    {
+      "test": "smoke/mesh_bridge.py",
+      "detail": "13673b"
+    },
+    {
+      "test": "smoke/metrics_exporter.py",
+      "detail": "12090b"
+    },
+    {
+      "test": "smoke/minimax_fix.py",
+      "detail": "1480b"
+    },
+    {
+      "test": "smoke/minimax_patch.py",
+      "detail": "1403b"
+    },
+    {
+      "test": "smoke/morning_fix.py",
+      "detail": "2610b"
+    },
+    {
+      "test": "smoke/notification_hub.py",
+      "detail": "10091b"
+    },
+    {
+      "test": "smoke/npm_typo_squatter.py",
+      "detail": "16151b"
+    },
+    {
+      "test": "smoke/npm_webhook_handler.py",
+      "detail": "8622b"
+    },
+    {
+      "test": "smoke/patch_search_multiterm.py",
+      "detail": "1207b"
+    },
+    {
+      "test": "smoke/pattern_learner.py",
+      "detail": "20899b"
+    },
+    {
+      "test": "smoke/performance_monitor.py",
+      "detail": "10082b"
+    },
+    {
+      "test": "smoke/pipeline_health.py",
+      "detail": "6815b"
+    },
+    {
+      "test": "smoke/policy_engine.py",
+      "detail": "22583b"
+    },
+    {
+      "test": "smoke/policy_engine_v2.py",
+      "detail": "15609b"
+    },
+    {
+      "test": "smoke/prompt_injection_scanner.py",
+      "detail": "11021b"
+    },
+    {
+      "test": "smoke/queue_manager.py",
+      "detail": "10926b"
+    },
+    {
+      "test": "smoke/quick_seed.py",
+      "detail": "8055b"
+    },
+    {
+      "test": "smoke/rate_limiter.py",
+      "detail": "8643b"
+    },
+    {
+      "test": "smoke/registry_api.py",
+      "detail": "4844b"
+    },
+    {
+      "test": "smoke/registry_reconciler.py",
+      "detail": "16578b"
+    },
+    {
+      "test": "smoke/remediation_advisor.py",
+      "detail": "29694b"
+    },
+    {
+      "test": "smoke/report_formatter.py",
+      "detail": "6117b"
+    },
+    {
+      "test": "smoke/risk_ranker.py",
+      "detail": "14215b"
+    },
+    {
+      "test": "smoke/rug_pull_monitor.py",
+      "detail": "12448b"
+    },
+    {
+      "test": "smoke/run_schema.py",
+      "detail": "1325b"
+    },
+    {
+      "test": "smoke/runtime_behaviour_profiler.py",
+      "detail": "21235b"
+    },
+    {
+      "test": "smoke/schema.py",
+      "detail": "3742b"
+    },
+    {
+      "test": "smoke/schema_v2.py",
+      "detail": "3769b"
+    },
+    {
+      "test": "smoke/scoring_cache.py",
+      "detail": "2878b"
+    },
+    {
+      "test": "smoke/search_api.py",
+      "detail": "13694b"
+    },
+    {
+      "test": "smoke/security_reviewer.py",
+      "detail": "2498b"
+    },
+    {
+      "test": "smoke/sentinel_cli.py",
+      "detail": "22332b"
+    },
+    {
+      "test": "smoke/sentinel_sdk.py",
+      "detail": "12688b"
+    },
+    {
+      "test": "smoke/shodan_exposure_correlator.py",
+      "detail": "11129b"
+    },
+    {
+      "test": "smoke/signal_analyser.py",
+      "detail": "13858b"
+    },
+    {
+      "test": "smoke/signal_drift_detector.py",
+      "detail": "8487b"
+    },
+    {
+      "test": "smoke/signal_weights.py",
+      "detail": "1072b"
+    },
+    {
+      "test": "smoke/similarity_scorer.py",
+      "detail": "18056b"
+    },
+    {
+      "test": "smoke/smithery_scan_snippet.py",
+      "detail": "1729b"
+    },
+    {
+      "test": "smoke/smoke_evolution_agent.py",
+      "detail": "16823b"
+    },
+    {
+      "test": "smoke/stale_data_cleaner.py",
+      "detail": "9360b"
+    },
+    {
+      "test": "smoke/startup_checker.py",
+      "detail": "2735b"
+    },
+    {
+      "test": "smoke/stateful_trust_monitor.py",
+      "detail": "10900b"
+    },
+    {
+      "test": "smoke/submission_validator.py",
+      "detail": "9553b"
+    },
+    {
+      "test": "smoke/supervisor_auto_updater.py",
+      "detail": "13359b"
+    },
+    {
+      "test": "smoke/sybil_burst_detector.py",
+      "detail": "19356b"
+    },
+    {
+      "test": "smoke/test_runner_daemon.py",
+      "detail": "1884b"
+    },
+    {
+      "test": "smoke/text_patterns.py",
+      "detail": "3800b"
+    },
+    {
+      "test": "smoke/threat_correlator.py",
+      "detail": "13915b"
+    },
+    {
+      "test": "smoke/threat_feed_aggregator.py",
+      "detail": "26809b"
+    },
+    {
+      "test": "smoke/threat_intel_ingestor.py",
+      "detail": "10765b"
+    },
+    {
+      "test": "smoke/tool_schema_deep_scanner.py",
+      "detail": "24768b"
+    },
+    {
+      "test": "smoke/trend_analyser.py",
+      "detail": "15556b"
+    },
+    {
+      "test": "smoke/trust_score_time_series.py",
+      "detail": "12672b"
+    },
+    {
+      "test": "smoke/trust_synthesiser.py",
+      "detail": "11707b"
+    },
+    {
+      "test": "smoke/ui_server.py",
+      "detail": "16627b"
+    },
+    {
+      "test": "smoke/url_analyser.py",
+      "detail": "1932b"
+    },
+    {
+      "test": "smoke/vendor_concentration_monitor.py",
+      "detail": "16240b"
+    },
+    {
+      "test": "smoke/verdict_explainer.py",
+      "detail": "13709b"
+    },
+    {
+      "test": "smoke/verdict_taxonomy.py",
+      "detail": "1570b"
+    },
+    {
+      "test": "smoke/watch.py",
+      "detail": "13227b"
+    },
+    {
+      "test": "smoke/webhook_dispatcher.py",
+      "detail": "10022b"
+    },
+    {
+      "test": "smoke/wire_test_hooks.py",
+      "detail": "5383b"
+    },
+    {
+      "test": "smoke/builder_eye_dashboard.html",
+      "detail": "13230b HTML+JS"
+    },
+    {
+      "test": "smoke/builder_eye_dashboard_hr.html",
+      "detail": "154b HTML"
+    },
+    {
+      "test": "smoke/builder_eye_dashboard_public.html",
+      "detail": "407b HTML"
+    },
+    {
+      "test": "smoke/dashboard.html",
+      "detail": "22247b HTML+JS"
+    },
+    {
+      "test": "smoke/mcp_detail_view.html",
+      "detail": "14727b HTML+JS"
+    },
+    {
+      "test": "smoke/apply_patches.sh",
+      "detail": "1590b shell"
+    },
+    {
+      "test": "smoke/build_zo_coder.sh",
+      "detail": "3251b shell"
+    },
+    {
+      "test": "smoke/create_personas.sh",
+      "detail": "455b shell"
+    },
+    {
+      "test": "smoke/fix_sentinel_builder.sh",
+      "detail": "4606b shell"
+    },
+    {
+      "test": "smoke/requeue_failed.sh",
+      "detail": "1918b shell"
+    },
+    {
+      "test": "smoke/run_bootstrap.sh",
+      "detail": "197b shell"
+    },
+    {
+      "test": "smoke/start_all.sh",
+      "detail": "2791b shell"
+    },
+    {
+      "test": "smoke/start_sentinel.sh",
+      "detail": "3612b shell"
+    },
+    {
+      "test": "smoke/status.sh",
+      "detail": "1948b shell"
+    },
+    {
+      "test": "smoke/unstick_builder.sh",
+      "detail": "828b shell"
+    },
+    {
+      "test": "smoke/mock_write_service.py",
+      "detail": "6606b"
+    },
+    {
+      "test": "smoke/smoke_test.py",
+      "detail": "9501b"
+    },
+    {
+      "test": "smoke/test_known_threats.py",
+      "detail": "3453b"
+    },
+    {
+      "test": "smoke/test_scoring.py",
+      "detail": "9094b"
+    },
+    {
+      "test": "smoke/test_wiring.py",
+      "detail": "13814b"
+    },
+    {
+      "test": "smoke/ui_endpoint_tests.py",
+      "detail": "18339b"
+    },
+    {
+      "test": "phase/2",
+      "detail": "4 files"
+    },
+    {
+      "test": "phase/3",
+      "detail": "4 files"
+    },
+    {
+      "test": "phase/4",
+      "detail": "3 files"
+    },
+    {
+      "test": "phase/5",
+      "detail": "2 files"
+    },
+    {
+      "test": "phase/6",
+      "detail": "1 files"
+    },
+    {
+      "test": "phase/7",
+      "detail": "2 files"
+    },
+    {
+      "test": "phase/8",
+      "detail": "1 files"
+    },
+    {
+      "test": "phase/9",
+      "detail": "2 files"
+    },
+    {
+      "test": "phase/10",
+      "detail": "2 files"
+    },
+    {
+      "test": "pipeline/write_service",
+      "detail": ""
+    },
+    {
+      "test": "pipeline/schema",
+      "detail": "6 tables"
+    },
+    {
+      "test": "pipeline/seed",
+      "detail": ""
+    },
+    {
+      "test": "pipeline/seed_verify",
+      "detail": ""
+    },
+    {
+      "test": "pipeline/injection_detection",
+      "detail": ""
+    },
+    {
+      "test": "pipeline/signal_scoring",
+      "detail": "score=77.2 verdict=TRUSTED_GENERAL"
+    },
+    {
+      "test": "pipeline/verdict_write",
+      "detail": "TRUSTED_GENERAL"
+    },
+    {
+      "test": "pipeline/risk_register",
+      "detail": ""
+    },
+    {
+      "test": "pipeline/attestation",
+      "detail": ""
+    }
+  ]
+}

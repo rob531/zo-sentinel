@@ -1,0 +1,9 @@
+{
+  "task": "build_github_pr_verdict_integration",
+  "handler": "generate_file",
+  "output_file": "github_pr_verdict_gate.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire github_pr_checker.py verdict check into github_pr_webhook_receiver.py. On PR webhook, query verdict via write_service and post status check. MUST use write_service at 127.0.0.1:8772 for verdict lookup (no direct DB). FAIL the PR check if verdict is HIGH_RISK_ISOLATED or KNOWN_THREAT. Follows inter-daemon communication rules per spec section 5."
+}

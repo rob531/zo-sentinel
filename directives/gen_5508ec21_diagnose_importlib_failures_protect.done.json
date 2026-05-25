@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_importlib_failures_protected",
+  "handler": "generate_file",
+  "output_file": "importlib_failure_diagnostic.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic probe for importlib failures in protected modules. Inspects registry_api.py, signal_analyser.py, rug_pull_monitor.py for ImportError/ModuleNotFoundError patterns. Parses top-level imports, identifies missing dependencies, and writes findings to service_diagnostics table via write_service. Protected files cannot be rebuilt; this diagnostic provides actionable information for operator resolution. Reads from ALREADY_BUILT list to confirm protected status. No DB writes except to service_diagnostics."
+}

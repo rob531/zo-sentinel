@@ -1,0 +1,9 @@
+{
+  "task": "build_mcp_tool_schema_patterns",
+  "handler": "generate_file",
+  "output_file": "mcp_tool_schema_patterns.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Build mcp_tool_schema_patterns.py per Appendix B of the spec. Pure library module \u2014 no daemons, no network, no DB writes, no imports of protected modules. Detects architectural patterns in MCP server tool definitions: (a) progressive-disclosure (\u22644 high-level tools), (b) brute-force enumeration (\u226520 tools), (c) hybrid. Must: (1) export analyze_tool_schema(tool_definitions: list) -> {pattern: str, tool_count: int, evidence: dict}, (2) include Cloudflare attribution docstring, (3) compile patterns at module load, (4) include if __name__ == '__main__' self-smoke with three known-good inputs. Feeds future context_efficiency signal. Reference: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14."
+}

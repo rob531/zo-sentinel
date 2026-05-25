@@ -1,0 +1,14 @@
+{
+  "task": "build_performance_monitor",
+  "handler": "generate_file",
+  "output_file": "performance_monitor.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.61,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Performance monitor daemon. Every 300s: measures response time for write_service /health, registry_api /health (port 8781), approval_workflow /health (port 8780), search_api /health (port 8782). Records latency ms in perf_metrics dict. If any service >500ms avg over 3 readings: ws_write mesh_events severity=WARNING event_type=performance_degradation. If service unreachable: severity=CRITICAL. Write PERFORMANCE_LOG.md with rolling 24h stats. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

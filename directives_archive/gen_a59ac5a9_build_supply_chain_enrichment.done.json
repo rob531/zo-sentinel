@@ -1,0 +1,9 @@
+{
+  "task": "build_supply_chain_enrichment",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.97,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). CRITICAL: supply_chain signal is flat 0.0 across all servers \u2014 this module MUST introduce real discrimination. Must read MULTIPLE fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars. Compute partial scores for each field and combine. No DB writes, no network, no imports of protected modules. Complete in under 2 seconds. Returns evidence dict listing fields used and partial scores. Will be exercised by enrichment_harness.py and gated by enrichment_evidence.sql before integration."
+}

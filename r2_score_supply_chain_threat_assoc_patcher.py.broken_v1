@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""
+r2_score_supply_chain_threat_assoc_patcher.py
+Patches signal_analyser.py score_supply_chain to consume threat-intel via mcp_threat_associations.
+Exit codes: 0=already patched or success, 1=patch failed, 2=smoke test failed, 3=usage error
+"""
+import sys
+import os
+import re
+import time
+import requests
+import json
+import shutil
+from datetime import datetime, timezone
+
+WRITE_SERVICE_URL = "http://127.0.0.1:8772/write"
+QUERY_URL = "http://127.0.0.1:8772/query"
+EXECUTE_URL = "http://127.0.0.1:8772/execute"
+
+SIGNAL_ANALYSER_PATH = "/home/workspace/zo_sentinel/signal_analyser.py"
+MARKER = "# _zo_threat_assoc_v1"
+BACKUP_SUFFIX = ".bak.threat_assoc_v1"
+
+SEVERITY_SCORES = {
+    'CRITICAL': 0.0,
+    'HIGH': 15.0,
+    'MEDIUM': 40.0,
+    'LOW': 60.0,
+}
+DEFAULT_SCORE = 50.0
+
+DRY_RUN = "--dry-run" in sys.argv
+
+
+def log(msg):
+    print(f"[{datetime.now(timezone.utc).isoformat()}] {msg}", flush=True)
+
+
+def ws_query(sql):
+    try:
+        resp = requests.post(QUERY_URL, json={"sql": sql}, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict) and 'rows' in data:
+                return data['rows']
+            elif isinstance(data, list):
+                return data
+            return []
+        log(f"Query failed: {resp.status_code} {resp.text[:200]}")
+        return []
+    except Exception as e:
+        log(f"Query error: {e}")
+        return []
+
+
+def ws_write(table, rows):
+    try:
+        resp = requests.post(WRITE_SERVICE_URL, json={"table": table, "rows": rows, "wait": True}, timeout=10)
+        return resp.status_code == 200
+    except Exception as e:
+        log(f"Write error: {e}")
+        return False
+
+
+def ws_execute(sql):
+    try:
+        resp = requests.post(EXECUTE_URL, json={"sql": sql}, timeout=15)
+        return resp.status_code == 200
+    except Exception as e:
+        log(f"Execute error: {e}")
+        return False
+
+
+def ensure_threat_associations_table():
+    ws_execute("""
+    CREATE TABLE IF NOT EXISTS mcp_threat_associations (
+        server_id VARCHAR,
+        threat_type VARCHAR,
+        severity VARCHAR,
+        evidence VARCHAR,
+        source VARCHAR,
+        reported_at VARCHAR
+    )
+    """)
+
+
+def check_already_patched():
+    try:
+        with open(SIGNAL_ANALYSER_PATH, 'r') as f:
+            return MARKER in f.read()
+    except Exception as e:
+        log(f"Cannot read signal_analyser.py: {e}")
+        return False
+
+
+def backup_file(path):
+    backup_path = path + BACKUP_SUFFIX
+    if not os.path.exists(backup_path):
+        shutil.copy2(path, backup_path)
+        log(f"Backup saved: {backup_path}")
+    else:
+        log(f"Backup already exists: {backup_path}")
+
+
+def restore_from_backup():
+    backup_path = SIGNAL_ANALYSER_PATH + BACKUP_SUFFIX
+    if os.path.exists(backup_path):
+        shutil.copy2(backup_path, SIGNAL_ANALYSER_PATH)
+        log("Restored from backup")
+
+
+def find_score_supply_chain_function():
+    with open(SIGNAL_ANALYSER_PATH, 'r') as f:
+        content = f.read()
+    
+    pattern = r'(def score_supply_chain\(.*?\):.*?)(?=\n(?:def |class |if __name__|$))'
+    match = re.search(pattern, content, re.DOTALL)
+    if match:
+        return match.start(), match.end(), match.group(1)
+    return None, None, None
+
+
+def build_new_score_supply_chain(existing_code):
+    new_func = f'''def score_supply_chain(server_id, name):
+    """Score supply chain risk using threat-intel feeds and regex fallback.
+    {MARKER}
+    """
+    # Step 1: Query threat intelligence from mcp_threat_associations
+    threat_query = f"SELECT severity, source, threat_type, evidence, reported_at FROM mcp_threat_associations WHERE server_id = '{{server_id}}' AND source IN ('alienvault_otx','nvd','cisa_kev','urlhaus','abuseipdb') ORDER BY reported_at DESC LIMIT 10"
+    threat_rows = ws_query(threat_query)
+    
+    if threat_rows:
+        # Pick worst severity
+        worst_score = DEFAULT_SCORE
+        worst_evidence = ""
+        for row in threat_rows:
+            sev = row.get('severity', '').upper()
+            src = row.get('source', 'unknown')
+            ttype = row.get('threat_type', '')
+            ev_text = (row.get('evidence') or '')[:80]
+            score_for_row = SEVERITY_SCORES.get(sev, DEFAULT_SCORE)
+            if score_for_row < worst_score:
+                worst_score = score_for_row
+                worst_evidence = f"{src}: {ttype} — {ev_text}"
+        return (worst_score, worst_evidence)
+    
+    # Step 2: Fall through to existing regex-based check (fallback for servers not in threat_associations)
+    score = 50.0
+    evidence_parts = []
+    
+    # Check known malicious packages
+    if check_package(name):
+        return (0.0, "known_malicious_package")
+    
+    # Suspicious patterns
+    suspicious_patterns = [
+        (r'[_-]bot[_-]?', 5.0),
+        (r'auto[-_]mation', 8.0),
+        (r'\\.xyz$', 10.0),
+        (r'\\.top$', 10.0),
+        (r'\\.buzz$', 10.0),
+        (r'version[-_]?[0-9]', 0.0),
+        (r'\\d+\\.\\d+\\.\\d+', 0.0),
+    ]
+    
+    for pattern, penalty in suspicious_patterns:
+        if re.search(pattern, name):
+            score = min(score, penalty)
+            evidence_parts.append(f"pattern_match:{pattern}")
+    
+    # Check domain trust for URLs
+    if '://' in str(name):
+        domain = re.split(r'[/:]+', str(name))[1] if '://' in str(name) else str(name)
+        if domain.endswith(('.xyz', '.top', '.buzz', '.loan', '.click')):
+            score = min(score, 15.0)
+            evidence_parts.append(f"suspicious_tld:{domain}")
+    
+    # Generate evidence
+    if score == 50.0:
+        return (50.0, "no_threat_intel_match — no suspicious patterns detected")
+    
+    evidence = "no_threat_intel_match — " + ", ".join(evidence_parts if evidence_parts else ["regex_flagged"])
+    return (score, evidence)
+'''
+    return new_func
+
+
+def apply_patch():
+    start, end, old_func = find_score_supply_chain_function()
+    if start is None:
+        log("ERROR: Could not locate score_supply_chain function")
+        return False
+    
+    new_func = build_new_score_supply_chain(old_func)
+    
+    with open(SIGNAL_ANALYSER_PATH, 'r') as f:
+        content = f.read()
+    
+    new_content = content[:start] + new_func + content[end:]
+    
+    with open(SIGNAL_ANALYSER_PATH, 'w') as f:
+        f.write(new_content)
+    
+    log("Patch applied to signal_analyser.py")
+    return True
+
+
+def smoke_test():
+    log("=== Running smoke tests ===")
+    
+    # Ensure table exists
+    ensure_threat_associations_table()
+    
+    # Test 1: Insert synthetic threat association
+    synthetic_server_id = "SMOKE_TEST_OTX"
+    synthetic_rows = {
+        'server_id': synthetic_server_id,
+        'threat_type': 'c2_indicator',
+        'severity': 'HIGH',
+        'evidence': 'synthetic test indicator for smoke validation',
+        'source': 'alienvault_otx',
+        'reported_at': datetime.now(timezone.utc).isoformat()
+    }
+    ws_write('mcp_threat_associations', synthetic_rows)
+    log(f"Inserted synthetic threat row for {synthetic_server_id}")
+    
+    time.sleep(0.5)
+    
+    # Dynamically import signal_analyser to test the patched function
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("signal_analyser_mod", SIGNAL_ANALYSER_PATH)
+    sa = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sa)
+    
+    # Test 1b: Call score_supply_chain with OTX server
+    score1, evidence1 = sa.score_supply_chain(synthetic_server_id, 'test')
+    log(f"Test 1b - OTX server: score={score1}, evidence='{evidence1}'")
+    if not (score1 == 15.0 and 'alienvault_otx' in evidence1):
+        log(f"FAIL: Expected score=15.0 with 'alienvault_otx', got score={score1}")
+        return False
+    log("Test 1b PASSED: threat intel scoring works")
+    
+    # Test 2: Call with server NOT in threat_associations (should fall through to regex)
+    score2, evidence2 = sa.score_supply_chain("NO_INTEL_HASH_SMOKE", 'normal-package-xyz')
+    log(f"Test 2 - no intel: score={score2}, evidence='{evidence2}'")
+    if not evidence2.startswith('no_threat_intel_match'):
+        log(f"FAIL: Expected evidence to start with 'no_threat_intel_match', got '{evidence2}'")
+        return False
+    log("Test 2 PASSED: fallback regex works")
+    
+    # Test 3: Cleanup synthetic row
+    ws_execute(f"DELETE FROM mcp_threat_associations WHERE server_id = '{synthetic_server_id}'")
+    log(f"Deleted synthetic row for {synthetic_server_id}")
+    
+    log("=== All smoke tests passed ===")
+    return True
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] not in ['--dry-run', '-h', '--help']:
+        print("Usage: python r2_score_supply_chain_threat_assoc_patcher.py [--dry-run]")
+        sys.exit(3)
+    
+    log("=== Starting threat_assoc patcher ===")
+    
+    # Idempotence check
+    if check_already_patched():
+        log(f"signal_analyser.py already patched (marker found). Exiting 0.")
+        sys.exit(0)
+    
+    # Backup
+    backup_file(SIGNAL_ANALYSER_PATH)
+    
+    if DRY_RUN:
+        log("Dry-run: would patch signal_analyser.py")
+        sys.exit(0)
+    
+    # Apply patch
+    if not apply_patch():
+        log("PATCH FAILED - restoring backup")
+        restore_from_backup()
+        sys.exit(1)
+    
+    # Smoke test
+    if not smoke_test():
+        log("SMOKE TEST FAILED - restoring backup")
+        restore_from_backup()
+        sys.exit(2)
+    
+    log("=== Patcher completed successfully ===")
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()

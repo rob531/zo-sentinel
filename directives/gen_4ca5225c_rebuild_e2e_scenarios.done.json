@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_e2e_scenarios",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild e2e_scenarios.py addressing last_error 'failed in cohort_7_n5'. This file tests three canonical flows: (1) new MCP \u2192 signal scored \u2192 verdict, (2) verdict \u2192 attestation \u2192 UI visible, (3) threat intel overlay \u2192 risk rank update. The file exists but is failing Gate 8 (2/3 attempts). Must include self-contained test fixtures that do not require live write_service. Reference spec section 4 (Freshness SLAs) and section 2 (Verdict Taxonomy). Keep existing interface signatures."
+}

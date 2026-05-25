@@ -1,0 +1,9 @@
+{
+  "directive_id": "fix_threat_intel_world_articles_query",
+  "goal": "Fix threat_intel_ingestor.py: world_articles query fails with 400 because it references columns that don't exist.\n\nActual world_articles schema: id, url, title, summary, topics, importance, visited_at, processed_at, source.\n\nFix the ws_query call that queries world_articles to:\n1. Use 'summary' not 'content' for article body\n2. Use 'visited_at' not 'published_at' for recency filter\n3. Filter WHERE topics LIKE '%mcp%' OR topics LIKE '%security%' OR topics LIKE '%vulnerability%' to get relevant articles\n4. Use visited_at > now() - interval '48 hours' for recency\n\nAlso fix the OSV scan: it scans only 8 servers because it queries mcp_server_registry WHERE npm_package IS NOT NULL but that column may not exist. Change to query mcp_registry_facts for npm package names, or scan top 500 servers from registry by trust_score ASC (lowest trust = most need for threat intel).\n\nAfter fix: Cycle complete should show N > 0 from articles and OSV covering >8 servers.",
+  "output_path": "/home/workspace/zo_sentinel/threat_intel_ingestor.py",
+  "constraints": ["Do not change OSV API integration", "Preserve idempotent threat_already_recorded check", "Keep existing severity keyword lists"],
+  "success_criteria": ["No 400 on world_articles query", "OSV covers >8 servers per cycle", "mcp_threat_associations count increases"],
+  "source": "cto_directive",
+  "generated_at": "2026-05-20T01:30:00"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_phase9",
+  "handler": "generate_file",
+  "output_file": "snow_connector.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Phase 9 enterprise integration: ServiceNow inbound webhook connector for MCP request tickets. MUST: (1) Authenticate via SNOW OAuth2; (2) Validate request signature before processing; (3) NEVER accept unsigned webhooks; (4) Map SNOW ticket fields to mcp_submissions table columns; (5) Run on available port 8783. Priority 0.92. Cite PROMPT_INJECTION_PLAN.md if needed."
+}

@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_permission_scope_weak_signal",
+  "handler": "generate_file",
+  "output_file": "diagnose_permission_scope_weak_signal.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to investigate why permission_scope signal shows only 3 distinct values across range 30.0-100.0 (WEAK signal per signal_quality_diagnostic). Reads from mcp_signal_scores WHERE signal_type='permission_scope' via ws_query. Outputs diagnostic report listing score distribution, top contributing metadata fields, and specific recommendations for improving discrimination. Does NOT modify any data. Companion module only; does not replace any protected file. Per spec section 10, propose companion module when protected file behavior needs investigation.",
+  "reads": [
+    "verify_signal_discrimination.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "community_signal_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Pure enrichment module exposing compute_score(metadata: dict) -> tuple[float, dict]. Reads metadata fields: stars, download_count, age_days, registry_source, publisher_verified, dependency_count. Improves upon any prior community_signal_enrichment.py by reading MULTIPLE fields (not just stars) to achieve >=20 distinct scores across 34 synthetic fingerprints per enrichment_harness.py contract. Scoring: stars bonus (+15 max), download_count bonus (+20 max), age_days bonus (+10 max), registry_source quality multiplier (npm=1.0, github=1.2, pypi=1.1, other=0.8), publisher_verified bonus (+10), dependency_count penalty (-0.5 per dep, max -15). Returns score clamped to [0,100] and evidence dict. No DB writes, no network, no imports of protected modules."
+}

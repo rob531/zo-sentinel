@@ -1,0 +1,14 @@
+{
+  "task": "build_mcp_project_canonicalizer",
+  "handler": "generate_file",
+  "output_file": "mcp_project_canonicalizer.py",
+  "complexity": "high",
+  "priority": 0.6,
+  "description": "Build the MCP project canonicalizer daemon (deferred April 21 work). Creates and maintains mcp_project_canonical and mcp_project_members tables. Groups MCPs by canonical project (npm package, github repo, pypi package) so a single project's npm publish + github source + pypi mirror are recognized as one canonical project, not three independent MCPs. Unlocks UI aggregation and supply-chain-fork visibility. Idempotent re-run.",
+  "constraints": [
+    "ws_write via WriteService",
+    "ON CONFLICT DO NOTHING",
+    "FileHandler only",
+    "Schema additions only - never alter existing tables"
+  ]
+}

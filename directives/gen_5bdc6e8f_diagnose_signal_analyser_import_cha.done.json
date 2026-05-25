@@ -1,0 +1,14 @@
+{
+  "task": "diagnose_signal_analyser_import_chain",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_imports.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic script to trace import chain for signal_analyser.py smoke failure. Recent error shows traceback in <string> line 10 importlib - typical import resolution failure. Must identify which import statement fails, what module it references, and whether the module is missing from disk, has syntax errors, or has broken dependencies. Output to LOG_DIR/diagnose_signal_analyser_imports.log. This is a diagnostic-only file - do NOT propose fixes; just report findings for human review. Must use write_service on :8772 for any DB access, not direct duckdb.",
+  "reads": [
+    "signal_analyser.py",
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

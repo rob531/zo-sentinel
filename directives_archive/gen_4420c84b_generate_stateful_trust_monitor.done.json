@@ -1,0 +1,9 @@
+{
+  "task": "generate_stateful_trust_monitor",
+  "handler": "generate_file",
+  "output_file": "stateful_trust_monitor.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Trust change tracker on mcp_server_registry. Compare current trust_score against stored baseline in mcp_risk_register. Detect drift > 15 points, log to audit_log with target_server_id. Fire alert via alert_manager when drift detected. Use write_service :8772 for all DB operations."
+}

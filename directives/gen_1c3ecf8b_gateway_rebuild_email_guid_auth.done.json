@@ -1,0 +1,9 @@
+{
+  "task": "gateway_rebuild_email_guid_auth",
+  "handler": "generate_file",
+  "output_file": "gateway_rebuild_email_guid_auth.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Rebuild email_guid_auth.py because it failed in current cohort. This is NOT the same as the protected sentinel_ui_inventory_paginator.py or other protected auth files. Build a module that: (1) validates X-Email-Guid header against known guids in write_service, (2) extracts guid from header, (3) looks up user permissions in mcp_decisions or mcp_policy_rules if exists, (4) returns auth_result dict. Must use write_service :8772 for all DB access. Expose validate_email_guid(guid: str) -> bool. Do NOT hardcode guids. Configurable via EMAIL_GUID_ALLOWED env var. Spec reference: Section 7 security, Section 5 inter-daemon communication."
+}

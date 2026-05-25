@@ -1,0 +1,9 @@
+{
+  "task": "audit_temporal_stability_integration",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_integration_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Build integration audit module to verify temporal_stability_enrichment is correctly wired to signal_analyser and that output flows to mcp_signal_enrichments. Must query: (1) does signal_analyser import temporal_stability_enrichment, (2) does it call compute_score and write result to mcp_signal_enrichments with signal_type='temporal_stability', (3) are there at least 100 rows in mcp_signal_enrichments WHERE signal_type='temporal_stability'. If check fails, report specific gap. Pure diagnostic, no DB writes, no network calls to external services. Reads source files and queries write_service only."
+}

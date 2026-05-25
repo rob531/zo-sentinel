@@ -1,0 +1,14 @@
+{
+  "task": "integrate_e2e_scenarios",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_integration.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Wire e2e_scenarios.py into the supervisor daemon config (supervisord_sentinel_full.conf) for continuous validation. Per spec Appendix A, e2e_scenarios.py covers three canonical flows: new MCP \u2192 signal scored \u2192 verdict \u2192 attestation \u2192 UI visible. This integration ensures the e2e harness runs automatically against the live pipeline. Must NOT regenerate e2e_scenarios.py; this directive creates the integration shim that calls e2e_scenarios.run_scenario() on a schedule managed by assessment_scheduler.",
+  "reads": [
+    "e2e_scenarios.py",
+    "assessment_scheduler_integration.py"
+  ],
+  "next_directive": {}
+}

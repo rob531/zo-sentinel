@@ -1,0 +1,15 @@
+{
+  "task": "build_cli_main",
+  "handler": "generate_file",
+  "output_file": "sentinel_cli.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.61,
+  "reads": [
+    "sentinel_sdk.py",
+    "report_formatter.py"
+  ],
+  "description": "Main CLI for ZO-SENTINEL. Uses argparse. Commands: assess <mcp> (full assessment with colour output), search <query>, submit <url> --name --description, status (pipeline health), risks --tier=CRITICAL, threats --days=7, report (generate compliance report), seed (run quick_seed.py), validate (run config_validator.py). Each command uses SentinelClient. Colour output using ANSI. --json flag for machine-readable output. Installed as: python3 sentinel_cli.py <command>. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_aidr_commit_gateway_verdict_check",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_verdict_check.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Integration test/validator for aidr_commit_gateway.py. Must: (1) query write_service for verdict of a test MCP, (2) verify gateway refuses CAUTION_LIMITED or HIGH_RISK_ISOLATED verdicts (never auto-commit these), (3) verify injection_resilience score is included in commit payload, (4) verify TRUSTED_GENERAL and TRUSTED_RESEARCH can proceed. Use numbered MUST/MUST NOT rules: MUST check ZO-SENTINEL verdict before forwarding; MUST reject verdicts <=30 without explicit override; MUST include injection_resilience score; MUST NOT auto-commit KNOWN_THREAT. aidr_commit_gateway.py is built (2026-04-17); this validates the verdict-check enforcement."
+}

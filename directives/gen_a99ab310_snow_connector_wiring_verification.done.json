@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_wiring_verification",
+  "handler": "generate_file",
+  "output_file": "verify_snow_connector_wired.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.88,
+  "description": "Integration verification for snow_connector.py (built 2026-05-02). Tests: (1) service_health heartbeat firing, (2) write_service connectivity on :8772, (3) ServiceNow OAuth token acquisition, (4) webhook endpoint responds with 200 on valid SNOW payload. Checks approval_workflow integration by verifying mcp_decisions table is queried before ticket creation. No direct DB access; uses write_service query/execute only."
+}

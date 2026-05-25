@@ -1,0 +1,9 @@
+{
+  "task": "fix_signal_analyser_smoke_failure",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_fix.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.87,
+  "description": "Diagnostic and fix for signal_analyser.py smoke failure (traceback in most recent call). Must identify root cause: likely missing import, circular import, or syntax error in module. Preserve all existing function signatures and inter-daemon communication patterns. Must NOT target protected file signal_analyser.py directly\u2014create companion diagnostic module. Reference: section 3 signal invariant, section 6 execution contracts."
+}

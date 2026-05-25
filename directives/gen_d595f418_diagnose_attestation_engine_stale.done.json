@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_attestation_engine_stale",
+  "handler": "generate_file",
+  "output_file": "diagnose_attestation_engine_stale.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic-only module. Reads service_health for attestation_engine heartbeat age (16h13m stale, threshold 28800s), reads attestation_engine log for last attestation written timestamp and error patterns, queries write_service for mcp_attestations row count trend. Diagnoses root cause without rebuild. Checks: database write failures, ON CONFLICT handling, LLM inference timeouts to inference_router on :8773, attestation text generation failures. Does NOT target attestation_engine.py directly (protected). Does NOT propose rebuild.",
+  "reads": [
+    "attestation_engine.py"
+  ],
+  "next_directive": {}
+}

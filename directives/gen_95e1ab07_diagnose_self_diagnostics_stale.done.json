@@ -1,0 +1,10 @@
+{
+  "task": "diagnose_self_diagnostics_stale",
+  "handler": "generate_file",
+  "output_file": "self_diagnostics_restart_probe.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Diagnostic-only module to diagnose why self_diagnostics is stale (17m age, threshold 600s). Reads PID file location for self_diagnostics, checks if process is alive via signal 0, inspects last heartbeat timestamp from service_health table, probes write_service connectivity. Outputs findings to log. Does NOT restart anything \u2014 this is diagnostic only, human operator uses output to decide restart action. Protected files (write_service, rug_pull_monitor) are excluded from probe even if also stale.",
+  "reads": []
+}

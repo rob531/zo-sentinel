@@ -1,0 +1,9 @@
+{
+  "task": "verify_signal_enrichments_discrimination",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_validator.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Diagnostic module to validate signal enrichment discrimination. Queries mcp_signal_enrichments for each of the 8 signals and reports distinct score count. Must: (1) query DISTINCT score FROM mcp_signal_enrichments WHERE signal_type IN (...) GROUP BY signal_type, (2) flag any signal with <10 distinct values as weak, (3) output JSON report of {signal_type, distinct_count, sample_scores}. Pure read-only, no DB writes. Run against live DuckDB via write_service :8772/query. Helps diagnose why permission_scope, temporal_stability, tool_description_safety show only 4 distinct values."
+}

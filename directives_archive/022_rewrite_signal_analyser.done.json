@@ -1,0 +1,15 @@
+{
+  "task": "rewrite_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser.py",
+  "complexity": "high",
+  "phase": "3",
+  "priority": 0.95,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "Full signal analyser daemon. ws_query mcp_server_registry for unscored servers (WHERE trust_score IS NULL LIMIT 20). Score 6 signals each 0-100: domain_trust=check TLD and length of URL hostname; tool_description_safety=scan description against HIGH_RISK_PATTERNS from known_threats; permission_scope=count dangerous words (filesystem,credential,secret,exec,shell) in description; supply_chain=check server_id and name against check_package() from known_threats; community_signal=score by registry_source (npm_official=80,github=60,manual=40,unknown=20); temporal_stability=90 if scan_count>5 else 50. ws_write each signal to mcp_signal_scores {server_id,signal_name,score,evidence,scored_at}. ws_write composite trust_score and verdict to mcp_server_registry. Verdict: >=75=TRUSTED_GENERAL,>=60=TRUSTED_RESEARCH,>=50=ENTERPRISE_CONTROLLED,>=35=CAUTION_LIMITED,>=20=HIGH_RISK_ISOLATED,else=INSUFFICIENT. Heartbeat service_health. Poll 1800s.",
+  "context": "Imports from known_threats: check_package,check_domain,HIGH_RISK_PATTERNS. All DB via write_service:8772. Never import duckdb directly.",
+  "from": "claude_batch"
+}

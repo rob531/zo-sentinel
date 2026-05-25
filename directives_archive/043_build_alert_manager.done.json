@@ -1,0 +1,14 @@
+{
+  "task": "build_alert_manager",
+  "handler": "generate_file",
+  "output_file": "alert_manager.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.73,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Alert manager daemon. Polls mesh_events every 300s for severity=CRITICAL or CRITICAL events from zo_sentinel agents. Deduplicates: same server_id+event_type within 1h = skip. For each unique alert: (1) write to corrections table (2) attempt email via api.zo.computer/zo/notify (3) write ALERT_LOG.md entry. Thresholds: new KNOWN_THREAT verdict=CRITICAL, 3+ HIGH_RISK servers in 1h=HIGH, attestation expired+still deployed=HIGH. Tracks alert history in alert_history dict to avoid spam. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

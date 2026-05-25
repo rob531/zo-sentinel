@@ -1,0 +1,9 @@
+{
+  "task": "build_operations_runbook",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Operations runbook document covering: supervisord layout (supervisord_sentinel_full.conf path, process names, restart commands), log file locations (/var/log/sentinel/ and per-daemon stdout/stderr), service health thresholds (heartbeat staleness: normal <60s, stale >600s, dead >7200s), recovery runbook for common failures (daemon not responding, write_service timeout, smoke test failures, quarantine entries), database maintenance (DuckDB path, backup schedule, retention enforcement via query filters not DELETE), port assignments reference table. Append CONTRIBUTING section with directive submission guidelines and PROTECTED_FILES list. Docstring: '# ZO-SENTINEL Operations Runbook v1.0 \u2014 per SPEC.md section 6 execution contracts and Appendix A OPERATIONS.md requirement.'"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "integrate_snow_connector_wiring_v2",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integrator.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Integration module for snow_connector.py (built 2026-04-16) into approval_workflow. Must expose check_snow_ticket_status(ticket_id: str) -> dict function. Must use write_service on :8772 for state. Must NOT call ServiceNow directly in module body - only define the wiring function. The actual SNOW API calls belong in snow_connector.py itself. Read supply_chain_enrichment.py for reference on pure function pattern. Per spec section 5: no HTTP between peer daemons."
+}

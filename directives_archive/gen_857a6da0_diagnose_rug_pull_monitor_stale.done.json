@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_rug_pull_monitor_stale",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_diagnostic.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnostic-only daemon to diagnose why rug_pull_monitor.py is stale at 84h56m (heartbeat age >28800s threshold). Do NOT propose a rebuild; file is protected.\n\nMUST: Check service_health table for rug_pull_monitor last_heartbeat timestamp.\nMUST: Query evidence_blob age in mcp_signal_scores for rug_pull_monitor related rows.\nMUST: Report findings as structured log entry; do not modify any state.\nMUST: Output diagnostic fields: heartbeat_age_seconds, last_heartbeat_ts, process_uptime_if_available, recommended_action.\nMUST NOT: Attempt to restart the service.\nMUST NOT: Write to any table.\nOutput is read-only diagnostic for operator review.",
+  "reads": [
+    "write_service.py",
+    "service_health"
+  ]
+}

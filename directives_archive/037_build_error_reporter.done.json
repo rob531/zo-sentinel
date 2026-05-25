@@ -1,0 +1,14 @@
+{
+  "task": "build_error_reporter",
+  "handler": "generate_file",
+  "output_file": "error_reporter.py",
+  "complexity": "medium",
+  "phase": "10",
+  "priority": 0.79,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Error reporter daemon. Every 86400s: reads mesh_events WHERE event_type IN (build_failed,build_generation_failed,smoke_fail,signal_drift_detected,assessment_quality_issue) AND created_at > now()-24h. Groups by event_type and agent_id. Counts occurrences of each failure pattern. ws_query corrections for recent entries. Writes ERROR_REPORT.md with: summary table, top 5 recurring failures, correction actions taken, trend vs previous day. ws_write summary stats to mesh_events. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

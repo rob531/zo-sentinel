@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_into_approval",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow. snow_connector.py exists on disk but integration is incomplete per Appendix A. Create a wiring module that: 1) reads pending MCPs awaiting approval, 2) calls snow_connector to fetch ServiceNow ticket status, 3) updates mcp_decisions table with SNOW resolution via write_service. Use write_service at :8772 for all DB access. Do NOT make HTTP calls between daemons."
+}

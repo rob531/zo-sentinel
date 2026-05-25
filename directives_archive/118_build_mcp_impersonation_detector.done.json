@@ -1,0 +1,16 @@
+{
+  "task": "build_mcp_impersonation_detector",
+  "handler": "generate_file",
+  "output_file": "mcp_impersonation_detector.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.92,
+  "reads": [
+    "schema.py",
+    "similarity_scorer.py",
+    "known_threats.py"
+  ],
+  "description": "MCP impersonation and namespace confusion detector daemon. Reads all servers from mcp_server_registry via ws_query. Builds a canonical name index. Detects: (1) Namespace squatting: @modelcontextprotocol/server-X vs modelcontextprotocol-server-X (missing scope), (2) Homoglyph attacks: replace o->0, l->1, rn->m, use similarity_scorer.name_similarity, (3) Prefix/suffix injection: mcp-postgres-official vs mcp-postgres (appended legitimacy words), (4) Reversed scope: server-filesystem-mcp vs mcp-server-filesystem, (5) Hyphenation variants: filesystem vs file-system vs file_system. For each detected pair: compute impersonation_confidence score 0-100. If confidence > 70 AND suspect package has fewer downloads: ws_write mcp_threat_associations {threat_type=impersonation_attempt, severity=HIGH, evidence=suspect_name+target_name+similarity_score}. Poll 86400s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

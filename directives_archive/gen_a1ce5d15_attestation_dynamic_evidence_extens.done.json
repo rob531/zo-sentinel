@@ -1,0 +1,14 @@
+{
+  "task": "attestation_dynamic_evidence_extension",
+  "handler": "generate_file",
+  "output_file": "attestation_evidence_extender.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Companion module for attestation_engine.py (protected). attestation_dynamic_evidence_review.py was built 2026-04-21 22:03 but may need wiring to update attestation text with dynamic evidence summaries. Reads mcp_signal_scores and mcp_attestations via write_service. Produces updated evidence_blob JSON per signal invariant contract: {\"signal_type\": \"<snake_case_name>\", \"confidence\": 0.0-1.0, \"evidence_blob\": {...}}. Does not rewrite attestation_engine.py directly.",
+  "reads": [
+    "attestation_engine.py",
+    "attestation_dynamic_evidence_review.py"
+  ],
+  "next_directive": {}
+}

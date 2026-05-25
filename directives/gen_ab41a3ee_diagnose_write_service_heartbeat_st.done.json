@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_write_service_heartbeat_staleness",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnostic for write_service heartbeat staleness at 8h22m. Check service_health table for write_service row, assess if heartbeat loop is active by querying recent heartbeat timestamps. DO NOT rebuild write_service (protected). If heartbeat loop is stuck, propose targeted patch to heartbeat subroutine only. If write_service is responsive on :8772/health, log as 'healthy but missed beats' and exit 0.",
+  "reads": [
+    "write_service_heartbeat_investigator.py"
+  ],
+  "next_directive": {}
+}

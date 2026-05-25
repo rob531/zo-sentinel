@@ -1,0 +1,307 @@
+{
+  "state": "tripped",
+  "state_changed_at": "2026-05-24T23:48:45.553660+00:00",
+  "state_changed_reason": "single cohort trip: cohort_5_n4 size=4 fail_rate=50.00% >= 40%",
+  "recent_cohorts": [
+    {
+      "id": "cohort_4_n3",
+      "size": 3,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.436555+00:00"
+    },
+    {
+      "id": "cohort_5_n3",
+      "size": 3,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.437627+00:00"
+    },
+    {
+      "id": "cohort_6_n2",
+      "size": 2,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.438494+00:00"
+    },
+    {
+      "id": "cohort_7_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.439237+00:00"
+    },
+    {
+      "id": "cohort_8_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.440294+00:00"
+    },
+    {
+      "id": "cohort_9_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.441536+00:00"
+    },
+    {
+      "id": "cohort_10_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.442548+00:00"
+    },
+    {
+      "id": "cohort_11_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.443667+00:00"
+    },
+    {
+      "id": "cohort_12_n2",
+      "size": 2,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.444322+00:00"
+    },
+    {
+      "id": "cohort_13_n3",
+      "size": 3,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.444964+00:00"
+    },
+    {
+      "id": "cohort_14_n3",
+      "size": 3,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T09:04:35.445858+00:00"
+    },
+    {
+      "id": "cohort_1_n2",
+      "size": 2,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.297521+00:00"
+    },
+    {
+      "id": "cohort_2_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.298681+00:00"
+    },
+    {
+      "id": "cohort_3_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.299529+00:00"
+    },
+    {
+      "id": "cohort_4_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.300476+00:00"
+    },
+    {
+      "id": "cohort_5_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.302577+00:00"
+    },
+    {
+      "id": "cohort_6_n1",
+      "size": 1,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.303627+00:00"
+    },
+    {
+      "id": "cohort_7_n2",
+      "size": 2,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.305162+00:00"
+    },
+    {
+      "id": "cohort_8_n3",
+      "size": 3,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.305989+00:00"
+    },
+    {
+      "id": "cohort_9_n3",
+      "size": 3,
+      "fail_rate": 0.0,
+      "observed_at": "2026-05-25T15:05:40.307205+00:00"
+    }
+  ],
+  "file_retries": {
+    "aidr_gateway_verdict_test.py": {
+      "attempts": 3,
+      "last_failed_at": "2026-04-22T12:47:57.436103+00:00",
+      "last_error": "failed in cohort_3_n3",
+      "cohorts": [
+        "cohort_4_n3",
+        "cohort_3_n3"
+      ]
+    },
+    "aidr_verdict_enforcement_test_v2.py": {
+      "attempts": 6,
+      "last_failed_at": "2026-04-27T01:35:13.682608+00:00",
+      "last_error": "failed in cohort_1_n3",
+      "cohorts": [
+        "cohort_3_n3",
+        "cohort_1_n3"
+      ]
+    },
+    "verify_tool_description_enrichment.py": {
+      "attempts": 3,
+      "last_failed_at": "2026-05-01T01:55:30.539821+00:00",
+      "last_error": "failed in cohort_2_n2",
+      "cohorts": [
+        "cohort_8_n2",
+        "cohort_4_n2",
+        "cohort_2_n2"
+      ]
+    },
+    "verify_aidr_commit_gateway_verdict_check.py": {
+      "attempts": 3,
+      "last_failed_at": "2026-05-01T20:12:26.452183+00:00",
+      "last_error": "failed in cohort_2_n2",
+      "cohorts": [
+        "cohort_5_n2",
+        "cohort_3_n2",
+        "cohort_2_n2"
+      ]
+    },
+    "snow_integration_completion.py": {
+      "attempts": 3,
+      "last_failed_at": "2026-05-03T05:56:12.062463+00:00",
+      "last_error": "failed in cohort_4_n4",
+      "cohorts": [
+        "cohort_12_n4",
+        "cohort_4_n4"
+      ]
+    },
+    "github_pr_checker_wiring.py": {
+      "attempts": 4,
+      "last_failed_at": "2026-05-03T14:11:37.818122+00:00",
+      "last_error": "failed in cohort_1_n3",
+      "cohorts": [
+        "cohort_12_n5",
+        "cohort_1_n5",
+        "cohort_1_n3"
+      ]
+    },
+    "e2e_scenarios_run.py": {
+      "attempts": 4,
+      "last_failed_at": "2026-05-03T17:09:50.809496+00:00",
+      "last_error": "failed in cohort_6_n5",
+      "cohorts": [
+        "cohort_8_n5",
+        "cohort_6_n5"
+      ]
+    },
+    "r2_score_supply_chain_threat_assoc_patcher.py": {
+      "attempts": 6,
+      "last_failed_at": "2026-05-05T14:24:34.950695+00:00",
+      "last_error": "failed in cohort_2_n5",
+      "cohorts": [
+        "cohort_5_n5",
+        "cohort_4_n5",
+        "cohort_2_n5"
+      ]
+    }
+  },
+  "quarantined": {
+    "retention_sweeper.py": {
+      "quarantined_at": "2026-04-19T20:43:56.525381+00:00",
+      "reason": "3 consecutive fails: failed in cohort_1_n1",
+      "attempts_when_quarantined": 3
+    },
+    "aidr_gateway_verdict_test.py": {
+      "quarantined_at": "2026-04-22T12:48:04.157542+00:00",
+      "reason": "3 consecutive fails: failed in cohort_3_n3",
+      "attempts_when_quarantined": 3
+    },
+    "aidr_verdict_enforcement_test_v2.py": {
+      "quarantined_at": "2026-04-26T14:37:31.279075+00:00",
+      "reason": "3 consecutive fails: failed in cohort_3_n3",
+      "attempts_when_quarantined": 3
+    },
+    "verify_tool_description_enrichment.py": {
+      "quarantined_at": "2026-05-01T01:55:39.115742+00:00",
+      "reason": "3 consecutive fails: failed in cohort_2_n2",
+      "attempts_when_quarantined": 3
+    },
+    "verify_aidr_commit_gateway_verdict_check.py": {
+      "quarantined_at": "2026-05-01T20:12:31.458267+00:00",
+      "reason": "3 consecutive fails: failed in cohort_2_n2",
+      "attempts_when_quarantined": 3
+    },
+    "github_pr_checker_wiring.py": {
+      "quarantined_at": "2026-05-03T14:09:47.558919+00:00",
+      "reason": "3 consecutive fails: failed in cohort_1_n3",
+      "attempts_when_quarantined": 3
+    },
+    "e2e_scenarios_run.py": {
+      "quarantined_at": "2026-05-03T14:12:03.080283+00:00",
+      "reason": "3 consecutive fails: failed in cohort_8_n5",
+      "attempts_when_quarantined": 3
+    },
+    "r2_score_supply_chain_threat_assoc_patcher.py": {
+      "quarantined_at": "2026-05-04T23:27:20.692273+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    },
+    "r1_wire_v3_enrichments_patcher.py": {
+      "quarantined_at": "2026-05-05T05:28:38.283851+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    },
+    "snow_integration_completion.py": {
+      "quarantined_at": "2026-05-23T04:51:48.933301+00:00",
+      "reason": "3 consecutive fails: failed in cohort_4_n4",
+      "attempts_when_quarantined": 3
+    },
+    "tool_description_safety_enrichment.py": {
+      "quarantined_at": "2026-05-23T10:53:03.568703+00:00",
+      "reason": "3 consecutive fails: failed in cohort_9_n4",
+      "attempts_when_quarantined": 3
+    },
+    "e2e_scenarios.py": {
+      "quarantined_at": "2026-05-24T00:06:16.330674+00:00",
+      "reason": "3 consecutive fails: failed in cohort_7_n4",
+      "attempts_when_quarantined": 3
+    },
+    "temporal_stability_enrichment_v2.py": {
+      "quarantined_at": "2026-05-24T23:26:38.150528+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    },
+    "temporal_stability_enrichment.py": {
+      "quarantined_at": "2026-05-24T23:52:26.886837+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    },
+    "permission_scope_enrichment.py": {
+      "quarantined_at": "2026-05-25T00:20:55.456377+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    },
+    "tool_description_safety_enrichment_v2.py": {
+      "quarantined_at": "2026-05-25T00:20:55.457257+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    },
+    "permission_scope_enrichment_v2.py": {
+      "quarantined_at": "2026-05-25T02:19:02.574528+00:00",
+      "reason": "missing_on_disk after 3 fails",
+      "attempts_when_quarantined": 3
+    }
+  },
+  "notes": [
+    {
+      "at": "2026-05-22T11:50:22.962593+00:00",
+      "action": "set_breaker_state",
+      "from": "tripped",
+      "to": "half-open",
+      "reason": "stale trip: recent build cohorts all 0.0 fail_rate through 2026-05-21; CTO reset 2026-05-22"
+    },
+    {
+      "at": "2026-05-23T01:06:05.633140+00:00",
+      "action": "unquarantine_for_test",
+      "file": "snow_integration_completion.py",
+      "reason": "CTO: re-attempt with conventions+ladder builder (baseline + provenance)"
+    }
+  ]
+}

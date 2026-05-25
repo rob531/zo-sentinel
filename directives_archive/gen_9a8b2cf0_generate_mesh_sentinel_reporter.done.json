@@ -1,0 +1,9 @@
+{
+  "task": "generate_mesh_sentinel_reporter",
+  "handler": "generate_file",
+  "output_file": "mesh_sentinel_reporter.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Writes sentinel stats to mesh_memory every 6 hours. Query mcp_submissions, mcp_risk_register, approval_workflow decisions. POST to mesh bridge endpoint on port 8781. Heartbeat to service_health. Daemon pattern: run() + if __name__ == '__main__': run()."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_advanced_filter_api_v2",
+  "handler": "generate_file",
+  "output_file": "advanced_filter_api_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild advanced_filter_api.py fixing smoke failure. Module provides filtering API for MCP servers but has import errors. Create v2 with FastAPI app, GET /servers/filtered endpoint accepting query params: min_score, max_score, verdict tiers, signal filters. Must use write_service for queries. Protected file advanced_filter_api.py is quarantined; create new v2."
+}

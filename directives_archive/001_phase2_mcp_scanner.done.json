@@ -1,0 +1,11 @@
+{
+  "task": "phase2_mcp_scanner",
+  "handler": "generate_file",
+  "output_file": "mcp_scanner.py",
+  "complexity": "high",
+  "description": "T1 ZOMesh agent that autonomously crawls MCP server registries every 6 hours. Sources: npm registry (@modelcontextprotocol/* packages), Smithery MCP marketplace API, GitHub topic:mcp-server. For each discovered server, writes a raw record to DuckDB world_articles-style table called mcp_server_registry via write_service:8772. Fields: server_id (hash of url/package), name, registry_source, url, description, first_seen, last_seen, scan_count. Deduplicates on server_id. Writes heartbeat to service_health. Writes mesh_event 'mcp_scan_complete' with count. Runs as daemon with run() function.",
+  "context": "This is Phase 2 of ZO-SENTINEL. The scanner feeds the signal analyser (Phase 3). Keep it lightweight - just discovery and raw record storage. No scoring yet. Use requests library. npm registry endpoint: https://registry.npmjs.org/-/v1/search?text=mcp-server&size=50. GitHub API: https://api.github.com/search/repositories?q=topic:mcp-server&sort=stars. Handle rate limits gracefully with exponential backoff.",
+  "priority": 0.9,
+  "from": "claude_bootstrap_directive",
+  "phase": "2"
+}

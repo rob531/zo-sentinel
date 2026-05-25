@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_workflow_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_workflow_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.88,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow. snow_connector.py receives ServiceNow inbound webhooks for MCP request tickets but is not yet connected to the approval pipeline. Must: (1) query mcp_submissions for pending tickets, (2) pass submission to snow_connector for SNOW OAuth authentication and ticket creation, (3) wire response back to approval_workflow. Must use write_service :8772 for all DB operations. Must NOT introduce direct HTTP between daemons. Integration test must verify webhook round-trip without blocking."
+}

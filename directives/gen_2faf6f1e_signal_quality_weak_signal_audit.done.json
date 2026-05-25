@@ -1,0 +1,9 @@
+{
+  "task": "signal_quality_weak_signal_audit",
+  "handler": "generate_file",
+  "output_file": "signal_quality_weak_signal_audit.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Audit the three weak signals flagged by signal quality diagnostic: permission_scope (4 distinct values), temporal_stability (4 distinct), tool_description_safety (4 distinct). Queries mcp_signal_scores for cardinality by signal_name. Compares v1 vs v2 enrichment outputs to verify v2 modules (built 2026-05-24 14:12-14:14) are producing higher discrimination. Reads permission_scope_enrichment_v2.py, temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py. Reports whether v2 has moved beyond the 4-distinct-value plateau. Output to signal_quality_audit table via write_service."
+}

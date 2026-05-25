@@ -1,0 +1,19 @@
+{
+  "directive_id": "20260501_signal_analyser_quality",
+  "created_at": "2026-05-01T20:00:00Z",
+  "priority": "HIGH",
+  "goal": "Fix verdict uniformity in signal_analyser. Currently >95% of all MCPs receive TRUSTED_RESEARCH verdict with scores 65-73. Diagnose why 5 of 6 signals return a single distinct value across all MCPs, then implement signal differentiation. Signals must draw from real observable data: TLS certificate validity, domain age, GitHub star count, OTX threat intel hit, tool count from manifest, and known-bad pattern matching. Each signal should produce meaningful variance across the MCP population.",
+  "constraints": [
+    "Read current signal_analyser at /home/workspace/zo_sentinel/signal_analyser.py before writing",
+    "Preserve existing WriteService call pattern",
+    "New scoring must produce at least 4 distinct verdicts across a 100-MCP test batch",
+    "Thresholds: score <30 = BLOCKED, 30-50 = HIGH_RISK, 50-70 = REVIEW, 70-85 = TRUSTED_RESEARCH, >85 = TRUSTED"
+  ],
+  "success_criteria": [
+    "signal_analyser log shows mixed verdicts within 1 cycle",
+    "At least 3 distinct verdict types in any 50-MCP window",
+    "No single verdict >70% of output in any 100-MCP batch"
+  ],
+  "output_path": "/home/workspace/zo_sentinel/signal_analyser.py",
+  "error_handling": "Fall back to REVIEW verdict if any signal fetch fails, never emit NULL scores"
+}

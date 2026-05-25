@@ -1,0 +1,9 @@
+{
+  "task": "build_temporal_stability_enrichment_v3",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.95,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). MUST use MULTIPLE metadata fields to produce at least 20 distinct scores across 34 fingerprints. Required fields: first_seen, last_updated, update_frequency_days, version_count, release_interval_avg, stability_flags. Penalize frequent version churn, reward consistent release Cadence. No DB writes, no network, no imports of protected modules. This is the THIRD attempt to break the 3-distinct-value plateau. Reference: Signal Quality Diagnostic shows temporal_stability has only 3 distinct values with range 40-90."
+}

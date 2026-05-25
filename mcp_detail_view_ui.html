@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Detail - ZO-SENTINEL</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0d0f14;
+            --bg-secondary: #141820;
+            --bg-tertiary: #1a1f2a;
+            --accent: #00e5ff;
+            --accent-dim: #007a8a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #8892a2;
+            --text-muted: #5a6478;
+            --border: #2a3040;
+            --success: #00ff88;
+            --warning: #ffb800;
+            --danger: #ff3d3d;
+            --amber: #ffaa00;
+        }
+        
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header-title {
+            color: var(--accent);
+            font-size: 18px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        .header-nav {
+            display: flex;
+            gap: 24px;
+        }
+        
+        .header-nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: color 0.2s;
+        }
+        
+        .header-nav a:hover, .header-nav a.active {
+            color: var(--accent);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .back-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+            display: inline-block;
+        }
+        
+        .back-link:hover { text-decoration: underline; }
+        
+        .server-header {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .server-title {
+            font-size: 28px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .server-meta {
+            display: flex;
+            gap: 32px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .meta-label {
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .verdict-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border: 2px solid;
+        }
+        
+        .verdict-trusted { background: rgba(0,255,136,0.1); border-color: var(--success); color: var(--success); }
+        .verdict-amber { background: rgba(255,170,0,0.1); border-color: var(--amber); color: var(--amber); }
+        .verdict-untrusted { background: rgba(255,61,61,0.1); border-color: var(--danger); color: var(--danger); }
+        .verdict-unknown { background: rgba(90,100,120,0.2); border-color: var(--text-muted); color: var(--text-muted); }
+        .verdict-known_threat { background: rgba(255,61,61,0.2); border-color: var(--danger); color: var(--danger); }
+        
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            padding: 20px;
+        }
+        
+        .panel-title {
+            color: var(--accent);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .signals-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 12px;
+        }
+        
+        .signal-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .signal-gauge {
+            width: 60px;
+            height: 60px;
+            position: relative;
+        }
+        
+        .signal-gauge svg {
+            transform: rotate(-90deg);
+        }
+        
+        .signal-gauge-bg {
+            fill: none;
+            stroke: var(--bg-tertiary);
+            stroke-width: 6;
+        }
+        
+        .signal-gauge-fill {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        
+        .signal-score-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+        
+        .signal-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            max-width: 70px;
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .stat-row:last-child { border-bottom: none; }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat-value {
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .stat-value.success { color: var(--success); }
+        .stat-value.warning { color: var(--warning); }
+        .stat-value.danger { color: var(--danger); }
+        
+        .attestation-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+        }
+        
+        .attestation-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-size: 18px;
+        }
+        
+        .attestation-icon.valid { background: rgba(0,255,136,0.2); color: var(--success); }
+        .attestation-icon.pending { background: rgba(255,170,0,0.2); color: var(--amber); }
+        .attestation-icon.none { background: rgba(90,100,120,0.2); color: var(--text-muted); }
+        
+        .attestation-info { flex: 1; }
+        .attestation-title { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        .attestation-subtitle { font-size: 11px; color: var(--text-muted); }
+        
+        .threat-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .threat-item {
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            margin-bottom: 8px;
+        }
+        
+        .threat-item:last-child { margin-bottom: 0; }
+        
+        .threat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .threat-type { font-size: 14px; font-weight: bold; }
+        
+        .severity-badge {
+            padding: 4px 8px;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .severity-critical { background: rgba(255,61,61,0.3); color: var(--danger); }
+        .severity-high { background: rgba(255,100,0,0.3); color: #ff6400; }
+        .severity-medium { background: rgba(255,170,0,0.3); color: var(--warning); }
+        .severity-low { background: rgba(100,180,255,0.2); color: #64b4ff; }
+        
+        .threat-evidence {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        
+        .threat-date {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px;
+            color: var(--accent);
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--bg-tertiary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 16px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-state {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255,61,61,0.1);
+            border: 1px solid var(--danger);
+        }
+        
+        .error-state-title {
+            color: var(--danger);
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .error-state-message {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        
+        .risk-tier-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: 1px solid;
+        }
+        
+        .risk-critical { background: rgba(255,61,61,0.15); border-color: var(--danger); color: var(--danger); }
+        .risk-high { background: rgba(255,100,0,0.15); border-color: #ff6400; color: #ff6400; }
+        .risk-medium { background: rgba(255,170,0,0.15); border-color: var(--amber); color: var(--amber); }
+        .risk-low { background: rgba(0,255,136,0.15); border-color: var(--success); color: var(--success); }
+        
+        .full-width { grid-column: 1 / -1; }
+        
+        .trust-score-display {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding: 20px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+        }
+        
+        .trust-score-ring {
+            width: 100px;
+            height: 100px;
+            position: relative;
+        }
+        
+        .trust-score-ring svg {
+            transform: rotate(-90deg);
+        }
+        
+        .trust-score-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+        
+        .trust-score-details { flex: 1; }
+        
+        .trust-score-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .trust-score-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-title">ZO-SENTINEL // SERVER DETAIL</div>
+        <nav class="header-nav">
+            <a href="/" onclick="navigateTo(event, 'dashboard.html')">Dashboard</a>
+            <a href="/" onclick="navigateTo(event, 'sentinel_status.html')">Status</a>
+            <a href="/" onclick="navigateTo(event, 'admin_submissions.html')">Submissions</a>
+            <a href="/" onclick="navigateTo(event, 'admin_policies.html')">Policies</a>
+            <a href="/" onclick="navigateTo(event, 'admin_exemptions.html')">Exemptions</a>
+            <a href="/" onclick="navigateTo(event, 'admin_attestations.html')">Attestations</a>
+        </nav>
+    </header>
+    
+    <div class="container">
+        <a href="#" class="back-link" onclick="window.close(); return false;">← Back to List</a>
+        
+        <div id="loading-state" class="loading">
+            <div class="loading-spinner"></div>
+            <span>Loading server data...</span>
+        </div>
+        
+        <div id="error-state" class="error-state" style="display: none;">
+            <div class="error-state-title">Failed to Load Server</div>
+            <div class="error-state-message" id="error-message">Unknown error occurred</div>
+        </div>
+        
+        <div id="content-area" style="display: none;">
+            <div class="server-header">
+                <div class="server-title" id="server-name">Loading...</div>
+                <div style="margin-top: 12px;">
+                    <span class="verdict-badge" id="verdict-badge">UNKNOWN</span>
+                </div>
+                <div class="server-meta">
+                    <div class="meta-item">
+                        <span class="meta-label">Server ID</span>
+                        <span class="meta-value" id="server-id">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Registry Source</span>
+                        <span class="meta-value" id="registry-source">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">First Seen</span>
+                        <span class="meta-value" id="first-seen">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Last Assessed</span>
+                        <span class="meta-value" id="last-assessed">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Scan Count</span>
+                        <span class="meta-value" id="scan-count">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="trust-score-display">
+                <div class="trust-score-ring">
+                    <svg width="100" height="100" viewBox="0 0 100 100">
+                        <circle class="signal-gauge-bg" cx="50" cy="50" r="42"/>
+                        <circle class="signal-gauge-fill" id="trust-score-ring" cx="50" cy="50" r="42" 
+                            stroke-dasharray="264" stroke-dashoffset="264"/>
+                    </svg>
+                    <div class="trust-score-value" id="trust-score-value">--</div>
+                </div>
+                <div class="trust-score-details">
+                    <div class="trust-score-title">Composite Trust Score</div>
+                    <div class="trust-score-subtitle" id="trust-score-subtitle">Loading...</div>
+                </div>
+            </div>
+            
+            <div class="grid-layout" style="margin-top: 24px;">
+                <div class="panel full-width">
+                    <div class="panel-title">Signal Scores</div>
+                    <div class="signals-grid" id="signals-grid">
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="supply_chain"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="supply_chain">--</div>
+                            </div>
+                            <div class="signal-label">Supply Chain</div>
+                        </div>
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="domain_trust"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="domain_trust">--</div>
+                            </div>
+                            <div class="signal-label">Domain Trust</div>
+                        </div>
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="community"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="community">--</div>
+                            </div>
+                            <div class="signal-label">Community</div>
+                        </div>
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="temporal_stability"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="temporal_stability">--</div>
+                            </div>
+                            <div class="signal-label">Temporal</div>
+                        </div>
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="permission_scope"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="permission_scope">--</div>
+                            </div>
+                            <div class="signal-label">Permissions</div>
+                        </div>
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="tool_description"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="tool_description">--</div>
+                            </div>
+                            <div class="signal-label">Docs Quality</div>
+                        </div>
+                        <div class="signal-item">
+                            <div class="signal-gauge">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="signal-gauge-bg" cx="30" cy="30" r="24"/>
+                                    <circle class="signal-gauge-fill" cx="30" cy="30" r="24" 
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8" data-signal="injection_resilience"/>
+                                </svg>
+                                <div class="signal-score-text" data-score="injection_resilience">--</div>
+                            </div>
+                            <div class="signal-label">Injection Resil.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid-layout">
+                <div class="panel">
+                    <div class="panel-title">Attestation Status</div>
+                    <div id="attestation-status">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">○</div>
+                            <div>No attestation data available</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-title">Threat Associations</div>
+                    <div class="threat-list" id="threat-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">◇</div>
+                            <div>No threats detected</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-title">Risk Register</div>
+                    <div id="risk-register">
+                        <div class="stat-row">
+                            <span class="stat-label">Risk Tier</span>
+                            <span class="stat-value" id="risk-tier">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Risk Rank</span>
+                            <span class="stat-value" id="risk-rank">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Threat Count</span>
+                            <span class="stat-value" id="threat-count">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Computed At</span>
+                            <span class="stat-value" id="computed-at">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-title">Server Information</div>
+                    <div class="stat-row">
+                        <span class="stat-label">Server URL</span>
+                        <span class="stat-value" id="server-url">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Description</span>
+                        <span class="stat-value" id="server-description">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Fingerprint Count</span>
+                        <span class="stat-value" id="fingerprint-count">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Registry Source</span>
+                        <span class="stat-value" id="source">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const REGISTRY_API_URL = 'http://127.0.0.1:8781';
+        const WRITE_SERVICE_URL = 'http://127.0.0.1:8772';
+        
+        const SIGNAL_COLORS = {
+            supply_chain: '#00e5ff',
+            domain_trust: '#00ff88',
+            community: '#ffb800',
+            temporal_stability: '#ff64ff',
+            permission_scope: '#ff8c00',
+            tool_description: '#64b4ff',
+            injection_resilience: '#ff3d3d'
+        };
+        
+        function getQueryParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name);
+        }
+        
+        function navigateTo(event, page) {
+            event.preventDefault();
+            window.location.href = page;
+        }
+        
+        async function fetchJSON(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                throw error;
+            }
+        }
+        
+        function setSignalGauge(element, score, signalName) {
+            const circumference = 150.8;
+            const maxScore = 100;
+            const percentage = Math.min(score / maxScore, 1);
+            const offset = circumference * (1 - percentage);
+            
+            element.style.strokeDashoffset = offset;
+            element.style.stroke = SIGNAL_COLORS[signalName] || '#00e5ff';
+            
+            const textEl = document.querySelector(`[data-score="${signalName}"]`);
+            if (textEl) {
+                textEl.textContent = score.toFixed(1);
+            }
+        }
+        
+        function setTrustScoreRing(score) {
+            const circumference = 264;
+            const percentage = Math.min(score / 100, 1);
+            const offset = circumference * (1 - percentage);
+            
+            const ring = document.getElementById('trust-score-ring');
+            ring.style.strokeDashoffset = offset;
+            
+            let color = '#5a6478';
+            if (score >= 80) color = '#00ff88';
+            else if (score >= 60) color = '#00e5ff';
+            else if (score >= 40) color = '#ffb800';
+            else if (score >= 20) color = '#ff8c00';
+            else color = '#ff3d3d';
+            
+            ring.style.stroke = color;
+            
+            document.getElementById('trust-score-value').textContent = score.toFixed(0);
+        }
+        
+        function getVerdictClass(verdict) {
+            const v = (verdict || 'unknown').toLowerCase().replace(' ', '_');
+            const classes = {
+                'trusted': 'verdict-trusted',
+                'amber': 'verdict-amber',
+                'untrusted': 'verdict-untrusted',
+                'unknown': 'verdict-unknown',
+                'known_threat': 'verdict-known_threat',
+                'high_risk_isolated': 'verdict-amber',
+                'caution_limited': 'verdict-amber'
+            };
+            return classes[v] || 'verdict-unknown';
+        }
+        
+        function getSeverityClass(severity) {
+            const s = (severity || 'low').toLowerCase();
+            const classes = {
+                'critical': 'severity-critical',
+                'high': 'severity-high',
+                'medium': 'severity-medium',
+                'low': 'severity-low'
+            };
+            return classes[s] || 'severity-low';
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+        
+        function truncateText(text, maxLength = 80) {
+            if (!text) return '-';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+        
+        async function loadServerDetail() {
+            const serverId = getQueryParam('server_id');
+            
+            if (!serverId) {
+                showError('No server ID provided in URL');
+                return;
+            }
+            
+            try {
+                const serverData = await fetchJSON(`${REGISTRY_API_URL}/server/${serverId}`);
+                const signalsData = await fetchJSON(`${REGISTRY_API_URL}/signals/${serverId}`).catch(() => ({rows: []}));
+                const threatData = await fetchJSON(`${REGISTRY_API_URL}/threats/${serverId}`).catch(() => ({rows: []}));
+                const riskData = await fetchJSON(`${REGISTRY_API_URL}/risk/${serverId}`).catch(() => null);
+                const attestationData = await fetchJSON(`${REGISTRY_API_URL}/attestation/${serverId}`).catch(() => null);
+                
+                renderServerDetail(serverData, signalsData.rows || [], threatData.rows || [], riskData, attestationData);
+            } catch (error) {
+                showError(`Failed to load server data: ${error.message}`);
+            }
+        }
+        
+        function renderServerDetail(server, signals, threats, risk, attestation) {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('content-area').style.display = 'block';
+            
+            document.getElementById('server-name').textContent = server.name || 'Unknown Server';
+            document.getElementById('server-id').textContent = server.server_id || '-';
+            
+            const verdictBadge = document.getElementById('verdict-badge');
+            verdictBadge.textContent = (server.verdict || 'UNKNOWN').toUpperCase();
+            verdictBadge.className = `verdict-badge ${getVerdictClass(server.verdict)}`;
+            
+            document.getElementById('registry-source').textContent = server.registry_source || '-';
+            document.getElementById('first-seen').textContent = formatDate(server.first_seen);
+            document.getElementById('last-assessed').textContent = formatDate(server.last_assessed);
+            document.getElementById('scan-count').textContent = server.scan_count || 0;
+            
+            const trustScore = server.trust_score || 0;
+            setTrustScoreRing(trustScore);
+            document.getElementById('trust-score-subtitle').textContent = `Based on ${signals.length} signal dimensions`;
+            
+            signals.forEach(signal => {
+                const signalEl = document.querySelector(`[data-signal="${signal.signal_name}"]`);
+                if (signalEl) {
+                    setSignalGauge(signalEl, signal.score || 0, signal.signal_name);
+                }
+            });
+            
+            if (attestation) {
+                renderAttestation(attestation);
+            }
+            
+            if (threats && threats.length > 0) {
+                renderThreats(threats);
+            }
+            
+            if (risk) {
+                renderRiskRegister(risk);
+            }
+            
+            document.getElementById('server-url').textContent = truncateText(server.url, 50);
+            document.getElementById('server-description').textContent = truncateText(server.description, 100);
+            document.getElementById('fingerprint-count').textContent = server.fingerprint_count || 0;
+            document.getElementById('source').textContent = server.registry_source || '-';
+        }
+        
+        function renderAttestation(att) {
+            const container = document.getElementById('attestation-status');
+            
+            let iconClass = 'none';
+            let icon = '○';
+            let title = 'No Attestation';
+            let subtitle = 'Server has not been attested';
+            
+            if (att.status === 'valid') {
+                iconClass = 'valid';
+                icon = '✓';
+                title = 'Attested';
+                subtitle = formatDate(att.attested_at) + (att.attestor ? ` by ${att.attestor}` : '');
+            } else if (att.status === 'pending') {
+                iconClass = 'pending';
+                icon = '◐';
+                title = 'Pending Attestation';
+                subtitle = 'Attestation review in progress';
+            }
+            
+            container.innerHTML = `
+                <div class="attestation-status">
+                    <div class="attestation-icon ${iconClass}">${icon}</div>
+                    <div class="attestation-info">
+                        <div class="attestation-title">${title}</div>
+                        <div class="attestation-subtitle">${subtitle}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderThreats(threats) {
+            const container = document.getElementById('threat-list');
+            
+            container.innerHTML = threats.map(threat => `
+                <div class="threat-item">
+                    <div class="threat-header">
+                        <span class="threat-type">${threat.threat_type || 'Unknown Threat'}</span>
+                        <span class="severity-badge ${getSeverityClass(threat.severity)}">${(threat.severity || 'LOW').toUpperCase()}</span>
+                    </div>
+                    <div class="threat-evidence">${truncateText(threat.evidence, 120)}</div>
+                    <div class="threat-date">Reported: ${formatDate(threat.reported_at)}</div>
+                </div>
+            `).join('');
+        }
+        
+        function renderRiskRegister(risk) {
+            document.getElementById('risk-tier').textContent = risk.risk_tier || '-';
+            document.getElementById('risk-tier').className = `stat-value risk-${(risk.risk_tier || 'unknown').toLowerCase()}`;
+            
+            document.getElementById('risk-rank').textContent = risk.risk_rank || '-';
+            document.getElementById('threat-count').textContent = risk.threat_count || 0;
+            document.getElementById('computed-at').textContent = formatDate(risk.computed_at);
+        }
+        
+        function showError(message) {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('error-state').style.display = 'block';
+            document.getElementById('error-message').textContent = message;
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadServerDetail);
+    </script>
+</body>
+</html>

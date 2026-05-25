@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_approval_wiring_validate",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_wiring_validate.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.86,
+  "description": "Validates snow_connector_integration_v2.py is properly wired into approval_workflow.py for ServiceNow inbound webhook processing. Reads: snow_connector_integration_v2.py, approval_workflow.py. Verifies write_service calls use correct table/columns per DB_SCHEMA.md (mcp_submissions table with mcp_name, requested_by columns). No DB writes, no network calls."
+}

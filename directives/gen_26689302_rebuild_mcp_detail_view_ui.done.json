@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Rebuild mcp_detail_view_ui.py which provides the per-MCP detail view page served at port 8790. FastAPI app with GET /mcp/{server_id_or_name} returning an HTML page with signal scores, verdict badge, attestation text, and threat intel summary. Must use write_service at :8772 for all DB reads via POST /query with parameterized SQL. Imports only fastapi, uvicorn, requests, os, json. Top comment declares '# deps: fastapi, uvicorn, requests'. Heartbeat to service_health every 60s. Template rendering via string substitution (no Jinja2 dependency). All user-supplied values go through params arrays \u2014 zero SQL interpolation."
+}

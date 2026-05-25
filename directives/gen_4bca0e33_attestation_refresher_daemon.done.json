@@ -1,0 +1,13 @@
+{
+  "task": "attestation_refresher_daemon",
+  "handler": "generate_file",
+  "output_file": "attestation_refresher.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Builds attestation_refresher.py daemon per spec Appendix A. Nightly job that finds mcp_attestations where validity_days remaining <7 or where underlying signals have changed since attestation created_at. Regenerates attestation text referencing current signal scores. Uses write_service POST :8772/query to find candidates, POST :8772/execute to update. Does NOT drop or delete rows. Must write heartbeat to service_health every 60s. Include check_single_instance PID guard. Service name: attestation_refresher, port: none (daemon). Read spec section 4 for freshness SLA details.",
+  "reads": [
+    "exemption_expirer.py"
+  ],
+  "next_directive": {}
+}

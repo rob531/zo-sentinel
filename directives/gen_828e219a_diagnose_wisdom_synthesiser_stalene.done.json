@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_wisdom_synthesiser_staleness",
+  "handler": "generate_file",
+  "output_file": "diagnose_wisdom_synthesiser.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to investigate wisdom_synthesiser daemon staleness (age=8h14m, threshold=14400s). Must NOT propose rebuild of wisdom_synthesiser. Diagnose via write_service health queries to identify why it stopped emitting heartbeats. Check if any upstream dependencies (world_article_feeder, signal_analyser) are failing. Output diagnostic JSON to stdout. No DB writes to core tables."
+}

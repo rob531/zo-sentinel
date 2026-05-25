@@ -1,0 +1,9 @@
+{
+  "task": "regenerate_mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Rebuild failed module mcp_detail_view_ui. Create an HTML detail view for MCP server submissions showing: server metadata, all 7 signal scores with visual indicators, verdict badge, approval workflow actions, and audit trail excerpt. Must integrate with existing registry_api.py (read only) and approval_workflow.py endpoints. Port: 8780. Do NOT duplicate existing mcp_submission_portal.html \u2014 this is a read-only detail view, not a submission form."
+}

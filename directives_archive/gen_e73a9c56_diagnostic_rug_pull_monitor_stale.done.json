@@ -1,0 +1,9 @@
+{
+  "task": "diagnostic_rug_pull_monitor_stale",
+  "handler": "generate_file",
+  "output_file": "diagnostic_rug_pull_monitor.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic module to identify why rug_pull_monitor has stale heartbeat (24h3m > 28800s threshold). Must NOT rebuild rug_pull_monitor.py (protected file). Must: 1) Query service_health for rug_pull_monitor last_heartbeat timestamp, 2) Check if PID file exists at configured location, 3) Attempt to read any log output to stderr, 4) Emit diagnosis JSON to stdout: {stale_reason, pid_exists, last_heartbeat_iso, recommended_action}. Recommended actions: 'restart_service' if pid exists but no heartbeat, 'investigate_import' if heartbeat exists but daemon unresponsive, 'service_file_review' if no pid."
+}

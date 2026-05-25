@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_email_guid_auth",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Rebuild failed module email_guid_auth. Failure: listed in Failed modules. email_guid_auth.py is NOT in PROTECTED_FILES list (only email_guid_auth_compact is not protected, but email_guid_auth itself is not protected). Create email_guid_auth_v2.py with fixed implementation. Must follow naming invariant: use _v2 suffix ONCE for deliberate rewrite. Must conform to signal invariant if it emits signals (spec section 3). Must use write_service :8772 for any DB access, never direct duckdb. Document what caused the build failure in docstring."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_writeservice_stale_heartbeat",
+  "handler": "generate_file",
+  "output_file": "diagnose_writeservice_heartbeat.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnostic-only module to investigate why write_service shows stale heartbeat (8h30m old) while service is responsive. Must: (1) query service_health for write_service last_heartbeat timestamp, (2) verify POST to write_service/write still works, (3) check if write_service has a self-heartbeat mechanism that may be broken, (4) do NOT propose rebuild of write_service (protected). Output diagnosis to stdout and return suggested fix action (e.g., restart command, config change). Service name: diagnose_writeservice_heartbeat."
+}

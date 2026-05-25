@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZO-SENTINEL | MCP Detail View</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d0f14;
+            --bg-secondary: #151820;
+            --bg-tertiary: #1a1f2a;
+            --accent: #00e5ff;
+            --accent-dim: #00a5b5;
+            --text-primary: #e0e0e0;
+            --text-secondary: #9e9e9e;
+            --border-color: #2a3040;
+            --verdict-approved: #00ff88;
+            --verdict-conditional: #ffaa00;
+            --verdict-rejected: #ff4444;
+            --verdict-pending: #888888;
+        }
+        * { box-sizing: border-box; }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        .sentinel-header {
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            border-bottom: 2px solid var(--accent);
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+        .sentinel-logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--accent);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+        .sentinel-subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+        }
+        .card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--accent);
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-size: 13px;
+            padding: 12px 16px;
+        }
+        .card-body { padding: 16px; }
+        .verdict-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 4px;
+            border: 2px solid;
+        }
+        .verdict-approved {
+            color: var(--verdict-approved);
+            border-color: var(--verdict-approved);
+            background-color: rgba(0, 255, 136, 0.1);
+        }
+        .verdict-conditional {
+            color: var(--verdict-conditional);
+            border-color: var(--verdict-conditional);
+            background-color: rgba(255, 170, 0, 0.1);
+        }
+        .verdict-rejected {
+            color: var(--verdict-rejected);
+            border-color: var(--verdict-rejected);
+            background-color: rgba(255, 68, 68, 0.1);
+        }
+        .verdict-pending {
+            color: var(--verdict-pending);
+            border-color: var(--verdict-pending);
+            background-color: rgba(136, 136, 136, 0.1);
+        }
+        .btn-approval {
+            padding: 10px 24px;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border: 2px solid;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Courier New', monospace;
+        }
+        .btn-approve {
+            color: var(--verdict-approved);
+            border-color: var(--verdict-approved);
+        }
+        .btn-approve:hover, .btn-approve.active {
+            background-color: var(--verdict-approved);
+            color: var(--bg-primary);
+        }
+        .btn-conditional {
+            color: var(--verdict-conditional);
+            border-color: var(--verdict-conditional);
+        }
+        .btn-conditional:hover, .btn-conditional.active {
+            background-color: var(--verdict-conditional);
+            color: var(--bg-primary);
+        }
+        .btn-reject {
+            color: var(--verdict-rejected);
+            border-color: var(--verdict-rejected);
+        }
+        .btn-reject:hover, .btn-reject.active {
+            background-color: var(--verdict-rejected);
+            color: var(--bg-primary);
+        }
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border-color);
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 20px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid var(--bg-secondary);
+        }
+        .timeline-date {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+        .timeline-title {
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        .timeline-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .signal-bar {
+            height: 24px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        .signal-fill {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+        .signal-label {
+            font-size: 12px;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .injection-result {
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            border-left: 4px solid;
+        }
+        .injection-pass {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: var(--verdict-approved);
+            color: var(--verdict-approved);
+        }
+        .injection-fail {
+            background: rgba(255, 68, 68, 0.1);
+            border-color: var(--verdict-rejected);
+            color: var(--verdict-rejected);
+        }
+        .injection-info {
+            background: rgba(0, 229, 255, 0.1);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .server-info-row {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 0;
+        }
+        .server-info-row:last-child { border-bottom: none; }
+        .info-label {
+            width: 160px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .info-value {
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+        .radar-container {
+            max-width: 350px;
+            margin: 0 auto;
+        }
+        .risk-tier {
+            display: inline-block;
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border-radius: 2px;
+            text-transform: uppercase;
+        }
+        .risk-critical { background: #ff4444; color: #000; }
+        .risk-high { background: #ff8800; color: #000; }
+        .risk-medium { background: #ffaa00; color: #000; }
+        .risk-low { background: #00ff88; color: #000; }
+        .nav-pills .nav-link {
+            color: var(--text-secondary);
+            border: 1px solid transparent;
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--accent);
+            color: var(--bg-primary);
+        }
+        .trust-score-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--accent);
+            text-align: center;
+            line-height: 1;
+        }
+        .trust-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+        .score-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            text-align: center;
+        }
+        .score-item {
+            background: var(--bg-tertiary);
+            padding: 12px 8px;
+            border-radius: 4px;
+        }
+        .score-item-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--accent);
+        }
+        .score-item-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .hidden { display: none !important; }
+        .scan-count-badge {
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="sentinel-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <div class="sentinel-logo">ZO-SENTINEL</div>
+                    <div class="sentinel-subtitle">MCP Server Safety Intelligence</div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <div class="sentinel-subtitle" id="currentTime">LOADING...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="mainContent">
+        <div id="loadingState" class="loading-spinner">
+            <div class="spinner"></div>
+        </div>
+
+        <div id="contentArea" class="hidden">
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">Server Details</div>
+                        <div class="card-body">
+                            <div class="server-info-row">
+                                <span class="info-label">Server ID</span>
+                                <span class="info-value" id="serverId">-</span>
+                            </div>
+                            <div class="server-info-row">
+                                <span class="info-label">Name</span>
+                                <span class="info-value" id="serverName">-</span>
+                            </div>
+                            <div class="server-info-row">
+                                <span class="info-label">URL</span>
+                                <span class="info-value"><a href="#" id="serverUrl" target="_blank" style="color: var(--accent);">-</a></span>
+                            </div>
+                            <div class="server-info-row">
+                                <span class="info-label">Description</span>
+                                <span class="info-value" id="serverDesc">-</span>
+                            </div>
+                            <div class="server-info-row">
+                                <span class="info-label">Registry Source</span>
+                                <span class="info-value" id="registrySource">-</span>
+                            </div>
+                            <div class="server-info-row">
+                                <span class="info-label">Scan Count</span>
+                                <span class="info-value"><span id="scanCount">-</span> <span class="scan-count-badge">scans</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Signal Score Radar</div>
+                        <div class="card-body">
+                            <div class="radar-container">
+                                <canvas id="radarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Signal Dimension Breakdown</div>
+                        <div class="card-body" id="signalBreakdown">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">Trust Score</div>
+                        <div class="card-body text-center">
+                            <div class="trust-score-display" id="trustScore">--</div>
+                            <div class="trust-label">Trust Index</div>
+                            <div style="margin-top: 16px;">
+                                <span class="verdict-badge" id="verdictBadge">PENDING</span>
+                            </div>
+                            <div style="margin-top: 12px;">
+                                <span class="risk-tier risk-medium" id="riskTier">MEDIUM RISK</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Approval Workflow</div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn-approval btn-approve" id="btnApprove" onclick="submitVerdict('APPROVED')">APPROVED</button>
+                                <button class="btn-approval btn-conditional" id="btnConditional" onclick="submitVerdict('CONDITIONAL')">CONDITIONAL</button>
+                                <button class="btn-approval btn-reject" id="btnReject" onclick="submitVerdict('REJECTED')">REJECTED</button>
+                            </div>
+                            <div style="margin-top: 16px;">
+                                <label class="info-label">Override Reason</label>
+                                <textarea class="form-control" id="overrideReason" rows="3" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 12px;" placeholder="Required for override..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Quick Stats</div>
+                        <div class="card-body">
+                            <div class="score-summary-grid">
+                                <div class="score-item">
+                                    <div class="score-item-value" id="threatCount">0</div>
+                                    <div class="score-item-label">Threats</div>
+                                </div>
+                                <div class="score-item">
+                                    <div class="score-item-value" id="signalCount">0</div>
+                                    <div class="score-item-label">Signals</div>
+                                </div>
+                                <div class="score-item">
+                                    <div class="score-item-value" id="attestCount">0</div>
+                                    <div class="score-item-label">Attest</div>
+                                </div>
+                                <div class="score-item">
+                                    <div class="score-item-value" id="riskRank">-</div>
+                                    <div class="score-item-label">Risk Rank</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Injection Resilience</div>
+                        <div class="card-body" id="injectionResults">
+                            <div class="injection-result injection-info">Loading injection test results...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">Attestation History</div>
+                        <div class="card-body">
+                            <div class="timeline" id="attestationTimeline">
+                                <div class="timeline-item">
+                                    <div class="timeline-date">Loading...</div>
+                                    <div class="timeline-title">Fetching attestation records</div>
+                                    <div class="timeline-desc">Please wait...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WRITE_SERVICE_URL = 'http://127.0.0.1:8772/write';
+        const QUERY_SERVICE_URL = 'http://127.0.0.1:8772/query';
+        const EXECUTE_SERVICE_URL = 'http://127.0.0.1:8772/execute';
+
+        const SIGNAL_DIMENSIONS = [
+            { key: 'reputation', label: 'Reputation', color: '#00e5ff' },
+            { key: 'security', label: 'Security', color: '#00ff88' },
+            { key: 'trust_score', label: 'Trust Score', color: '#ffaa00' },
+            { key: 'attestation', label: 'Attestation', color: '#ff88ff' },
+            { key: 'threat_intel', label: 'Threat Intel', color: '#ff4444' },
+            { key: 'code_quality', label: 'Code Quality', color: '#4488ff' },
+            { key: 'operational', label: 'Operational', color: '#ffaa44' }
+        ];
+
+        let currentServerId = null;
+        let currentVerdict = null;
+        let radarChart = null;
+
+        function ws_query(sql) {
+            return fetch(QUERY_SERVICE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: sql })
+            }).then(r => r.json()).catch(e => ({ rows: [], count: 0, error: e.message }));
+        }
+
+        function ws_write(table, rows) {
+            return fetch(WRITE_SERVICE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: table, rows: rows, wait: true })
+            }).then(r => r.json()).catch(e => ({ ok: false, error: e.message }));
+        }
+
+        function ws_execute(sql) {
+            return fetch(EXECUTE_SERVICE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: sql })
+            }).then(r => r.json()).catch(e => ({ ok: false, error: e.message }));
+        }
+
+        function getUrlParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name);
+        }
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+        }
+
+        function getVerdictClass(verdict) {
+            if (!verdict) return 'verdict-pending';
+            const v = verdict.toUpperCase();
+            if (v === 'APPROVED') return 'verdict-approved';
+            if (v === 'CONDITIONAL') return 'verdict-conditional';
+            if (v === 'REJECTED') return 'verdict-rejected';
+            return 'verdict-pending';
+        }
+
+        function getRiskClass(riskTier) {
+            if (!riskTier) return 'risk-medium';
+            const r = riskTier.toUpperCase();
+            if (r === 'CRITICAL') return 'risk-critical';
+            if (r === 'HIGH') return 'risk-high';
+            if (r === 'MEDIUM') return 'risk-medium';
+            if (r === 'LOW') return 'risk-low';
+            return 'risk-medium';
+        }
+
+        function getScoreColor(score, maxScore = 1.0) {
+            const ratio = score / maxScore;
+            if (ratio >= 0.8) return '#00ff88';
+            if (ratio >= 0.6) return '#00e5ff';
+            if (ratio >= 0.4) return '#ffaa00';
+            return '#ff4444';
+        }
+
+        function initRadarChart(labels, data, colors) {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            if (radarChart) radarChart.destroy();
+
+            radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Signal Scores',
+                        data: data,
+                        backgroundColor: 'rgba(0, 229, 255, 0.2)',
+                        borderColor: '#00e5ff',
+                        borderWidth: 2,
+                        pointBackgroundColor: colors,
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1.0,
+                            ticks: {
+                                stepSize: 0.2,
+                                color: '#9e9e9e',
+                                backdropColor: 'transparent',
+                                font: { family: "'Courier New', monospace", size: 10 }
+                            },
+                            grid: { color: '#2a3040' },
+                            angleLines: { color: '#2a3040' },
+                            pointLabels: {
+                                color: '#e0e0e0',
+                                font: { family: "'Courier New', monospace", size: 11 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function renderSignalBreakdown(signals) {
+            const container = document.getElementById('signalBreakdown');
+            let html = '';
+
+            SIGNAL_DIMENSIONS.forEach(dim => {
+                const signal = signals.find(s => s.signal_name === dim.key);
+                const score = signal ? signal.score : 0;
+                const color = getScoreColor(score);
+
+                html += `
+                    <div class="signal-label">
+                        <span>${dim.label}</span>
+                        <span style="color: ${color};">${(score * 100).toFixed(0)}%</span>
+                    </div>
+                    <div class="signal-bar">
+                        <div class="signal-fill" style="width: ${score * 100}%; background: ${color};"></div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderAttestationTimeline(attestations) {
+            const container = document.getElementById('attestationTimeline');
+
+            if (!attestations || attestations.length === 0) {
+                container.innerHTML = `
+                    <div class="timeline-item">
+                        <div class="timeline-date">No records</div>
+                        <div class="timeline-title">No attestation history found</div>
+                        <div class="timeline-desc">This server has not been attested yet.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            attestations.forEach(att => {
+                const date = att.attested_at || att.created_at || 'Unknown';
+                const issuer = att.issuer || att.analyst || 'System';
+                const status = att.status || att.verdict || 'PENDING';
+
+                html += `
+                    <div class="timeline-item">
+                        <div class="timeline-date">${new Date(date).toISOString().substring(0, 16).replace('T', ' ')}</div>
+                        <div class="timeline-title"><span class="verdict-badge ${getVerdictClass(status)}" style="font-size: 10px; padding: 2px 8px;">${status}</span> Attestation</div>
+                        <div class="timeline-desc">Issued by: ${issuer}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderInjectionResults(results) {
+            const container = document.getElementById('injectionResults');
+
+            if (!results || results.length === 0) {
+                container.innerHTML = `
+                    <div class="injection-result injection-info">No injection tests performed yet</div>
+                `;
+                return;
+            }
+
+            let html = '';
+            results.forEach(r => {
+                const statusClass = r.result === 'PASS' ? 'injection-pass' : (r.result === 'FAIL' ? 'injection-fail' : 'injection-info');
+                html += `
+                    <div class="injection-result ${statusClass}">
+                        <strong>${r.test_name || r.signal_name || 'Test'}:</strong> ${r.result || 'UNKNOWN'}
+                        ${r.evidence ? '<br><small>' + r.evidence.substring(0, 100) + '</small>' : ''}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function loadServerDetails(serverId) {
+            try {
+                const serverQuery = await ws_query(`SELECT * FROM mcp_server_registry WHERE server_id = '${serverId}'`);
+                const server = serverQuery.rows && serverQuery.rows[0];
+
+                if (!server) {
+                    document.getElementById('contentArea').innerHTML = `
+                        <div class="alert alert-danger" style="background: rgba(255,68,68,0.1); border-color: #ff4444; color: #ff4444;">
+                            Server not found: ${serverId}
+                        </div>
+                    `;
+                    document.getElementById('contentArea').classList.remove('hidden');
+                    document.getElementById('loadingState').classList.add('hidden');
+                    return;
+                }
+
+                document.getElementById('serverId').textContent = server.server_id || '-';
+                document.getElementById('serverName').textContent = server.name || '-';
+                document.getElementById('serverUrl').textContent = server.url || '-';
+                document.getElementById('serverUrl').href = server.url || '#';
+                document.getElementById('serverDesc').textContent = server.description || '-';
+                document.getElementById('registrySource').textContent = server.registry_source || '-';
+                document.getElementById('scanCount').textContent = server.scan_count || 0;
+
+                currentVerdict = server.verdict || 'PENDING';
+                const verdictBadge = document.getElementById('verdictBadge');
+                verdictBadge.textContent = currentVerdict;
+                verdictBadge.className = 'verdict-badge ' + getVerdictClass(currentVerdict);
+
+                document.getElementById('trustScore').textContent = server.trust_score ? server.trust_score.toFixed(2) : '--';
+                document.getElementById('trustScore').style.color = getScoreColor(server.trust_score || 0);
+
+                const riskTier = server.risk_tier || 'MEDIUM';
+                const riskEl = document.getElementById('riskTier');
+                riskEl.textContent = riskTier + ' RISK';
+                riskEl.className = 'risk-tier ' + getRiskClass(riskTier);
+
+                const signalsQuery = await ws_query(`SELECT * FROM mcp_signal_scores WHERE server_id = '${serverId}'`);
+                const signals = signalsQuery.rows || [];
+
+                const labels = SIGNAL_DIMENSIONS.map(d => d.label);
+                const data = SIGNAL_DIMENSIONS.map(d => {
+                    const sig = signals.find(s => s.signal_name === d.key);
+                    return sig ? sig.score : 0;
+                });
+                const colors = SIGNAL_DIMENSIONS.map(d => {
+                    const sig = signals.find(s => s.signal_name === d.key);
+                    return getScoreColor(sig ? sig.score : 0);
+                });
+
+                initRadarChart(labels, data, colors);
+                renderSignalBreakdown(signals);
+
+                const threatsQuery = await ws_query(`SELECT * FROM mcp_threat_associations WHERE server_id = '${serverId}'`);
+                const threats = threatsQuery.rows || [];
+                document.getElementById('threatCount').textContent = threats.length;
+
+                const riskQuery = await ws_query(`SELECT * FROM mcp_risk_register WHERE server_id = '${serverId}'`);
+                if (riskQuery.rows && riskQuery.rows[0]) {
+                    document.getElementById('riskRank').textContent = riskQuery.rows[0].risk_rank || '-';
+                }
+
+                document.getElementById('signalCount').textContent = signals.length;
+
+                const attestQuery = await ws_query(`SELECT * FROM attestations WHERE server_id = '${serverId}' ORDER BY created_at DESC LIMIT 10`);
+                renderAttestationTimeline(attestQuery.rows || []);
+                document.getElementById('attestCount').textContent = attestQuery.count || 0;
+
+                const injectionQuery = await ws_query(`SELECT * FROM mcp_signal_scores WHERE server_id = '${serverId}' AND signal_name LIKE '%injection%'`);
+                renderInjectionResults(injectionQuery.rows || []);
+
+                document.getElementById('contentArea').classList.remove('hidden');
+                document.getElementById('loadingState').classList.add('hidden');
+
+            } catch (err) {
+                console.error('Error loading server details:', err);
+                document.getElementById('contentArea').innerHTML = `
+                    <div class="alert alert-danger" style="background: rgba(255,68,68,0.1); border-color: #ff4444; color: #ff4444;">
+                        Error loading details: ${err.message}
+                    </div>
+                `;
+                document.getElementById('contentArea').classList.remove('hidden');
+                document.getElementById('loadingState').classList.add('hidden');
+            }
+        }
+
+        async function submitVerdict(verdict) {
+            const reason = document.getElementById('overrideReason').value.trim();
+            if (!reason) {
+                alert('Override reason is required');
+                return;
+            }
+
+            const btnId = 'btn' + verdict.charAt(0) + verdict.slice(1).toLowerCase();
+            document.querySelectorAll('.btn-approval').forEach(b => b.classList.remove('active'));
+            document.getElementById(btnId).classList.add('active');
+
+            try {
+                await ws_write('audit_log', [{
+                    target_server_id: currentServerId,
+                    event_type: 'VERDICT_OVERRIDE',
+                    actor: 'analyst',
+                    detail: `Verdict changed to ${verdict}. Reason: ${reason}`
+                }]);
+
+                await ws_execute(`UPDATE mcp_server_registry SET verdict = '${verdict}', updated_at = NOW() WHERE server_id = '${currentServerId}'`);
+
+                document.getElementById('overrideReason').value = '';
+                alert('Verdict submitted successfully');
+                loadServerDetails(currentServerId);
+
+            } catch (err) {
+                console.error('Error submitting verdict:', err);
+                alert('Error submitting verdict: ' + err.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTime();
+            setInterval(updateTime, 1000);
+
+            currentServerId = getUrlParam('server_id') || getUrlParam('id') || 'demo-server-001';
+
+            if (currentServerId === 'demo-server-001') {
+                document.getElementById('contentArea').classList.remove('hidden');
+                document.getElementById('loadingState').classList.add('hidden');
+
+                document.getElementById('serverId').textContent = 'demo-server-001';
+                document.getElementById('serverName').textContent = 'example-mcp-server';
+                document.getElementById('serverUrl').textContent = 'https://npm.example.com/mcp-server';
+                document.getElementById('serverUrl').href = 'https://npm.example.com/mcp-server';
+                document.getElementById('serverDesc').textContent = 'An example MCP server for demonstration purposes with multiple capabilities.';
+                document.getElementById('registrySource').textContent = 'npm_registry';
+                document.getElementById('scanCount').textContent = '42';
+
+                document.getElementById('trustScore').textContent = '0.73';
+                document.getElementById('verdictBadge').textContent = 'CONDITIONAL';
+                document.getElementById('verdictBadge').className = 'verdict-badge verdict-conditional';
+                document.getElementById('riskTier').textContent = 'MEDIUM RISK';
+                document.getElementById('riskTier').className = 'risk-tier risk-medium';
+                document.getElementById('threatCount').textContent = '2';
+                document.getElementById('signalCount').textContent = '7';
+                document.getElementById('attestCount').textContent = '3';
+                document.getElementById('riskRank').textContent = '15';
+
+                const demoSignals = [
+                    { signal_name: 'reputation', score: 0.75 },
+                    { signal_name: 'security', score: 0.82 },
+                    { signal_name: 'trust_score', score: 0.73 },
+                    { signal_name: 'attestation', score: 0.60 },
+                    { signal_name: 'threat_intel', score: 0.90 },
+                    { signal_name: 'code_quality', score: 0.68 },
+                    { signal_name: 'operational', score: 0.55 }
+                ];
+
+                const labels = SIGNAL_DIMENSIONS.map(d => d.label);
+                const data = SIGNAL_DIMENSIONS.map(d => {
+                    const sig = demoSignals.find(s => s.signal_name === d.key);
+                    return sig ? sig.score : 0;
+                });
+                const colors = SIGNAL_DIMENSIONS.map(d => {
+                    const sig = demoSignals.find(s => s.signal_name === d.key);
+                    return getScoreColor(sig ? sig.score : 0);
+                });
+
+                initRadarChart(labels, data, colors);
+                renderSignalBreakdown(demoSignals);
+
+                renderAttestationTimeline([
+                    { attested_at: new Date(Date.now() - 86400000 * 3).toISOString(), issuer: 'analyst-001', status: 'CONDITIONAL' },
+                    { attested_at: new Date(Date.now() - 86400000 * 7).toISOString(), issuer: 'system', status: 'APPROVED' },
+                    { attested_at: new Date(Date.now() - 86400000 * 14).toISOString(), issuer: 'analyst-002', status: 'PENDING' }
+                ]);
+
+                renderInjectionResults([
+                    { test_name: 'SQL Injection', result: 'PASS', evidence: 'No SQL injection vectors detected' },
+                    { test_name: 'Prompt Injection', result: 'PASS', evidence: 'Input sanitization working correctly' },
+                    { test_name: 'XSS Test', result: 'PASS', evidence: 'Content encoding properly applied' },
+                    { test_name: 'Command Injection', result: 'FAIL', evidence: 'Potential command injection in exec handler' }
+                ]);
+
+            } else {
+                loadServerDetails(currentServerId);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "task": "build_admin_attestations_html",
+  "handler": "generate_file",
+  "output_file": "admin_attestations.html",
+  "complexity": "low",
+  "phase": "9",
+  "priority": 0.8,
+  "description": "Admin UI to revoke or extend existing attestations. Must: (1) list attestations with server name, verdict, valid_until, (2) allow extend (new valid_until date) or revoke action, (3) write audit_log entry for every action, (4) revoke triggers attestation_engine revocation flow via :8780. Target port 8790. X-API-Key auth. Table columns: attestation_id, server_id, verdict, valid_until, status.",
+  "reads": [
+    "attestation_engine.py"
+  ],
+  "next_directive": {}
+}

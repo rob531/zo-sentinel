@@ -1,0 +1,11 @@
+{
+  "task": "build_operations_documentation",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Create OPERATIONS.md documenting: (1) supervisord layout for all daemons, (2) log file locations by daemon, (3) recovery runbook for stale daemons (restart procedure), (4) how to check queue depth and backlog, (5) escalation path for mcp_scanner and rug_pull_monitor staleness. Reference Appendix A. Not a code file.",
+  "reads": [],
+  "next_directive": {}
+}

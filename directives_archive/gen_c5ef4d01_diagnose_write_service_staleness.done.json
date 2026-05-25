@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_write_service_staleness",
+  "handler": "generate_file",
+  "output_file": "diagnose_ws_staleness_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Diagnostic-only directive. write_service is stale at 24m (threshold 300s). This is a protected file \u2014 do NOT propose rebuild. Instead, produce a diagnostic module that: (1) queries service_health to confirm staleness, (2) attempts a lightweight query call to :8772 to check responsiveness, (3) logs findings to diagnostic output, (4) does NOT restart or deploy anything. File is for human review, not automated repair."
+}

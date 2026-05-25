@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_signal_analyser_import_smoke",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_import_smoke.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module for the smoke failure in signal_analyser.py showing import traceback at line 10. The three smoke failures (registry_api.py, rug_pull_monitor.py, signal_analyser.py) all show identical pattern \u2014 import error at line 10, suggesting a common dependency issue. Extract the line-10 imports from signal_analyser.py, verify each is importable, check if any is missing from auto-installed deps, and report findings via diagnostic log. Do NOT propose rebuild of signal_analyser.py (protected). Return diagnostic output only; let builder auto-install loop handle dependency resolution if needed.",
+  "reads": [
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

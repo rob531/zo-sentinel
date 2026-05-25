@@ -1,0 +1,14 @@
+{
+  "task": "snow_connector_approval_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow on port 8780. snow_connector.py is a protected file \u2014 this directive creates a new companion module that consumes snow_connector outputs. MUST use write_service (:8772) for all DB reads/writes. MUST check service_health for snow_connector before processing. MUST query mcp_server_registry for verdict before inserting mcp_submissions. MUST call approval_workflow API (POST :8780/submissions) when SNOW ticket arrives. MUST NOT make direct HTTP to snow_connector daemon. MUST NOT write to mcp_submissions without verifying verdict != HIGH_RISK_ISOLATED and verdict != KNOWN_THREAT. Spec reference: Section 5 inter-daemon communication rules.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

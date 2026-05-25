@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire snow_connector.py into the approval_workflow daemon. The snow_connector.py was built 2026-04-17 but integration is incomplete per gaps map. New module MUST: (1) Query approval_workflow for pending decisions (mcp_decisions table WHERE status='APPROVED' OR status='CONDITIONAL'). (2) Transform each decision into a ServiceNow ticket payload with server_name, verdict, signal scores, decision_date, expiry. (3) POST to ServiceNow via snow_connector.py write path (or direct SNOW API). (4) Log result to audit_log table with target_server_id, action='snow_sync', outcome. (5) Handle ServiceNow unavailable gracefully (exponential backoff 3 tries, log failure, continue). (6) Run as a polling daemon with 5-minute cycle. (7) Use write_service :8772 exclusively for DB reads/writes per section 5. No HTTP between daemons. Reference: PRODUCT_SPEC.md section 1 core loop, section 5 communication rules, section 7 audit requirements."
+}

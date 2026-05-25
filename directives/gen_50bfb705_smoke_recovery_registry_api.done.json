@@ -1,0 +1,9 @@
+{
+  "task": "smoke_recovery_registry_api",
+  "handler": "generate_file",
+  "output_file": "registry_api_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Recover registry_api.py from smoke failure. The recent smoke failures show import errors in registry_api.py. This is a protected file (in ALREADY_BUILT list), so propose a new companion module that exposes the same API surface. New module MUST: (1) Mirror the existing FastAPI interface (endpoints, request/response shapes). (2) Fix the import error: the error shows line 10 importlib failure \u2014 likely missing `# deps: requests, fastapi` header or broken relative imports. (3) Ensure module loads cleanly with `python3 registry_api_v2.py` smoke. (4) Use write_service on :8772 for DB operations per section 5 of PRODUCT_SPEC.md. (5) Include heartbeat writer to service_health table. (6) Do NOT prefix filename with build_ or rebuild_. Reference: section 6 heartbeat contract, section 5 inter-daemon communication rules."
+}

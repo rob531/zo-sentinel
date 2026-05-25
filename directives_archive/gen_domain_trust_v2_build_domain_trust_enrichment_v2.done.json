@@ -1,0 +1,9 @@
+{
+  "task": "build_domain_trust_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "domain_trust_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Build a replacement for domain_trust_enrichment.py which was REJECTED by the enrichment_harness evidence query (only 8 distinct scores from 34 distinct synthetic input fingerprints -- ignores most inputs). Root cause in v1: the final scoring step renormalizes total_contribution by total_weight_used then multiplies by sum(WEIGHTS.values()), which collapses scores toward a weighted average and kills variance. Requirements for v2: (1) EXACT signature def compute_score(metadata: dict) -> tuple[float, dict] returning score in [0.0, 100.0] and evidence dict. (2) Pure function, no DB/network/file access, no project imports. (3) Must produce at least 20 distinct scores across the 34-input synthetic harness fingerprint set. (4) Must read AT LEAST 4 of these metadata fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars, url. (5) Must use non-linear interactions -- e.g., if age_days < 30 AND download_count < 1000, apply multiplicative suspicion penalty; if publisher_verified is False AND registry_source is unknown, compound the penalty; if url present and ends in high-risk TLD (.ru .xyz .tk .ml .ga .cc .su), apply additional risk. DO NOT renormalize by sum of used weights -- let missing fields reduce confidence naturally, not rescale the score. Evidence dict must list fields_used, partial_scores per field, any interaction penalties applied, and final_score_raw. Include __main__ harness block with 8+ test cases covering the edge cases (new+unknown registry, aged+verified, popular-but-new, typosquat-risk, minimal-metadata). Do not target protected files. The file domain_trust_enrichment.py is NOT protected -- it will be deprecated once v2 proves out against enrichment_harness.py."
+}

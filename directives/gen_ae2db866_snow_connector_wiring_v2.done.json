@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_wiring_v2",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.86,
+  "description": "Wire existing snow_connector.py (built 2026-04-16) into approval_workflow. The connector currently exists but integration is incomplete per gaps map. Create snow_inbound_webhook_receiver.py that: (1) accepts ServiceNow ticket webhook on appropriate endpoint, (2) validates X-SNOW-Signature header using shared secret from environment SNOW_SIGNING_SECRET, (3) extracts MCP server_name from SNOW ticket description field, (4) queries write_service for current verdict, (5) writes decision record to mcp_decisions if approved, (6) writes audit_log entry for every action. MUST: validate signature before processing, never accept unsigned webhooks. MUST NOT: auto-approve high-risk MCPs, write to mcp_server_registry directly. Spec reference: Section 5 inter-daemon communication, Section 7 security, Appendix A integration wiring."
+}

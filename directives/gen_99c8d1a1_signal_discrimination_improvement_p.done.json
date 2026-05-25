@@ -1,0 +1,9 @@
+{
+  "task": "signal_discrimination_improvement_pass",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_audit_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Audit weak signals with low discrimination (permission_scope, temporal_stability, tool_description_safety each at 4 distinct values). Analyze why v2 enrichments produce flat scores. Identify the specific scoring formula failure points in the compute_score() implementations. Must query mcp_signal_enrichments for actual score distribution per signal. Output a JSON report of distinct-value counts per signal_name, and recommendation list for specific formula adjustments. Reads: permission_scope_enrichment_v2.py, temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py (already built but may be underperforming). Do NOT propose rebuilds; output audit findings only."
+}

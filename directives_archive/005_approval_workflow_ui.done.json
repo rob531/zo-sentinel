@@ -1,0 +1,11 @@
+{
+  "task": "phase4b_approval_workflow_ui",
+  "handler": "generate_file",
+  "output_file": "ui/approval_workflow.jsx",
+  "complexity": "high",
+  "description": "React component for the enterprise InfoSec MCP approval workflow. Three views: (1) SUBMIT VIEW: form fields - MCP Identifier (text), Requester Name, Team, Business Purpose (textarea), Target Environment (dropdown: Production/Staging/Research/Development). Submit button calls POST /api/submit. (2) REVIEW VIEW: shows the intelligence brief - verdict badge, confidence, 6 signal scores (domain_trust, tool_description_safety, permission_scope, supply_chain, community_signal, temporal_stability), key findings list, recommended deployment contexts. Below the brief: Decision panel with APPROVE/CONDITIONAL/REJECT buttons, conditions textarea (shown for CONDITIONAL), notes textarea, analyst name field, expiry days (shown for APPROVE/CONDITIONAL, default 90). POST /api/decision to submit. (3) REGISTRY VIEW: table of all assessed MCPs - name, verdict badge, last assessed date, decision status. Click row to see full brief. Tabs at top to switch between Submit / Review / Registry. Uses same ZO-SENTINEL dark aesthetic as Phase 1 UI - dark bg #090b0f, cyan accent #00d4ff, Barlow Condensed headers, Courier Prime mono. Decision buttons: green for APPROVE, amber for CONDITIONAL, red for REJECT.",
+  "context": "This replaces the simple lookup from Phase 1 with a full approval workflow. The analyst is the primary user - not the developer. The intelligence brief is designed to support a human decision, not automate it. The verdict is advisory - the analyst makes the final call and records it with conditions.",
+  "priority": 0.90,
+  "from": "claude_directive",
+  "phase": "4"
+}

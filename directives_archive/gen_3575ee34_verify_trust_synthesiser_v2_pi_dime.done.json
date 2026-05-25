@@ -1,0 +1,9 @@
+{
+  "task": "verify_trust_synthesiser_v2_pi_dimension",
+  "handler": "generate_file",
+  "output_file": "verify_trust_synthesiser_v2_pi.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Quality verification module for Phase 8 completion. Must inspect trust_synthesiser_v2.py source to confirm: (1) reads mcp_signal_scores rows WHERE dimension='injection_resilience', (2) applies weight 1.6 for injection_resilience dimension, (3) applies threshold 0.80 for HIGH_RISK_ISOLATED on injection_resilience. Outputs JSON verification report with PASS/FAIL per check. trust_synthesiser_v2.py is protected \u2014 this is diagnostic only, not a rebuild directive."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_approval_workflow_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_workflow_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire snow_connector.py into approval_workflow daemon. ServiceNow inbound webhook for MCP request tickets. MUST authenticate via SNOW OAuth; MUST validate request signature; MUST never accept unsigned webhooks. When SNOW ticket arrives, query current verdict via write_service, route to approval_workflow for analyst review, write decision back to SNOW. No HTTP between peer daemons - use write_service contract."
+}

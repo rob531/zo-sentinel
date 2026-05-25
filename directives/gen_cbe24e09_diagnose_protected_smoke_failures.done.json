@@ -1,0 +1,15 @@
+{
+  "task": "diagnose_protected_smoke_failures",
+  "handler": "generate_file",
+  "output_file": "diagnose_import_chain_smoke.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic module to identify the root cause of import chain failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. These are protected files but are failing smoke with similar tracebacks pointing to import errors in line 10. The diagnostic MUST: (1) NOT modify any protected file; (2) Import each target module and capture the specific ImportError or ModuleNotFoundError; (3) Report which dependency is missing or conflicting; (4) NOT attempt to install or fix anything \u2014 pure diagnostic only. Outputs findings to a JSON blob written via write_service for operator review.",
+  "reads": [
+    "registry_api.py",
+    "rug_pull_monitor.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

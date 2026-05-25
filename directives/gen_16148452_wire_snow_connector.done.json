@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Complete wiring of snow_connector.py into approval_workflow daemon. Must wire inbound ServiceNow webhook to create mcp_submissions records. Must use write_service :8772 for all DB writes. Must implement numbered constraints: (1) MUST validate ServiceNow HMAC signature on all incoming webhooks, (2) MUST reject unsigned requests with HTTP 401, (3) MUST parse SNOW ticket fields into mcp_submissions schema (mcp_name, requested_by, notes), (4) MUST NOT make outbound HTTP to ServiceNow without explicit admin configuration. Reference: snow_connector_integration.py (already built)."
+}

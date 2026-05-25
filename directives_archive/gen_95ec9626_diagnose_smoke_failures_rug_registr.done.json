@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_failures_rug_registry_signal",
+  "handler": "generate_file",
+  "output_file": "diagnose_smoke_failures_rug_registry_signal.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic directive to investigate smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. These files are protected and cannot be directly rebuilt. Examine import patterns, dependency declarations, and runtime signals. Report findings to inform whether a companion module is needed or if the issue is environmental (missing deps auto-resolve). Do NOT rebuild these protected files. Extract the specific import errors from smoke output."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "permission_scope_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Pure enrichment module exposing compute_score(metadata) returning (float, dict). Uses permission_types list, permission_count, has_fs_access, has_env_access, has_network_access, has_process_spawn to compute permission scope score. Current signal has only 3 distinct values (WEAK -- low variety). MUST read at least 6 metadata fields; MUST return evidence dict listing partial scores per permission category; MUST NOT write to DB or call network; MUST complete in under 2 seconds."
+}

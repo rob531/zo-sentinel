@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_signal_analyser_staleness",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_staleness.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic-only directive. Queries write_service for signal_analyser heartbeat age (currently 4h2m, stale >7200s threshold). Inspects service_health table, checks for import errors or loop crashes in recent logs, verifies write_service connectivity. Does NOT rebuild signal_analyser.py (protected file). Does NOT restart services. Outputs JSON diagnostic report with: heartbeat age, suspected cause, signal_analyser last processed timestamp from mcp_signal_scores, and recommended remediation steps. Needed because signal_analyser staleness blocks signal scoring pipeline.",
+  "reads": [
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,12 @@
+{
+  "task": "build_http_retry",
+  "handler": "generate_file",
+  "output_file": "http_retry.py",
+  "complexity": "low",
+  "phase": "2",
+  "priority": 0.85,
+  "reads": [],
+  "description": "HTTP retry utility. Functions: get_with_retry(url,params=None,headers=None,retries=3,backoff=2.0,timeout=10)->Response|None. post_with_retry(url,json=None,headers=None,retries=3,backoff=2.0,timeout=10)->Response|None. Both retry on ConnectionError,Timeout,5xx responses. Exponential backoff: wait=backoff**attempt. Returns None if all retries exhausted (logs warning). Also: safe_json(response)->dict|None catches json.JSONDecodeError. Designed to replace raw requests.get/post in all sentinel modules. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

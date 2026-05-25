@@ -1,0 +1,9 @@
+{
+  "task": "signal_discrimination_probe",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_probe.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Diagnostic module to probe why permission_scope, temporal_stability, and tool_description_safety each show only 4 distinct values in signal_analyser output. Query mcp_signal_scores for each of these signal_types and compute actual cardinality. If cardinality is genuinely low, investigate whether the underlying metadata fields have insufficient variance or whether the v2 enrichment modules are not being called. Output a JSON diagnostic report with field variance analysis. Pure read-only diagnostic - uses ws_query only."
+}

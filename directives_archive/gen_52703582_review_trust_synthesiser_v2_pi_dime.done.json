@@ -1,0 +1,13 @@
+{
+  "task": "review_trust_synthesiser_v2_pi_dimension",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_pi_audit.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Build trust_synthesiser_v2_pi_audit.py: a quality-pass diagnostic that reads trust_synthesiser_v2.py from disk and verifies (1) it reads mcp_signal_scores where dimension='injection_resilience', (2) applies weight 1.6, (3) applies threshold 0.80 for that dimension, (4) includes the injection_resilience score in the composite calculation. Phase 8 harness components are built; the spec says trust_synthesiser_v2 may already be correct but needs verification. The audit file outputs: {conforms: bool, findings: list of strings}. This is audit-only; does NOT modify trust_synthesiser_v2.py. Exits 0 on success. If conforms=True and findings=[], queue nothing. If conforms=False, queue a companion module that patches the gap rather than rewriting the protected file.",
+  "reads": [
+    "trust_synthesiser_v2.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "wire_permission_scope_enrichment",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Integration daemon that wires the existing permission_scope_enrichment.py into the signal pipeline. Polls mcp_server_registry for MCPs without a permission_scope score in mcp_signal_enrichments, calls permission_scope_enrichment.compute_score(metadata) per MCP, and writes results to mcp_signal_enrichments with signal_type='permission_scope', confidence, evidence_blob. Target: move permission_scope from current 4 distinct values (weak discrimination) toward 20+ distinct values across the 34-fingerprint corpus. Uses write_service :8772 for all DB operations. Heartbeat every 60s to service_health."
+}

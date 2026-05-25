@@ -1,0 +1,9 @@
+{
+  "task": "strengthen_tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Signal quality diagnostic shows tool_description_safety has low variety (3 distinct scores). Replace or extend tool_description_safety_enrichment.py to read MULTIPLE metadata fields and produce at least 20 distinct scores. Must expose compute_score(metadata: dict) -> tuple[float, dict] per enrichment contract."
+}

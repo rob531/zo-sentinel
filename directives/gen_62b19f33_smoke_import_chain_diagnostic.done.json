@@ -1,0 +1,9 @@
+{
+  "task": "smoke_import_chain_diagnostic",
+  "handler": "generate_file",
+  "output_file": "smoke_import_chain_diag.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Recent smoke failures on registry_api.py, rug_pull_monitor.py, and signal_analyser.py all show identical traceback: 'File \"<string>\", line 10, in <module> File \"<frozen importlib'. This indicates an import chain failure at line 10 of some module these files try to import. Create a diagnostic that: (1) parses the smoke failure log to extract the common import path, (2) checks which shared dependency is causing the failure, (3) reports the specific import statement that fails. Output a JSON diagnostic report. Do NOT propose a fix file \u2014 that is the meta-task that spec forbids. This diagnostic enables a human to understand what rebuild directive to issue."
+}

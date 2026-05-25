@@ -1,0 +1,12 @@
+{
+  "task": "rewrite_attestation_engine",
+  "handler": "generate_file",
+  "output_file": "attestation_engine.py",
+  "complexity": "high",
+  "reads": ["schema.py", "schema_v2.py", "trust_synthesiser.py"],
+  "description": "Complete attestation engine daemon. Core function: generate_attestation(server_id) -> dict. Steps: (1) fetch trust_score, verdict, verdict_reasoning, confidence from mcp_server_registry. (2) fetch risk_rank, risk_tier from mcp_risk_register if exists. (3) select attestation_text based on verdict tier using non-binary probabilistic language: TRUSTED_GENERAL='No significant threat indicators detected at time of assessment. Assessment suggests suitability for enterprise use under standard security controls. Valid for 90 days.', TRUSTED_RESEARCH='Assessment indicates likely suitability for research and development environments. Exercise standard security review before production deployment.', ENTERPRISE_CONTROLLED='Moderate confidence in safety for controlled use. Recommended for staging environments under explicit security review. Not validated for production systems processing PII.', CAUTION_LIMITED='Elevated risk signals detected. Suitable only for isolated environments with no access to sensitive data or credentials. Requires explicit InfoSec approval.', HIGH_RISK_ISOLATED='High risk indicators present. Deployment inadvisable without independent security audit and explicit CISO approval.', KNOWN_THREAT='Active threat indicators identified. Do not deploy in any environment pending investigation.', INSUFFICIENT='Insufficient assessment data. Submit for manual InfoSec review.'. (4) Set expiry: TRUSTED_GENERAL=90d, TRUSTED_RESEARCH=60d, ENTERPRISE_CONTROLLED=60d, CAUTION_LIMITED=30d, HIGH_RISK_ISOLATED=7d, KNOWN_THREAT=7d, INSUFFICIENT=14d. (5) Write to mcp_attestations {server_id, attestation_text, scope, confidence_level, valid_until, risk_tier, caveats, generated_at}. caveats ALWAYS='This attestation reflects automated signal analysis only. It does not constitute a security audit or legal certification. Independent review is required before production deployment.' Daemon polls every 21600s (6h). Writes ATTESTATION_REPORT.md summary.",
+  "context": "The non-binding language is architecturally required. Never use the words 'safe' or 'unsafe' in an attestation. Always include caveats field. write mcp_attestations via ws_write with rows field.",
+  "priority": 0.93,
+  "from": "claude_manual",
+  "phase": "7"
+}

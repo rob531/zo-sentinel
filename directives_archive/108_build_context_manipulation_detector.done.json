@@ -1,0 +1,15 @@
+{
+  "task": "build_context_manipulation_detector",
+  "handler": "generate_file",
+  "output_file": "context_manipulation_detector.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.95,
+  "reads": [
+    "schema.py",
+    "text_patterns.py"
+  ],
+  "description": "Context manipulation detector daemon. For each MCP in mcp_server_registry: fetch tool JSON schema from {url}/tools (GET, 5s timeout). Parse each tool's inputSchema.properties for dangerous parameter types: (1) parameters accepting 'string' type with no maxLength (unbounded text injection), (2) parameter names containing: prompt, instruction, system, context, override, (3) parameters with enum values containing instruction-like strings, (4) tools with >10 parameters (unusually broad permission surface). Blast radius calc: (file_path parameter AND url parameter in same tool) = exfil combo = CRITICAL. (command OR shell parameter) = code_exec = CRITICAL. ws_write mcp_threat_associations for CRITICAL/HIGH findings. ws_write mcp_signal_scores permission_scope signal. Poll 21600s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

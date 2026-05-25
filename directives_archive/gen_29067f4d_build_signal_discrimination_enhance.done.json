@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_discrimination_enhancer",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_enhancer.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Build diagnostic daemon to address WEAK signals (permission_scope, temporal_stability, tool_description_safety). Reads mcp_signal_scores for each signal type and computes discrimination metrics: number of distinct values, value distribution entropy, correlation with verdict tiers. Logs findings to service_health. Does NOT modify any signal computation logic. Pure diagnostic \u2014 identifies which enrichment modules produce insufficient variance for downstream trust_synthesiser weighting."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Build aidr_commit_gateway.py: CrowdStrike AI Defense Runtime commit bridge. MUST use numbered constraints: (1) MUST query ZO-SENTINEL verdict via /query before forwarding commit, (2) MUST check verdict NOT IN ('CAUTION_LIMITED', 'HIGH_RISK_ISOLATED') before auto-commit, (3) MUST include injection_resilience score in commit payload JSON, (4) MUST log decision to audit_log table, (5) MUST support manual override flag to bypass verdict check with audit trail, (6) MUST timeout external calls at 10s, (7) MUST NOT forward any MCP server flagged as HIGH_RISK_ISOLATED regardless of override. Run as daemon pattern: run() + if __name__ == '__main__': run()."
+}

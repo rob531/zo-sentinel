@@ -1,0 +1,9 @@
+{
+  "task": "github_pr_webhook_wiring",
+  "handler": "generate_file",
+  "output_file": "github_pr_webhook_receiver.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.85,
+  "description": "Webhook receiver daemon for GitHub PR events wired to existing github_pr_checker.py. Binds to localhost port 8785. (1) MUST verify GitHub webhook signature using HMAC-SHA256 from keys file; (2) MUST forward validated PR events to github_pr_checker logic via internal function call (not HTTP); (3) MUST implement 5s processing timeout; (4) MUST log received events to audit_log; (5) MUST return 200 within 3s to GitHub to prevent re-delivery; (6) MUST NOT process events if github_pr_checker is not running (check via service_health). Reads github_pr_checker.py."
+}

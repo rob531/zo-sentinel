@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui_v2.html",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild mcp_detail_view_ui.html (previously built 2026-04-18T01:23:02) to fix build failure. Template showing MCP server details: name, registry_source, signal scores (all 7 dimensions), composite verdict, attestation status, threat associations. Fetch data from registry_api on :8781. Include signal breakdown bars and verdict badge."
+}

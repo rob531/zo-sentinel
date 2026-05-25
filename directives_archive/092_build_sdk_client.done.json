@@ -1,0 +1,14 @@
+{
+  "task": "build_sdk_client",
+  "handler": "generate_file",
+  "output_file": "sentinel_sdk.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.62,
+  "reads": [
+    "env_config.py"
+  ],
+  "description": "Python SDK client for ZO-SENTINEL. SentinelClient class: __init__(base_url=http://localhost:8787). Methods: assess(mcp_name_or_url)->AssessmentResult, search(query,limit=10)->list, submit_for_review(name,url,description,requested_by)->str (job_id), get_status(job_id)->dict, is_trusted(mcp_name)->bool (quick check), get_risk_tier(mcp_name)->str. AssessmentResult dataclass: server_id,name,verdict,trust_score,risk_tier,attestation_summary,recommended_action. Importable by other tools: from sentinel_sdk import SentinelClient. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

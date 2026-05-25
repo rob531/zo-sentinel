@@ -1,0 +1,9 @@
+{
+  "task": "retry_email_guid_auth_module",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Retry failed build_email_guid_auth and build_email_guid_auth_compact. The email_guid_auth.py exists but builds failed. Regenerate with correct module structure. Must expose: generate_magic_link(server_id, email), validate_guid(guid), cleanup_expired(). Use os.environ.get() for API keys. Heartbeat to service_health every 60s. No direct duckdb imports \u2014 all writes via write_service :8772."
+}

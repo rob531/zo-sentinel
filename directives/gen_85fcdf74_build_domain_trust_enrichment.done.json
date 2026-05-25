@@ -1,0 +1,9 @@
+{
+  "task": "build_domain_trust_enrichment",
+  "handler": "generate_file",
+  "output_file": "domain_trust_enrichment.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Pure enrichment module for domain_trust signal (currently only 12 distinct values - weak discrimination per signal quality diagnostic). Exposes compute_score(metadata: dict) returning (float 0-100, evidence dict). Must read MULTIPLE metadata fields: registry_source, age_days, publisher_verified, stars, download_count, dependency_count to improve discrimination. Pure function: no DB writes, network, or imports of protected modules. Must yield at least 20 distinct scores across synthetic fingerprints per enricher contract. Evidence dict required for audit."
+}

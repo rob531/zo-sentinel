@@ -1,0 +1,15 @@
+{
+  "task": "diagnose_signal_enrichment_low_cardinality",
+  "handler": "generate_file",
+  "output_file": "diagnose_enrichment_cardinality.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic to assess why permission_scope_enrichment_v2, temporal_stability_enrichment_v2, and tool_description_safety_enrichment_v2 produce only 4 distinct scores (signal diagnostic shows plateau at 4 values). Query mcp_signal_enrichments for rows where signal_type in ('permission_scope','temporal_stability','tool_description_safety'), collect all score values, assert cardinality >= 20 per spec section 3 enricher contract. Report which fields the enrichment modules read vs. the metadata available. Output is a diagnostic report only \u2014 no DB writes, no module changes.",
+  "reads": [
+    "permission_scope_enrichment_v2.py",
+    "temporal_stability_enrichment_v2.py",
+    "tool_description_safety_enrichment_v2.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,13 @@
+{
+  "task": "build_permission_scope_enrichment",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Pure enrichment module for permission_scope signal. Current signal has only 4 distinct values, needs enrichment to improve discrimination. Must expose compute_score(metadata: dict) -> tuple[float, dict] returning (score 0-100, evidence dict). Must read MULTIPLE fields from metadata: requested_permissions, permission_complexity_score, permission_risk_tags, scope_creep_indicators. No DB writes, no network, no imports of protected modules. Should yield at least 20 distinct scores across 34 synthetic fingerprints per enrichment_harness.py contract. Score should reward minimal permission requests and penalize broad/scoped permissions. Evidence dict must list fields used and partial scores for auditability.",
+  "reads": [
+    "signal_discrimination_validator.py"
+  ],
+  "next_directive": {}
+}

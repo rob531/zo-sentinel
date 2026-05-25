@@ -1,0 +1,9 @@
+{
+  "task": "pi_components_supervisord_integration",
+  "handler": "generate_file",
+  "output_file": "pi_components_supervisord_addition.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Generate a supervisord config fragment that adds the six Phase 8 Pi components to supervisord_sentinel_full.conf: pi_corpus_ingest, pi_quarantine_reviewer, pi_quarantine_promoter, pi_flagged_review_api, pi_harness_runner, pi_scorer. Each entry uses command=python3 /home/workspace/zo_sentinel/{filename}.py with autorestart=true and stdout_logfile. Reads current supervisord file and appends new entries without modifying existing ones."
+}

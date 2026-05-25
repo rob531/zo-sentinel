@@ -1,0 +1,12 @@
+{
+  "task": "diagnose_rug_pull_monitor_stale_v2",
+  "handler": "generate_file",
+  "output_file": "diagnose_rug_pull_monitor_stale_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Fresh diagnostic for rug_pull_monitor which has been stale for 140h44m (far exceeding the 2h threshold). Unlike the prior diagnostic (2026-05-03T16:02:00), this version must specifically check: (1) supervisord.conf entry exists and is enabled, (2) process pid file is stale or missing, (3) last successful heartbeat timestamp in service_health, (4) recent log entries showing daemon startup or failure. Output: structured diagnostic report to stdout. Do NOT propose rebuild of rug_pull_monitor.py (protected).",
+  "reads": [
+    "diagnose_rug_pull_monitor_stale.py"
+  ]
+}

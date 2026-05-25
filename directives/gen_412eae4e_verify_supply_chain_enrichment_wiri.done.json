@@ -1,0 +1,9 @@
+{
+  "task": "verify_supply_chain_enrichment_wiring",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_wiring_verifier.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Verifies that supply_chain_enrichment.py (built 2026-05-23T13:21:00) is wired into signal_analyser and writing to mcp_signal_enrichments correctly. Performs: (1) queries mcp_signal_enrichments for rows where signal_type='supply_chain', (2) verifies enrichment rows have evidence_blob with signal_type, confidence, and evidence_blob keys per spec section 3, (3) checks that compute_score() in the module reads at least 5 metadata fields, (4) runs a synthetic metadata dict through compute_score() to verify output shape. Reports missing wiring as a gap requiring a signal_analyser patch directive. Priority is high because supply_chain is flagged as OK in signal quality (35 distinct values) but mcp_signal_enrichments total is only 280 rows."
+}

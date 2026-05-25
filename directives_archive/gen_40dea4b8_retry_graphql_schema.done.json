@@ -1,0 +1,9 @@
+{
+  "task": "retry_graphql_schema",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.93,
+  "description": "Regenerate graphql_schema_builder.py to fix the build failure. MUST: (1) Use refresh_schema_doc.py to pull latest schema from live DB via write_service :8772; (2) Include all Phase 9 types: injection_resilience score field, AiDr commit metadata, ServiceNow ticket references, approval_evidence bundle schema; (3) Fix any import errors causing smoke failures; (4) Ensure GraphQL schema validates against DB schema reference in DB_SCHEMA.md. Task name avoids build_ prefix to prevent orphan filename. Explicit output_file ensures clean generation."
+}

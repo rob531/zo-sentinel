@@ -1,0 +1,11 @@
+{
+  "task": "phase4c_schema_v2",
+  "handler": "generate_file",
+  "output_file": "schema_v2.py",
+  "complexity": "low",
+  "description": "Extended DuckDB schema for approval workflow. Add to existing sentinel tables: (1) mcp_submissions: id BIGINT PK, submission_id VARCHAR UNIQUE, mcp_identifier VARCHAR, requester_name VARCHAR, requester_team VARCHAR, business_purpose TEXT, environment VARCHAR, submitted_at TIMESTAMPTZ, status VARCHAR DEFAULT 'pending'. (2) mcp_decisions: id BIGINT PK, submission_id VARCHAR, analyst_name VARCHAR, decision VARCHAR CHECK(decision IN ('APPROVED','CONDITIONAL','REJECTED')), conditions TEXT, notes TEXT, expiry_days INTEGER DEFAULT 90, expires_at TIMESTAMPTZ, decided_at TIMESTAMPTZ. (3) mcp_policy_rules: id BIGINT PK, rule_name VARCHAR UNIQUE, rule_type VARCHAR, pattern VARCHAR, action VARCHAR, description TEXT, created_at TIMESTAMPTZ - for org-specific policy automation e.g. never allow filesystem MCPs on production. Include create_v2() function. Run via POST to http://127.0.0.1:8772/execute.",
+  "context": "Schema extension for Phase 4 approval workflow. Keep DuckDB compatible.",
+  "priority": 0.93,
+  "from": "claude_directive",
+  "phase": "4"
+}

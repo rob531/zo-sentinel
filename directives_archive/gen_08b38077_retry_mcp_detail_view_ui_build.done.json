@@ -1,0 +1,9 @@
+{
+  "task": "retry_mcp_detail_view_ui_build",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Rebuild mcp_detail_view_ui.py. Last build failed. UI component for MCP detail view in Search-Driven UI. Must integrate with existing dashboard.html patterns. Include static HTML with data injection points. Must not import protected modules. Include deps comment. Uses localhost port binding only."
+}

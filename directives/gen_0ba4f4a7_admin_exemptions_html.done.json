@@ -1,0 +1,13 @@
+{
+  "task": "admin_exemptions_html",
+  "handler": "generate_file",
+  "output_file": "admin_exemptions.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Admin UI page for managing mcp_exemptions table. Must include: (1) list view of existing exemptions with valid_until dates, (2) create exemption form with mcp_identifier, reason, valid_until, created_by fields, (3) revoke exemption action, (4) read-only display of mcp_policy_rules associations. Binds to port 8790 localhost. Uses write_service at :8772 for all DB operations. Does not implement RBAC or multi-tenancy. Table mcp_exemptions is currently empty - page should handle empty state gracefully.",
+  "reads": [
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

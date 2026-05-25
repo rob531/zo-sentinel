@@ -1,0 +1,11 @@
+{
+  "task": "cto_2026_05_07_sentinel_ui_signal_diversity_panel",
+  "handler": "generate_file",
+  "output_file": "sentinel_ui_signal_diversity_panel.py",
+  "complexity": "medium",
+  "phase": "15",
+  "priority": 0.90,
+  "description": "Build a FastAPI APIRouter module exposing GET /signal-diversity and GET /signal-diversity/<signal_name>. The router queries mcp_signal_scores via the WriteService /query endpoint (POST http://127.0.0.1:8772/query with body {sql: ...}, 5s httpx timeout). For GET /signal-diversity: runs SQL `SELECT signal_name, COUNT(DISTINCT score_value) AS distinct_values, COUNT(*) AS total_rows FROM mcp_signal_scores GROUP BY signal_name ORDER BY distinct_values ASC, total_rows DESC` and returns {signals: [{signal_name, distinct_values, total_rows, diversity_ratio}]} where diversity_ratio = distinct_values / max(total_rows, 1). For GET /signal-diversity/<signal_name>: runs SQL `SELECT score_value, COUNT(*) AS n FROM mcp_signal_scores WHERE signal_name = ? GROUP BY score_value ORDER BY n DESC LIMIT 50` parameterised via WriteService and returns {signal_name, distribution: [{score_value, n}]}. Module exports `router` (APIRouter instance) for the Sentinel UI to include via app.include_router(router, prefix='/api'). Set Cache-Control: 'public, max-age=60' on responses. If WriteService is down (httpx.ConnectError or 5xx), return 503 with body {error: 'writeservice_unavailable'}. Pure read - never writes. FileHandler logging to /home/workspace/logs/sentinel_ui_signal_diversity.log at INFO on each request, ERROR on WriteService failure. WHY NOW: Verdict-uniformity issue (5/6 signals collapsed to 1 distinct value across all MCPs) is the central credibility gap for the 20K-MCP defensible-signals goal; this panel exposes the per-signal distribution so a glance tells whether each signal is discriminating. CONSTRAINTS: FileHandler ONLY. Read-only - no INSERT/UPDATE/DELETE. WriteService /query - never connect direct to DuckDB. 5 second httpx timeout. Return 503 not 500. Module exports `router`. No top-level WriteService call at import time.",
+  "reads": [],
+  "next_directive": {}
+}

@@ -1,0 +1,12 @@
+{
+  "task": "mcp_scanner_daemon_diagnosis",
+  "handler": "generate_file",
+  "output_file": "mcp_scanner_heartbeat_recovery.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnose why mcp_scanner daemon heartbeat is stale at 5h19m (threshold 14400s). This is NOT a protected file (mcp_scanner.py is protected, but a recovery/wiring helper is not). Steps: (1) query service_health for mcp_scanner last_heartbeat age, (2) check if daemon process is running via ps aux | grep mcp_scanner, (3) inspect /home/workspace/zo_sentinel/logs/ for recent errors, (4) verify write_service connectivity, (5) if process dead but daemon file intact, output diagnostic report with restart recommendation. Must use write_service at :8772 for health checks. Do NOT auto-restart; output diagnosis only. Handler: diagnostic_report.",
+  "reads": [
+    "mcp_scanner.py"
+  ]
+}

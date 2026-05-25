@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_approval_wiring_verify",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_verify.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Verify snow_connector_approval_wiring.py integration is complete. Check that: (1) snow_connector.py webhook endpoint is registered, (2) submission hash computation matches expected format, (3) approval_workflow API can receive SNOW ticket data. Query service_health for snow_connector heartbeat. If heartbeat missing, investigate registration. Pure verification - no file writes, no service restarts."
+}

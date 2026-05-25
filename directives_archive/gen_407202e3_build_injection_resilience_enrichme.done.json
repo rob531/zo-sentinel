@@ -1,0 +1,9 @@
+{
+  "task": "build_injection_resilience_enrichment",
+  "handler": "generate_file",
+  "output_file": "injection_resilience_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Pure enrichment module for injection_resilience signal (the 8th signal per spec section 3). Must expose: def compute_score(metadata: dict) -> tuple[float, dict]. Uses: prompt_injection_test_score, corpus_size, test_pass_rate, avg_response_latency_ms, pi_flagged_count. No DB writes, no network, no imports of protected modules. Coordinate with existing pi_scorer.py (built Phase 8) \u2014 this enricher reads pi_scorer output fields from registry metadata, does not duplicate scoring logic. Evidence dict must show relationship to pi_scorer data."
+}

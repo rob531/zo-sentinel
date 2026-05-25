@@ -1,0 +1,10 @@
+{
+  "task": "mcp_tool_schema_patterns",
+  "handler": "generate_file",
+  "output_file": "mcp_tool_schema_patterns.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Pure library module for architectural pattern detection in MCP server tool definitions. Per Appendix B of spec, source: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14. MUST: (1) detect progressive-disclosure pattern (Code Mode shape: <=4 high-level tools with dynamic discovery); (2) detect brute-force enumeration pattern (>=20 tools with full schemas upfront); (3) detect hybrid pattern; (4) output {pattern: str, tool_count: int, evidence: dict} for each input; (5) compile regex patterns at module load; (6) include if __name__ == '__main__' self-smoke with 3 known-good inputs and assert non-empty results; (7) no daemon, no network, no DB writes, no imports of protected modules. Deferred context_efficiency_enrichment will consume this output once the three weak signals (permission_scope, temporal_stability, tool_description_safety) have improved discrimination beyond their current 4-distinct-values plateau.",
+  "reads": []
+}

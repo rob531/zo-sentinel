@@ -1,0 +1,13 @@
+{
+  "task": "tool_description_safety_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Build new enrichment for tool_description_safety signal which currently has only 4 distinct values (BAD SIGNAL per diagnostic). Must read MULTIPLE metadata fields (tool_count, schema_complexity, has_examples, risk_keywords). Previous tool_description_safety_enrichment.py was quarantined 2026-05-23T10:53:03 \u2014 this is a deliberate _v2 rewrite per spec naming rules. Must expose compute_score(metadata) returning (float, dict) per enrichment contract. No DB writes, no network, pure function.",
+  "reads": [
+    "mcp_scanner.py"
+  ],
+  "next_directive": {}
+}

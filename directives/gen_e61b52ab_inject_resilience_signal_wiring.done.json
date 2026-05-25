@@ -1,0 +1,9 @@
+{
+  "task": "inject_resilience_signal_wiring",
+  "handler": "generate_file",
+  "output_file": "injection_resilience_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "injection_resilience_enrichment.py was built 2026-05-02 16:35:00 and exposes compute_score. The signal_analyser may not be wiring this enricher into mcp_signal_enrichments. Create a wiring module that: (1) queries mcp_server_registry for servers that lack injection_resilience in mcp_signal_enrichments, (2) calls injection_resilience_enrichment.compute_score for each, (3) writes result to mcp_signal_enrichments via write_service with evidence blob matching contract: {\"signal_type\": \"injection_resilience\", \"confidence\": 0.0-1.0, \"evidence_blob\": {...}}. Must NOT import signal_analyser.py (protected). Must NOT make HTTP calls to peer daemons (section 5 violation)."
+}

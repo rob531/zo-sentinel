@@ -1,0 +1,346 @@
+#!/usr/bin/env python3
+"""
+signal_analyser.py -- ZO-SENTINEL signal scoring daemon.
+Scores MCP servers on 6 trust signals and computes composite trust_score.
+v1.1: Fixed EXECUTE_URL to use /query endpoint (not /execute) for SELECT statements.
+"""
+import logging
+import re
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
+import requests
+import time
+import hashlib
+
+from known_threats import check_package, check_domain, HIGH_RISK_PATTERNS
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+log = logging.getLogger(__name__)
+
+WRITE_SERVICE_URL = "http://127.0.0.1:8772/write"
+QUERY_URL = "http://127.0.0.1:8772/query"   # /query for SELECT, not /execute
+HEARTBEAT_INTERVAL = 1800
+SERVICE_NAME = "signal_analyser"
+
+
+def get_write_url():
+    return WRITE_SERVICE_URL
+
+
+def send_heartbeat():
+    """Send heartbeat to service_health."""
+    try:
+        requests.post(get_write_url(), json={
+            'table': 'service_health',
+            'rows': {
+                'service': SERVICE_NAME,
+                'last_heartbeat': datetime.now(timezone.utc).isoformat()
+            },
+            'wait': True
+        }, timeout=5)
+        log.debug("Heartbeat sent")
+    except Exception as e:
+        log.warning(f"Heartbeat failed: {e}")
+
+
+def ws_query(sql: str) -> List[Dict[str, Any]]:
+    """Execute SELECT query via write_service /query endpoint."""
+    try:
+        response = requests.post(QUERY_URL, json={'sql': sql}, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            if 'rows' in result:
+                return result['rows']
+            elif isinstance(result, list):
+                return result
+            return []
+        else:
+            log.error(f"Query failed: {response.status_code} - {response.text[:100]}")
+            return []
+    except Exception as e:
+        log.error(f"Query error: {e}")
+        return []
+
+
+def ws_write(table: str, rows: Dict[str, Any]):
+    """Write data via write_service. Uses 'rows' not 'row'."""
+    try:
+        payload = {
+            'table': table,
+            'rows': rows,
+            'wait': True
+        }
+        response = requests.post(get_write_url(), json=payload, timeout=10)
+        if response.status_code != 200:
+            log.error(f"Write failed: {response.status_code} - {response.text[:100]}")
+        return response.status_code == 200
+    except Exception as e:
+        log.error(f"Write error: {e}")
+        return False
+
+
+def get_unscored_servers(limit: int = 20) -> List[Dict[str, Any]]:
+    """Query for servers with no trust_score (unscored)."""
+    sql = f"""
+        SELECT
+            server_id,
+            name,
+            registry_source,
+            url,
+            description,
+            scan_count
+        FROM mcp_server_registry
+        WHERE trust_score IS NULL
+        LIMIT {limit}
+    """
+    return ws_query(sql)
+
+
+def score_domain_trust(url: Optional[str]) -> tuple[float, str]:
+    """Score domain trust based on TLD and hostname length."""
+    if not url:
+        return 20.0, "No URL provided"
+    try:
+        if '://' in url:
+            hostname = url.split('://')[-1].split('/')[0]
+        else:
+            hostname = url.split('/')[0]
+        if hostname.replace('.', '').replace(':', '').isdigit():
+            return 30.0, "IP address detected (30)"
+        parts = hostname.split('.')
+        tld = parts[-1].lower() if len(parts) >= 2 else ""
+        tld_scores = {
+            'gov': 95, 'edu': 90, 'mil': 95, 'org': 80,
+            'com': 75, 'net': 70, 'io': 65, 'co': 60,
+            'xyz': 30, 'top': 25, 'win': 20, 'click': 20,
+            'link': 20, 'tech': 40, 'ai': 50, 'dev': 55,
+        }
+        tld_score = tld_scores.get(tld, 25 if len(tld) <= 6 else 15)
+        hostname_len = len(hostname)
+        length_score = 10 if hostname_len < 20 else 5 if hostname_len < 40 else 0 if hostname_len < 60 else -10
+        subdomain_depth = len([p for p in parts[:-2] if p])
+        depth_penalty = min(subdomain_depth * 5, 20)
+        final_score = max(0.0, min(100.0, tld_score + length_score - depth_penalty))
+        evidence = f"TLD={tld}(+{tld_score}), len={hostname_len}({length_score:+d}), depth={subdomain_depth}"
+        return final_score, evidence
+    except Exception as e:
+        return 30.0, f"Parse error: {str(e)}"
+
+
+def score_tool_description_safety(description: Optional[str]) -> tuple[float, str]:
+    """Score tool description against HIGH_RISK_PATTERNS."""
+    if not description:
+        return 50.0, "No description provided"
+    risk_matches = []
+    description_lower = description.lower()
+    for pattern in HIGH_RISK_PATTERNS:
+        try:
+            if re.search(pattern, description_lower, re.IGNORECASE):
+                risk_matches.append(pattern)
+        except re.error:
+            continue
+    if not risk_matches:
+        suspicious_keywords = ['admin', 'root', 'bypass', 'exploit', 'hack']
+        found_suspicious = [kw for kw in suspicious_keywords if kw in description_lower]
+        if found_suspicious:
+            return max(0.0, 85.0 - len(found_suspicious) * 10), f"Suspicious keywords: {found_suspicious}"
+        return 100.0, "No high-risk patterns detected"
+    num_patterns = len(risk_matches)
+    score = max(0.0, 100.0 - num_patterns * (20 if num_patterns >= 5 else 15 if num_patterns >= 3 else 10))
+    evidence = f"{num_patterns} pattern(s): {', '.join(risk_matches[:3])}"
+    if len(risk_matches) > 3:
+        evidence += f" (+{len(risk_matches) - 3} more)"
+    return score, evidence
+
+
+def score_permission_scope(description: Optional[str]) -> tuple[float, str]:
+    """Count dangerous permission words in description."""
+    if not description:
+        return 30.0, "No description to analyze"
+    description_lower = description.lower()
+    dangerous_patterns = {
+        'filesystem': ['filesystem', 'file system', 'files', 'read/write', 'fs_'],
+        'credential': ['credential', 'credentials', 'password', 'passwd', 'pwd'],
+        'secret': ['secret', 'secrets', 'api_key', 'apikey', 'api-key'],
+        'exec': ['execute', 'exec_', 'subprocess', 'run_command', 'command execution'],
+        'shell': ['shell', 'bash', 'sh ', 'zsh', 'cmd', 'powershell'],
+    }
+    found_patterns = []
+    for category, patterns in dangerous_patterns.items():
+        for pattern in patterns:
+            if pattern in description_lower:
+                found_patterns.append(category)
+                break
+    num_dangerous = len(found_patterns)
+    if num_dangerous >= 4:
+        score = max(0.0, 100.0 - num_dangerous * 25)
+    elif num_dangerous >= 2:
+        score = max(0.0, 100.0 - num_dangerous * 20)
+    elif num_dangerous == 1:
+        score = 65.0
+    else:
+        score = 100.0
+    evidence = f"Dangerous scopes: {', '.join(set(found_patterns))}" if found_patterns else "No dangerous permission patterns detected"
+    return score, evidence
+
+
+def score_supply_chain(server_id: str, name: Optional[str]) -> tuple[float, str]:
+    """Check against known malicious packages."""
+    if check_package(server_id):
+        return 0.0, f"KNOWN MALICIOUS: {server_id}"
+    if name and name != server_id and check_package(name):
+        return 0.0, f"KNOWN MALICIOUS: {name}"
+    suspicious_patterns = [
+        r'fake[_-]', r'clone', r'copy', r'null', r'unofficial',
+        r'^mcp[-_]server[-_]all$', r'stealer', r'grabber'
+    ]
+    for pattern in suspicious_patterns:
+        if re.search(pattern, server_id, re.IGNORECASE):
+            return 10.0, f"Suspicious pattern detected: {pattern}"
+    return 100.0, "No supply chain threats detected"
+
+
+def score_community_signal(registry_source: Optional[str]) -> tuple[float, str]:
+    """Score based on registry source credibility."""
+    source_scores = {
+        'npm_official': (80.0, "Official NPM registry"),
+        'github': (60.0, "GitHub repository"),
+        'smithery': (70.0, "Smithery verified marketplace"),
+        'manual': (40.0, "Manually registered"),
+        'unknown': (20.0, "Unknown source"),
+    }
+    source = registry_source.lower() if registry_source else 'unknown'
+    return source_scores.get(source, source_scores['unknown'])
+
+
+def score_temporal_stability(scan_count: int) -> tuple[float, str]:
+    """Score based on temporal stability (scan history)."""
+    if scan_count is None:
+        scan_count = 0
+    if scan_count > 10: return 95.0, f"High stability: {scan_count} scans"
+    elif scan_count > 5: return 90.0, f"Established: {scan_count} scans"
+    elif scan_count > 2: return 70.0, f"Developing: {scan_count} scans"
+    elif scan_count > 0: return 50.0, f"New: {scan_count} scan(s)"
+    else: return 30.0, "First observation"
+
+
+def compute_trust_score(signals: Dict[str, float]) -> tuple[float, str, str]:
+    """Compute weighted composite trust score and determine verdict."""
+    weights = {
+        'domain_trust': 0.20,
+        'tool_description_safety': 0.25,
+        'permission_scope': 0.20,
+        'supply_chain': 0.15,
+        'community_signal': 0.10,
+        'temporal_stability': 0.10,
+    }
+    weighted_score = sum(signals.get(s, 50.0) * w for s, w in weights.items())
+    if weighted_score >= 75:   verdict, reasoning = "TRUSTED_GENERAL",      "Likely safe for enterprise use across standard workloads"
+    elif weighted_score >= 60: verdict, reasoning = "TRUSTED_RESEARCH",     "Suitable for research and non-production environments"
+    elif weighted_score >= 50: verdict, reasoning = "ENTERPRISE_CONTROLLED","Acceptable under formal security controls and monitoring"
+    elif weighted_score >= 35: verdict, reasoning = "CAUTION_LIMITED",      "Limited deployment with enhanced monitoring required"
+    elif weighted_score >= 20: verdict, reasoning = "HIGH_RISK_ISOLATED",   "Requires isolation; significant risk factors present"
+    else:                      verdict, reasoning = "INSUFFICIENT",         "Insufficient data for meaningful assessment"
+    return weighted_score, verdict, reasoning
+
+
+def save_signal(server_id: str, signal_name: str, score: float, evidence: str):
+    """Write individual signal score to mcp_signal_scores."""
+    id_str = f"{server_id}:{signal_name}"
+    signal_id = int(hashlib.md5(id_str.encode()).hexdigest()[:8], 16) % (2**31)
+    return ws_write('mcp_signal_scores', {
+        'id': signal_id, 'server_id': server_id,
+        'signal_name': signal_name, 'score': score,
+        'evidence': evidence,
+        'scored_at': datetime.now(timezone.utc).isoformat()
+    })
+
+
+def save_trust_verdict(server_id: str, trust_score: float, verdict: str,
+                       reasoning: str, confidence: float):
+    """Update mcp_server_registry with composite trust verdict."""
+    success = ws_write('mcp_server_registry', {
+        'server_id': server_id, 'trust_score': trust_score,
+        'verdict': verdict, 'verdict_reasoning': reasoning,
+        'confidence': confidence,
+        'last_assessed': datetime.now(timezone.utc).isoformat()
+    })
+    if success:
+        log.info(f"Saved verdict {verdict} ({trust_score:.1f}) for {server_id}")
+    return success
+
+
+def score_server(server: Dict[str, Any]) -> bool:
+    """Score a single server across all 6 signals."""
+    server_id = server.get('server_id')
+    if not server_id:
+        log.warning("Server missing server_id, skipping")
+        return False
+    log.info(f"Scoring server: {server_id}")
+    signals = {}
+    evidence_map = {}
+    signals['domain_trust'],            evidence_map['domain_trust']            = score_domain_trust(server.get('url'))
+    signals['tool_description_safety'], evidence_map['tool_description_safety'] = score_tool_description_safety(server.get('description'))
+    signals['permission_scope'],        evidence_map['permission_scope']        = score_permission_scope(server.get('description'))
+    signals['supply_chain'],            evidence_map['supply_chain']            = score_supply_chain(server_id, server.get('name'))
+    signals['community_signal'],        evidence_map['community_signal']        = score_community_signal(server.get('registry_source'))
+    signals['temporal_stability'],      evidence_map['temporal_stability']      = score_temporal_stability(server.get('scan_count') or 0)
+    trust_score, verdict, reasoning = compute_trust_score(signals)
+    confidence = max(0.0, 1.0
+        - (0.15 if not server.get('url') else 0)
+        - (0.20 if not server.get('description') else 0)
+        - (0.10 if not server.get('registry_source') else 0)
+        - (0.15 if not server.get('scan_count') else 0)
+    )
+    for signal_name, score in signals.items():
+        save_signal(server_id, signal_name, score, evidence_map[signal_name])
+    save_trust_verdict(server_id, trust_score, verdict, reasoning, confidence)
+    log.info(f"Completed scoring {server_id}: score={trust_score:.1f}, verdict={verdict}")
+    return True
+
+
+def cycle():
+    log.info("Starting scoring cycle...")
+    send_heartbeat()
+    servers = get_unscored_servers(limit=20)
+    if not servers:
+        log.info("No unscored servers found")
+        return 0
+    log.info(f"Found {len(servers)} servers to score")
+    scored = sum(1 for s in servers if score_server(s))
+    log.info(f"Scoring cycle complete: {scored}/{len(servers)} servers scored")
+    return scored
+
+
+def run():
+    log.info(f"{SERVICE_NAME} v1.1 daemon starting...")
+    send_heartbeat()
+    try:
+        cycle()
+    except Exception as e:
+        log.error(f"Initial cycle failed: {e}")
+    while True:
+        try:
+            time.sleep(HEARTBEAT_INTERVAL)
+            send_heartbeat()
+            cycle()
+        except KeyboardInterrupt:
+            log.info("Received shutdown signal")
+            break
+        except Exception as e:
+            log.error(f"Daemon error: {e}")
+            time.sleep(60)
+
+
+if __name__ == '__main__':
+    run()
+
+from tool_description_safety_enrichment_v4 import compute_score as tool_description_safety_enrichment_compute_score, get_score_band as tool_description_safety_enrichment_get_score_band
+from permission_scope_enrichment_v3 import compute_score as permission_scope_enrichment_compute_score, get_score_band as permission_scope_enrichment_get_score_band
+from temporal_stability_enrichment_v4 import compute_score as temporal_stability_enrichment_compute_score, get_score_band as temporal_stability_enrichment_get_score_band
+from community_signal_enrichment_v4 import compute_score as community_signal_enrichment_compute_score, get_score_band as community_signal_enrichment_get_score_band
+from supply_chain_enrichment_v3 import compute_score as supply_chain_enrichment_compute_score, get_score_band as supply_chain_enrichment_get_score_band
+# _zo_v3_wire_v1

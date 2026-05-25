@@ -1,0 +1,9 @@
+{
+  "task": "extend_external_api_attestation",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api_v2_attestation.py",
+  "complexity": "medium",
+  "phase": "15",
+  "priority": 0.85,
+  "description": "EXTEND EXISTING sentinel_external_api.py with a new endpoint: GET /v1/mcp/{server_id}/attestation. Returns the latest attestation record for one MCP server. This is a READ-ONLY ADDITION -- produce a PATCH MODULE with a register_routes(app) function that attaches to an existing FastAPI app, do NOT rewrite the whole external API. Follow the same patterns as /v1/mcp/{id}/risk in /home/workspace/zo_sentinel/sentinel_external_api.py: (1) validate server_id ^[a-f0-9]{32}$ or 400; (2) verify server exists in mcp_server_registry, else 404; (3) query mcp_attestations WHERE server_id=? ORDER BY created_at DESC LIMIT 1 (take the most recent); (4) Pydantic model AttestationRecord with fields: attestation_type:Optional[str], attested_by:Optional[str], attested_at:Optional[str], verdict_at_attestation:Optional[str], attestation_notes:Optional[str], is_current:bool (true if less than 30 days old); (5) Depends(enforce_rate_limit) applied; (6) if no attestation exists, return the model with all fields None and is_current=False (not 404 -- 404 is for missing SERVER, empty attestation is valid state). Use ws_query helper. Reference the get_mcp_risk pattern which has similar shape (no-row-found returns model with Nones, not 404)."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_e2e_scenarios_cohort_failure",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic module to investigate e2e_scenarios.py failures. e2e_scenarios.py is under retry budget (2/3) with last failure at cohort_7_n5. This diagnostic must NOT rebuild e2e_scenarios.py directly. Analyze what cohort_7_n5 tests, identify the specific assertion or timeout causing failure, and output a JSONL log with findings. Include if __name__ == '__main__' that runs the diagnostic and prints findings. MUST read e2e_scenarios.py to understand test structure without modifying it."
+}

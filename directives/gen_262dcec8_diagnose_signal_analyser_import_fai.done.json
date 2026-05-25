@@ -1,0 +1,14 @@
+{
+  "task": "diagnose_signal_analyser_import_failures",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_analyser_import_chain.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnose why signal_analyser.py is failing smoke tests with import chain errors. Run import chain detection against signal_analyser.py and registry_api.py. Identify circular imports or missing dependencies. Generate a report with root causes. Do NOT propose rebuilds; produce diagnostic output only. Reference: smoke failures show Traceback in frozen importlib suggesting import-time failures.",
+  "reads": [
+    "signal_analyser.py",
+    "registry_api.py"
+  ],
+  "next_directive": {}
+}

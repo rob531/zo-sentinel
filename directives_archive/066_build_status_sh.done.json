@@ -1,0 +1,12 @@
+{
+  "task": "build_status_sh",
+  "handler": "generate_file",
+  "output_file": "status.sh",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.75,
+  "reads": [],
+  "description": "Bash status script. #!/bin/bash. For each daemon (mcp_scanner,signal_analyser,trust_synthesiser,threat_intel_ingestor,risk_ranker,attestation_engine,approval_workflow,registry_api,search_api): check if pgrep -f <daemon>.py returns a PID. Print [OK] PID or [--] not running. Then curl -s http://localhost:<port>/health for API services. Print summary: N/M services running. Also print last 3 lines of each log file.",
+  "context": "",
+  "from": "claude_batch"
+}

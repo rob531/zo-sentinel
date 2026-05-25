@@ -1,0 +1,9 @@
+{
+  "task": "github_pr_checker_verdict_integration",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_verdict_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire github_pr_checker_wiring_v2.py (built 2026-05-23T15:58:15) to check ZO-SENTINEL verdict before allowing GitHub PR merge. Query trust_synthesiser via write_service to get verdict for MCP servers mentioned in PR. Must check verdict tier: block CAUTION_LIMITED, HIGH_RISK_ISOLATED, and KNOWN_THREAT automatically; allow TRUSTED_GENERAL, TRUSTED_RESEARCH, ENTERPRISE_CONTROLLED with documented controls. Read mcp_signal_scores and mcp_server_registry via write_service query. No direct DB access."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_discrimination_auditor",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_auditor.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Audit signal quality across production data. Query mcp_signal_scores for each of the 8 signals and compute: (1) distinct score count per signal_type; (2) score range (min-max); (3) standard deviation. Signals with <5 distinct scores or stddev <5.0 are WEAK and need enrichment revision. Also verify each signal producer writes evidence_blob with signal_type, confidence, and evidence_blob keys matching spec section 3. Output: structured report logged and written to service_health.meta as JSON. Runs on 4h cycle via gate_scheduler."
+}

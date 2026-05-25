@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Admin UI surface on port 8790 for managing mcp_policy_rules records. Implements CRUD operations for rule_type and pattern columns per DB schema. Uses write_service :8772 for state. Authenticated surface (X-API-Key header pattern). All user-supplied values go through params arrays (SQL injection prevention per section 7). Every write action inserts audit_log row. Do NOT propose new verdict tiers or modify signal shapes."
+}

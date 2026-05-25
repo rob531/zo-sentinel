@@ -1,0 +1,11 @@
+{
+  "task": "verify_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "verify_signal_discrimination.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Verification module that queries mcp_signal_scores via write_service to count distinct score values per signal_type. Outputs a report identifying which signals have fewer than 5 distinct values (weak signals per spec heuristic: BAD SIGNAL = SAME SIGNAL across all inputs). Targeted signals: permission_scope, temporal_stability, tool_description_safety. Query pattern: SELECT signal_type, COUNT(DISTINCT score) FROM mcp_signal_scores GROUP BY signal_type. No DB writes.",
+  "reads": [],
+  "next_directive": {}
+}

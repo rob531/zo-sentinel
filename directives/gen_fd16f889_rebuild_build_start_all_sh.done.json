@@ -1,0 +1,13 @@
+{
+  "task": "rebuild_build_start_all_sh",
+  "handler": "generate_file",
+  "output_file": "build_start_all_sh.sh",
+  "complexity": "low",
+  "phase": "13",
+  "priority": 0.9,
+  "description": "Rebuild failed build_start_all_sh. The previous attempt failed in smoke. Ensure all daemons listed in supervisord_sentinel_full.conf are started in correct dependency order. Use nohup/setsid for daemon launch. Write PID files to /var/run/sentinel/. Exit 0 on all starts successful, exit 1 if any daemon fails to start within 30s.",
+  "reads": [
+    "supervisord_sentinel_full.conf"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_build_failures_april28",
+  "handler": "generate_file",
+  "output_file": "diagnose_build_failures_april28.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module for the 9 failed build modules: build_graphql_schema, build_mcp_detail_view_ui, build_advanced_filter_api, build_forensic_detail_api, build_manual_override_api, build_compliance_export_service, build_supervisor_auto_updater, and the email variants. Note: advanced_filter_api.py, forensic_detail_api.py, manual_override_api.py, and compliance_export_service.py already exist in the 'Already Built' list - investigate whether these failed due to rebuild attempts on protected files. Output a structured report per module: failure_type, is_protected_file_conflict, remediation_action (rebuild, skip, or investigate further)."
+}

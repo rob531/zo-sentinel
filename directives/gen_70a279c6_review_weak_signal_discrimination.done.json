@@ -1,0 +1,9 @@
+{
+  "task": "review_weak_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "weak_signal_investigation.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic module to investigate why permission_scope, temporal_stability, and tool_description_safety still show only 4 distinct values after recent enrichment builds. Query mcp_signal_scores and mcp_signal_enrichments directly to identify the actual score distribution per signal. Recent enrichments were built (permission_scope_enrichment.py at 09:26:09, temporal_stability_enrichment.py at 09:24:16, tool_description_safety_enrichment_v2.py at 10:56:48) but may not be writing to the database or may have compute_score functions that return near-constant values. Report cardinality per signal_type, sample evidence blobs, and confirm whether the enrichments are being invoked by signal_analyser."
+}

@@ -1,0 +1,14 @@
+{
+  "task": "rewrite_mcp_scanner",
+  "handler": "generate_file",
+  "output_file": "mcp_scanner.py",
+  "complexity": "high",
+  "phase": "2",
+  "priority": 0.91,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "MCP scanner daemon. Fetches real MCP packages from two sources: (1) npm API: GET https://registry.npmjs.org/-/v1/search?text=scope:modelcontextprotocol&size=250 parse objects[].package {name,description,links.npm,version,date}. (2) GitHub API: GET https://api.github.com/search/repositories?q=topic:mcp-server&sort=stars&per_page=50 parse items[] {name,description,html_url,stargazers_count,pushed_at}. For each: compute server_id=md5(url), set registry_source=npm_official or github, write to mcp_server_registry via ws_write {server_id,name,url,description,registry_source,scan_count=1,first_seen=now,last_scanned=now}. Skip if server_id already exists (check via ws_query). Poll 21600s. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_temporal_stability_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "diagnose_temporal_stability_enrichment.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Diagnostic module to analyze why temporal_stability_enrichment.py produces only 4 distinct scores. Tests compute_score() against varied metadata (first_seen, last_updated, last_assessed, age_days across a 0-730 day range, update_frequency). Reports score bucket distribution and identifies the flattening behavior. Per spec section 10: emit findings consumable by directive generator for enrichment improvements. Do NOT modify the existing enrichment."
+}

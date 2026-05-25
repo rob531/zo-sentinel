@@ -1,0 +1,16 @@
+{
+  "task": "verify_signal_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "verify_enrichment_discrimination.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Verification script to test that recently-built enrichment modules (tool_description_safety_enrichment.py, permission_scope_enrichment.py, temporal_stability_enrichment.py, community_signal_enrichment.py) can produce at least 20 distinct scores across the 34-fingerprint synthetic corpus defined in enrichment_harness.py. Run compute_score() against each fingerprint and assert len(distinct_scores) >= 20 per module. This addresses the weak-signal diagnostic where these 3 signals show only 4 distinct values across all inputs. Exits 0 on pass, non-zero with diagnostic output on failure.",
+  "reads": [
+    "tool_description_safety_enrichment.py",
+    "permission_scope_enrichment.py",
+    "temporal_stability_enrichment.py",
+    "community_signal_enrichment.py"
+  ],
+  "next_directive": {}
+}

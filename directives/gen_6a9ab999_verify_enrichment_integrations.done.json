@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_integrations",
+  "handler": "generate_file",
+  "output_file": "verify_enrichment_wiring.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Build verify_enrichment_wiring.py to confirm the three enrichment modules (temporal_stability_enrichment, permission_scope_enrichment, community_signal_enrichment) are correctly wired into the enrichment_harness evaluation pipeline. Must: (1) Import each new enrichment module and call compute_score with synthetic metadata dict. (2) Assert return type is tuple[float, dict] and score is in [0.0, 100.0]. (3) Query mcp_signal_enrichments table to verify rows exist for each signal type. (4) Check that signal_analyser includes these enrichments in its scoring pipeline. (5) Send heartbeat to service_health on completion. (6) Exit 0 on success, exit 1 on any assertion failure. Follows pattern from verify_supply_chain_enrichment_wired.py (2026-04-30)."
+}

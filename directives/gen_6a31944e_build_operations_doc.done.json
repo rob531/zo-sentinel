@@ -1,0 +1,11 @@
+{
+  "task": "build_operations_doc",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Generate OPERATIONS.md documenting supervisord layout (sentinel_full.conf), log locations (/home/workspace/zo_sentinel/logs/), recovery runbook for stale daemons, and freshness SLA enforcement (24h first verdict, 7d re-verdict). Reference assessment_scheduler.py and stale_data_cleaner.py for SLA details.",
+  "reads": [],
+  "next_directive": {}
+}

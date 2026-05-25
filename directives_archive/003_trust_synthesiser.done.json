@@ -1,0 +1,11 @@
+{
+  "task": "phase2b_trust_synthesiser",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser.py",
+  "complexity": "high",
+  "description": "T3 ZOMesh agent. Reads mcp_signal_scores from DuckDB, computes composite weighted trust_score, maps to verdict taxonomy, writes verdict + confidence to mcp_server_registry. Weight: domain_trust 0.20, tool_description_safety 0.20, permission_scope 0.15, supply_chain 0.15, community_signal 0.15, temporal_stability 0.15. Verdict map: >75=TRUSTED_GENERAL, 60-75=TRUSTED_RESEARCH, 45-60=ENTERPRISE_CONTROLLED, 30-45=CAUTION_LIMITED, 15-30=HIGH_RISK_ISOLATED, <15=KNOWN_THREAT, missing signals=INSUFFICIENT. Also generates a natural-language reasoning string explaining the verdict in human terms suitable for an InfoSec analyst reviewing an approval request. Writes judgment to mcp_server_registry: trust_score REAL, verdict VARCHAR, verdict_reasoning TEXT, confidence REAL, last_assessed TIMESTAMPTZ. Runs as 30min daemon.",
+  "context": "ZO-SENTINEL Phase 3. The reasoning field is the most important output - it's what the InfoSec analyst reads when deciding to approve or reject an MCP. Keep reasoning concise: 2-3 sentences max per verdict. Use language like 'Likely safe for research use' not 'SAFE'. Always note what is NOT known.",
+  "priority": 0.88,
+  "from": "claude_directive",
+  "phase": "3"
+}

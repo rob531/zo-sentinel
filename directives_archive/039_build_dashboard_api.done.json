@@ -1,0 +1,15 @@
+{
+  "task": "build_dashboard_api",
+  "handler": "generate_file",
+  "output_file": "dashboard_api.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.77,
+  "reads": [
+    "schema.py",
+    "registry_api.py"
+  ],
+  "description": "Dashboard data API. FastAPI port 8783. Endpoints: GET /dashboard/summary (total servers, breakdown by verdict, breakdown by risk_tier, avg trust_score, last_scan_time, pipeline_health counts), GET /dashboard/recent (last 20 build events from mesh_events), GET /dashboard/top_risks (top 10 servers by risk_rank from mcp_risk_register JOIN mcp_server_registry), GET /dashboard/trends (verdict distribution last 7 days grouped by date), GET /health. All queries via ws_query. Daemon with uvicorn port 8783. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

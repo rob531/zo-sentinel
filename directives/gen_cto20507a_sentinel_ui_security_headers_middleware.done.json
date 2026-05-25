@@ -1,0 +1,11 @@
+{
+  "task": "cto_2026_05_07_sentinel_ui_security_headers_middleware",
+  "handler": "generate_file",
+  "output_file": "sentinel_ui_security_headers_middleware.py",
+  "complexity": "low",
+  "phase": "15",
+  "priority": 0.92,
+  "description": "Build a Starlette/FastAPI middleware module that closes the April-26 probe-loop finding: Sentinel UI was missing all 5 security headers and exposing /openapi.json unauthenticated. Module exports two callables. (1) SecurityHeadersMiddleware - a starlette.middleware.base.BaseHTTPMiddleware subclass whose dispatch() awaits call_next(request) then on the response sets these headers (always overwriting): Strict-Transport-Security='max-age=31536000; includeSubDomains', Content-Security-Policy=\"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'\", X-Frame-Options='DENY', X-Content-Type-Options='nosniff', Referrer-Policy='strict-origin-when-cross-origin'. (2) install(app) - a helper that calls app.add_middleware(SecurityHeadersMiddleware) and adds a route handler for GET /openapi.json that returns 401 unless the request header 'X-Sentinel-Token' equals os.environ.get('SENTINEL_OPENAPI_TOKEN','') AND the env var is non-empty (if env var is empty, return 401 always - fail closed). The handler when authorised should call app.openapi() and return JSONResponse with that schema. Pure stdlib + starlette/fastapi (already deps). FileHandler-only logging to /home/workspace/logs/sentinel_ui_security_headers.log at WARNING level only when 401s fire. Module must import cleanly with no side effects (install() only wires when called). WHY NOW: Sentinel UI is the live face of the product; April-26 probe-loop flagged 5 missing security headers and unauthed /openapi.json. CONSTRAINTS: FileHandler ONLY for logging. No DB writes. Module-level: no side effects beyond imports - all wiring inside install(app). Fail closed on /openapi.json when env var is empty. Headers always overwrite. Middleware must subclass BaseHTTPMiddleware.",
+  "reads": [],
+  "next_directive": {}
+}

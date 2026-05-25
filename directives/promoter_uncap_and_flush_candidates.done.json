@@ -1,0 +1,9 @@
+{
+  "directive_id": "promoter_uncap_and_flush_candidates",
+  "goal": "Two fixes to candidate_promoter_daemon.py:\n\nFIX 1 - Remove 50-page cycle cap: The daemon stops at pages=50 (5000 servers) per cycle even though next_cursor=yes. Find the page limit constant (likely MAX_PAGES=50 or similar) and raise to 500, or remove it entirely and let the cursor exhaust naturally. This allows a single cycle to process all available registry pages.\n\nFIX 2 - Diagnose why 2065 promoted candidates did not increase mcp_server_registry count: Add a log line that explicitly counts mcp_server_registry before and after each INSERT batch so we can see if rows are being skipped due to ON CONFLICT DO NOTHING or URL dedup. If the registry INSERT uses ON CONFLICT on URL or name, log how many actually inserted vs skipped.\n\nGoal: after next cycle, mcp_server_registry should increase from 6334 toward 9000+.",
+  "output_path": "/home/workspace/zo_sentinel/candidate_promoter_daemon.py",
+  "constraints": ["Do not remove deduplication", "Keep heartbeat", "Log before/after counts"],
+  "success_criteria": ["pages logged > 50 in next cycle", "registry count increases after cycle", "before/after INSERT counts visible in log"],
+  "source": "cto_directive",
+  "generated_at": "2026-05-20T01:45:00"
+}

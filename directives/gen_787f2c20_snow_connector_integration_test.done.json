@@ -1,0 +1,14 @@
+{
+  "task": "snow_connector_integration_test",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_test.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration test verifying snow_connector.py (built 2026-04-16) is wired into approval_workflow. Test sequence: (1) POST a sample MCP submission to mcp_submissions via write_service, (2) trigger approval_workflow processing, (3) verify snow_connector receives the verdict payload, (4) assert snow_connector writes to the expected SNOW table structure. Mock the SNOW API endpoint to avoid real external calls. Use write_service query to verify no database errors occurred. Exit 0 on success, exit 1 with diagnostic message on any step failure.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

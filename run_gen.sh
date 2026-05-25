@@ -1,0 +1,1 @@
+python3 /home/workspace/zo_sentinel/gen_directives.py

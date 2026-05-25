@@ -1,0 +1,11 @@
+{
+  "task": "r1_ecosystems_metadata_fetcher_backoff_patcher",
+  "handler": "generate_file",
+  "output_file": "r1_ecosystems_metadata_fetcher_backoff_patcher.py",
+  "complexity": "medium",
+  "phase": "14",
+  "priority": 0.90,
+  "description": "Build a standalone Python patcher script `r1_ecosystems_metadata_fetcher_backoff_patcher.py`. When run, it edits /home/workspace/zo_sentinel/ecosystems_metadata_fetcher.py to add: (1) exponential backoff capped at 32 seconds on HTTP 429, 503, and read/connect timeouts; (2) honor Retry-After response header — if integer-string, sleep that many seconds; if HTTP-date, parse via email.utils.parsedate_to_datetime and sleep until that time; (3) per-source token-bucket rate budgets — npm 10 calls/min, PyPI 5 calls/min, GitHub 30 calls/hr — persisted to write_service via POST /write {table:'service_health', rows:{service:'rate_budget_<src>', last_heartbeat:<iso>, meta:{tokens_remaining:<int>, refill_at:<iso>}}, wait:true} so budget survives container restarts; (4) every 429/503 logged to /home/workspace/logs/ecosystems_429.log with timestamp+source+endpoint+status_code+retry_after+tokens_remaining. STRICT IDEMPOTENCE: read ecosystems_metadata_fetcher.py first; if marker '# _zo_backoff_v1' present, print 'NOOP: already hardened' and exit 0. Otherwise: backup as ecosystems_metadata_fetcher.py.bak.<UTC>Z, insert backoff helper (def _zo_backoff_sleep(resp, retries, source) returning sleep_seconds), wrap existing requests.get/post calls with retry loop using the helper, add token-bucket check before each call, insert marker. Run bash -n equivalent for python: `python3 -c \"import ast; ast.parse(open('/home/workspace/zo_sentinel/ecosystems_metadata_fetcher.py').read())\"` to verify syntax pre-write. Smoke-test path: import ecosystems_metadata_fetcher and confirm at least one named function (e.g. fetch_metadata) exists and is callable. Exit codes: 0=applied or noop, 1=shape unrecognized, 2=syntax check failed and rolled back, 3=smoke failed and rolled back. Include `--dry-run` flag. NO daemon shape. Touch ONLY ecosystems_metadata_fetcher.py.",
+  "reads": ["ecosystems_metadata_fetcher.py"],
+  "next_directive": {}
+}

@@ -1,0 +1,10 @@
+{
+  "task": "attestation_refresher",
+  "handler": "generate_file",
+  "output_file": "attestation_refresher.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Daemon that regenerates attestations for MCPs approaching expiry. Pattern: (1) Poll mcp_attestations for records where expires_at - NOW() < 7 days AND status = 'active'. (2) Re-invoke trust_synthesiser to get current composite score. (3) Write new attestation row with refreshed issued_at, new expires_at. (4) Heartbeat to service_health every 60s. (5) No DROP or DELETE on core tables. (6) Follow naming: attestation_refresher.py (already in spec list, not yet built).",
+  "reads": []
+}

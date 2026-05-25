@@ -1,0 +1,9 @@
+{
+  "task": "architecture_md",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Document inter-daemon topology, write_service contract on :8772, signal invariant contract (section 3 of spec), heartbeat SLA thresholds, and port assignments. Reference all daemons from KNOWN_DAEMONS. Include the 6-tier verdict taxonomy. Do not duplicate DuckDB schema from DB_SCHEMA.md. Target ~150 lines."
+}

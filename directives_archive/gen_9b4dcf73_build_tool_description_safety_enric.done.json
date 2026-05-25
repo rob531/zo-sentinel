@@ -1,0 +1,9 @@
+{
+  "task": "build_tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Reads multiple metadata fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars. Must NOT write to DB, import other project modules, make network calls, or use runtime file reads. Must complete in under 2 seconds. Returns evidence dict listing fields used and partial scores. Diagnosed WEAK \u2014 only 3 distinct values across range 50-100, low discrimination. Must introduce richer variation across MCP servers."
+}

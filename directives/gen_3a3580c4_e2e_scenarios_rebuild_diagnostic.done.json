@@ -1,0 +1,12 @@
+{
+  "task": "e2e_scenarios_rebuild_diagnostic",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_failure_analysis.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Analyze why e2e_scenarios.py failed 3 consecutive times (quarantined at 2026-05-24T00:06:16, last_error: failed in cohort_7_n4). This is a diagnostic directive, not a rebuild. Steps: (1) check if e2e_scenarios.py still exists on disk (quarantine may have removed it), (2) review smoke test logs for cohort_7_n4 failure details, (3) identify which of the three canonical flows (new MCP \u2192 signal scored \u2192 verdict \u2192 attestation \u2192 UI) fails first, (4) list specific assertion or import that fails. Output: (a) file existence status, (b) cohort_7_n4 failure reason, (c) which of the 3 canonical flows is broken, (d) specific fix recommendation. This diagnostic enables a future clean rebuild. Handler: diagnostic_report.",
+  "reads": [
+    "e2e_scenarios.py"
+  ]
+}

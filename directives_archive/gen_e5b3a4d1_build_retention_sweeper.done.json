@@ -1,0 +1,9 @@
+{
+  "task": "build_retention_sweeper",
+  "handler": "generate_file",
+  "output_file": "retention_sweeper.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Retention daemon for age-based expiry of evidence_blob columns (30-day SLA from spec section 4). Connects to write_service at :8772. Queries mcp_signal_scores and mcp_signal_enrichments WHERE evidence_blob rows are older than 30 days based on a captured_at or created_at timestamp column. Uses write_service execute endpoint with parameterized DELETE. Does NOT delete from core tables mcp_server_registry, mcp_attestations, mcp_threat_associations, mcp_risk_register, or mcp_decisions per spec retention rules. Emits heartbeat to service_health every 60s. Runs nightly via assessment_scheduler integration pattern."
+}

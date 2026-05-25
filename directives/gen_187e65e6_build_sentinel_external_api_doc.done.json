@@ -1,0 +1,13 @@
+{
+  "task": "build_sentinel_external_api_doc",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.78,
+  "description": "Documentation file: external API reference for port 8791. Must document: (1) authentication via X-API-Key header; (2) rate limit 60 req/min/key; (3) GET /servers/{server_id_or_name} returning full verdict object with all 7 signal scores, composite, verdict tier, last_assessed, attestation text; (4) GET /servers/search?q=<name> returning ranked list; (5) GET /verdict-history/{server_id} returning time-series of composite scores; (6) error response shapes (401 Unauthorized, 404 Not Found, 429 Rate Limited, 500 Internal Error). External API is read-only for v1.0 per spec section 7. Bind localhost unless exposed via ZoComputer zite.",
+  "reads": [
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

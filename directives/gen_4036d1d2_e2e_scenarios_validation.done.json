@@ -1,0 +1,9 @@
+{
+  "task": "e2e_scenarios_validation",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_validation.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Validate and exercise e2e_scenarios.py (built 2026-05-23T17:27:48). The file exists but e2e_scenarios_run.py was quarantined after 4/3 fails. Create a self-contained validation that tests the three canonical flows: (1) new MCP ingested \u2192 signal scored, (2) signal scored \u2192 verdict assigned, (3) verdict \u2192 attestation generated \u2192 UI visible. Use synthetic MCP server entries. Verify write_service interactions produce expected DB rows. Does NOT modify e2e_scenarios.py - this is a separate validation harness."
+}

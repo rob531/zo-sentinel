@@ -1,0 +1,9 @@
+{
+  "task": "build_directive_queue_health",
+  "handler": "generate_file",
+  "output_file": "directive_queue_health.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.80,
+  "description": "Build a directive_queue_health daemon that runs every 5 minutes and writes structured JSON to mesh_memory via ws_write with agent_id='directive_queue_health' memory_type='queue_state'. Fields: pending_count (active .json that aren't .done.json or .failed.json under /home/workspace/zo_sentinel/directives/), oldest_pending_age_secs (time since oldest pending file mtime), builder_alive (bool: is /home/workspace/zo_sentinel/zo_sentinel_builder.py running per pgrep matching canonical install path, excluding /home/workspace/logs/ launchers), dirgen_last_cycle_age_secs (time since last 'Generation complete' line in /home/workspace/logs/sentinel_directive_gen.log), warnings_emitted (int counter of warnings this run). When pending_count == 0 AND builder_alive AND dirgen_last_cycle_age_secs > 1800 (i.e., starvation lasting longer than one nominal poll cycle), emit a mesh_event event_type='directive_starvation' severity='warning'. Constraints: FileHandler ONLY (no StreamHandler), ws_write for all DB writes, ISO-8601 timestamps, idempotent. Closes the diagnostic gap that hid this morning's 80-minute starvation."
+}

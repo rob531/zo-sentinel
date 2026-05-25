@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_signal_weak_signal_import_chain",
+  "handler": "generate_file",
+  "output_file": "signal_weak_signal_diagnosis.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Diagnose why signal_analyser.py and rug_pull_monitor.py smoke failures show identical import errors at line 10. Query write_service for service_health records, check sys.path entries, extract imports from source files, and trace import chain. The recent import_failure_root_cause_v2.py (2026-05-24T10:20:24) already has extract_imports_from_source and trace_import_chain - reuse that pattern. Output: list of broken imports and suggested fixes. DO NOT generate any rebuild directive - this is diagnostic only."
+}

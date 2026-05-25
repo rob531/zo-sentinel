@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_start_all_sh",
+  "handler": "generate_file",
+  "output_file": "start_all_sh.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Rebuild start_all_sh.sh as start_all_sh.py (Python daemon). Previous build failed. Must start all ZO-SENTINEL services in correct dependency order: write_service first, then dependent APIs. Use subprocess to launch services. Include heartbeat registration for each service. Port mapping: 8772 write_service, 8773 api_gateway, 8780 scanner, 8781 registry, 8782 search, 8790 dashboard, 8792 pi_flagged_review, etc. Pattern: run() + if __name__ == '__main__': run()"
+}

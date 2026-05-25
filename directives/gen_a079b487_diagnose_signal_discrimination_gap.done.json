@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_signal_discrimination_gap",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_check.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Diagnostic to assess why permission_scope, temporal_stability, and tool_description_safety signals show only 3 distinct values across 34 fingerprints. MUST: (1) query mcp_signal_scores for these signal types, (2) count distinct score values per signal, (3) log distribution to service_health meta. Context: v2 enrichments exist (permission_scope_enrichment_v2.py built 15:00:27, temporal_stability_enrichment_v2.py built 15:04:25, tool_description_safety_enrichment_v2.py built 15:03:05) but signal diagnostic still reports WEAK \u2014 low variety. Result determines whether human review of enrichment logic is needed."
+}

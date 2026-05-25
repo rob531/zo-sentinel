@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_manual_override_api_v2",
+  "handler": "generate_file",
+  "output_file": "manual_override_api_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild manual_override_api.py fixing smoke failure. Module provides admin API for manual verdict overrides. Create v2 with POST /servers/{server_id}/override endpoint accepting new_verdict, reason, override_type. Must write to audit_log table. Protected file manual_override_api.py is quarantined; create new v2 with clean imports."
+}

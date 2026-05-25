@@ -1,0 +1,9 @@
+{
+  "task": "build_stale_daemon_report",
+  "handler": "generate_file",
+  "output_file": "stale_daemon_report.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Generate a structured report of stale daemons from service_health table. Queries for daemons with last_heartbeat > 2h ago (rug_pull_monitor 596h, write_service 41m, mcp_scanner 4h6m, anti_entropy 4h8m, wisdom_synthesiser 4h8m). For each stale daemon, output: daemon name, last heartbeat age, stale threshold, recommended action (restart via supervisord, service file review, or diagnostic). Per spec section 10: diagnostic-only, do NOT propose rebuilds of protected files (write_service, rug_pull_monitor). mcp_scanner, anti_entropy, wisdom_synthesiser may be rebuild candidates pending diagnostic."
+}

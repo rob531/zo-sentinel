@@ -1,0 +1,9 @@
+{
+  "task": "build_tool_description_safety_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Rewrite of tool_description_safety_enrichment (deliberate _v2 per spec section 8). Pure enrichment module exposing compute_score(metadata: dict) that returns tuple[float, dict]. Signal: tool_description_safety. The original module (2026-05-03T00:46:51) failed to fix the weak-signal plateau at 3 distinct values (Signal Quality Diagnostic: WEAK -- low variety). Must read at least registry_source, age_days, download_count, dependency_count, publisher_verified, stars, and tool_count fields. Must achieve >20 distinct score outputs across 34 synthetic fingerprints. No DB writes, no network, no imports of protected modules. Exports: compute_score, compute_batch_scores, get_unscored_servers."
+}

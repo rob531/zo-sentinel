@@ -1,0 +1,11 @@
+{
+  "task": "smoke_test_suite",
+  "handler": "generate_file",
+  "output_file": "tests/smoke_test.py",
+  "complexity": "medium",
+  "description": "Smoke test suite for ZO-SENTINEL. Tests each built module: (1) import each module without error; (2) check key functions/classes exist; (3) for FastAPI apps: instantiate the app object; (4) for daemon modules: check run() exists; (5) for schema modules: check create_all() or create functions exist; (6) for known_threats: check HIGH_RISK_PATTERNS, KNOWN_MALICIOUS_PACKAGES, check_package() work. Run all tests and print PASS/FAIL per module. Exit code 0 if all pass, 1 if any fail. Standalone script, run as: python3 tests/smoke_test.py. Imports each module from /home/workspace/zo_sentinel/ by adding it to sys.path.",
+  "context": "This is the automated test suite the builder runs after each phase checkpoint. Keep it simple - just verify each file imports cleanly and has the expected interface. No mocking, no complex test infrastructure.",
+  "priority": 0.75,
+  "from": "claude_directive",
+  "phase": "test"
+}

@@ -1,0 +1,10 @@
+{
+  "task": "build_registry_promoter_daemon",
+  "handler": "generate_file",
+  "output_file": "registry_promoter_daemon.py",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.97,
+  "source": "manual_standing_goals_emit_20260427T1340",
+  "description": "Long-running daemon. Every 300s, queries mcp_registry_facts via WriteService /query for up to 100 server_ids that have no matching row in mcp_server_registry. For each, builds a canonical registry row (server_id, source, first_seen, last_updated, transport, repo_url, package_name) from the facts and POSTs to WriteService /write with table='mcp_server_registry', wait=True. Sends heartbeat to service_health every 30s in a daemon thread. Single-instance lockfile at /home/workspace/logs/registry_promoter_daemon.lock with PID. NEVER imports duckdb or sqlite3. Uses requests + json + threading only. Writes structured INFO log lines on each batch with promoted_count. Closes the 4545 mcp_registry_facts rows that have no canonical mcp_server_registry entry."
+}

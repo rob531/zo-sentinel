@@ -1,0 +1,10 @@
+{
+  "task": "build_decision_emitter_daemon",
+  "handler": "generate_file",
+  "output_file": "decision_emitter_daemon.py",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.96,
+  "source": "manual_standing_goals_emit_20260427T1340",
+  "description": "Long-running daemon. Every 300s, queries mcp_attestations via WriteService /query for up to 100 server_ids that have no matching row in mcp_decisions. For each, fetches the latest mcp_signal_scores aggregate score for that server_id, applies threshold (>=70 -> 'trusted', 40-69 -> 'review', <40 -> 'block'), and POSTs to /write with table='mcp_decisions' (server_id, verdict, score, decided_at, basis_signal_count). Heartbeat thread every 30s. Single-instance lockfile at /home/workspace/logs/decision_emitter_daemon.lock. No duckdb/sqlite3 imports. Reads thresholds from /home/workspace/zo_sentinel/decision_thresholds.json with sane defaults if missing. Closes the gap that mcp_decisions has 0 rows despite 844 attestations."
+}

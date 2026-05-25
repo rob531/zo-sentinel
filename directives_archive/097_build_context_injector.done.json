@@ -1,0 +1,14 @@
+{
+  "task": "build_context_injector",
+  "handler": "generate_file",
+  "output_file": "context_injector.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.67,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Context injector for build prompts. Reads current ZO-SENTINEL state and injects it into MiniMax generation prompts. get_build_context()->str: queries mcp_server_registry count, lists built files with sizes, reads KNOWLEDGE_BASE.md, reads last 3 build failures from GENERATION_FAILURES.md, reads BUILD_STATE.md. Used by builder to enrich prompts with current system state. Caches context for 300s. No daemon, utility.",
+  "context": "",
+  "from": "claude_batch"
+}

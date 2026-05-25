@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_verdict_enforcement_test",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_enforcement_test.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.87,
+  "description": "Build integration test for aidr_commit_gateway.py (built 2026-04-17) verdict-check enforcement. Test MUST verify: (1) gateway refuses commit for MCP with CAUTION_LIMITED or HIGH_RISK_ISOLATED verdict; (2) gateway allows commit for TRUSTED_GENERAL, TRUSTED_RESEARCH, ENTERPRISE_CONTROLLED verdicts; (3) injection_resilience score is included in commit payload when verdict is approved. Use synthetic MCP records in test DB. Assert audit_log entries for all commit decisions. File must be executable standalone and exit 0 on pass."
+}

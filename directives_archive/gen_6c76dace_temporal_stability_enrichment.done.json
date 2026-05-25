@@ -1,0 +1,9 @@
+{
+  "task": "temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Reads metadata fields: age_days, last_updated_timestamp, update_frequency_days, release_count, registry_source. Computes temporal stability score by penalizing very new (<7 days) and very stale (>365 days) servers while rewarding consistent update patterns. No DB writes, no network, no imports of protected modules. Returns evidence dict with per-field partial scores."
+}

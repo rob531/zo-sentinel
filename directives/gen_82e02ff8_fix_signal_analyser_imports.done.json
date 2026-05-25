@@ -1,0 +1,13 @@
+{
+  "task": "fix_signal_analyser_imports",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_import_fix.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Fix signal_analyser.py smoke failure: importlib traceback at line 10 in <module>. Use importlib to validate all top-level imports in signal_analyser.py, identify which module fails to import and why (missing .py file, circular dependency, or syntax error). Output diagnostic report listing problematic imports and suggested fixes. DO NOT rewrite signal_analyser.py directly \u2014 output a patch script or flag for human review.",
+  "reads": [
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "verify_temporal_stability_enrichment_v2_integration",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2_smoke_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnose why temporal_stability_enrichment_v2.py has 2/3 retry attempts remaining. Recent build was 2026-05-24T14:12:00 and should be fresh. Check that the module exports compute_score(metadata) correctly, does not import protected modules, and completes within 2 seconds per call. This is a diagnostic-only file; do not propose rebuild of the enrichment itself unless the check reveals a specific import or signature issue that requires code change."
+}

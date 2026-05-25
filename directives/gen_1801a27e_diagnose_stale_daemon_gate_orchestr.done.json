@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_daemon_gate_orchestrator",
+  "handler": "generate_file",
+  "output_file": "diagnose_gate_orchestrator_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic daemon that inspects the stale gate_orchestrator service (last heartbeat 10h5m ago, threshold=28800s). Logic mirrors diagnose_zo_sentinel_builder_stale.py: read service_health row, compute stale gap, tail recent logs for ERROR/EXCEPTION, write diagnostic blob to mcp_daemon_diagnostics. gate_orchestrator is not in the PROTECTED_FILES list (zo_sentinel_builder is the only protected stale daemon), but per spec rule prefer diagnosis over rebuild. This file is a NEW diagnostic companion, not a rebuild of any existing file. Export heartbeat and diagnose() functions. Reference SPEC.md section 6. Docstring must cite Appendix A entry for gate_orchestrator diagnostic."
+}

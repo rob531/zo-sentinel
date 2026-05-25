@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_approval_workflow",
+  "handler": "generate_file",
+  "output_file": "snow_connector_workflow_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Wire snow_connector.py (built 2026-05-22T18:10:53) into the approval_workflow daemon. snow_connector.py provides ServiceNow integration functions; approval_workflow.py (protected) processes MCP submission decisions. This module reads pending decisions from mcp_decisions where status='PENDING' and exports relevant records to ServiceNow via snow_connector write methods. Uses write_service at :8772 for DB access (not direct duckdb). Exposes function process_pending_decisions() that: (1) queries mcp_decisions WHERE status='PENDING'; (2) calls snow_connector methods to create/update SN records; (3) updates mcp_decisions status to 'EXPORTED'. No HTTP between daemons \u2014 uses write_service exclusively. Depends on: snow_connector.py (already built), approval_workflow.py (protected \u2014 do not modify)."
+}

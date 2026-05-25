@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_registry_api_smoke_failure",
+  "handler": "generate_file",
+  "output_file": "diagnose_registry_api_smoke_failure.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnostic module for registry_api.py smoke failure. Traceback shows import error at line 10 in <frozen importlib>. Investigate module imports, check for missing dependencies, verify all referenced modules exist, and validate Python 3.11 compatibility. Report findings to service_health with diagnostic_blob. Do NOT propose rebuild \u2014 file is protected per PROTECTED_FILES list. Output diagnostic report to stdout and write to audit_log via write_service."
+}

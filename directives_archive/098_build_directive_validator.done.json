@@ -1,0 +1,12 @@
+{
+  "task": "build_directive_validator",
+  "handler": "generate_file",
+  "output_file": "directive_validator.py",
+  "complexity": "low",
+  "phase": "9",
+  "priority": 0.68,
+  "reads": [],
+  "description": "Directive validator utility. validate_directive(d:dict)->tuple[bool,list]: checks required fields (task,handler,output_file,complexity,description), validates complexity in (high,medium,low), validates handler in (generate_file,write_raw,run_script), checks output_file ends in .py or known extensions, checks description length >50 chars, checks priority 0-1 range. Returns (valid,errors). scan_directive_folder(path)->dict: validates all JSON files in directives/ folder. Reports malformed directives. Run: python3 directive_validator.py. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,8 @@
+{
+  "task": "build_pi_quarantine_promoter_auto",
+  "description": "Build the auto-promoter that reads pi_review/approved/*.json and writes to pi_test_corpus, then moves files to promoted/.",
+  "from": "chain_build_pi_quarantine_reviewer",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "priority": 0.9199999999999999
+}

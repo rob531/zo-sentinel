@@ -1,0 +1,14 @@
+{
+  "task": "build_pipeline_health",
+  "handler": "generate_file",
+  "output_file": "pipeline_health.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.85,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Pipeline health daemon. Every 14400s: (1) count unscored servers (mcp_server_registry WHERE trust_score IS NULL) (2) count stale assessments (last_assessed < now()-7d) (3) count servers with no attestation (not in mcp_attestations) (4) count servers with no threat intel checked (5) count zero-signal servers (not in mcp_signal_scores). ws_write each count as pipeline_health event to mesh_events with severity=WARNING if any count >10 else INFO. Log summary. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "write_operations_md",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Document operational procedures for ZO-SENTINEL. Must include: (1) supervisord config location and daemon list (check supervisord_sentinel_full.conf). (2) Log locations for each daemon (find via LOG_DIR constants in each file). (3) Recovery runbook: if write_service stale \u2014 check DuckDB accessibility via ws_query, verify port 8772 is listening (ss -tlnp | grep 8772), restart via supervisorctl if unresponsive. (4) Recovery runbook: if rug_pull_monitor stale >14h \u2014 run rug_pull_monitor_diagnostic.py to check connectivity, if dead restart via supervisorctl. (5) Circuit breaker (Gate 8): tracks consecutive fails, auto-trips at 3, auto-recloses when a cohort passes. (6) Quarantine: files with 3 consecutive fails are quarantined and never auto-rebuilt. (7) Smoke test execution: runs automatically at build time; individual files exercise their own if __name__ == '__main__' block. (8) Retention: evidence_blob expires at 30 days via query filter, no row deletion."
+}

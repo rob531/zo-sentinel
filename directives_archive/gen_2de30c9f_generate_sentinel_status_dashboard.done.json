@@ -1,0 +1,14 @@
+{
+  "task": "generate_sentinel_status_dashboard",
+  "handler": "generate_file",
+  "output_file": "sentinel_status.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "HTML dashboard polling /v1/registry + /v1/threats endpoints. Shows current system health, verdict distribution, recent submissions. Auto-refresh every 30s. Pure static HTML with fetch API calls to local sentinel ports 8772/8773.",
+  "reads": [
+    "dashboard.html",
+    "registry_api.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,11 @@
+{
+  "task": "phase5_known_threats_db",
+  "handler": "generate_file",
+  "output_file": "known_threats.py",
+  "complexity": "medium",
+  "description": "Python module containing ZO-SENTINEL curated threat intelligence. Provides: (1) KNOWN_MALICIOUS_PACKAGES list of confirmed malicious npm/pip package names. (2) KNOWN_MALICIOUS_DOMAINS list. (3) HIGH_RISK_PATTERNS list of regex pattern strings (as raw strings) for tool description injection detection - look for IMPORTANT tag abuse, ignore previous instructions, read ssh keys, exfiltrate patterns. (4) SUSPICIOUS_PERMISSIONS list: filesystem, execute, shell, subprocess, ssh, credentials, keychain, env_vars. (5) check_package(name) -> dict with malicious bool, patterns_found list, risk_notes list. (6) check_domain(domain) -> dict. This module is imported by signal_analyser.py. Use raw strings for all regex patterns.",
+  "context": "Static threat intelligence baseline. Keep as pure Python data structures, no external dependencies. Use r-prefix strings for all regex patterns to avoid escape issues.",
+  "priority": 0.85,
+  "from": "claude_directive",
+  "phase": "5"
+}

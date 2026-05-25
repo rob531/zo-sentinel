@@ -1,0 +1,9 @@
+{
+  "task": "auto_dependency_resolver",
+  "description": "Build auto_dependency_resolver.py. TASK: Auto-install missing pip packages before smoke tests. 1. Setup: `import ast, sys, subprocess, importlib.util`; `sys.path.insert(0, '/home/workspace/zo_mesh')`. 2. Expose `def resolve_dependencies(filepath):`. 3. Read the target .py file, parse with `ast.parse(code)`. 4. Extract all root module names from `Import` and `ImportFrom` nodes. 5. Filter out standard libraries using `sys.stdlib_module_names`. 6. For remaining third-party modules, check installation via `importlib.util.find_spec(module_name)`. 7. If missing, execute `subprocess.run([sys.executable, '-m', 'pip', 'install', '--break-system-packages', module_name], capture_output=True)`. 8. Log outcome via requests.post to write_service /write with table=mesh_events. 9. Return dict of {module: 'installed'|'already_present'|'failed'}. SMOKE TEST CONTRACT: Must successfully parse its own AST and correctly filter out 'sys' and 'ast' from installation attempts. No uvicorn, no daemon - pure utility module.",
+  "complexity": "high",
+  "phase": "27",
+  "priority": 1.0,
+  "handler": "generate_file",
+  "output_file": "auto_dependency_resolver.py"
+}

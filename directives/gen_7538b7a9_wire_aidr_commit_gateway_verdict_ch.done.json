@@ -1,0 +1,12 @@
+{
+  "task": "wire_aidr_commit_gateway_verdict_check",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_check_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "New integration module to wire aidr_commit_gateway.py verdict-check enforcement. Uses write_service to query mcp_server_registry for verdict column before forwarding commits. NEVER auto-commits CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override. Includes injection_resilience score in commit payload per Phase 9 rules. Uses write_service :8772 for all DB reads. References aidr_commit_gateway.py (built 2026-04-17) and the last_error from aidr_gateway_verdict_test.py (cohort_3_n3) to understand what the previous test was checking.",
+  "reads": [
+    "aidr_commit_gateway.py"
+  ]
+}

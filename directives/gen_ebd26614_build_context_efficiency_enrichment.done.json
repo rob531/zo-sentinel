@@ -1,0 +1,13 @@
+{
+  "task": "build_context_efficiency_enrichment",
+  "handler": "generate_file",
+  "output_file": "context_efficiency_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Build context_efficiency enrichment consuming mcp_tool_schema_patterns library. Per Appendix B spec: progressive-disclosure servers deserve positive signal weight. Must: (1) Expose compute_score(metadata: dict) returning tuple[float, dict] with score in [0,100]; (2) Read tool_pattern (from mcp_tool_schema_patterns output), tool_count, schema_complexity, publisher_verified fields; (3) Score progressive-disclosure (pattern='progressive_disclosure', tool_count<=4) higher than brute-force (pattern='brute_force', tool_count>=20); (4) Return evidence dict listing pattern type and partial scores; (5) Pure function - no DB, network, imports of protected modules; (6) Complete in <2s. Note: Appendix B defers this until weak signals (permission_scope, temporal_stability, tool_description_safety) have >=20 distinct values. tool_description_safety_v2 is being rebuilt in parallel to address this.",
+  "reads": [
+    "mcp_tool_schema_patterns.py"
+  ],
+  "next_directive": {}
+}

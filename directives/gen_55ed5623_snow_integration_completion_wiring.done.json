@@ -1,0 +1,9 @@
+{
+  "task": "snow_integration_completion_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_integration_completion.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.87,
+  "description": "Both snow_connector_wiring.py (2026-05-02 15:46:41) and snow_integration_wiring.py (2026-05-02 15:08:04) are built but the Gaps Map marks wiring as incomplete. Create the completion module that: (1) queries mcp_server_registry for servers awaiting approval, (2) calls snow_connector to submit ServiceNow ticket, (3) listens for ServiceNow webhook callback on the configured inbound endpoint, (4) calls approval_workflow.py with the ServiceNow resolution. Must use write_service on :8772 for all DB ops. Must include heartbeat to service_health every 60s. Phase 9 file \u2014 use numbered MUST/MUST NOT rules in description: MUST authenticate via SNOW OAuth token, MUST validate request signature on inbound webhook, MUST never accept unsigned webhooks, MUST write audit_log entry for each ticket action."
+}

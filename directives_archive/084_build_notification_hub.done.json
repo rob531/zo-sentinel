@@ -1,0 +1,14 @@
+{
+  "task": "build_notification_hub",
+  "handler": "generate_file",
+  "output_file": "notification_hub.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.66,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Notification hub utility. Centralises all outbound notifications. send_alert(subject,body,severity=HIGH)->bool: tries api.zo.computer/zo/notify with 8s timeout, falls back to writing ALERT_QUEUE.md. send_build_failure(task,description,reason)->bool: formats failure notification for Claude chat ingestion. send_daily_digest(content)->bool. notify_high_risk(server_name,verdict,trust_score)->bool. All methods: best-effort, never raise exceptions, always return bool success. Tracks send_count and failure_count. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

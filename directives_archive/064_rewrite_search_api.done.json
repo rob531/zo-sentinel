@@ -1,0 +1,15 @@
+{
+  "task": "rewrite_search_api",
+  "handler": "generate_file",
+  "output_file": "search_api.py",
+  "complexity": "high",
+  "phase": "8",
+  "priority": 0.87,
+  "reads": [
+    "schema.py",
+    "registry_api.py"
+  ],
+  "description": "Search API. FastAPI port 8782. GET /search?q=&limit=20&verdict=&risk_tier= -> ILIKE search on name+description in mcp_server_registry with optional verdict/risk_tier filters. Returns list with server_id,name,url,verdict,trust_score,risk_tier. GET /mcp/{server_id} -> full detail: registry record + all signals + all threats + risk register + latest attestation. GET /threats?severity=&limit=20 -> threat feed. GET /risks?tier=&limit=20 -> risk register. GET /stats -> counts by verdict and risk_tier. GET /health. Daemon uvicorn port 8782. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

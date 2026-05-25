@@ -1,0 +1,9 @@
+{
+  "task": "gateway_rebuild_all_sh",
+  "handler": "generate_file",
+  "output_file": "gateway_rebuild_all_sh.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Rebuild build_start_all_sh because it failed in current cohort. This is a shell script launcher, not a protected Python daemon. Target file: build_start_all_sh (the script itself, not the task name). The script should source environment variables, set PYTHONPATH, then invoke python3 for each daemon in supervisord order. Include: mcp_scanner, signal_analyser, trust_synthesiser, threat_intel_ingestor, attestation_engine. Use absolute paths. Log each daemon start with timestamp. Spec reference: Section 6 execution, Section 10 directive generator execution rules."
+}

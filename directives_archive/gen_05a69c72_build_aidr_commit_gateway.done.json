@@ -1,0 +1,13 @@
+{
+  "task": "build_aidr_commit_gateway",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Generate aidr_commit_gateway.py \u2014 CrowdStrike AI Defense Runtime commit bridge for Phase 9 enterprise integration. MUST follow numbered rules: (1) MUST query write_service at 8772 for MCP verdict before forwarding commits, (2) MUST block CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts unless explicit override flag present, (3) MUST include injection_resilience score in commit payload under key 'security_signal', (4) MUST never auto-approve without analyst review, (5) MUST post heartbeat to service_health every 30 seconds, (6) MUST log all commit attempts to audit_log table, (7) MUST support dry-run mode via env var AIDR_DRY_RUN=true. Pattern: if __name__ == '__main__': run(). Port: 8785.",
+  "reads": [
+    "schema.py"
+  ],
+  "next_directive": {}
+}

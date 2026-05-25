@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_wiring_to_approval_workflow",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring_completion.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow for ServiceNow inbound webhook processing. MUST use write_service at :8772 for all state exchange. MUST read from mcp_submissions table to find pending MCP requests created by SNOW webhook. MUST write verdict decisions to mcp_decisions table. MUST NOT make direct HTTP calls between peer daemons. Include numbered constraints: (1) SNOW OAuth token via os.environ.get('SNOW_CLIENT_ID') and 'SNOW_CLIENT_SECRET', (2) validate webhook request signatures before processing, (3) never accept unsigned webhooks, (4) 10s strict timeout on external I/O, (5) write heartbeat to service_health every 60s. File is already built per wiring map \u2014 this is integration glue, not a new module."
+}

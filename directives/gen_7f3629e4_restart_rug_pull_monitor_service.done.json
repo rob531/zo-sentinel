@@ -1,0 +1,9 @@
+{
+  "task": "restart_rug_pull_monitor_service",
+  "handler": "generate_file",
+  "output_file": "restart_rug_pull_monitor.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.86,
+  "description": "Service restart directive for rug_pull_monitor which is 27h53m stale (status=stale, threshold=28800s). Check: (1) PID file at /var/run/rug_pull_monitor.pid exists, (2) process still alive, (3) last heartbeat row in service_health. If process dead, restart via supervisorctl. If alive but not reporting, diagnose heartbeat loop. Write diagnosis to logs. File is protected - prefer diagnosis over rebuild."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "wire_signal_analyser_to_supply_chain_enrichment",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_wiring_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Verify that signal_analyser.py (or signal_analyser_v2.py) actually invokes supply_chain_enrichment.compute_score() when computing the supply_chain signal score. Check the recent build signal_analyser_v2_wiring.py (2026-05-24T22:36:52) and confirm it reads from mcp_signal_enrichments table for signal_type='supply_chain'. Write a diagnostic that queries the enrichment table and reports whether any rows exist with that signal_type."
+}

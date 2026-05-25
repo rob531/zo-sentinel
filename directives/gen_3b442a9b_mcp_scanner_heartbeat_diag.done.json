@@ -1,0 +1,9 @@
+{
+  "task": "mcp_scanner_heartbeat_diag",
+  "handler": "generate_file",
+  "output_file": "mcp_scanner_heartbeat_diag.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Diagnostic script to diagnose why mcp_scanner heartbeat is stale at 4h35m. Check: (1) process alive, (2) startup import chain, (3) scanner loop entry point reachable. The same traceback pattern (File \"<string>\", line 10 in <module>, File \"<frozen importlib) appears in registry_api.py, rug_pull_monitor.py, signal_analyser.py \u2014 indicates shared import chain failure. DO NOT propose rebuild of mcp_scanner (protected). This is diagnostic only, not a daemon."
+}

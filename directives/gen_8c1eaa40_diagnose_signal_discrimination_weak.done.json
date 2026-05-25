@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_signal_discrimination_weakness",
+  "handler": "generate_file",
+  "output_file": "diagnose_weak_signal_discrimination.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic module to investigate why permission_scope, temporal_stability, and tool_description_safety signals show only 3 distinct values each (range 30-100, 40-90, 50-100). Must analyze metadata inputs fed to each enrichment and identify bucket collapse. Reads: permission_scope_enrichment.py, temporal_stability_enrichment.py, tool_description_safety_enrichment.py. Outputs diagnosis report identifying which metadata field combinations produce identical scores."
+}

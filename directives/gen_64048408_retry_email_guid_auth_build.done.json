@@ -1,0 +1,9 @@
+{
+  "task": "retry_email_guid_auth_build",
+  "handler": "generate_file",
+  "output_file": "build_email_guid_auth_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Rebuild failed module build_email_guid_auth. The original failed with import/smoke errors. Review the failure log, identify the root cause (likely missing dependency declaration or import ordering issue), fix in v2. Rules: (1) Must include # deps comment at top with all required imports, (2) must not introduce HTTP between peer daemons (section 5), (3) must not import duckdb directly \u2014 use write_service only, (4) output filename must be build_email_guid_auth_v2.py (use _v2 for deliberate documented rewrite), (5) must follow signal_analyser.py pattern for signal emission. Do NOT target build_email_guid_auth_compact \u2014 that is a duplicate target of the same module; if this rebuild passes, compact is redundant."
+}

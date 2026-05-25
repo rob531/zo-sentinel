@@ -1,0 +1,15 @@
+{
+  "task": "wire_signal_analyser_v2_integration",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v2_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Wire the three v2 enrichment modules into signal_analyser.py since signal quality diagnostics show permission_scope (4 distinct), temporal_stability (4 distinct), and tool_description_safety (4 distinct) are on a discrimination plateau. temporal_stability_enrichment_v2.py (built 2026-05-24T14:12:00), permission_scope_enrichment_v2.py (built 2026-05-24T14:13:11), and tool_description_safety_enrichment_v2.py (built 2026-05-24T10:56:48) all exist but are not yet called by signal_analyser. Must update signal_analyser.py to import and invoke the v2 compute_score functions instead of any legacy implementations. No DB writes from this wiring file; it modifies the daemon's import/call paths only.",
+  "reads": [
+    "signal_analyser.py",
+    "temporal_stability_enrichment_v2.py",
+    "permission_scope_enrichment_v2.py",
+    "tool_description_safety_enrichment_v2.py"
+  ]
+}

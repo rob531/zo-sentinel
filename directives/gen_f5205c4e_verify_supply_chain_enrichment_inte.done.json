@@ -1,0 +1,9 @@
+{
+  "task": "verify_supply_chain_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_integration_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic companion that verifies supply_chain_enrichment.py (built 2026-05-23T13:21:00) is being called by signal_analyser or signal_analyser_v2. Queries mcp_signal_enrichments for rows where signal_type='supply_chain' and checks: (1) row count > 0, (2) evidence_blob contains the expected fields (registry_source, age_days, dependency_count, publisher_verified bonus/penalty). Reports findings via ws_write to service_health. Does NOT write to mcp_signal_enrichments directly. This module is a diagnostic only; it does not fix or rebuild any protected file."
+}

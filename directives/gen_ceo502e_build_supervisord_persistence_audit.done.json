@@ -1,0 +1,9 @@
+{
+  "task": "build_supervisord_persistence_audit",
+  "handler": "generate_file",
+  "output_file": "supervisord_persistence_audit.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Build a read-only diagnostic daemon that runs every 30 minutes and reports any Python daemon currently running under /home/workspace/ that is NOT registered in /etc/zo/supervisord-user.conf. This closes the supervisord persistence gap by making missing-from-conf visible. Read /etc/zo/supervisord-user.conf as text, parse [program:NAME] sections, then enumerate ps -ef python processes and compare. Write findings to mesh_memory via ws_write with agent_id='supervisord_audit' memory_type='persistence_drift' and emit a mesh_event when daemons-not-in-conf count > 0. Exit 0 on no drift, 1 on drift. Pure read-only — never modifies supervisord-user.conf. Constraints: FileHandler ONLY for logging (daemon_logging_filehandler_only convention), ws_write for mesh_memory (never direct DuckDB), ISO-8601 string timestamps (never time.time() float), idempotent (same diff each run if no state change). Author: CEO direct (Claude), 2026-05-02. Reason: closes the unsupervised-daemons issue that took out trigger_watcher this morning."
+}

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZO-SENTINEL Build Watch</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#1a1228;font-family:'Courier New',monospace;overflow:hidden}
+#ambient{position:fixed;inset:0;z-index:0;background:
+  radial-gradient(ellipse 40% 30% at 30% 44%,rgba(20,100,255,.5) 0%,transparent 100%),
+  radial-gradient(ellipse 40% 30% at 70% 44%,rgba(180,20,255,.5) 0%,transparent 100%),
+  radial-gradient(ellipse 80% 60% at 50% 50%,#2a0e48 0%,#1a1228 100%)}
+/* Base stream -- hidden, used as data source */
+#stream-base{display:none}
+/* Two eye-hole windows -- above SVG, clipped to goggle lens shapes */
+.eye-window{
+  position:fixed;inset:0;z-index:20;pointer-events:none;overflow:hidden;
+  display:flex;align-items:center;
+}
+#eye-left{ clip-path:ellipse(14.6% 9.2% at 30% 44%); }
+#eye-right{ clip-path:ellipse(14.6% 9.2% at 70% 44%); }
+.eye-track{
+  display:flex;align-items:center;gap:14px;padding:0 20px;
+  width:max-content;animation:marquee 52s linear infinite;
+  will-change:transform;
+}
+.eye-idle .eye-track{animation-duration:120s;opacity:.8;filter:saturate(0.25)}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.pill{
+  display:flex;align-items:center;gap:7px;padding:5px 10px;
+  border:1.5px solid currentColor;border-radius:3px;
+  background:rgba(8,4,18,.92);flex-shrink:0;
+  font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap;
+  filter:drop-shadow(0 0 6px currentColor);
+}
+.pill-icon{font-size:12px;width:14px;text-align:center}
+.pill-name{max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.pill-tag{font-size:7px;padding:2px 5px;border-radius:2px;font-weight:800;letter-spacing:.12em;background:currentColor;color:#06030f;opacity:.85}
+.c-py{color:#22d3ee}.c-html{color:#f472b6}.c-sh{color:#4ade80}.c-conf{color:#fb923c}.c-md{color:#c084fc}.c-json{color:#facc15}.c-other{color:#94a3b8}
+/* SVG mask layer */
+#mask-svg{position:fixed;inset:0;width:100%;height:100%;z-index:10;pointer-events:none;overflow:visible}
+@keyframes cog-spin{to{transform:rotate(360deg)}}@keyframes cog-rev{to{transform:rotate(-360deg)}}
+@keyframes steam-rise{0%{opacity:0;transform:translateY(0) scaleX(1)}12%{opacity:.55}88%{opacity:.3}100%{opacity:0;transform:translateY(-7vh) scaleX(2.2)}}
+@keyframes steam-rise2{0%{opacity:0;transform:translateY(0) scaleX(1)}12%{opacity:.45}88%{opacity:.25}100%{opacity:0;transform:translateY(-6vh) scaleX(1.8)}}
+@keyframes needle-wobble{0%,100%{transform:rotate(-25deg)}30%{transform:rotate(40deg)}60%{transform:rotate(-10deg)}85%{transform:rotate(22deg)}}
+@keyframes needle-wobble2{0%,100%{transform:rotate(10deg)}40%{transform:rotate(-30deg)}70%{transform:rotate(35deg)}}
+@keyframes piston-pump{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.1}}
+#cog-main{transform-origin:50% 15%;animation:cog-spin 8s linear infinite}
+#cog-small{transform-origin:61% 18%;animation:cog-rev 3.2s linear infinite}
+#steam-l-1{animation:steam-rise 3.8s ease-in-out infinite}#steam-l-2{animation:steam-rise2 5.2s ease-in-out infinite 1.4s}#steam-l-3{animation:steam-rise 4.5s ease-in-out infinite .8s}
+#steam-r-1{animation:steam-rise 4.1s ease-in-out infinite .6s}#steam-r-2{animation:steam-rise2 3.6s ease-in-out infinite 2.1s}
+#needle-l{animation:needle-wobble 4.3s ease-in-out infinite}#needle-r{animation:needle-wobble2 5.7s ease-in-out infinite 1.2s}
+#piston{animation:piston-pump 1.2s ease-in-out infinite}
+#chrome{position:fixed;inset:0;z-index:30;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:10px}
+.status-row{display:flex;align-items:center;gap:8px;font-size:8px;letter-spacing:.25em;color:rgba(180,150,90,.45);text-transform:uppercase}
+#sd{width:4px;height:4px;border-radius:50%;background:#c8943a}#sd.active{animation:dot-blink 2s ease-in-out infinite}
+#ticker{font-size:8px;letter-spacing:.08em;color:rgba(180,140,70,.3);margin-top:2px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="ambient"></div>
+
+<!-- Two eye-window streams, clipped to lens positions, above SVG -->
+<div class="eye-window eye-idle" id="eye-left"><div class="eye-track" id="track-left"></div></div>
+<div class="eye-window eye-idle" id="eye-right"><div class="eye-track" id="track-right"></div></div>
+
+<svg id="mask-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+<defs>
+<mask id="em"><rect width="100" height="100" fill="white"/><ellipse cx="30" cy="44" rx="14.8" ry="9.4" fill="black"/><ellipse cx="70" cy="44" rx="14.8" ry="9.4" fill="black"/></mask>
+<filter id="wobble" x="-4%" y="-4%" width="108%" height="108%"><feTurbulence type="fractalNoise" baseFrequency="0.035 0.02" numOctaves="2" seed="9" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="0.55" xChannelSelector="R" yChannelSelector="G"/></filter>
+<filter id="mshadow" x="-6%" y="-6%" width="112%" height="120%"><feDropShadow dx=".3" dy="1.8" stdDeviation="2" flood-color="rgba(0,0,0,.7)"/></filter>
+</defs>
+<rect width="100" height="100" fill="#ece0c0" mask="url(#em)"/>
+<g filter="url(#mshadow)">
+<path d="M5,44 C5,30 17,26 30,27 C39,27 45,31 47.5,36.5 L50,38 L52.5,36.5 C55,31 61,27 70,27 C83,26 95,30 95,44 C95,57 83,62 70,61 C62,63 55,58 52.5,54 L50,51 L47.5,54 C45,58 38,63 30,61 C17,62 5,57 5,44 Z" fill="#e4d4a4" mask="url(#em)" filter="url(#wobble)"/>
+<path d="M5,44 C5,30 17,26 30,27 C39,27 45,31 47.5,36.5 L50,38 L52.5,36.5 C55,31 61,27 70,27 C83,26 95,30 95,44 C95,57 83,62 70,61 C62,63 55,58 52.5,54 L50,51 L47.5,54 C45,58 38,63 30,61 C17,62 5,57 5,44 Z" fill="none" stroke="#6a4810" stroke-width=".4" mask="url(#em)" filter="url(#wobble)"/>
+</g>
+<!-- Left goggle ring -->
+<ellipse cx="30" cy="44" rx="17.5" ry="12.5" fill="#c8943a" stroke="#6a4810" stroke-width=".35" filter="url(#wobble)"/>
+<ellipse cx="30" cy="44" rx="16.8" ry="11.8" fill="#e4d4a4" stroke="#6a4810" stroke-width=".25" filter="url(#wobble)"/>
+<ellipse cx="30" cy="44" rx="15.8" ry="10.8" fill="none" stroke="#4a3010" stroke-width=".6" stroke-dasharray=".8 .8" filter="url(#wobble)"/>
+<ellipse cx="30" cy="44" rx="15.2" ry="9.6" fill="none" stroke="#8b6420" stroke-width=".4"/>
+<ellipse cx="30" cy="44" rx="14.8" ry="9.4" fill="none" stroke="rgba(200,148,58,.4)" stroke-width=".5"/>
+<circle cx="47.5" cy="44" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="42.4" cy="35.2" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="30" cy="31.5" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="17.6" cy="35.2" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="12.5" cy="44" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="17.6" cy="52.8" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="30" cy="56.5" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="42.4" cy="52.8" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/>
+<!-- Right goggle ring -->
+<ellipse cx="70" cy="44" rx="17.5" ry="12.5" fill="#c8943a" stroke="#6a4810" stroke-width=".35" filter="url(#wobble)"/>
+<ellipse cx="70" cy="44" rx="16.8" ry="11.8" fill="#e4d4a4" stroke="#6a4810" stroke-width=".25" filter="url(#wobble)"/>
+<ellipse cx="70" cy="44" rx="15.8" ry="10.8" fill="none" stroke="#4a3010" stroke-width=".6" stroke-dasharray=".8 .8" filter="url(#wobble)"/>
+<ellipse cx="70" cy="44" rx="15.2" ry="9.6" fill="none" stroke="#8b6420" stroke-width=".4"/>
+<ellipse cx="70" cy="44" rx="14.8" ry="9.4" fill="none" stroke="rgba(200,148,58,.4)" stroke-width=".5"/>
+<circle cx="87.5" cy="44" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="82.4" cy="35.2" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="70" cy="31.5" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="57.6" cy="35.2" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="52.5" cy="44" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="57.6" cy="52.8" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="70" cy="56.5" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/><circle cx="82.4" cy="52.8" r=".9" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/>
+<path d="M44.5,43 Q50,45.5 55.5,43" fill="none" stroke="#c8943a" stroke-width="2.5" filter="url(#wobble)"/><path d="M44.5,45 Q50,47.5 55.5,45" fill="none" stroke="#a07428" stroke-width="1" filter="url(#wobble)"/>
+<rect x="42.5" y="42" width="3" height="3.5" rx=".3" fill="#c8943a" stroke="#4a3010" stroke-width=".25"/><rect x="54.5" y="42" width="3" height="3.5" rx=".3" fill="#c8943a" stroke="#4a3010" stroke-width=".25"/>
+<circle cx="44" cy="43.75" r=".45" fill="#4a3010"/><circle cx="45.5" cy="43.75" r=".45" fill="#4a3010"/><circle cx="54.5" cy="43.75" r=".45" fill="#4a3010"/><circle cx="56" cy="43.75" r=".45" fill="#4a3010"/>
+<g transform="rotate(5,50,48)" filter="url(#wobble)"><line x1="50" y1="47.5" x2="50" y2="49.5" stroke="#4a3010" stroke-width=".2"/><rect x="44" y="49.5" width="12" height="4.2" rx=".4" fill="#f8f0d8" stroke="#4a3010" stroke-width=".25"/><text x="50" y="52.3" text-anchor="middle" font-size="1.3" fill="#2c1a08" font-family="Courier New,monospace">EFFLUVIUM CONDUIT</text></g>
+<rect x="28.5" y="17" width="3" height="10" rx=".4" fill="#a08040" stroke="#6a4810" stroke-width=".3" filter="url(#wobble)"/><rect x="27.5" y="16" width="5" height="1.5" rx=".3" fill="#c8943a" stroke="#6a4810" stroke-width=".25"/><rect x="27.5" y="26.5" width="5" height="1.5" rx=".3" fill="#c8943a" stroke="#6a4810" stroke-width=".25"/>
+<path id="steam-l-1" d="M30,16 Q31.5,13.5 29.5,11 Q28,8.5 30,6" stroke="#d4c8a8" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+<path id="steam-l-2" d="M30,16 Q28.5,13 30.5,10.5 Q32,8 30,5.5" stroke="#c8bc9c" stroke-width="1" fill="none" stroke-linecap="round" opacity=".7"/>
+<path id="steam-l-3" d="M30,16 Q31,14 30,11.5 Q29,9 30.5,7" stroke="#b8aa88" stroke-width=".7" fill="none" stroke-linecap="round" opacity=".5"/>
+<rect x="68.5" y="17" width="3" height="10" rx=".4" fill="#a08040" stroke="#6a4810" stroke-width=".3" filter="url(#wobble)"/><rect x="67.5" y="16" width="5" height="1.5" rx=".3" fill="#c8943a" stroke="#6a4810" stroke-width=".25"/><rect x="67.5" y="26.5" width="5" height="1.5" rx=".3" fill="#c8943a" stroke="#6a4810" stroke-width=".25"/>
+<path id="steam-r-1" d="M70,16 Q71.5,13.5 69.5,11 Q68,8.5 70,6" stroke="#d4c8a8" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+<path id="steam-r-2" d="M70,16 Q68.5,13 70.5,10.5 Q72,8 70,5.5" stroke="#c8bc9c" stroke-width="1" fill="none" stroke-linecap="round" opacity=".7"/>
+<g id="cog-main"><path d="M50,7.5 L50.8,9.5 L52.8,9.3 L53.5,11.2 L51.6,11.8 L51.8,14 L50,14.5 L48.2,14 L48.4,11.8 L46.5,11.2 L47.2,9.3 L49.2,9.5 Z" fill="#c8943a" stroke="#4a3010" stroke-width=".2" filter="url(#wobble)"/><circle cx="50" cy="11.5" r="3" fill="#d4a840" stroke="#4a3010" stroke-width=".25"/><circle cx="50" cy="11.5" r="1.8" fill="#e4d4a4" stroke="#4a3010" stroke-width=".2"/><circle cx="50" cy="11.5" r=".5" fill="#4a3010"/><line x1="50" y1="9.5" x2="50" y2="13.5" stroke="#4a3010" stroke-width=".2"/><line x1="47.6" y1="10.5" x2="52.4" y2="12.5" stroke="#4a3010" stroke-width=".2"/><line x1="47.6" y1="12.5" x2="52.4" y2="10.5" stroke="#4a3010" stroke-width=".2"/></g>
+<g id="cog-small"><circle cx="54.5" cy="16" r="2.5" fill="#b07828" stroke="#4a3010" stroke-width=".2" filter="url(#wobble)"/><circle cx="54.5" cy="16" r="1.2" fill="#e4d4a4" stroke="#4a3010" stroke-width=".15"/><circle cx="54.5" cy="16" r=".3" fill="#4a3010"/><circle cx="54.5" cy="13.5" r=".45" fill="#b07828" stroke="#4a3010" stroke-width=".15"/><circle cx="57" cy="16" r=".45" fill="#b07828" stroke="#4a3010" stroke-width=".15"/><circle cx="54.5" cy="18.5" r=".45" fill="#b07828" stroke="#4a3010" stroke-width=".15"/><circle cx="52" cy="16" r=".45" fill="#b07828" stroke="#4a3010" stroke-width=".15"/></g>
+<rect x="3" y="40" width="2" height="8" rx=".3" fill="#a08040" stroke="#6a4810" stroke-width=".2" filter="url(#wobble)"/><rect x="2.5" y="40" width="3" height="1" rx=".2" fill="#c8943a" stroke="#6a4810" stroke-width=".15"/>
+<circle cx="5" cy="36" r="5.5" fill="#e8d8b0" stroke="#6a4810" stroke-width=".4" filter="url(#wobble)"/><circle cx="5" cy="36" r="5" fill="#f8f0d8" stroke="#4a3010" stroke-width=".2"/>
+<line x1="5" y1="31.2" x2="5" y2="32.2" stroke="#4a3010" stroke-width=".3"/><line x1="9.5" y1="33" x2="8.8" y2="33.7" stroke="#4a3010" stroke-width=".3"/><line x1="9.8" y1="37.5" x2="8.8" y2="37.5" stroke="#4a3010" stroke-width=".3"/><line x1=".5" y1="33" x2="1.2" y2="33.7" stroke="#4a3010" stroke-width=".3"/><line x1=".2" y1="37.5" x2="1.2" y2="37.5" stroke="#4a3010" stroke-width=".3"/>
+<g id="needle-l" style="transform-origin:5px 36px"><line x1="5" y1="36" x2="5" y2="32.5" stroke="#8b2010" stroke-width=".5" stroke-linecap="round"/></g>
+<circle cx="5" cy="36" r=".6" fill="#4a3010"/><text x="5" y="40" text-anchor="middle" font-size="1.1" fill="#4a3010" font-family="Courier New,monospace">PRESSURE</text>
+<circle cx="2" cy="39.5" r=".4" fill="#c8943a" stroke="#4a3010" stroke-width=".15"/><circle cx="8" cy="39.5" r=".4" fill="#c8943a" stroke="#4a3010" stroke-width=".15"/>
+<rect x="95" y="40" width="2" height="8" rx=".3" fill="#a08040" stroke="#6a4810" stroke-width=".2" filter="url(#wobble)"/><rect x="94.5" y="40" width="3" height="1" rx=".2" fill="#c8943a" stroke="#6a4810" stroke-width=".15"/>
+<circle cx="95" cy="36" r="5.5" fill="#e8d8b0" stroke="#6a4810" stroke-width=".4" filter="url(#wobble)"/><circle cx="95" cy="36" r="5" fill="#f8f0d8" stroke="#4a3010" stroke-width=".2"/>
+<line x1="95" y1="31.2" x2="95" y2="32.2" stroke="#4a3010" stroke-width=".3"/><line x1="99.5" y1="33" x2="98.8" y2="33.7" stroke="#4a3010" stroke-width=".3"/><line x1="99.8" y1="37.5" x2="98.8" y2="37.5" stroke="#4a3010" stroke-width=".3"/><line x1="90.5" y1="33" x2="91.2" y2="33.7" stroke="#4a3010" stroke-width=".3"/><line x1="90.2" y1="37.5" x2="91.2" y2="37.5" stroke="#4a3010" stroke-width=".3"/>
+<g id="needle-r" style="transform-origin:95px 36px"><line x1="95" y1="36" x2="95" y2="32.5" stroke="#8b2010" stroke-width=".5" stroke-linecap="round"/></g>
+<circle cx="95" cy="36" r=".6" fill="#4a3010"/><text x="95" y="40" text-anchor="middle" font-size="1.1" fill="#4a3010" font-family="Courier New,monospace">PRESSURE</text>
+<circle cx="92" cy="39.5" r=".4" fill="#c8943a" stroke="#4a3010" stroke-width=".15"/><circle cx="98" cy="39.5" r=".4" fill="#c8943a" stroke="#4a3010" stroke-width=".15"/>
+<path d="M0,44 L1,44 Q1.4,41.5 2,44 Q2.6,46.5 3.2,44 Q3.8,41.5 4.4,44 Q5,46.5 5.6,44 Q6.2,41.5 6.8,44 L7.5,44" fill="none" stroke="#8a8878" stroke-width=".6" filter="url(#wobble)"/>
+<circle cx="0" cy="44" r=".5" fill="#6a6858" stroke="#4a4838" stroke-width=".15"/><circle cx="7.5" cy="44" r=".5" fill="#6a6858" stroke="#4a4838" stroke-width=".15"/>
+<path d="M100,44 L99,44 Q98.6,41.5 98,44 Q97.4,46.5 96.8,44 Q96.2,41.5 95.6,44 Q95,46.5 94.4,44 Q93.8,41.5 93.2,44 L92.5,44" fill="none" stroke="#8a8878" stroke-width=".6" filter="url(#wobble)"/>
+<circle cx="100" cy="44" r=".5" fill="#6a6858" stroke="#4a4838" stroke-width=".15"/><circle cx="92.5" cy="44" r=".5" fill="#6a6858" stroke="#4a4838" stroke-width=".15"/>
+<g id="piston" filter="url(#wobble)"><rect x="86" y="7" width="4" height="8" rx=".5" fill="#b07828" stroke="#4a3010" stroke-width=".3"/><rect x="87" y="15" width="2" height="3" fill="#c8943a" stroke="#4a3010" stroke-width=".2"/></g>
+<rect x="85.5" y="5" width="5" height="2.5" rx=".5" fill="#c8943a" stroke="#4a3010" stroke-width=".3" filter="url(#wobble)"/>
+<path d="M88,18 Q88,20 84,22 Q80,24 75,26.5" fill="none" stroke="#a08040" stroke-width="1" stroke-linecap="round" filter="url(#wobble)"/>
+<g transform="rotate(-3,30,62)" filter="url(#wobble)"><line x1="30" y1="57.5" x2="30" y2="60" stroke="#4a3010" stroke-width=".22"/><circle cx="30" cy="60" r=".35" fill="none" stroke="#4a3010" stroke-width=".2"/><rect x="21" y="60" width="18" height="4.5" rx=".4" fill="#f8f0d8" stroke="#4a3010" stroke-width=".28"/><text x="30" y="63.3" text-anchor="middle" font-size="1.35" fill="#2c1a08" font-family="Courier New,monospace">OCULAR UNIT I</text></g>
+<g transform="rotate(3,70,62)" filter="url(#wobble)"><line x1="70" y1="57.5" x2="70" y2="60" stroke="#4a3010" stroke-width=".22"/><circle cx="70" cy="60" r=".35" fill="none" stroke="#4a3010" stroke-width=".2"/><rect x="61" y="60" width="18" height="4.5" rx=".4" fill="#f8f0d8" stroke="#4a3010" stroke-width=".28"/><text x="70" y="63.3" text-anchor="middle" font-size="1.35" fill="#2c1a08" font-family="Courier New,monospace">OCULAR UNIT II</text></g>
+<g transform="rotate(-6,23,24)" filter="url(#wobble)"><rect x="12" y="22" width="22" height="4.5" rx=".4" fill="#f8f0d8" stroke="#4a3010" stroke-width=".28"/><text x="23" y="25.3" text-anchor="middle" font-size="1.35" fill="#2c1a08" font-family="Courier New,monospace">INTAKE MANIFOLD</text></g>
+<path d="M23,26.5 L25,28.5" fill="none" stroke="#4a3010" stroke-width=".3" filter="url(#wobble)"/><polygon points="24.5,28.2 26.5,28.8 25.5,27.2" fill="#4a3010"/>
+<g transform="rotate(8,79,23)" filter="url(#wobble)"><rect x="69" y="21" width="21" height="4.5" rx=".4" fill="#f8f0d8" stroke="#4a3010" stroke-width=".28"/><text x="79.5" y="24.3" text-anchor="middle" font-size="1.35" fill="#2c1a08" font-family="Courier New,monospace">EFFLUVIUM OUT</text></g>
+<path d="M74,25.5 L72,27" fill="none" stroke="#4a3010" stroke-width=".3" filter="url(#wobble)"/><polygon points="71.8,27.5 73.5,26.5 72.2,25.5" fill="#4a3010"/>
+<text x="50" y="42" text-anchor="middle" font-size="1.2" fill="#6a4810" opacity=".6" font-family="Courier New,monospace" filter="url(#wobble)">-- DATA FLOW --</text>
+<g transform="rotate(-18,50,34)" opacity=".55" filter="url(#wobble)"><circle cx="50" cy="34" r="7.5" fill="none" stroke="#8b3010" stroke-width=".35" stroke-dasharray=".6 .4"/><circle cx="50" cy="34" r="6.8" fill="none" stroke="#8b3010" stroke-width=".2"/><text x="50" y="32.8" text-anchor="middle" font-size="1.7" fill="#8b3010" font-weight="bold" font-family="Courier New,monospace">PATENT</text><text x="50" y="35.4" text-anchor="middle" font-size="1.4" fill="#8b3010" font-family="Courier New,monospace">APPLIED FOR</text><text x="50" y="37.8" text-anchor="middle" font-size="1.1" fill="#8b3010" font-family="Courier New,monospace">No. 4,871,204</text></g>
+<g opacity=".3" filter="url(#wobble)"><text x="18" y="50" font-size="1.2" fill="#2c1a08" font-family="Courier New,monospace" transform="rotate(-2,18,50)">SEE REV.C</text></g>
+<text x="50" y="73" text-anchor="middle" font-size="1.8" fill="#4a3010" font-family="Courier New,monospace" letter-spacing=".08em" filter="url(#wobble)">VIGILANCE APPARATUS Mk.IV</text>
+<text x="50" y="76" text-anchor="middle" font-size="1.2" fill="#6a4810" font-family="Courier New,monospace" opacity=".65" filter="url(#wobble)">Proprietary Ocular Build-Observation System</text>
+<text x="50" y="78.8" text-anchor="middle" font-size="1.1" fill="#8a6818" font-family="Courier New,monospace" opacity=".45" filter="url(#wobble)">W. Heath-Robinzon and Associates</text>
+<g fill="#c8943a" stroke="#4a3010" stroke-width=".15"><circle cx="20" cy="27.2" r=".55"/><circle cx="25" cy="26.8" r=".55"/><circle cx="35" cy="27.2" r=".55"/><circle cx="40" cy="28" r=".55"/><circle cx="60" cy="28" r=".55"/><circle cx="65" cy="27.2" r=".55"/><circle cx="75" cy="26.8" r=".55"/><circle cx="80" cy="27.2" r=".55"/><circle cx="8" cy="40" r=".55"/><circle cx="8" cy="48" r=".55"/><circle cx="92" cy="40" r=".55"/><circle cx="92" cy="48" r=".55"/></g>
+<g filter="url(#wobble)" opacity=".75"><line x1="50" y1="51" x2="50" y2="67" stroke="#6a4810" stroke-width=".2" stroke-dasharray=".5 .3"/><rect x="46.5" y="67" width="7" height="4.5" rx=".4" fill="#8a8070" stroke="#4a3010" stroke-width=".3"/><text x="50" y="70" text-anchor="middle" font-size="1.3" fill="#2c1a08" font-family="Courier New,monospace">2kg</text><text x="50" y="73" text-anchor="middle" font-size=".9" fill="#6a4810" font-family="Courier New,monospace" opacity=".6">BALLAST</text></g>
+</svg>
+
+<div id="chrome">
+  <div class="status-row"><div id="sd" class="active"></div><span id="sl">OBSERVATIONAL PROCESSES NOMINAL</span></div>
+  <div id="ticker"></div>
+</div>
+
+<script>
+var FEED_API='/api/build-stream',POLL_MS=30000;
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+var T={'.py':'c-py','.html':'c-html','.sh':'c-sh','.conf':'c-conf','.md':'c-md','.json':'c-json'};
+var IC={'.py':'\u2b21','.html':'\u25c8','.sh':'\u229e','.conf':'\u229b','.md':'\u25c9','.json':'\u25ce'};
+function ext(n){var i=n.lastIndexOf('.');return i>0?n.slice(i).toLowerCase():''}
+function pill(f){
+  var e=ext(f.name),c=T[e]||'c-other',ic=IC[e]||'\u25b7';
+  var nm=f.name.length>22?f.name.slice(0,20)+'..':f.name;
+  var ag=f.age_display?'<span class="pill-tag">'+esc(f.age_display)+'</span>':'';
+  return '<div class="pill '+c+'"><span class="pill-icon">'+ic+'</span><span class="pill-name">'+esc(nm)+'</span>'+ag+'</div>';
+}
+var DEMO=['signal_analyser.py','trust_synthesiser.py','mcp_scanner.py','registry_api.py','forensic_detail_api.py','email_guid_auth.py','manifest_blast_radius.py','prompt_injection_scanner.py','sybil_burst_detector.py','npm_typo_squatter.py','mcp_detail_view.html','supervisord_sentinel.conf','sentinel_cli.py','sentinel_sdk.py','metrics_exporter.py','status.sh','compliance_export_service.py','audit_trail.py','certificate_analyser.py','threat_feed_aggregator.py'].map(function(n){return{name:n,age_display:''}});
+
+var tL=document.getElementById('track-left');
+var tR=document.getElementById('track-right');
+var eL=document.getElementById('eye-left');
+var eR=document.getElementById('eye-right');
+
+function renderEyes(files,idle){
+  var html='';
+  files.forEach(function(f){html+=pill(f);});
+  files.forEach(function(f){html+=pill(f);});
+  tL.innerHTML=html;
+  tR.innerHTML=html;
+  if(idle){eL.classList.add('eye-idle');eR.classList.add('eye-idle');}
+  else{eL.classList.remove('eye-idle');eR.classList.remove('eye-idle');}
+}
+
+renderEyes(DEMO,true);
+
+function poll(){
+  fetch(FEED_API).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.status==='active'&&d.files&&d.files.length){
+      var clean=d.files.filter(function(f){return f&&f.name&&/^[\w\-.]+$/.test(f.name);});
+      if(clean.length){
+        renderEyes(clean,false);
+        document.getElementById('sd').className='active';
+        document.getElementById('sl').textContent='OBSERVATIONAL PROCESSES NOMINAL';
+        document.getElementById('ticker').textContent=clean[clean.length-1].name;
+        return;
+      }
+    }
+    renderEyes(DEMO,true);
+    document.getElementById('sd').className='';
+    document.getElementById('sl').textContent='OBSERVATIONAL PROCESSES SUSPENDED';
+  }).catch(function(){});
+}
+setTimeout(poll,3000);
+setInterval(poll,POLL_MS);
+</script>
+</body></html>

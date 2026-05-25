@@ -1,0 +1,9 @@
+{
+  "task": "attestation_dynamic_evidence_check",
+  "handler": "generate_file",
+  "output_file": "attestation_dynamic_evidence_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Quality pass for attestation_engine.py. Verify attestation text cites dynamic signal evidence (current scores, not static templates). Read attestation_engine.py and check for dynamic evidence sourcing. Report findings. Do NOT modify attestation_engine.py directly (protected). If static text found, propose companion module attestation_dynamic_text.py referencing specific missing fields."
+}

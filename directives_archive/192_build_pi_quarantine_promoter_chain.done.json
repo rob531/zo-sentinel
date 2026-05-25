@@ -1,0 +1,8 @@
+{
+  "task": "build_pi_quarantine_promoter",
+  "description": "Build /home/workspace/zo_sentinel/pi_quarantine_promoter.py -- CLI tool that reads quarantine JSON files, prints a summary, waits for interactive y/N signoff, then writes approved records to pi_test_corpus.",
+  "from": "chain_rebuild_pi_corpus_ingest_quarantined",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "priority": 0.9099999999999999
+}

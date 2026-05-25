@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_build_failure_correlation",
+  "handler": "generate_file",
+  "output_file": "diagnose_build_failure_correlation.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module to identify why 24 builds failed and 17 smoke tests failed simultaneously. Analyze the build log to find common failure patterns: shared import paths, similar file sizes, same dependency versions, identical build environment conditions. Query service_health for stale daemons (write_service 9h22m, self_diagnostics 23m, rug_pull_monitor 112h27m, wisdom_synthesiser 9h23m) and correlate with failure timestamps. Output a ranked list of likely root causes. This is a diagnostic-only file; do not propose rebuilds based on its output."
+}

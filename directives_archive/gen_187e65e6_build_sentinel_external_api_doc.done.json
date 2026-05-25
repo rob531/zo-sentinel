@@ -1,0 +1,9 @@
+{
+  "task": "build_sentinel_external_api_doc",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Documentation module. Create sentinel_external_api.md for external API reference (:8791). Document read-only endpoints, X-API-Key authentication, 60 req/min/key rate limit. Include request/response shapes for verdict lookup, signal scores, and attestation retrieval. Reference trust_synthesiser.py for verdict tiers. Does NOT propose new endpoints; documents existing surface only."
+}

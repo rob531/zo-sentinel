@@ -1,0 +1,9 @@
+{
+  "task": "build_self_diagnostics_refresh",
+  "handler": "generate_file",
+  "output_file": "self_diagnostics_refresh.py",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.8,
+  "description": "Diagnostic daemon to refresh self_diagnostics heartbeat which is stale at 16m (threshold 600s). Must query service_health table to confirm stale status, restart health check cycle, and write fresh heartbeat. Must use write_service :8772 only. Must not rebuild the self_diagnostics daemon directly - this is a diagnostic wrapper that triggers health refresh via heartbeat mechanism."
+}

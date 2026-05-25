@@ -1,0 +1,621 @@
+import os
+import sys
+import time
+import json
+import uuid
+import hmac
+import hashlib
+import logging
+import threading
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List
+from fastapi import FastAPI, Request, HTTPException, Depends, Header
+from pydantic import BaseModel
+import uvicorn
+
+# Add project root to path for imports
+sys.path.insert(0, '/home/workspace/zo_sentinel')
+
+from db_utils import ws_query, ws_write, ws_execute
+
+# ============================================================
+# PHASE 9: Snow Integration Completion Wiring
+# MUST authenticate via SNOW OAuth token
+# MUST validate request signature on inbound webhook
+# MUST never accept unsigned webhooks
+# MUST write audit_log entry for each ticket action
+# ============================================================
+
+SERVICE_NAME = "snow_integration_completion"
+SERVICE_PORT = 8786
+WRITE_SERVICE_URL = "http://127.0.0.1:8772"
+QUERY_SERVICE_URL = "http://127.0.0.1:8772"
+EXECUTE_SERVICE_URL = "http://127.0.0.1:8772"
+SNOW_CONNECTOR_URL = "http://127.0.0.1:8766"
+APPROVAL_WORKFLOW_URL = "http://127.0.0.1:8780"
+HEARTBEAT_INTERVAL = 60
+PID_FILE = "/tmp/snow_integration_completion.pid"
+LOG_FILE = "/var/log/zo_sentinel/snow_integration_completion.log"
+
+# ServiceNow OAuth config (from env or config)
+SNOW_INSTANCE = os.environ.get("SNOW_INSTANCE", "")
+SNOW_CLIENT_ID = os.environ.get("SNOW_CLIENT_ID", "")
+SNOW_CLIENT_SECRET = os.environ.get("SNOW_CLIENT_SECRET", "")
+SNOW_WEBHOOK_SECRET = os.environ.get("SNOW_WEBHOOK_SECRET", "")
+SNOW_OAUTH_URL = f"https://{SNOW_INSTANCE}/oauth_token.do"
+
+# In-memory token cache
+_cached_token: Optional[str] = None
+_token_expiry: Optional[datetime] = None
+_lock = threading.Lock()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+log = logging.getLogger(SERVICE_NAME)
+
+app = FastAPI()
+
+
+def get_db_path() -> str:
+    return os.environ.get("DUCKDB_PATH", "/tmp/zo_sentinel.duckdb")
+
+
+def get_write_url() -> str:
+    return WRITE_SERVICE_URL
+
+
+def get_query_url() -> str:
+    return QUERY_SERVICE_URL
+
+
+def get_execute_url() -> str:
+    return EXECUTE_SERVICE_URL
+
+
+def check_single_instance() -> bool:
+    """Check if another instance is already running."""
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, 'r') as f:
+                old_pid = int(f.read().strip())
+            os.kill(old_pid, 0)
+            log.error(f"Another instance already running with PID {old_pid}")
+            return False
+        except (ProcessLookupError, ValueError, OSError):
+            log.warning(f"Stale PID file found, removing")
+            os.remove(PID_FILE)
+    with open(PID_FILE, 'w') as f:
+        f.write(str(os.getpid()))
+    return True
+
+
+def remove_pid_file():
+    """Remove the PID file on shutdown."""
+    try:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+    except Exception as e:
+        log.warning(f"Failed to remove PID file: {e}")
+
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    log.info(f"Received signal {signum}, shutting down...")
+    remove_pid_file()
+    sys.exit(0)
+
+
+def send_heartbeat():
+    """Send heartbeat to service_health table."""
+    try:
+        ws_write(WRITE_SERVICE_URL, "service_health", {
+            "service": SERVICE_NAME,
+            "last_heartbeat": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        log.error(f"Heartbeat failed: {e}")
+
+
+def ensure_tables():
+    """Ensure required tables exist."""
+    tables = [
+        """CREATE TABLE IF NOT EXISTS snow_ticket_map (
+            server_id VARCHAR PRIMARY KEY,
+            snow_sys_id VARCHAR,
+            snow_ticket_number VARCHAR,
+            snow_ticket_state VARCHAR,
+            snow_ticket_link VARCHAR,
+            submitted_at VARCHAR,
+            updated_at VARCHAR,
+            resolution_status VARCHAR
+        )""",
+        """CREATE TABLE IF NOT EXISTS snow_integration_state (
+            key VARCHAR PRIMARY KEY,
+            value VARCHAR,
+            updated_at VARCHAR
+        )"""
+    ]
+    for sql in tables:
+        try:
+            ws_execute(EXECUTE_SERVICE_URL, sql)
+        except Exception as e:
+            log.warning(f"Table creation warning: {e}")
+
+
+def get_snow_oauth_token() -> Optional[str]:
+    """MUST authenticate via SNOW OAuth token."""
+    global _cached_token, _token_expiry
+    
+    with _lock:
+        if _cached_token and _token_expiry and datetime.utcnow() < _token_expiry:
+            return _cached_token
+        
+        if not SNOW_CLIENT_ID or not SNOW_CLIENT_SECRET or not SNOW_INSTANCE:
+            log.error("SNOW OAuth credentials not configured")
+            return None
+        
+        try:
+            import requests
+            data = {
+                "grant_type": "client_credentials",
+                "client_id": SNOW_CLIENT_ID,
+                "client_secret": SNOW_CLIENT_SECRET
+            }
+            resp = requests.post(SNOW_OAUTH_URL, data=data, timeout=30)
+            if resp.status_code == 200:
+                result = resp.json()
+                _cached_token = result.get("access_token")
+                expires_in = result.get("expires_in", 3600)
+                _token_expiry = datetime.utcnow() + timedelta(seconds=expires_in - 60)
+                log.info("Successfully obtained SNOW OAuth token")
+                return _cached_token
+            else:
+                log.error(f"SNOW OAuth failed: {resp.status_code} {resp.text}")
+                return None
+        except Exception as e:
+            log.error(f"SNOW OAuth exception: {e}")
+            return None
+
+
+def validate_snow_webhook_signature(request_body: bytes, signature: str) -> bool:
+    """MUST validate request signature on inbound webhook. MUST never accept unsigned webhooks."""
+    if not SNOW_WEBHOOK_SECRET:
+        log.error("SNOW_WEBHOOK_SECRET not configured - rejecting unsigned webhook")
+        return False
+    
+    if not signature:
+        log.error("No signature provided in webhook request - rejecting")
+        return False
+    
+    expected_sig = hmac.new(
+        SNOW_WEBHOOK_SECRET.encode(),
+        request_body,
+        hashlib.sha256
+    ).hexdigest()
+    
+    is_valid = hmac.compare_digest(f"sha256={expected_sig}", signature)
+    
+    if not is_valid:
+        log.error("Invalid webhook signature - rejecting request")
+    
+    return is_valid
+
+
+def write_audit_log(event_type: str, target_server_id: str, actor: str, detail: str):
+    """MUST write audit_log entry for each ticket action."""
+    try:
+        ws_write(WRITE_SERVICE_URL, "audit_log", {
+            "id": str(uuid.uuid4()),
+            "target_server_id": target_server_id,
+            "event_type": event_type,
+            "actor": actor,
+            "detail": detail,
+            "created_at": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        log.error(f"Failed to write audit log: {e}")
+
+
+def get_servers_awaiting_approval() -> List[Dict[str, Any]]:
+    """Query mcp_server_registry for servers awaiting approval."""
+    try:
+        result = ws_query(QUERY_SERVICE_URL, """
+            SELECT server_id, name, url, description, trust_score, verdict, scan_count
+            FROM mcp_server_registry
+            WHERE verdict IN ('pending', 'pending_review', 'candidate')
+            ORDER BY scan_count DESC, trust_score ASC
+            LIMIT 50
+        """)
+        return result.get("rows", [])
+    except Exception as e:
+        log.error(f"Failed to query servers awaiting approval: {e}")
+        return []
+
+
+def get_servers_with_pending_tickets() -> List[Dict[str, Any]]:
+    """Get servers that have been submitted but not yet resolved in ServiceNow."""
+    try:
+        result = ws_query(QUERY_SERVICE_URL, """
+            SELECT stm.server_id, stm.snow_sys_id, stm.snow_ticket_number, 
+                   stm.snow_ticket_state, msr.name, msr.url
+            FROM snow_ticket_map stm
+            JOIN mcp_server_registry msr ON stm.server_id = msr.server_id
+            WHERE stm.resolution_status != 'resolved'
+            ORDER BY stm.submitted_at ASC
+        """)
+        return result.get("rows", [])
+    except Exception as e:
+        log.error(f"Failed to query pending tickets: {e}")
+        return []
+
+
+def submit_snow_ticket(server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Submit a ticket to ServiceNow via snow_connector."""
+    try:
+        import requests
+        
+        token = get_snow_oauth_token()
+        if not token:
+            log.error("Cannot submit ticket: no OAuth token")
+            return None
+        
+        ticket_payload = {
+            "short_description": f"MCP Server Security Review: {server.get('name', 'Unknown')}",
+            "description": f"""MCP Server requires security approval review.
+
+Server Name: {server.get('name', 'Unknown')}
+Server URL: {server.get('url', 'N/A')}
+Description: {server.get('description', 'N/A')}
+Trust Score: {server.get('trust_score', 'N/A')}
+Current Verdict: {server.get('verdict', 'pending')}
+Scan Count: {server.get('scan_count', 0)}
+
+This server is awaiting approval in ZO-SENTINEL. Please review and provide resolution.
+""",
+            "category": "Software",
+            "subcategory": "Security Review",
+            "assignment_group": "Security Operations",
+            "urgency": "3",
+            "impact": "2",
+            "server_id": server.get('server_id'),
+            "source": "zo_sentinel"
+        }
+        
+        snow_endpoint = f"https://{SNOW_INSTANCE}/api/now/table/incident"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        resp = requests.post(snow_endpoint, json=ticket_payload, headers=headers, timeout=30)
+        
+        if resp.status_code in (200, 201):
+            result = resp.json()
+            ticket = result.get("result", result)
+            log.info(f"Created SNOW ticket: {ticket.get('number')}")
+            
+            ws_write(WRITE_SERVICE_URL, "snow_ticket_map", {
+                "server_id": server.get('server_id'),
+                "snow_sys_id": ticket.get('sys_id'),
+                "snow_ticket_number": ticket.get('number'),
+                "snow_ticket_state": ticket.get('state'),
+                "snow_ticket_link": f"https://{SNOW_INSTANCE}/nav_to.do?uri=incident.do?sys_id={ticket.get('sys_id')}",
+                "submitted_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat(),
+                "resolution_status": "submitted"
+            })
+            
+            write_audit_log(
+                "snow_ticket_created",
+                server.get('server_id'),
+                "snow_integration_completion",
+                f"Created ServiceNow ticket {ticket.get('number')} for server {server.get('name')}"
+            )
+            
+            return ticket
+        else:
+            log.error(f"Failed to create SNOW ticket: {resp.status_code} {resp.text}")
+            return None
+            
+    except Exception as e:
+        log.error(f"Exception submitting SNOW ticket: {e}")
+        return None
+
+
+def check_snow_ticket_status(snow_sys_id: str) -> Optional[Dict[str, Any]]:
+    """Check the status of a ServiceNow ticket."""
+    try:
+        import requests
+        
+        token = get_snow_oauth_token()
+        if not token:
+            return None
+        
+        snow_endpoint = f"https://{SNOW_INSTANCE}/api/now/table/incident/{snow_sys_id}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        
+        resp = requests.get(snow_endpoint, headers=headers, timeout=30)
+        
+        if resp.status_code == 200:
+            result = resp.json()
+            return result.get("result", result)
+        else:
+            log.error(f"Failed to check SNOW ticket: {resp.status_code}")
+            return None
+            
+    except Exception as e:
+        log.error(f"Exception checking SNOW ticket: {e}")
+        return None
+
+
+def call_approval_workflow(server_id: str, snow_ticket: Dict[str, Any], resolution: str):
+    """Call approval_workflow.py with the ServiceNow resolution."""
+    try:
+        import requests
+        
+        payload = {
+            "server_id": server_id,
+            "source": "snow_integration",
+            "resolution": resolution,
+            "snow_ticket_number": snow_ticket.get("number"),
+            "snow_ticket_state": snow_ticket.get("state"),
+            "snow_resolved_by": snow_ticket.get("resolved_by", {}).get("value") if isinstance(snow_ticket.get("resolved_by"), dict) else snow_ticket.get("resolved_by"),
+            "snow_resolved_at": snow_ticket.get("resolved_at") or snow_ticket.get("closed_at"),
+            "snow_resolution_notes": snow_ticket.get("close_notes") or snow_ticket.get("work_notes"),
+            "callback_timestamp": datetime.utcnow().isoformat()
+        }
+        
+        resp = requests.post(
+            f"{APPROVAL_WORKFLOW_URL}/webhook/snow_resolution",
+            json=payload,
+            timeout=30
+        )
+        
+        if resp.status_code in (200, 201, 202):
+            log.info(f"Successfully called approval workflow for server {server_id}")
+            write_audit_log(
+                "approval_workflow_called",
+                server_id,
+                "snow_integration_completion",
+                f"Called approval workflow with SNOW resolution: {resolution}"
+            )
+            return True
+        else:
+            log.error(f"Approval workflow call failed: {resp.status_code} {resp.text}")
+            return False
+            
+    except Exception as e:
+        log.error(f"Exception calling approval workflow: {e}")
+        return False
+
+
+def process_pending_tickets():
+    """Check status of pending ServiceNow tickets and update accordingly."""
+    pending_tickets = get_servers_with_pending_tickets()
+    
+    for ticket_info in pending_tickets:
+        server_id = ticket_info.get("server_id")
+        snow_sys_id = ticket_info.get("snow_sys_id")
+        snow_ticket_number = ticket_info.get("snow_ticket_number")
+        current_state = ticket_info.get("snow_ticket_state")
+        
+        ticket_status = check_snow_ticket_status(snow_sys_id)
+        
+        if not ticket_status:
+            continue
+        
+        new_state = ticket_status.get("state")
+        resolution_status = ticket_status.get("resolution_status", "submitted")
+        
+        if new_state != current_state or resolution_status == "resolved":
+            ws_write(WRITE_SERVICE_URL, "snow_ticket_map", {
+                "server_id": server_id,
+                "snow_sys_id": snow_sys_id,
+                "snow_ticket_state": new_state,
+                "snow_ticket_number": snow_ticket_number,
+                "updated_at": datetime.utcnow().isoformat(),
+                "resolution_status": resolution_status
+            })
+            
+            write_audit_log(
+                "snow_ticket_updated",
+                server_id,
+                "snow_integration_completion",
+                f"Updated SNOW ticket {snow_ticket_number} state: {current_state} -> {new_state}"
+            )
+        
+        if resolution_status == "resolved" or new_state in (7, "7", "Closed"):
+            call_approval_workflow(server_id, ticket_status, "approved_by_snow")
+
+
+def submit_pending_servers():
+    """Submit servers awaiting approval to ServiceNow."""
+    servers = get_servers_awaiting_approval()
+    
+    for server in servers:
+        server_id = server.get("server_id")
+        
+        existing = ws_query(QUERY_SERVICE_URL, f"""
+            SELECT server_id FROM snow_ticket_map 
+            WHERE server_id = '{server_id}' AND resolution_status != 'resolved'
+        """)
+        
+        if existing and existing.get("rows"):
+            continue
+        
+        submit_snow_ticket(server)
+
+
+# ============================================================
+# Inbound Webhook Handler - ServiceNow Callbacks
+# ============================================================
+
+class SnowWebhookPayload(BaseModel):
+    sys_id: str
+    ticket_number: str
+    state: str
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[str] = None
+    closed_at: Optional[str] = None
+    close_notes: Optional[str] = None
+    work_notes: Optional[str] = None
+    server_id: Optional[str] = None
+
+
+@app.post("/webhook/snow/callback")
+async def snow_webhook_callback(
+    request: Request,
+    x_snow_signature: Optional[str] = Header(None, alias="X-SNOW-Signature"),
+    x_snow_event_type: Optional[str] = Header(None, alias="X-SNOW-Event-Type")
+):
+    """
+    MUST never accept unsigned webhooks.
+    MUST validate request signature on inbound webhook.
+    """
+    body = await request.body()
+    
+    if not validate_snow_webhook_signature(body, x_snow_signature or ""):
+        raise HTTPException(status_code=401, detail="Invalid or missing webhook signature")
+    
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    server_id = payload.get("server_id") or payload.get("u_server_id")
+    
+    if not server_id:
+        existing = ws_query(QUERY_SERVICE_URL, f"""
+            SELECT server_id FROM snow_ticket_map 
+            WHERE snow_sys_id = '{payload.get('sys_id')}' 
+            OR snow_ticket_number = '{payload.get('ticket_number')}'
+            LIMIT 1
+        """)
+        if existing and existing.get("rows"):
+            server_id = existing["rows"][0].get("server_id")
+    
+    if server_id:
+        write_audit_log(
+            "snow_webhook_received",
+            server_id,
+            "snow_integration_completion",
+            f"Received SNOW webhook callback for ticket {payload.get('ticket_number')}"
+        )
+    
+    ws_write(WRITE_SERVICE_URL, "snow_integration_state", {
+        "key": f"webhook_{payload.get('sys_id')}",
+        "value": json.dumps(payload),
+        "updated_at": datetime.utcnow().isoformat()
+    })
+    
+    ticket_state = payload.get("state")
+    resolved = ticket_state in (7, "7", "Closed", "resolved") if ticket_state else False
+    
+    if server_id and resolved:
+        call_approval_workflow(server_id, payload, "resolved_by_snow_webhook")
+        
+        ws_execute(EXECUTE_SERVICE_URL, f"""
+            UPDATE snow_ticket_map 
+            SET resolution_status = 'resolved', 
+                snow_ticket_state = '{ticket_state}',
+                updated_at = '{datetime.utcnow().isoformat()}'
+            WHERE snow_sys_id = '{payload.get('sys_id')}'
+            OR snow_ticket_number = '{payload.get('ticket_number')}'
+        """)
+        
+        if server_id:
+            write_audit_log(
+                "snow_webhook_resolution",
+                server_id,
+                "snow_integration_completion",
+                f"Processed SNOW webhook resolution for ticket {payload.get('ticket_number')}"
+            )
+    
+    return {"status": "received", "processed": True}
+
+
+@app.post("/submit/{server_id}")
+async def submit_ticket(server_id: str):
+    """Manually submit a specific server for SNOW approval."""
+    result = ws_query(QUERY_SERVICE_URL, f"""
+        SELECT server_id, name, url, description, trust_score, verdict, scan_count
+        FROM mcp_server_registry
+        WHERE server_id = '{server_id}'
+    """)
+    
+    if not result.get("rows"):
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    server = result["rows"][0]
+    ticket = submit_snow_ticket(server)
+    
+    if ticket:
+        return {"status": "submitted", "ticket_number": ticket.get("number")}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to submit ticket")
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {
+        "status": "ok",
+        "service": SERVICE_NAME,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.get("/status")
+async def status():
+    """Get integration status."""
+    pending = get_servers_with_pending_tickets()
+    return {
+        "pending_tickets": len(pending),
+        "pending_ticket_details": pending,
+        "snow_instance": SNOW_INSTANCE or "not_configured",
+        "oauth_configured": bool(SNOW_CLIENT_ID and SNOW_CLIENT_SECRET),
+        "webhook_secret_configured": bool(SNOW_WEBHOOK_SECRET)
+    }
+
+
+def heartbeat_loop():
+    """Background thread for sending heartbeats."""
+    while True:
+        send_heartbeat()
+        time.sleep(HEARTBEAT_INTERVAL)
+
+
+def run():
+    """Main daemon entry point."""
+    import signal
+    
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    if not check_single_instance():
+        log.error("Cannot start: another instance is running")
+        sys.exit(1)
+    
+    log.info(f"Starting {SERVICE_NAME} on port {SERVICE_PORT}")
+    
+    ensure_tables()
+    send_heartbeat()
+    
+    heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    heartbeat_thread.start()
+    
+    uvicorn.run(app, host="127.0.0.1", port=SERVICE_PORT)
+
+
+if __name__ == "__main__":
+    run()

@@ -1,0 +1,9 @@
+{
+  "task": "verify_snow_connector_wiring_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_verify.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Verify snow_connector_approval_wiring.py (built 2026-05-23T23:30:40) is properly wired into approval_workflow on :8780. Test that a ServiceNow inbound webhook POST to :8780/webhook/mcp_request creates a row in mcp_submissions via write_service. Reads snow_connector.py and approval_workflow.py to confirm the wiring contract. Reports pass/fail to build_watcher_api."
+}

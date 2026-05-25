@@ -1,0 +1,14 @@
+{
+  "task": "build_github_pr_webhook_wiring",
+  "handler": "generate_file",
+  "output_file": "github_pr_webhook_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.8,
+  "description": "Wire github_pr_checker.py into approval_workflow for GitHub PR verdict gating. Integration glue per section 1 core loop.\n\nMUST: Use write_service :8772 for all state exchange.\nMUST: Query mcp_server_registry for MCPs with pending approval_workflow status.\nMUST: Write PR check results to appropriate status columns via write_service.\nMUST: Include verdict_composite score from trust_synthesiser in PR status payload.\nMUST NOT: Query GitHub API directly; use github_pr_checker.py as the sole GitHub interface.\nMUST NOT: Introduce HTTP between peer daemons; all via write_service.\nPhase 9 integration per ZO-SENTINEL Product Specification section 1.",
+  "reads": [
+    "github_pr_checker.py",
+    "approval_workflow.py",
+    "write_service.py"
+  ]
+}

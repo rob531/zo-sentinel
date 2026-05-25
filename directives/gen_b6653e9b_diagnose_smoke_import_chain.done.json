@@ -1,0 +1,16 @@
+{
+  "task": "diagnose_smoke_import_chain",
+  "handler": "generate_file",
+  "output_file": "diagnose_import_chain_failures_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnose import failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. These daemons are smoke-failing on import with identical traceback patterns. Use smoke_import_chain_diag_v2.py approach but target these three specific files. Report: (a) which shared dependency chain is broken, (b) which imports within each file fail first, (c) recommended fix per file. Do NOT auto-patch \u2014 diagnostic only. Read: smoke_import_chain_diag_v2.py, registry_api.py, rug_pull_monitor.py, signal_analyser.py.",
+  "reads": [
+    "smoke_import_chain_diag_v2.py",
+    "registry_api.py",
+    "rug_pull_monitor.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

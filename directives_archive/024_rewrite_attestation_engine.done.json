@@ -1,0 +1,16 @@
+{
+  "task": "rewrite_attestation_engine",
+  "handler": "generate_file",
+  "output_file": "attestation_engine.py",
+  "complexity": "high",
+  "phase": "7",
+  "priority": 0.92,
+  "reads": [
+    "schema.py",
+    "schema_v2.py",
+    "trust_synthesiser.py"
+  ],
+  "description": "Attestation engine daemon. generate_attestation(server_id)->dict. Fetch trust_score+verdict+confidence from mcp_server_registry, risk_tier from mcp_risk_register. Build attestation_text from verdict: TRUSTED_GENERAL=90d expiry no significant indicators; TRUSTED_RESEARCH=60d suitable for R&D; ENTERPRISE_CONTROLLED=60d controlled use only; CAUTION_LIMITED=30d elevated risk isolated env; HIGH_RISK_ISOLATED=7d high risk no sensitive data; KNOWN_THREAT=7d do not deploy; INSUFFICIENT=14d manual review. caveats always=automated analysis only not a security audit. ws_write mcp_attestations {server_id,attestation_text,scope,confidence_level,valid_until,risk_tier,caveats,generated_at}. Write ATTESTATION_REPORT.md. Poll 21600s. Never use words safe or unsafe.",
+  "context": "",
+  "from": "claude_batch"
+}

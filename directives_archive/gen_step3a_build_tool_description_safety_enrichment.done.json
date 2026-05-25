@@ -1,0 +1,10 @@
+{
+  "task": "build_tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment.py",
+  "complexity": "medium",
+  "phase": "sentinel.signal.unbucket",
+  "priority": 0.94,
+  "source": "manual_step3a_tool_description_safety_20260427T1555",
+  "description": "Pure function module. Exposes EXACTLY: def compute_score(metadata: dict) -> tuple[float, dict]. Returns score in [0.0, 100.0] and an evidence dict listing the field-level contributions. Reads at LEAST 3 metadata fields: (1) description text -- penalize embedded XML-like instruction tags by -15 each (search for substrings '<important>', '<s>', '<override>', '<admin>', '<ignore>' case-insensitively); penalize base64-pattern strings >40 chars (regex r'[A-Za-z0-9+/]{40,}={0,2}') by -10 each; penalize known prompt-injection phrases (lowercase substring match against {'ignore previous', 'disregard above', 'system prompt', 'jailbreak', 'do anything now'}) by -20 each. (2) tool_name_hash from metadata -- if NULL or absent, the server's tools were never inspected, score is anchored at 50 (insufficient evidence) and other adjustments are skipped. (3) description_tokens (int) -- very short descriptions (<10 tokens) get -5 (low information); very long (>500) get -3 (potential bait). Start score at 80, add/subtract per above (only if tool_name_hash is present), clamp to [0, 100]. Return (score, {'embedded_tags': N, 'base64_blocks': N, 'injection_phrases': N, 'tokens': N, 'fingerprint_present': bool}). NO DB writes, NO network, NO file I/O at runtime, NO imports beyond stdlib + re. Function MUST complete in under 2 seconds for any reasonable input. NEVER write to mcp_signal_scores directly -- enrichment_harness.py reads from this module and routes through the existing signal_bridge."
+}

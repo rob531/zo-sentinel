@@ -1,0 +1,18 @@
+{
+  "task": "cto_2026_05_02_directive_queue_health",
+  "handler": "generate_file",
+  "output_file": "directive_queue_health.py",
+  "complexity": "low",
+  "description": "Build a queue-health monitor daemon that runs every 5 minutes and tracks the directive queue at /home/workspace/zo_sentinel/directives/. Counts: pending (.json files not ending .done.json or .failed.json), done (.done.json), failed (.failed.json), oldest pending age in seconds, and total queue depth. Writes a row to mesh_memory with agent_id='directive_queue_health' memory_type='queue_snapshot' and a JSON content payload. Emits a mesh_event with severity=WARNING when pending count is 0 (builder is starving). Emits severity=ERROR when oldest pending is older than 1 hour (builder is stuck). Closes the gap that let the queue sit empty for 80 minutes today undetected. Logs via FileHandler only to /home/workspace/logs/directive_queue_health.log. Uses ws_write for all DB writes. ISO 8601 string timestamps only.",
+  "context": {
+    "author": "CTO/CEO direct (Claude)",
+    "date": "2026-05-02",
+    "why_now": "Robin's standing rule: directives must NEVER be empty. Today builder went idle 80min undetected. This adds the missing observability so future starvation triggers a mesh_event within 5 minutes.",
+    "constraints": [
+      "FileHandler ONLY for logging",
+      "ws_write for mesh_memory and mesh_events",
+      "ISO 8601 string timestamps",
+      "Idempotent: pure read of filesystem"
+    ]
+  }
+}

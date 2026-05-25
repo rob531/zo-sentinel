@@ -1,0 +1,14 @@
+{
+  "task": "build_config_validator",
+  "handler": "generate_file",
+  "output_file": "config_validator.py",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.8,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Config validator. validate_all()->dict with keys: write_service_ok,tables_exist,required_ports_open,env_vars_set,schema_version. validate_write_service(): POST http://127.0.0.1:8772/health timeout=3. validate_tables(): ws_query information_schema for all 8 sentinel tables. validate_ports(): check 8780,8781,8782 with socket connect timeout=1. validate_env(): check MINIMAX_API_KEY set. main() prints pass/fail for each and exits 0 if all pass else 1. Useful as startup check. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

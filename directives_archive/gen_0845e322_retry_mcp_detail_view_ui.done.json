@@ -1,0 +1,9 @@
+{
+  "task": "retry_mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Retry generation of MCP detail view HTML page. Previous build failed. Must include: signal score radar chart for all 7 dimensions, verdict badge with colour coding, approval workflow buttons (APPROVED/CONDITIONAL/REJECTED), attestation history timeline, injection resilience results panel. Use Bootstrap 5 for styling."
+}

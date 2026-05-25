@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_email_guid_auth_compact",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_compact.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.91,
+  "description": "Rebuild email_guid_auth_compact.py \u2014 a lightweight companion to email_guid_auth.py for constrained environments. Must expose the same POST /auth/email-guid interface but using only stdlib + requests. No fastapi/uvicorn import. Standalone daemon with run() method and if __name__ == '__main__': run() entry. Heartbeat to service_health via write_service. Declares '# deps: requests' at top. This is a separate file, not a rewrite of email_guid_auth.py; both can coexist."
+}

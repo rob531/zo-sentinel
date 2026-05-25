@@ -1,0 +1,19 @@
+{
+  "task": "rebuild_compliance_export",
+  "handler": "generate_file",
+  "output_file": "compliance_export_service.py",
+  "complexity": "medium",
+  "phase": "18",
+  "priority": 0.85,
+  "description": "Daemon. Generates compliance reports every 24 hours. Reads from: mcp_server_registry (count by verdict), mcp_decisions (decisions in last 30d, grouped by decision), mcp_risk_register (count by risk_tier, note: timestamp column is computed_at not last_assessed). Writes /home/workspace/zo_sentinel/COMPLIANCE_REPORT.md with sections: Executive Summary, Registry Status, Recent Decisions, Risk Distribution. Also writes compliance_export.json with same data. Sends heartbeat to service_health every 300s. run() loops with 86400s sleep. if __name__=='__main__': run().",
+  "next_directive": {
+    "task": "build_api_health_checker",
+    "handler": "generate_file",
+    "output_file": "api_health_checker.py",
+    "complexity": "low",
+    "phase": "13",
+    "priority": 0.82,
+    "description": "Daemon. Every 5 minutes pings all ZO-SENTINEL API ports: 8780 (approval_workflow /health), 8781 (registry_api /health), 8782 (search_api /health), 8783 (email_guid_auth /health), 8784 (advanced_filter_api /health), 8785 (forensic_detail_api /health), 8786 (manual_override_api /health), 8790 (ui_server /health), 8795 (build_watcher /health). For each: HTTP GET with 3s timeout. Writes result to mesh_events: {agent_id='api_health_checker', event_type='api_health', tier='T1', payload=json({port, endpoint, status_code, ok, latency_ms}), severity='INFO' if ok else 'WARNING'}. Also writes service_health heartbeat. run() with 300s sleep loop. if __name__=='__main__': run()."
+  },
+  "from": "chain_rebuild_manual_override_api"
+}

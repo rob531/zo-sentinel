@@ -1,0 +1,12 @@
+{
+  "task": "build_smoke_evolution_agent",
+  "handler": "generate_file",
+  "output_file": "smoke_evolution_agent.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.88,
+  "reads": ["schema.py", "tests/smoke_test.py"],
+  "description": "Self-improving smoke test evolution daemon. Every 21600s (6h): (1) reads GENERATION_FAILURES.md and mesh_memory WHERE agent_id='zo_sentinel.smoke_fail' AND memory_type='build_traceback' for last 24h. (2) Extracts failure patterns not already in SMOKE_ANTIPATTERNS list in tests/smoke_test.py. Pattern types to detect: new forbidden import patterns (e.g. 'import sqlite3', 'from fastapi import FastAPI' in wrong context), new LLM prose markers (e.g. 'Sure!', 'Certainly', 'Of course'), new wiring anti-patterns from failure reasons. (3) For each new pattern found: appends to SMOKE_ANTIPATTERNS list in tests/smoke_test.py via file read-modify-write (ast-safe: reads file, finds SMOKE_ANTIPATTERNS = [...] assignment, appends new tuple). (4) Also updates WIRING_ANTIPATTERNS in zo_sentinel_builder.py the same way if new wiring patterns found. (5) Writes SMOKE_EVOLUTION_LOG.md with what was added and why. (6) ws_write smoke_patterns_updated event to mesh_events with count of new patterns added. CRITICAL: uses ast.parse() to verify tests/smoke_test.py and zo_sentinel_builder.py still valid after any modification. If syntax check fails: restores original file from backup. Never breaks working smoke tests. Heartbeat.",
+  "context": "Pattern extraction: scan failure reason strings for patterns starting with 'wiring:' or 'runtime:'. New wiring pattern = any string in failure reason not substring of any existing SMOKE_ANTIPATTERNS tuple[0]. Back up files before modifying: shutil.copy(path, path+'.bak'). All DB via write_service:8772.",
+  "from": "claude_manual"
+}

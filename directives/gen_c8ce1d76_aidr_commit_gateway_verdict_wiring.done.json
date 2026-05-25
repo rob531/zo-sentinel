@@ -1,0 +1,13 @@
+{
+  "task": "aidr_commit_gateway_verdict_wiring",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_verdict_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Rebuild of integration wiring for aidr_commit_gateway.py. Last failure: 'failed in cohort_3_n3'. Root cause: verdict-check enforcement was missing or bypassed. This rebuild MUST: (1) query mcp_server_registry.verdict via write_service before any commit action, (2) BLOCK commit forwarding when verdict IN ('CAUTION_LIMITED', 'HIGH_RISK_ISOLATED', 'KNOWN_THREAT') unless mcp_exemptions has an explicit override row, (3) log every commit attempt with verdict_context to audit_log, (4) include injection_resilience dimension score in the commit payload per Phase 9 plan. MUST NOT auto-commit without verdict check. MUST NOT import trust_synthesiser directly \u2014 query DB only. Spec reference: Section 5 inter-daemon rules, Section 1 core loop step 3.",
+  "reads": [
+    "aidr_commit_gateway.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,26 @@
+{
+  "id": "770cc417",
+  "source": "zo-sentinel-audit",
+  "category": "bug",
+  "severity": "high",
+  "summary": "Unicode escape sequences rendered as literal text in UI",
+  "details": "DOM inspection confirms literal backslash-u sequences are present in the served HTML/JS source rather than the intended unicode characters. document.querySelector('h1').nextElementSibling.outerHTML returns: <div class=\"sub\">MCP TRUST INTELLIGENCE \\u00b7 NON-BINDING ASSESSMENT</div>. The Python emitting this HTML in ui_server.py uses JSON-style \\uXXXX escapes inside raw string literals, so the browser receives the bytes 'backslash u 0 0 b 7' instead of the middle dot. Affected user-visible strings include: page title 'ZO-SENTINEL \\u2014 MCP Trust Intelligence', header subtitle 'MCP TRUST INTELLIGENCE \\u00b7 NON-BINDING ASSESSMENT', admin button labels 'Admin \\u00b7 Threats' and 'Admin \\u00b7 Risk', search placeholder, 'Assess \\u2192' button, 'Loading recent assessments\\u2026', and verdict labels in the inline <script> such as 'Likely safe \\u00b7 General use' and 'Caution \\u00b7 Limited scoped use'.",
+  "suggested_fix": "In ui_server.py (including any inline JS string literals), perform a mechanical search/replace from JSON-style escape sequences to the actual unicode characters (or HTML entities). Specifically: replace \\u00b7 with · (or &middot;), \\u2192 with → (or &rarr;), \\u2014 with — (or &mdash;), and \\u2026 with … (or &hellip;). Ensure the source files are saved as UTF-8 so the literal characters survive serialization. Re-render the page and confirm via DOM inspection that no backslash-u sequences appear in outerHTML.",
+  "observed_at": "2026-05-09T16:34:50Z",
+  "evidence": {
+    "url": "https://zo-sentinel.example/",
+    "dom_query": "document.querySelector('h1').nextElementSibling.outerHTML",
+    "dom_result": "<div class=\"sub\">MCP TRUST INTELLIGENCE \\u00b7 NON-BINDING ASSESSMENT</div>",
+    "affected_strings": [
+      "ZO-SENTINEL \\u2014 MCP Trust Intelligence",
+      "MCP TRUST INTELLIGENCE \\u00b7 NON-BINDING ASSESSMENT",
+      "Admin \\u00b7 Threats",
+      "Admin \\u00b7 Risk",
+      "Assess \\u2192",
+      "Loading recent assessments\\u2026",
+      "Likely safe \\u00b7 General use",
+      "Caution \\u00b7 Limited scoped use"
+    ]
+  },
+  "output_file": "ui_server.py"
+}

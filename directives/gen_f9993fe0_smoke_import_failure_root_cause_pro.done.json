@@ -1,0 +1,9 @@
+{
+  "task": "smoke_import_failure_root_cause_probe",
+  "handler": "generate_file",
+  "output_file": "smoke_import_failure_root_cause_probe.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to identify root cause of importlib failures in smoke tests for registry_api.py, rug_pull_monitor.py, signal_analyser.py. Checks: (1) Python sys.path entries missing workspace paths, (2) module-level import statements referencing protected files that no longer export expected names, (3) circular import chains in signal_analyser hierarchy. Uses importlib.util.find_spec and ast parsing to identify broken import statements without executing them. Reports findings as structured dict, does not modify files. Targeted at protected files \u2014 diagnostic only, no rewrites proposed."
+}

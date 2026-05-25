@@ -1,0 +1,10 @@
+{
+  "task": "build_fingerprint_runner_daemon_v2",
+  "handler": "generate_file",
+  "output_file": "fingerprint_runner_daemon_v2.py",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.97,
+  "source": "manual_step2_fingerprint_v2_20260427T1555",
+  "description": "Long-running daemon. Every 600s, queries /query for up to 30 server_ids in mcp_server_registry that have no row in mcp_fingerprints. For each, imports mcp_fingerprinter (sibling module, already built and present in /home/workspace/zo_sentinel/), calls its primary fingerprint(server_row) function inside a per-server try/except so one failure never wedges the batch. Maps the fingerprint result to the LIVE mcp_fingerprints schema: columns are exactly (server_id, tool_name_hash, description_tokens, permission_scope_hash, domain_fingerprint, version_string, computed_at). DO NOT use tool_count / prompt_count / resource_count -- those are NOT in the schema (verified via information_schema.columns). If mcp_fingerprinter returns fields not in the live schema, drop them silently. If mcp_fingerprinter doesn't return a required field, set it to NULL. POSTs each row to /write table='mcp_fingerprints' wait=True. Heartbeat thread every 30s. Single-instance lockfile at /home/workspace/logs/fingerprint_runner_daemon_v2.lock. NEVER imports duckdb or sqlite3. Bounded 5s timeout per fingerprint() call -- skip and log if exceeded. requests timeout=10 on /write and /query. Logging: only FileHandler. Logs structured INFO per cycle: 'cycle done: targets=N fingerprinted=M errors=K timeouts=T'."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_import_chain_failures",
+  "handler": "generate_file",
+  "output_file": "smoke_import_chain_diag_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to investigate import chain failures causing smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. The existing smoke_import_chain_diag.py (2026-05-02T18:07:50) did not resolve the failures. Must trace the exact import error from File '<string>' line 10 and importlib failures. Must identify which shared dependency is broken and report findings without proposing self-repair (no import_fixer.py per DO NOT GENERATE rules). Output: structured diagnostic report."
+}

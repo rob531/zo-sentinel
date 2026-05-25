@@ -1,0 +1,9 @@
+{
+  "task": "build_e2e_signal_flow_scenario",
+  "handler": "generate_file",
+  "output_file": "e2e_signal_flow_scenario.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.78,
+  "description": "Build end-to-end scenario script: (1) seed a test MCP server in mcp_server_registry, (2) run signal_analyser to score it across all 8 signals including the 3 new enrichments (supply_chain_enrichment, community_signal_enrichment, permission_scope_enrichment_v2, temporal_stability_enrichment_v2, tool_description_safety_enrichment_v2), (3) verify trust_synthesiser produces a valid 6-tier verdict, (4) verify attestation_engine writes attestation, (5) verify UI_api surface shows verdict. Use synthetic metadata dicts for enrichment testing. NOT the same as e2e_scenarios.py which is quarantined - this is a focused signal flow test."
+}

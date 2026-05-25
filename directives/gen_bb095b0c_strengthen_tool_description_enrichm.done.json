@@ -1,0 +1,9 @@
+{
+  "task": "strengthen_tool_description_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.89,
+  "description": "Enhanced pure enrichment module for tool_description_safety signal. Must expose compute_score(metadata: dict) -> tuple[float, dict] conforming to signal invariant. Must read tool_name, description_length, schema_complexity, permission_risk_score, has_examples, parameter_count. Target: produce >=10 distinct scores across 34 synthetic fingerprints instead of current 3. No DB writes, no network."
+}

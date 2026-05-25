@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_rug_pull_monitor_stale",
+  "handler": "generate_file",
+  "output_file": "rug_pull_monitor_stale_diagnostic.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic module to investigate why rug_pull_monitor has a stale heartbeat of 640h5m. Queries service_health for rug_pull_monitor last_heartbeat age, checks for pid file presence at /var/run/zo_sentinel/rug_pull_monitor.pid, attempts to inspect the process state via /proc, and emits a structured diagnostic report (NOT a fix). This is diagnostic only - do not propose a rebuild of rug_pull_monitor.py as it is a protected file. Reads: db_utils.py, ws_query only. Writes: diagnostic log only, no DB state changes."
+}

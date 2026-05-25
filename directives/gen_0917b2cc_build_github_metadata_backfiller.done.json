@@ -1,0 +1,9 @@
+{
+  "task": "build_github_metadata_backfiller",
+  "output_file": "github_metadata_backfiller.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k.v3",
+  "priority": 0.84,
+  "description": "Long-running daemon. Every 600s, queries: SELECT server_id, name, url FROM mcp_server_registry WHERE registry_source IN ('github', 'github_topic') AND (metadata IS NULL OR metadata = '{}' OR last_scanned IS NULL OR last_scanned < now() - INTERVAL 14 DAY) LIMIT 30. For each: parse owner/repo from url (https://github.com/<owner>/<repo>); GET https://api.github.com/repos/<owner>/<repo> with token from os.environ.get('GITHUB_TOKEN'); 8s timeout. Parse fields {stargazers_count, forks_count, open_issues_count, pushed_at, created_at, updated_at, default_branch, license.spdx_id, archived, disabled}. ws_write mcp_server_registry UPDATE metadata merge + last_scanned=now + scan_count+1. ws_write mcp_registry_facts one row per field as evidence. Also ws_write github_velocity with summary {stars, forks, days_since_push, archived}. Respect rate limit: parse X-RateLimit-Remaining; sleep to X-RateLimit-Reset if <5. Heartbeat. Lockfile. Requests + json + datetime + threading."
+}

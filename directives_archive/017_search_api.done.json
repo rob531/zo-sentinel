@@ -1,0 +1,12 @@
+{
+  "task": "search_api_enhancements",
+  "handler": "generate_file",
+  "output_file": "search_api.py",
+  "complexity": "high",
+  "reads": ["schema.py", "known_threats.py", "trust_synthesiser.py"],
+  "description": "FastAPI search and lookup service on port 8782. Four endpoints: (1) GET /search?q= - searches mcp_server_registry by name/url/server_id ILIKE, returns results with signals and attestation. (2) GET /mcp/{server_id} - full detail page: registry record + all signal scores + threat associations + risk register entry + attestation + all decisions. (3) GET /threats?severity=&limit= - threat feed from mcp_threat_associations joined with mcp_server_registry for names. (4) GET /risks?tier=&limit= - risk register from mcp_risk_register ordered by risk_rank DESC. All queries via requests.post to write_service on port 8772. Returns JSON. Include GET /health.",
+  "context": "This service is called by ui_server.py which proxies to it. Keep responses clean JSON with consistent field names. All DB reads via POST http://127.0.0.1:8772/query with sql field.",
+  "priority": 0.93,
+  "from": "claude_directive",
+  "phase": "7"
+}

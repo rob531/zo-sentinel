@@ -1,0 +1,11 @@
+{
+  "task": "r2_score_supply_chain_threat_assoc_patcher",
+  "handler": "generate_file",
+  "output_file": "r2_score_supply_chain_threat_assoc_patcher.py",
+  "complexity": "medium",
+  "phase": "14",
+  "priority": 0.92,
+  "description": "Build a standalone Python patcher script `r2_score_supply_chain_threat_assoc_patcher.py`. When run, it rewires /home/workspace/zo_sentinel/signal_analyser.py's score_supply_chain function (currently around lines 189-215, locate by 'def score_supply_chain') to consume the threat-intel feeds via mcp_threat_associations rather than the static-list check_package() lookup. New flow inside score_supply_chain(server_id, name): (1) POST /query with SELECT severity, source, threat_type, evidence, reported_at FROM mcp_threat_associations WHERE server_id = ? AND source IN ('alienvault_otx','nvd','cisa_kev','urlhaus','abuseipdb') ORDER BY reported_at DESC LIMIT 10; (2) if rows returned: pick worst severity (CRITICAL=0.0, HIGH=15.0, MEDIUM=40.0, LOW=60.0, default 50.0), evidence string = f'{source}: {threat_type} — {evidence_text[:80]}', return (score, evidence); (3) if NO rows: fall through to the EXISTING regex-based suspicious-pattern check, but PREFIX returned evidence with 'no_threat_intel_match — ' so the UI can distinguish regex-only-flagged from intel-flagged servers. KEEP the existing regex code path intact — it's the fallback for servers not yet in threat_associations. STRICT IDEMPOTENCE: marker '# _zo_threat_assoc_v1' inside the rewritten function. Backup before edit. Smoke-test: (a) POST /write to insert synthetic mcp_threat_associations row for server_id='SMOKE_TEST_OTX' with source='alienvault_otx' severity='HIGH' threat_type='c2_indicator' evidence='synthetic test'; (b) call signal_analyser.score_supply_chain('SMOKE_TEST_OTX', 'test'); assert returned score == 15.0 and 'alienvault_otx' in evidence; (c) call signal_analyser.score_supply_chain('NO_INTEL_HASH_SMOKE', 'normal-package'); assert evidence string starts with 'no_threat_intel_match'; (d) DELETE the synthetic row. If any smoke step fails, restore from backup and exit 2. Exit codes 0/1/2/3. `--dry-run` flag. NO daemon shape. Touch ONLY signal_analyser.py. Idempotent: re-runs detect marker and exit 0.",
+  "reads": ["signal_analyser.py"],
+  "next_directive": {}
+}

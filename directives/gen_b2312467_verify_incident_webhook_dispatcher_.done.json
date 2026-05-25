@@ -1,0 +1,9 @@
+{
+  "task": "verify_incident_webhook_dispatcher_dormant",
+  "handler": "generate_file",
+  "output_file": "verify_incident_webhook_dispatcher_dormant.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic verification module for incident_webhook_dispatcher.py. File exists but must remain dormant per spec section 9 (outbound webhooks are out of scope). Verify: (1) file is not imported by any active daemon, (2) no HTTP routes mount it, (3) no write_service calls trigger it. Report findings to confirm it's properly isolated. Do NOT propose rebuild or activation."
+}

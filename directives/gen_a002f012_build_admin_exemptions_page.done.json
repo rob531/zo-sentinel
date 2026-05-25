@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_exemptions_page",
+  "handler": "generate_file",
+  "output_file": "admin_exemptions.html",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Admin UI page for managing mcp_exemptions records. Serves on port 8790. Fetches rows via write_service query endpoint, renders table with columns: mcp_server_id, mcp_name, granted_by, granted_at, valid_until, reason. Includes Revoke and Extend action buttons that POST to approval_workflow via write_service. Embedded CSS for table styling. Refresh mechanism via meta http-equiv. Read mcp_exemptions table schema from DB_SCHEMA.md for column names."
+}

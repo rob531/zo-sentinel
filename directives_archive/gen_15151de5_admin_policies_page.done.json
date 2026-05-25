@@ -1,0 +1,9 @@
+{
+  "task": "admin_policies_page",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.87,
+  "description": "Admin UI surface for managing mcp_policy_rules. Must include: rule listing (rule_type, pattern, verdict_action, priority), create/edit form with regex validation for pattern field, enable/disable toggle, and hit count display. Ports to localhost:8790. Reads via write_service :8772 /query, writes via :8772/write. Table columns from DB_SCHEMA.md: rule_id, rule_type, pattern, verdict_action, priority, is_enabled, created_at."
+}

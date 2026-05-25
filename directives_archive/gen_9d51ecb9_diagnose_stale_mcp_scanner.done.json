@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_mcp_scanner",
+  "handler": "generate_file",
+  "output_file": "diagnose_mcp_scanner_stale.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnostic-only directive. mcp_scanner heartbeat is 4h1m stale (threshold: 14400s). Must NOT propose a rebuild of mcp_scanner.py (protected file). Instead: diagnose scanner process health, check if scanner is blocked on external I/O (10s timeout contract), verify queue depth (currently 0 = no work pending), and check write_service connectivity. Reference: Section 6 timeout contract."
+}

@@ -1,0 +1,12 @@
+{
+  "task": "build_signal_weights",
+  "handler": "generate_file",
+  "output_file": "signal_weights.py",
+  "complexity": "low",
+  "phase": "3",
+  "priority": 0.86,
+  "reads": [],
+  "description": "Signal weight configuration. SIGNAL_WEIGHTS dict: domain_trust=0.20,tool_description_safety=0.20,permission_scope=0.15,supply_chain=0.15,community_signal=0.15,temporal_stability=0.15 (must sum to 1.0). SIGNAL_NAMES list. SIGNAL_DESCRIPTIONS dict. compute_trust_score(signals_dict)->float: multiplies each signal score by its weight and sums. validate_weights()->bool: checks sum==1.0. No daemon, pure config module.",
+  "context": "",
+  "from": "claude_batch"
+}

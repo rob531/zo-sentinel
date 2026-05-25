@@ -1,0 +1,9 @@
+{
+  "task": "build_aidr_verdict_gate_test",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_gate_test.py",
+  "complexity": "low",
+  "phase": "9",
+  "priority": 0.8,
+  "description": "Build integration test for aidr_commit_gateway.py verdict-check enforcement. Phase 9. Test MUST verify: (1) gateway refuses CAUTION_LIMITED or HIGH_RISK_ISOLATED verdicts, (2) gateway accepts TRUSTED_* and ENTERPRISE_CONTROLLED, (3) injection_resilience score is included in commit payload, (4) explicit override path works for CAUTION_LIMITED with documented reason. Uses synthetic verdict data. Does NOT make real AiDr API calls. Logs test results to service_health."
+}

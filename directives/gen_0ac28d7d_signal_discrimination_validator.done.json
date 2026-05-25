@@ -1,0 +1,11 @@
+{
+  "task": "signal_discrimination_validator",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_validator.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Validate whether recent v2 enrichments (permission_scope_enrichment_v2, temporal_stability_enrichment_v2, tool_description_safety_enrichment_v2 built 2026-05-24T14:12-14:14) have improved signal discrimination. Query mcp_signal_enrichments for recent rows (last 24h) and compute COUNT(DISTINCT score) per signal_type. Report cardinality to service_health.meta. This is a diagnostic-only daemon \u2014 MUST NOT modify any data. MUST use write_service query interface only. If any weak signal still shows <10 distinct scores, log warning to indicate v2 enrichments may need tuning. Spec reference: Signal Quality Diagnostic section \u2014 weak signals plateau of 3-4 distinct values must be resolved before context_efficiency_enrichment is proposed.",
+  "reads": [],
+  "next_directive": {}
+}

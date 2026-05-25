@@ -1,0 +1,13 @@
+{
+  "task": "aidr_verdict_enforcement_test_v3",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_enforcement_test_v3.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.88,
+  "description": "Wire existing aidr_commit_gateway.py (built 2026-04-17) with verdict-check enforcement. MUST: (1) Read mcp_server_registry for servers with verdict='CAUTION_LIMITED' or 'HIGH_RISK_ISOLATED'; (2) For each, assert that aidr_commit_gateway rejects the commit with appropriate error code (never auto-commits these tiers); (3) For servers with verdict='TRUSTED_GENERAL' or 'TRUSTED_RESEARCH', assert commit payload includes injection_resilience score; (4) Mock the AiDr API endpoint to avoid real outbound calls during test; (5) Use write_service query to fetch test data \u2014 no direct duckdb. References: aidr_commit_gateway.py interface, the prior v2 test that failed in cohort_3_n3 with 'failed in cohort_1_n3' last_error. This is NOT a rebuild of the quarantined file \u2014 it is a new test with corrected logic.",
+  "reads": [
+    "aidr_commit_gateway.py"
+  ],
+  "next_directive": {}
+}

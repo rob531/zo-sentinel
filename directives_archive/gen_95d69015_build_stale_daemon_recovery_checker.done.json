@@ -1,0 +1,13 @@
+{
+  "task": "build_stale_daemon_recovery_checker",
+  "handler": "generate_file",
+  "output_file": "stale_daemon_recovery_checker.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Diagnostic daemon to assess stale daemons and determine if they need restart or service file review. Multiple core daemons are stale: mcp_scanner (33h29m), signal_analyser (31h30m), trust_synthesiser (31h54m), threat_intel_ingestor (33h5m), attestation_engine (33h29m), risk_ranker (33h29m).\n\nMUST: Query service_health table for all daemons with stale heartbeat (> per-daemon threshold).\nMUST: For each stale daemon, check if process is still running (pid exists).\nMUST: Output structured report: daemon, heartbeat_age_seconds, threshold_seconds, process_status, recommended_action (restart/service_file_review/diagnostic_needed).\nMUST: Do NOT attempt to restart any daemon.\nMUST NOT: Write to any table; read-only diagnostic.\nThis supports Section 4 freshness SLA enforcement by providing operator-ready diagnostic output.",
+  "reads": [
+    "write_service.py",
+    "service_health"
+  ]
+}

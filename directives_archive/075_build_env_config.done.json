@@ -1,0 +1,12 @@
+{
+  "task": "build_env_config",
+  "handler": "generate_file",
+  "output_file": "env_config.py",
+  "complexity": "low",
+  "phase": "2",
+  "priority": 0.86,
+  "reads": [],
+  "description": "Environment configuration module. Reads all config from environment variables with defaults. WRITE_SERVICE_URL=os.getenv(WRITE_SERVICE_URL,http://127.0.0.1:8772). OLLAMA_URL=os.getenv(OLLAMA_URL,http://127.0.0.1:11434). MINIMAX_API_KEY=os.getenv(MINIMAX_API_KEY,). GITHUB_TOKEN=os.getenv(GITHUB_TOKEN,). WEBHOOK_SECRET=os.getenv(WEBHOOK_SECRET,). ALERT_EMAIL=os.getenv(ALERT_EMAIL,robin.craib@gmail.com). PORT_APPROVAL=int(os.getenv(PORT_APPROVAL,8780)). PORT_REGISTRY=int(os.getenv(PORT_REGISTRY,8781)). PORT_SEARCH=int(os.getenv(PORT_SEARCH,8782)). validate() checks required vars set. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

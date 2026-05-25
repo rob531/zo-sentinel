@@ -1,0 +1,9 @@
+{
+  "task": "build_exemption_expirer",
+  "handler": "generate_file",
+  "output_file": "exemption_expirer.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Retention/lifecycle daemon from Appendix A. Nightly check for exemptions past valid_until in mcp_exemptions table. Reads valid_until column, marks expired records by setting status='expired' or removing them per policy. Must write heartbeat to service_health every 60s. Use write_service at :8772 for all DB access. No direct duckdb imports. Pure function for date checking allowed. Scan interval: 24h."
+}

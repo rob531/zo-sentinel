@@ -1,0 +1,13 @@
+{
+  "task": "rebuild_tool_description_safety_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rebuild tool_description_safety enrichment to fix discrimination weakness. Current signal shows only 4 distinct values across range 50-100, failing discrimination heuristic. Must: (1) Expose compute_score(metadata: dict) returning tuple[float, dict] with score in [0,100]; (2) Read MULTIPLE metadata fields (tool_name_patterns, schema_complexity, permission_scope_risk, publisher_verified, community_stars) to achieve >=20 distinct scores; (3) Use hashing + sigmoid/log-normalize pattern per v2 modules; (4) Return evidence dict listing each field used and partial score contribution; (5) Be pure function - no DB writes, network, imports of protected modules; (6) Complete in <2s per call. Reference spec section 3 signal invariant and enrichment contract. tool_description_safety_enrichment.py was quarantined 2026-05-23; this v2 corrects the implementation.",
+  "reads": [
+    "tool_description_safety_enrichment.py"
+  ],
+  "next_directive": {}
+}

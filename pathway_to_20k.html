@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZO-SENTINEL: Pathway to 20K</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --bg: #0e1116;
+            --bg-panel: #151921;
+            --bg-panel-hover: #1c212b;
+            --accent: #2dd4bf;
+            --accent-dim: rgba(45, 212, 191, 0.15);
+            --text: #e0e0e0;
+            --text-dim: #8b9298;
+            --border: #2a3142;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            padding: 24px;
+            line-height: 1.5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.error {
+            background: var(--danger);
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .refresh-btn {
+            background: var(--accent-dim);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 8px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: var(--accent);
+            color: var(--bg);
+        }
+        
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+        }
+        
+        .panel-body {
+            padding: 24px;
+        }
+        
+        /* HEADLINE PANEL */
+        .headline-panel {
+            text-align: center;
+            padding: 40px 24px;
+        }
+        
+        .headline-label {
+            font-size: 14px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .headline-counter {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 72px;
+            font-weight: 700;
+            color: var(--accent);
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        
+        .headline-denominator {
+            font-size: 36px;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+        
+        .headline-percent {
+            font-size: 18px;
+            color: var(--text);
+            margin-top: 16px;
+            font-family: 'SF Mono', 'Consolas', monospace', monospace;
+        }
+        
+        .progress-container {
+            max-width: 800px;
+            margin: 24px auto 0;
+        }
+        
+        .progress-bar {
+            height: 12px;
+            background: rgba(45, 212, 191, 0.15);
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #14b8a6);
+            transition: width 0.5s ease;
+        }
+        
+        /* FUNNEL PANEL */
+        .funnel-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .funnel-row {
+            display: grid;
+            grid-template-columns: 160px 100px 80px 1fr 100px;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .funnel-stage-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text);
+        }
+        
+        .funnel-count {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            text-align: right;
+        }
+        
+        .funnel-percent {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            color: var(--text-dim);
+            text-align: right;
+        }
+        
+        .funnel-bar-container {
+            height: 6px;
+            background: rgba(45, 212, 191, 0.1);
+            overflow: hidden;
+        }
+        
+        .funnel-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.5s ease;
+        }
+        
+        .funnel-goal {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            color: var(--text-dim);
+            text-align: right;
+        }
+        
+        /* VELOCITY PANEL */
+        .velocity-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        
+        .velocity-chart {
+            text-align: center;
+        }
+        
+        .velocity-title {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .velocity-svg {
+            width: 100%;
+            height: 100px;
+            display: block;
+        }
+        
+        .velocity-current {
+            margin-top: 12px;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+        
+        .velocity-label {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+        
+        /* ETA PANEL */
+        .eta-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .eta-row {
+            display: grid;
+            grid-template-columns: 180px 1fr 140px;
+            align-items: center;
+            gap: 24px;
+            padding: 16px;
+            background: rgba(45, 212, 191, 0.05);
+            border-left: 3px solid var(--accent);
+        }
+        
+        .eta-label {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 500;
+        }
+        
+        .eta-bar-container {
+            height: 8px;
+            background: rgba(45, 212, 191, 0.1);
+            overflow: hidden;
+        }
+        
+        .eta-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #14b8a6);
+            transition: width 0.5s ease;
+        }
+        
+        .eta-value {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            text-align: right;
+        }
+        
+        .eta-value span {
+            font-size: 13px;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+        
+        /* FOOTER */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+        
+        .footer-left {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+        }
+        
+        /* ERROR STATE */
+        .error-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--danger);
+        }
+        
+        .error-state h3 {
+            margin-bottom: 8px;
+        }
+        
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-dim);
+        }
+        
+        @media (max-width: 1024px) {
+            .velocity-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .funnel-row {
+                grid-template-columns: 140px 80px 60px 1fr;
+            }
+            
+            .funnel-goal {
+                display: none;
+            }
+            
+            .eta-row {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            
+            .eta-value {
+                text-align: left;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            body {
+                padding: 16px;
+            }
+            
+            .headline-counter {
+                font-size: 48px;
+            }
+            
+            .headline-denominator {
+                font-size: 24px;
+            }
+            
+            .funnel-row {
+                grid-template-columns: 1fr 80px;
+                gap: 12px;
+            }
+            
+            .funnel-stage-name {
+                grid-column: 1 / -1;
+            }
+            
+            .funnel-percent {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Pathway to 20,000 Assessed MCPs</h1>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+                <button class="refresh-btn" onclick="refreshData()">Refresh Now</button>
+            </div>
+        </header>
+
+        <!-- HEADLINE PANEL -->
+        <section class="panel headline-panel" id="headlinePanel">
+            <div class="loading" id="headlineLoading">Loading metrics...</div>
+        </section>
+
+        <!-- ASSESSMENT FUNNEL PANEL -->
+        <section class="panel">
+            <div class="panel-header">Assessment Funnel</div>
+            <div class="panel-body">
+                <div class="funnel-grid" id="funnelGrid">
+                    <div class="loading">Loading funnel data...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VELOCITY PANEL -->
+        <section class="panel">
+            <div class="panel-header">24-Hour Velocity</div>
+            <div class="panel-body">
+                <div class="velocity-grid" id="velocityGrid">
+                    <div class="loading">Loading velocity data...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ETA PANEL -->
+        <section class="panel">
+            <div class="panel-header">Estimated Time to 20K</div>
+            <div class="panel-body">
+                <div class="eta-grid" id="etaGrid">
+                    <div class="loading">Calculating ETA...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            <div class="footer-left" id="lastRefreshed">Last refreshed: --</div>
+            <div class="footer-right">Auto-refreshes every 60 seconds</div>
+        </footer>
+    </div>
+
+    <script>
+        const GOAL = 20000;
+        const API_BASE = 'http://127.0.0.1:8781';
+        const REFRESH_INTERVAL = 60000;
+
+        let refreshTimer = null;
+        let isLoading = false;
+
+        const STAGE_NAMES = [
+            { key: 'discovered', label: 'Discovered', color: '#64748b' },
+            { key: 'promoted', label: 'Promoted', color: '#818cf8' },
+            { key: 'fingerprinted', label: 'Fingerprinted', color: '#a78bfa' },
+            { key: 'scored', label: 'Scored', color: '#c084fc' },
+            { key: 'enriched', label: 'Enriched', color: '#e879f9' },
+            { key: 'attested', label: 'Attested', color: '#2dd4bf' }
+        ];
+
+        function formatNumber(n) {
+            return n.toLocaleString();
+        }
+
+        function formatDate(date) {
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function setStatus(status, message) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            dot.className = status === 'error' ? 'status-dot error' : 'status-dot';
+            text.textContent = message;
+        }
+
+        function renderHeadline(data) {
+            const total = data.total || 0;
+            const percent = ((total / GOAL) * 100).toFixed(2);
+            const barWidth = Math.min((total / GOAL) * 100, 100);
+
+            document.getElementById('headlinePanel').innerHTML = `
+                <div class="headline-label">Total MCP Servers Assessed</div>
+                <div class="headline-counter">
+                    ${formatNumber(total)}<span class="headline-denominator"> / ${formatNumber(GOAL)}</span>
+                </div>
+                <div class="headline-percent">${percent}% of goal achieved</div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${barWidth}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderFunnel(data) {
+            const container = document.getElementById('funnelGrid');
+            const rows = STAGE_NAMES.map(stage => {
+                const count = data[stage.key] || 0;
+                const percent = ((count / GOAL) * 100).toFixed(2);
+                const barWidth = Math.min((count / GOAL) * 100, 100);
+                return `
+                    <div class="funnel-row">
+                        <div class="funnel-stage-name">${stage.label}</div>
+                        <div class="funnel-count">${formatNumber(count)}</div>
+                        <div class="funnel-percent">${percent}%</div>
+                        <div class="funnel-bar-container">
+                            <div class="funnel-bar-fill" style="width: ${barWidth}%; background: ${stage.color}"></div>
+                        </div>
+                        <div class="funnel-goal">of 20K goal</div>
+                    </div>
+                `;
+            }).join('');
+            container.innerHTML = rows;
+        }
+
+        function renderVelocity(data) {
+            const container = document.getElementById('velocityGrid');
+            const charts = [
+                {
+                    title: 'Registry Additions',
+                    data: data.registry_velocity || [],
+                    current: data.registry_current || 0,
+                    color: '#2dd4bf'
+                },
+                {
+                    title: 'Fingerprints Created',
+                    data: data.fingerprint_velocity || [],
+                    current: data.fingerprint_current || 0,
+                    color: '#a78bfa'
+                },
+                {
+                    title: 'Signal Scores Created',
+                    data: data.signal_velocity || [],
+                    current: data.signal_current || 0,
+                    color: '#c084fc'
+                }
+            ];
+
+            container.innerHTML = charts.map(chart => {
+                const svg = renderSparkline(chart.data, chart.color);
+                return `
+                    <div class="velocity-chart">
+                        <div class="velocity-title">${chart.title}</div>
+                        <svg class="velocity-svg" viewBox="0 0 300 80" preserveAspectRatio="none">${svg}</svg>
+                        <div class="velocity-current">${chart.current}<span class="velocity-label"> / hr avg</span></div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderSparkline(data, color) {
+            if (!data || data.length === 0) {
+                return '<text x="150" y="45" text-anchor="middle" fill="#64748b" font-size="12">No data</text>';
+            }
+
+            const width = 300;
+            const height = 80;
+            const padding = 10;
+            const maxVal = Math.max(...data, 1);
+            const minVal = Math.min(...data, 0);
+            const range = maxVal - minVal || 1;
+
+            const points = data.map((val, i) => {
+                const x = padding + (i / (data.length - 1 || 1)) * (width - padding * 2);
+                const y = height - padding - ((val - minVal) / range) * (height - padding * 2);
+                return `${x},${y}`;
+            }).join(' ');
+
+            return `
+                <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+                <line x1="10" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#2a3142" stroke-width="1"/>
+            `;
+        }
+
+        function renderEta(data) {
+            const container = document.getElementById('etaGrid');
+            const rows = [
+                {
+                    label: 'Registry to 20K',
+                    days: data.registry_eta_days,
+                    percent: data.registry_eta_percent
+                },
+                {
+                    label: 'Fingerprints to 20K',
+                    days: data.fingerprint_eta_days,
+                    percent: data.fingerprint_eta_percent
+                },
+                {
+                    label: 'Full Assessment (Attestations)',
+                    days: data.attestation_eta_days,
+                    percent: data.attestation_eta_percent
+                }
+            ];
+
+            container.innerHTML = rows.map(row => {
+                const days = row.days || 0;
+                const percent = row.percent || 0;
+                const barWidth = Math.min(percent, 100);
+                const daysText = days > 36500 ? '> 100 years' :
+                                 days > 1000 ? '> 2.7 years' :
+                                 days > 365 ? `${(days / 365).toFixed(1)} years` :
+                                 days > 30 ? `${Math.ceil(days / 30)} months` :
+                                 days > 0 ? `${Math.ceil(days)} days` : 'Complete';
+                
+                return `
+                    <div class="eta-row">
+                        <div class="eta-label">${row.label}</div>
+                        <div class="eta-bar-container">
+                            <div class="eta-bar-fill" style="width: ${barWidth}%"></div>
+                        </div>
+                        <div class="eta-value">${daysText}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function fetchJson(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Accept': 'application/json',
+                        ...options.headers
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Fetch error for ${url}:`, error);
+                throw error;
+            }
+        }
+
+        async function loadTotals() {
+            const data = await fetchJson(`${API_BASE}/api/pathway/totals`);
+            renderHeadline(data);
+            return data;
+        }
+
+        async function loadFunnel() {
+            const data = await fetchJson(`${API_BASE}/api/pathway/funnel`);
+            renderFunnel(data);
+            return data;
+        }
+
+        async function loadVelocity() {
+            const data = await fetchJson(`${API_BASE}/api/pathway/velocity`);
+            renderVelocity(data);
+            return data;
+        }
+
+        async function loadEta() {
+            const data = await fetchJson(`${API_BASE}/api/pathway/eta`);
+            renderEta(data);
+            return data;
+        }
+
+        async function refreshData() {
+            if (isLoading) return;
+            isLoading = true;
+
+            try {
+                setStatus('ok', 'Loading...');
+                
+                await Promise.all([
+                    loadTotals(),
+                    loadFunnel(),
+                    loadVelocity(),
+                    loadEta()
+                ]);
+
+                document.getElementById('lastRefreshed').textContent = `Last refreshed: ${formatDate(new Date())}`;
+                setStatus('ok', 'Live');
+            } catch (error) {
+                console.error('Refresh failed:', error);
+                setStatus('error', 'Connection error');
+                document.getElementById('headlinePanel').innerHTML = `
+                    <div class="error-state">
+                        <h3>Unable to Connect</h3>
+                        <p>Could not reach registry_api at ${API_BASE}</p>
+                        <p style="font-size: 12px; margin-top: 8px;">Make sure the service is running</p>
+                    </div>
+                `;
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+            refreshTimer = setInterval(refreshData, REFRESH_INTERVAL);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshData();
+            startAutoRefresh();
+        });
+    </script>
+</body>
+</html>

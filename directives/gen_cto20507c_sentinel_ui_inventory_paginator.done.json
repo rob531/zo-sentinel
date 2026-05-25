@@ -1,0 +1,11 @@
+{
+  "task": "cto_2026_05_07_sentinel_ui_inventory_paginator",
+  "handler": "generate_file",
+  "output_file": "sentinel_ui_inventory_paginator.py",
+  "complexity": "medium",
+  "phase": "15",
+  "priority": 0.88,
+  "description": "Build a FastAPI APIRouter module exposing GET /inventory and GET /inventory/<server_id>. /inventory accepts query params: page (int>=1 default 1), page_size (int 10-200 default 50), verdict (optional string filter on latest verdict), search (optional substring match on server_id or display_name). It queries via WriteService /query endpoint (POST http://127.0.0.1:8772/query, 8s httpx timeout). Build SQL that joins mcp_server_registry with the latest row from mcp_signal_scores GROUP BY server_id (taking MAX(scored_at)) and returns: server_id, display_name, source, first_seen, latest_verdict, latest_overall_risk, latest_scored_at, signal_count. Apply WHERE clauses for verdict + search BEFORE LIMIT/OFFSET. Page math: offset = (page-1)*page_size; LIMIT page_size. Also runs a separate count query (same WHERE, no LIMIT) to populate total_rows. Response: {page, page_size, total_rows, total_pages, results: [...]}. /inventory/<server_id> returns the full registry row + ALL latest signal scores per signal + ALL fingerprint fields, joined as {server_id, registry: {...}, signals: [...], fingerprint: {...}}. 503 when WriteService unavailable with body {error: 'writeservice_unavailable'}. FileHandler logging to /home/workspace/logs/sentinel_ui_inventory.log at INFO per request. Module exports `router` symbol. WHY NOW: At the 20K-MCP target a paginated inventory is the only way reviewers can navigate and verify breadth coverage; this is the foundational read view that the rest of the UI hangs off (detail page, evidence drawer, verdict filter chips). CONSTRAINTS: FileHandler ONLY. Read-only - no writes. WriteService /query - never direct DuckDB. Always parameterise WHERE values via the WriteService params payload - never string-interpolate user input into SQL. page_size hard cap 200, reject larger as 400. 503 on WriteService unavailable. Module exports `router`. No top-level network call at import time.",
+  "reads": [],
+  "next_directive": {}
+}

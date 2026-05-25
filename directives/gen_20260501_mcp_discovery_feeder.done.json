@@ -1,0 +1,25 @@
+{
+  "task_name": "build_mcp_discovery_feeder",
+  "output_file": "mcp_discovery_feeder.py",
+  "complexity": "medium",
+  "phase": 1,
+  "goal": "Build a continuous MCP discovery feeder daemon that sources new MCP server candidates from npm (keyword mcp-server) and GitHub (topic mcp-server), deduplicates against existing mcp_server_registry entries by server_id, and inserts new candidates with status PENDING_SCAN via WriteService POST /write. Must run every 30 minutes, log discovery counts per source, emit a mesh_event of type discovery_batch with candidate count on each cycle. Target: 500+ new unique MCPs per day to keep signal_analyser queue non-empty toward the 20k assessed MCPs goal.",
+  "constraints": [
+    "Deduplicate by server_id (blake2s hash of name+url)",
+    "Write via WriteService POST /write to http://127.0.0.1:8772/write not direct DuckDB",
+    "Must not re-queue already scored servers where trust_score IS NOT NULL",
+    "Rate limit max 60 npm API calls per minute",
+    "Use ON CONFLICT DO NOTHING not INSERT OR IGNORE for DuckDB compat",
+    "Register in /etc/zo/supervisord-user.conf with autorestart=true"
+  ],
+  "success_criteria": [
+    "Script runs without error for one full 30-min cycle",
+    "At least one discovery_batch event appears in mesh_events",
+    "mcp_server_registry shows new PENDING_SCAN entries"
+  ],
+  "antipatterns": [
+    "INSERT OR IGNORE - use ON CONFLICT DO NOTHING instead",
+    "Direct DuckDB writes - always use WriteService",
+    "Crashing on single source failure - log and continue"
+  ]
+}

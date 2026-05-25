@@ -1,0 +1,15 @@
+{
+  "task": "build_remediation_advisor",
+  "handler": "generate_file",
+  "output_file": "remediation_advisor.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.58,
+  "reads": [
+    "schema.py",
+    "verdict_taxonomy.py"
+  ],
+  "description": "Remediation advisor. get_remediation_steps(server_id)->list: fetches verdict+signals+threats. Returns ordered list of specific remediation steps based on findings. Examples: if tool_description_safety<40: Conduct manual review of tool descriptions for injection patterns. if supply_chain<30: Verify package provenance and check npm author identity. if rug_pull threat detected: Immediately revoke all active sessions using this MCP. Each step has priority (1-5), estimated_effort (hours), and responsible_team (security|developer|platform). generate_remediation_report(server_id)->str: full markdown remediation plan. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

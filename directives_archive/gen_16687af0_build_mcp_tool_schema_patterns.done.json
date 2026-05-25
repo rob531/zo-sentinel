@@ -1,0 +1,9 @@
+{
+  "task": "build_mcp_tool_schema_patterns",
+  "handler": "generate_file",
+  "output_file": "mcp_tool_schema_patterns.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.92,
+  "description": "Pure library module per Appendix B. Exports pattern detection for MCP server tool definitions: (a) progressive-disclosure pattern (\u22644 high-level tools), (b) brute-force enumeration (\u226520 tools), (c) hybrid. Takes tool-definitions list, returns {pattern: str, tool_count: int, evidence: dict}. Attribution in docstring: 'Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14.' No daemons. No network. No DB. Compiled patterns at module load. Must include if __name__ == '__main__' self-smoke exercising detection against \u22653 known-good inputs."
+}

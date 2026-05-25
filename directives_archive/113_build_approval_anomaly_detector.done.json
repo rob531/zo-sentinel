@@ -1,0 +1,14 @@
+{
+  "task": "build_approval_anomaly_detector",
+  "handler": "generate_file",
+  "output_file": "approval_anomaly_detector.py",
+  "complexity": "medium",
+  "phase": "16",
+  "priority": 0.86,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Approval workflow anomaly detector daemon. Reads mcp_decisions via ws_query. Detects: (1) rubber-stamp analyst: analyst approving >90% of submissions = WARNING, (2) speed anomaly: decision made <2 minutes after submission = suspicious_speed, (3) verdict override: approved server has trust_score < 30 = anomalous_approval, (4) bulk approval: >5 ALLOW decisions from same analyst in 1 hour = bulk_approval_burst, (5) self-approval pattern: requested_by == analyst_name = conflict_of_interest. For each anomaly: ws_write corrections {agent_id=zo_sentinel.approval_auditor, action=approval_anomaly, reason=description, cluster=governance}. ws_write mesh_events severity=WARNING. Poll 3600s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

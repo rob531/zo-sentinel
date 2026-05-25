@@ -1,0 +1,12 @@
+{
+  "task": "build_manifest_blast_radius",
+  "handler": "generate_file",
+  "output_file": "manifest_blast_radius.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.93,
+  "reads": ["schema.py", "known_threats.py", "db_utils.py"],
+  "description": "MCP manifest blast radius calculator daemon. For each server in mcp_server_registry: attempt GET {url}/tools or {url}/manifest or parse npm package.json for tool definitions. Extract: tool_names list, permission_keywords list (filesystem, network, credentials, exec, shell, env, process). Blast radius scoring -- DANGEROUS COMBINATIONS: (filesystem_read AND network_out) = semantic_exfiltration -> CRITICAL. (exec OR shell) AND (filesystem OR credentials) = code_execution_with_data_access -> CRITICAL. (credentials OR env) AND network_out = credential_exfiltration -> HIGH. Only network_out = data_egress -> MEDIUM. Only filesystem_read = local_access -> LOW. For each server: compute blast_radius_score 0-100, blast_radius_category (CRITICAL/HIGH/MEDIUM/LOW/MINIMAL), write to mcp_signal_scores {server_id, signal_name=blast_radius, score=100-blast_radius_score, evidence=dangerous_combination_description}. Also update permission_scope signal. ws_write mcp_threat_associations if CRITICAL/HIGH. Poll 21600s. 5s timeout per manifest fetch. Heartbeat.",
+  "context": "Parse tool permissions from: (1) MCP tools endpoint JSON tools[].inputSchema.properties keys, (2) npm package.json keywords array, (3) README.md first 500 chars keyword scan. Graceful on fetch failure: log and continue. All DB via write_service:8772.",
+  "from": "threat_matrix"
+}

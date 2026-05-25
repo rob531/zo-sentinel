@@ -1,0 +1,13 @@
+{
+  "task": "domain_trust_enrichment",
+  "handler": "generate_file",
+  "output_file": "domain_trust_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Pure enrichment module for the domain_trust signal. Although domain_trust currently shows OK range (44.8-85.0), enrichment will improve discrimination beyond base signal. Build compute_score(metadata: dict) that reads MULTIPLE fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars. Must return (float in [0,100], evidence_dict) per section 3 signal invariant. Must complete in under 2 seconds. Must NOT write to DB, import protected modules, or make network calls. Pure function: same input always produces same output. Export exactly: def compute_score(metadata: dict) -> tuple[float, dict]. Will be evaluated by enrichment_harness.py against synthetic corpus; requires >=20 distinct scores for acceptance.",
+  "reads": [
+    "enrichment_harness.py"
+  ],
+  "next_directive": {}
+}

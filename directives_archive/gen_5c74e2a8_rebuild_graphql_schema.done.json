@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_graphql_schema",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Rebuild graphql_schema_builder.py - failed in previous build cycle. Ensure schema includes all MCP tables and query/mutation types per DB_SCHEMA.md."
+}

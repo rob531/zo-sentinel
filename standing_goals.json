@@ -1,0 +1,76 @@
+{
+  "_meta": {
+    "version": "1.2.0",
+    "updated": "2026-05-02",
+    "purpose": "Perpetual fallback directives for sentinel_directive_generator when LLM suggestions all dedupe. Ensures builder queue is NEVER empty per directives_never_empty convention.",
+    "changelog": [
+      "1.2.0 (2026-05-02): renamed top-level 'standing_goals' -> 'goals', renamed per-entry 'task_name' -> 'task' and 'goal' -> 'description', added required 'handler' field. Schema now matches standing_goals_fallback.py REQUIRED_FIELDS contract. Previous shape silently produced 0 emissions every cycle.",
+      "1.1.0 (2026-05-01): five reframed goals"
+    ]
+  },
+  "goals": [
+    {
+      "task": "build_pypi_discovery_paginator_v2",
+      "handler": "generate_file",
+      "output_file": "discovery_pypi_paginator_v2.py",
+      "complexity": "medium",
+      "priority": 0.9,
+      "description": "Build a PyPI discovery paginator daemon as a third discovery source beyond npm + github. Search PyPI JSON API for keywords mcp-server, model-context-protocol, mcp-tools. Paginate 5 pages of 100 per 600s cycle. Insert candidates into mcp_discovery_candidates via WriteService ON CONFLICT DO NOTHING. server_id = blake2s('pypi:' + name).hexdigest()[:16]. Logs FileHandler only. ISO 8601 timestamps. Rate limit 60 calls/min.",
+      "constraints": ["ws_write only", "FileHandler only", "ON CONFLICT DO NOTHING", "ISO 8601 timestamps"]
+    },
+    {
+      "task": "build_verdict_aggregator_daemon",
+      "handler": "generate_file",
+      "output_file": "verdict_aggregator_daemon.py",
+      "complexity": "medium",
+      "priority": 0.85,
+      "description": "Build a daemon that runs every 1800s and updates mcp_server_registry.verdict by aggregating mcp_signal_scores across the 7 trust framework signals using the documented weights. Pure read of signal_scores, single UPDATE statement to registry per row. Uses ws_write for the UPDATE. Skips rows where verdict was UPDATEd in the last 6 hours. Emits a verdict_aggregation mesh_event per cycle with counts. This is the verdict_assigner carryover from PROJECT_GOALS.md, distinct from the archived decision_emitter.",
+      "constraints": ["ws_write only", "FileHandler only", "ISO 8601 timestamps", "6h re-aggregation cooldown per row"]
+    },
+    {
+      "task": "build_registry_ingestor_remotes_patch",
+      "handler": "generate_file",
+      "output_file": "mcp_registry_ingestor_v2.py",
+      "complexity": "medium",
+      "priority": 0.8,
+      "description": "Build mcp_registry_ingestor_v2 that reads BOTH remotes[] and packages[] from registry entries (current ingestor only reads packages[], leaving raw_packages='[]' for HTTPS-served MCPs). Populates mcp_registry_facts with proper transport classification (stdio for packages, http/sse/ws for remotes). Idempotent re-run via ON CONFLICT DO NOTHING. After this lands and re-runs, signal_bridge will have real transport info as a backup data source for Signals 1 and 4.",
+      "constraints": ["ws_write only", "FileHandler only", "ON CONFLICT DO NOTHING", "Read remotes[] AND packages[]"]
+    },
+    {
+      "task": "build_runpod_session_monitor",
+      "handler": "generate_file",
+      "output_file": "runpod_session_monitor.py",
+      "complexity": "low",
+      "priority": 0.7,
+      "description": "Build a RunPod session monitor daemon that polls RunPod API every 300s for active pod status. Writes pod IP, port, GPU type, status, credit_balance to /home/workspace/shared/outputs/runpod_active.json (UTF-8 BOM-free for tower interop). Emits mesh_event with severity=ERROR if pod terminates unexpectedly or credit_balance < 5. Reads RUNPOD_API_KEY from env. Exits gracefully if no active pods. This supports the SFT training program where adapters are trained on RunPod.",
+      "constraints": ["FileHandler only", "BOM-free JSON output", "ISO 8601 timestamps", "Never hardcode credentials", "ws_write for mesh_events"]
+    },
+    {
+      "task": "build_sft_adapter_loader",
+      "handler": "generate_file",
+      "output_file": "sft_adapter_loader.py",
+      "complexity": "medium",
+      "priority": 0.75,
+      "description": "Build an adapter loader service that integrates the trained ZoMesh LoRA adapter (Qwen2.5-3B + student_v1 from rob531/zomesh-sentinel-sft GitHub adapters/student-v1) into the inference router as a mesh_specialist tier. Loads adapter at startup with peft.PeftModel.from_pretrained. Exposes /generate POST endpoint on port 8793 (FastAPI + uvicorn). Routes task_type=sentinel_assess to the adapter; falls back to MiniMax if adapter inference exceeds 10s or errors. Logs adapter latency per request to mesh_memory.",
+      "constraints": ["Read inference_router_service.py before writing", "NO 4-bit quantization (bitsandbytes set_submodule bug)", "Graceful fallback to MiniMax tier", "FileHandler only", "ISO 8601 timestamps"]
+    },
+    {
+      "task": "build_signal_distinct_value_monitor",
+      "handler": "generate_file",
+      "output_file": "signal_distinct_value_monitor.py",
+      "complexity": "low",
+      "priority": 0.65,
+      "description": "Build a signal-quality monitor daemon that runs every 1800s and computes the distinct-value count for each of the 7 trust framework signals across mcp_signal_scores. Emits a mesh_event severity=WARNING when any signal has < 5 distinct values across the population (the 'bad signal = same signal' gate from PROJECT_GOALS.md defensibility section). Writes per-signal distinct counts to mesh_memory for trend visibility. Pure read; never modifies signal_scores.",
+      "constraints": ["ws_query for reads", "ws_write for mesh_events / mesh_memory", "FileHandler only", "ISO 8601 timestamps"]
+    },
+    {
+      "task": "build_mcp_project_canonicalizer",
+      "handler": "generate_file",
+      "output_file": "mcp_project_canonicalizer.py",
+      "complexity": "high",
+      "priority": 0.6,
+      "description": "Build the MCP project canonicalizer daemon (deferred April 21 work). Creates and maintains mcp_project_canonical and mcp_project_members tables. Groups MCPs by canonical project (npm package, github repo, pypi package) so a single project's npm publish + github source + pypi mirror are recognized as one canonical project, not three independent MCPs. Unlocks UI aggregation and supply-chain-fork visibility. Idempotent re-run.",
+      "constraints": ["ws_write via WriteService", "ON CONFLICT DO NOTHING", "FileHandler only", "Schema additions only - never alter existing tables"]
+    }
+  ]
+}

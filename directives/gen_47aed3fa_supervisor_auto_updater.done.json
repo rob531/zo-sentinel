@@ -1,0 +1,9 @@
+{
+  "task": "supervisor_auto_updater",
+  "handler": "generate_file",
+  "output_file": "supervisor_auto_updater.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild of build_supervisor_auto_updater which failed. Daemon that monitors for configuration drift in supervisord and corrects it. Must use write_service :8772 exclusively for state. Heartbeat to service_health at least every 60s. Parses supervisord_sentinel_full.conf for current config. Compares against expected state. Can trigger supervisorctl reload without restart. No direct duckdb import - all reads via write_service /query. Dependency declarations as top comment."
+}

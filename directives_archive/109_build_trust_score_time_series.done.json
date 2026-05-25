@@ -1,0 +1,14 @@
+{
+  "task": "build_trust_score_time_series",
+  "handler": "generate_file",
+  "output_file": "trust_score_time_series.py",
+  "complexity": "medium",
+  "phase": "16",
+  "priority": 0.88,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Trust score time series tracker daemon. Every 21600s: for each server in mcp_server_registry: compare current trust_score to trust_score from 7 days ago (query mcp_signal_scores WHERE scored_at < now()-7d for same server_id). Compute delta. Alert thresholds: delta > +20 (rapid improvement, possible score manipulation) = WARNING, delta < -15 (degradation, possible compromise) = HIGH, trust_score was >60 now <35 (cliff drop) = CRITICAL. ws_write mcp_threat_associations for CRITICAL. ws_write mesh_events {event_type=trust_score_drift, payload={server_id, old_score, new_score, delta}}. Write DRIFT_REPORT.md with servers sorted by abs(delta) desc. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

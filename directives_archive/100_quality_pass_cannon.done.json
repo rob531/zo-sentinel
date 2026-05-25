@@ -1,0 +1,54 @@
+{
+  "task": "rebuild_email_guid_auth",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth.py",
+  "complexity": "medium",
+  "phase": "17",
+  "priority": 0.9,
+  "description": "Email + GUID token authentication for ZO-SENTINEL analyst portal. FastAPI middleware. POST /auth/request-link sends magic link email. GET /auth/verify?token=GUID validates token and returns session. Stores auth_tokens in DuckDB via ws_write. Token TTL 24h. run() on port 8783. Daemon pattern.",
+  "next_directive": {
+    "task": "rebuild_advanced_filter_api",
+    "handler": "generate_file",
+    "output_file": "advanced_filter_api.py",
+    "complexity": "medium",
+    "phase": "17",
+    "priority": 0.88,
+    "description": "Advanced filtering API for ZO-SENTINEL registry. FastAPI port 8784. GET /filter with params: verdict, min_score, max_score, threat_type, registry_source, date_range. Queries mcp_server_registry + mcp_threat_associations via ws_query. Returns paginated results with filter summary. run() daemon pattern.",
+    "next_directive": {
+      "task": "rebuild_forensic_detail_api",
+      "handler": "generate_file",
+      "output_file": "forensic_detail_api.py",
+      "complexity": "medium",
+      "phase": "18",
+      "priority": 0.86,
+      "description": "Deep forensic detail API for a single MCP server. FastAPI port 8785. GET /forensics/{server_id} returns: full signal history, threat timeline, hash mutation log, attestation history, approval decisions, risk rank history. All from ws_query across mcp_signal_scores, mcp_threat_associations, mcp_attestations, mcp_decisions. run() daemon.",
+      "next_directive": {
+        "task": "rebuild_compliance_export",
+        "handler": "generate_file",
+        "output_file": "compliance_export_service.py",
+        "complexity": "medium",
+        "phase": "18",
+        "priority": 0.84,
+        "description": "Compliance export daemon for ZO-SENTINEL. Generates periodic compliance reports as JSON and Markdown. Reads mcp_server_registry, mcp_decisions, mcp_risk_register. Writes COMPLIANCE_REPORT.md and compliance_export.json to /home/workspace/zo_sentinel/. Runs every 24h. ws_write heartbeat. run() daemon.",
+        "next_directive": {
+          "task": "rebuild_manual_override_api",
+          "handler": "generate_file",
+          "output_file": "manual_override_api.py",
+          "complexity": "medium",
+          "phase": "17",
+          "priority": 0.82,
+          "description": "Manual override API for InfoSec analysts. FastAPI port 8786. POST /override/{server_id} with body {verdict, reason, analyst, duration_days} writes override to mcp_server_registry. GET /overrides lists active overrides. Overrides expire after duration_days. Audit logged to mcp_decisions. run() daemon.",
+          "next_directive": {
+            "task": "build_sentinel_status_page",
+            "handler": "generate_file",
+            "output_file": "sentinel_status.html",
+            "complexity": "high",
+            "phase": "19",
+            "priority": 0.80,
+            "description": "Single-page HTML status dashboard for ZO-SENTINEL. Shows: pipeline health (daemons up/down), registry stats (total MCPs, by verdict), recent threats (last 5), latest attestations, build manifest (last 10 builds). Polls /api/search, /v1/registry, /v1/threats every 30s. Dark brutalist style matching existing UI. Self-contained HTML with embedded JS."
+          }
+        }
+      }
+    }
+  }
+}

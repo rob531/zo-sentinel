@@ -1,0 +1,9 @@
+{
+  "task": "build_exemption_expirer_integration",
+  "handler": "generate_file",
+  "output_file": "exemption_expirer.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.86,
+  "description": "Build exemption_expirer.py \u2014 nightly check for mcp_exemptions rows past valid_until. Read from mcp_exemptions WHERE valid_until < CURRENT_DATE AND status = 'active'. Update status to 'expired'. Write one audit_log row per expiry. Pure daemon pattern: run() + if __name__ == '__main__': run(). No DB writes except via write_service. Heartbeat to service_health. Spec-listed in Appendix A as NOT YET BUILT."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_failures_3modules",
+  "handler": "generate_file",
+  "output_file": "diagnose_smoke_failures_signal.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic directive for three smoke test failures: registry_api.py, rug_pull_monitor.py, signal_analyser.py all showing 'File \"<frozen importlib\"' traceback at line 10. MUST NOT propose rebuilds of these files (all are PROTECTED per Idempotency Protection). Instead: diagnose whether this is a shared dependency issue (auto_dependency_resolver should have caught this), check if it's a Python version mismatch, verify frozen importlib environment is correct, and report findings. Reference: Section 6 dependency declaration contract."
+}

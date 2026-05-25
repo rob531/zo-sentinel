@@ -1,0 +1,13 @@
+{
+  "task": "snow_connector_integration_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring_check.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Verify snow_connector.py (built 2026-04-16) is wired into approval_workflow. This is integration work, not rebuild. Steps: (1) query information_schema for snow_connector related tables or columns, (2) check if snow_connector.py imports approval_workflow.py, (3) verify ServiceNow webhook registration endpoint exists, (4) check for any pending SNOW integration tasks in task queue. Output: wiring status (connected/disconnected), missing integration points, and specific file+line references where connection should be added. Handler: diagnostic_report. Priority: 0.85 because snow_connector is phase-9 unblocked.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ]
+}

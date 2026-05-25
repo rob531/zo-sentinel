@@ -1,0 +1,9 @@
+{
+  "task": "build_tool_description_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "tool_description_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Enhanced enrichment module for tool_description_safety signal (currently at 4 distinct values). Must improve discrimination by reading: tool_count, average_schema_length, has_examples, has_descriptions, parameter_docs\u8986\u76d6\u7387, dangerous_tool_names, version_tag_present, deprecation_notice. Produce >20 distinct scores. Expose compute_score(metadata) -> tuple[float, dict]. Pure function, no DB writes, no network. Already have tool_description_safety_enrichment.py from 2026-05-04 but signal remains weak \u2014 this is a deliberate rewrite per spec section 8 chain naming. Must cite evidence of weak discrimination in description."
+}

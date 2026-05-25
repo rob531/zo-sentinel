@@ -1,0 +1,12 @@
+{
+  "task": "monitor_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_monitor.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Monitor signal discrimination quality for weak signals (permission_scope, temporal_stability, tool_description_safety). Each has only 4 distinct values across 34 MCP fingerprints \u2014 below the 20-distinct-score threshold for valid enrichment. Queries mcp_signal_enrichments table via write_service for each weak signal, computes distinct count and range. Logs warning if any signal remains below 20 distinct values after 7 days. Does not modify any data. Implements graceful degradation per spec section 6. Heartbeat to service_health.",
+  "reads": [
+    "signal_discrimination_validator.py"
+  ]
+}

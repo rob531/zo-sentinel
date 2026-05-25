@@ -1,0 +1,9 @@
+{
+  "task": "fix_temporal_stability_enrichment_flat_signal",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Current temporal_stability_enrichment_v2.py produces flat 50.0 across all synthetic fingerprints (signal quality: BAD). Generate replacement that reads MULTIPLE time-series fields: first_seen_days, last_updated_days, update_frequency_days, release_count, version_count. Weight recency of updates higher than raw age. Return evidence dict with per-field partial scores. Pure function compute_score(metadata: dict) -> tuple[float, dict]. Target 20+ distinct score buckets."
+}

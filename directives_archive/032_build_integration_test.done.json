@@ -1,0 +1,16 @@
+{
+  "task": "build_integration_test",
+  "handler": "generate_file",
+  "output_file": "integration_test.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.84,
+  "reads": [
+    "schema.py",
+    "registry_api.py",
+    "approval_workflow.py"
+  ],
+  "description": "End-to-end integration test suite. Tests: (1) write_service reachable (2) all tables exist via ws_query information_schema (3) at least 1 server in mcp_server_registry (4) GET registry_api /health returns 200 (5) GET registry_api /v1/registry returns list (6) GET approval_workflow /health returns 200 (7) if servers exist: GET /v1/assess?mcp=test returns valid structure (8) mesh_events writable. Each test: PASS/FAIL with reason. Print summary. sys.exit(1) if any FAIL. Write results to mesh_events event_type=integration_test_result. Run via: python3 integration_test.py --write-db.",
+  "context": "",
+  "from": "claude_batch"
+}

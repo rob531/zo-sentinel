@@ -1,0 +1,11 @@
+{
+  "task": "write_operations_runbook",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Write OPERATIONS.md documentation covering: (1) Supervisord layout \u2014 all daemons, their ports, cycle thresholds, PID file locations; (2) Log locations \u2014 each daemon log path, log rotation policy; (3) Recovery runbook \u2014 steps to recover from: write_service stale (>2h), rug_pull_monitor stale (>14h), mcp_scanner backlog, signal_analyser queue explosion; (4) Heartbeat SLA enforcement \u2014 what constitutes a dead daemon, how to restart safely; (5) Freshness SLA reference \u2014 24h first verdict, 7d re-verdict windows and which daemons enforce them (assessment_scheduler, stale_data_cleaner); (6) Quarantine and retry budget explanation (Gate 8 breaker). Do NOT duplicate DB schema or signal invariant \u2014 those belong in ARCHITECTURE.md.",
+  "reads": [],
+  "next_directive": {}
+}

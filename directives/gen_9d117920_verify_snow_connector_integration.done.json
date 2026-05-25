@@ -1,0 +1,9 @@
+{
+  "task": "verify_snow_connector_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_verify.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Integration verification for snow_connector_integration_v2.py (built 2026-05-03T14:16:04). Must: (1) send a test webhook payload to the SNOW inbound endpoint; (2) verify mcp_submissions row is created with correct mcp_name, registry_source='service_now', requested_by; (3) verify approval_workflow at :8780 can query and surface the new submission; (4) verify audit_log entry is created for the inbound event; (5) test with both APPROVED and REJECTED verdict states to ensure round-trip works. Spec reference: section 5 write_service contract, section 4 awaiting-user tables note, Phase 9 snow_connector.py priority 0.92. This is integration verification only\u2014not a rebuild of snow_connector.py."
+}

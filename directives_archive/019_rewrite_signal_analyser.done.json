@@ -1,0 +1,12 @@
+{
+  "task": "rewrite_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser.py",
+  "complexity": "high",
+  "reads": ["schema.py", "known_threats.py"],
+  "description": "Complete production-grade signal analyser daemon for ZO-SENTINEL. Reads unscored MCP servers from mcp_server_registry via ws_query. Scores each server on exactly 6 signal dimensions (0-100 each): domain_trust (check domain age/TLD via URL analysis), tool_description_safety (scan description against HIGH_RISK_PATTERNS from known_threats), permission_scope (count dangerous permission keywords from SUSPICIOUS_PERMISSIONS), supply_chain (check if server_id is in KNOWN_MALICIOUS_PACKAGES), community_signal (score based on scan_count and registry_source), temporal_stability (penalise servers seen <7 days). For each server: write one row per signal to mcp_signal_scores via ws_write, then compute weighted trust_score (domain_trust*0.20 + tool_description_safety*0.20 + permission_scope*0.15 + supply_chain*0.15 + community_signal*0.15 + temporal_stability*0.15), map to verdict (>=75=TRUSTED_GENERAL, >=60=TRUSTED_RESEARCH, >=45=ENTERPRISE_CONTROLLED, >=30=CAUTION_LIMITED, >=15=HIGH_RISK_ISOLATED, else KNOWN_THREAT if in malicious list or INSUFFICIENT), write verdict+trust_score+reasoning to mcp_server_registry. Daemon with heartbeat to service_health. Process 20 servers per cycle. Poll every 1800s.",
+  "context": "Imports from known_threats: check_package, check_domain, HIGH_RISK_PATTERNS, SUSPICIOUS_PERMISSIONS. ws_query pattern: requests.post('http://127.0.0.1:8772/query', json={'sql': 'SELECT server_id, name, url, description FROM mcp_server_registry WHERE trust_score IS NULL LIMIT 20'}). ws_write pattern: requests.post('http://127.0.0.1:8772/write', json={'table': 'mcp_signal_scores', 'rows': {'server_id':sid, 'signal_name':'domain_trust', 'score':85, 'evidence':'...'}, 'wait': True}).",
+  "priority": 0.95,
+  "from": "claude_manual",
+  "phase": "3"
+}

@@ -1,0 +1,804 @@
+# ZO-SENTINEL Build State
+# Injected into every generation prompt so files know what exists.
+
+## Successfully Built Files
+- `threat_intel_ingestor.py` (fix_threat_intel_world_articles_query): fns=log,ws_write,ws_query,ws_execute,send_heartbeat | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `risk_ranker.py` (risk_ranker): fns=run,cycle,create_table,insert_into_table | consts=TABLES,EXECUTE_URL
+- `attestation_engine.py` (attestation_engine): fns=generate_attestation,create_all,run,cycle
+- `ui/approval_workflow.jsx` (phase4b_approval_workflow_ui): classes=ApprovalWorkflow: | fns=run | consts=WRITE_SERVICE_URL,INFERENCE_ROUTER_URL
+- `signal_analyser.py` (20260501_signal_analyser_quality): fns=log,check_single_instance,signal_handler,remove_pid_file,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `rug_pull_monitor.py` (phase5c_rug_pull_monitor): classes=RugPullMonitor: | fns=fetch_tool_definitions,compute_hash,check_hash_change
+- `ui/approval_workflow.jsx` (phase4b_approval_workflow_ui): fns=run
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw file
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw file
+- `search_api.py` (search_api_enhancements): fns=main
+- `mcp_scanner.py` (phase2_mcp_scanner): module
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `search_api.py` (director_maturity_search_api): fns=run | consts=EXECUTE_URL
+- `lookup.py` (director_maturity_lookup): fns=get_write_url,query_director_maturity,get_director_maturity,lookup,main
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `trust_synthesiser.py` (rewrite_trust_synthesiser): fns=check_single_instance | consts=WRITE_SERVICE_URL,EXECUTE_URL,HEARTBEAT_INTERVAL
+- `trust_synthesiser.py` (phase2b_trust_synthesiser): fns=check_single_instance,send_heartbeat,get_write_url,get_db_path,query_signal_scores | consts=WRITE_SERVICE_URL,EXECUT
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `tests/smoke_test.py` (smoke_test_suite): fns=test_module,main | consts=ZO_SENTINEL_PATH
+- `run_schema.py` (build_schema_runner): fns=create_tables,verify_tables,main
+- `quick_seed.py` (build_quick_seed): fns=seed_servers,main | consts=WRITE_SERVICE_URL,MCP_SERVERS
+- `risk_ranker.py` (rewrite_risk_ranker): fns=check_single_instance,get_write_url,get_db_path,send_heartbeat,ws_query | consts=WRITE_SERVICE_URL,EXECUTE_URL,HEART
+- `KNOWLEDGE_BASE.md` (build_knowledge_base_seed): fns=build_knowledge_base_seed,run
+- `attestation_engine.py` (rewrite_attestation_engine): fns=get_write_url,send_heartbeat,ws_query,ws_write,fetch_server_data | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `mcp_scanner.py` (rewrite_mcp_scanner): fns=check_single_instance,send_heartbeat,ws_write,ws_query,compute_server_id | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXE
+- `rug_pull_monitor.py` (rewrite_rug_pull_monitor): fns=ws_query,ws_write,get_db_path,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_U
+- `db_utils.py` (build_db_utils): fns=ws_query,ws_write,ws_execute,ws_heartbeat,get_unscored_servers | consts=WRITE_SERVICE,EXECUTE_URL,QUERY_URL
+- `lookup.py` (rewrite_lookup_cli): fns=ws_query,ws_write,color_for_risk,color_for_verdict,format_trust_bar | consts=WRITE_SERVICE_URL,EXECUTE_URL,ANSI_RESE
+- `verdict_taxonomy.py` (build_verdict_taxonomy): consts=VERDICTS,VERDICT_THRESHOLDS: Dict[str, float],VERDICT_EXPIRY_DAYS: Dict[str, int]
+- `search_api.py` (rewrite_search_api): fns=ws_query,ws_write,send_heartbeat,health,search | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `signal_weights.py` (build_signal_weights): fns=build_signal_weights
+- `env_config.py` (build_env_config): module
+- `pipeline_health.py` (build_pipeline_health): fns=ws_query,ws_write,send_heartbeat,cleanup,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `http_retry.py` (build_http_retry): fns=get_with_retry,post_with_retry,safe_json
+- `policy_engine_v2.py` (build_policy_engine_v2): fns=ws_query,ws_write,generate_submission_id,load_active_policies,check_analyst_override | consts=WRITE_SERVICE_URL,EXEC
+- `integration_test.py` (build_integration_test): fns=ws_query,ws_write,test_result,print_summary,test_write_service_reachable | consts=WRITE_SERVICE,EXECUTE_URL,REGISTRY
+- `text_patterns.py` (build_text_patterns): fns=scan_description | consts=INJECTION_PATTERNS,CREDENTIAL_HARVESTING_PATTERNS,OBFUSCATION_PATTERNS
+- `assessment_auditor.py` (build_assessment_auditor): fns=ws_query,ws_write,send_heartbeat,check_single_instance,check_low_confidence_verdicts | consts=SERVICE_NAME,WRITE_SER
+- `url_analyser.py` (build_url_analyser): fns=analyse_url,is_suspicious,domain_trust_score,get_domain_trust_score_from_url,is_suspicious_tld
+- `signal_drift_detector.py` (build_signal_drift_detector): fns=ws_query,ws_write,send_heartbeat,check_single_instance,get_servers_with_history | consts=SERVICE_NAME,WRITE_SERVICE_
+- `submission_validator.py` (build_submission_validator): fns=ws_query,ws_write,is_internal_ip,check_url_reachability,check_known_malicious | consts=WRITE_SERVICE_URL,EXECUTE_URL
+- `rate_limiter.py` (build_rate_limiter): fns=rate_limit_dependency,create_default_limiter,get_default_limiter,rate_limit
+- `policy_engine.py` (phase5b_policy_engine): fns=ws_query,ws_write,send_heartbeat,create_policy_rules_table,load_active_policies | consts=SERVICE_NAME,WRITE_SERVICE_
+- `error_reporter.py` (build_error_reporter): fns=ws_query,ws_write,send_heartbeat,get_recent_errors,get_previous_day_errors | consts=SERVICE_NAME,WRITE_SERVICE_URL,E
+- `startup_checker.py` (build_startup_checker): fns=config_validator,startup_checker,run
+- `dashboard_api.py` (build_dashboard_api): fns=ws_query,ws_write,send_heartbeat,get_summary,get_recent_events | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `daily_digest.py` (build_daily_digest): fns=ws_query,ws_write,send_heartbeat,check_single_instance,get_new_mcps | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `trend_analyser.py` (build_trend_analyser): fns=check_single_instance,send_heartbeat,ws_query,ws_write,get_verdict_distribution | consts=SERVICE_NAME,WRITE_SERVICE_
+- `status.sh` (build_status_sh): fns=run,cycle
+- `scoring_cache.py` (build_scoring_cache): module
+- `compliance_reporter.py` (build_compliance_reporter): fns=ws_query,get_registry_summary,get_risk_distribution,get_expired_attestations,calculate_days_overdue | consts=WRITE_S
+- `supervisord_sentinel.conf` (build_sentinel_supervisor): fns=run
+- `alert_manager.py` (build_alert_manager): fns=ws_query,ws_write,send_heartbeat,check_single_instance,get_dedup_key | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE
+- `assessment_scheduler.py` (build_assessment_scheduler): fns=ws_query,ws_write,send_heartbeat,check_single_instance,ensure_mesh_events_table | consts=SERVICE_NAME,WRITE_SERVICE_
+- `webhook_dispatcher.py` (build_webhook_dispatcher): fns=get_webhook_urls,ws_query,ws_write,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXEC
+- `tests/test_scoring.py` (build_test_scoring): fns=score_to_verdict
+- `tests/ui_endpoint_tests.py` (build_ui_endpoint_tests): fns=ws_query,ws_write,ws_execute,check_service,ensure_mesh_events_table | consts=WRITE_SERVICE,EXECUTE_URL,RESULTS_FILE
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `mcp_fingerprinter.py` (build_mcp_fingerprinter): fns=ws_query,ws_write,compute_sha256_hash,compute_jaccard_similarity,extract_significant_tokens | consts=EXECUTE_URL,WRI
+- `deduplicator.py` (build_deduplicator): fns=ws_query,ws_write,send_heartbeat,compute_character_overlap,name_similarity | consts=SERVICE_NAME,WRITE_SERVICE_URL,E
+- `tests/test_known_threats.py` (build_test_known_threats): module
+- `verdict_explainer.py` (build_verdict_explainer): fns=ws_query,ws_write,fetch_server_verdict_data,fetch_latest_signals,get_signal_level | consts=EXECUTE_URL,QUERY_URL,WRI
+- `stale_data_cleaner.py` (build_stale_data_cleaner): fns=ws_query,ws_write,send_heartbeat,check_single_instance,create_tables | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE
+- `mcp_profiler.py` (build_mcp_profiler): fns=compute_profile_hash,determine_server_type,extract_tool_names,extract_permission_list,check_has_authentication | con
+- `data_validator.py` (build_data_validator): fns=ws_query,ws_write,send_heartbeat,check_single_instance,validate_trust_scores | consts=SERVICE_NAME,WRITE_SERVICE_URL
+- `tests/mock_write_service.py` (build_mock_write_service): fns=parse_where_clause,run | consts=DATA_STORE: Dict[str, List[Dict[str, Any]]]
+- `mesh_bridge.py` (build_mesh_bridge): fns=ws_query,ws_write,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERV
+- `registry_reconciler.py` (build_registry_reconciler): fns=check_single_instance,send_heartbeat,ws_query,ws_write,get_with_retry | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUT
+- `report_formatter.py` (build_report_formatter): fns=header,table,badge,progress_bar,section | consts=VERDICT_BADGES,STYLE_BADGES
+- `directive_validator.py` (build_directive_validator): fns=validate_directive,validate_task,validate_handler,validate_complexity,validate_description
+- `bulk_assess_api.py` (build_bulk_assess_api): fns=check_single_instance,get_write_url,ws_query,ws_write,ws_execute | consts=SERVICE_NAME,PORT,WRITE_SERVICE
+- `context_injector.py` (build_context_injector): fns=ws_query,get_registry_count,get_unscored_count,get_high_risk_count,list_built_files | consts=ZO_SENTINEL_PATH,KNOWLE
+- `comparison_api.py` (build_comparison_api): fns=ws_query,ws_write,send_heartbeat,heartbeat_loop,start_heartbeat | consts=WRITE_SERVICE,EXECUTE_URL,SERVICE_NAME
+- `notification_hub.py` (build_notification_hub): fns=send_alert,send_build_failure,send_daily_digest,notify_high_risk,get_stats | consts=NOTIFY_API_URL,NOTIFY_TIMEOUT,AL
+- `pattern_learner.py` (build_pattern_learner): fns=ws_query,ws_write,send_heartbeat,check_single_instance,remove_pid_file | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY
+- `watch.py` (build_watch_mode): fns=ws_query,ws_write,get_daemon_status,get_daemon_pid,get_process_uptime | consts=WRITE_SERVICE,QUERY_URL,WRITE_URL
+- `false_positive_tracker.py` (build_false_positive_tracker): fns=ws_query,ws_write,send_heartbeat,check_single_instance,ensure_corrections_table | consts=SERVICE_NAME,WRITE_SERVICE_
+- `smoke_evolution_agent.py` (build_smoke_evolution_agent): fns=ws_query,ws_write,send_heartbeat,check_single_instance,get_db_path | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_U
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `tests/test_wiring.py` (build_test_wiring): fns=check_duckdb_violations,check_has_run_function,check_has_main_guard,check_health_route,load_module | consts=PROJECT_
+- `api_gateway.py` (build_api_gateway): fns=get_rate_limiter,send_heartbeat,log_gateway_event,forward_request,heartbeat_loop | consts=SERVICE_NAME,PORT,WRITE_SE
+- `analyst_feedback_loop.py` (build_analyst_feedback_loop): fns=get_write_url,get_execute_url,get_query_url,get_db_path,ws_query | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `audit_trail.py` (build_audit_trail): fns=ws_write,ws_query,ensure_audit_table,record_event,get_server_history | consts=WRITE_SERVICE_URL,QUERY_URL,AUDIT_TABL
+- `backup_service.py` (build_backup_service): fns=check_single_instance,send_heartbeat,backup_table,cleanup_old_backups,write_backup_manifest | consts=SERVICE_NAME,WR
+- `sentinel_sdk.py` (build_sdk_client): consts=DEFAULT_BASE_URL,WRITE_SERVICE_URL,QUERY_URL
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `sentinel_cli.py` (build_cli_main): fns=ws_query,ws_write,color_verdict,color_risk_tier,color_score | consts=RED,GREEN,YELLOW
+- `queue_manager.py` (build_queue_manager): fns=ws_query,ws_write,get_approval_submitted_servers,get_mesh_submitted_servers,get_npm_official_servers | consts=WRITE_
+- `metrics_exporter.py` (build_metrics_exporter): fns=ws_query,ws_write,send_heartbeat,fetch_server_counts,fetch_trust_score_avg | consts=SERVICE_NAME,PORT,WRITE_SERVICE_
+- `github_pr_checker.py` (build_github_pr_checker): fns=ws_query,get_github_headers,parse_pr_url,fetch_pr_diff,fetch_pr_files | consts=WRITE_SERVICE,QUERY_URL,RISK_TIER_THR
+- `exemption_manager.py` (build_exemption_manager): fns=ws_execute,ws_write,ws_query,ensure_exemptions_table,grant_exemption | consts=WRITE_SERVICE_URL,EXECUTE_URL,QUERY_UR
+- `npm_webhook_handler.py` (build_npm_webhook_handler): fns=ws_query,ws_write,ws_execute,check_single_instance,send_heartbeat | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `remediation_advisor.py` (build_remediation_advisor): fns=ws_query,ws_write,ws_execute,ensure_remediation_table,get_server_verdict | consts=WRITE_SERVICE_URL,QUERY_SERVICE_UR
+- `cve_enricher.py` (build_cve_enricher): fns=get_write_url,get_query_url,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `behavioral_analyser.py` (build_behavioral_analyser): fns=check_single_instance,ws_query,ws_write,send_heartbeat,ensure_threat_table | consts=SERVICE_NAME,WRITE_SERVICE_URL,Q
+- `threat_correlator.py` (build_threat_correlator): fns=get_write_url,get_execute_url,get_query_url,send_heartbeat,ws_query | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_
+- `anomaly_detector.py` (build_anomaly_detector): fns=get_write_url,get_execute_url,get_query_url,ws_query,ws_write | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `similarity_scorer.py` (build_similarity_scorer): fns=name_similarity,description_similarity,find_similar_to_known_threats,find_namespace_squatting,compute_name_hash | co
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `performance_monitor.py` (build_performance_monitor): fns=ws_query,ws_write,send_heartbeat,measure_latency,check_service_health | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_
+- `manifest_blast_radius.py` (build_manifest_blast_radius): fns=ws_query,ws_write,send_heartbeat,check_single_instance,fetch_manifest_tools | consts=SERVICE_NAME,WRITE_SERVICE_URL,
+- `shodan_exposure_correlator.py` (build_shodan_exposure_correlator): fns=check_single_instance,get_servers_with_urls,resolve_hostname,query_shodan,extract_cves | consts=SERVICE_NAME,SHODAN_
+- `github_repo_velocity.py` (build_github_repo_velocity): fns=get_github_headers,rate_limit_call,get_with_retry,check_single_instance,send_heartbeat | consts=SERVICE_NAME,PORT,WR
+- `npm_typo_squatter.py` (build_npm_typo_squatter): fns=levenshtein,apply_homoglyph_normalization,check_homoglyph_similarity,is_scope_variant,ws_query | consts=WRITE_SERVIC
+- `prompt_injection_scanner.py` (build_prompt_injection_scanner): fns=check_single_instance,get_write_url,get_query_url,ws_query,ws_write | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_
+- `context_manipulation_detector.py` (build_context_manipulation_detector): fns=check_single_instance,remove_pid_file,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECU
+- `sybil_burst_detector.py` (build_sybil_burst_detector): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `tool_schema_deep_scanner.py` (build_tool_schema_deep_scanner): fns=ws_query,ws_write,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_URL
+- `mcp_impersonation_detector.py` (build_mcp_impersonation_detector): fns=ws_query,ws_write,send_heartbeat,check_single_instance,remove_pid_file | consts=WRITE_SERVICE_URL,QUERY_URL,EXECUTE_
+- `dependency_chain_auditor.py` (build_dependency_chain_auditor): fns=ws_query,ws_write,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `threat_feed_aggregator.py` (build_threat_feed_aggregator): fns=check_single_instance,remove_pid_file,get_write_url,get_execute_url,get_query_url | consts=SERVICE_NAME,PORT,WRITE_S
+- `cross_registry_correlator.py` (build_cross_registry_correlator): fns=get_write_url,get_query_url,get_execute_url,get_db_path,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `trust_score_time_series.py` (build_trust_score_time_series): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `runtime_behaviour_profiler.py` (build_runtime_behaviour_profiler): fns=ws_query,ws_write,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERV
+- `mcp_age_risk_scorer.py` (build_mcp_age_risk_scorer): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `approval_anomaly_detector.py` (build_approval_anomaly_detector): fns=get_write_url,get_query_url,get_execute_url,get_db_path,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `vendor_concentration_monitor.py` (build_vendor_concentration_monitor): fns=ws_query,ws_write,get_write_url,send_heartbeat,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `certificate_analyser.py` (build_certificate_analyser): fns=ws_query,ws_write,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERV
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `manual_override_api.py` (rebuild_manual_override_api): fns=ws_write,ws_query,send_heartbeat,check_single_instance,ensure_override_metadata_table | consts=SERVICE_NAME,PORT,WRI
+- `advanced_filter_api.py` (rebuild_advanced_filter_api): fns=log,remove_pid_file,signal_handler,check_single_instance,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_U
+- `compliance_export_service.py` (rebuild_compliance_export): fns=log,ws_query,ws_write,ws_execute,get_db_path | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `forensic_detail_api.py` (rebuild_forensic_detail_api): fns=ws_query,ws_write,send_heartbeat,heartbeat_loop,get_registry_record | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE
+- `mcp_detail_view.html` (retry_mcp_detail_view_ui): module
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `config_validator.py` (build_config_validator): fns=create_table,drop_table,create_all,run
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `email_guid_auth.py` (rebuild_email_guid_auth): fns=check_single_instance,remove_pid_file,ws_query,ws_write,ws_execute | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisor_auto_updater.py` (supervisor_auto_updater): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,PORT,PID_FILE
+- `stateful_trust_monitor.py` (generate_stateful_trust_monitor): fns=check_single_instance,send_heartbeat,query_servers,get_baseline_scores,log_trust_drift | consts=POLL_SECS,DRIFT_THRE
+- `live_threat_cross_referencer.py` (build_live_threat_cross_referencer): fns=load_processed_events,save_processed_events,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,PORT,WRITE_SERVIC
+- `incident_webhook_dispatcher.py` (build_incident_webhook_dispatcher): fns=get_write_url,get_execute_url,get_query_url,check_single_instance,remove_pid_file | consts=SERVICE_NAME,PORT,WRITE_S
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `live_threat_cross_referencer.py` (build_live_threat_cross_referencer): fns=get_write_url,get_query_url,get_execute_url,ws_query,ws_write | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `config_validator.py` (build_config_validator): fns=create_tables | consts=EXECUTE_URL,TABLES
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=get_write_url,get_query_url,get_execute_url,ws_query,ws_write | consts=SERVICE_NAME,QUERY_URL,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_query,ws_write,ensure_tables,run | consts=SERVICE_NAME,QUERY_URL,WRITE_SERVICE_URL
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=check_single_instance,get_write_url,get_execute_url,get_query_url,get_db_path | consts=WRITE_SERVICE_URL,EXECUTE_URL
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `RETIRED_run_architect_test.py` (RETIRED_run_architect_test): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `RETIRED_run_schema_bootstrap_now.py` (RETIRED_run_schema_bootstrap_now): fns=get_db_path,get_write_url,get_execute_url,check_single_instance,ws_execute | consts=WRITE_SERVICE_URL,EXECUTE_URL,QU
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_db_path,check_single_instance,run | consts=SERVICE_NAME,WRITE_SERVICE_URL,EXECUTE_URL
+- `RETIRED_run_architect_test.py` (RETIRED_run_architect_test): fns=get_db_path,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `retired_placeholder_do_not_restore.txt` (RETIRED_fix_write_service_and_bootstrap_v3): fns=run
+- `retired_placeholder_do_not_restore.txt` (RETIRED_fix_write_service_and_bootstrap_v3): fns=run,cycle
+- `retired_placeholder_do_not_restore.txt` (RETIRED_reseed_mcp_registry_now): fns=run
+- `retired_placeholder_do_not_restore.txt` (RETIRED_patch_write_service_pks_and_start_pipeline): fns=run,cycle
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_query,ws_write,ws_execute,ensure_tables,fetch_toolbench_grades | consts=SERVICE_NAME,QUERY_URL,WRITE_SERVICE_URL
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=WRITE_SERVICE_URL,EXECUTE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=run
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=run
+- `RETIRED_run_architect_test.py` (RETIRED_run_architect_test): fns=get_write_url,get_execute_url,get_query_url,get_db_path,ws_write | consts=WRITE_SERVICE_URL,EXECUTE_URL,QUERY_URL
+- `RETIRED_run_architect_test.py` (RETIRED_run_architect_test): fns=get_db_path,get_write_url,get_query_url,get_execute_url,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `retired_placeholder_do_not_restore.txt` (RETIRED_fix_write_service_and_bootstrap_v3): fns=ws_write,ws_query,heartbeat,run | consts=WRITE_SERVICE_URL
+- `retired_placeholder_do_not_restore.txt` (RETIRED_fix_write_service_and_bootstrap_v3): fns=ws_write,ws_query,heartbeat,run | consts=WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=signal_handler,check_single_instance,remove_pid_file,get_db_path,get_write_url | consts=SERVICE_NAME,PORT,WRITE_SERV
+- `RETIRED_run_architect_test.py` (RETIRED_run_architect_test): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=WRITE_SERVICE_URL,EXECUTE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVI
+- `RETIRED_run_architect_test.py` (RETIRED_run_architect_test): fns=get_write_url,get_execute_url,get_query_url,get_db_path,ws_query | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `retired_placeholder_do_not_restore.txt` (RETIRED_fix_write_service_and_bootstrap_v3): fns=run,send_data
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_write_url,get_execute_url,get_query_url,get_db_path,ws_query | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=get_write_url,get_query_url,ws_query,ws_write,ensure_tables | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=run
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=signal_handler,remove_pid_file,check_single_instance,get_db_path,ws_query | consts=SERVICE_NAME,PORT,WRITE_SERVICE_U
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,ws_write,ws_query,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_db_path,get_write_url,get_execute_url,get_query_url,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVI
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_db_path,get_write_url,get_execute_url,get_query_url,remove_pid_file | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_write_url,get_execute_url,get_query_url,get_db_path,check_single_instance | consts=SERVICE_NAME,PORT
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=run
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=run
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=create_table,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_write_url,get_execute_url,get_query_url,get_db_path,remove_pid_file | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=run,check_single_instance,get_write_url,get_execute_url,get_query_url
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_db_path,check_single_instance,remove_pid_file,signal_handler,get_write_url | consts=SERVICE_NAME,PORT,WRITE_SERV
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `RETIRED_fix_sequence_tables_restart_pipeline.py` (RETIRED_fix_sequence_tables_restart_pipeline): fns=get_db_path,get_write_url,get_execute_url,get_query_url,remove_pid_file | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=run
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=get_write_url,ws_write,send_heartbeat,ensure_tables,fetch_toolbench_grades | consts=SERVICE_NAME,WRITE_SERVICE_URL,Q
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=get_db_path,check_single_instance,remove_pid_file,get_write_url,get_execute_url | consts=SERVICE_NAME,PORT,QUERY_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_write,ws_query,send_heartbeat,check_single_instance,get_db_path | consts=SERVICE_NAME,QUERY_URL,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_query,ws_write,send_heartbeat,ensure_tables,fetch_toolbench_grades | consts=SERVICE_NAME,QUERY_URL,WRITE_SERVICE_
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_execute,ws_query,ws_write,ensure_tables,fetch_toolbench_grades | consts=EXECUTE_URL,WRITE_SERVICE_URL,QUERY_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_query,ws_write,fetch_toolbench_grades,ensure_tables,run | consts=SERVICE_NAME,QUERY_URL,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,QUERY_URL,EXECUTE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ws_write,run | consts=SERVICE_NAME,WRITE_SERVICE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=signal_handler,remove_pid_file,check_single_instance,get_write_url,get_query_url | consts=SERVICE_NAME,PORT,WRITE_SE
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,ws_write,ws_query,run | consts=SERVICE_NAME,LOG,FETCH_TIMEOUT
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=create_table,run | consts=SERVICE_NAME
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,run | consts=SERVICE_NAME
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=check_single_instance,remove_pid_file,get_db_path,ensure_tables,fetch_toolbench_grades | consts=SERVICE_NAME,PID_FIL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=create_table,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELA
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,ws_query,ws_write,run | consts=SERVICE_NAME,QUERY_URL,EXECUTE_URL
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=get_write_url,get_query_url,get_db_path,check_single_instance,remove_pid_file | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `arcade_toolbench_ingestor.py` (arcade_toolbench_ingestor): fns=ensure_tables,fetch_toolbench_grades,ws_write,ws_query,run | consts=SERVICE_NAME,FETCH_TIMEOUT,FETCH_DELAY_SUCCESS
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `supervisord_sentinel_full.conf` (phase6b_sentinel_supervisor): config/raw
+- `status.sh` (build_status_sh): consts=DAEMONS,PORTS["approval_workflow"],PORTS["registry_api"]
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=ws_query,ws_write,ensure_mesh_events_table,log_resolution_result,extract_module_names | consts=WRITE_SERVICE_URL,QUE
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=resolve_dependencies | consts=WRITE_SERVICE_URL
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=ws_write,get_stdlib_modules,extract_imports_from_code,extract_imports_from_file,filter_stdlib | consts=WRITE_SERVICE
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=get_stdlib_modules,extract_imports_from_code,filter_stdlib,check_installed,install_module | consts=WRITE_SERVICE_URL
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=log_event,resolve_dependencies | consts=WRITE_SERVICE_URL
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=get_stdlib_modules,extract_imports_from_code,extract_imports_from_file,filter_stdlib,check_installed | consts=WRITE_
+- `auto_dependency_resolver.py` (auto_dependency_resolver): fns=resolve_dependencies | consts=WRITE_SERVICE_URL
+- `config_validator.py` (fix_config_validator_raw): config/raw
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report
+- `alert_dispatcher.py` (build_alert_dispatcher): fns=ws_write,ws_query,dispatch_alert,get_recent_alerts | consts=WRITE_SERVICE_URL
+- `scan_scheduler.py` (build_scan_scheduler): fns=run,cycle
+- `compliance_exporter.py` (build_compliance_exporter): module
+- `alert_dispatcher.py` (build_alert_dispatcher): fns=ws_write,ws_query,dispatch_alert,get_recent_alerts | consts=WRITE_SERVICE_URL
+- `scan_scheduler.py` (build_scan_scheduler): fns=build_scan_scheduler
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report
+- `alert_dispatcher.py` (build_alert_dispatcher): fns=ws_write,ws_query,dispatch_alert,get_recent_alerts | consts=WRITE_SERVICE_URL
+- `scan_scheduler.py` (build_scan_scheduler): fns=schedule_scan,get_pending_scans,mark_scan_complete,run
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report,run
+- `alert_dispatcher.py` (build_alert_dispatcher): fns=ws_write,ws_query,dispatch_alert,get_recent_alerts | consts=WRITE_SERVICE_URL
+- `scan_scheduler.py` (build_scan_scheduler): fns=schedule_scan,get_pending_scans,mark_scan_complete,get_last_heartbeat,run
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report
+- `scan_scheduler.py` (build_scan_scheduler): module
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report
+- `scan_scheduler.py` (build_scan_scheduler): fns=schedule_scan,get_pending_scans,mark_scan_complete,run
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report
+- `compliance_exporter.py` (build_compliance_exporter): fns=run
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report,get_mcp_servers,export_compliance_report
+- `config_validator.py` (fix_config_validator_raw): config/raw
+- `compliance_exporter.py` (build_compliance_exporter): fns=export_compliance_report
+- `alert_dispatcher.py` (build_alert_dispatcher): fns=ws_write,ws_query,dispatch_alert,get_recent_alerts | consts=WRITE_SERVICE_URL
+- `config_validator.py` (build_config_validator): fns=create_table,create_audit_log,validate_config,build_config_validator
+- `scan_scheduler.py` (build_scan_scheduler): fns=schedule_scan,get_pending_scans,mark_scan_complete,run
+- `threat_feed_api.py` (build_threat_feed_api): fns=ws_query,ws_write,send_heartbeat,health,get_threats | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `signal_analyser_v2.py` (unknown): fns=check_single_instance,remove_pid_file,signal_handler,utc_now_iso,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,WR
+- `sentinel_status.html` (generate_sentinel_status_dashboard): module
+- `api_health_checker.py` (build_api_health_checker): module
+- `graphql_schema_builder.py` (rebuild_graphql_schema_builder): fns=signal_handler,check_single_instance,remove_pid_file,send_heartbeat,get_db_path | consts=SERVICE_NAME,SERVICE_PORT,W
+- `pi_corpus_ingest.py` (rebuild_pi_corpus_ingest_quarantined): fns=signal_handler,remove_pid_file,check_single_instance,get_write_url,get_query_url | consts=SERVICE_NAME,WRITE_SERVICE
+- `mesh_sentinel_reporter.py` (build_mesh_sentinel_reporter): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,PID_FILE,PORT
+- `trust_synthesiser_v2.py` (generate_trust_synthesiser_v2): fns=check_single_instance,remove_pid_file,signal_handler,get_write_url,get_execute_url | consts=SERVICE_NAME,PORT,WRITE_
+- `pi_scorer.py` (build_pi_scorer): fns=get_write_url,get_query_url,get_execute_url,get_db_path,ws_query | consts=Threshold 0.80,SERVICE_NAME,PORT
+- `pi_harness_runner.py` (build_pi_harness_runner): fns=check_single_instance,remove_pid_file,signal_handler,get_write_url,get_query_url | consts=SERVICE_NAME,PORT,WRITE_SE
+- `mcp_submission_portal.html` (build_mcp_submission_portal): module
+- `build_pi_quarantine_promoter.py` (build_pi_quarantine_promoter): fns=ws_write,ws_execute,ws_query,check_single_instance,remove_pid_file | consts=WRITE_SERVICE_URL,EXECUTE_URL,QUERY_URL
+- `pi_quarantine_reviewer.py` (build_pi_quarantine_reviewer): fns=signal_handler,remove_pid_file,check_single_instance,ensure_directories,get_existing_hashes | consts=SERVICE_NAME,WR
+- `pi_quarantine_promoter.py` (build_pi_quarantine_promoter_auto): fns=log,ws_write,ws_query,ws_execute,ensure_table | consts=SERVICE_NAME,REVIEW_APPROVED,REVIEW_PROMOTED
+- `pi_flagged_review_api.py` (build_pi_flagged_review_api): fns=ws_write,heartbeat_loop,validate_hash,load_json_file,count_files_in_dir | consts=SERVICE_NAME,FLAGGED_DIR,REJECTED_D
+- `build_pi_quarantine_promoter_auto.py` (build_pi_quarantine_promoter_auto): fns=log,check_single_instance,remove_pid_file,signal_handler,ws_write | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `snow_connector.py` (snow_connector): fns=sanitize_for_log,check_prompt_injection,ws_write,validate_snow_oauth_token,validate_snow_signature | consts=SERVICE_
+- `aidr_commit_gateway.py` (aidr_commit_gateway_build): fns=log,signal_handler,remove_pid_file,check_single_instance,ws_query | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(parents
+- `email_guid_auth_compact.py` (rebuild_email_guid_auth_compact): fns=log,check_single_instance,remove_pid_file,signal_handler,ws_write | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_U
+- `start_all.sh` (rebuild_start_all_sh): consts=KNOWN_DAEMONS,WRITE_SERVICE_URL
+- `approval_evidence_bundler.py` (approval_evidence_bundler): fns=utc_now_iso,compute_sha256,compute_blob_sha256,ws_query,ws_execute | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_
+- `trust_synthesiser_v2_review.py` (quality_pass_trust_synthesiser_v2): fns=main
+- `import_fixer.py` (fix_smoke_import_failures): fns=check_file_imports,fix_registry_api,fix_rug_pull_monitor,fix_signal_analyser,main | consts=SERVICE_DIR,TARGET_FILES
+- `trust_synthesiser_v2_audit.py` (trust_synthesiser_v2_quality_check): fns=read_source,query_mcp_signal_scores_schema,query_injection_resilience_signals,check_injection_resilience_implementat
+- `trust_synthesiser_v3.py` (rewrite_trust_synthesiser_v3): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `supply_chain_enrichment.py` (build_supply_chain_enrichment): fns=compute_score | consts=SERVICE_NAME,TRUSTED_REGISTRIES
+- `domain_trust_enrichment.py` (build_domain_trust_enrichment): fns=ws_write,ws_query,compute_score,log_enrichment_audit,get_registered_domains_requiring_enrichment | consts=SERVICE_NA
+- `community_signal_enrichment.py` (build_community_signal_enrichment): fns=sigmoid,softmax_weight,log_normalize,hash_string,compute_score | consts=SERVICE_NAME,SIGNAL_NAME,VERSION
+- `temporal_stability_enrichment.py` (build_temporal_stability_enrichment): fns=parse_iso_date,compute_score,run | consts=LOG,SIGNAL_NAME,VERSION
+- `permission_scope_enrichment.py` (build_permission_scope_enrichment): fns=compute_score,generate_fingerprint_id
+- `tool_description_safety_enrichment.py` (tool_description_safety_enrichment): fns=sigmoid,log_normalize,softmax_weight,score_description_quality,score_schema_complexity | consts=LOG_DIR,LOG_FILE,SIG
+- `domain_trust_enrichment_v2.py` (build_domain_trust_enrichment_v2): fns=get_tld_from_url,score_registry_source,score_age_days,score_download_count,score_dependency_count | consts=SERVICE_N
+- `mcp_detail_view_ui.html` (build_mcp_detail_view_ui): module
+- `start_all_sh.py` (rebuild_start_all_sh): fns=check_single_instance,get_uptime_seconds,send_heartbeat,wait_for_service,start_service | consts=SERVICE_PORT,HEARTBE
+- `sentinel_external_api.py` (build_sentinel_external_api): fns=load_api_keys,verify_api_key,check_rate_limit,ws_query,setup_logging | consts=SERVICE_NAME,PORT,HOST
+- `sentinel_external_api.md` (build_sentinel_external_api_md): module
+- `retention_sweeper.py` (build_retention_sweeper): fns=check_single_instance,remove_pid_file,write_pid,signal_handler,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,WRIT
+- `exemption_expirer.py` (build_exemption_expirer): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_execute | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `admin_exemptions.html` (build_admin_exemptions_html): module
+- `admin_policies.html` (build_admin_policies_html): module
+- `admin_submissions.html` (build_admin_submissions_html): module
+- `attestation_refresher.py` (build_attestation_refresher): fns=utc_now_iso,ws_write,ws_query,ws_execute,check_single_instance | consts=SERVICE_NAME,PORT,PID_FILE
+- `signal_enrichment_aggregator.py` (build_signal_enrichment_aggregator): fns=remove_pid_file,signal_handler,check_single_instance,ws_query,ws_write | consts=PID_FILE,SERVICE_NAME,WRITE_SERVICE_
+- `supply_chain_enrichment_v2.py` (supply_chain_enrichment_v2): fns=sigmoid,softmax_weight,log_normalize,hash_string,score_registry_source | consts=LOG,SERVICE_NAME,SIGNAL_NAME
+- `temporal_stability_enrichment_v2.py` (temporal_stability_enrichment_v2): fns=utc_now_iso,parse_iso_date,compute_days_between,sigmoid,log_normalize | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVI
+- `community_signal_enrichment_v2.py` (community_signal_enrichment_v2): fns=sigmoid,softmax_weight,log_normalize,hash_string,score_stars | consts=MAX_STARS_SCORE,MAX_DOWNLOAD_SCORE,MAX_AGE_SCO
+- `e2e_scenarios.py` (rebuild_e2e_scenarios): fns=scenario_1_new_mcp_to_verdict,scenario_2_verdict_to_attestation_to_ui,scenario_3_threat_intel_overlay_to_risk_update
+- `snow_connector_wiring.py` (build_snow_connector_wiring): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_S
+- `temporal_stability_enrichment_v3.py` (build_temporal_stability_enrichment_v3): fns=parse_iso_date,compute_days_between,sigmoid,compute_score,get_score_band | consts=LOG,SERVICE_NAME,SIGNAL_NAME
+- `supply_chain_enrichment_v3.py` (fix_supply_chain_enrichment_flat_signal): fns=score_age_days,score_download_count,score_dependency_count,score_publisher_verified,score_stars | consts=WEIGHTS,REG
+- `community_signal_enrichment_v3.py` (fix_community_signal_enrichment_weak_signal): fns=ws_query,ws_write,ws_execute,check_single_instance,remove_pid_file | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `mcp_detail_view_ui_v2.html` (rebuild_mcp_detail_view_ui): module
+- `diagnostic_rug_pull_monitor.py` (diagnostic_rug_pull_monitor_stale): fns=get_last_heartbeat,check_pid_file,read_stderr,diagnose_stale_heartbeat,run
+- `injection_resilience_enrichment.py` (build_injection_resilience_enrichment): fns=sigmoid,softmax_weight,log_normalize,hash_string,utc_now_iso | consts=LOG_DIR,LOG_FILE,SERVICE_NAME
+- `community_signal_enrichment_v4.py` (community_signal_enrichment_v4): fns=compute_score,get_score_band,run | consts=SIGNAL_NAME,MAX_SCORE,VERSION
+- `snow_connector_integration.py` (build_snow_connector_integration): fns=ws_write,ws_query,ws_execute,utc_now_iso,check_prompt_injection | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `OPERATIONS.md` (operations_documentation): module
+- `build_start_all_sh.py` (rebuild_build_start_all_sh): fns=generate_shell_script
+- `sentinel_external_api_v2_signals.py` (extend_external_api_signals): fns=register_routes,create_signals_router | consts=SERVER_ID_PATTERN
+- `retry_build_failures.py` (retry_failed_build_modules): fns=retry_build_failures
+- `sentinel_external_api_v2_attestation.py` (extend_external_api_attestation): fns=ws_query,get_rate_limiter,enforce_rate_limit,validate_server_id,register_routes | consts=WRITE_SERVICE_URL,QUERY_SER
+- `sentinel_external_api_v2_history.py` (extend_external_api_history): fns=ws_query,server_exists,get_rate_limiter,enforce_rate_limit,register_routes | consts=WRITE_SERVICE_URL,QUERY_URL,SERV
+- `ARCHITECTURE.md` (architecture_documentation): module
+- `signal_analyser_diagnostic.py` (diagnose_stale_signal_analyser): module
+- `aidr_commit_enforcement_test.py` (phase9_aidr_commit_gateway_enforcement): fns=ws_query,ws_write,ws_execute,setup_test_tables,cleanup_test_tables | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SER
+- `unknown.py` (unknown): fns=check_pid_file,is_process_running,get_process_uptime,read_stderr,get_last_heartbeat | consts=SERVICE_NAME,PID_FILE,W
+- `permission_scope_enrichment_v2.py` (permission_scope_enrichment_v2): fns=sigmoid,softmax_weight,log_normalize,hash_string,normalize_permission_name | consts=SIGNAL_NAME,VERSION,MAX_SCORE
+- `tool_description_safety_enrichment_v2.py` (build_tool_description_safety_enrichment_v2): fns=sigmoid,log_normalize,softmax_weight,hash_string,score_tool_name_safety | consts=SERVICE_NAME,LOG_DIR,LOG_FILE
+- `pilot_harness.py` (pilot_harness_framework): fns=run_pilot,write_pilot_report,gate_production_deploy | consts=DIRECTIVE_ID_PATTERN
+- `threat_feed_cache.py` (threat_feed_cache_refresher): fns=ws_execute,ws_query,ensure_table,compute_id,extract_hostname | consts=SERVICE_NAME,WRITE_SERVICE,EXECUTE_URL
+- `smoke_import_diagnostic.py` (diagnose_smoke_import_failures): fns=ws_query,ws_write,diagnose | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_FILE
+- `aidr_verdict_gate.py` (aidr_verdict_gate_wiring): fns=get_write_url,get_query_url,get_execute_url,ws_query,ws_write | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `github_pr_webhook_receiver.py` (github_pr_webhook_wiring): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,PORT,PID_FILE
+- `signal_discrimination_auditor.py` (build_signal_discrimination_auditor): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,PID_FILE,LOG_FILE
+- `admin_attestations.html` (build_admin_attestations_html): module
+- `signal_discrimination_reporter.py` (build_signal_discrimination_reporter): fns=run,cycle
+- `mcp_directory_ingestor.py` (new_mcp_directory_ingestors): fns=check_single_instance,write_pid,remove_pid_file,signal_handler,ws_write | consts=LOG,SERVICE_NAME,PORT
+- `aidr_commit_enforcement.py` (build_aidr_verdict_gate_wiring): fns=get_session,ws_write,ws_query,ws_execute,send_heartbeat | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `snow_approval_integration.py` (wire_snow_connector_approval_workflow): fns=make_snow_request,is_token_fresh,ensure_valid_token,verify_snow_webhook_signature,get_server_verdict | consts=PORT,S
+- `github_pr_verdict_gate.py` (build_github_pr_verdict_integration): fns=cycle,run
+- `aidr_verdict_enforcer.py` (aidr_commit_gateway_verdict_check): fns=remove_pid_file,check_single_instance,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `attestation_dynamic_evidence_check.py` (attestation_dynamic_evidence_check): fns=ws_write,ws_query,heartbeat,check_attestation_text,run | consts=WRITE_SERVICE_URL
+- `smoke_import_diagnostic_v2.py` (smoke_failure_diagnostic): fns=run,cycle,smoke_import_diagnostic_v2,main
+- `graphql_schema_builder_v2.py` (retry_graphql_schema_builder): fns=check_single_instance,remove_pid_file,signal_handler,send_heartbeat,run | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `signal_discrimination_enhancer.py` (build_signal_discrimination_enhancer): fns=log,get_write_url,get_query_url,get_execute_url,ws_write | consts=SERVICE_NAME,PORT,POLL_SECS
+- `email_guid_auth_v2.py` (rebuild_email_guid_auth_v2): fns=remove_pid_file,signal_handler,check_single_instance,ws_query,ws_write | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `compliance_export_service_v2.py` (rebuild_compliance_export_service_v2): fns=ws_query,ws_write,utc_now_iso,check_single_instance,remove_pid_file | consts=SERVICE_NAME,PORT,PID_FILE
+- `aidr_verdict_gate_test.py` (aidr_verdict_enforcement_test): fns=log,ws_query,ws_write,ws_execute,ensure_test_tables | consts=WRITE_SERVICE,QUERY_SERVICE,EXECUTE_SERVICE
+- `enrichment_wiring_verifier.py` (verify_enrichment_wiring_for_weak_signals): fns=ws_query,ws_write,check_module_importable,test_compute_score,check_mcp_signal_enrichments | consts=WRITE_SERVICE,QUE
+- `rug_pull_monitor_diagnostic.py` (diagnose_rug_pull_monitor_stale): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=WRITE_SERVICE_URL,SERVICE_NAME,SERVI
+- `signal_enrichment_wiring_check.py` (verify_signal_enrichment_wiring): fns=verify_signal_enrichment_wiring,check_score_flow,report_health,run | consts=WRITE_SERVICE_URL,REQUIRED_SIGNAL_TYPES
+- `github_pr_webhook_wiring.py` (build_github_pr_webhook_wiring): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `stale_daemon_recovery_checker.py` (build_stale_daemon_recovery_checker): fns=run
+- `aidr_gateway_verdict_test.py` (test_aidr_gateway_verdict_enforcement): fns=ws_query,ws_write,ws_execute,log_result,create_test_server | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERVICE_URL
+- `trust_synthesiser_v2_injection_check.py` (check_trust_synthesiser_v2_injection_dimension): fns=check_trust_synthesiser_v2,get_injection_resilience_score,check_injection_resilience_threshold,enrich_trust_score | 
+- `aidr_commit_gateway_integration.py` (build_aidr_commit_gateway_integration): fns=send_heartbeat,check_single_instance,remove_pid_file,signal_handler,heartbeat_loop | consts=SERVICE_NAME,PORT,WRITE_
+- `temporal_stability_signal_auditor.py` (temporal_stability_signal_auditor): fns=get_utc_now_iso,send_heartbeat,query_signal_scores,compute_audit,report_audit | consts=WRITE_SERVICE_URL,SERVICE_NAM
+- `attestation_dynamic_evidence_review.py` (review_attestation_engine_dynamic): fns=run
+- `snow_inbound_webhook.py` (service_now_inbound_wiring): fns=log,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `github_pr_verdict_gate_v2.py` (github_pr_webhook_complete): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=LOG_FILE,SERVICE_NAME,PORT
+- `trust_synthesiser_v2_integration_verify.py` (verify_trust_synthesiser_v2_integration): fns=check_single_instance,send_heartbeat,query_database,verify_signal_scores_table,verify_injection_resilience_dimension
+- `attestation_evidence_extender.py` (attestation_dynamic_evidence_extension): fns=run
+- `signal_discrimination_audit_runner.py` (signal_discrimination_audit_runner): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,send_heartbeat | consts=SERVICE_NAME,PID_FILE,LOG_FILE
+- `permission_scope_enrichment_v3.py` (rebuild_permission_scope_enrichment): fns=sigmoid,softmax_weight,log_normalize,hash_string,normalize_permission_name | consts=SIGNAL_NAME,VERSION,MAX_SCORE
+- `mcp_traffic_fingerprints.py` (build_mcp_traffic_fingerprints): fns=detect_mcp_methods,has_jsonrpc_version,has_protocol_version,is_mcp_traffic,extract_session_indicators | consts=SERVI
+- `sentinel_intel_feed.py` (build_sentinel_intel_feed): fns=score_insight,fetch_recent_article_insights,load_latest_wisdom_briefing,build_intel_map_section | consts=WRITE_SERVI
+- `scanner_traffic_fingerprint_wiring.py` (wire_mcp_scanner_traffic_fingerprints): fns=write_signal_score,get_pending_scans,analyze_server_traffic,process_fingerprint_signals,run_daemon | consts=Writes r
+- `diagnose_smoke_failures_rug_registry_signal.py` (diagnose_smoke_failures_rug_registry_signal): fns=diagnose_smoke_failures_rug_registry_signal,inspect_all_imports,inspect_module_dependencies,get_runtime_signals | co
+- `mcp_traffic_fingerprints_wiring.py` (mcp_traffic_fingerprints_wiring): fns=ws_write,ws_query,ws_execute,send_heartbeat,compute_mcp_fingerprint | consts=SERVICE_NAME,LOG_FILE,WRITE_SERVICE_URL
+- `trust_synthesiser_v2_pi_audit.py` (verify_trust_synthesiser_v2_dimension): fns=audit_trust_synthesiser_v2
+- `snow_connector_integration_review.py` (review_snow_connector_integration): module
+- `mcp_tool_schema_patterns.py` (build_mcp_tool_schema_patterns_library): fns=detect_tool_pattern,compute_context_efficiency_score
+- `shadow_mcp_indicators.py` (build_shadow_mcp_indicators_library): fns=is_shadow_mcp_url,is_shadow_mcp_hostname,detect_shadow_patterns | consts=SHADOW_MCP_PATHS,SHADOW_PATH_PATTERNS,KNOWN
+- `aidr_gateway_verdict_test_v2.py` (aidr_gateway_verdict_test_wiring): fns=ws_write,ws_query,ws_execute,create_test_server,call_gateway_commit | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL,EXE
+- `enrichment_discrimination_diagnostic.py` (diagnose_signal_enrichment_discrimination_gap): fns=load_modules,compute_score,analyze_scores,diagnose_signal_enrichment_discrimination_gap
+- `diagnose_write_service_stale.py` (diagnose_stale_write_service): fns=ws_query,is_service_stale,run | consts=WRITE_SERVICE_URL,HEALTH_THRESHOLD_SECONDS
+- `diagnose_import_traces_rug_registry_signal.py` (diagnose_import_traces): fns=ws_write,heartbeat,inspect_imports,run | consts=WRITE_SERVICE_URL
+- `diagnose_smoke_failures_20260424.py` (diagnose_smoke_failures_core_modules): fns=ws_write,heartbeat,check_import,check_circular_dependency,verify_dependencies | consts=WRITE_SERVICE_URL
+- `mcp_detail_view_ui.py` (rebuild_mcp_detail_view_ui): fns=remove_pid_file,check_single_instance,signal_handler,log,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_U
+- `signal_analyser_enrichment_consumer_v2.py` (build_signal_analyser_enrichment_consumer): fns=log,get_write_url,get_query_url,get_execute_url,ws_query | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_write_service_stale_check.py` (diagnose_write_service_stale): fns=check_http_connectivity,check_heartbeat_entries,check_service_process,check_duckdb_locks,check_write_errors | consts
+- `diagnose_manager_agent_stale.py` (build_manager_agent_diagnostic): fns=run | consts=WRITE_SERVICE_URL,DUCKDB_PATH,MANAGER_AGENT_PID_FILE
+- `aidr_verdict_enforcement_test_v2.py` (build_aidr_verdict_enforcement_test): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `diagnose_inference_router_stale.py` (build_inference_router_diagnostic): fns=run
+- `scanner_fingerprint_wiring.py` (wire_scanner_fingerprint_integration): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `enrichment_wiring_validator.py` (validate_enrichment_signal_wiring): fns=run
+- `diagnose_stale_pipeline_daemons.py` (diagnose_stale_pipeline_daemons): fns=log,ws_query,ws_write,send_heartbeat,check_write_service_connectivity | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVI
+- `verify_signal_discrimination.py` (verify_signal_discrimination): module
+- `temporal_stability_wiring.py` (integrate_temporal_stability_wiring): fns=query_temporal_stability_signals,aggregate_stability_by_server,get_composite_signal_contribution,validate_data_flow,
+- `smoke_import_diagnostics_v2.py` (rebuild_smoke_import_fixer_v2): fns=check_single_instance,send_heartbeat,write_diagnostics,inspect_line_10_imports,test_import | consts=SERVICE_NAME,MET
+- `snow_connector_workflow_wiring.py` (wire_snow_connector_approval_workflow): fns=log,check_single_instance,remove_pid_file,signal_handler,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `snow_connector_integrator.py` (integrate_snow_connector_wiring_v2): fns=check_snow_ticket_status,resolve_ticket,get_ticket_audit_trail | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL
+- `shadow_mcp_indicators_test.py` (build_shadow_mcp_integration_test): module
+- `snow_connector_approval_wiring.py` (snow_connector_approval_wiring): fns=ws_query,ws_write,check_service_health,get_registry_verdict,process_pending_snow_tickets | consts=SERVICE_NAME,PORT,
+- `diagnose_ws_staleness_v2.py` (diagnose_write_service_staleness): fns=diagnose_ws_staleness
+- `aidr_commit_gateway_wiring_v2.py` (wire_aidr_commit_gateway_verdict_check): fns=check_single_instance,remove_pid_file,signal_handler,send_heartbeat,ws_query | consts=SERVICE_NAME,PORT,WRITE_SERVIC
+- `build_graphql_schema.py` (rebuild_build_graphql_schema): fns=extract_table_columns,generate_graphql_schema,generate_resolvers,get_mcp_by_name,get_mcp_list | consts=WRITE_SERVICE
+- `diagnose_mcp_scanner_stale.py` (diagnose_mcp_scanner_stale): fns=check_process_alive,get_last_log_entry,get_last_heartbeat,get_queue_depth,check_write_service_connectivity | consts=
+- `diagnose_smoke_failures_signal.py` (diagnose_smoke_failures_3modules): fns=ws_write,ws_query,heartbeat,run | consts=WRITE_SERVICE_URL
+- `snow_connector_completeness.py` (extend_snow_connector_wiring): fns=log,check_single_instance,remove_pid_file,signal_handler,get_utc_now_iso | consts=SERVICE_NAME,PORT,WRITE_SERVICE_UR
+- `diagnose_importlib_failures_all.py` (diagnose_smoke_failures_all_three): fns=write,run_cmd,inspect_sys_path,inspect_importlib_bootstrap,check_dependencies | consts=OUTPUT_FILE,PIP_CMD
+- `registry_promoter_daemon.py` (build_registry_promoter_daemon): fns=get_write_url,get_query_url,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_URL
+- `decision_emitter_daemon.py` (build_decision_emitter_daemon): fns=log,ws_query,ws_write,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `fingerprint_runner_daemon.py` (build_fingerprint_runner_daemon): fns=log,get_write_url,get_query_url,ws_query,ws_write | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERVICE_URL
+- `snow_connector_wiring_complete.py` (complete_snow_connector_wiring): fns=log_msg,check_single_instance,remove_pid_file,signal_handler,load_processed_events | consts=SERVICE_NAME,SERVICE_POR
+- `candidate_promoter_daemon.py` (promoter_uncap_and_flush_candidates): fns=check_single_instance,send_heartbeat,log,fetch_page,get_reg_count | consts=PID_FILE,SERVICE_NAME,POLL_SECS
+- `candidate_npm_promoter.py` (build_candidate_npm_promoter): fns=setup_logging,get_write_url,get_query_url,get_execute_url,get_db_path | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_
+- `fingerprint_runner_daemon_v2.py` (build_fingerprint_runner_daemon_v2): fns=get_server_ids | consts=MCP_SERVER_REGISTRY_URL,MCP_FINGERPRINTS_URL
+- `fingerprint_activator.py` (build_fingerprint_activator): fns=setup_logging,ws_query,ws_write,check_single_instance,send_heartbeat | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL,SE
+- `diagnose_self_diagnostics_stale.py` (self_diagnostics_stale_diagnostic): fns=write_service_query,write_service_execute,check_write_service_connectivity,check_daemon_logs,check_scheduled_run_tab
+- `fingerprint_runner_daemon_v3.py` (build_fingerprint_runner_daemon_v3): fns=check_single_instance,send_heartbeat,ws_query,ws_write,heartbeat_loop | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL,S
+- `aidr_verdict_enforcement_wiring.py` (wire_aidr_verdict_enforcement): fns=log,get_write_url,get_query_url,get_execute_url,ws_write | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `diagnose_permission_scope_weak_signal.py` (diagnose_permission_scope_weak_signal): module
+- `diagnose_signal_analyser_smoke.py` (diagnose_signal_analyser_smoke_failure): fns=check_single_instance,send_heartbeat,write_audit_log,get_smoke_log_content,parse_import_error | consts=SERVICE_NAME,
+- `diagnose_build_failures_april27.py` (diagnose_failed_build_modules): fns=get_failed_modules
+- `candidate_smithery_promoter.py` (build_candidate_smithery_promoter): fns=log,signal_handler,remove_pid_file,check_single_instance,ws_query | consts=SERVICE_NAME,PORT,PID_FILE
+- `discovery_npm_paginator.py` (build_discovery_npm_paginator): fns=log,load_cursor,save_cursor,load_pid_file,write_pid_file | consts=SERVICE_NAME,STATE_DIR,STATE_FILE
+- `discovery_github_paginator.py` (build_discovery_github_paginator): fns=log,check_single_instance,send_heartbeat,heartbeat_loop,get_github_headers | consts=SERVICE_NAME,SERVICE_PORT,WRITE_
+- `stale_signal_refresher.py` (build_stale_signal_refresher): fns=check_single_instance,send_heartbeat,ws_query,ws_write,get_stale_signals | consts=WRITE_SERVICE_URL,WRITE_API_URL,QU
+- `goal_progress_emitter.py` (build_goal_progress_emitter): fns=ws_write,ws_query,get_table_count,compute_progress_percentages,heartbeat | consts=WRITE_SERVICE_URL
+- `diagnose_build_failures_april28.py` (diagnose_build_failures_april28): fns=diagnose_build_failures_april28,run
+- `diagnose_email_guid_auth_build.py` (diagnose_build_email_guid_auth_failure): fns=ws_write,ws_query,heartbeat,read_source_file,check_imports | consts=WRITE_SERVICE_URL
+- `diagnose_signal_analyser_stale.py` (diagnose_signal_analyser_stale): fns=diagnose_signal_analyser_stale
+- `verify_trust_synthesiser_v2_pi.py` (verify_trust_synthesiser_v2_pi_dimension): fns=mcp_signal_scores,verify_trust_synthesiser_v2_pi_dimension,run,cycle
+- `pathway_to_20k.html` (build_pathway_to_20k_dashboard): module
+- `evidence_density_enrichment.py` (build_evidence_density_enrichment): fns=compute_score,get_fact_counts_for_server,ws_write,send_heartbeat,check_single_instance | consts=SIGNAL_NAME,VERSION,
+- `registry_breadth_enrichment.py` (build_registry_breadth_enrichment): fns=compute_score | consts=SIGNAL_NAME,VERSION,MAX_SCORE
+- `coverage_gap_reporter.py` (build_coverage_gap_reporter): fns=log,check_single_instance,remove_pid_file,signal_handler,send_heartbeat | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `smoke_static_safety.py` (build_smoke_static_safety_lint): fns=lint,run_tests,compute_score,dynamic_eval,dynamic_eval | consts=BLOCKING_REASONS,WARNING_REASONS
+- `pathway_api.py` (build_pathway_api): fns=ws_query,ws_write,send_heartbeat,heartbeat_loop,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVI
+- `aidr_verdict_enforcement_test_v3.py` (aidr_verdict_enforcement_test_v3): fns=start_mock_aidr_server,ws_query,ws_write,ws_execute,create_test_server | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY
+- `ladder_extensions.py` (build_ladder_extensions_v1): consts=EXTRA_RUNGS,TASK_MAX_ATTEMPTS
+- `diagnose_import_failures.py` (diagnose_smoke_import_failures): fns=check_sys_path,read_import_chains,check_sys_path_imports,check_dependency_availability,diagnose_smoke_import_failure
+- `aidr_commit_gateway_verdict_check.py` (build_aidr_commit_gateway_verdict_check): fns=run_service,validate_gateway,validate_score,validate_trusted,aidr_commit_gateway_verdict_check
+- `schema_bootstrap.py` (bootstrap_core_tables): fns=execute_ddl,create_tables,verify_tables,main | consts=WRITE_SERVICE,MAX_RETRIES,RETRY_DELAY
+- `diagnose_import_failures_cycle.py` (diagnose_failed_import_modules): fns=run
+- `diagnose_write_service_heartbeat.py` (diagnose_write_service_heartbeat_stale): fns=query_service_health,check_write_service_health_endpoint,check_running_heartbeat_processes,check_heartbeat_pid_files
+- `restart_rug_pull_monitor.py` (restart_rug_pull_monitor_service): fns=main
+- `context_efficiency_enrichment.py` (build_context_efficiency_enrichment): fns=sigmoid,softmax_weight,log_normalize,hash_string,compute_score | consts=SIGNAL_NAME,VERSION,MAX_SCORE
+- `verify_trust_synthesiser_v2_dimension.py` (verify_trust_synthesiser_v2_dimension): fns=query_db,write_audit,read_trust_synthesiser_source,verify_dimension_implementation,verify_signal_scores_data | const
+- `integrate_traffic_fingerprints.py` (integrate_mcp_traffic_fingerprints_scanner): fns=ws_write,ws_query,ws_execute,check_single_instance,remove_pid_file | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL,EXEC
+- `diagnose_write_service_staleness.py` (diagnose_write_service_staleness): fns=get_write_service_last_heartbeat,run_write_service_test,check_pid_file_and_process_liveness,diagnose_write_service_s
+- `wiring_snow_connector_to_approval.py` (wiring_snow_connector_to_approval): fns=read_snow_connector,create_integration_shim,wiring_snow_connector_to_approval,main
+- `diagnose_self_diagnostics.py` (diagnose_self_diagnostics_staleness): fns=ws_write,ws_query,heartbeat,check_staleness,diagnose_staleness | consts=WRITE_SERVICE_URL,STALENESS_THRESHOLD
+- `diagnose_wisdom_synthesiser.py` (diagnose_wisdom_synthesiser_staleness): fns=run
+- `diagnose_rug_pull_monitor.py` (diagnose_rug_pull_monitor_staleness): fns=diagnose_rug_pull_monitor_staleness
+- `candidate_github_promoter.py` (build_candidate_github_promoter): fns=log_info,log_error,send_heartbeat,heartbeat_loop,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `attestation_coverage_reporter_v3.py` (build_attestation_coverage_reporter_v3): fns=log,check_single_instance,remove_pid_file,ws_query,ws_write | consts=SERVICE_NAME,WRITE_SERVICE,QUERY_URL
+- `npm_metadata_backfiller.py` (build_npm_metadata_backfiller): fns=check_single_instance,ws_write,ws_query,send_heartbeat,fetch_npm_metadata | consts=POLL_SECS,PORT,WRITE_SERVICE_URL
+- `github_metadata_backfiller.py` (build_github_metadata_backfiller): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `zo_mcp_server_auth_patch.md` (build_mcp_endpoint_bearer_auth_v1): fns=login,create_access_token,get_current_user,create_user
+- `github_pr_checker_webhook_wiring.py` (github_pr_checker_webhook_wiring): fns=ws_query,ws_write,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,PORT,PID_FILE
+- `supervisord_persistence_runbook.md` (build_supervisord_persistence_runbook): consts=PHASE1_SERVICES,DAEMON_NAME,SCRIPT
+- `wire_traffic_fingerprints_to_scanner.py` (wire_mcp_traffic_fingerprints_integration): fns=ws_write,ws_query,ws_execute,analyze_response_for_mcp,enrich_server_scan
+- `signal_analyser_v3.py` (smoke_recovery_signal_analyser): fns=log,get_write_url,get_query_url,get_execute_url,ws_query | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_signal_analyser_import.py` (diagnose_signal_analyser_import_failure): fns=read_source_file,check_module_symbols,check_duckdb_schema,run_diagnostics
+- `diagnose_signal_analyser_staleness.py` (diagnose_signal_analyser_staleness): fns=query_service,calculate_heartbeat_age,get_last_signal_processed,check_service_health,check_recent_logs | consts=WRIT
+- `/home/workspace/zo_mesh/zo_lifecycle.py` (build_lifecycle_emitter): fns=emit_lifecycle_event,run
+- `/home/workspace/zo_sentinel/signal_training_corpus.py` (build_signal_training_corpus_writer): consts=WRITE_SERVICE_URL,EXECUTE_SERVICE_URL,QUERY_SERVICE_URL
+- `signal_flatness_alarm.py` (build_signal_flatness_alarm): module
+- `vendor_concentration_enrichment.py` (build_vendor_concentration_enrichment): fns=compute_score,get_score_band,run | consts=SIGNAL_NAME,VERSION,MAX_SCORE
+- `wire_snow_connector_v2.py` (wire_snow_connector_to_approval_workflow): fns=check_instance,send_heartbeat,write_to_db,query_db,ensure_tables | consts=SERVICE_NAME,PORT,WRITE_URL
+- `verify_tool_description_enrichment.py` (verify_tool_description_safety_enrichment_effectiveness): consts=WRITE_SERVICE_URL,ENRICHMENT_TABLE,ENRICHMENT_SOURCE
+- `verify_aidr_gateway_verdict_integration.py` (verify_aidr_gateway_verdict_integration): fns=main | consts=GATEWAY_URL,WRITE_SERVICE_URL,VERDICT_ALLOWED
+- `verify_supply_chain_enrichment_wired.py` (verify_supply_chain_enrichment_wired): fns=ws_write,ws_query,heartbeat,run | consts=WRITE_SERVICE_URL
+- `signal_discrimination_analyzer.py` (build_signal_discrimination_analyzer): fns=check_single_instance,remove_pid_file,signal_handler,get_write_url,get_query_url | consts=SERVICE_NAME,SERVICE_PORT,
+- `verify_tool_description_enrichment_effectiveness.py` (verify_tool_description_enrichment_effectiveness): fns=write_evidence,count_distinct_tool_description_scores,run | consts=WRITE_SERVICE_URL,SIGNAL_THRESHOLD
+- `rebuild_failed_build_scripts.py` (rebuild_failed_build_scripts): fns=send_heartbeat,generate_guid_token,health,initiate_auth,verify_token | consts=OUTPUT_DIR,SCRIPTS,SCRIPTS['start_all.
+- `diagnose_zo_sentinel_builder_stale.py` (diagnose_stale_daemon_zo_sentinel_builder): fns=get_zo_sentinel_builder_health,get_recent_error_logs,compute_staleness_gap,format_duration,run | consts=LOGGING_CONF
+- `diagnose_gate_orchestrator_stale.py` (diagnose_stale_daemon_gate_orchestrator): fns=get_service_health,compute_stale_gap,tail_log_file,write_diagnostic_blob,run | consts=SERVICE_NAME,STALE_THRESHOLD_S
+- `verify_snow_connector_wired.py` (snow_connector_wiring_verification): fns=log,check_single_instance,remove_pid_file,ws_write,ws_query | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERVICE_UR
+- `verify_aidr_commit_gateway_verdict_check.py` (verify_aidr_commit_gateway_wired): fns=ws_query,ws_execute,verify_verdict_check_enforcement,main | consts=WRITE_SERVICE
+- `build_email_guid_auth_v2.py` (retry_email_guid_auth_build): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_anti_entropy_stale.py` (diagnose_anti_entropy_stale): fns=get_service_health,tail_log_file,parse_log_activity,check_work_queue_accumulation,check_staleness | consts=WRITE_SER
+- `verify_enrichment_wiring.py` (verify_enrichment_integrations): fns=test_temporal_stability_enrichment,test_permission_scope_enrichment,test_community_signal_enrichment,test_enrichment
+- `audit_log_pruner.py` (build_audit_log_pruner): fns=get_db_path,check_single_instance,remove_pid_file,signal_handler,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,WR
+- `verify_context_efficiency_enrichment_wired.py` (verify_context_efficiency_enrichment_wired): fns=query_table,check_context_efficiency_entries,check_signal_analyser_wiring,check_trust_synthesiser_wiring,generate_di
+- `e2e_signal_flow_test.py` (build_e2e_signal_flow_test): fns=ws_query,ws_write,ws_execute,ensure_test_tables,create_synthetic_corpus | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL
+- `diagnose_tool_description_safety_enrichment_effectiveness.py` (diagnose_tool_description_safety_enrichment_effectiveness): fns=query,write_diagnostic,check_single_instance,send_heartbeat,run | consts=SERVICE_NAME,WRITE_SERVICE,QUERY_SERVICE
+- `diagnose_exemption_expirer_wiring.py` (wire_exemption_expirer_health): fns=get_service_health,check_supervisord_registration,verify_function_signature,check_log_file,run | consts=WRITE_SERVIC
+- `diagnose_attestation_refresher_wiring.py` (wire_attestation_refresher_health): fns=compute_file_hash,check_supervisord_registration,check_log_files,check_module_integrity,check_heartbeat_status | con
+- `diagnose_registry_api_smoke_failure.py` (diagnose_registry_api_smoke_failure): fns=get_import_error_details,check_module_exists,get_registry_api_source_path,diagnose_import_failure,report_to_service_
+- `verify_snow_connector_wiring.py` (verify_snow_connector_wiring): fns=log,ws_query,ws_write,ws_execute,send_heartbeat | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL,EXECUTE_SERVICE_URL
+- `wire_attestation_refresher_to_scheduler.py` (wire_attestation_refresher_to_scheduler): fns=ws_write,ws_query,ws_execute,send_heartbeat,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_mcp_scanner_stale_v2.py` (diagnose_mcp_scanner_stale_v2): fns=ws_query,ws_write,ws_execute,get_utc_now,iso_to_datetime | consts=SERVICE_NAME,DIAGNOSTIC_SERVICE,WRITE_SERVICE
+- `diagnose_attestation_engine_stale.py` (diagnose_attestation_engine_stale): fns=get_utc_now,ws_query,ws_execute,get_service_health,calculate_heartbeat_age | consts=SERVICE_NAME,WRITE_SERVICE_URL,Q
+- `verify_trust_synthesiser_v2_injection_resilience.py` (verify_trust_synthesiser_v2_injection_resilience): fns=check_single_instance,send_heartbeat,query_db,execute_db,read_synthesiser_source | consts=SERVICE_NAME,PORT,WRITE_SE
+- `diagnose_registry_api_smoke_import.py` (diagnose_registry_api_smoke_import): fns=get_line_10_imports,check_module_importable,diagnose_registry_import,main
+- `snow_connector_approval_integration.py` (build_snow_connector_approval_integration): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `verify_graphql_schema_builder_wired.py` (verify_graphql_schema_builder_wired): fns=check_file_exists,check_daemon_imports,check_http_routes,check_supervisord,verify_dependencies_not_installed | const
+- `verify_incident_webhook_dispatcher_dormant.py` (verify_incident_webhook_dispatcher_dormant): fns=run
+- `diagnose_build_failure_correlation.py` (diagnose_build_failure_correlation): fns=log,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=WRITE_SERVICE,QUERY_SERVICE,EXECUTE_SERVI
+- `verify_snow_connector_integration_v2.py` (verify_snow_connector_wiring_integration): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERVICE_URL
+- `verify_aidr_commit_gateway_verdict_wiring.py` (wire_aidr_commit_gateway_verdict_integration): fns=run
+- `diagnose_signal_discrimination_gap.py` (diagnose_signal_discrimination_gap): fns=query,execute,analyze_evidence_metadata,run_diagnosis | consts=WRITE_SERVICE,PORT
+- `verify_github_pr_checker_webhook_wiring.py` (verify_github_pr_checker_webhook_wiring): fns=ws_query,ws_write,send_heartbeat,get_service_health,check_supervisord_registration | consts=SERVICE_NAME,WRITE_SERVI
+- `signal_enrichment_harness.py` (build_signal_enrichment_harness): fns=get_write_url,get_query_url,get_execute_url,get_db_path,ws_query | consts=WRITE_SERVICE_URL,EXECUTE_URL,QUERY_URL
+- `supervisord_persistence_audit.py` (build_supervisord_persistence_audit): fns=setup_logging,parse_supervisord_config,find_workspace_python_daemons,extract_program_name_from_cmdline,audit | const
+- `runpod_session_monitor.py` (build_runpod_session_monitor): fns=check_single_instance,remove_pid_file,get_runpod_token,get_ssh_key_path,get_utc_now_iso | consts=SERVICE_NAME,PORT,W
+- `directive_queue_health.py` (build_directive_queue_health): fns=get_pending_directives,get_queue_health,write_to_mesh_memory,cycle,run | consts=DIRECTIVES_PATH,WRITE_SERVICE_URL,CY
+- `diagnose_signal_analyser_import_smoke.py` (diagnose_signal_analyser_import_smoke): fns=test_import,main | consts=REQUIRED_IMPORTS
+- `verify_graphql_schema_builder_dormant.py` (verify_graphql_schema_builder_dormant): fns=test_dormant_status
+- `sft_dataset_preflight.py` (build_sft_dataset_preflight): fns=setup_logging,load_jsonl,check_schema,check_tokenizer_simulation,compute_vram_estimate | consts=SERVICE_NAME,LOG_FIL
+- `sft_results_drive_watcher.py` (build_sft_results_drive_watcher): fns=get_write_url,get_query_url,get_execute_url,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `build_start_all_sh.sh` (rebuild_build_start_all_sh): consts=PROJECT_DIR,LOG_DIR,RUN_DIR
+- `github_pr_webhook_handler_integration.py` (github_pr_webhook_wiring): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `snow_integration_wiring.py` (snow_connector_integration_wiring): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,PID_FILE,LOG_FILE
+- `aidr_gateway_wiring.py` (wire_aidr_commit_gateway_verdict_check): fns=query_db,get_signal_score,get_server_verdict,get_risk_tier,check_commit_allowed | consts=LOG_DIR,LOG_FILE,WRITE_SERV
+- `write_service_heartbeat_diag.py` (diagnose_write_service_stale_heartbeat): fns=is_process_lively,main,run
+- `signal_discrimination_check.py` (diagnose_signal_discrimination_gap): fns=query_signal_scores,count_distinct_scores,log_diagnostic,main
+- `signal_enrichment_diversity_checker.py` (signal_enrichment_diversity_checker): fns=query_service,get_all_signals_in_table,count_distinct_scores,count_total_servers_with_signal,get_score_distribution 
+- `verify_trust_synthesiser_v2_injection_dimension.py` (verify_trust_synthesiser_v2_injection_dimension): fns=send_heartbeat,query_mcp_signal_scores,verify_injection_resilience_dimension,health,verify | consts=SERVICE_NAME,POR
+- `snow_connector_integration_test.py` (snow_connector_integration_test): fns=check_service_health,write_service_request,query_service,execute_service,setup_test_submission | consts=WRITE_SERVIC
+- `audit_log_writer.py` (audit_log_writer): fns=write_audit_event,log_exemption_created,log_attestation_revoked,log_verdict_override | consts=WRITE_SERVICE_URL
+- `write_service_heartbeat_diag_v2.py` (write_service_heartbeat_diag_v2): fns=setup_logging,check_service_process,check_import_chain,check_heartbeat_table_reachable,check_last_heartbeat_value | 
+- `mcp_scanner_heartbeat_diag.py` (mcp_scanner_heartbeat_diag): fns=log,check_process_alive,check_import_chain,analyze_shared_import_issue,test_scanner_loop_entry_point | consts=PROJEC
+- `signal_v2_diversity_validator.py` (signal_v2_diversity_validator): fns=write_via_service,generate_synthetic_corpus,insert_synthetic_fingerprints,run_enrichment_validation,query_distinct_s
+- `signal_v2_discrimination_boost.py` (fix_signal_v2_weak_discrimination): fns=ws_query,ws_write,ws_execute,check_single_instance,remove_pid_file | consts=WRITE_SERVICE_URL,EXECUTE_URL,QUERY_URL
+- `smoke_import_chain_diag.py` (smoke_import_chain_diagnostic): fns=parse_smoke_log,identify_failing_modules,extract_import_chain,diagnose_import_chain_failure,run_diagnostic
+- `snow_integration_completion.py` (snow_integration_completion_wiring): fns=check_single_instance,remove_pid_file,signal_handler,utc_now_iso,ws_write | consts=SERVICE_NAME,SERVICE_PORT,WRITE_S
+- `injection_resilience_wiring.py` (inject_resilience_signal_wiring): fns=check_single_instance,signal_handler,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `discovery_pypi_paginator.py` (build_discovery_pypi_paginator): fns=setup_logging,log,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `verify_snow_connector_approval_wiring.py` (wire_snow_connector_approval_integration): module
+- `discovery_pypi_paginator_v2.py` (build_pypi_discovery_paginator_v2): fns=setup_logging,log,get_utc_now,get_write_url,get_query_url | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `verdict_aggregator_daemon.py` (build_verdict_aggregator_daemon): fns=log,check_single_instance,remove_pid_file,signal_handler,get_write_url | consts=SERVICE_NAME,PORT,PID_FILE
+- `mcp_registry_ingestor_v2.py` (build_registry_ingestor_remotes_patch): fns=log,ws_write,ws_query,ws_execute,check_single_instance | consts=SERVICE_NAME,PORT,PID_FILE
+- `write_service_heartbeat_restarter.py` (build_write_service_heartbeat_restarter): fns=check_single_instance,test_write_service_responsive,write_fresh_heartbeat,get_heartbeat_status,send_self_heartbeat |
+- `smoke_import_chain_diag_v2.py` (diagnose_smoke_import_chain_failures): fns=find_import_error_in_chain,test_import,diagnose_shared_dependency_failures,check_circular_imports,run_full_diagnosti
+- `check_enrichment_integration.py` (check_supply_chain_enrichment_integration): fns=query_enrichments_table,get_sample_enrichments,check_audit_log_for_enrichment_calls,analyze_evidence_blob_structure,
+- `signal_analyser_smoke_diag.py` (diagnose_signal_analyser_smoke_failure): fns=run
+- `aidr_commit_gateway_wiring.py` (complete_aidr_commit_gateway_integration): fns=setup_logging,check_single_instance,remove_pid_file,signal_handler,ws_write | consts=SERVICE_NAME,SERVICE_PORT,PID_F
+- `sft_adapter_loader.py` (build_sft_adapter_loader): fns=check_single_instance,remove_pid_file,signal_handler,get_write_url,get_query_url | consts=SERVICE_NAME,SERVICE_PORT,
+- `signal_distinct_value_monitor.py` (build_signal_distinct_value_monitor): fns=check_single_instance,cleanup_pid_file,send_heartbeat,get_all_signal_names,count_distinct_values | consts=SERVICE_NA
+- `mcp_project_canonicalizer.py` (build_mcp_project_canonicalizer): fns=ws_query,ws_write,ws_execute,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_import_chain_failures_v2.py` (diagnose_smoke_import_chain): fns=run_diagnostic,generate_recommendations,identify_root_causes,detect_circular_dependencies,main | consts=PROJECT_ROOT
+- `inspect_weak_signal_quality.py` (inspect_weak_signal_enrichments): fns=run_harness,extract_distinct_values,analyze_enrichment,main | consts=PROJECT_DIR
+- `github_pr_checker_wiring.py` (wire_github_pr_checker_webhook): fns=check_single_instance,send_heartbeat,verify_github_signature,extract_mcp_server_id,lookup_server_in_registry | const
+- `diagnose_stale_daemons.py` (diagnose_stale_daemons): fns=query_service_health,check_process_running,check_health_endpoint,parse_heartbeat,diagnose_daemon | consts=WRITE_SERV
+- `diagnose_weak_signal_plateau.py` (diagnose_weak_signal_plateau): fns=send_heartbeat,query_enrichments,analyze_score_field,check_enrichment_modules,generate_diagnosis | consts=LOG,SERVIC
+- `tool_description_safety_enrichment_v3.py` (fix_tool_description_safety_enrichment_discrimination): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=WRITE_SERVICE,QUERY_SERVICE,EXECUTE_SERVICE
+- `verify_github_pr_checker_wiring.py` (verify_github_pr_checker_wiring): fns=ws_query,ws_write,ws_execute,cleanup_pid_file,create_synthetic_webhook_payload | consts=SERVICE_NAME,SERVICE_PORT,WR
+- `github_pr_checker_integration.py` (build_github_pr_checker_integration): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_signal_analyser_import_chain.py` (diagnose_signal_analyser_import_failures): fns=parse_imports,resolve_module_path,build_import_graph,check_circular_imports,test_import_chain | consts=PROJECT_ROOT
+- `tool_description_safety_enrichment_v4.py` (rebuild_tool_description_safety_enrichment): fns=log,score_description_length,score_description_clarity,score_param_documented,score_returns_documented | consts=WRIT
+- `temporal_stability_enrichment_v4.py` (rebuild_temporal_stability_enrichment): fns=parse_iso_date,compute_days_between,sigmoid,softmax_weight,score_age_days | consts=LOG,SERVICE_NAME,SIGNAL_NAME
+- `verify_github_pr_checker_wiring_v2.py` (verify_github_pr_checker_integration): fns=check_single_instance,send_heartbeat,verify_write_service_contract,verify_github_pr_checker_import,verify_github_pr_
+- `enrichment_wiring_diagnostic.py` (verify_enrichment_wiring_diagnostic): fns=query_service,check_signal_type_wiring,main | consts=Confirms >,WRITE_SERVICE_URL,QUERY_ENDPOINT
+- `diagnose_writeservice_heartbeat.py` (diagnose_writeservice_stale_heartbeat): fns=query_service_health,test_write_service_write,test_write_service_query,check_heartbeat_age,check_pid_exists | consts
+- `github_pr_checker_wiring_v2.py` (patch_github_pr_checker): fns=ws_query,ws_write,get_github_headers,verify_github_signature,extract_mcp_servers_from_pr_body | consts=LOG_DIR,LOG_D
+- `verify_signal_analyser_scoring.py` (verify_signal_analyser_scoring): fns=log,ws_query,ws_write,send_heartbeat,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_URL
+- `community_signal_enrichment_diagnostic.py` (community_signal_enrichment_diagnostic): fns=query_db,run_diagnostic,main | consts=SERVICE_NAME,WRITE_SERVICE_URL,MIN_DISTINCT_SCORES
+- `supply_chain_enrichment_wiring_check.py` (wire_signal_analyser_to_supply_chain_enrichment): fns=ws_query,ws_write,send_heartbeat,read_source_file,parse_signal_analyser_for_supply_chain | consts=SERVICE_NAME,WRITE
+- `enrichment_wiring_for_weak_signals.py` (wire_weak_signal_enrichments_to_analyser_v2): fns=signal_handler,remove_pid_file,check_single_instance,get_write_url,get_query_url | consts=LOG,SERVICE_NAME,SERVICE_P
+- `supply_chain_enrichment_wiring.py` (supply_chain_enrichment_wiring): fns=ws_query,ws_write,ws_execute,utc_now_iso,check_single_instance | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(parents
+- `diagnose_rug_pull_stale.py` (diagnose_rug_pull_monitor_stale): fns=ws_write,ws_query,get_rug_pull_monitor_health,check_pid_file,check_process_by_pgrep | consts=SERVICE_NAME,WRITE_SERV
+- `diagnose_wisdom_synthesiser_stale.py` (diagnose_wisdom_synthesiser_stale): fns=check_service_health,test_daemon_responsive,diagnose,run | consts=WRITE_SERVICE_URL
+- `verify_weak_signals_enrichment_effect.py` (verify_weak_signals_enrichment_effect): fns=ws_query,ws_execute,get_signal_scores,get_enrichment_records,compute_distinct_scores | consts=SERVICE_NAME,WRITE_SER
+- `graphql_schema_builder_integration_check.py` (graphql_schema_builder_integration_check): fns=find_files_with_mention,scan_python_file_for_imports,check_file_content,scan_directory_for_patterns,check_config_fil
+- `github_pr_checker_wiring_v3.py` (github_pr_checker_wiring_v3): fns=check_single_instance,remove_pid_file,signal_handler,send_heartbeat,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRIT
+- `snow_connector_approval_wiring_v2.py` (snow_connector_approval_wiring_v2): fns=check_single_instance,remove_pid_file,signal_handler,send_heartbeat,ws_query | consts=SERVICE_NAME,SERVICE_PORT,PID_
+- `aidr_commit_gateway_verdict_test_v3.py` (aidr_commit_gateway_verdict_test_v3): fns=log,setup_logging,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `diagnose_rug_pull_stale_v2.py` (diagnose_rug_pull_stale_v2): fns=get_last_heartbeat,check_process_alive,get_service_health_record,format_timestamp,calculate_age_seconds | consts=Dia
+- `e2e_scenarios_run.py` (e2e_scenarios_run): fns=log,get_write_url,get_query_url,get_execute_url,get_db_path | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `build_diagnostic_report.py` (diagnose_failed_build_scripts): fns=check_file_exists,check_script_exists,check_outputs_exist,get_related_source_files,diagnose_script | consts=PROJECT_
+- `diagnose_smoke_import_failures.py` (diagnose_smoke_import_failures): fns=setup_logging,send_heartbeat,ws_write,read_smoke_output,parse_failure_patterns | consts=SERVICE_NAME,SERVICE_PORT,WR
+- `snow_connector_integration_v2.py` (patch_snow_connector_integration): fns=utc_now_iso,sanitize_for_log,check_prompt_injection,compute_ticket_hash,ws_query | consts=SERVICE_NAME,PORT,WRITE_SE
+- `verify_enrichment_discrimination.py` (verify_enrichment_discrimination): fns=ws_query,ws_write,check_enrichment_discrimination | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_FILE
+- `snow_connector_finalizer.py` (finalize_snow_connector_wiring): fns=check_single_instance,send_heartbeat,write_to_db,query_db,get_server_verdict | consts=SERVICE_NAME,SERVICE_PORT,WRIT
+- `retry_failed_build_modules.py` (retry_failed_build_modules): fns=get_failed_modules,get_import_error_patterns,retry_failed_build,record_build_history,run | consts=FAILED_MODULES,BUI
+- `diagnose_importlib_import_failures.py` (diagnose_importlib_failures): fns=diagnose_file,main | consts=PROTECTED_FILES
+- `diagnose_rug_pull_monitor_stale.py` (diagnose_rug_pull_monitor_stale): fns=setup_logging,log,send_heartbeat,ws_write,query_service_health | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `diagnose_rug_pull_monitor_stale_v2.py` (diagnose_rug_pull_monitor_stale_v2): fns=check_supervisord_entry,check_pid_file,check_service_health,check_log_file,check_process_list | consts=SERVICE_NAME,
+- `e2e_scenarios_diagnostic.py` (diagnose_e2e_scenarios_cohort_failure): fns=log,read_scenario_file,find_cohort_7_n5,check_cohort_7_n5_structure,parse_assertions | consts=DIAG_LOG
+- `verify_mcp_traffic_fingerprints_standalone.py` (verify_mcp_traffic_fingerprints_standalone): fns=verify_module_structure,test_detect_mcp_methods,test_is_mcp_traffic,test_extract_session_indicators,check_no_protect
+- `snow_connector_approval_wiring_validate.py` (snow_connector_approval_wiring_validate): fns=validate | consts=PROJECT_ROOT
+- `aidr_commit_gateway_verdict_enforcement_validate.py` (aidr_commit_gateway_verdict_enforcement_validate): fns=validate
+- `diagnose_signal_weakness_root_cause.py` (diagnose_smoke_import_failures_weak_signals): fns=main
+- `diagnostic_enrichment_signal_discrimination.py` (diagnostic_enrichment_signal_discrimination): fns=ws_query,ws_write,generate_synthetic_fingerprints,diagnose_module,diagnose_input_diversity | consts=WRITE_SERVICE_UR
+- `snow_connector_integration_verify.py` (snow_connector_wiring_completion): fns=ws_query,ws_write,send_heartbeat,read_source_file,check_snow_connector_wiring | consts=WRITE_SERVICE_URL,SERVICE_NAM
+- `e2e_scenarios_run_v2.py` (rebuild_e2e_scenarios_run): fns=log,check_single_instance,remove_pid_file,signal_handler,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `diagnose_weak_signal_discrimination.py` (diagnose_signal_discrimination_weakness): fns=diagnose_signal_discrimination_weakness,run | consts=PROJECT_ROOT
+- `registry_api_fix.py` (fix_registry_api_smoke_failure): fns=write_to_db,query_from_db,run | consts=WRITE_SERVICE_URL,INFERENCE_ROUTER_URL
+- `signal_analyser_fix.py` (fix_signal_analyser_smoke_failure): fns=check_syntax_errors,check_import_issues,import_module_safely,diagnose_signal_analyser,print_diagnosis | consts=SIGNA
+- `aidr_verdict_check_wiring.py` (wire_aidr_commit_gateway_verdict_check): fns=log,signal_handler,remove_pid_file,check_single_instance,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `diagnose_importlib_systemic_failures.py` (diagnose_importlib_failures): fns=log,check_single_instance,remove_pid_file,run_subprocess_import,check_sys_path_integrity | consts=PROTECTED_FILES,FA
+- `improve_enrichment_discriminators.py` (improve_signal_discrimination): fns=read_file | consts=SCRIPT_DIR
+- `tool_description_safety_enrichment_verify.py` (verify_tool_description_safety_enrichment_integration): fns=main | consts=WRITE_SERVICE_URL
+- `temporal_stability_enrichment_verify.py` (verify_temporal_stability_enrichment_v2_integration): fns=run
+- `diagnose_importlib_failures.py` (diagnose_smoke_import_failures): fns=get_utc_now,log,check_pycache_corruption,check_python_version_consistency,check_sys_path_integrity | consts=PROJECT_
+- `diagnose_failed_build_modules.py` (diagnose_failed_build_modules): fns=log,ws_query,ws_execute,ws_write,check_file_exists | consts=SERVICE_NAME,PROJECT_ROOT,BUILD_SCRIPTS_DIR
+- `r1_wire_v3_enrichments_patcher.py` (r1_wire_v3_enrichments_patcher): fns=utc_now_iso,read_source,write_source,backup_path,already_wired | consts=SCRIPT_DIR,SIGNAL_ANALYSER_PATH,MARKER
+- `r2_score_supply_chain_threat_assoc_patcher.py` (r2_score_supply_chain_threat_assoc_patcher): fns=log,ws_query,ws_write,ws_execute,ensure_threat_associations_table | consts=Exit codes: 0,WRITE_SERVICE_URL,EXECUTE_U
+- `r1_ecosystems_metadata_fetcher_backoff_patcher.py` (r1_ecosystems_metadata_fetcher_backoff_patcher): fns=utc_now,log,log_429,get_rate_budget,save_rate_budget | consts=Exit codes: 0,WRITE_SERVICE,WRITE_URL
+- `r1_signal_discrimination_floor_patcher.py` (r1_signal_discrimination_floor_patcher): fns=find_scoring_function,find_score_dict_assignment,patch_signal_bridge | consts=DISCRIMINATION_FLOOR
+- `r2_rescore_supply_chain_runner.py` (r2_rescore_supply_chain_runner): fns=setup_logging,verify_patcher_applied,query_inference_router,write_to_service,get_supply_chain_server_ids | consts=IN
+- `advanced_filter_api_v2.py` (rebuild_advanced_filter_api_v2): fns=check_single_instance,remove_pid_file,signal_handler,utc_now_iso,ws_query | consts=SERVICE_NAME,SERVICE_PORT,PID_FIL
+- `forensic_detail_api_v2.py` (rebuild_forensic_detail_api_v2): fns=ws_query,ws_write,ws_execute,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_
+- `manual_override_api_v2.py` (rebuild_manual_override_api_v2): fns=ws_write,ws_query,ws_execute,check_single_instance,write_pid | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `diagnose_stale_daemon_cluster.py` (diagnose_stale_daemon_cluster): fns=query_table,get_stale_services,check_write_service_health,check_supervisord_status,check_recent_audit_events | const
+- `integration_verification_suite.py` (build_integration_verification_suite): fns=log,check_single_instance,write_pid,remove_pid_file,ws_query | consts=WRITE_SERVICE,QUERY_URL,WRITE_URL
+- `tower_selenium_ui_prober.py` (cto_2026_05_07_tower_selenium_ui_prober): fns=utc_now_iso,probe_http_status,extract_security_headers,probe_openapi_unauthed,get_console_logs
+- `sentinel_ui_security_headers_middleware.py` (cto_2026_05_07_sentinel_ui_security_headers_middleware): fns=install
+- `sentinel_ui_signal_diversity_panel.py` (cto_2026_05_07_sentinel_ui_signal_diversity_panel): consts=LOG_PATH,LOG_PATH.parent.mkdir(parents,WRITESERVICE_URL
+- `sentinel_ui_inventory_paginator.py` (cto_2026_05_07_sentinel_ui_inventory_paginator): fns=ws_query,get_total_rows,build_inventory_results,list_inventory,get_inventory_detail | consts=SERVICE_NAME,LOG_PATH,W
+- `sentinel_ui_evidence_drawer_route.py` (cto_2026_05_07_sentinel_ui_evidence_drawer_route): fns=run | consts=WRITE_SERVICE_URL,QUERY_TIMEOUT
+- `ui_server.py` (sentinel_auth_api_keys): fns=log,ws_query,ws_write,ws_execute,generate_token_id | consts=PROJECT_DIR,LOGS_DIR,LOGS_DIR.mkdir(parents
+- `../logs/_rescore_supply_chain.py` (rescore_supply_chain_existing_servers): fns=log,ws_query,ws_write,get_current_stats,count_malicious_pattern | consts=WRITE_SERVICE_URL,QUERY_SERVICE_URL,EXECUTE
+- `signal_bridge.py` (fix_signal_bridge_column_mismatch): fns=utc_now_iso,ws_query,ws_write,get_distinct_score_count,write_discrimination_floor_breach | consts=LOG_DIR,LOG_FILE,P
+- `ecosystems_metadata_fetcher.py` (harden_ecosystems_metadata_fetcher_backoff): fns=log,signal_handler,check_single_instance,remove_pid_file,get_db_path | consts=LOGS_DIR,LOGS_DIR.mkdir(parents,CACHE_
+- `mcp_discovery_feeder.py` (unknown): fns=check_single_instance,remove_pid_file,signal_handler,compute_server_id,ws_query | consts=SERVICE_NAME,SERVICE_PORT,W
+- `bulk_promote.py` (bulk_promote_registry_candidates): fns=ws_query,ws_write,ws_execute,get_registry_count,get_unpromoted_candidates | consts=WRITE_SERVICE_URL,QUERY_SERVICE_U
+- `supervisord-user.conf` (supervisord_add_new_daemons): fns=log,ensure_log_directory,read_config,write_config,parse_existing_programs | consts=Adds mcp_directory_ingestor daemo
+- `goose_hello.py` (goose_test_hello): fns=query_registry_count,main | consts=QUERY_SERVICE_URL,SQL_QUERY
+- `tool_description_enrichment_v2.py` (build_tool_description_enrichment_v2): fns=sigmoid,softmax_weight,hash_string,score_tool_name_safety,score_description_length | consts=SERVICE_NAME,SIGNAL_NAME
+- `stale_daemon_diagnosis.py` (diagnose_stale_daemons): fns=ws_query,ws_write,ws_execute,check_write_service_health,get_daemon_health_status | consts=WRITE_SERVICE_URL,SERVICE_
+- `mcp_traffic_fingerprints_wirer.py` (wire_mcp_traffic_fingerprints): fns=check_single_instance,remove_pid_file,ws_write,ws_query,send_heartbeat | consts=SERVICE_NAME,WRITE_SERVICE,HEARTBEAT
+- `aidr_commit_gateway_wirer.py` (wire_aidr_commit_gateway_verdict_check): fns=log,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVICE_URL
+- `write_service_startup.py` (build_write_service_heartbeat_wiring): fns=check_single_instance,send_heartbeat,execute_sql,create_table_if_not_exists,init_service_health | consts=WRITE_SERVI
+- `wiring_diagnostic.py` (build_wiring_diagnostic): fns=log,ws_query,ws_write,main | consts=EXPECTED_DAEMONS
+- `retention_sweeper_v2.py` (build_retention_sweeper_replacement): fns=utc_now_iso,ws_query,ws_write,ws_execute,check_single_instance | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(parents
+- `diagnose_temporal_stability_enrichment.py` (diagnose_temporal_stability_enrichment_discrimination): fns=send_heartbeat,ws_write,ws_query,ws_execute,compute_score | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `diagnose_permission_scope_enrichment.py` (diagnose_permission_scope_enrichment_discrimination): fns=main
+- `diagnose_tool_description_safety_enrichment.py` (diagnose_tool_description_safety_enrichment_discrimination): fns=log,run | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `stale_daemon_report.py` (build_stale_daemon_report): fns=calculate_age_hours,get_stale_daemons,generate_report,persist_report,run | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SE
+- `scanner_fingerprint_wirer.py` (wire_mcp_traffic_fingerprints_into_scanner): fns=check_single_instance,remove_pid_file,signal_handler,send_heartbeat,ws_query | consts=LOG_DIR,LOG_DIR,LOG_FILE
+- `e2e_scenarios_runner.py` (e2e_scenarios_run): fns=ws_write,ws_query,ws_execute,utc_now_iso,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `verify_temporal_stability_enrichment_quality.py` (verify_temporal_stability_enrichment_quality): fns=generate_synthetic_corpus,verify_temporal_stability_enrichment_quality,run
+- `verify_community_signal_enrichment_quality.py` (verify_community_signal_enrichment_quality): fns=ws_write,send_heartbeat,generate_synthetic_corpus,main,run | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `enrichment_field_coverage_validator.py` (enrichment_field_coverage_validator): fns=validate_enrichment
+- `diagnose_signal_plateau.py` (diagnose_weak_signal_discrimination): fns=query_service,compute_entropy,get_max_entropy,analyze_signal_plateau,get_metadata_field_coverage | consts=WRITE_SERV
+- `registry_api_v2.py` (smoke_recovery_registry_api): fns=get_current_token,send_heartbeat,ws_write,run | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `signal_bridge_discrimination_ext.py` (extend_signal_bridge_discrimination): fns=ws_write,ws_query,ws_execute,send_heartbeat,run | consts=WRITE_SERVICE_URL,SERVICE_NAME,SERVICE_PORT
+- `snow_connector_wiring_v2.py` (snow_connector_wiring_v2): fns=log,signal_handler,check_single_instance,remove_pid_file,get_write_url | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `signal_discrimination_validator.py` (signal_discrimination_validator): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `e2e_integration_scenario_runner.py` (e2e_integration_scenario_runner): fns=ws_query,ws_write,ws_execute,create_synthetic_mcp,trigger_scanner_ingestion | consts=SERVICE_NAME,WRITE_SERVICE_URL,
+- `diagnose_stale_daemons_report.py` (diagnose_stale_daemons_report): fns=ws_query,ws_write,check_process_exists,get_pid_from_file,diagnose_stale_daemons | consts=SERVICE_NAME,SERVICE_PORT,W
+- `gateway_rebuild_email_guid_auth.py` (rebuild_gateway_email_guid_auth): fns=ws_query,ws_write,send_heartbeat,compute_signal_score,check_single_instance | consts=SERVICE_NAME,PORT,WRITE_SERVICE
+- `gateway_rebuild_all_sh.py` (gateway_rebuild_all_sh): fns=main | consts=SERVICE_NAME,SCRIPT_PATH,SHELL_SCRIPT_CONTENT
+- `assessment_scheduler_integration.py` (wire_attestation_refresher_into_scheduler): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `diagnose_signal_analyser_imports.py` (diagnose_signal_analyser_import_chain): fns=get_imports_from_source,check_module_on_disk,diagnose_module,attempt_live_import,main | consts=LOG_DIR,LOG_DIR.mkdir
+- `signal_enrichment_wiring.py` (wire_enrichment_modules_into_analyser): fns=ws_write,ws_query,ws_execute,utc_now_iso,check_single_instance | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERVICE
+- `retention_sweeper_integration.py` (build_retention_sweeper_integration): fns=utc_now_iso,ws_query,ws_write,ws_execute,send_heartbeat | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `e2e_scenarios_integration.py` (integrate_e2e_scenarios): fns=ws_write,ws_query,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,WRITE_SERVICE_URL,PID_F
+- `write_service_heartbeat_check.py` (diagnose_write_service_heartbeat): fns=ws_query,send_heartbeat,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,SERVICE_PORT,PID_
+- `diagnose_core_tables.py` (diagnose_missing_core_tables): fns=ws_query,ws_write,send_heartbeat,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `verify_analyser_v2_integration.py` (verify_signal_analyser_v2_integration): fns=ws_query,validate_evidence_blob,get_all_signal_types,validate_rows_for_signal_type,run_integration_test | consts=WRI
+- `graphql_schema_integration.py` (rebuild_graphql_schema_integration): fns=ws_query,ws_write,ws_execute,get_verdict_tiers,get_verdict_schema | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERV
+- `verify_snow_wiring.py` (verify_snow_connector_wiring): fns=ws_query,ws_write,verify_snow_payload_construction,send_heartbeat,main | consts=SERVICE_NAME,LOG_DIR,LOG_FILE
+- `audit_enrichment_blobs.py` (audit_enrichment_evidence_blobs): fns=ws_query,ws_execute,utc_now_iso,compute_row_id,validate_evidence_blob | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_
+- `verify_schema_complete.py` (verify_schema_bootstrap_completeness): fns=ws_query,verify_table_exists,verify_all_tables,verify_table_columns,main | consts=SERVICE_NAME,WRITE_SERVICE_URL,REQ
+- `signal_discrimination_validator_v2.py` (build_signal_discrimination_validator_v2): fns=ws_query,ws_write,ws_execute,utc_now_iso,compute_breach_id | consts=WRITE_SERVICE_URL,QUERY_URL,EXECUTE_URL
+- `diagnose_import_chain_smoke.py` (diagnose_protected_smoke_failures): fns=check_file_exists,check_syntax,check_imports,check_required_constants,check_cyclic_imports | consts=Exit code 0,SERV
+- `snow_connector_integration_wiring.py` (snow_connector_wiring_integration): fns=ws_write,ws_query,ws_execute,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `import_diagnostic_runner.py` (diagnose_import_chain_bootstrap): fns=trace_imports,check_file_existence,check_import_dependencies,write_diagnostic_report,main | consts=SERVICE_NAME,LOG_
+- `snow_integration_smoke.py` (complete_snow_integration_smoke): fns=ws_write,ws_query,ws_execute,check_single_instance,remove_pid_file | consts=PROJECT_DIR,SERVICE_NAME,SERVICE_PORT
+- `enrichment_signal_wiring.py` (wire_enrichment_outputs_to_signal_analyser): fns=utc_now_iso,compute_deterministic_id,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,SERV
+- `signal_discrimination_diagnosis.py` (diagnostic_signal_weak_discrimination): fns=count_distinct_scores_per_signal_type,sample_rows_per_signal,check_enrichment_modules_called,check_enrichment_eviden
+- `signal_analyser_v2_enrichment_wiring.py` (signal_analyser_v2_wiring_check): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,WRITE_SERVICE_URL,SERVI
+- `tool_description_safety_enrichment_wiring.py` (wire_tool_description_safety_enrichment): fns=ws_write,ws_query,check_single_instance,remove_pid_file,signal_handler | consts=WRITE_SERVICE_URL,SERVICE_NAME,PORT
+- `daemon_diagnostic_probe.py` (diagnose_stale_daemons): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,WRITE_SERVICE_URL,SERVI
+- `signal_discrimination_monitor.py` (monitor_signal_discrimination): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,ws_write | consts=SERVICE_NAME,SERVICE_PORT,WRITE_S
+- `importlib_error_diagnostic.py` (diagnose_import_failure_pattern): fns=ws_write,ws_query,send_heartbeat,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `write_service_diagnostic_probe.py` (build_write_service_diagnostic_probe): fns=ws_query,ws_write,check_health,check_duckdb_access,test_write_throughput | consts=SERVICE_NAME,WRITE_SERVICE_URL,TIM
+- `stale_daemon_diagnostics.py` (build_stale_daemon_diagnostics): fns=ws_query,ws_write,get_stale_services,parse_heartbeat_ts,check_daemon_connectivity | consts=SERVICE_NAME,WRITE_SERVIC
+- `snow_connector_integration_completion.py` (wire_snow_connector_integration): fns=utc_now_iso,ws_query,ws_write,ws_execute,get_snow_oauth_token | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `importlib_failure_diagnostic.py` (diagnose_importlib_failures_protected): fns=ws_write,ws_query,is_protected,extract_imports_from_source,resolve_module_path | consts=SERVICE_NAME,WRITE_SERVICE_U
+- `mcp_traffic_fingerprints_scanner_wiring.py` (wire_mcp_traffic_fingerprints_into_scanner): fns=remove_pid_file,signal_handler,check_single_instance,ws_write,ws_query | consts=SERVICE_NAME,PORT,PID_FILE
+- `gate_scheduler_staleness_diagnostic.py` (diagnose_stale_gate_scheduler): fns=ws_query,ws_write,check_write_service_connectivity,get_latest_heartbeat,get_heartbeat_history | consts=SERVICE_NAME,
+- `rug_pull_monitor_staleness_diagnostic.py` (diagnose_rug_pull_monitor_staleness): fns=ws_write,ws_query,read_source_file,check_process_running,check_source_issues | consts=WRITE_SERVICE_URL,SERVICE_NAME
+- `signal_analyser_v2_permission_scope_wiring.py` (build_permission_scope_v2_wiring): fns=get_write_url,get_query_url,get_execute_url,ws_query,ws_write | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `tool_description_safety_enrichment_diagnostic.py` (diagnose_tool_description_safety_quarantine): fns=ws_write,ws_query,send_heartbeat,synthetic_metadata,validate_compute_score_result | consts=WRITE_SERVICE_URL
+- `signal_analyser_enrichment_telemetry.py` (verify_enrichment_wiring_telemetry): fns=ws_write,ws_query,compute_deterministic_id,send_heartbeat,introspect_signal_analyser | consts=WRITE_SERVICE_URL,SERV
+- `supply_chain_enrichment_wiring_verifier.py` (verify_supply_chain_enrichment_wiring): fns=ws_query,ws_write,verify_mcp_signal_enrichments_schema,verify_supply_chain_enrichments,verify_signal_analyser_integr
+- `community_signal_enrichment_wiring_verifier.py` (build_community_signal_enrichment_wiring): fns=ws_query,ws_write,send_heartbeat,verify_enrichment_rows,verify_evidence_blob_shape | consts=SERVICE_NAME,WRITE_SERVI
+- `write_service_diagnostic.py` (write_service_diagnostic): fns=check_single_instance,remove_pid_file,signal_handler,ws_query,ws_write | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `aidr_commit_gateway_integration_v2.py` (patch_aidr_commit_gateway): fns=log,signal_handler,remove_pid_file,check_single_instance,ws_write | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(parents
+- `github_pr_checker_webhook_wiring_complete.py` (github_pr_checker_webhook_wiring_complete): fns=ws_write,ws_query,ws_execute,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_
+- `aidr_commit_gateway_verdict_check_test.py` (aidr_commit_gateway_verdict_check_test): fns=utc_now_iso,ws_write,ws_query,ws_execute,compute_deterministic_id | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERV
+- `importlib_import_diagnostic.py` (diagnose_importlib_smoke_failures): fns=ws_query,ws_write,send_heartbeat,get_module_path,get_imports_from_source | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG
+- `write_service_heartbeat_investigator.py` (write_service_heartbeat_investigator): fns=ws_query,ws_write,check_write_service_health,get_write_service_heartbeat_history,compute_missed_beats | consts=WRITE
+- `importlib_smoke_diagnostic.py` (importlib_smoke_diagnostic): fns=ws_write,diagnose_import_failure,check_zo_sentinel_modules,parse_smoke_output_for_import_errors,write_diagnostic_fin
+- `github_pr_checker_verdict_integration.py` (github_pr_checker_verdict_integration): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_S
+- `snow_connector_webhook_wiring.py` (snow_connector_webhook_wiring): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `e2e_scenarios_validation.py` (e2e_scenarios_validation): fns=deterministic_id,ws_write,ws_query,now_iso,clear_test_artifacts | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_PATH
+- `retention_sweeper_validation.py` (retention_sweeper_validation): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=SERVICE_NAME,PORT,PID_FILE
+- `supply_chain_enrichment_integration_check.py` (verify_supply_chain_enrichment_integration): fns=ws_query,check_supply_chain_enrichment_rows,validate_evidence_blob,is_recent_enrichment,check_signal_analyser_integr
+- `registry_api_import_diagnostic.py` (registry_api_import_diagnostic): fns=extract_imports,test_import_in_subprocess,find_recently_built_files,extract_conflicts,run_diagnostic | consts=SERVIC
+- `snow_connector_wiring_completion.py` (snow_connector_wiring_to_approval_workflow): fns=setup_logging,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_UR
+- `aidr_commit_gateway_verdict_wiring.py` (aidr_commit_gateway_verdict_wiring): fns=log,signal_handler,remove_pid_file,check_single_instance,utc_now_iso | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(pare
+- `rug_pull_monitor_staleness_probe.py` (rug_pull_monitor_staleness_diagnostic): fns=ws_query,ws_write,parse_iso_to_utc,format_timedelta,assess_severity | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_PATH
+- `write_service_heartbeat_monitor.py` (write_service_heartbeat_investigator_for_daemons): fns=utc_now_iso,ws_query,ws_write,check_health_endpoint,get_service_health_record | consts=LOG,WRITE_SERVICE_URL,QUERY_S
+- `trust_synthesiser_dimension_check.py` (trust_synthesiser_7th_dimension_review): fns=ws_query,ws_write,get_injection_resilience_row_count,get_injection_resilience_sample,read_trust_synthesiser_config |
+- `aidr_gateway_verdict_enforcement_v3.py` (aidr_gateway_verdict_enforcement_v3): fns=utc_now_iso,compute_request_id,ws_query,ws_write,send_heartbeat | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `snow_connector_approval_workflow_wiring.py` (snow_connector_approval_workflow_wiring): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,get_db_path | consts=SERVICE_NAME,SERVICE_PORT,PID_
+- `mcp_scanner_fingerprints_wiring.py` (mcp_scanner_fingerprints_wiring): fns=ws_write,ws_query,ws_execute,utc_now_iso,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `importlib_import_diagnostic_v2.py` (import_failure_diagnostic_probe): fns=ws_write,ws_query,send_heartbeat,try_import_module,find_spec_module | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_PATH
+- `email_guid_auth_compact_v2.py` (rebuild_email_guid_auth_compact_v2): fns=signal_handler,check_single_instance,remove_pid_file,ws_write,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERV
+- `supervisor_auto_updater_v2.py` (rebuild_supervisor_auto_updater_v2): fns=utc_now_iso,get_db_path,check_single_instance,remove_pid_file,signal_handler | consts=PROJECT_DIR,LOG_DIR,SUPERVISOR
+- `diagnose_enrichment_cardinality.py` (diagnose_signal_enrichment_low_cardinality): fns=ws_query,ws_write,collect_enrichment_scores,analyze_cardinality,check_raw_source_data | consts=LOG,SERVICE_NAME,WRIT
+- `community_signal_enrichment_wiring.py` (build_community_signal_enrichment_wiring): fns=utc_now_iso,ws_query,ws_write,ws_execute,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE_URL
+- `write_service_heartbeat_diagnostic.py` (diagnose_write_service_heartbeat_staleness): fns=diagnose_write_service_heartbeat_staleness
+- `signal_analyser_import_fix.py` (fix_signal_analyser_imports): fns=log,ws_write,send_heartbeat,extract_imports_from_source,check_module_importable | consts=SERVICE_NAME,LOG_FILE,WRITE
+- `community_signal_discrimination_check.py` (validate_community_signal_discrimination): fns=ws_query,ws_write,check_signal_scores_cardinality,check_signal_enrichments_cardinality,identify_underutilized_metada
+- `signal_analyser_enrichment_bridge.py` (verify_signal_analyser_enrichment_integration): fns=utc_now_iso,ws_query,ws_write,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,WRITE_SERVICE
+- `snow_connector_workflow_integration.py` (snow_connector_workflow_integration): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=LOG_DIR,LOG_DIR.mkdir(parents,SERVIC
+- `signal_analyser_v2_enrichment_wiring_check.py` (signal_analyser_v2_enrichment_diagnostic): fns=ws_query,ws_write,send_heartbeat,utc_now_iso,read_source_file | consts=SERVICE_NAME,PORT,PID_FILE
+- `write_service_staleness_probe.py` (diagnose_write_service_staleness): fns=ws_write,ws_query,check_write_service_responsive,get_write_service_heartbeat_age,check_recent_restarts | consts=SERV
+- `integrate_weak_signals_v2_enrichments.py` (integrate_weak_signals_v2_enrichments): fns=ws_query,ws_write,ws_execute,utc_now_iso,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `community_signal_enrichment_integration.py` (integrate_community_signal_enrichment): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,send_heartbeat | consts=SERVICE_NAME,SERVICE_PORT,W
+- `snow_connector_approval_wiring_completion.py` (snow_connector_approval_wiring_completion): fns=ws_query,ws_write,ws_execute,utc_now_iso,check_write_service_health | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(paren
+- `signal_scores_cardinality_verification.py` (signal_scores_cardinality_verification): fns=ws_query,ws_write,send_heartbeat,check_signal_type_coverage,main | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_FILE
+- `aidr_gateway_verdict_test_v3.py` (build_aidr_gateway_verdict_test_v2): fns=utc_now_iso,ws_query,ws_write,ws_execute,compute_deterministic_id | consts=LOG,SERVICE_NAME,PORT
+- `e2e_scenarios_v2.py` (build_e2e_scenarios_v2): fns=log,signal_handler,check_single_instance,remove_pid_file,ws_write | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SERV
+- `domain_trust_enrichment_inspection.py` (inspect_domain_trust_enrichment): fns=ws_query,inspect_domain_trust_cardinality,get_sample_domain_trust_records,get_registry_metadata_fields,main | consts
+- `trust_synthesiser_v2_coverage_check.py` (verify_trust_synthesiser_v2_signal_coverage): fns=ws_query,read_source_file,extract_weight_from_code,extract_threshold_from_code,check_code_reads_dimension | consts=W
+- `supervisord_phase8_update.conf` (build_supervisord_config_for_phase8_daemons): module
+- `attestation_engine_dynamic_evidence_check.py` (review_attestation_engine_dynamic_evidence): module
+- `self_diagnostics_restart_probe.py` (diagnose_self_diagnostics_stale): fns=ws_query,ws_write,probe_pid_file,probe_heartbeat,probe_write_service_connectivity | consts=SERVICE_NAME,WRITE_SERVIC
+- `enrichment_v2_discrimination_audit.py` (verify_enrichment_v2_signal_discrimination): fns=ws_query,ws_write,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY
+- `pi_components_supervisord_addition.py` (pi_components_supervisord_integration): fns=generate_supervisord_fragment,main | consts=SERVICE_NAME,OUTPUT_PATH,PI_COMPONENTS
+- `mcp_traffic_fingerprints_wiring_verify.py` (verify_mcp_traffic_fingerprints_wiring): fns=ws_query,ws_write,verify_module_exists,verify_fingerprints_module,verify_scanner_module | consts=WRITE_SERVICE_URL,S
+- `community_signal_integration_verifier.py` (community_signal_enrichment_integration_verify): fns=ws_query,ws_write,send_heartbeat,check_table_exists,get_enrichment_cardinality | consts=Queries mcp_signal_enrichmen
+- `signal_discrimination_probe.py` (signal_discrimination_probe): fns=ws_query,ws_write,send_heartbeat,get_signal_cardinality,get_metadata_variance | consts=WRITE_SERVICE_URL,SERVICE_NAM
+- `snow_connector_approval_verify.py` (snow_connector_approval_wiring_verify): fns=ws_query,ws_write,get_service_health,check_snow_connector_heartbeat,check_webhook_registration | consts=WRITE_SERVIC
+- `stale_daemon_heartbeat_diagnostic.py` (stale_daemon_heartbeat_diagnostic): fns=ws_query,calculate_heartbeat_age,format_age,main | consts=WRITE_SERVICE_URL,SERVICE_NAME,CYCLE_THRESHOLDS
+- `smoke_import_failure_root_cause_probe.py` (smoke_import_failure_root_cause_probe): fns=ws_query,ws_write,send_heartbeat,check_sys_path_entries,extract_imports_from_source | consts=SERVICE_NAME,LOG_FILE,W
+- `signal_discrimination_diagnostic.py` (diagnose_weak_signal_plateau): fns=ws_query,ws_write,send_heartbeat,diagnose_signal_cardinality,read_source_files | consts=WRITE_SERVICE_URL,SERVICE_NA
+- `rug_pull_monitor_recovery_diagnostic.py` (rug_pull_monitor_heartbeat_recovery): fns=ws_query,ws_write,check_heartbeat_status,get_last_heartbeat_age_hours,check_pid_file | consts=WRITE_SERVICE_URL,SERV
+- `import_failure_root_cause_v2.py` (smoke_import_failure_root_cause): fns=ws_query,check_sys_path_entries,extract_imports_from_source,resolve_import_path,trace_import_chain | consts=PROJECT_
+- `attestation_engine_dynamic_check.py` (attestation_engine_dynamic_evidence): fns=ws_query,ws_write,compute_deterministic_id,read_attestation_engine_source,check_dynamic_evidence_in_attestations | c
+- `permission_scope_enrichment_integration.py` (wire_permission_scope_enrichment): fns=ws_query,ws_write,send_heartbeat,check_single_instance,remove_pid_file | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `temporal_stability_enrichment_integration.py` (wire_temporal_stability_enrichment): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=SERVICE_NAME,PORT,PID_FILE
+- `snow_integration_final_verify.py` (snow_integration_final_verification): fns=ws_query,ws_write,ws_execute,utc_now_iso,check_write_service_connectivity | consts=SERVICE_NAME,WRITE_SERVICE_URL,QU
+- `weak_signal_investigation.py` (review_weak_signal_discrimination): fns=ws_write,ws_query,get_table_columns,analyze_distinct_values,analyze_signal_enrichments | consts=SERVICE_NAME,WRITE_S
+- `fingerprint_scanner_wiring.py` (wire_mcp_traffic_fingerprints_to_scanner): fns=ws_write,ws_query,ws_execute,check_single_instance,remove_pid_file | consts=SERVICE_NAME,LOG_DIR,LOG_FILE
+- `rug_pull_monitor_stale_diagnostic.py` (diagnose_rug_pull_monitor_stale): fns=ws_query,ws_write,get_last_heartbeat,parse_iso_to_utc,calculate_age_seconds | consts=SERVICE_NAME,WRITE_SERVICE_URL,
+- `tool_description_safety_enrichment_integration.py` (wire_tool_description_safety_enrichment): fns=ws_query,ws_execute,ws_write,check_single_instance,remove_pid_file | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_SER
+- `smoke_import_failure_diagnostic.py` (diagnose_smoke_import_failures): fns=ws_query,send_heartbeat,read_source,extract_line_10_imports,get_imports_from_source | consts=SERVICE_NAME,PROJECT_RO
+- `self_diagnostics_refresh.py` (build_self_diagnostics_refresh): fns=setup_logging,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE
+- `permission_scope_integration_check.py` (audit_permission_scope_integration): fns=ws_query,ws_write,ws_execute,check_signal_analyser_imports,check_mcp_signal_enrichments_table | consts=SERVICE_NAME,
+- `temporal_stability_integration_check.py` (audit_temporal_stability_integration): fns=ws_write,ws_query,send_heartbeat,read_source,check_imports_temporal_stability | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `mcp_traffic_fingerprints_integration_check.py` (verify_mcp_traffic_fingerprints_wiring): fns=check_imports,check_fingerprint_usage,check_no_direct_peer_http,check_write_service_wiring,main | consts=SERVICE_NAM
+- `snow_approval_wiring.py` (service_now_approval_workflow_wiring): fns=get_token_path,load_token_from_file,save_token_to_file,get_snow_oauth_token,is_token_fresh | consts=WRITE_SERVICE_UR
+- `stale_daemon_diagnostic_v2.py` (stale_daemon_heartbeat_diagnostic_report): fns=ws_query,calculate_age_minutes,diagnose_stale_reason,check_process_exists,build_diagnostic_report | consts=SERVICE_N
+- `gate_orchestrator_error_probe.py` (gate_orchestrator_error_investigation): fns=ws_query,check_daemon_exists,read_recent_log_lines,probe | consts=WRITE_SERVICE_URL,SERVICE_NAME,GATE_ORCHESTRATOR_D
+- `signal_quality_weak_signal_audit.py` (signal_quality_weak_signal_audit): fns=ws_write,ws_query,get_schema_columns,audit_weak_signals | consts=SERVICE_NAME,WRITE_SERVICE_URL
+- `signal_discrimination_audit_v2.py` (signal_discrimination_improvement_pass): fns=ws_query,ws_write,send_heartbeat,load_enrichment_script,audit_discrimination | consts=LOG_DIR,LOG_DIR.mkdir(parents,
+- `mcp_scanner_heartbeat_recovery.py` (mcp_scanner_daemon_diagnosis): fns=utc_now_iso,ws_query,ws_write,check_single_instance,remove_pid_file | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY_UR
+- `smoke_import_chain_debug.py` (smoke_import_chain_diagnosis): fns=log,check_sys_path,capture_import_traceback,extract_line_10_imports,check_circular_imports | consts=SERVICE_NAME,PRO
+- `snow_connector_wiring_check.py` (snow_connector_integration_wiring): fns=ws_write,ws_query,read_file,check_file_exists,diagnose_wiring | consts=SERVICE_NAME,LOG_DIR,LOG_DIR.mkdir(parents
+- `e2e_scenarios_failure_analysis.py` (e2e_scenarios_rebuild_diagnostic): fns=check_file_exists,find_smoke_logs,find_failure_details,analyze_e2e_scenarios_structure,identify_broken_flow | consts
+- `anti_entropy_diagnosis.py` (anti_entropy_daemon_check): fns=ws_write,ws_query,send_heartbeat,diagnose | consts=SERVICE_NAME,WRITE_SERVICE_URL,ZO_SENTINEL_DIR
+- `wisdom_synthesiser_diagnosis.py` (build_wisdom_synthesiser_diagnosis): fns=ws_query,ws_write,query_service_health,query_mcp_registry_for_wisdom,check_mesh_memory_wisdom | consts=WRITE_SERVICE
+- `signal_quality_dashboard_patch.py` (build_signal_quality_dashboard_patch): fns=check_single_instance,remove_pid_file,signal_handler,ws_write,ws_query | consts=WRITE_SERVICE_URL,SERVICE_NAME,SERVI
+- `supply_chain_enrichment_integration.py` (integrate_supply_chain_enrichment): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,send_heartbeat | consts=SERVICE_NAME,SERVICE_PORT,W
+- `smoke_import_failure_root_cause_probe_v3.py` (diagnose_smoke_import_failures_root_cause): fns=ws_query,ws_write,check_single_instance,remove_pid_file,signal_handler | consts=SERVICE_NAME,WRITE_SERVICE_URL,QUERY
+- `signal_weak_signal_diagnosis.py` (diagnose_signal_weak_signal_import_chain): fns=ws_query,ws_write,extract_imports_from_source,check_service_health_records,check_sys_path | consts=SERVICE_NAME,WRIT
+- `aidr_verdict_gateway.py` (aidr_verdict_enforcement_gateway): fns=check_single_instance,remove_pid_file,signal_handler,utc_now_iso,ws_query | consts=SERVICE_NAME,SERVICE_PORT,WRITE_S
+- `permission_scope_discrimination_validator.py` (validate_permission_scope_enrichment_discrimination): fns=ws_query,ws_write,validate_permission_scope_discrimination,main | consts=SERVICE_NAME,WRITE_SERVICE_URL,MIN_DISTINCT
+- `mcp_traffic_fingerprints_scanner_integration.py` (wire_mcp_traffic_fingerprints_into_scanner): fns=utc_now_iso,check_single_instance,remove_pid_file,signal_handler,ws_query | consts=SERVICE_NAME,WRITE_SERVICE_URL,QU
+- `temporal_stability_discrimination_validator.py` (validate_temporal_stability_enrichment_discrimination): fns=ws_query,check_temporal_stability_discrimination,main | consts=SERVICE_NAME,WRITE_SERVICE_URL,SIGNAL_NAME
+- `tool_description_safety_discrimination_validator.py` (validate_tool_description_safety_enrichment_discrimination): fns=ws_query,ws_write,send_heartbeat,validate_discrimination | consts=SERVICE_NAME,WRITE_SERVICE_URL,LOG_FILE
+- `community_signal_enrichment_synthesiser_wiring.py` (wire_community_signal_enrichment_to_synthesiser): module
+- `supply_chain_enrichment_synthesiser_wiring.py` (wire_supply_chain_enrichment_to_synthesiser): fns=ws_write,ws_query,ws_execute,utc_now_iso,check_single_instance | consts=SERVICE_NAME,LOG_FILE,QUERY_URL
+- `audit_log_archival_gateway.py` (audit_log_archival_gateway): fns=ws_query,ws_write,ws_execute,utc_now_iso,check_single_instance | consts=SERVICE_NAME,SERVICE_PORT,PID_FILE
+- `snow_webhook_inbound_wiring.py` (snow_webhook_inbound_wiring): fns=ws_write,ws_query,ws_execute,utc_now_iso,compute_ticket_hash | consts=LOG_DIR,LOG_DIR.mkdir(parents,LOG_FILE
+- `e2e_signal_flow_scenario.py` (build_e2e_signal_flow_scenario): fns=utc_now_iso,deterministic_id,ws_write,ws_query,ws_execute | consts=PROJECT_DIR,WRITE_SERVICE_URL,QUERY_URL
+- `enrichment_v2_integration_check.py` (verify_enrichment_v2_integration): fns=ws_query,check_imports_and_calls,check_signal_enrichments,send_heartbeat,main | consts=SERVICE_NAME,WRITE_SERVICE_UR
+- `signal_analyser_v2_wiring.py` (wire_signal_analyser_v2_integration): fns=log,utc_now_iso,read_source,write_source,backup_path | consts=SIGNAL_ANALYSER_PATH,OUTPUT_PATH,LOG_FILE
+- `smoke_import_diagnosis.py` (diagnose_smoke_import_failures): fns=ws_query,ws_write,get_line_10_imports,query_smoke_logs,diagnose_import_failure | consts=SERVICE_NAME,SERVICE_PORT,WR
+- `rug_pull_monitor_stale_check.py` (build_rug_pull_monitor_restart_check): fns=ws_query,read_file,check_supervisord_config,check_source_heartbeat,parse_iso_timestamp | consts=Exit codes: 0,SERVIC
+- `aidr_verdict_check_integration.py` (wire_aidr_commit_gateway_verdict_check): fns=log,signal_handler,remove_pid_file,check_single_instance,utc_now_iso | consts=PROJECT_DIR,LOG_DIR,LOG_DIR.mkdir(pare
+- `temporal_stability_enrichment_v2_smoke_check.py` (verify_temporal_stability_enrichment_v2_integration): fns=check_module_imports,check_function_signature,check_execution_time,main
+- `permission_scope_enrichment_discrimination_check.py` (check_permission_scope_enrichment_discrimination): fns=ws_query,ws_write,send_heartbeat,get_distinct_permission_scope_scores,inspect_v2_source_for_metadata_fields | consts
+- `tool_description_safety_enrichment_v2_output_check.py` (check_tool_description_safety_enrichment_v2_output): fns=ws_query,main | consts=SERVICE_NAME,WRITE_SERVICE_URL

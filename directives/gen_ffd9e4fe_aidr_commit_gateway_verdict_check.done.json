@@ -1,0 +1,9 @@
+{
+  "task": "aidr_commit_gateway_verdict_check",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_verdict_check.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Wire aidr_commit_gateway.py (built 2026-04-17) verdict-check enforcement. Must: check ZO-SENTINEL verdict via write_service query before forwarding commits, never auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override, include injection_resilience score in commit payload. Use write_service read path for verdict lookup. Write commit decision to audit_log via write_service."
+}

@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+r2_rescore_supply_chain_runner.py -- ZO-SENTINEL resupply chain scoring runner.
+Rescores all supply_chain signal rows in mcp_signal_scores table.
+"""
+import logging
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from typing import Optional, List
+
+# === Configuration ===
+INFERENCE_ROUTER_URL = "http://127.0.0.1:8773"
+WRITE_SERVICE_URL = "http://127.0.0.1:8772"
+PATCHER_FILENAME = "r2_score_supply_chain_threat_assoc_patcher.py"
+PATCHER_MARKER = "# _PATCHER_APPLIED_MARKER_#"
+LOG_DIR = "/home/workspace/zo_sentinel/logs"
+
+# === Logging Setup ===
+def setup_logging() -> logging.Logger:
+    """Configure logging for the runner."""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    logger = logging.getLogger("rescore_supply_chain_runner")
+    logger.setLevel(logging.INFO)
+    
+    log_file = os.path.join(LOG_DIR, "r2_rescore_runner.log")
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    return logger
+
+logger = setup_logging()
+
+# === Patcher Verification ===
+def verify_patcher_applied(patcher_path: str) -> bool:
+    """Verify patcher has been applied by checking for marker."""
+    logger.info(f"Checking patcher: {patcher_path}")
+    
+    if not os.path.exists(patcher_path):
+        logger.error(f"Patcher not found: {patcher_path}")
+        return False
+    
+    try:
+        with open(patcher_path, 'r') as f:
+            content = f.read()
+        
+        if PATCHER_MARKER in content:
+            logger.info(f"Patcher verified: marker found in {patcher_path}")
+            return True
+        else:
+            logger.error(f"Patcher NOT applied: marker '{PATCHER_MARKER}' not found")
+            return False
+    except Exception as e:
+        logger.error(f"Error reading patcher file: {e}")
+        return False
+
+# === Inference Router Query ===
+def query_inference_router(sql: str) -> Optional[List[dict]]:
+    """Query inference router via POST to /query endpoint."""
+    import requests
+    
+    try:
+        response = requests.post(
+            f"{INFERENCE_ROUTER_URL}/query",
+            json={"sql": sql},
+            timeout=30
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get("status") == "success":
+            return result.get("data", [])
+        else:
+            logger.error(f"Query failed: {result.get('error', 'Unknown')}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error: {e}")
+        return None
+
+# === Write Service Call ===
+def write_to_service(table: str, rows: dict) -> bool:
+    """Write results to write_service at 8772."""
+    import requests
+    
+    try:
+        response = requests.post(
+            f"{WRITE_SERVICE_URL}/write",
+            json={"table": table, "rows": rows, "wait": True},
+            timeout=60
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get("status") == "success":
+            return True
+        else:
+            logger.error(f"Write failed: {result.get('error', 'Unknown')}")
+            return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Write error: {e}")
+        return False
+
+# === Core Rescoring Logic ===
+def get_supply_chain_server_ids() -> List[str]:
+    """Get distinct server_ids with supply_chain signal from mcp_signal_scores."""
+    sql = """
+    SELECT DISTINCT server_id 
+    FROM mcp_signal_scores 
+    WHERE signal_name = 'supply_chain'
+    """
+    
+    logger.info("Fetching distinct server_ids with supply_chain signal...")
+    results = query_inference_router(sql)
+    
+    if results is None:
+        logger.error("Failed to fetch server_ids")
+        return []
+    
+    server_ids = [row.get("server_id") for row in results if row.get("server_id")]
+    logger.info(f"Found {len(server_ids)} distinct server_ids to rescore")
+    return server_ids
+
+def rescore_server(server_id: str) -> bool:
+    """Rescore a single server's supply_chain signal."""
+    logger.debug(f"Rescoring server: {server_id}")
+    
+    # Import the patcher module dynamically
+    sys.path.insert(0, "/home/workspace/zo_sentinel")
+    
+    try:
+        from signal_analyser import SignalAnalyser
+        
+        analyser = SignalAnalyser()
+        
+        # Trigger rescore via the patcher logic
+        # The patcher modifies scoring to include threat associations
+        result = analyser.rescore_supply_chain(server_id)
+        
+        if result:
+            logger.info(f"Successfully rescored server: {server_id}")
+            return True
+        else:
+            logger.warning(f"Rescore returned False for server: {server_id}")
+            return False
+            
+    except ImportError as e:
+        logger.error(f"Cannot import signal_analyser: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error rescing server {server_id}: {e}")
+        return False
+
+def update_rescore_audit(server_ids: List[str], success_count: int, 
+                          failure_count: int, duration_seconds: float) -> None:
+    """Write rescore audit entry."""
+    rows = {
+        "runner": "r2_rescore_supply_chain_runner",
+        "run_timestamp": datetime.now(timezone.utc).isoformat(),
+        "server_count": len(server_ids),
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "duration_seconds": duration_seconds
+    }
+    
+    write_to_service("rescore_audit_log", rows)
+    logger.info("Audit entry written to rescore_audit_log")
+
+# === Main Runner ===
+def run():
+    """Main execution entry point."""
+    start_time = datetime.now(timezone.utc)
+    logger.info("=" * 60)
+    logger.info("ZO-SENTINEL R2 Rescore Supply Chain Runner Starting")
+    logger.info(f"Start time: {start_time.isoformat()}")
+    logger.info("=" * 60)
+    
+    # Step 1: Verify patcher applied
+    patcher_path = os.path.join("/home/workspace/zo_sentinel", PATCHER_FILENAME)
+    
+    if not verify_patcher_applied(patcher_path):
+        logger.error("PATCHER VERIFICATION FAILED - Aborting run")
+        logger.error("Please apply the patcher before running this rescoring job")
+        sys.exit(1)
+    
+    logger.info("Patcher verification PASSED")
+    
+    # Step 2: Get server IDs to rescore
+    server_ids = get_supply_chain_server_ids()
+    
+    if not server_ids:
+        logger.warning("No server_ids found with supply_chain signal")
+        sys.exit(0)
+    
+    logger.info(f"Will rescore {len(server_ids)} servers")
+    
+    # Step 3: Rescore each server
+    success_count = 0
+    failure_count = 0
+    
+    for idx, server_id in enumerate(server_ids, 1):
+        logger.info(f"Processing {idx}/{len(server_ids)}: {server_id}")
+        
+        if rescore_server(server_id):
+            success_count += 1
+        else:
+            failure_count += 1
+    
+    # Step 4: Calculate duration and write audit
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    
+    logger.info("=" * 60)
+    logger.info("Rescoring Complete")
+    logger.info(f"  Total: {len(server_ids)}")
+    logger.info(f"  Success: {success_count}")
+    logger.info(f"  Failed: {failure_count}")
+    logger.info(f"  Duration: {duration:.2f}s")
+    logger.info("=" * 60)
+    
+    # Write audit log
+    update_rescore_audit(server_ids, success_count, failure_count, duration)
+    
+    # Exit with error if any failures
+    if failure_count > 0:
+        logger.warning(f"Completed with {failure_count} failures")
+        sys.exit(1)
+    
+    logger.info("Rescore runner completed successfully")
+
+if __name__ == "__main__":
+    run()

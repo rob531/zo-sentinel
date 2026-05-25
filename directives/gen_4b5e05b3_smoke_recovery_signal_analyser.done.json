@@ -1,0 +1,9 @@
+{
+  "task": "smoke_recovery_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Recover signal_analyser.py from smoke failure. Recent smoke failure: signal_analyser.py showing import error in traceback. signal_analyser_v2.py exists and was built 2026-05-20 (interface: log, get_write_url, get_query_url, get_execute_url, ws_write). New module MUST: (1) Use the same interface as signal_analyser_v2.py (which should be the canonical version now). (2) Fix import errors from the original signal_analyser.py. (3) Include `# deps: requests` comment at top for auto_dependency_resolver parsing per section 6. (4) Emit signal scores to mcp_signal_scores with correct evidence blob shape per section 3 signal invariant. (5) Heartbeat to service_health at least every 60s. (6) Completes startup (enters main loop) within 10s per section 6. Do NOT prefix filename with build_. Reference: sections 3, 5, 6 of PRODUCT_SPEC.md."
+}

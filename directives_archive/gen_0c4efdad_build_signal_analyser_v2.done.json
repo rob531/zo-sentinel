@@ -1,0 +1,15 @@
+{
+  "task": "build_signal_analyser_v2",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v2.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Quality pass: Bayesian confidence weighting across mcp_signal_scores. Replace stub with full implementation. Reads from mcp_signal_scores table, computes weighted confidence intervals. Emits VERDICT_CHANGED events to mesh_events.",
+  "reads": [
+    "signal_analyser.py",
+    "db_utils.py",
+    "mesh_bridge.py"
+  ],
+  "next_directive": {}
+}

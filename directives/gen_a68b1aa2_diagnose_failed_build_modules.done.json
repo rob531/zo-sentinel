@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_failed_build_modules",
+  "handler": "generate_file",
+  "output_file": "diagnose_failed_build_modules.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Analyze the 9 failed build modules: build_start_all_sh, build_graphql_schema, build_email_guid_auth, build_mcp_detail_view_ui, build_advanced_filter_api, build_forensic_detail_api, build_manual_override_api, build_compliance_export_service, build_supervisor_auto_updater. For each, determine: (1) whether the output file exists despite failure, (2) what the build error was, (3) whether the file is protected or already-built. Output a prioritized list of which modules need fresh build attempts vs which are blocked by protected/built files. Do not propose rebuilds for protected or already-built files."
+}

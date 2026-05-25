@@ -1,0 +1,12 @@
+{
+  "task": "admin_policies_html",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Admin UI surface for managing mcp_policy_rules table. Must provide: (1) CRUD interface for policy rules with rule_type, pattern, action, and priority fields. (2) Table display of existing rules with sort/filter. (3) Form for creating new rules. (4) Delete with confirmation. (5) All writes via write_service POST :8772/write. (6) Audit log insertion on every write action. (7) Match visual style of admin_exemptions.html.",
+  "reads": [
+    "admin_exemptions.html"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_wisdom_synthesiser_stale",
+  "handler": "generate_file",
+  "output_file": "diagnose_wisdom_synthesiser_stale.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Create diagnostic daemon for wisdom_synthesiser which is stale at 10h3m (status=stale, threshold=14400s). File is NOT in PROTECTED_FILES list so a diagnostic is appropriate. Must: (1) query service_health for last heartbeat of wisdom_synthesiser; (2) attempt a lightweight query via write_service to test if daemon is responsive; (3) log findings with severity; (4) propose a restart via supervisord if daemon is non-responsive and >12h stale; (5) do NOT rebuild the daemon itself \u2014 only diagnose. Must emit heartbeat to service_health. Pattern: check heartbeat \u2192 test responsiveness \u2192 log diagnosis \u2192 suggest restart."
+}

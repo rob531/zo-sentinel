@@ -1,0 +1,9 @@
+{
+  "task": "build_email_guid_auth_v2",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Fresh build of email_guid_auth_v2.py \u2014 target file build_email_guid_auth failed in cohort_12_n5 (20% cohort failure rate). email_guid_auth.py exists in ALREADY_BUILT but build task failed. New file should implement GUID-based auth for email link flows: generate time-limited GUID tokens, store in mcp_submissions (email_token column), validate token on callback. Uses write_service :8772 for token storage. Exposes run() + if __name__ == '__main__': run(). Must pass smoke: no imports of protected modules, no direct duckdb."
+}

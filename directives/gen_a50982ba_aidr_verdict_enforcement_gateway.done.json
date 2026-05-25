@@ -1,0 +1,9 @@
+{
+  "task": "aidr_verdict_enforcement_gateway",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_gateway.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Bridge between ZO-SENTINEL verdict engine and AiDr commit gateway. MUST: (1) check verdict from trust_synthesiser_v2 before forwarding commit payload; (2) NEVER auto-commit servers with CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override flag in payload; (3) include injection_resilience score (dimension='injection_resilience') in commit payload; (4) query mcp_signal_scores for verdict history; (5) log all commit decisions to audit_log. Reads aidr_commit_gateway.py, trust_synthesiser_v2.py, mcp_signal_scores. The module is a guard that wraps AiDr commit calls \u2014 it does not replace aidr_commit_gateway.py."
+}

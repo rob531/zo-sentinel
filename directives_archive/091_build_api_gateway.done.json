@@ -1,0 +1,15 @@
+{
+  "task": "build_api_gateway",
+  "handler": "generate_file",
+  "output_file": "api_gateway.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.64,
+  "reads": [
+    "schema.py",
+    "rate_limiter.py"
+  ],
+  "description": "API gateway. FastAPI port 8787. Single entry point that proxies to all ZO-SENTINEL APIs. Routes: /assess/* -> registry_api:8781, /search/* -> search_api:8782, /submit/* -> approval_workflow:8780, /dashboard/* -> dashboard_api:8783, /bulk/* -> bulk_assess_api:8784, /compare/* -> comparison_api:8785. Adds rate limiting via RateLimiter middleware. Adds X-Sentinel-Version header. Adds request logging to mesh_events. GET /gateway/health checks all downstream /health endpoints. Daemon uvicorn port 8787. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

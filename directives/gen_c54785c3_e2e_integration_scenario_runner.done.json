@@ -1,0 +1,9 @@
+{
+  "task": "e2e_integration_scenario_runner",
+  "handler": "generate_file",
+  "output_file": "e2e_integration_scenario_runner.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "End-to-end integration test for three canonical flows: (1) new MCP ingestion through mcp_scanner, (2) signal scoring through signal_analyser_v2, (3) verdict computation through trust_synthesiser_v2, (4) attestation generation through attestation_engine, (5) UI visibility check. Reads synthetic MCP fixture, writes to mcp_server_registry, polls for completion. Uses write_service at :8772 for all DB operations. Exits 0 on all three flows completing with non-null verdict. DO NOT name task with build_ prefix."
+}

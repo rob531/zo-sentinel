@@ -1,0 +1,9 @@
+{
+  "task": "complete_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Complete wiring for snow_connector.py (built 2026-04-16) into approval_workflow. snow_connector.py is present but not integrated per Appendix A gap listing. This directive wires the ServiceNow inbound webhook handler to call approval_workflow.create_submission() when a new MCP request ticket arrives. Must: (1) fetch pending submissions from mcp_submissions via registry_api, (2) submit each to trust_synthesiser_v2 for verdict check, (3) write decision back to mcp_decisions via write_service, (4) heartbeat every 60s to service_health. No direct DB access. Use write_service :8772 for all state. ServiceNow OAuth token refresh via snow_connector.py helper."
+}

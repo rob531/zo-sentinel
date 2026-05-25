@@ -1,0 +1,12 @@
+{
+  "task": "build_npm_typo_squatter",
+  "handler": "generate_file",
+  "output_file": "npm_typo_squatter.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.90,
+  "reads": ["schema.py", "known_threats.py", "similarity_scorer.py", "db_utils.py"],
+  "description": "NPM typo-squatting hunter daemon. Reads all server names from mcp_server_registry via ws_query. For each known legitimate name (those with trust_score > 60 or registry_source=npm_official): query npm registry search API: GET https://registry.npmjs.org/-/v1/search?text={name}&size=20. For each result: compute Levenshtein distance between result name and known name using pure Python (no external deps -- implement levenshtein(a,b)->int using dynamic programming). Flag if: distance <= 2 AND result.downloads < 100 AND result published < 30 days ago. Additional checks: same-name different-scope (e.g. @modelcontextprotocol/server-filesystem vs modelcontextprotocol-server-filesystem). Homoglyph detection: replace lookalike chars (0->o, 1->l, rn->m) and check similarity again. ws_write npm_typosquat_alerts {suspect_name, target_name, levenshtein_dist, npm_downloads, published_at}. ws_write mcp_threat_associations {server_id of target, threat_type=typosquat_detected, evidence=suspect_name+dist, severity=HIGH}. Poll 86400s. Heartbeat.",
+  "context": "Levenshtein implementation: use 2D DP matrix, O(mn) time. npm downloads: GET https://api.npmjs.org/downloads/point/last-month/{package_name}. No external deps -- all stdlib + requests. All DB via write_service:8772 never duckdb.",
+  "from": "threat_matrix"
+}

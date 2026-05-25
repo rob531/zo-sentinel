@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies_page",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Admin UI page for managing mcp_policy_rules. Serves on port 8790. Fetches rows via write_service query endpoint, renders table with columns: rule_type, pattern, severity, action, created_by, created_at, is_active. Includes Create Rule and Toggle Active action buttons. Embedded CSS. Read mcp_policy_rules table schema from DB_SCHEMA.md for column names."
+}

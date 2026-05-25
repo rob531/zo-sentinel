@@ -1,0 +1,9 @@
+{
+  "task": "e2e_scenarios_rebuild",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_v2.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Rebuild e2e_scenarios.py (quarantined: last failed cohort_7_n4). The spec Appendix A lists this as a testing need. Script three canonical flows: (1) new MCP ingestion -> signal scored -> verdict -> attestation -> UI visible, (2) threat intel overlay -> risk_ranker update, (3) manual override -> attestation revocation. Use mock write_service responses. The original failed - ensure test harness uses proper mock isolation and does not hit real DB. Reference SPEC: Appendix A - e2e_scenarios.py."
+}

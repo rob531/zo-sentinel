@@ -1,0 +1,9 @@
+{
+  "task": "retry_graphql_schema_builder",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Retry failed graphql_schema_build. The graphql_schema_builder.py file exists but build failed. Regenerate with correct FastAPI GraphQL schema construction using strawberry-graphql. Must expose /graphql endpoint reading from registry_api. Do NOT wire GraphQL to any daemon \u2014 it is dormant per spec section 9. No new imports beyond strawberry, fastapi, and existing protected modules."
+}

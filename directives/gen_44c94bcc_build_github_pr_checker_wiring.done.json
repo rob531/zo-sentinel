@@ -1,0 +1,9 @@
+{
+  "task": "build_github_pr_checker_wiring",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Wire github_pr_checker.py webhook endpoint into the pipeline. Must: (1) receive GitHub PR webhook on port 8780 or 8790, (2) query mcp_server_registry for MCP names in PR description, (3) fetch verdict for each referenced MCP via write_service :8772/query, (4) POST check run result to GitHub API with verdict. MUST NOT auto-approve HIGH_RISK_ISOLATED or KNOWN_THREAT MCPs. Must use X-API-Key auth for GitHub API calls. Reference: github_pr_checker.py (already built)."
+}

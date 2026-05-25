@@ -1,0 +1,10 @@
+{
+  "task": "build_evidence_density_enrichment",
+  "handler": "generate_file",
+  "output_file": "evidence_density_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.97,
+  "from": "cto_directive_2026-04-28",
+  "description": "Pure enrichment exposing compute_score(metadata: dict) -> tuple[float, dict]. Discriminates MCPs by EVIDENCE DENSITY -- the count of distinct fact rows in mcp_registry_facts associated with this server divided by an expected baseline of 6 fact-types (npm metadata, github velocity, ecosystems metadata, registry origin, threat correlation, signal score). Returns score in [0..100] proportional to fact_count_observed / 6.0, capped at 100. Uses metadata fields: fact_count_npm, fact_count_github, fact_count_ecosystems, fact_count_registry, fact_count_threat, fact_count_signal. Pure function, no DB writes, no network, no imports of protected modules. Evidence dict reports each fact-type contribution. This is a CRITICAL diversity-injecting signal because the live diagnostic shows 5/6 existing signals have only 1 distinct value across the registry, while only 45 of 3786 registered MCPs currently have any facts at all. Discriminating on evidence density immediately produces a non-flat score distribution and exposes the breadth of the gap to 20k coverage."
+}

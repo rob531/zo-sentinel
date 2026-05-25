@@ -1,0 +1,9 @@
+{
+  "task": "exemption_expirer_integration",
+  "handler": "generate_file",
+  "output_file": "exemption_expirer.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Daemon that checks mcp_exemptions for records past valid_until and marks them expired via write_service on :8772. Must not DELETE rows per spec retention rules. Nightly check via cron or internal loop. Spec section 4. File exists in gaps map but not integrated."
+}

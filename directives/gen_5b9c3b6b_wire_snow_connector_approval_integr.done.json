@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_approval_integration",
+  "handler": "generate_file",
+  "output_file": "verify_snow_connector_approval_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration verification module for snow_connector_approval_integration.py wiring into approval_workflow. Must verify: (1) snow_connector reads from mcp_submissions table for pending MCP requests, (2) snow_connector writes ServiceNow ticket metadata to audit_log, (3) approval_workflow receives ServiceNow callback and creates mcp_decisions record. Checks function signatures match: snow_connector_approval_integration exports log, ws_query, ws_write, ws_execute. Verifies write_service endpoints at :8772 are used for all DB access (no direct duckdb). Includes test that simulates a ServiceNow webhook payload and verifies full round-trip through approval_workflow."
+}

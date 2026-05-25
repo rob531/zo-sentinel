@@ -1,0 +1,9 @@
+{
+  "task": "build_threat_feed_api",
+  "handler": "generate_file",
+  "output_file": "threat_feed_api.py",
+  "complexity": "medium",
+  "phase": "20",
+  "priority": 0.95,
+  "description": "FastAPI service on port 8789. GET /threats returns last 20 threat entries from mcp_threat_associations via write_service /query. GET /health returns ok. Daemon with uvicorn. Heartbeat to service_health. Uses requests.post to write_service. No duckdb.connect()."
+}

@@ -1,0 +1,13 @@
+{
+  "task": "fix_permission_scope_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rewrites permission_scope_enrichment to achieve >20 distinct scores across 34 fingerprints. Current v1 has 4 distinct values (30-100 range), failing the discrimination floor per signal_analyser_v2 output. MUST read MULTIPLE metadata fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars, tool_count, schema_complexity_score. MUST NOT directly write DB or import protected project modules. Pure function compute_score(metadata: dict) returning (float, dict) per enrichment contract. Provide sigmoid, softmax_weight, log_normalize, hash_string helpers. Target range 0-100 with high variance. Exit 0 on self-smoke exercising at least 3 known inputs.",
+  "reads": [
+    "enrichment_harness.py"
+  ],
+  "next_directive": {}
+}

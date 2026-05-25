@@ -1,0 +1,9 @@
+{
+  "task": "improve_permission_scope_enrichment",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "V2 of permission_scope_enrichment.py to improve signal discrimination from 4 distinct values to 20+. Use additional metadata fields: registry_source (npm/pypi/github/custom), has_read_perm, has_write_perm, has_network_access, has_env_access, is_dangerous_permission, permission_count. Apply sigmoid transformation with softmax weighting. Pure function compute_score(metadata) -> (float, evidence). Reference: supply_chain_enrichment.py pattern (built 2026-05-22 23:24:35). Cannot target permission_scope_enrichment.py directly (protected); propose new companion."
+}

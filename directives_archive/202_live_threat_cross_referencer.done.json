@@ -1,0 +1,12 @@
+{
+  "task": "build_live_threat_cross_referencer",
+  "handler": "generate_file",
+  "output_file": "live_threat_cross_referencer.py",
+  "complexity": "high",
+  "phase": "22",
+  "priority": 0.95,
+  "description": "Build live_threat_cross_referencer.py. Cross-references live threat intel with the MCP registry. 1. Every 1800s: ws_query mesh_events WHERE event_type IN ('threat_feed_match','cisa_kev','urlhaus_hit','malware_bazaar') AND created_at > now() - INTERVAL 24 HOURS. 2. For each threat event: extract indicators from payload JSON -- look for fields: ip, domain, package_name, url, hash. 3. ws_query mcp_server_registry WHERE url ILIKE '%domain%' OR metadata ILIKE '%package_name%' OR name ILIKE '%package_name%' -- build dynamic OR conditions for each extracted indicator. 4. For each matching MCP: ws_write mcp_threat_associations {server_id, threat_type='threat_feed_cross_ref', evidence=json.dumps({indicator, threat_event_id, source}), severity='HIGH', reported_at=now()}. 5. ws_write mcp_server_registry update {trust_score = GREATEST(0, trust_score - 25), verdict='HIGH_RISK_ISOLATED', last_assessed=now()} WHERE server_id=matched_id. 6. ws_write mesh_events {event_type='cross_ref_hit', severity='CRITICAL', payload=json.dumps({mcp_name, indicator, threat_source})}. 7. Track already-processed event IDs in memory dict to avoid double-processing. 8. GET /health port 8793. ws_write service_health heartbeat. run() uvicorn. All DB via ws_query/ws_write to write_service:8772. SMOKE TEST CONTRACT: Must perform cross-table entity match using ws_query.",
+  "pillar": "THREAT_INTEL",
+  "source_note": "world_articles:live_threat_intel",
+  "from": "depth_injection_layer3"
+}

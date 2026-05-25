@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies_page",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Admin UI surface for managing mcp_policy_rules in the Search-Driven UI (port 8790). Must read existing policy rules via registry_api on :8781, present as HTML table with columns: rule_id, rule_type, pattern, action, created_at. Must include form for admin to create new policy rule. Per spec Section 3 signal invariant: policy rules must not introduce new signal shapes or verdict tiers. Write actions via write_service."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_write_service_stale",
+  "handler": "generate_file",
+  "output_file": "write_service_diagnostic.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnostic daemon to investigate why write_service has heartbeat age 1h31m (stale). Must: (1) use write_service :8772 for state only, never direct DB. (2) check DuckDB accessibility by querying information_schema.tables. (3) verify port 8772 is listening. (4) test write throughput: POST a small payload to /write with wait=True and measure round-trip. (5) log findings to LOG_DIR/write_service_diagnostic.log. (6) output structured dict: {service: str, port_listening: bool, db_accessible: bool, write_latency_ms: float, last_heartbeat: str, status: str}. (7) do NOT attempt to restart \u2014 diagnostic only. (8) write_service is protected \u2014 this is a companion diagnostic module."
+}

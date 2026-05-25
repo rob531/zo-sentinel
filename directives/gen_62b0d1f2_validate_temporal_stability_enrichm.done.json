@@ -1,0 +1,9 @@
+{
+  "task": "validate_temporal_stability_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_discrimination_validator.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Validate that temporal_stability_enrichment_v2.py produces >20 distinct scores across the 34 synthetic fingerprints in enrichment_harness.py. Query mcp_signal_enrichments WHERE signal_name='temporal_stability', count distinct score values. The signal currently has only 4 distinct values per the live diagnostic - this is a BAD SIGNAL. Generate diagnostic report identifying which metadata fields the enrichment reads and how to increase score distribution granularity."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "wire_tool_description_enrichment_evidence",
+  "handler": "generate_file",
+  "output_file": "tool_description_enrichment_evidence_check.sql",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Build SQL validation query for enrichment_evidence gate. Verifies tool_description_safety_enrichment.py output produces >=20 distinct scores across mcp_fingerprints when computed via enrichment_harness. References last_error 'failed in cohort_9_n4' per quality map. Produces a pass/fail report without modifying the enrichment module."
+}

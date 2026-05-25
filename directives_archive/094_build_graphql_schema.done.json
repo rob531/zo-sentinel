@@ -1,0 +1,15 @@
+{
+  "task": "build_graphql_schema",
+  "handler": "generate_file",
+  "output_file": "graphql_schema.py",
+  "complexity": "high",
+  "phase": "15",
+  "priority": 0.5,
+  "reads": [
+    "schema.py",
+    "registry_api.py"
+  ],
+  "description": "GraphQL schema for ZO-SENTINEL using strawberry-graphql. Types: MCPServer(server_id,name,url,verdict,trust_score), SignalScore(signal_name,score,evidence), ThreatAssociation(threat_type,severity,evidence), Assessment(server,signals,threats,attestation). Query: server(id)->MCPServer, servers(verdict,risk_tier,limit)->list, search(q)->list, threats(severity)->list. FastAPI integration on port 8788 at /graphql. Daemon uvicorn. Heartbeat. Requires: pip install strawberry-graphql.",
+  "context": "",
+  "from": "claude_batch"
+}

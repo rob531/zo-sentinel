@@ -1,0 +1,14 @@
+{
+  "task": "rebuild_email_guid_auth",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.95,
+  "description": "Rebuild auth portal module. Must use auth_tokens table, correct column names. Implement POST /write with wait=True. Include run() + if __name__ pattern. Port: 8780. Handle token validation, expiry checks, and audit logging to audit_log table.",
+  "reads": [
+    "db_utils.py",
+    "audit_trail.py"
+  ],
+  "next_directive": {}
+}

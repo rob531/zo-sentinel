@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_exemptions_html",
+  "handler": "generate_file",
+  "output_file": "admin_exemptions.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Admin UI surface from Appendix A. Manage mcp_exemptions records. Must expose: create exemption (mcp_server_id, valid_until, reason, granted_by), revoke exemption (set status='revoked'), list active exemptions. Uses mcp_exemptions table via write_service API. Binds on port 8790. Must include XSS sanitization on all user inputs. No direct DB access."
+}

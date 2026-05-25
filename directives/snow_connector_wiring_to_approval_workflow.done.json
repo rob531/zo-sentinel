@@ -1,0 +1,19 @@
+{
+  "directive_id": "snow_connector_wiring_to_approval_workflow",
+  "completed_at": "2026-05-25T00:42:00+00:00",
+  "complexity": "low",
+  "source": "goose_tier1",
+  "outcome": "SUCCESS",
+  "summary": "Wired snow_connector (port 8778) to approval_workflow (port 8780) via snow_connector_wiring.py. Polls mcp_submissions for pending servicenow rows, transforms them into approval_workflow payloads, forwards via POST /api/submit, and updates status. Smoke tests passed (Gate 8: 64/68).",
+  "files_touched": [
+    "snow_connector_wiring.py"
+  ],
+  "notes": [
+    "snow_connector currently down (port 8778 not listening) — wiring will skip cycles until connector is restarted",
+    "approval_workflow is healthy (port 8780, PID 3832)",
+    "mcp_submissions table has no rows currently — wiring will idle until SNOW tickets arrive",
+    "Gate 8 breaker tripped due to 4 known-missing files (temporal_stability_enrichment, permission_scope_enrichment, tool_description_safety_enrichment_v2, temporal_stability_enrichment_v2) — not related to this directive",
+    "snow_connector_wiring.py passes all smoke gates: valid syntax, clean import, no DuckDB, run()=True, heartbeat present"
+  ],
+  "build_id": "run_494b6b20f47c40b2"
+}

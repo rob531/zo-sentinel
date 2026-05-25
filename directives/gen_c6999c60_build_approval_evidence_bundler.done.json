@@ -1,0 +1,13 @@
+{
+  "task": "build_approval_evidence_bundler",
+  "handler": "generate_file",
+  "output_file": "approval_evidence_bundler.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Generate approval_evidence_bundler.py: pure function compute_evidence_bundle(server_id) that queries write_service for all signal scores (7 dimensions + injection_resilience), attestation text, pi_scorer results, corpus hash, and analyst decision metadata from mcp_decisions. Bundles into signed JSON dict with fields: server_id, mcp_name, verdict_tier, composite_score, signal_scores (dict by signal_name), pi_injection_resilience (if present), attestation_text, corpus_hash, decision_by, decided_at, conditions_list. No DB writes. Returns (bundle_dict, evidence_dict) tuple. Called by approval_workflow.py after decision is logged.",
+  "reads": [
+    "approval_workflow.py",
+    "attestation_engine.py"
+  ]
+}

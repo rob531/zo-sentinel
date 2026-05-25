@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_build_start_all_sh",
+  "handler": "generate_file",
+  "output_file": "build_start_all_sh.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild build_start_all_sh as a Python file that generates the supervisord startup script. Read existing stub, fix any syntax errors, output proper shell script content via the builder. The script should: set PYTHONPATH, cd to /home/workspace/zo_sentinel, start write_service first (blocks until healthy), then start all other daemons via supervisord."
+}

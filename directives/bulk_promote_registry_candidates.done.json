@@ -1,0 +1,9 @@
+{
+  "directive_id": "bulk_promote_registry_candidates",
+  "goal": "Write a one-shot script /home/workspace/logs/bulk_promote.py that directly promotes all 3151 unpromoteed mcp_registry candidates into mcp_server_registry in batches of 500.\n\nLogic:\n1. SELECT id, candidate_name, candidate_url, candidate_description FROM mcp_discovery_candidates WHERE promoted=false AND discovered_status='active' AND discovered_in_directory='mcp_registry'\n2. For each batch of 500: INSERT INTO mcp_server_registry (server_id, name, url, description, verdict, trust_score, created_at) SELECT gen_random_uuid(), candidate_name, candidate_url, candidate_description, 'unknown', 0.5, now() FROM batch ON CONFLICT(url) DO NOTHING\n3. UPDATE mcp_discovery_candidates SET promoted=true, reviewed_at=now() WHERE id IN (batch_ids)\n4. Log before/after count of mcp_server_registry\n5. Run immediately when script is executed - not a daemon\n\nAlso fix candidate_promoter_daemon.py MAX_PAGES constant from 50 to 500.",
+  "output_path": "/home/workspace/logs/bulk_promote.py",
+  "constraints": ["ON CONFLICT DO NOTHING on registry insert", "Batch size 500 max", "Log registry count before and after"],
+  "success_criteria": ["mcp_server_registry grows from 6334 toward 9000+", "promoted=true for all processed candidates"],
+  "source": "cto_directive",
+  "generated_at": "2026-05-20T02:10:00"
+}

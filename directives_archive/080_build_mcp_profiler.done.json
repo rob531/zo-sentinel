@@ -1,0 +1,15 @@
+{
+  "task": "build_mcp_profiler",
+  "handler": "generate_file",
+  "output_file": "mcp_profiler.py",
+  "complexity": "medium",
+  "phase": "8",
+  "priority": 0.7,
+  "reads": [
+    "schema.py",
+    "url_analyser.py"
+  ],
+  "description": "MCP profiler utility. profile_mcp(url)->dict: attempts to fetch the MCP server manifest or package.json. Extracts: tool_count, tool_names list, permission_list, server_type (npm/github/custom), has_authentication, has_encryption, declared_scope. Also runs url_analyser.analyse_url. Returns structured profile dict. Used as pre-assessment enrichment step before signal scoring. Handles timeout gracefully (5s). Stores profile in mcp_server_registry extended_metadata JSON field. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

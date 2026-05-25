@@ -1,0 +1,14 @@
+{
+  "task": "build_test_known_threats",
+  "handler": "generate_file",
+  "output_file": "tests/test_known_threats.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.71,
+  "reads": [
+    "known_threats.py"
+  ],
+  "description": "Unit tests for known_threats.py. Tests: (1) check_package with known malicious names returns True (2) check_package with clean names returns False (3) check_domain with suspicious TLDs returns True (4) check_domain with clean domains returns False (5) HIGH_RISK_PATTERNS is non-empty list (6) SUSPICIOUS_PERMISSIONS is non-empty list (7) each pattern in HIGH_RISK_PATTERNS is a non-empty string. Uses stdlib unittest. Run: python3 -m pytest tests/test_known_threats.py -v. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

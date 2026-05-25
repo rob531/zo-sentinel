@@ -1,0 +1,9 @@
+{
+  "task": "verify_enrichment_wiring_telemetry",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_enrichment_telemetry.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Adds instrumentation to signal_analyser.py (protected file \u2014 uses monkey-patch approach via a companion module) to log each enrichment call: which enrichment module was called, the metadata fields present, the returned score, and timestamp. This is needed because mcp_signal_enrichments has only 280 rows while mcp_signal_scores has 6,490 rows \u2014 a 4% enrichment rate that suggests enrichments may not be wired into signal_analyser correctly. signal_analyser_v2_enrichment_wiring.py was built on 2026-05-23T08:05:51 but the integration gap persists. Companion module adds a telemetry layer without modifying the protected signal_analyser.py directly."
+}

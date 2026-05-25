@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_rug_pull_stale_v2",
+  "handler": "generate_file",
+  "output_file": "diagnose_rug_pull_stale_v2.py",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.85,
+  "description": "Diagnostic-only module for rug_pull_monitor (age=135h0m, status=stale). DO NOT rebuild rug_pull_monitor.py (protected). diagnose_rug_pull_stale.py already exists. This v2 should: (1) query write_service :8772 for current heartbeat timestamp, (2) check if service process is alive via system APIs, (3) log findings without attempting to restart. Output is diagnostic report, not a fix action. rug_pull_monitor is protected per ALREADY_BUILT list.",
+  "reads": [
+    "diagnose_rug_pull_stale.py"
+  ],
+  "next_directive": {}
+}

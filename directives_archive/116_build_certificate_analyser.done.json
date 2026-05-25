@@ -1,0 +1,15 @@
+{
+  "task": "build_certificate_analyser",
+  "handler": "generate_file",
+  "output_file": "certificate_analyser.py",
+  "complexity": "medium",
+  "phase": "16",
+  "priority": 0.84,
+  "reads": [
+    "schema.py",
+    "url_analyser.py"
+  ],
+  "description": "TLS certificate analyser daemon. For each HTTPS server in mcp_server_registry: use ssl + socket to fetch certificate: ssl.get_server_certificate((host, 443)). Parse with ssl.PEM_cert_to_DER_cert and x509 analysis. Extract: issuer, subject, valid_from, valid_until, san_domains, is_self_signed. Risk scoring: self_signed = -30 to domain_trust signal, expired cert = -40, cert valid <7 days = -20 (likely compromised rotation), mismatched hostname (cert CN != server domain) = CRITICAL, cert issued by unknown/private CA = -25. ws_write mcp_signal_scores domain_trust signal update with evidence. ws_write mcp_threat_associations for CRITICAL cert issues. Poll 43200s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

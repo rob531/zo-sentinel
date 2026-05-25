@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_forensic_detail_api_v2",
+  "handler": "generate_file",
+  "output_file": "forensic_detail_api_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild forensic_detail_api.py to fix smoke failure. Module provides forensic analysis endpoints. Create v2 with FastAPI, GET /servers/{server_id}/forensic endpoint returning signal scores, threat associations, attestation history. Must use write_service for DB access. Forensic data from mcp_signal_scores, mcp_threat_associations, mcp_attestations tables."
+}

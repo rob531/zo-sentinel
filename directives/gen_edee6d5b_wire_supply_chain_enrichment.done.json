@@ -1,0 +1,13 @@
+{
+  "task": "wire_supply_chain_enrichment",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire supply_chain_enrichment.py (built 2026-05-22T23:24:35) into signal_analyser_v2 pipeline. Uses write_service on :8772 to read mcp_server_registry metadata fields (registry_source, age_days, download_count, dependency_count, publisher_verified, stars) and calls compute_score(metadata) from supply_chain_enrichment. Writes results to mcp_signal_enrichments with signal_type='supply_chain_enrichment' and evidence_blob conforming to signal invariant contract. Polls for work via pending enrichment rows. Must include heartbeat to service_health.",
+  "reads": [
+    "supply_chain_enrichment.py",
+    "signal_analyser_v2_enrichment_wiring.py"
+  ]
+}

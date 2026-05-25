@@ -1,0 +1,11 @@
+{
+  "task": "build_incident_webhook_dispatcher",
+  "handler": "generate_file",
+  "output_file": "incident_webhook_dispatcher.py",
+  "complexity": "medium",
+  "phase": "22",
+  "priority": 0.93,
+  "description": "Build incident_webhook_dispatcher.py. Real-time enterprise alerting via webhook. 1. Every 120s: ws_query mcp_risk_register WHERE risk_tier IN ('QUARANTINED','HIGH_RISK_ISOLATED') AND computed_at > now() - INTERVAL 10 MINUTES. Also ws_query mcp_server_registry WHERE trust_score < 40 AND last_assessed > now() - INTERVAL 10 MINUTES. 2. Anti-spam: maintain in-memory dict alerted_cache = {server_id: last_alerted_at}. Skip if server_id was alerted within last 3600s. 3. For each new alert: format rich JSON block {alert_type, mcp_name, server_id, trust_score, risk_tier, verdict, url, triggered_at, sentinel_url='http://localhost:8790'}. 4. POST to os.environ.get('ZO_ALERT_WEBHOOK') if set -- if not set log warning and skip. Include Content-Type: application/json. Handle HTTP errors gracefully (log, don't crash). 5. Update alerted_cache[server_id] = now(). 6. ws_write audit_log {event_type='webhook_alert_sent', actor='incident_webhook_dispatcher', target_server_id=server_id, action='alert', outcome='sent'}. 7. GET /health port 8794 returns {status, alerts_sent_total, cache_size, webhook_configured: bool(os.environ.get('ZO_ALERT_WEBHOOK'))}. ws_write service_health heartbeat. run() uvicorn. SMOKE TEST CONTRACT: Must implement alerted_cache dict anti-spam mechanism and handle requests.post with try/except.",
+  "pillar": "SOA",
+  "from": "depth_injection_layer1_alerting"
+}

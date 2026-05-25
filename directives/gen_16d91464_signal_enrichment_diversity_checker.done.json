@@ -1,0 +1,13 @@
+{
+  "task": "signal_enrichment_diversity_checker",
+  "handler": "generate_file",
+  "output_file": "signal_enrichment_diversity_checker.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic tool that queries mcp_signal_scores for all 8 signals and counts distinct score values across the 34 MCP servers in the synthetic corpus. Reports which signals have <20 distinct values (weak discrimination) versus >=20 (acceptable). Output format: {signal_type: distinct_count, verdict: 'WEAK'|'OK', recommended_action: str}. Primary targets: permission_scope, temporal_stability, tool_description_safety (currently at 3 distinct values each). Uses write_service query only; no DB writes. Returns actionable guidance: either (a) rebuild identified weak enrichments with better logic, (b) add wiring to existing _v2 modules, or (c) investigate integration path. Include human-readable summary print at end.",
+  "reads": [
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

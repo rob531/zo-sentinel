@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_build_email_guid_auth_failure",
+  "handler": "generate_file",
+  "output_file": "diagnose_email_guid_auth_build.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to investigate build failure for email_guid_auth.py and email_guid_auth_compact. Inspects the build artifact by reading the source file, checking import statements against available modules, and identifying missing dependencies or import conflicts. Does NOT import any protected modules. Outputs a structured diagnostic report identifying the specific failure cause (missing import, circular dependency, syntax error, etc.) with remediation recommendations. Pure diagnostic only - no writes to DB or state."
+}

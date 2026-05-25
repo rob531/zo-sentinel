@@ -1,0 +1,12 @@
+{
+  "task": "build_scoring_cache",
+  "handler": "generate_file",
+  "output_file": "scoring_cache.py",
+  "complexity": "low",
+  "phase": "3",
+  "priority": 0.75,
+  "reads": [],
+  "description": "In-memory scoring cache with TTL. ScoringCache class: get(server_id)->dict|None, set(server_id,data,ttl_seconds=3600), invalidate(server_id), clear_expired(). Uses dict with {data,expires_at} per server_id. Thread-safe with threading.Lock. clear_expired() called on every get to avoid unbounded growth. Global instance: _cache=ScoringCache(). Reduces repeated ws_query calls when signal_analyser processes same server multiple times per cycle. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_write_service_stale",
+  "handler": "generate_file",
+  "output_file": "diagnose_write_service_stale_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module to investigate why write_service is 4h1m stale (threshold 300s). write_service is PROTECTED - do NOT propose rebuild. Check: (1) Can connect to write_service at :8772, (2) Does heartbeat table have recent entries for write_service, (3) Is the service process running (ps aux | grep write_service), (4) Are there locked tables or long-running transactions. Output findings as structured report. This is diagnostic only - do not write to service_health or attempt recovery.",
+  "reads": [
+    "diagnose_write_service_stale.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "fix_supply_chain_enrichment_flat_signal",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Current supply_chain_enrichment_v2.py produces flat 0.0 across all synthetic fingerprints (signal quality: BAD). Generate a replacement that discriminates between MCPs using MULTIPLE metadata fields. MUST use registry_source (score_registry_source), age_days (age_score), download_count (download_score), dependency_count (dep_penalty), publisher_verified (verified_bonus), stars (star_score). Compute weighted sum, return evidence dict listing each partial score. Pure function only, no DB writes, no network, no imports of protected modules. Target 20+ distinct score buckets across 34 fingerprints."
+}

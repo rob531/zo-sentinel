@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_supervisor_auto_updater",
+  "handler": "generate_file",
+  "output_file": "supervisor_auto_updater.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild supervisor_auto_updater.py which failed smoke. Must include # deps: supabase or requests comment. Must expose start() and check_updates() functions. Build as supervisor_auto_updater.py (NOT build_supervisor_auto_updater to avoid orphan filename). Reference: last_error showed smoke failure in cohort analysis. This is NOT a protected file - proceed with rebuild."
+}

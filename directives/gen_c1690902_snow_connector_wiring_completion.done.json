@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_wiring_completion",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_verify.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Integration verification module for snow_connector.py. Reads snow_connector.py and approval_workflow.py source to verify wiring is complete per spec section 5. Checks: (1) snow_connector.py uses ws_query/ws_write for all state, not direct DB; (2) approval_workflow.py calls snow_connector endpoint via write_service pattern; (3) webhook registration exists in mcp_submissions handling. Queries write_service for recent mcp_submissions rows to verify inbound ServiceNow tickets are being ingested. Produces wiring completeness report with specific gaps: missing ws_write calls, incomplete endpoint wiring, unhandled ticket states. Does NOT modify source files. snow_connector.py is in ALREADY_BUILT; this module only verifies and reports."
+}

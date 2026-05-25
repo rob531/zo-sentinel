@@ -1,0 +1,11 @@
+{
+  "task": "build_supervisord_config_for_phase8_daemons",
+  "handler": "generate_file",
+  "output_file": "supervisord_phase8_update.conf",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Generate a supervisord config snippet (NOT a full replacement) to add the 6 Phase 8 pi_* daemons to supervisord_sentinel_full.conf. Include entries for: pi_corpus_ingest.py, pi_quarantine_reviewer.py, pi_quarantine_promoter.py, pi_flagged_review_api.py (:8792), pi_harness_runner.py, pi_scorer.py. Each entry must: (1) command=python3 /home/workspace/zo_sentinel/<filename>, (2) autostart=true, (3) autorestart=true, (4) stderr_logfile=/home/workspace/zo_sentinel/logs/<name>.err, (5) stdout_logfile=/home/workspace/zo_sentinel/logs/<name>.out. Output as a patch snippet with header comment '# PHASE 8 DAEMONS - ADD TO supervisord_sentinel_full.conf' and instructions to append.",
+  "reads": [],
+  "next_directive": {}
+}

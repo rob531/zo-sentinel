@@ -1,0 +1,9 @@
+{
+  "task": "community_signal_enrichment_diagnostic",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic to verify community_signal_enrichment.py (built 2026-05-03T07:04:51) is producing distinct scores. Must: (1) query mcp_signal_enrichments WHERE signal_type='community_signal', (2) count DISTINCT score values, (3) assert >=20 distinct values (enrichment contract). The signal quality diagnostic shows community_signal range 10.0-80.0 which looks healthy (distinct values), but verify the enrichment module is the source. Report findings. Does not write to DB. Service name: community_signal_enrichment_diagnostic."
+}

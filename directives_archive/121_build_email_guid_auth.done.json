@@ -1,0 +1,12 @@
+{
+  "task": "build_email_guid_auth",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth.py",
+  "complexity": "high",
+  "phase": "17",
+  "priority": 0.99,
+  "reads": ["schema.py"],
+  "description": "Email GUID authentication service for ZO-SENTINEL approval workflow. Creates and validates one-time token links sent by email. TABLES NEEDED (create via ws_execute if not exist): CREATE TABLE IF NOT EXISTS auth_tokens (token_id VARCHAR PRIMARY KEY, action VARCHAR, mcp_name VARCHAR, submission_id VARCHAR, requested_by VARCHAR, admin_email VARCHAR, expires_at TIMESTAMPTZ, used BOOLEAN DEFAULT FALSE, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now()). FUNCTIONS: generate_token(action, mcp_name, submission_id, requested_by, admin_email, ttl_hours=24) -> token_id: generates uuid4 token, ws_write to auth_tokens, returns token string. validate_token(token_id) -> dict: ws_query auth_tokens WHERE token_id=? AND used=FALSE AND expires_at > now(), returns {valid, action, mcp_name, submission_id} or {valid: False, reason}. consume_token(token_id): marks token used=TRUE, used_at=now() via ws_write. send_approval_email(to_email, mcp_name, token_id, base_url='http://localhost:8780'): sends email via requests.post to https://api.zo.computer/zo/notify with subject='[ZO-SENTINEL] MCP Approval Required: {mcp_name}' and body containing the approval link: {base_url}/api/approve?token={token_id} and denial link: {base_url}/api/deny?token={token_id}. FASTAPI APP on port 8775: POST /api/send-approval-email body={mcp_name, submission_id, requested_by, admin_email} -> generates token, sends email, returns {sent: true, token_preview: token[:8]+'...'}. GET /api/validate?token={token_id} -> returns validation result. POST /api/consume body={token_id} -> marks used. GET /health. All DB via write_service:8772. run() + uvicorn. Heartbeat.",
+  "context": "ZO_NOTIFY_URL=https://api.zo.computer/zo/notify. Email sending may fail (known timeout) -- wrap in try/except, log warning, still return sent:true with note. Token expiry: 24h default. uuid4 import from uuid module. No duckdb.",
+  "from": "claude_manual"
+}

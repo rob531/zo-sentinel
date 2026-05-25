@@ -1,0 +1,9 @@
+{
+  "task": "fix_community_signal_enrichment_weak_signal",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_v3.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "community_signal_enrichment_v2.py shows WEAK signal (only 3 distinct values, range 60-80). Enhance to read stars, download_count, registry_source, publisher_verified, dependency_count, age_days, github_stars. Apply non-linear scaling (log for downloads, sqrt for stars). Compute min/max normalization across available fields. Return evidence dict. Pure function. Target 15+ distinct score buckets (current is 3)."
+}

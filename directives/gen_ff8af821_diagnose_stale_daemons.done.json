@@ -1,0 +1,10 @@
+{
+  "task": "diagnose_stale_daemons",
+  "handler": "generate_file",
+  "output_file": "daemon_diagnostic_probe.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic-only daemon that reports on stale daemon heartbeats without attempting restart. Reads service_health table via write_service to identify: write_service (5h22m stale), mcp_scanner (5h19m stale), rug_pull_monitor (614h28m stale), anti_entropy (5h22m stale), wisdom_synthesiser (5h22m stale), self_diagnostics (21m stale). For each stale daemon, queries last_seen timestamp, checks if PID file exists under /home/workspace/zo_sentinel/pid/, and logs findings. Does NOT restart services or modify any state. Outputs structured diagnostic report to log file. Heartbeat to service_health.",
+  "reads": []
+}

@@ -1,0 +1,7 @@
+{
+  "task": "cto_2026_05_08_sft_listing",
+  "handler": "run_script",
+  "phase": "99",
+  "priority": 0.99,
+  "command": "python3 /home/workspace/logs/_sft_listing.py"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_submissions",
+  "handler": "generate_file",
+  "output_file": "admin_submissions.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Admin triage view for mcp_submissions table (portal already exists, admin view does not). Surfaces pending MCP submissions with columns: mcp_name (not mcp_identifier), requested_by (not requester_name), submitted_at, status. Uses write_service :8772. Authenticated via X-API-Key. All values parameterized to prevent SQL injection. Inserts audit_log row on any admin action (approve/reject/triage)."
+}

@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_email_guid_auth_compact_v2",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth_compact_v2.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Rebuild email_guid_auth_compact.py fixing the same importlib failure pattern seen in recent smoke tests. Creates a compact variant of the email GUID auth module. Must maintain compatibility with email_guid_auth_v2 interface."
+}

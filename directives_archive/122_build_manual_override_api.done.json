@@ -1,0 +1,11 @@
+{
+  "task": "build_manual_override_api",
+  "handler": "generate_file",
+  "output_file": "manual_override_api.py",
+  "complexity": "high",
+  "phase": "17",
+  "priority": 0.97,
+  "reads": ["schema.py", "email_guid_auth.py"],
+  "description": "Manual override API for human administrators. FastAPI on port 8776. POST /api/override payload: {mcp_name, new_trust_score, status (quarantined/locked/cleared), reason, admin_token}. Auth: compare admin_token against os.environ.get('ZO_ADMIN_TOKEN') -- if mismatch return 403. ALSO support GUID token auth: if admin_token starts with 'guid:' extract token_id, call validate_token() from email_guid_auth module, consume on success. Idempotency: ws_query mcp_risk_register WHERE server_id matches mcp_name to check if status+score already set -- return 200 with already_applied:true if unchanged needed. Execution: ws_write mcp_risk_register update {risk_tier: status, trust_score: new_trust_score}. ws_write audit_log {event_type: manual_override, actor: admin, action: status+':'+reason, outcome: success, target_server_id: server_id}. ws_write mcp_threat_associations if status=quarantined {threat_type: admin_quarantine, severity: HIGH, evidence: reason}. GET /api/overrides?limit=20 returns recent audit_log WHERE event_type=manual_override. GET /health. All DB via write_service:8772. run() + uvicorn. Heartbeat. os.environ.get('ZO_ADMIN_TOKEN') required.",
+  "from": "claude_manual"
+}

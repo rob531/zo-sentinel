@@ -1,0 +1,11 @@
+{
+  "task": "build_forensic_detail_api",
+  "handler": "generate_file",
+  "output_file": "forensic_detail_api.py",
+  "complexity": "high",
+  "phase": "18",
+  "priority": 0.93,
+  "reads": ["schema.py"],
+  "description": "Forensic lifecycle API. FastAPI on port 8779. GET /api/forensics/{mcp_name}: looks up server by name (ILIKE match) or server_id. Returns 404 with {detail: 'MCP not found', mcp_name: mcp_name} if not found -- 404 handling is mandatory. For found servers: execute sequential ws_query calls: (1) base record from mcp_server_registry, (2) all signal scores from mcp_signal_scores ORDER BY scored_at ASC, (3) risk register entry from mcp_risk_register, (4) full audit trail from audit_log WHERE target_server_id=server_id ORDER BY timestamp ASC, (5) all threats from mcp_threat_associations ORDER BY reported_at ASC, (6) attestations from mcp_attestations ORDER BY generated_at DESC LIMIT 5. Assemble into timeline: list of {timestamp, event_type, description, data} sorted chronologically across all sources (first_seen=DISCOVERED, each signal score=SIGNAL_UPDATE, each threat=THREAT_DETECTED, each audit entry=ADMIN_ACTION, each attestation=ATTESTATION_ISSUED). Return {server_id, name, url, current_verdict, current_trust_score, timeline: [...], summary: {total_events, first_seen, days_monitored, threat_count, assessment_count}}. GET /api/forensics/{mcp_name}/timeline?event_type=THREAT_DETECTED filters timeline. GET /health. All DB via ws_query to write_service:8772. No duckdb. run() + uvicorn. Heartbeat.",
+  "from": "claude_manual"
+}

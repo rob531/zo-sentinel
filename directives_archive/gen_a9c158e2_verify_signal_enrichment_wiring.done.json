@@ -1,0 +1,13 @@
+{
+  "task": "verify_signal_enrichment_wiring",
+  "handler": "generate_file",
+  "output_file": "signal_enrichment_wiring_check.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Verify that signal_enrichment modules are properly wired into signal_analyser and that scores flow to mcp_signal_enrichments table.\n\nMUST: Query mcp_signal_enrichments for presence of all 8 signal types (domain_trust, tool_description_safety, permission_scope, supply_chain, community_signal, temporal_stability, supply_chain_enrichment, community_signal_enrichment).\nMUST: Check that each enrichment row has evidence_blob with signal_type and confidence fields per spec contract.\nMUST: Report distinct scores per signal_type to verify discrimination quality.\nMUST: Flag any signal_type missing from mcp_signal_enrichments as wiring gap.\nSignal discrimination quality: supply_chain (34 distinct), community_signal (33 distinct), domain_trust (11 distinct) are OK. permission_scope (3), temporal_stability (3), tool_description_safety (3) are WEAK -- may indicate wiring issue or enrichment needs review.\nRead-only diagnostic; no DB writes.",
+  "reads": [
+    "write_service.py",
+    "mcp_signal_enrichments"
+  ]
+}

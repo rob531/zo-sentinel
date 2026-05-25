@@ -1,0 +1,9 @@
+{
+  "task": "temporal_stability_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Pure enrichment module exposing compute_score(metadata) that returns (float, dict). Target: improve discrimination from current 4 distinct values. Must read MULTIPLE fields from metadata dict (age_days, first_seen, last_updated, commit_frequency, release_regularity, version_count). Compute a score in [0.0, 100.0] with evidence dict listing partial scores. No DB writes, no network, no imports of protected modules. Will be exercised by enrichment_harness.py. This directly addresses the weak signal with 4 distinct values per Signal Quality Diagnostic."
+}

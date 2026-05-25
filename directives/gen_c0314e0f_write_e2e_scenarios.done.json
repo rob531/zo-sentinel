@@ -1,0 +1,15 @@
+{
+  "task": "write_e2e_scenarios",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Write end-to-end scenario tests as a standalone Python script (NOT a daemon). Three canonical flows: (1) New_MCP_Flow: inject a test MCP into mcp_submissions, verify mcp_scanner picks it up, signal_analyser scores it across all 8 signals, trust_synthesiser assigns verdict, attestation_engine creates attestation, UI (port 8790) surfaces verdict \u2014 assert all steps complete without error; (2) Verdict_Override_Flow: submit a manual_override_api call for a known MCP, verify mcp_decisions records the override with analyst metadata, audit_log captures the action; (3) Threat_Intel_Flow: inject a known-threat signal via threat_intel_ingestor, verify risk_ranker promotes server to HIGH_RISK_ISOLATED, verify attestation is revoked. Use write_service for all DB operations. No direct duckdb. Exit 0 on all pass, exit 1 on any failure. Include docstring citing ZO-SENTINEL Product Specification v1.0.",
+  "reads": [
+    "approval_workflow.py",
+    "trust_synthesiser.py",
+    "attestation_engine.py"
+  ],
+  "next_directive": {}
+}

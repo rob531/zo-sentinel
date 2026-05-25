@@ -1,0 +1,9 @@
+{
+  "task": "signal_analyser_v2_enrichment_diagnostic",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v2_enrichment_wiring_check.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic companion that audits signal_analyser_v2.py to verify it calls the v2 enrichment modules (permission_scope_enrichment_v2.py, tool_description_safety_enrichment_v2.py, supply_chain_enrichment.py, community_signal_enrichment.py, domain_trust_enrichment.py). Reads source via file I/O, searches for import statements and compute_score calls. Then queries mcp_signal_enrichments to confirm each enricher has produced rows in the last 7 days. Reports which enrichers are wired but silent. This explains why permission_scope and tool_description_safety show only 4 distinct values in the signal diagnostic despite v2 modules existing. Does not modify any file; purely investigative."
+}

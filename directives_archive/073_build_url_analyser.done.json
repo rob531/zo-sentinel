@@ -1,0 +1,14 @@
+{
+  "task": "build_url_analyser",
+  "handler": "generate_file",
+  "output_file": "url_analyser.py",
+  "complexity": "low",
+  "phase": "3",
+  "priority": 0.83,
+  "reads": [
+    "known_threats.py"
+  ],
+  "description": "URL analysis utility. Functions: analyse_url(url)->dict {domain,tld,is_ip_address,is_localhost,is_suspicious_tld,domain_length,has_port,port,path_depth,score:int 0-100}. SUSPICIOUS_TLDS: list including .xyz,.top,.click,.pw,.cc,.tk. is_suspicious(url)->bool. domain_trust_score(url)->int 0-100: penalise short domains(-20),suspicious TLD(-30),IP address(-40),localhost(-100),no HTTPS(-10),unusual port(-20). Called by signal_analyser domain_trust signal. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

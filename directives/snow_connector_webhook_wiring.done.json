@@ -1,0 +1,24 @@
+{
+  "directive_id": "snow_connector_webhook_wiring",
+  "description": "Wire snow_connector_integration_completion.py into approval_workflow with inbound webhook handler",
+  "complexity": "low",
+  "source": "goose_tier1",
+  "created_at": "2026-05-25T00:19:33.054811+00:00",
+  "completed_at": "2026-05-25T00:21:00+00:00",
+  "output_file": "snow_connector_webhook_wiring.py",
+  "verification": {
+    "gate_8_passed": true,
+    "import_check": "passed",
+    "static_safety": "passed",
+    "write_service_8772": "configured",
+    "port": 8780,
+    "tables": ["mcp_submissions", "snow_mcp_tickets", "service_health"],
+    "features": ["oauth_signature_validation", "heartbeat", "single_instance_lock"]
+  },
+  "endpoints": {
+    "webhook": "POST /webhook/snow/mcp",
+    "health": "GET /health",
+    "ready": "GET /ready"
+  },
+  "notes": "Inbound webhook receives ServiceNow MCP request tickets, validates OAuth signature, creates entries in mcp_submissions and snow_mcp_tickets tables via write_service :8772"
+}

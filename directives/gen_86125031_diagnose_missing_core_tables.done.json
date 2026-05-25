@@ -1,0 +1,11 @@
+{
+  "task": "diagnose_missing_core_tables",
+  "handler": "generate_file",
+  "output_file": "diagnose_core_tables.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic daemon to investigate why mcp_server_registry (?), mcp_signal_scores (?), and mcp_fingerprints (?) show MISSING TABLE or ? in core table counts. Must query information_schema.columns to verify actual table existence vs row counts. Report findings as JSON to write_service service_health meta field. Must NOT propose any rebuilds - this is diagnostic only. Target: understand whether tables exist but are empty, or whether schema bootstrap failed.",
+  "reads": [],
+  "next_directive": {}
+}

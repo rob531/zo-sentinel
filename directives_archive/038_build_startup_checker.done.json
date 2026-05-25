@@ -1,0 +1,14 @@
+{
+  "task": "build_startup_checker",
+  "handler": "generate_file",
+  "output_file": "startup_checker.py",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.78,
+  "reads": [
+    "config_validator.py"
+  ],
+  "description": "Startup checker script. Imports and runs config_validator.validate_all(). If write_service not reachable: print ERROR and exit 1. If tables missing: print which tables missing, offer to run schema.py. If ports not open: print which daemons not started. If env vars missing: print which vars needed. Designed to be sourced at daemon startup. Also: check for GENERATION_FAILURES.md and print count of unresolved failures. No daemon, runs once and exits.",
+  "context": "",
+  "from": "claude_batch"
+}

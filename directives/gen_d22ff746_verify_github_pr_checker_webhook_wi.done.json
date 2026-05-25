@@ -1,0 +1,9 @@
+{
+  "task": "verify_github_pr_checker_webhook_wiring",
+  "handler": "generate_file",
+  "output_file": "verify_github_pr_checker_webhook_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Integration verification for github_pr_checker.py into the pipeline. Check: (1) github_pr_checker.py is registered in supervisord, (2) webhook endpoint exists and accepts GitHub PR event payloads, (3) verdict lookup from trust_synthesiser is wired correctly, (4) PR status update path to GitHub API is configured. Query service_health for github_pr_checker heartbeat. Report integration completeness score 0-100."
+}

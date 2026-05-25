@@ -1,0 +1,13 @@
+{
+  "task": "verify_graphql_schema_builder_dormant",
+  "handler": "generate_file",
+  "output_file": "verify_graphql_schema_builder_dormant.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Verification module for graphql_schema_builder.py. Spec section 9 explicitly states this file is dormant and GraphQL surface is out of scope. Generate a verification module that confirms: (1) file exists and is importable, (2) daemon does NOT register any GraphQL routes, (3) no HTTP endpoints exposed, (4) file is not in supervisord config, (5) all dependencies declared in top comment. Per spec section 9, this file stays dark \u2014 only confirm it remains that way. Log pass/fail for audit trail.",
+  "reads": [
+    "graphql_schema_builder.py"
+  ],
+  "next_directive": {}
+}

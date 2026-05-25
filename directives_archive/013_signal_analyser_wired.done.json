@@ -1,0 +1,12 @@
+{
+  "task": "phase3_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_analyser.py",
+  "complexity": "high",
+  "reads": ["schema.py", "known_threats.py"],
+  "description": "T2 ZOMesh agent that reads raw mcp_server_registry records and scores them across 6 signal dimensions: domain_trust, tool_description_safety, permission_scope, supply_chain, community_signal, temporal_stability (each 0-100). Imports check_package and check_domain from known_threats module. Reads unscored servers from mcp_server_registry via write_service query. Writes scores to mcp_signal_scores table. Computes weighted composite trust_score and writes verdict to mcp_server_registry. Runs as 30min daemon with heartbeat.",
+  "context": "Imports: from known_threats import check_package, check_domain, HIGH_RISK_PATTERNS. Queries: POST http://127.0.0.1:8772/query json={'sql':'SELECT server_id,name,url,description FROM mcp_server_registry WHERE trust_score IS NULL LIMIT 20'}. Writes scores via POST http://127.0.0.1:8772/write json={'table':'mcp_signal_scores','rows':{...},'wait':True}. Weight map: domain_trust=0.20, tool_description_safety=0.20, permission_scope=0.15, supply_chain=0.15, community_signal=0.15, temporal_stability=0.15.",
+  "priority": 0.88,
+  "from": "claude_directive_v1.4",
+  "phase": "3"
+}

@@ -1,0 +1,15 @@
+{
+  "task": "aidr_commit_gateway_verdict_test_v3",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_verdict_test_v3.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.88,
+  "description": "Rebuild verdict-check enforcement test for aidr_commit_gateway.py (built 2026-04-17). Both verify_aidr_commit_gateway_verdict_check.py (attempts=3/3, quarantined) and aidr_verdict_enforcement_test_v2.py (attempts=6/3, quarantined) have exhausted their retry budgets. This test MUST: (1) verify verdict-check enforcement before forwarding, (2) assert CAUTION_LIMITED and HIGH_RISK_ISOLATED are NOT auto-committed without explicit override, (3) include injection_resilience score in commit payload per Phase 9 requirements. Reference: aidr_commit_gateway.py (in ALREADY_BUILT).",
+  "reads": [
+    "aidr_commit_gateway.py",
+    "verify_aidr_commit_gateway_verdict_check.py",
+    "aidr_verdict_enforcement_test_v2.py"
+  ],
+  "next_directive": {}
+}

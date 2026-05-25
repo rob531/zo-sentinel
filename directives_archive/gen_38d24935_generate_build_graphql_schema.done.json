@@ -1,0 +1,9 @@
+{
+  "task": "generate_build_graphql_schema",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_builder.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Generate GraphQL schema from ZO-SENTINEL DB schema. Introspect mcp_submissions, mcp_server_registry, mcp_signal_scores, approval_workflow decisions tables. Output .graphql file with types, queries, mutations. Use db_utils via write_service :8772 for schema introspection."
+}

@@ -1,0 +1,84 @@
+{
+  "directive_id": "seed_pilot_harness_framework",
+  "directive_version": "0.1_sketch",
+  "owner": "robinc",
+  "created_at": "2026-04-19",
+  "phase": "meta",
+  "title": "Pilot Harness Framework (shared infrastructure for all pilot-first directives)",
+  "purpose": "Formalize the pilot-first pattern that saved us during canonical-name research. Provide a reusable harness so every new enrichment module, T1 agent, or external integration can run a bounded validation against hand-picked candidates before committing to production infrastructure. Meta-directive — produces tooling used by other directives, not a user-facing capability.",
+
+  "mode": "PATCH_MODULE",
+  "target_file": "/home/workspace/zo_sentinel/pilot_harness.py",
+  "target_type": "framework",
+
+  "pilot_first": false,
+  "pilot_rationale": "This IS the pilot infrastructure. Not meta-piloting it.",
+
+  "interface_contract": {
+    "exported_functions": [
+      {
+        "name": "run_pilot",
+        "signature": "run_pilot(directive_id: str, candidates: list[dict], ground_truth: dict, under_test_fn: Callable) -> PilotResult",
+        "description": "Run under_test_fn against each candidate. Compare output to ground_truth. Compute precision/recall/runtime stats. Return PilotResult with verdict (PASS/FAIL/ABORT) and evidence JSON."
+      },
+      {
+        "name": "write_pilot_report",
+        "signature": "write_pilot_report(result: PilotResult) -> Path",
+        "description": "Write structured pilot report to /home/workspace/zo_sentinel/fixes/pilot_{directive_id}_results.json for operator review."
+      },
+      {
+        "name": "gate_production_deploy",
+        "signature": "gate_production_deploy(result: PilotResult, thresholds: dict) -> bool",
+        "description": "Return True only if pilot meets all thresholds (precision, recall, runtime, abort_conditions none triggered). If False, caller must not proceed to production deploy."
+      }
+    ]
+  },
+
+  "pilot_result_schema": {
+    "directive_id": "string",
+    "started_at": "ISO8601",
+    "completed_at": "ISO8601",
+    "candidates_count": "int",
+    "per_candidate": [
+      {
+        "candidate_id": "string",
+        "expected": "object (from ground_truth)",
+        "actual": "object (from under_test_fn)",
+        "true_positives": "int",
+        "false_positives": "int",
+        "false_negatives": "int",
+        "runtime_ms": "int",
+        "errors": "list"
+      }
+    ],
+    "aggregate": {
+      "precision": "float",
+      "recall": "float",
+      "f1": "float",
+      "total_runtime_ms": "int",
+      "abort_triggered": "bool",
+      "abort_reason": "string or null"
+    },
+    "verdict": "PASS|FAIL|ABORT",
+    "operator_notes_required": "bool (true if any abort or FAIL)"
+  },
+
+  "conventions": [
+    "Pilot candidates must be human-selected, not randomly sampled",
+    "Ground truth must be provided by a human BEFORE the pilot runs (pre-registered, not retrofitted)",
+    "Pilot results are append-only — never overwrite a previous pilot run, always new timestamp",
+    "A failing pilot is data, not a crisis — it means the approach needs rethinking, not that the module is buggy",
+    "Pilot success does NOT imply production readiness — it means 'approach is viable, now build the real module'. Operator review still required."
+  ],
+
+  "why_this_matters": [
+    "Canonical-naming pilot (15 candidates, 15/15 bridges found) told us ecosyste.ms was viable BEFORE we built the fetcher daemon. That's 4 hours saved vs building and then discovering the data source didn't work.",
+    "Signal_bridge bug (created_at vs computed_at typo) silently returned 0 bridges for 24 hours. A ground-truth pilot (expected: ~100 bridges) would have caught it immediately.",
+    "Adapter run_id NOT NULL bug produced 100% write failures. Ground-truth pilot with expected-writes >0 would have failed loudly instead of returning success.",
+    "The pattern of 'hand-pick candidates, pre-register expectations, measure' is how every scientific discipline validates instruments. We should adopt it for every external-data-source integration."
+  ],
+
+  "integration_with_existing_gates": {
+    "note": "Pilot harness is upstream of Gate 8 (circuit breaker) and Gate 9 (signal variance). Pilot catches issues before the enrichment starts running. Gates catch issues after it's running. Complementary, not redundant."
+  }
+}

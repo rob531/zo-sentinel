@@ -1,0 +1,14 @@
+{
+  "task": "review_trust_synthesiser_v2_7th_dimension",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_review.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Quality pass: Review trust_synthesiser_v2.py for proper handling of 7th dimension (injection_resilience). Must verify the code reads mcp_signal_scores where dimension='injection_resilience' and applies weight 1.6 with threshold 0.80 as specified in Phase 8 requirements. If weighting/threshold logic is missing or incorrect, generate corrected version. If already correct, output a brief stub confirming correctness. Do not duplicate the entire file \u2014 generate only delta/correction.",
+  "reads": [
+    "trust_synthesiser_v2.py",
+    "schema.py"
+  ],
+  "next_directive": {}
+}

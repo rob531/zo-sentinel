@@ -1,0 +1,9 @@
+{
+  "task": "build_operations_doc",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.83,
+  "description": "Operations documentation per spec appendix A. Must cover: (1) supervisord config location and daemon list, (2) log file locations for each daemon, (3) heartbeat SLA thresholds (60s for all, >2h = dead), (4) recovery runbook for stale daemons (check service_health table, restart via supervisorctl), (5) Freshness SLA windows (24h first verdict, 7d re-verdict cycle), (6) External API port 8791 rate limits (60 req/min/key). Must include quick diagnostic commands using write_service /query endpoint against service_health table."
+}

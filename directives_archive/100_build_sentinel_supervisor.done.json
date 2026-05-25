@@ -1,0 +1,12 @@
+{
+  "task": "build_sentinel_supervisor",
+  "handler": "generate_file",
+  "output_file": "supervisord_sentinel.conf",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.74,
+  "reads": [],
+  "description": "Supervisord config for ZO-SENTINEL daemons. [program:sentinel_mcp_scanner] command=python3 /home/workspace/zo_sentinel/mcp_scanner.py, [program:sentinel_signal_analyser], [program:sentinel_trust_synthesiser], [program:sentinel_threat_intel], [program:sentinel_risk_ranker], [program:sentinel_attestation], [program:sentinel_approval_workflow] port 8780, [program:sentinel_registry_api] port 8781, [program:sentinel_search_api] port 8782, [program:sentinel_pipeline_health], [program:sentinel_alert_manager]. All: autostart=true autorestart=true redirect_stderr=true stdout_logfile=/home/workspace/logs/sentinel_%(program_name)s.log.",
+  "context": "",
+  "from": "claude_batch"
+}

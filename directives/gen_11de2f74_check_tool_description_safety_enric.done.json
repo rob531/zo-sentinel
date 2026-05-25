@@ -1,0 +1,9 @@
+{
+  "task": "check_tool_description_safety_enrichment_v2_output",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_v2_output_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Verify that tool_description_safety_enrichment_v2.py (built 2026-05-24T10:56:48) is producing more than 4 distinct scores. Diagnostic query to mcp_signal_enrichments WHERE signal_type='tool_description_safety' to count distinct composite_score values. If still at plateau, the enrichment may not be reading enough metadata fields or may have a normalization issue causing score compression."
+}

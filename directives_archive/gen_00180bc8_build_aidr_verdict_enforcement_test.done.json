@@ -1,0 +1,9 @@
+{
+  "task": "build_aidr_verdict_enforcement_test",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_enforcement_test_v2.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Integration test for aidr_commit_gateway.py verdict-check enforcement. aidr_commit_gateway.py was built 2026-04-17 but needs verification test per Appendix A. Must assert that CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts block auto-commit. Must verify injection_resilience score appears in commit payload. Uses write_service queries only. References last_error from quarantine list: 'failed in cohort_3_n3' for context but proposes new file, not rebuild of quarantined file."
+}

@@ -1,0 +1,13 @@
+{
+  "task": "build_e2e_scenarios_v2",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "End-to-end test scenarios covering three canonical flows: (1) new MCP registration -> signal scored -> verdict computed -> attestation written -> UI visible on port 8790; (2) manual override via manual_override_api.py; (3) compliance export via compliance_export_service.py. Each scenario uses write_service for state assertions. Self-contained with if __name__ == '__main__' block. Previous e2e_scenarios.py was quarantined after 3 fails (cohort_7_n4); this v2 addresses the prior failure modes by using simpler assertions and mocking where appropriate.",
+  "reads": [
+    "manual_override_api.py",
+    "compliance_export_service.py"
+  ]
+}

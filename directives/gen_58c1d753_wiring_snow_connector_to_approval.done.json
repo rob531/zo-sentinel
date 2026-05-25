@@ -1,0 +1,9 @@
+{
+  "task": "wiring_snow_connector_to_approval",
+  "handler": "generate_file",
+  "output_file": "wiring_snow_connector_to_approval.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Integration wiring to connect snow_connector.py (built 2026-04-16) into approval_workflow. snow_connector.py currently exists but integration incomplete per gaps map. MUST: 1) Read snow_connector.py and approval_workflow.py to understand interfaces. 2) Create integration shim that routes ServiceNow inbound webhook data to approval_workflow endpoint (:8780). 3) Follow inter-daemon communication rules: all state exchange via write_service :8772, no HTTP between peer daemons. 4) Add appropriate error handling with exponential backoff per spec section 6. 5) Do NOT modify protected files (approval_workflow.py is protected). Integration shim should be a separate module. Include heartbeat to service_health."
+}

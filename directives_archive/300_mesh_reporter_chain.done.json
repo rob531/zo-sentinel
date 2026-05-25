@@ -1,0 +1,18 @@
+{
+  "task": "build_mesh_sentinel_reporter",
+  "handler": "generate_file",
+  "output_file": "mesh_sentinel_reporter.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.88,
+  "description": "Daemon that reports ZO-SENTINEL statistics to ZOMesh memory every 6 hours. Reads from mcp_server_registry (total count, verdict distribution, avg trust_score), mcp_threat_associations (threat count by severity in last 7d), mcp_risk_register (risk tier distribution, note: timestamp column is computed_at not last_assessed). Writes a mesh_memory entry: agent_id='sentinel_reporter', memory_type='sentinel_stats', content=JSON summary, importance=0.6. Also writes service_health heartbeat. Runs every 21600s. run() with while True sleep loop. if __name__=='__main__': run(). All DB access via ws_query POST to http://127.0.0.1:8772/query.",
+  "next_directive": {
+    "task": "build_signal_analyser_v2",
+    "handler": "generate_file",
+    "output_file": "signal_analyser_v2.py",
+    "complexity": "high",
+    "phase": "14",
+    "priority": 0.85,
+    "description": "Improved signal analyser daemon. Queries mcp_server_registry for unscored or stale servers (last_assessed IS NULL OR last_assessed < NOW() - INTERVAL '7 days'). For each server scores 6 signals: domain_trust (0-100 based on url TLD and age heuristic), tool_description_safety (keyword scan for dangerous patterns), permission_scope (count of permission-related words in description), supply_chain (npm vs github vs unknown registry_source), community_signal (scan_count as proxy), temporal_stability (days since first_seen vs last_scanned delta). Adds confidence weights per signal. Writes to mcp_signal_scores via ws_write (table=mcp_signal_scores, rows={server_id, signal_name, score, evidence, scored_at}). Then writes composite trust_score back to mcp_server_registry. Runs every 1800s. Heartbeat to service_health. run() daemon. if __name__=='__main__': run()."
+  }
+}

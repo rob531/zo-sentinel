@@ -1,0 +1,9 @@
+{
+  "task": "improve_signal_discrimination",
+  "handler": "generate_file",
+  "output_file": "improve_enrichment_discriminators.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Revise the three weak-signal enrichments to achieve >20 distinct scores across synthetic fingerprints. Must: (1) inspect the existing temporal_stability_enrichment_v2.py, tool_description_safety_enrichment.py, permission_scope_enrichment.py - currently producing only 3 distinct values each; (2) identify why discrimination is low - likely weighting too coarse or field coverage incomplete; (3) enhance each compute_score() to read more metadata fields (url_variance, http_response_time, header_fingerprint_count, registry_source_distribution, pub_datespread) while maintaining pure-function contract; (4) each module must pass enrichment_harness.py self-smoke with >20 distinct outputs. Will be validated against the existing diagnostic_enrichment_signal_discrimination.py test harness."
+}

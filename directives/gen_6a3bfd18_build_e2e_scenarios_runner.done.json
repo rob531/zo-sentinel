@@ -1,0 +1,17 @@
+{
+  "task": "build_e2e_scenarios_runner",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "End-to-end test harness covering three canonical flows per Appendix A testing requirement: (1) new MCP submission -> signal scored -> verdict assigned -> attestation generated -> UI visible in port 8790. (2) Existing MCP re-assessment within 7-day SLA window. (3) Threat intel overlay -> risk register update. Must use write_service :8772 for all DB access. Must include synthetic MCP creation, scanner trigger, signal analyser poll, verdict check, and UI verification steps. Outputs JSONL audit log of each step. No network calls except to write_service and localhost APIs.",
+  "reads": [
+    "write_service",
+    "mcp_scanner.py",
+    "signal_analyser_v2.py",
+    "trust_synthesiser_v2.py",
+    "attestation_engine.py"
+  ],
+  "next_directive": {}
+}

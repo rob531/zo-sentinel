@@ -1,0 +1,9 @@
+{
+  "task": "build_write_service_heartbeat_restarter",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_restarter.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Diagnostic/restarter for write_service heartbeat. write_service process is responsive but heartbeat is 46m stale. Per Appendix A: 'write_service self-heartbeat \u2014 service responsive but beat is >3h old; diagnostic-only, do NOT propose rebuild'. Generate diagnostic that: (1) confirms write_service is responsive via test write, (2) attempts to write fresh heartbeat to service_health, (3) logs diagnostic results. write_service is protected - do not propose rebuild. Export run() function following daemon pattern with heartbeat."
+}

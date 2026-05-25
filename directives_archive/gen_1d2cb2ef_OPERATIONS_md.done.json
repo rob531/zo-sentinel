@@ -1,0 +1,9 @@
+{
+  "task": "OPERATIONS_md",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Operations documentation for ZO-SENTINEL. Must include: supervisord layout, log locations (/home/workspace/zo_sentinel/logs/), recovery runbook, heartbeat SLA thresholds (60s, dead at >2h), write_service endpoints and contract, service restart guidance. No architecture duplication from ARCHITECTURE.md."
+}

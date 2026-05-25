@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_supply_chain_enrichment_quality",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Rebuild supply_chain_enrichment.py to fix BAD signal quality. Current version produces flat 0.0 scores with no discrimination across inputs. MUST read MULTIPLE metadata fields: registry_source (3 distinct values), age_days (range-based scoring), download_count (log scale), dependency_count (penalty curve), publisher_verified (boolean bonus), stars (linear). MUST produce at least 20 distinct score values across 34 synthetic fingerprints. Pure function compute_score(metadata: dict) -> tuple[float, dict]. No DB writes, no network, no imports of protected modules. Evidence dict must list each partial score component. Completes in <2s per call."
+}

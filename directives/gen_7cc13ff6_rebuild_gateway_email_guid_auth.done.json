@@ -1,0 +1,13 @@
+{
+  "task": "rebuild_gateway_email_guid_auth",
+  "handler": "generate_file",
+  "output_file": "gateway_rebuild_email_guid_auth.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Rebuild gateway_rebuild_email_guid_auth.py to fix cohort_7_n1 failure. Last error: failed in cohort_7_n1. Reference spec section 5 (write_service integration) and section 3 (signal invariant). Ensure compute_score output conforms to evidence blob shape {\"signal_type\": \"<snake_case_name>\", \"confidence\": 0.0-1.0, \"evidence_blob\": {...}}. Must NOT prefix output filename with build_ or rebuild_; output_file field ensures correct naming.",
+  "reads": [
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

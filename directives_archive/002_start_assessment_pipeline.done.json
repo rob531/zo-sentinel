@@ -1,0 +1,10 @@
+{
+  "task": "RETIRED_patch_write_service_pks_and_start_pipeline",
+  "handler": "generate_file",
+  "output_file": "retired_placeholder_do_not_restore.txt",
+  "complexity": "low",
+  "phase": "99",
+  "priority": 0.0,
+  "description": "RETIRED - do not execute",
+  "retired": true
+}

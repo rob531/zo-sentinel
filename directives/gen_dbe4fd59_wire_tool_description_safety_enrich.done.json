@@ -1,0 +1,9 @@
+{
+  "task": "wire_tool_description_safety_enrichment",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Integration daemon that wires the existing tool_description_safety_enrichment_v2.py into the signal pipeline. Polls mcp_server_registry for MCPs without a tool_description_safety score in mcp_signal_enrichments, calls tool_description_safety_enrichment_v2.compute_score(metadata) per MCP, and writes results to mcp_signal_enrichments with signal_type='tool_description_safety', confidence, evidence_blob. Target: move tool_description_safety from current 4 distinct values (weak discrimination) toward 20+ distinct values across the 34-fingerprint corpus. Uses write_service :8772 for all DB operations. Heartbeat every 60s to service_health. Note: v2 module is already built and on disk."
+}

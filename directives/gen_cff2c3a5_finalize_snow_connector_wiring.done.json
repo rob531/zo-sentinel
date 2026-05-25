@@ -1,0 +1,9 @@
+{
+  "task": "finalize_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_finalizer.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Complete integration wiring for snow_connector.py (built 2026-04-16) into approval_workflow. Current state: snow_connector exists, verify_snow_connector_approval_wiring.py exists, but integration is incomplete per gaps map. Must wire: (1) ServiceNow inbound webhook on approval_workflow receives SNOW ticket, (2) validate verdict check before approval, (3) write decision to mcp_decisions via write_service. Reference spec section 5 (No HTTP between peer daemons) - use write_service at :8772 only. Include heartbeat to service_health."
+}

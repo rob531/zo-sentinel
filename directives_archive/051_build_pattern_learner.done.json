@@ -1,0 +1,14 @@
+{
+  "task": "build_pattern_learner",
+  "handler": "generate_file",
+  "output_file": "pattern_learner.py",
+  "complexity": "high",
+  "phase": "13",
+  "priority": 0.65,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Pattern learner daemon. Every 86400s: reads mcp_decisions from schema_v2 (analyst approvals/rejections). For REJECTED decisions: extract text patterns from server description that correlate with rejection. Updates KNOWLEDGE_BASE.md with: LEARNED_REJECTION_PATTERNS list of description substrings found in 3+ rejections. For APPROVED despite low trust_score: extract characteristics of false positives. ws_write learned_patterns count to mesh_events. Write LEARNING_REPORT.md. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

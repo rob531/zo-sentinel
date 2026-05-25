@@ -1,0 +1,9 @@
+{
+  "task": "build_schema_bootstrap",
+  "handler": "generate_file",
+  "output_file": "schema_bootstrap.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Bootstrap module to create all core DuckDB tables per spec v1.0. Creates: mcp_server_registry (server_id, mcp_name, registry_source, first_seen, last_assessed, verdict, ...), mcp_signal_scores (server_id, signal_type, confidence, evidence_blob, scored_at), mcp_signal_enrichments (server_id, signal_type, score, evidence, computed_at), mcp_threat_associations, mcp_risk_register, mcp_attestations, mcp_submissions, mcp_exemptions, mcp_decisions, mcp_policy_rules, mcp_fingerprints, mcp_tool_hashes, service_health, audit_log. All tables as append-only per spec section 4. Idempotent: skips table creation if table already exists."
+}

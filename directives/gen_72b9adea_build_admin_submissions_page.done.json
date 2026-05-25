@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_submissions_page",
+  "handler": "generate_file",
+  "output_file": "admin_submissions.html",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.75,
+  "description": "Admin UI page for triaging pending mcp_submissions (admin view of the portal). Serves on port 8790. Fetches rows via write_service query endpoint, renders table with columns: mcp_name, requested_by, requested_at, status, notes. Shows triage buttons: Approve, Conditional, Reject. Embedded CSS. Read mcp_submissions table schema from DB_SCHEMA.md for correct column names (mcp_name not mcp_identifier, requested_by not requester_name)."
+}

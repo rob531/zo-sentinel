@@ -1,0 +1,9 @@
+{
+  "task": "signal_scores_cardinality_verification",
+  "handler": "generate_file",
+  "output_file": "signal_scores_cardinality_verification.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Verify that signal_analyser is actually writing to mcp_signal_scores for all 8 signals. The diagnostic shows only 6490 rows in mcp_signal_scores for 10141 servers - average <1 signal per server. Run diagnostic query against information_schema to check which signal_types exist per server_id. If any signal_type is missing for servers that have been scanned, that signal producer is not executing. Report findings as JSON to service_health."
+}

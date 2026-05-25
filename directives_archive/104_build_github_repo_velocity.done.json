@@ -1,0 +1,12 @@
+{
+  "task": "build_github_repo_velocity",
+  "handler": "generate_file",
+  "output_file": "github_repo_velocity.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.91,
+  "reads": ["schema.py", "db_utils.py"],
+  "description": "GitHub supply chain velocity analyser daemon. Reads mcp_server_registry WHERE url LIKE '%github%' via ws_query. For each: parse owner/repo from URL. GitHub API calls (all unauthenticated or with GITHUB_TOKEN): GET /repos/{owner}/{repo}/commits?per_page=30&since=30_days_ago -- calculate commit_velocity (commits per week). GET /repos/{owner}/{repo}/contributors?per_page=10 -- detect contributor_churn (new contributors this month vs historical). GET /repos/{owner}/{repo}/pulls?state=merged&per_page=10 -- detect massive_pr: PRs with >500 line additions from contributor with <5 prior commits (rug-pull indicator). Risk rules: commit_velocity > 50/week from new contributor -> HIGH, single massive PR >1000 lines from unknown -> CRITICAL, repo transferred to new owner in last 30d -> CRITICAL. ws_write github_velocity {server_id, repo_url, commit_velocity, contributor_churn, last_suspicious_commit}. ws_write mcp_threat_associations if HIGH/CRITICAL found. Poll 43200s. Heartbeat.",
+  "context": "GITHUB_TOKEN=os.environ.get('GITHUB_TOKEN','') for higher rate limits (60 req/hr unauth vs 5000 with token). Headers: {'Authorization': 'token ' + token} if token set. Rate limit: time.sleep(1) between calls. Parse GitHub URL: repo_url.replace('https://github.com/','').split('/') gives [owner, repo].",
+  "from": "threat_matrix"
+}

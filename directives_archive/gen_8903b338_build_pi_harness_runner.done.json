@@ -1,0 +1,14 @@
+{
+  "task": "build_pi_harness_runner",
+  "handler": "generate_file",
+  "output_file": "pi_harness_runner.py",
+  "complexity": "high",
+  "phase": "8",
+  "priority": 0.9,
+  "description": "Execute ingested pi_test_corpus payloads against APPROVED MCP servers pre-commit. Spawn subprocess per MCP tool invocation, capture output, detect injection success markers. Write results to pi_test_results table with computed_resilience score. Daemon with 6h batch cycle.",
+  "reads": [
+    "pi_corpus_ingest.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

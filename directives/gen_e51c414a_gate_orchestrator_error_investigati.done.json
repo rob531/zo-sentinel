@@ -1,0 +1,12 @@
+{
+  "task": "gate_orchestrator_error_investigation",
+  "handler": "generate_file",
+  "output_file": "gate_orchestrator_error_probe.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Investigate gate_orchestrator daemon in ERROR state (age 5h16m). Query service_health for gate_orchestrator status and last_error. Check if gate_orchestrator.py exists on disk. Inspect logs for Python traceback. Output: (a) current error state from service_health, (b) daemon file existence, (c) recent log excerpt if available, (d) recommendation (restart needed vs. code fix required). Must use write_service :8772 for health queries. Handler: diagnostic_report.",
+  "reads": [
+    "gate_orchestrator.py"
+  ]
+}

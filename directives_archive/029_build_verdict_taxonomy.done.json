@@ -1,0 +1,12 @@
+{
+  "task": "build_verdict_taxonomy",
+  "handler": "generate_file",
+  "output_file": "verdict_taxonomy.py",
+  "complexity": "low",
+  "phase": "2",
+  "priority": 0.87,
+  "reads": [],
+  "description": "Shared verdict taxonomy constants. VERDICTS list in order: TRUSTED_GENERAL,TRUSTED_RESEARCH,ENTERPRISE_CONTROLLED,CAUTION_LIMITED,HIGH_RISK_ISOLATED,KNOWN_THREAT,INSUFFICIENT. VERDICT_THRESHOLDS dict mapping verdict to min_score. VERDICT_EXPIRY_DAYS dict. RISK_TIERS: CRITICAL,HIGH,MEDIUM,LOW with thresholds. VERDICT_DESCRIPTIONS dict with human-readable one-line description of each verdict. Functions: score_to_verdict(score)->str, verdict_to_expiry(verdict)->int, is_safe_for_production(verdict)->bool (only TRUSTED_GENERAL returns True). No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

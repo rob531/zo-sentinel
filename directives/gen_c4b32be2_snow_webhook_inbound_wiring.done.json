@@ -1,0 +1,9 @@
+{
+  "task": "snow_webhook_inbound_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_webhook_inbound_wiring.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.8,
+  "description": "ServiceNow inbound webhook receiver for MCP request tickets. snow_connector.py is built 2026-04-16 but not wired. This directive wires the inbound webhook endpoint. Phase 9 enterprise integration. MUST: (1) expose FastAPI endpoint at /webhook/snow on port 8782, (2) validate request signature using SNOW OAuth token, (3) NEVER accept unsigned webhooks (reject with 401), (4) parse ticket payload into mcp_submissions record, (5) trigger approval_workflow for new submission, (6) write to audit_log. MUST NOT: make outbound SNOW API calls (snow_connector handles that); this is inbound-only. MUST: enumerate constraints as numbered rules. Priority: 0.92 per Phase 9 candidates list (upgraded for workflow-critical gap)."
+}

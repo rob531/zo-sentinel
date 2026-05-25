@@ -1,0 +1,9 @@
+{
+  "task": "aidr_verdict_gate_wiring",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_gate.py",
+  "complexity": "high",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Wiring module enforcing ZO-SENTINEL verdict checks before AiDr commit forwarding. Phase 9 with numbered constraints: (1) MUST query write_service :8772 for current verdict before forwarding commit; (2) MUST NOT auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED verdicts without explicit override flag in payload; (3) MUST include injection_resilience dimension score in commit payload; (4) MUST log all commit decisions to audit_log table; (5) MUST implement 30s timeout on verdict query; (6) MUST NOT forward KNOWN_THREAT verdicts under any circumstance. Reads aidr_commit_gateway.py and trust_synthesiser_v2.py. Outputs verdict_gate_daemon.py."
+}

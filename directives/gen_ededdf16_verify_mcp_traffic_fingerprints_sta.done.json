@@ -1,0 +1,9 @@
+{
+  "task": "verify_mcp_traffic_fingerprints_standalone",
+  "handler": "generate_file",
+  "output_file": "verify_mcp_traffic_fingerprints_standalone.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Verifies mcp_traffic_fingerprints.py is a standalone pure library module that exports detect_mcp_methods, is_mcp_traffic, and extract_session_indicators. Runs self-smoke: python3 <module>.py exits 0 on success. Exercises detection against at least 3 known-good JSON-RPC inputs. No DB writes, no network, no imports of protected modules. Per Appendix B rule 5."
+}

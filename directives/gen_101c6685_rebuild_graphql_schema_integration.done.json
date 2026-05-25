@@ -1,0 +1,13 @@
+{
+  "task": "rebuild_graphql_schema_integration",
+  "handler": "generate_file",
+  "output_file": "graphql_schema_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Fresh attempt at wiring graphql_schema_builder.py into the pipeline. Previous build_graphql_schema failed. This file must NOT expose a GraphQL surface (out of scope per spec section 9). Instead, it provides library functions that export the schema as Python dataclasses consumable by the external API. Must include self-smoke test: python3 graphql_schema_integration.py exits 0 verifying all 6 verdict tiers + INSUFFICIENT are defined.",
+  "reads": [
+    "graphql_schema_builder.py"
+  ],
+  "next_directive": {}
+}

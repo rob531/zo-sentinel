@@ -1,0 +1,12 @@
+{
+  "task": "build_start_all_sh",
+  "handler": "generate_file",
+  "output_file": "start_all.sh",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.76,
+  "reads": [],
+  "description": "Bash startup script. #!/bin/bash. Starts all ZO-SENTINEL daemons in order: (1) validate schema exists: python3 config_validator.py || (python3 schema.py && python3 schema_v2.py) (2) nohup python3 mcp_scanner.py (3) nohup python3 signal_analyser.py (4) nohup python3 trust_synthesiser.py (5) nohup python3 threat_intel_ingestor.py (6) nohup python3 risk_ranker.py (7) nohup python3 attestation_engine.py (8) nohup python3 approval_workflow.py (9) nohup python3 registry_api.py (10) nohup python3 search_api.py. Each redirected to logs/. Prints PID for each. Sleep 2 between daemons.",
+  "context": "",
+  "from": "claude_batch"
+}

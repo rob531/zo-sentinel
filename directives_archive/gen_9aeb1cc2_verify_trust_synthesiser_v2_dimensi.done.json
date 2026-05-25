@@ -1,0 +1,9 @@
+{
+  "task": "verify_trust_synthesiser_v2_dimension",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_pi_audit.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Quality pass: verify trust_synthesiser_v2.py reads mcp_signal_scores with dimension='injection_resilience' and applies weight 1.6 with threshold 0.80 as specified in Phase 8 Status. If correct, add audit stub confirming this. If incorrect, generate a targeted patch note for human editor. This is NOT a rebuild \u2014 file is protected. Output is an audit confirmation or patch note document."
+}

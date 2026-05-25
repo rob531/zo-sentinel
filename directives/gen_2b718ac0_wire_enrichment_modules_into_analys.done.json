@@ -1,0 +1,18 @@
+{
+  "task": "wire_enrichment_modules_into_analyser",
+  "handler": "generate_file",
+  "output_file": "signal_enrichment_wiring.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Wire four newly-built enrichment modules into signal_analyser_v2 to improve weak-signal discrimination. Modules to integrate: community_signal_enrichment.py (compute_score returns sigmoid-weighted community score), tool_description_safety_enrichment.py (compute_score returns safety assessment), permission_scope_enrichment.py (compute_score returns permission scope score), temporal_stability_enrichment.py (compute_score returns age-based stability score). Each signal currently shows only 4 distinct values; enrichment must use MULTIPLE metadata fields per the enrichment contract. Reference spec section 3 (Signal Invariant) and section 4 (Freshness SLAs). The signal_bridge.py already exists at 2026-05-17; this wiring ensures enrichments feed through to mcp_signal_enrichments table.",
+  "reads": [
+    "signal_analyser_v2.py",
+    "community_signal_enrichment.py",
+    "tool_description_safety_enrichment.py",
+    "permission_scope_enrichment.py",
+    "temporal_stability_enrichment.py",
+    "signal_bridge.py"
+  ],
+  "next_directive": {}
+}

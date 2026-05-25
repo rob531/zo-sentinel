@@ -1,0 +1,9 @@
+{
+  "task": "supply_chain_enrichment_wiring_check",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_wiring_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Diagnostic to verify supply_chain enrichment is wired into signal pipeline. Must: (1) query mcp_signal_enrichments WHERE signal_type='supply_chain', (2) check distinct score values (signal quality shows range 0.0-75.9 OK), (3) verify the enricher module (supply_chain_enrichment.py) exists and has compute_score interface. The signal quality diagnostic shows supply_chain is OK with 34 distinct values, but confirm it's from the enrichment module not raw calculation. No DB writes. Service name: supply_chain_enrichment_wiring_check."
+}

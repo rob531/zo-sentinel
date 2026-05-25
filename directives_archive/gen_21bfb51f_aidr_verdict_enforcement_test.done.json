@@ -1,0 +1,9 @@
+{
+  "task": "aidr_verdict_enforcement_test",
+  "handler": "generate_file",
+  "output_file": "aidr_verdict_gate_test.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Test harness for aidr_commit_gateway.py verdict-check enforcement. MUST: (1) Query write_service for MCP verdict before forwarding any commit. (2) Assert CAUTION_LIMITED and HIGH_RISK_ISOLATED verdicts BLOCK auto-commit. (3) Assert TRUSTED_GENERAL, TRUSTED_RESEARCH, ENTERPRISE_CONTROLLED permit commit. (4) Include injection_resilience score in commit payload when verdict is approved. (5) Log every gate decision to audit_log with mcp_name, verdict, decision, timestamp. References aidr_gateway_verdict_test.py last_error (failed in cohort_3_n3) - this is a fresh test file targeting same integration point with corrected logic."
+}

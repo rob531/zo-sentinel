@@ -1,0 +1,9 @@
+{
+  "task": "admin_exemptions_page",
+  "handler": "generate_file",
+  "output_file": "admin_exemptions.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Admin UI surface for managing mcp_exemptions records. Must include: table listing of exemptions (server_name, reason, valid_until, granted_by), create form, revoke action, and audit trail reference. Ports to localhost:8790, reads via write_service :8772 /query, writes via :8772/write. Must not include any X-API-Key authentication (only internal). Table columns from DB_SCHEMA.md: exemption_id, server_id, reason, valid_until, granted_by, created_at."
+}

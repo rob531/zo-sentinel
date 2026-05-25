@@ -1,0 +1,9 @@
+{
+  "task": "extend_signal_bridge_discrimination",
+  "handler": "generate_file",
+  "output_file": "signal_bridge_discrimination_ext.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Extend signal_bridge.py (already built 2026-05-17) to add explicit discrimination monitoring for the three weak signals: permission_scope (4 distinct values), temporal_stability (4 distinct values), tool_description_safety (4 distinct values). The signal quality diagnostic flags any signal with fewer than 10 distinct values as providing poor discrimination. This module adds a check_wEAK_SIGNALS() function that queries mcp_signal_scores for each of these three signals, counts distinct scores, and writes a discrimination_breach record to service_health meta field if any signal has <10 distinct values. Does NOT modify signal_bridge.py directly (protected) \u2014 adds a companion that signal_bridge calls on each cycle."
+}

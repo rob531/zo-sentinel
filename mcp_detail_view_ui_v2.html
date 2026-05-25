@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <style>
+        body {
+            background-color: #0d0f14;
+            color: #e0e0e0;
+        }
+
+        #mcp-detail-view-ui {
+            border-radius: 10px;
+            padding: 20px;
+            margin: auto;
+            width: 80%;
+            background-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .signal-breakdown-bars {
+            margin-bottom: 20px;
+        }
+
+        .verdict-badge {
+            background-color: #00e5ff;
+            padding: 5px 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        table th, table td {
+            color: #e0e0e0;
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="mcp-detail-view-ui">
+        <h1>MCP Server Details</h1>
+        <p>Registry Source: <span id="registry-source"></span></p>
+        <h2>Signal Scores (7 Dimensions)</h2>
+        <table>
+            <tr>
+                <th id="signal-score-0">Score 1</th>
+                <th id="signal-score-1">Score 2</th>
+                <th id="signal-score-2">Score 3</th>
+                <th id="signal-score-3">Score 4</th>
+                <th id="signal-score-4">Score 5</th>
+                <th id="signal-score-5">Score 6</th>
+                <th id="signal-score-6">Score 7</th>
+            </tr>
+            <tr>
+                <td id="signal-breakdown-bar-0"></td>
+                <td id="signal-breakdown-bar-1"></td>
+                <td id="signal-breakdown-bar-2"></td>
+                <td id="signal-breakdown-bar-3"></td>
+                <td id="signal-breakdown-bar-4"></td>
+                <td id="signal-breakdown-bar-5"></td>
+                <td id="signal-breakdown-bar-6"></td>
+            </tr>
+        </table>
+        <p>Composite Verdict: <span id="composite-verdict"></span></p>
+        <p>Attestation Status: <span id="attestation-status">Pending</span></p>
+        <h2>Threat Associations</h2>
+        <ul id="threat-associations">
+            <!-- List of threat associations -->
+        </ul>
+    </div>
+
+    <script>
+        fetch('http://127.0.0.1:8781/write', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                table: 'mcp_detail_view_ui',
+                rows: [{
+                    service_id: 'name',
+                    value: '<span id="registry-source"></span>'
+                }, {
+                    signal_score_0: <span id="signal-score-0">0</span>,
+                    signal_score_1: <span id="signal-score-1">0</span>,
+                    signal_score_2: <span id="signal-score-2">0</span>,
+                    signal_score_3: <span id="signal-score-3">0</span>,
+                    signal_score_4: <span id="signal-score-4">0</span>,
+                    signal_score_5: <span id="signal-score-5">0</span>,
+                    signal_score_6: <span id="signal-score-6">0</span>
+                }, {
+                    verdict: '<span id="composite-verdict"></span>',
+                    attestation_status: '<span id="attestation-status">Pending</span>'
+                }, {
+                    threat_association: [
+                        // List of threat associations
+                    ]
+                }]
+            }),
+            wait: true
+        })
+        .then(response => response.json())
+        .catch(error => console.error('Error fetching data:', error));
+
+        const signalBreakdownBars = document.querySelectorAll('.signal-breakdown-bars');
+
+        fetch('http://127.0.0.1:8781/write', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                table: 'mcp_detail_view_ui_signal_scores',
+                rows: [{
+                    service_id: 'name',
+                    value: '<span id="registry-source"></span>',
+                    score_0: <span id="signal-score-0">0</span>,
+                    score_1: <span id="signal-score-1">0</span>,
+                    score_2: <span id="signal-score-2">0</span>,
+                    score_3: <span id="signal-score-3">0</span>,
+                    score_4: <span id="signal-score-4">0</span>,
+                    score_5: <span id="signal-score-5">0</span>,
+                    score_6: <span id="signal-score-6">0</span>
+                }]
+            }),
+            wait: true
+        })
+        .then(response => response.json())
+        .catch(error => console.error('Error fetching signal scores:', error));
+
+        const verdictBadge = document.querySelector('.verdict-badge');
+
+        fetch('http://127.0.0.1:8781/write', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                table: 'mcp_detail_view_ui_verdicts',
+                rows: [{
+                    service_id: 'name',
+                    value: '<span id="composite-verdict"></span>'
+                }]
+            }),
+            wait: true
+        })
+        .then(response => response.json())
+        .catch(error => console.error('Error fetching verdict:', error));
+
+        const threatAssociationsList = document.getElementById('threat-associations');
+
+        fetch('http://127.0.0.1:8781/write', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                table: 'mcp_detail_view_ui_threat_associations',
+                rows: [{
+                    service_id: 'name',
+                    value: '<span id="threat-associations"></span>'
+                }]
+            }),
+            wait: true
+        })
+        .then(response => response.json())
+        .catch(error => console.error('Error fetching threat associations:', error));
+    </script>
+</body>
+</html>

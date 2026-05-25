@@ -1,0 +1,11 @@
+{
+  "task": "phase5b_policy_engine",
+  "handler": "generate_file",
+  "output_file": "policy_engine.py",
+  "complexity": "medium",
+  "description": "Policy rules engine for org-specific MCP approval rules. Reads mcp_policy_rules from DuckDB. Evaluates a submission against active rules and returns policy_verdict: BLOCK (rule says never allow), ESCALATE (requires senior review), ALLOW (policy permits). Rule types: (1) ENVIRONMENT_RESTRICTION: e.g. 'never allow filesystem MCPs in production environment'. (2) PERMISSION_BLOCK: 'never allow MCPs requesting shell/execute in any environment'. (3) VENDOR_TRUST: 'auto-approve MCPs from verified vendors list'. (4) SIGNAL_THRESHOLD: 'block any MCP with trust_score < 30'. Function: evaluate_policy(submission_dict, trust_score, verdict, signals) -> {policy_verdict, triggered_rules: list, escalation_reason: str}. Also provides seed_default_policies() which writes sensible defaults to mcp_policy_rules via write_service. Default rules: block shell/execute on production, escalate if trust_score < 45, block KNOWN_THREAT verdict.",
+  "context": "Phase 5 - enterprise policy layer. This enables orgs to encode their security posture as rules rather than relying purely on the intelligence scores. Integrates with approval_workflow.py - policy check runs before the analyst review.",
+  "priority": 0.80,
+  "from": "claude_directive",
+  "phase": "5"
+}

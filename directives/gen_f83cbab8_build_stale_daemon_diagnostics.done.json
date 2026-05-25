@@ -1,0 +1,9 @@
+{
+  "task": "build_stale_daemon_diagnostics",
+  "handler": "generate_file",
+  "output_file": "stale_daemon_diagnostics.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic module that reads service_health for all daemons with last_heartbeat > 2h. For each stale daemon (write_service, self_diagnostics, rug_pull_monitor, wisdom_synthesiser): attempt to reconnect, log the heartbeat age, and emit a structured diagnostic dict {daemon, age_seconds, likely_cause, suggested_action}. Must NOT: restart services, modify supervisord configs, or propose rebuilds of protected files. Output diagnostic to stdout; write summary row to service_health with meta containing the full report. Targeted daemons per live wiring map snapshot."
+}

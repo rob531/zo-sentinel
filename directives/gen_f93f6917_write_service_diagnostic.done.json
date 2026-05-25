@@ -1,0 +1,9 @@
+{
+  "task": "write_service_diagnostic",
+  "handler": "generate_file",
+  "output_file": "write_service_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic-only daemon to investigate write_service staleness (3h56m). MUST NOT propose restart. Must: (1) ping write_service health endpoint, (2) check if service is responsive to query requests, (3) report whether heartbeat is being dropped by the service or not being written by callers, (4) identify which callers last successfully wrote. Output diagnostic JSON to stdout. No DB modifications, no restarts, no HTTP to peer daemons beyond health ping."
+}

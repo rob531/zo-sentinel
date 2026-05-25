@@ -1,0 +1,14 @@
+{
+  "task": "build_webhook_dispatcher",
+  "handler": "generate_file",
+  "output_file": "webhook_dispatcher.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.72,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Webhook dispatcher daemon. Reads WEBHOOK_URLS from env var (comma-separated). Polls mesh_events every 60s for new severity=CRITICAL or WARNING events with event_type in (build_generation_failed,signal_drift_detected,new_threat_detected). For each: POST to each webhook URL with JSON {event_type,severity,payload,timestamp,source=zo_sentinel}. Retry 3x with 5s backoff. Log success/failure per webhook. Graceful degradation if no WEBHOOK_URLS set (logs warning and skips). Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

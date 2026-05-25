@@ -1,0 +1,15 @@
+{
+  "task": "rewrite_threat_intel_ingestor",
+  "handler": "generate_file",
+  "output_file": "threat_intel_ingestor.py",
+  "complexity": "high",
+  "phase": "7",
+  "priority": 0.89,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "Threat intel ingestor daemon. Two sources: (1) world_articles table: ws_query world_articles WHERE topics LIKE '%cybersecurity%' AND (title LIKE '%mcp%' OR title LIKE '%model context%' OR title LIKE '%supply chain%') AND processed_at > now()-INTERVAL 48 HOUR. For each article: extract server name clues from title/summary, find matching server_id in mcp_server_registry, ws_write mcp_threat_associations {server_id,threat_type=news_signal,evidence=article title+url,severity based on keywords(critical/high/medium/low)}. (2) OSV.dev: GET https://api.osv.dev/v1/query with ecosystem=npm. Match CVE affected packages against mcp_server_registry names. ws_write severity from CVSS score. Poll 7200s. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

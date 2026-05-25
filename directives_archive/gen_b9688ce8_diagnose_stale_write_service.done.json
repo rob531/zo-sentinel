@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_write_service",
+  "handler": "generate_file",
+  "output_file": "diagnose_write_service_stale.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnostic-only file. write_service is 12h8m stale per wiring map (>300s threshold). Generate diagnostic module that: (1) queries write_service health via POST :8772/query, (2) identifies whether the service is responsive but failing to heartbeat, (3) reports findings for operator review. This file is DIAGNOSTIC ONLY \u2014 do NOT propose to restart write_service directly (builder does not orchestrate services). Report to operational runbook in OPERATIONS.md."
+}

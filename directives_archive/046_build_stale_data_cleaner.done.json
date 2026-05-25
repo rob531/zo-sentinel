@@ -1,0 +1,14 @@
+{
+  "task": "build_stale_data_cleaner",
+  "handler": "generate_file",
+  "output_file": "stale_data_cleaner.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.7,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Stale data cleaner daemon. Weekly (check day_of_week==0 in loop): (1) find mcp_signal_scores older than 90d for servers that have been reassessed -> mark old scores inactive via ws_write (2) find mcp_attestations past valid_until -> ws_write status=expired (3) find mcp_server_registry last_scanned > 60d with no recent assessments -> set status=stale (4) archive mesh_memory older than 30d with importance < 0.5. Log counts. ws_write cleanup_complete to mesh_events. Never hard-delete. Poll 86400s. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

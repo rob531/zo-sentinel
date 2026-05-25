@@ -1,0 +1,9 @@
+{
+  "task": "fix_registry_api_smoke_failure",
+  "handler": "generate_file",
+  "output_file": "registry_api_fix.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.87,
+  "description": "Diagnostic and fix for registry_api.py smoke failure (traceback in most recent call). Must identify root cause: likely missing import or duckdb direct connection attempt. Must NOT use duckdb.connect() directly per section 5 wiring rules. All DB access via write_service :8772. Preserve existing FastAPI endpoints and function signatures. Reference: section 5 inter-daemon communication, section 7 SQL injection prevention."
+}

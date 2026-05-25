@@ -1,0 +1,9 @@
+{
+  "task": "validate_tool_description_safety_enrichment_discrimination",
+  "handler": "generate_file",
+  "output_file": "tool_description_safety_discrimination_validator.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Validate that tool_description_safety_enrichment_v2.py produces >20 distinct scores across the 34 synthetic fingerprints. Query mcp_signal_enrichments WHERE signal_name='tool_description_safety', count distinct scores. Currently only 4 distinct values - BAD SIGNAL per spec. Report on which metadata fields the enrichment uses (registry_source, tool_names, schema_complexity) and suggest weighting adjustments to increase discrimination."
+}

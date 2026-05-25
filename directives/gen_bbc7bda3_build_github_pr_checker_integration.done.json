@@ -1,0 +1,9 @@
+{
+  "task": "build_github_pr_checker_integration",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_integration.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Complete github_pr_checker webhook wiring. Reference last_error from github_pr_checker_wiring.py: failed in cohort_12_n5 with 1/3 attempts. github_pr_checker.py exists but webhook wiring is incomplete. Must wire to POST :8772/write and POST :8772/query per spec section 5. Must include verdict-check enforcement: reject PR additions for MCPs rated CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override."
+}

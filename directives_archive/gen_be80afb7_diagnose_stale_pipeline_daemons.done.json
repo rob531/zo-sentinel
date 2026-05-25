@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_stale_pipeline_daemons",
+  "handler": "generate_file",
+  "output_file": "diagnose_stale_pipeline_daemons.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Diagnostic daemon to investigate why core pipeline daemons are stale: mcp_scanner (143h26m), signal_analyser (141h27m), trust_synthesiser (141h52m), threat_intel_ingestor (143h3m), attestation_engine (143h27m), risk_ranker (143h27m). Checks write_service connectivity, inspects last known errors from service_health meta, and reports findings. MUST NOT restart any daemon. MUST NOT write to any core table. Output findings to log for operator review. Daemon pattern: run() with heartbeat to service_health.",
+  "reads": [
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

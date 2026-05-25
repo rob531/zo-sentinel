@@ -1,0 +1,9 @@
+{
+  "task": "build_operations_md",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Create OPERATIONS.md documenting: (1) supervisord layout \u2014 which daemons run under which supervisor group, restart policies; (2) Log locations \u2014 /home/workspace/zo_sentinel/logs/ for all daemons, naming conventions; (3) Recovery runbook \u2014 steps to recover from write_service stale (>5m), rug_pull_monitor dead, mcp_scanner stalled; (4) Health check commands \u2014 how to verify each daemon is responsive via curl to its port; (5) Escalation path for stale service_health entries. Reference current supervisord config location and log rotation policy."
+}

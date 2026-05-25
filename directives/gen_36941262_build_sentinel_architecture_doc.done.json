@@ -1,0 +1,9 @@
+{
+  "task": "build_sentinel_architecture_doc",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.84,
+  "description": "Document ARCHITECTURE.md covering: inter-daemon topology diagram (write_service :8772 as central hub, inference_router :8773 as exception for LLM calls), signal invariant contract (all enrichment producers must write to mcp_signal_scores or mcp_signal_enrichments with {signal_type, confidence, evidence_blob}), signal model with 8 dimensions (domain_trust, tool_description_safety, permission_scope, supply_chain, community_signal, temporal_stability, supply_chain_enrichment, community_signal_enrichment), verdict taxonomy (6 tiers + INSUFFICIENT), scope boundary (intelligence layer only, no gateway/proxy/enforcement)."
+}

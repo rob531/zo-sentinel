@@ -1,0 +1,3 @@
+# fingerprint_runner_daemon.py STOPPED 2026-04-27T15:55:44.865831+00:00
+
+Stopped 2026-04-27. v1 SQL named columns that don't exist in mcp_fingerprints. Real schema: server_id, tool_name_hash, description_tokens, permission_scope_hash, domain_fingerprint, version_string, computed_at. Replacement: mcp_fingerprinter.py already exists; just needs an activator that runs it against registry rows missing fingerprint entries. Will be queued as a directive after candidate_npm_promoter lands its first batch.

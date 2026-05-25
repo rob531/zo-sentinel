@@ -1,0 +1,15 @@
+{
+  "task": "build_github_pr_checker",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker.py",
+  "complexity": "high",
+  "phase": "14",
+  "priority": 0.59,
+  "reads": [
+    "schema.py",
+    "registry_api.py"
+  ],
+  "description": "GitHub PR checker utility. check_pr_for_mcps(pr_url)->list: fetches PR diff from GitHub API, finds any new MCP package.json entries or mcp_config additions. For each new MCP found: looks up in mcp_server_registry, returns verdict+trust_score+risk_tier. generate_pr_comment(results)->str: builds markdown PR comment summarising MCP safety assessment with emoji indicators (green=trusted, yellow=caution, red=high_risk). Intended to be called from a CI webhook. Not a daemon. Requires GITHUB_TOKEN env var.",
+  "context": "",
+  "from": "claude_batch"
+}

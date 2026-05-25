@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_supervisor_auto_updater_v2",
+  "handler": "generate_file",
+  "output_file": "supervisor_auto_updater_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Rebuild supervisor_auto_updater.py to fix smoke failure. Module auto-updates supervisord configuration when new daemons are built. Create v2 that reads daemon list from write_service, generates supervisord config, validates syntax before writing. Must be pure Python daemon with run() function."
+}

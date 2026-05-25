@@ -1,0 +1,9 @@
+{
+  "task": "build_shadow_mcp_indicators_library",
+  "handler": "generate_file",
+  "output_file": "shadow_mcp_indicators.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Pure library module providing URL-path and hostname-pattern indicators for shadow MCP detection. Source: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com/enterprise-mcp, 2026-04-14. Exports: is_shadow_mcp_url(path: str) -> bool, is_shadow_mcp_hostname(hostname: str) -> bool, detect_shadow_patterns(url: str, hostname: str) -> dict. Indicators: /mcp, /mcp/sse, mcp.* subdomains, known MCP server hostnames (mcp.stripe.com, mcp.cloudflare.com). NO daemons. NO network. NO DB writes. NO imports of protected modules. Include if __name__ == '__main__' self-smoke with 3 known-good inputs. Compile regex at module load."
+}

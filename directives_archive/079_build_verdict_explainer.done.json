@@ -1,0 +1,15 @@
+{
+  "task": "build_verdict_explainer",
+  "handler": "generate_file",
+  "output_file": "verdict_explainer.py",
+  "complexity": "medium",
+  "phase": "7",
+  "priority": 0.71,
+  "reads": [
+    "verdict_taxonomy.py",
+    "signal_weights.py"
+  ],
+  "description": "Verdict explanation generator. explain_verdict(server_id)->str: fetches trust_score,verdict,signals from write_service. Generates human-readable paragraph explaining WHY the server received its verdict. Format: <name> received verdict <VERDICT> (trust score: <N>/100). The strongest contributing factor was <top_signal> (score: <N>/100): <evidence>. This was partially offset/reinforced by <second_signal>. The assessment carries <confidence>% confidence based on <N> scoring dimensions. Full explanation suitable for analyst review notes. No daemon, utility.",
+  "context": "",
+  "from": "claude_batch"
+}

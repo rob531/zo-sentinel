@@ -1,0 +1,16 @@
+hdr "18. ZO-SENTINEL Schema Bootstrap"
+# Uses full_schema_bootstrap.py which creates ALL sentinel tables with 30s timeouts
+# Safe to re-run -- all CREATE TABLE IF NOT EXISTS
+echo "  Waiting for write_service..."
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8772/health 2>/dev/null || echo 000)
+    [[ "$CODE" == "200" ]] && break
+    sleep 3
+done
+CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8772/health 2>/dev/null || echo 000)
+if [[ "$CODE" == "200" ]]; then
+    python3 $SENTINEL/full_schema_bootstrap.py 2>&1 | tee $LOGS/bootstrap.log | tail -5
+    ok "Sentinel schema bootstrapped"
+else
+    warn "write_service not ready after 30s -- skipping bootstrap (run manually: python3 $SENTINEL/full_schema_bootstrap.py)"
+fi

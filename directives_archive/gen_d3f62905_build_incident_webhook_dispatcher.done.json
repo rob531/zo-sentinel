@@ -1,0 +1,15 @@
+{
+  "task": "build_incident_webhook_dispatcher",
+  "handler": "generate_file",
+  "output_file": "incident_webhook_dispatcher.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.85,
+  "description": "Fire webhooks on HIGH/CRITICAL mcp_threat_associations detection. Query threat register for new entries since last run, batch by severity. Configurable target URLs per severity tier. Retry with exponential backoff, log to audit_log. Daemon.",
+  "reads": [
+    "schema.py",
+    "webhook_dispatcher.py",
+    "threat_feed_aggregator.py"
+  ],
+  "next_directive": {}
+}

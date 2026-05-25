@@ -1,0 +1,11 @@
+{
+  "task": "enrichment_field_coverage_validator",
+  "handler": "generate_file",
+  "output_file": "enrichment_field_coverage_validator.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Pure library module to validate that enrichment modules read multiple metadata fields. Expose validate_enrichment(module_path: str) -> dict with keys: {field_count: int, fields_used: list, distinct_metadata_keys: set, coverage_score: float}. A coverage_score >= 0.7 requires reading >= 3 distinct metadata fields. This prevents weak single-field enrichments that produce poor discrimination. Will be run against all *_enrichment.py files. No DB, no network.",
+  "reads": [],
+  "next_directive": {}
+}

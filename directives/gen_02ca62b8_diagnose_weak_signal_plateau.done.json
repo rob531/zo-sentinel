@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_weak_signal_plateau",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_diagnostic.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnostic module that reads signal_analyser.py and mcp_signal_scores table to diagnose why permission_scope, temporal_stability, and tool_description_safety signals plateau at only 4 distinct values each. Queries write_service for cardinality per signal_type. Reads source of the three enrichment files (permission_scope_enrichment.py, temporal_stability_enrichment.py, any tool_description_safety enrichment) to identify if they read multiple metadata fields or only one. Outputs a detailed report of which fields each enricher reads, why discrimination remains low, and concrete recommendations for increasing distinct-value count above 20. No DB writes, no network, pure diagnostic."
+}

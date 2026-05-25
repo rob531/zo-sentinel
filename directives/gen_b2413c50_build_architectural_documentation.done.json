@@ -1,0 +1,14 @@
+{
+  "task": "build_architectural_documentation",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Create ARCHITECTURE.md documenting: (1) inter-daemon topology with all daemons and their ports, (2) write_service contract (:8772) for all state exchange, (3) signal invariant: every signal producer must write rows with {signal_type, confidence, evidence_blob}, (4) table schema summary for core tables, (5) heartbeat SLA (every 60s, stale >2h = dead). Reference SPEC.md section 5 and 6. Not a code file.",
+  "reads": [
+    "schema.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

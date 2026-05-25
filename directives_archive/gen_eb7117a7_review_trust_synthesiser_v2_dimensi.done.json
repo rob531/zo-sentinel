@@ -1,0 +1,26 @@
+{
+  "task": "review_trust_synthesiser_v2_dimension",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_audit.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Generate trust_synthesiser_v2_audit.py \u2014 audit review of trust_synthesiser_v2.py for Phase 8 injection_resilience dimension. MUST verify scorer reads mcp_signal_scores where dimension='injection_resilience'. MUST verify weight=1.6 and threshold=0.80 are applied. MUST output JSON report to /home/workspace/zo_sentinel/audit/trust_synth_v2_dimen_audit.json. If issues found, set next_directive to rewrite_trust_synthesiser_v3.py with fixes.",
+  "reads": [
+    "trust_synthesiser_v2.py",
+    "pi_scorer.py"
+  ],
+  "next_directive": {
+    "task": "rewrite_trust_synthesiser_v3",
+    "handler": "generate_file",
+    "output_file": "trust_synthesiser_v3.py",
+    "complexity": "medium",
+    "phase": "11",
+    "priority": 0.88,
+    "description": "Rewrite trust_synthesiser_v3.py based on audit findings \u2014 fix injection_resilience dimension handling in trust synthesiser.",
+    "reads": [
+      "trust_synthesiser_v2.py"
+    ],
+    "next_directive": {}
+  }
+}

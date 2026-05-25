@@ -1,0 +1,9 @@
+{
+  "task": "github_pr_checker_wiring_v2",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild of github_pr_checker_wiring.py which failed cohort_12_n5 (20% fail rate). Last error: failed in cohort_12_n5. Must: (1) keep identical interface from original (check_single_instance, remove_pid_file, signal_handler, send_heartbeat, ws_query), (2) add additional error handling around webhook payload parsing (likely cause of cohort failure), (3) ensure webhook route returns 200 even on malformed payload (GitHub retries 500s). References spec section 5 (inter-daemon communication) and Section 8 (naming invariants). Explicitly includes output_file field to avoid build_ prefix orphan bug."
+}

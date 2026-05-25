@@ -1,0 +1,13 @@
+{
+  "task": "patch_snow_connector_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Patch for snow_connector.py integration into approval_workflow on :8780. snow_connector.py already built 2026-04-16 and passed smoke at 11:51 May 23. The snow_integration_completion.py was quarantined after 3 fails in cohort_4_n4 with last_error indicating missing configuration handling. This patch adds: ON CONFLICT update logic for mcp_submissions when duplicate SNOW ticket arrives, valid_until field population for exemption records created from SNOW auth blocks, error recovery path for expired OAuth tokens that re-triggers SNOW OAuth flow. References snow_connector_integration_completion.py for the already-wired get_snow_oauth_token and ws_query/ws_write pattern.",
+  "reads": [
+    "snow_connector_integration_completion.py",
+    "snow_connector.py"
+  ]
+}

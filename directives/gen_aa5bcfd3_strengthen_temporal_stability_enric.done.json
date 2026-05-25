@@ -1,0 +1,9 @@
+{
+  "task": "strengthen_temporal_stability_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.89,
+  "description": "Enhanced pure enrichment module for temporal_stability signal. Must expose compute_score(metadata: dict) -> tuple[float, dict] conforming to signal invariant. Must use age_days, download_count, dependency_count, publisher_verified, last_commit_days, release_frequency. Target: produce >=10 distinct scores across 34 synthetic fingerprints instead of current 3. Penalize recent repos (<30 days) and low-download-count outliers more aggressively. No DB writes, no network."
+}

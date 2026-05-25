@@ -1,0 +1,12 @@
+{
+  "task": "build_mock_write_service",
+  "handler": "generate_file",
+  "output_file": "tests/mock_write_service.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.69,
+  "reads": [],
+  "description": "Mock write service for testing. FastAPI port 8799 (test port). Stores all writes in memory dict by table name. Endpoints: POST /write (stores rows in memory), POST /query (returns stored rows matching basic SQL WHERE), POST /execute (no-op returns ok), GET /health, GET /dump (returns all stored data as JSON), POST /reset (clears all data). Used by integration tests to avoid polluting real DuckDB. Run: python3 tests/mock_write_service.py --port 8799 in test setup.",
+  "context": "",
+  "from": "claude_batch"
+}

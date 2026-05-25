@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZO-SENTINEL: Attestation Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0d0f14;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .header {
+            border-bottom: 2px solid #00e5ff;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #00e5ff;
+            font-size: 24px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .header .subtitle {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .auth-panel {
+            background: #1a1d24;
+            border: 1px solid #00e5ff;
+            padding: 20px;
+            margin-bottom: 30px;
+            max-width: 400px;
+        }
+        .auth-panel label {
+            display: block;
+            color: #00e5ff;
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        .auth-panel input {
+            width: 100%;
+            background: #0d0f14;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .auth-panel input:focus {
+            outline: none;
+            border-color: #00e5ff;
+        }
+        .btn {
+            background: transparent;
+            border: 1px solid #00e5ff;
+            color: #00e5ff;
+            padding: 10px 20px;
+            font-family: monospace;
+            font-size: 12px;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        .btn:hover {
+            background: #00e5ff;
+            color: #0d0f14;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            border-color: #ff3333;
+            color: #ff3333;
+        }
+        .btn-danger:hover {
+            background: #ff3333;
+            color: #0d0f14;
+        }
+        .error-msg {
+            background: #2a1a1a;
+            border: 1px solid #ff3333;
+            color: #ff3333;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+        .success-msg {
+            background: #1a2a1a;
+            border: 1px solid #00ff66;
+            color: #00ff66;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+        .hidden {
+            display: none;
+        }
+        .stats-bar {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #1a1d24;
+            border: 1px solid #333;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-value {
+            color: #00e5ff;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            color: #00e5ff;
+            font-size: 11px;
+            text-transform: uppercase;
+            background: #1a1d24;
+        }
+        td {
+            font-size: 13px;
+        }
+        tr:hover {
+            background: #1a1d24;
+        }
+        .status-valid {
+            color: #00ff66;
+        }
+        .status-expired {
+            color: #ff3333;
+        }
+        .status-revoked {
+            color: #ff9900;
+        }
+        .action-cell {
+            display: flex;
+            gap: 10px;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal {
+            background: #1a1d24;
+            border: 2px solid #00e5ff;
+            padding: 30px;
+            min-width: 400px;
+        }
+        .modal h2 {
+            color: #00e5ff;
+            font-size: 16px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .modal input[type="date"] {
+            width: 100%;
+            background: #0d0f14;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .refresh-btn {
+            float: right;
+            font-size: 11px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ZO-SENTINEL Attestation Admin</h1>
+        <div class="subtitle">Port 8790 // X-API-Key Auth // Audit-logged Actions</div>
+    </div>
+
+    <div class="auth-panel" id="authPanel">
+        <label>API Key</label>
+        <input type="password" id="apiKey" placeholder="Enter X-API-Key">
+        <button class="btn" onclick="authenticate()">Authenticate</button>
+        <div id="authMsg"></div>
+    </div>
+
+    <div id="mainContent" class="hidden">
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value" id="totalCount">-</div>
+                <div class="stat-label">Total Attestations</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="validCount">-</div>
+                <div class="stat-label">Valid</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="expiredCount">-</div>
+                <div class="stat-label">Expired</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="revokedCount">-</div>
+                <div class="stat-label">Revoked</div>
+            </div>
+        </div>
+
+        <button class="btn refresh-btn" onclick="loadAttestations()">Refresh</button>
+        <div id="messageBox"></div>
+        <table id="attestationsTable">
+            <thead>
+                <tr>
+                    <th>Attestation ID</th>
+                    <th>Server ID</th>
+                    <th>Server Name</th>
+                    <th>Verdict</th>
+                    <th>Valid Until</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="attestationsBody">
+                <tr><td colspan="7" class="loading">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="extendModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Extend Attestation</h2>
+            <div id="extendAttestationId"></div>
+            <input type="date" id="newValidUntil">
+            <div class="modal-actions">
+                <button class="btn" onclick="closeExtendModal()">Cancel</button>
+                <button class="btn" onclick="confirmExtend()">Extend</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WRITE_SERVICE_URL = 'http://127.0.0.1:8772';
+        const ATTESTATION_ENGINE_URL = 'http://127.0.0.1:8780';
+        const ADMIN_PORT = 8790;
+        let apiKey = '';
+        let currentExtendId = '';
+        let attestations = [];
+
+        function authenticate() {
+            apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                showMsg('authMsg', 'API key required', 'error');
+                return;
+            }
+            document.getElementById('authPanel').classList.add('hidden');
+            document.getElementById('mainContent').classList.remove('hidden');
+            loadAttestations();
+        }
+
+        function getHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'X-API-Key': apiKey,
+                'X-Admin-Port': ADMIN_PORT.toString()
+            };
+        }
+
+        function wsQuery(sql) {
+            return fetch(WRITE_SERVICE_URL + '/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: sql }),
+                signal: AbortSignal.timeout(30000)
+            })
+            .then(r => r.json())
+            .catch(e => { console.error('Query error:', e); throw e; });
+        }
+
+        function wsWrite(table, rows) {
+            return fetch(WRITE_SERVICE_URL + '/write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: table, rows: rows, wait: true }),
+                signal: AbortSignal.timeout(30000)
+            })
+            .then(r => r.json())
+            .catch(e => { console.error('Write error:', e); throw e; });
+        }
+
+        function wsExecute(sql, params) {
+            return fetch(WRITE_SERVICE_URL + '/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: sql, params: params }),
+                signal: AbortSignal.timeout(30000)
+            })
+            .then(r => r.json())
+            .catch(e => { console.error('Execute error:', e); throw e; });
+        }
+
+        function loadAttestations() {
+            const sql = `SELECT 
+                a.attestation_id,
+                a.server_id,
+                COALESCE(s.server_name, a.server_id) as server_name,
+                a.verdict,
+                a.valid_until,
+                a.status,
+                a.attested_at
+            FROM mcp_attestations a
+            LEFT JOIN mcp_server_registry s ON a.server_id = s.server_id
+            ORDER BY a.valid_until DESC`;
+            
+            wsQuery(sql)
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    attestations = data.rows || [];
+                    renderAttestations();
+                    updateStats();
+                })
+                .catch(e => {
+                    document.getElementById('attestationsBody').innerHTML = 
+                        '<tr><td colspan="7" class="loading">Error loading: ' + e.message + '</td></tr>';
+                });
+        }
+
+        function renderAttestations() {
+            const tbody = document.getElementById('attestationsBody');
+            if (attestations.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="loading">No attestations found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = attestations.map(a => {
+                const statusClass = getStatusClass(a.status);
+                const statusText = a.status ? a.status.toUpperCase() : 'UNKNOWN';
+                return '<tr>' +
+                    '<td>' + escapeHtml(a.attestation_id || '') + '</td>' +
+                    '<td>' + escapeHtml(a.server_id || '') + '</td>' +
+                    '<td>' + escapeHtml(a.server_name || '') + '</td>' +
+                    '<td>' + escapeHtml(a.verdict || '') + '</td>' +
+                    '<td>' + escapeHtml(a.valid_until || '') + '</td>' +
+                    '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
+                    '<td class="action-cell">' +
+                        (a.status !== 'revoked' ? 
+                            '<button class="btn" onclick="openExtendModal(\'' + a.attestation_id + '\')">Extend</button>' +
+                            '<button class="btn btn-danger" onclick="revokeAttestation(\'' + a.attestation_id + '\',\'' + a.server_id + '\')">Revoke</button>'
+                        : '') +
+                    '</td>' +
+                '</tr>';
+            }).join('');
+        }
+
+        function getStatusClass(status) {
+            if (status === 'valid') return 'status-valid';
+            if (status === 'expired') return 'status-expired';
+            if (status === 'revoked') return 'status-revoked';
+            return '';
+        }
+
+        function updateStats() {
+            const total = attestations.length;
+            const valid = attestations.filter(a => a.status === 'valid').length;
+            const expired = attestations.filter(a => a.status === 'expired').length;
+            const revoked = attestations.filter(a => a.status === 'revoked').length;
+            
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('validCount').textContent = valid;
+            document.getElementById('expiredCount').textContent = expired;
+            document.getElementById('revokedCount').textContent = revoked;
+        }
+
+        function openExtendModal(attestationId) {
+            currentExtendId = attestationId;
+            document.getElementById('extendAttestationId').textContent = 'Attestation: ' + attestationId;
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 90);
+            document.getElementById('newValidUntil').value = tomorrow.toISOString().split('T')[0];
+            document.getElementById('extendModal').classList.remove('hidden');
+        }
+
+        function closeExtendModal() {
+            document.getElementById('extendModal').classList.add('hidden');
+            currentExtendId = '';
+        }
+
+        function confirmExtend() {
+            const newValidUntil = document.getElementById('newValidUntil').value;
+            if (!newValidUntil) {
+                showMsg('messageBox', 'Please select a date', 'error');
+                return;
+            }
+            extendAttestation(currentExtendId, newValidUntil);
+            closeExtendModal();
+        }
+
+        function extendAttestation(attestationId, newValidUntil) {
+            const now = new Date().toISOString();
+            const sql = `UPDATE mcp_attestations 
+                SET valid_until = ?, status = 'valid', updated_at = ?
+                WHERE attestation_id = ?`;
+            
+            const auditEntry = {
+                audit_id: generateAuditId(attestationId, 'extend', now),
+                target_server_id: getServerIdForAttestation(attestationId),
+                action: 'extend',
+                admin_api_key_hash: hashApiKey(apiKey),
+                attestation_id: attestationId,
+                previous_valid_until: getPreviousValidUntil(attestationId),
+                new_valid_until: newValidUntil,
+                performed_at: now,
+                admin_port: ADMIN_PORT.toString()
+            };
+
+            Promise.all([
+                wsExecute(sql, [newValidUntil, now, attestationId]),
+                wsWrite('audit_log', auditEntry)
+            ])
+            .then(() => {
+                showMsg('messageBox', 'Attestation extended successfully', 'success');
+                loadAttestations();
+            })
+            .catch(e => {
+                showMsg('messageBox', 'Extension failed: ' + e.message, 'error');
+            });
+        }
+
+        function revokeAttestation(attestationId, serverId) {
+            if (!confirm('Revoke attestation ' + attestationId + '? This action cannot be undone.')) {
+                return;
+            }
+
+            const now = new Date().toISOString();
+            const sql = `UPDATE mcp_attestations 
+                SET status = 'revoked', revoked_at = ?, updated_at = ?
+                WHERE attestation_id = ?`;
+
+            const auditEntry = {
+                audit_id: generateAuditId(attestationId, 'revoke', now),
+                target_server_id: serverId,
+                action: 'revoke',
+                admin_api_key_hash: hashApiKey(apiKey),
+                attestation_id: attestationId,
+                performed_at: now,
+                admin_port: ADMIN_PORT.toString()
+            };
+
+            Promise.all([
+                wsExecute(sql, [now, now, attestationId]),
+                wsWrite('audit_log', auditEntry)
+            ])
+            .then(() => {
+                showMsg('messageBox', 'Revocation logged, triggering engine...', 'success');
+                triggerRevocation(serverId, attestationId);
+                loadAttestations();
+            })
+            .catch(e => {
+                showMsg('messageBox', 'Revocation failed: ' + e.message, 'error');
+            });
+        }
+
+        function triggerRevocation(serverId, attestationId) {
+            fetch(ATTESTATION_ENGINE_URL + '/revoke', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    server_id: serverId,
+                    attestation_id: attestationId,
+                    source: 'admin_ui',
+                    admin_port: ADMIN_PORT.toString()
+                }),
+                signal: AbortSignal.timeout(30000)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    showMsg('messageBox', 'Engine revocation error: ' + data.error, 'error');
+                }
+            })
+            .catch(e => {
+                showMsg('messageBox', 'Engine unreachable: ' + e.message, 'error');
+            });
+        }
+
+        function generateAuditId(attestationId, action, timestamp) {
+            const input = attestationId + action + timestamp;
+            let hash = 0;
+            for (let i = 0; i < input.length; i++) {
+                const char = input.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return 'AUD_' + Math.abs(hash).toString(16).padStart(16, '0');
+        }
+
+        function hashApiKey(key) {
+            let hash = 0;
+            for (let i = 0; i < key.length; i++) {
+                const char = key.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return hash.toString(16).padStart(16, '0');
+        }
+
+        function getServerIdForAttestation(attestationId) {
+            const att = attestations.find(a => a.attestation_id === attestationId);
+            return att ? att.server_id : null;
+        }
+
+        function getPreviousValidUntil(attestationId) {
+            const att = attestations.find(a => a.attestation_id === attestationId);
+            return att ? att.valid_until : null;
+        }
+
+        function showMsg(boxId, msg, type) {
+            const box = document.getElementById(boxId);
+            box.innerHTML = '<div class="' + (type === 'error' ? 'error-msg' : 'success-msg') + '">' + msg + '</div>';
+            setTimeout(() => { box.innerHTML = ''; }, 5000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

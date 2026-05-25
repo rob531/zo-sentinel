@@ -1,0 +1,11 @@
+{
+  "task": "build_architecture_doc",
+  "handler": "generate_file",
+  "output_file": "ARCHITECTURE.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Generate ARCHITECTURE.md documenting inter-daemon topology, write_service contract (:8772 read/write/execute paths), signal invariant (section 3), heartbeat contract (60s max staleness), and port map. Use content from PRODUCT_SPEC.md sections 1-7. Include table-of-contents linking to sections. This is documentation only \u2014 no code.",
+  "reads": [],
+  "next_directive": {}
+}

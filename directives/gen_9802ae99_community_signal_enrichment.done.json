@@ -1,0 +1,11 @@
+{
+  "task": "community_signal_enrichment",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Pure enrichment module exposing compute_score(metadata: dict) -> tuple[float, dict]. Uses multiple metadata fields: stars, download_count, age_days, registry_source, dependency_count, publisher_verified. Reads at least 6 fields to produce scores with high discrimination. Returns score in [0.0, 100.0] and evidence dict listing partial scores per field. No DB writes, no network, no imports of protected modules. Must complete in under 2 seconds per call. Designed to improve community_signal which currently shows 34 distinct values - this enrichment should maintain that discrimination while deepening the scoring model.",
+  "reads": [],
+  "next_directive": {}
+}

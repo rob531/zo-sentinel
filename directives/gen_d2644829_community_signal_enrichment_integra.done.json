@@ -1,0 +1,9 @@
+{
+  "task": "community_signal_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Integrate community_signal_enrichment.py (built 2026-05-23T23:29:12) into signal_analyser.py. This enrichment module uses compute_score(metadata) that returns (float, dict) and was built with supply_chain_enrichment patterns. The wiring map shows signal_analyser_enrichment_bridge.py exists but the community_signal_enrichment may not be wired. Verify it is called in signal_analyser's enrichment loop and add integration if missing. No DB writes from the enricher itself."
+}

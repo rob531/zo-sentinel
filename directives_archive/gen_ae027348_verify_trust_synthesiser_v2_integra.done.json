@@ -1,0 +1,14 @@
+{
+  "task": "verify_trust_synthesiser_v2_integration",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_integration_verify.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration verification daemon. Trust synthesiser v2 (built 2026-04-21 19:50) must read mcp_signal_scores with dimension='injection_resilience' and apply weight 1.6 with threshold 0.80 per Phase 8 spec. Also verifies it reads all 8 signals per spec section 3. Uses write_service on :8772 to verify query patterns. Produces health report via log output. Does not modify database.",
+  "reads": [
+    "trust_synthesiser_v2.py",
+    "trust_synthesiser_v2_injection_check.py"
+  ],
+  "next_directive": {}
+}

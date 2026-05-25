@@ -1,0 +1,15 @@
+{
+  "task": "diagnose_import_traces",
+  "handler": "generate_file",
+  "output_file": "diagnose_import_traces_rug_registry_signal.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Diagnostic module to inspect import chain failures in smoke tests for registry_api.py, rug_pull_monitor.py, signal_analyser.py. All three show recent traceback ending in '<frozen importlib'. File is protected so do NOT propose rebuild. Instead: inspect all __import__ calls and top-level imports in each file, list which modules resolve vs fail, identify missing deps or import ordering issues. Export diagnostic findings so they can be handed to a human editor for targeted fix.",
+  "reads": [
+    "registry_api.py",
+    "rug_pull_monitor.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

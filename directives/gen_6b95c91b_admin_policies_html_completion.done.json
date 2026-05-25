@@ -1,0 +1,9 @@
+{
+  "task": "admin_policies_html_completion",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Build admin_policies.html - the admin surface for mcp_policy_rules table (currently empty per gaps map). The file exists per gaps map but needs completion. Provide CRUD interface for policy rules with fields: rule_type, pattern, verdict_action, created_by. Wire to write_service :8772 for reads and writes. Include audit_log insertion on every create/update/delete operation per spec section 7. Do not build if already exists on disk - check first."
+}

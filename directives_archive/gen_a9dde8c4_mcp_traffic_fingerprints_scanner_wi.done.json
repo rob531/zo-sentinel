@@ -1,0 +1,9 @@
+{
+  "task": "mcp_traffic_fingerprints_scanner_wiring",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Wire the already-built mcp_traffic_fingerprints.py library into mcp_scanner.py for MCP protocol confirmation during candidate server scanning. mcp_traffic_fingerprints.py (built 2026-04-22T15:52:17) exports detect_mcp_methods, is_mcp_traffic, extract_session_indicators. Integration point: mcp_scanner checks server responses against these patterns. No HTTP between daemons. Must use write_service for any state."
+}

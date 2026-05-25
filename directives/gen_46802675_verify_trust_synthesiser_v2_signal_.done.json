@@ -1,0 +1,14 @@
+{
+  "task": "verify_trust_synthesiser_v2_signal_coverage",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v2_coverage_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Verify that trust_synthesiser_v2.py reads all 8 signals from mcp_signal_scores and mcp_signal_enrichments, with correct weights for the Phase 8 injection_resilience dimension (weight 1.6, threshold 0.80). Check: (1) query mcp_signal_scores WHERE dimension='injection_resilience' returns rows, (2) trust_synthesiser_v2.py code reads that dimension, (3) composite formula includes injection_resilience with weight 1.6. If the 8th dimension is missing, generate trust_synthesiser_v3.py with the missing dimension integrated. If it is present, document confirmation in a status note.",
+  "reads": [
+    "trust_synthesiser_v2.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,15 @@
+{
+  "task": "complete_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring_complete.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Complete wiring of snow_connector.py into approval_workflow. Per Appendix A: built 2026-04-16, needs wiring into approval_workflow. Create the integration glue that routes ServiceNow inbound webhook data through snow_connector to update mcp_decisions or mcp_submissions. Validate request signature per Section 7. No direct HTTP between peer daemons \u2014 use write_service.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py",
+    "snow_connector_wiring.py",
+    "snow_connector_completeness.py"
+  ]
+}

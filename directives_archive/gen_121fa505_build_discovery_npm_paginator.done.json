@@ -1,0 +1,9 @@
+{
+  "task": "build_discovery_npm_paginator",
+  "output_file": "discovery_npm_paginator.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.8,
+  "description": "Long-running daemon. Every 1800s, fetches the next page of npm packages from https://registry.npmjs.com/-/v1/search?text=mcp&size=100&from=<cursor> matching MCP indicators (keyword 'modelcontextprotocol', name prefix 'mcp-' or '@modelcontextprotocol/', description contains 'Model Context Protocol'). Tracks last-seen cursor in /home/workspace/zo_sentinel/state/npm_pagination_cursor.txt. For each new package, ws_write mcp_discovery_candidates with id=hashlib.md5(('npm|'+pkg_name).encode()).hexdigest()[:16] cast to int via int(...,16) % 2**31, candidate_name=pkg_name, candidate_url='https://www.npmjs.com/package/'+pkg_name, candidate_description=description[:500], discovered_in_directory='npm_search', discovered_status='active', last_seen=now. ON CONFLICT (discovered_in_directory, candidate_name) DO UPDATE SET last_seen=now. Heartbeat. Lockfile. Respects 300s rate-limit floor between hits to npm. Will be activated once candidate_npm_promoter is proven so the inflow doesn't outpace the outflow."
+}

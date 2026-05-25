@@ -1,0 +1,14 @@
+{
+  "task": "wire_mcp_traffic_fingerprints",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints_wirer.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration module to wire mcp_traffic_fingerprints.py (already built 2026-04-22) into mcp_scanner. The fingerprints library exports detect_mcp_methods(), is_mcp_traffic(), extract_session_indicators(). Wire mcp_scanner to call is_mcp_traffic() against candidate server responses for MCP protocol confirmation. MUST use write_service for any state writes (table=mcp_signal_scores with signal_type, confidence, evidence_blob). No direct DB access. No HTTP between peer daemons. This is integration only, not a rebuild of either file.",
+  "reads": [
+    "mcp_traffic_fingerprints.py",
+    "mcp_scanner.py"
+  ],
+  "next_directive": {}
+}

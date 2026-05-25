@@ -1,0 +1,9 @@
+{
+  "task": "build_exemption_expirer",
+  "handler": "generate_file",
+  "output_file": "exemption_expirer.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Nightly check daemon for exemptions past valid_until in mcp_exemptions table. Queries write_service for rows WHERE valid_until < NOW(). Marks expired exemptions (sets status='expired' or equivalent column). Emits audit_log entry for each expiry. Only touches mcp_exemptions. Runs as a standalone daemon with 60s heartbeat to service_health. Complements retention_sweeper for lifecycle management."
+}

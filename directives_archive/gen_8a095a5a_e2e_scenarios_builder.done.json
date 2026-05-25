@@ -1,0 +1,9 @@
+{
+  "task": "e2e_scenarios_builder",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Build the missing e2e_scenarios.py test harness per Appendix A. MUST implement three canonical end-to-end flows: (1) new MCP submission -> scanner ingest -> all 7 signals scored -> trust_synthesiser verdict -> attestation_engine attestation -> UI visible via search_api; (2) threat_intel_ingestor update -> risk_ranker re-score -> verdict change; (3) attestation_expiry -> renewal check. Each scenario must assert final DB state. No DB writes during test, only asserts via write_service query. File must be executable standalone: python3 e2e_scenarios.py."
+}

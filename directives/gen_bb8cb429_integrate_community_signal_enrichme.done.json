@@ -1,0 +1,15 @@
+{
+  "task": "integrate_community_signal_enrichment",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Wire community_signal_enrichment module into signal_analyser_v2. Currently community_signal shows 34 distinct values (OK) but should use the enrichment layer per spec section 3. Must: (1) Query mcp_signal_enrichments for community_signal_enrichment rows per MCP; (2) Merge enrichment scores with base community_signal signal in trust_synthesiser_v2 weighting; (3) Follow write_service :8772 protocol for DB access; (4) Add heartbeat to service_health every 60s; (5) Do NOT rewrite community_signal_enrichment.py - companion module rule applies. The enrichment module community_signal_enrichment.py exists (built 2026-05-24); this integration wires it into the signal pipeline.",
+  "reads": [
+    "community_signal_enrichment.py",
+    "community_signal_enrichment_integration.py",
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

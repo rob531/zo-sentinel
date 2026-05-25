@@ -1,0 +1,15 @@
+{
+  "task": "build_anomaly_detector",
+  "handler": "generate_file",
+  "output_file": "anomaly_detector.py",
+  "complexity": "high",
+  "phase": "15",
+  "priority": 0.55,
+  "reads": [
+    "schema.py",
+    "signal_analyser.py"
+  ],
+  "description": "Anomaly detector daemon. Every 43200s: computes population statistics for each signal across all scored servers (mean, stddev). Flags servers where any signal is >2 stddev from mean as statistical_anomaly. Also detects: (1) score_clustering_anomaly: if 90% of servers have near-identical scores (scoring not discriminating) (2) temporal_anomaly: server score changed >30 points between assessments with no new threat intel. ws_write anomalies to mcp_threat_associations severity=MEDIUM evidence=statistical. Write ANOMALY_REPORT.md. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

@@ -1,0 +1,9 @@
+{
+  "task": "verify_signal_enrichment_v2_wiring",
+  "handler": "generate_file",
+  "output_file": "enrichment_wiring_verifier.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Verify that enrichment v2 modules are properly wired into signal_analyser. Check: (1) community_signal_enrichment_v2.py, temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py, permission_scope_enrichment_v2.py all have compute_score(metadata) -> tuple[float, dict]; (2) signal_analyser_v2.py or signal_analyser.py calls each enrichment; (3) evidence query verifies distinct score distribution across synthetic fingerprints. Emit report to log and write_service health table. If wiring is missing, generate a patch directive via next_directive field."
+}

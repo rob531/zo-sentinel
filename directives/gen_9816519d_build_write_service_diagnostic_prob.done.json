@@ -1,0 +1,9 @@
+{
+  "task": "build_write_service_diagnostic_probe",
+  "handler": "generate_file",
+  "output_file": "write_service_diagnostic_probe.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Diagnostic-only probe for write_service on :8772. Must: (1) POST /health to check liveness, (2) query information_schema.tables to verify DuckDB is accessible, (3) attempt a minimal write to a temp table with immediate cleanup to test throughput, (4) report findings to service_health with status=diagnostic_stale or diagnostic_ok. Must NOT: rewrite any state, delete data, or propose a rebuild of write_service (protected file). Reads: write_service.py interface patterns. Output: diagnostic report JSON to stdout + heartbeat to service_health."
+}

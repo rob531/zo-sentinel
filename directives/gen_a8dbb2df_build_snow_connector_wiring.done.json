@@ -1,0 +1,14 @@
+{
+  "task": "build_snow_connector_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Integration module to wire snow_connector.py (built 2026-04-16) into approval_workflow on :8780. Reads from mcp_submissions table for ServiceNow inbound ticket data. On new submission: (1) query snow_connector for ticket status, (2) if ticket approved, trigger approval_workflow.create_decision(), (3) write result back to mcp_decisions. Must NOT introduce HTTP between peer daemons \u2014 all via write_service :8772. Snow connector exists and is protected; this is the wiring layer only. Priority 0.85 because integration is blocking Phase 9 enterprise use case.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

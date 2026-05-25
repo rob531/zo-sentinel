@@ -1,0 +1,9 @@
+{
+  "task": "improve_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Rebuild temporal_stability_enrichment.py to improve weak signal discrimination (currently only 3 distinct values per signal quality diagnostic). Must expose compute_score(metadata: dict) -> tuple[float, dict]. Must read MULTIPLE fields: age_days, last_updated_date, update_frequency_days, commit_velocity, release_regularity, maintainer_activity, version_bumps_90d. Apply weighted scoring with partial scores for each dimension. Target >=20 distinct scores. No DB writes, no network, no imports of protected modules."
+}

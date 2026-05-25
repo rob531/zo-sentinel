@@ -1,0 +1,15 @@
+{
+  "task": "build_dependency_chain_auditor",
+  "handler": "generate_file",
+  "output_file": "dependency_chain_auditor.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.91,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "npm dependency chain auditor daemon. For npm-sourced MCPs in mcp_server_registry: fetch package.json via GET https://registry.npmjs.org/{package_name}/latest. Extract dependencies and devDependencies. For each direct dependency: (1) check against KNOWN_MALICIOUS_PACKAGES from known_threats, (2) GET https://api.osv.dev/v1/query with package name for CVEs, (3) flag 0-download transitive deps (dependency confusion attack vector), (4) detect deps with git:// URLs (pinned to mutable commit = supply chain risk), (5) detect deps with file:// paths (unusual, possible local injection). Depth: check 2 levels deep (direct + transitive direct). ws_write mcp_threat_associations for each malicious dep found. ws_write mcp_signal_scores supply_chain signal update. Poll 86400s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

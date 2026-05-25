@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_analyser_enrichment_consumer",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_enrichment_consumer_v2.py",
+  "complexity": "high",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Companion module for signal_analyser_v2.py that explicitly queries and uses mcp_signal_enrichments table when computing scores for the three weak signals (permission_scope, temporal_stability, tool_description_safety). Must read from mcp_signal_enrichments where signal_type IN ('temporal_stability_enrichment', 'tool_description_safety_enrichment', 'permission_scope_enrichment') and incorporate enrichment scores into final signal computation. Must use ws_query through write_service :8772. Must NOT directly import duckdb. This is a companion module, not a rewrite of signal_analyser_v2.py (protected)."
+}

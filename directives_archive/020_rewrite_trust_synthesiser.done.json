@@ -1,0 +1,12 @@
+{
+  "task": "rewrite_trust_synthesiser",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser.py",
+  "complexity": "high",
+  "reads": ["schema.py", "signal_analyser.py"],
+  "description": "Complete production-grade trust synthesiser daemon. Reads servers from mcp_server_registry where trust_score IS NOT NULL but verdict IS NULL, or where last_assessed < now() - INTERVAL 24 HOUR. For each: fetch all signal scores from mcp_signal_scores via ws_query, compute weighted composite trust_score (domain_trust*0.20 + tool_description_safety*0.20 + permission_scope*0.15 + supply_chain*0.15 + community_signal*0.15 + temporal_stability*0.15). Map to verdict: >=75=TRUSTED_GENERAL, >=60=TRUSTED_RESEARCH, >=50=ENTERPRISE_CONTROLLED, >=35=CAUTION_LIMITED, >=20=HIGH_RISK_ISOLATED, <20=KNOWN_THREAT. Generate reasoning string explaining top 2 signals that drove the verdict. Compute confidence (0.0-1.0) based on how many of the 6 signals have scores vs missing. Write verdict, trust_score, verdict_reasoning, confidence, last_assessed to mcp_server_registry via ws_write. Daemon polls every 1800s with heartbeat.",
+  "context": "The verdict taxonomy must be contextual, never binary safe/unsafe. Reasoning example: 'Trust score 72: domain_trust=85 (registered domain, no suspicious TLD) and tool_description_safety=80 (no injection patterns detected) are strongest signals. permission_scope=45 (requests filesystem access) reduces confidence.' Write to mcp_server_registry with rows field not row.",
+  "priority": 0.94,
+  "from": "claude_manual",
+  "phase": "3"
+}

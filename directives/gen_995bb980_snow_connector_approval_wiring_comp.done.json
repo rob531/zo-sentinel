@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_approval_wiring_completion",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_wiring_completion.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Complete wiring for snow_connector.py into approval_workflow. The snow_connector_approval_wiring.py was built 2026-05-23T23:30:40 but the gaps map flags it as needing integration. Verify the webhook endpoint is registered in approval_workflow, test the ServiceNow OAuth flow, and ensure mcp_submissions table is written when SNOW tickets arrive. Must use write_service :8772 exclusively."
+}

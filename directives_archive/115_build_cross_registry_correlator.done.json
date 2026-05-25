@@ -1,0 +1,15 @@
+{
+  "task": "build_cross_registry_correlator",
+  "handler": "generate_file",
+  "output_file": "cross_registry_correlator.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.89,
+  "reads": [
+    "schema.py",
+    "known_threats.py"
+  ],
+  "description": "Cross-registry correlation daemon. For each server in mcp_server_registry: cross-reference across multiple threat intelligence sources passively: (1) PhishTank API: GET https://checkurl.phishtank.com/checkurl/ with url, (2) URLVoid: GET https://api.urlvoid.com/v1/{API_KEY}/host/{domain}/ if URLVOID_API_KEY set, (3) AbuseIPDB: check host IP GET https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&key={key}, (4) Maltiverse: GET https://api.maltiverse.com/hostname/{hostname}, (5) Cross-reference server_id against known threat feeds in world_articles table: ws_query world_articles WHERE topics LIKE '%mcp%' AND title ILIKE '%malicious%' or '%supply chain%'. All APIs: graceful skip if key not set. Rate limit: 1 req/sec. Any positive hit: ws_write mcp_threat_associations severity=CRITICAL, set verdict=KNOWN_THREAT via ws_write mcp_server_registry update. Poll 86400s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

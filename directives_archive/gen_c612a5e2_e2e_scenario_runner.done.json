@@ -1,0 +1,9 @@
+{
+  "task": "e2e_scenario_runner",
+  "handler": "generate_file",
+  "output_file": "e2e_scenarios.py",
+  "complexity": "high",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "End-to-end scenario runner with three canonical flows: 1) new MCP submission \u2192 signal scored \u2192 verdict \u2192 attestation \u2192 UI visible. 2) threat intel ingestion \u2192 risk_ranker \u2192 verdict update. 3) exemption creation \u2192 retention \u2192 expiry. Scripted in Python, validates final state in DuckDB via write_service /query. No mocks \u2014 tests against live tables."
+}

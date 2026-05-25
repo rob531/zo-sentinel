@@ -1,0 +1,9 @@
+{
+  "task": "build_permission_scope_v2_wiring",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v2_permission_scope_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wiring module to integrate permission_scope_enrichment_v2.py into signal_analyser_v2 enrichment pipeline. permission_scope_enrichment_v2.py was built 2026-05-23T13:24:37 with functions sigmoid, softmax_weight, log_normalize, hash_string, normalize_permission_name. This wiring ensures signal_analyser_v2 calls compute_score and writes results to mcp_signal_enrichments with signal_type='permission_scope'. The permission_scope signal currently has only 4 distinct values (BAD SIGNAL); this wiring validates v2 enrichment is active. No new logic, pure wiring. Reads permission_scope_enrichment_v2 only."
+}

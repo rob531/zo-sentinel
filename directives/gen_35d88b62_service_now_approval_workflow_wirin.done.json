@@ -1,0 +1,9 @@
+{
+  "task": "service_now_approval_workflow_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_approval_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.92,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow.py. MUST: (1) authenticate via SNOW OAuth tokens retrieved from env SNOW_OAUTH_TOKEN or snow_oauth_token_file; (2) validate inbound webhook signature via X-SNOW-Signature header; (3) never accept unsigned webhooks \u2014 reject with HTTP 401; (4) write MCP approval decisions back to ServiceNow via write_service; (5) query mcp_decisions table for analyst APPROVED/CONDITIONAL before forwarding. Reads snow_connector.py and approval_workflow.py. ServiceNow OAuth2 token acquisition via env SNOW_INSTANCE, SNOW_CLIENT_ID, SNOW_CLIENT_SECRET. Output is a wiring module, not a daemon."
+}

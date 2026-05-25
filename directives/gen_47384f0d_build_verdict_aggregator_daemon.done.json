@@ -1,0 +1,14 @@
+{
+  "task": "build_verdict_aggregator_daemon",
+  "handler": "generate_file",
+  "output_file": "verdict_aggregator_daemon.py",
+  "complexity": "medium",
+  "priority": 0.85,
+  "description": "Build a daemon that runs every 1800s and updates mcp_server_registry.verdict by aggregating mcp_signal_scores across the 7 trust framework signals using the documented weights. Pure read of signal_scores, single UPDATE statement to registry per row. Uses ws_write for the UPDATE. Skips rows where verdict was UPDATEd in the last 6 hours. Emits a verdict_aggregation mesh_event per cycle with counts. This is the verdict_assigner carryover from PROJECT_GOALS.md, distinct from the archived decision_emitter.",
+  "constraints": [
+    "ws_write only",
+    "FileHandler only",
+    "ISO 8601 timestamps",
+    "6h re-aggregation cooldown per row"
+  ]
+}

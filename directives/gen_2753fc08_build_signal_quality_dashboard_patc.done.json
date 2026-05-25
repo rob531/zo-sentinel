@@ -1,0 +1,9 @@
+{
+  "task": "build_signal_quality_dashboard_patch",
+  "handler": "generate_file",
+  "output_file": "signal_quality_dashboard_patch.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Patches the existing signal_quality_weak_signal_audit.py or sentinel_status.html to surface real-time signal discrimination metrics from the live signal quality diagnostic. Must read current distinct-value counts for all 8 signals (permission_scope=4, temporal_stability=4, tool_description_safety=4, domain_trust=12, community_signal=34, supply_chain=35). Updates dashboard indicators to RED for signals with <15 distinct values, YELLOW for 15-30, GREEN for >30. No DB writes; reads from mcp_signal_scores via ws_query only. Targets sentinel_status.html or adds new panel to existing dashboard_api."
+}

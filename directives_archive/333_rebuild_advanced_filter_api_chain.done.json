@@ -1,0 +1,37 @@
+{
+  "task": "rebuild_advanced_filter_api",
+  "handler": "generate_file",
+  "output_file": "advanced_filter_api.py",
+  "complexity": "medium",
+  "phase": "17",
+  "priority": 0.9,
+  "description": "FastAPI on port 8784. GET /filter accepts query params: verdict (str, optional), min_score (float 0-100, optional), max_score (float 0-100, optional), threat_type (str, optional), registry_source (str, optional), limit (int default 20, max 100), offset (int default 0). Builds dynamic SQL WHERE clause against mcp_server_registry LEFT JOIN mcp_threat_associations. Returns {results: list, count: int, filters_applied: dict}. GET /health. All reads via ws_query. Heartbeat every 300s. run() uvicorn 0.0.0.0:8784. if __name__=='__main__': run().",
+  "next_directive": {
+    "task": "rebuild_manual_override_api",
+    "handler": "generate_file",
+    "output_file": "manual_override_api.py",
+    "complexity": "medium",
+    "phase": "17",
+    "priority": 0.88,
+    "description": "FastAPI on port 8786. POST /override/{server_id} body: {verdict: str, reason: str, analyst: str, duration_days: int}. Writes to mcp_server_registry updating verdict and verdict_reasoning via ws_write. Also writes to audit_log: {event_type='manual_override', actor=analyst, target_server_id=server_id, action='override', outcome=verdict, details_json=json(reason+duration)}. GET /overrides returns servers where verdict was manually set (query mcp_server_registry where metadata LIKE '%override%'). GET /health. Heartbeat every 300s. run() uvicorn 0.0.0.0:8786. if __name__=='__main__': run().",
+    "next_directive": {
+      "task": "rebuild_compliance_export",
+      "handler": "generate_file",
+      "output_file": "compliance_export_service.py",
+      "complexity": "medium",
+      "phase": "18",
+      "priority": 0.85,
+      "description": "Daemon. Generates compliance reports every 24 hours. Reads from: mcp_server_registry (count by verdict), mcp_decisions (decisions in last 30d, grouped by decision), mcp_risk_register (count by risk_tier, note: timestamp column is computed_at not last_assessed). Writes /home/workspace/zo_sentinel/COMPLIANCE_REPORT.md with sections: Executive Summary, Registry Status, Recent Decisions, Risk Distribution. Also writes compliance_export.json with same data. Sends heartbeat to service_health every 300s. run() loops with 86400s sleep. if __name__=='__main__': run().",
+      "next_directive": {
+        "task": "build_api_health_checker",
+        "handler": "generate_file",
+        "output_file": "api_health_checker.py",
+        "complexity": "low",
+        "phase": "13",
+        "priority": 0.82,
+        "description": "Daemon. Every 5 minutes pings all ZO-SENTINEL API ports: 8780 (approval_workflow /health), 8781 (registry_api /health), 8782 (search_api /health), 8783 (email_guid_auth /health), 8784 (advanced_filter_api /health), 8785 (forensic_detail_api /health), 8786 (manual_override_api /health), 8790 (ui_server /health), 8795 (build_watcher /health). For each: HTTP GET with 3s timeout. Writes result to mesh_events: {agent_id='api_health_checker', event_type='api_health', tier='T1', payload=json({port, endpoint, status_code, ok, latency_ms}), severity='INFO' if ok else 'WARNING'}. Also writes service_health heartbeat. run() with 300s sleep loop. if __name__=='__main__': run()."
+      }
+    }
+  },
+  "from": "chain_rebuild_forensic_detail_api"
+}

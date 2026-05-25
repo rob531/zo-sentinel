@@ -1,0 +1,9 @@
+{
+  "task": "build_shadow_mcp_indicators",
+  "handler": "generate_file",
+  "output_file": "shadow_mcp_indicators.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.86,
+  "description": "Build shadow_mcp_indicators.py per Appendix B of the spec. Pure library module \u2014 no daemons, no network, no DB writes, no imports of protected modules. Exports URL-path and hostname-pattern detection functions for log analysis. Must: (1) include Cloudflare attribution docstring, (2) export is_shadow_mcp_host, detect_shadow_mcp_url_path pure functions, (3) compile regex patterns at module load, (4) include if __name__ == '__main__' self-smoke with at least three known-good inputs asserting non-empty results. Reference: Cloudflare enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14."
+}

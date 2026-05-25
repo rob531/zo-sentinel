@@ -1,0 +1,14 @@
+{
+  "task": "build_assessment_auditor",
+  "handler": "generate_file",
+  "output_file": "assessment_auditor.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.83,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Assessment quality auditor daemon. Every 86400s: reviews recent verdicts for quality issues: (1) servers with verdict but confidence<0.3 (2) servers where all 6 signals are identical score (possible scoring bug) (3) servers assessed >30 days ago not reassessed (4) TRUSTED_GENERAL servers with any HIGH/CRITICAL threat associations (contradiction). For each issue: ws_write corrections table {agent_id=zo_sentinel.auditor,action=assessment_quality_issue,reason=description,cluster=data_quality}. Write AUDIT_REPORT.md. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

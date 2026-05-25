@@ -1,0 +1,9 @@
+{
+  "task": "stale_daemon_heartbeat_diagnostic_report",
+  "handler": "generate_file",
+  "output_file": "stale_daemon_diagnostic_v2.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Diagnostic report for stale daemon heartbeats. Identify: write_service (4h36m stale), mcp_scanner (4h33m), anti_entropy (4h36m), wisdom_synthesiser (4h35m), rug_pull_monitor (644h41m \u2014 critically stale). Queries service_health table for heartbeat age. NOT a rebuild \u2014 does not touch protected files. Diagnostic output identifies whether stale is due to (a) daemon process dead, (b) network partition, or (c) heartbeat loop bug. Writes findings to diagnostic_report table via write_service. Recommend supervisorctl restart for dead processes."
+}

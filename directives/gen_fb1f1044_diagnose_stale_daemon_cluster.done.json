@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_stale_daemon_cluster",
+  "handler": "generate_file",
+  "output_file": "diagnose_stale_daemon_cluster.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Diagnostic script to identify root cause of the stale daemon cluster. Five daemons went stale within 4 minutes of each other (anti_entropy, wisdom_synthesiser, write_service, mcp_scanner, attestation_engine all at 4h42-4h43m). Pattern suggests either: (1) write_service failure causing heartbeat writes to fail, (2) supervisord restart at ~12:20 UTC that killed daemons without restarting them, or (3) network partition isolating :8772. Script queries service_health for stale daemons, correlates timestamps, checks write_service responsiveness via health check endpoint, and outputs JSON diagnostic report with recommended actions. DO NOT restart services \u2014 only diagnose and report."
+}

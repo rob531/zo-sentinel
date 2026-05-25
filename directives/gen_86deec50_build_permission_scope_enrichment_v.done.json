@@ -1,0 +1,9 @@
+{
+  "task": "build_permission_scope_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "permission_scope_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Build improved permission_scope enrichment module to fix BAD SIGNAL (4 distinct values, range 30-100). Current signal discriminates poorly. New module must expose compute_score(metadata: dict) -> tuple[float, dict] using: permission_count (from metadata), registry_source (npm packages tend to declare more permissions than PyPI), age_days, publisher_verified flag, dependency_count. Positive signals: explicit permission declarations (means server was designed with least-privilege), small permission surface. Negative signals: large dependency_count with no declared permissions. Must yield >20 distinct scores. Pure function, no DB writes, no network, no imports. Reference: enrichment contract section 7."
+}

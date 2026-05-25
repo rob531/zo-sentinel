@@ -1,0 +1,257 @@
+{
+  "_meta": {
+    "version": "1.2.0",
+    "created": "2026-04-20",
+    "updated": "2026-04-27T18:25Z",
+    "purpose": "Static conventions injected into builder prompts to prevent recurring wiring mistakes. Derived from observed builder log failures + interface patterns in mesh_memory.build_artifact.",
+    "usage": "Builder reads this file at prompt-build time and injects the top-N relevant conventions into every build prompt's system preamble. Start by injecting ALL; add relevance filtering later.",
+    "maintenance": "Append a new entry whenever the builder log shows a Smoke FAIL -> rescue with a reason that isn't already covered. Review quarterly for stale entries.",
+    "changelog": [
+      "1.0.0 (2026-04-20) - initial 21 entries from observed builder failures + interface patterns",
+      "1.1.0 (2026-04-27) - added 7 entries: MCP decorator, pgrep canonical path, BOM-safe tower IO, HTTP timeout, basicConfig double-handler, read-before-patch zo_mcp_server, standing goals never-empty rule",
+      "1.2.0 (2026-04-27) - added 3 entries from CEO transition day 1: directive_sql_must_match_live_schema, daemon_logging_filehandler_only, timestamps_must_be_iso_strings, probe_before_committing_to_url_pattern"
+    ]
+  },
+
+  "conventions": [
+    {
+      "id": "write_service_is_http_not_function",
+      "severity": "blocker",
+      "observed_failure": "Generated code imported and called write_service() as a Python function instead of POSTing to its HTTP endpoint. Triggered rescue on 2026-04-20 build_aidr_verdict_gate_test.",
+      "rule": "write_service is an HTTP service listening on port 8772. Never import or call it as a function. Use requests.post with JSON body.",
+      "correct_example": "import requests\nresp = requests.post('http://localhost:8772/write', json={'table': 'agent_outputs', 'rows': [row]}, timeout=10)\nresp.raise_for_status()",
+      "incorrect_example": "from write_service import write_service  # WRONG - does not exist\nwrite_service(table, rows)  # WRONG - not a Python function"
+    },
+
+    {
+      "id": "use_helper_functions_ws_write_ws_query",
+      "severity": "strong_preference",
+      "observed_pattern": "Most successful build_artifact entries expose ws_write and ws_query as local helper functions (see signal_discrimination_auditor.py, attestation_dynamic_evidence_check.py).",
+      "rule": "Wrap write_service calls in local helpers named ws_write(table, rows) and ws_query(sql). This gives a consistent interface and lets the smoke test detect wiring correctness.",
+      "correct_example": "def ws_write(table: str, rows: list) -> bool:\n    try:\n        r = requests.post(f'{WRITE_SERVICE_URL}/write', json={'table': table, 'rows': rows}, timeout=10)\n        r.raise_for_status()\n        return True\n    except Exception as e:\n        logger.error(f'ws_write failed: {e}')\n        return False\n\ndef ws_query(sql: str) -> list:\n    try:\n        r = requests.post(f'{WRITE_SERVICE_URL}/query', json={'sql': sql}, timeout=30)\n        r.raise_for_status()\n        return r.json().get('rows', [])\n    except Exception as e:\n        logger.error(f'ws_query failed: {e}')\n        return []"
+    },
+
+    {
+      "id": "write_service_url_constant",
+      "severity": "required",
+      "rule": "Every service-style module defines WRITE_SERVICE_URL = 'http://localhost:8772' near the top, alongside SERVICE_NAME, PORT (if applicable), and PID_FILE.",
+      "correct_example": "SERVICE_NAME = 'signal_discrimination_auditor'\nWRITE_SERVICE_URL = 'http://localhost:8772'\nPID_FILE = f'/tmp/{SERVICE_NAME}.pid'\nLOG_FILE = f'/home/workspace/logs/{SERVICE_NAME}.log'"
+    },
+
+    {
+      "id": "single_instance_guard",
+      "severity": "required_for_services",
+      "rule": "Any module with a run() loop must include check_single_instance() + remove_pid_file() + signal_handler(signum, frame) pattern, and install SIGTERM/SIGINT handlers in run().",
+      "correct_example": "def check_single_instance() -> bool:\n    if os.path.exists(PID_FILE):\n        try:\n            with open(PID_FILE) as f:\n                old_pid = int(f.read().strip())\n            os.kill(old_pid, 0)  # check alive\n            return False  # another instance running\n        except (OSError, ValueError):\n            pass  # stale pid file, proceed\n    with open(PID_FILE, 'w') as f:\n        f.write(str(os.getpid()))\n    return True\n\ndef remove_pid_file():\n    try:\n        os.remove(PID_FILE)\n    except OSError:\n        pass\n\ndef signal_handler(signum, frame):\n    logger.info(f'Received signal {signum}, shutting down')\n    remove_pid_file()\n    sys.exit(0)"
+    },
+
+    {
+      "id": "heartbeat_every_cycle",
+      "severity": "required_for_services",
+      "rule": "Services must send_heartbeat() once per cycle, writing a row to service_health table with {service_name, status, ts, meta}. Used by ManagerAgent for staleness detection.",
+      "correct_example": "def send_heartbeat(meta: dict = None):\n    row = {\n        'service_name': SERVICE_NAME,\n        'status': 'healthy',\n        'ts': datetime.utcnow().isoformat(),\n        'meta': json.dumps(meta or {})\n    }\n    ws_write('service_health', [row])"
+    },
+
+    {
+      "id": "cycle_then_run_shape",
+      "severity": "strong_preference",
+      "rule": "Scheduled services follow a two-function shape: cycle() does one unit of work, run() is the forever loop that calls cycle() + send_heartbeat() + sleep(POLL_SECS). This matches the interface column in mesh_memory.build_artifact.",
+      "correct_example": "def cycle():\n    # do one unit of work, idempotent, side-effect scoped\n    ...\n\ndef run():\n    if not check_single_instance():\n        return\n    signal.signal(signal.SIGTERM, signal_handler)\n    signal.signal(signal.SIGINT, signal_handler)\n    try:\n        while True:\n            cycle()\n            send_heartbeat()\n            time.sleep(POLL_SECS)\n    finally:\n        remove_pid_file()\n\nif __name__ == '__main__':\n    run()"
+    },
+
+    {
+      "id": "no_pip_install_in_generated_code",
+      "severity": "blocker",
+      "rule": "Never emit 'pip install', 'subprocess.run([\"pip\", ...])', or similar. The builder auto-installs imports as deps. Just write the imports; the build pipeline resolves them.",
+      "incorrect_example": "os.system('pip install reportlab')  # WRONG - builder handles deps\nsubprocess.run(['pip', 'install', 'fastapi'])  # WRONG"
+    },
+
+    {
+      "id": "logger_setup",
+      "severity": "required",
+      "rule": "Use a module-level logger configured via logging.basicConfig at file scope, not inside functions. Standard format: '%(asctime)s [%(name)s] %(levelname)s: %(message)s'. Log file path: /home/workspace/logs/{SERVICE_NAME}.log.",
+      "correct_example": "import logging\nlogging.basicConfig(\n    level=logging.INFO,\n    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',\n    handlers=[\n        logging.FileHandler(LOG_FILE),\n        logging.StreamHandler()\n    ]\n)\nlogger = logging.getLogger(SERVICE_NAME)"
+    },
+
+    {
+      "id": "duckdb_access_pattern",
+      "severity": "required",
+      "rule": "All DuckDB reads and writes go through write_service (ws_write / ws_query). Do NOT open a direct duckdb.connect() in generated code. Direct connections bypass governance and create lock contention.",
+      "incorrect_example": "import duckdb\nconn = duckdb.connect('/home/workspace/Datasets/zo-mesh/data.duckdb')  # WRONG - use ws_query/ws_write"
+    },
+
+    {
+      "id": "sqlite_mesh_memory_is_separate",
+      "severity": "context",
+      "rule": "mesh_memory.db is SQLite (at /home/workspace/Datasets/zo-mesh/mesh_memory.db), NOT DuckDB, and is accessed via direct sqlite3.connect() \u2014 NOT via write_service. It is a separate store from the DuckDB data warehouse.",
+      "correct_example": "import sqlite3\nMESH_MEMORY_DB = '/home/workspace/Datasets/zo-mesh/mesh_memory.db'\nconn = sqlite3.connect(MESH_MEMORY_DB)\nconn.row_factory = sqlite3.Row"
+    },
+
+    {
+      "id": "fastapi_service_daemonization",
+      "severity": "required_for_fastapi",
+      "rule": "FastAPI services launched by the builder are expected to run under uvicorn in daemon mode. Smoke test signature: '(Nb uvicorn-daemon)'. The module exposes app = FastAPI() at module level; entrypoint runs uvicorn.run(app, host='0.0.0.0', port=PORT).",
+      "correct_example": "from fastapi import FastAPI\napp = FastAPI()\n\n@app.get('/health')\ndef health():\n    return {'status': 'ok', 'service': SERVICE_NAME}\n\nif __name__ == '__main__':\n    import uvicorn\n    uvicorn.run(app, host='0.0.0.0', port=PORT)"
+    },
+
+    {
+      "id": "timestamps_utc_iso8601",
+      "severity": "required",
+      "rule": "All timestamps in writes use datetime.utcnow().isoformat() + 'Z' or datetime.now(timezone.utc).isoformat(). Never use naive local time, never use epoch seconds in user-facing outputs.",
+      "correct_example": "from datetime import datetime, timezone\nts = datetime.now(timezone.utc).isoformat()"
+    },
+
+    {
+      "id": "idempotent_writes_deterministic_ids",
+      "severity": "strong_preference",
+      "rule": "Writes that might re-run should use deterministic IDs (MD5 or SHA256 of the content's identifying fields) so UPSERT/INSERT OR IGNORE is safe. Learned from OTX/ecosyste.ms ingestor patterns.",
+      "correct_example": "import hashlib\nid_source = f'{source}|{indicator}|{pulse_id}'\nrow_id = hashlib.md5(id_source.encode()).hexdigest()"
+    },
+
+    {
+      "id": "no_f_string_sql",
+      "severity": "blocker",
+      "rule": "Never interpolate user-provided or external data into SQL via f-strings or % formatting. Always use parameterized queries. Threat feeds and external APIs may contain adversarial payloads.",
+      "incorrect_example": "cursor.execute(f\"SELECT * FROM indicators WHERE value = '{hostname}'\")  # SQL INJECTION",
+      "correct_example": "cursor.execute('SELECT * FROM indicators WHERE value = ?', (hostname,))"
+    },
+
+    {
+      "id": "smoke_exit_zero_on_success",
+      "severity": "required",
+      "rule": "Smoke-testable modules must exit with code 0 on success. A script with a run() loop that never returns is FINE - the smoke test detects the uvicorn-daemon or looping pattern. But a one-shot script must explicitly sys.exit(0) on success.",
+      "correct_example": "if __name__ == '__main__':\n    try:\n        main()\n        sys.exit(0)\n    except Exception as e:\n        logger.error(f'Fatal: {e}')\n        sys.exit(1)"
+    },
+
+    {
+      "id": "secrets_from_env_never_hardcoded",
+      "severity": "blocker",
+      "rule": "API keys, tokens, and credentials are read from os.environ ONLY. Never hardcode. Never log the value. Common ZoComputer secrets: Alpacasecret, RH_USERNAME, PWD_ROBINHOOD_TRADING_INVESTING, Alienvaultapi.",
+      "correct_example": "import os\nAPI_KEY = os.environ.get('Alienvaultapi')\nif not API_KEY:\n    logger.error('Alienvaultapi env var not set')\n    sys.exit(1)\n# NEVER: logger.info(f'Key: {API_KEY}')"
+    },
+
+    {
+      "id": "investing_account_read_only_hard_rule",
+      "severity": "blocker",
+      "rule": "Robinhood Investing account (acct #886614932, label 'Individual') is READ-ONLY FOREVER. No generated code may place trades, modify positions, or send orders to this account. Only the trading account (zocomptrady, acct #889310942) may receive trading instructions. Enforce at multiple layers.",
+      "correct_example": "INVESTING_ACCT = '886614932'\nTRADING_ACCT = '889310942'\n\ndef place_order(acct: str, ...):\n    if acct == INVESTING_ACCT:\n        raise ValueError('INVESTING account is read-only; trades forbidden')\n    assert acct == TRADING_ACCT, f'Unknown account {acct}'\n    ..."
+    },
+
+    {
+      "id": "context_boundary_no_cross_domain_bleed",
+      "severity": "blocker",
+      "rule": "Agents operating in one domain context (trading, deputyship, linkedin, sentinel) must never reference entities, names, or terms from another domain in their outputs. Historical failure: 'Christine' from deputyship agent leaked into trading output. Scope boundary is enforced by anti_entropy_agent; violations flag corrections.",
+      "correct_example": "# agent prompt construction must filter context to current domain only\ndomain_tags = {'trading', 'wealth_execution'}\nrelevant_memories = [m for m in past_memories if set(m.get('tags', [])) & domain_tags]"
+    },
+
+    {
+      "id": "never_reference_firm_operational_data",
+      "severity": "blocker",
+      "rule": "ZOMesh/Sentinel work stays within the MCP trust-intelligence domain. Never reference or integrate law-firm operational risk register, firm infrastructure, client matters, or work-Robin operational security concerns. Cross-reference targets for threat intel are always Sentinel-internal tables (mcp_server_registry, mcp_registry_facts), never the firm."
+    },
+
+    {
+      "id": "smoke_diagnostic_order",
+      "severity": "strong_preference",
+      "rule": "When debugging a Smoke FAIL, check in this order: (1) syntax via ast.parse, (2) imports resolve, (3) required constants defined (SERVICE_NAME, PORT, WRITE_SERVICE_URL), (4) wiring (write_service called correctly), (5) actual logic. Most failures are in layers 1-4, not 5."
+    },
+
+    {
+      "id": "one_file_per_module",
+      "severity": "convention",
+      "rule": "Each build_artifact produces one .py file at /home/workspace/zo_sentinel/{task_name}.py. Multi-file modules are not supported by the current builder smoke pipeline. If multi-file is required, chain multiple build directives."
+    },
+
+    {
+      "id": "mcp_fastmcp_decorator",
+      "severity": "blocker",
+      "observed_failure": "Wrong decorator (@app.tool() instead of @mcp.tool()) raises NameError at decoration time and silently drops the tool from registration. The tool just disappears from the server's tool list at runtime.",
+      "rule": "In zo_mcp_server.py, the FastMCP instance variable is named `mcp`. ALL tool decorators MUST be @mcp.tool(). Never @app.tool() or @server.tool().",
+      "correct_example": "@mcp.tool()\ndef zo_my_tool(params: MyInput) -> str:\n    ...",
+      "incorrect_example": "@app.tool()  # WRONG - app is not defined; raises NameError\n@server.tool()  # WRONG - server is not the instance name"
+    },
+
+    {
+      "id": "read_zo_mcp_server_before_patching",
+      "severity": "required",
+      "rule": "Before writing any patch to zo_mcp_server.py, ALWAYS read the current state via zo_read_file. Do not patch from memory. Stale NameError lines in zo_agent_health recent_errors are aging log history -- they will age out naturally; do NOT wipe logs to clear them.",
+      "observed_pattern": "Recurring failure mode: patching from outdated mental model leads to overwriting legitimate recent additions. Read-first is non-negotiable."
+    },
+
+    {
+      "id": "http_timeout_required",
+      "severity": "required",
+      "rule": "Every requests.* call MUST pass an explicit timeout argument. No bare requests.post / requests.get without timeout. Bare requests defaults to no timeout, and a wedged WriteService cascades into every daemon hanging forever.",
+      "correct_example": "requests.post(url, json=payload, timeout=8)\nrequests.get(url, timeout=10)",
+      "incorrect_example": "requests.post(url, json=payload)  # no timeout = potentially infinite hang"
+    },
+
+    {
+      "id": "basicConfig_only_in_entrypoint",
+      "severity": "strong_preference",
+      "rule": "Call logging.basicConfig(...) ONCE per process, in the entry-point script only. Library/imported modules use logging.getLogger(__name__) without basicConfig. If two modules each call basicConfig and both run in the same process, every log line prints twice.",
+      "observed_failure": "Builder log shows every line duplicated as of 2026-04-27. Caused by basicConfig being invoked from both the main module and an imported helper.",
+      "correct_example": "# library.py\nimport logging\nlog = logging.getLogger(__name__)  # no basicConfig\n\n# entry_point.py\nimport logging\nlogging.basicConfig(level=logging.INFO, format='...')\nlog = logging.getLogger('main')"
+    },
+
+    {
+      "id": "pgrep_match_canonical_path",
+      "severity": "required_for_is_running_checks",
+      "observed_failure": "pgrep -f 'probe_consumer' matched the launcher script /home/workspace/logs/_start_probe_consumer.py and produced a false 'already running' positive (2026-04-26).",
+      "rule": "When checking if a service is alive via pgrep -f, match the CANONICAL install path (e.g. '/zo_mesh/probe_consumer.py'), not just the basename. Explicitly exclude /home/workspace/logs/ launcher scripts that may have the daemon name in their command line.",
+      "correct_example": "pgrep -f '/zo_mesh/probe_consumer.py' | xargs -r ps -p > /dev/null 2>&1 && echo running || echo dead\n# Or in Python: filter out cmdlines containing /home/workspace/logs/",
+      "incorrect_example": "pgrep -f probe_consumer  # matches launcher scripts that *invoke* probe_consumer"
+    },
+
+    {
+      "id": "bom_safe_tower_zo_json_io",
+      "severity": "required_for_tower_interop",
+      "observed_failure": "PowerShell 5.1 'Set-Content -Encoding UTF8' writes a UTF-8 BOM by default. Python's json.loads then rejects with 'Unexpected UTF-8 BOM' (2026-04-26).",
+      "rule": "For tower↔ZoComputer JSON artifacts via Syncthing: TOWER side (PowerShell) must write with [IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding $false)) to avoid the BOM. ZO side (Python) must read with encoding='utf-8-sig' to tolerate either case.",
+      "correct_example": "# ZO consumer:\nimport json\nwith open(path, encoding='utf-8-sig') as f:\n    data = json.load(f)\n\n# Tower producer (PowerShell):\n[IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding $false))",
+      "incorrect_example": "# ZO consumer (will fail on BOM-prefixed files):\nwith open(path) as f:\n    data = json.load(f)\n\n# Tower producer (will write BOM):\nSet-Content -Path $path -Value $json -Encoding UTF8"
+    },
+
+    {
+      "id": "directives_never_empty",
+      "severity": "blocker",
+      "rule": "The builder directive queue must NEVER be empty. sentinel_directive_generator.py has a standing_goals_fallback that emits perpetual goals from /home/workspace/zo_sentinel/standing_goals.json when LLM-suggested directives all dedupe. Adding new long-running daemons should add new entries to standing_goals.json so the fallback library grows over time.",
+      "observed_pattern": "Pre-2026-04-27, builder logged 'No pending directives' for 90+ minutes between dirgen cycles. Robin's hard rule from the CEO transition: directives never empty. Standing goals close the gap structurally."
+    },
+
+    {
+      "id": "directive_sql_must_match_live_schema",
+      "severity": "blocker",
+      "observed_failure": "On 2026-04-27, three standing-goal daemons were generated based on directive descriptions that named columns the live tables don't have. registry_promoter v1 named columns on mcp_registry_facts that don't exist. decision_emitter named verdict/score/decided_at fields on mcp_decisions (real columns: submission_id, analyst_name, decision, conditions, expires_at). fingerprint_runner named tool_count/prompt_count/resource_count on mcp_fingerprints (real columns: tool_name_hash, description_tokens, permission_scope_hash, domain_fingerprint, version_string). Every cycle returned 400 Bad Request; daemons were idempotent so no harm done, but they did zero useful work for two hours.",
+      "rule": "Directive descriptions that reference SQL tables MUST verify the column list against information_schema.columns at directive-emit time. Either: (a) include the verified column list verbatim in the description so MiniMax sees the schema as ground truth, OR (b) instruct the daemon to introspect via 'SELECT column_name FROM information_schema.columns WHERE table_name = X' on startup and adapt its SQL to the live shape. Option (a) is preferred for stable schemas; (b) for tables under active migration. NEVER let a directive author (human or LLM) name columns from memory.",
+      "correct_example": "# In the directive description, include the verified schema:\n# 'mcp_fingerprints columns are exactly: server_id, tool_name_hash, description_tokens, permission_scope_hash, domain_fingerprint, version_string, computed_at. Do NOT use tool_count or prompt_count -- those are not in the schema.'",
+      "why": "MiniMax faithfully implements whatever the directive says. If the directive hallucinates columns, the generated code hallucinates columns. The cost is a wasted build cycle plus a daemon that pollutes service_health with idempotent-but-useless heartbeats. Schema verification at the directive layer prevents this entire failure class."
+    },
+
+    {
+      "id": "daemon_logging_filehandler_only",
+      "severity": "required_for_nohup_daemons",
+      "observed_failure": "On 2026-04-27, registry_promoter_daemon v1 logged every line twice. Cause: logging.basicConfig used handlers=[FileHandler, StreamHandler]. The daemon was launched with nohup which redirects stdout/stderr to the same FileHandler target. StreamHandler then wrote to stdout, which nohup wrote to the same file, doubling every line.",
+      "rule": "Daemons launched via nohup-style detached spawn (the standard pattern in /home/workspace/logs/_relaunch_*.py) must use ONLY a FileHandler. Adding a StreamHandler doubles every line because nohup redirects stdout to the same log path.",
+      "correct_example": "logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] %(message)s', handlers=[logging.FileHandler(LOG_FILE)])",
+      "incorrect_example": "# DON'T: logging.basicConfig(handlers=[FileHandler(LOG_FILE), StreamHandler()])"
+    },
+
+    {
+      "id": "timestamps_must_be_iso_strings",
+      "severity": "blocker",
+      "observed_failure": "On 2026-04-27, candidate_promoter_daemon v1 sent {'last_heartbeat': time.time()} every 30s for 6+ hours. WriteService logged 'Conversion Error: Unimplemented type for cast (DOUBLE -> TIMESTAMP WITH TIME ZONE)' on every heartbeat. The daemon's main writes (first_seen / last_seen on mcp_server_registry rows) had the same bug. Combined with concurrent fingerprint_v3 load, this contributed to a WS wedge at 18:13.",
+      "rule": "Any column typed TIMESTAMPTZ in DuckDB (service_health.last_heartbeat, mcp_server_registry.first_seen / last_seen / last_assessed / last_scanned, mcp_attestations.attested_at, mcp_signal_scores.computed_at, etc.) MUST be written as an ISO 8601 string. Never write time.time() (that's a DOUBLE epoch float). Use datetime.now(timezone.utc).isoformat().",
+      "correct_example": "from datetime import datetime, timezone\nrow = {\n    'service': SERVICE_NAME,\n    'last_heartbeat': datetime.now(timezone.utc).isoformat(),  # ISO string\n}",
+      "incorrect_example": "row = {\n    'service': SERVICE_NAME,\n    'last_heartbeat': time.time(),  # WRONG - DOUBLE; WS will reject every write\n}"
+    },
+
+    {
+      "id": "probe_before_committing_to_url_pattern",
+      "severity": "strong_preference",
+      "observed_failure": "On 2026-04-27, candidate_promoter v1 was built on the assumption that the official MCP registry has a per-server detail endpoint at /v0/servers/{name}. It doesn't \u2014 every variant returned 404 with structured application/problem+json. The probe (_probe_mcp_registry_url.py, ~30s to write and run) revealed this in 30 seconds; the daemon had been running broken for hours.",
+      "rule": "When a directive depends on an external API shape (URL pattern, response field names, pagination style), write a small probe script first that tries the candidate patterns against a known real input and reports which return 200 with the expected fields. Probe ~30s. Only commit to a URL pattern after the probe confirms it.",
+      "correct_example": "# Before building candidate_promoter, run a probe:\n# - V1 raw slash: /v0/servers/ai.aarna/atars-mcp\n# - V2 percent-encoded: /v0/servers/ai.aarna%2Fatars-mcp\n# - V3 query param: /v0/servers?name=ai.aarna/atars-mcp\n# - V5 LIST endpoint: /v0/servers?limit=1\n# Report status code + first 600 bytes of body for each. Pick the one that returns 200 with the data shape you need."
+    }
+  ]
+}

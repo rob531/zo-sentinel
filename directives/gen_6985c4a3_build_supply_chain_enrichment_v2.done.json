@@ -1,0 +1,9 @@
+{
+  "task": "build_supply_chain_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Enhanced version of supply_chain_enrichment.py with improved discrimination. Must expose compute_score(metadata: dict) -> tuple[float, dict]. Must read at minimum: registry_source, age_days, dependency_count, publisher_verified, stars, npm_downloads, github_subscribers. Must produce at least 20 distinct scores across 34 synthetic fingerprints (per enrichment contract). Must handle missing fields gracefully with safe defaults. No DB writes, no network, no imports of protected modules. This is a companion module; the original supply_chain_enrichment.py remains intact (protected). Use _v2 suffix once only as documented per spec section 8."
+}

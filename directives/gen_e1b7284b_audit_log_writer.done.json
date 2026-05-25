@@ -1,0 +1,11 @@
+{
+  "task": "audit_log_writer",
+  "handler": "generate_file",
+  "output_file": "audit_log_writer.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Utility module exposing write_audit_event(action: str, target_server_id: str, actor: str, details: dict) -> bool. Writes to audit_log table via write_service :8772 with columns: timestamp (UTC now), action, target_server_id, actor, details (JSON). Returns True on success, False on write_service failure. All admin-write actions (exemption create, attestation revoke, manual verdict override) must go through this module per security contract section 7. Include request_id generation using uuid4 for traceability.",
+  "reads": [],
+  "next_directive": {}
+}

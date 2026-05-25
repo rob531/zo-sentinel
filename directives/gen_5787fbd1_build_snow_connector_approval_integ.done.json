@@ -1,0 +1,9 @@
+{
+  "task": "build_snow_connector_approval_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_approval_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Integration module to wire snow_connector.py (built 2026-04-16) into approval_workflow. snow_connector.py handles ServiceNow inbound webhook. Integration module must: (1) call ws_query to fetch pending MCP submissions awaiting SNOW resolution, (2) call ws_write to update approval_workflow state when SNOW ticket transitions, (3) include audit_log insert for each state transition. Uses write_service on :8772. Does NOT introduce HTTP between daemons \u2014 all communication via write_service API."
+}

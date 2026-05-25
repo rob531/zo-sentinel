@@ -1,0 +1,14 @@
+{
+  "task": "review_attestation_engine_dynamic_evidence",
+  "handler": "generate_file",
+  "output_file": "attestation_engine_dynamic_evidence_check.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Review attestation_engine.py for language citing dynamic evidence from Phase 8 (injection_resilience scores, pi_results summary, corpus hash). If the attestation text does not reference the 8th signal or pi_scorer output, generate attestation_engine_v2.py that extends the attestation to include: (1) injection_resilience score and tier, (2) pi_quarantine status, (3) pi_scorer normalized score, (4) corpus build hash. The attestation remains non-binding per spec section 1 scope posture.",
+  "reads": [
+    "attestation_engine.py",
+    "pi_scorer.py"
+  ],
+  "next_directive": {}
+}

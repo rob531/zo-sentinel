@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_to_approval_workflow",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.87,
+  "description": "Integration glue module to wire existing snow_connector.py into approval_workflow. The connector was built 2026-04-16 but integration is incomplete per gaps map. Must expose process_snow_webhook(payload) that validates request, checks server verdict via trust_synthesiser, and creates pending_approval record via write_service. Must NOT make direct writes to duckdb - use write_service :8772. ServiceNow OAuth authentication must use os.environ.get(). Priority 0.92 in knowledge base but deferred until enrichment work is prioritized."
+}

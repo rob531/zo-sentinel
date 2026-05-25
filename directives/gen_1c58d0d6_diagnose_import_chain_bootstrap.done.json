@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_import_chain_bootstrap",
+  "handler": "generate_file",
+  "output_file": "import_diagnostic_runner.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Diagnostic-only module that traces the import chain for registry_api.py, rug_pull_monitor.py, and signal_analyser.py to identify the root frozen importlib error. Reads sys.modules and attempted imports, writes findings to a diagnostic log. Does NOT modify any protected file. Output guides manual resolution without proposing a rebuild of protected files."
+}

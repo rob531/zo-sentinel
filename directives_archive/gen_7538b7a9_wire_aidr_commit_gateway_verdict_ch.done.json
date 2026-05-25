@@ -1,0 +1,9 @@
+{
+  "task": "wire_aidr_commit_gateway_verdict_check",
+  "handler": "generate_file",
+  "output_file": "aidr_commit_gateway_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.9,
+  "description": "Wire aidr_commit_gateway.py verdict-check enforcement into the CI pipeline. Must check ZO-SENTINEL verdict via write_service query before forwarding to AiDr commit API; must never auto-commit CAUTION_LIMITED or HIGH_RISK_ISOLATED without explicit override; must include injection_resilience score in commit payload. Implements numbered constraints: (1) Query mcp_server_registry for mcp_name to get composite_score, (2) If verdict in [CAUTION_LIMITED, HIGH_RISK_ISOLATED] and no override flag, reject with 403, (3) If verdict KNOWN_THREAT, reject with 403 unconditionally, (4) Query mcp_signal_scores for dimension=injection_resilience score, (5) Include {verdict, composite_score, injection_resilience, assessed_at} in AiDr payload, (6) Log decision to audit_log via write_service. Cites AiDR_INTEGRATION_PLAN.md."
+}

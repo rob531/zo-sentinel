@@ -1,0 +1,9 @@
+{
+  "task": "build_attestation_refresher_integration",
+  "handler": "generate_file",
+  "output_file": "attestation_refresher.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.84,
+  "description": "Build attestation_refresher.py \u2014 regenerate attestations approaching expiry. Query mcp_attestations WHERE expiry_date BETWEEN today AND today+7 AND status = 'active'. Re-run attestation logic with fresh signals (including injection_resilience if present). Update in-place. Pure daemon pattern with heartbeat. Spec-listed in Appendix A. Complement existing attestation_engine.py (protected \u2014 do not modify)."
+}

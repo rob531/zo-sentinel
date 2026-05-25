@@ -1,0 +1,9 @@
+{
+  "task": "build_stale_signal_refresher",
+  "output_file": "stale_signal_refresher.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.quality",
+  "priority": 0.7,
+  "description": "Long-running daemon. Every 3600s, queries mcp_signal_scores WHERE scored_at < now() - INTERVAL 7 days LIMIT 100. For each (server_id, signal_name) pair, dynamically imports the matching '<signal_name>_enrichment' module from /home/workspace/zo_sentinel/, fetches the latest registry metadata for server_id via ws_query, calls compute_score, ws_write the new score back to mcp_signal_enrichments (signal_bridge will flow it onward to mcp_signal_scores). Heartbeat. Lockfile. Skip server_ids no longer in registry. NO duckdb/sqlite3 imports. PER spec, enrichment compute_score is bounded 2s; modules exceeding it are logged and skipped via signal.alarm or threading-timeout pattern."
+}

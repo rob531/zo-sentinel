@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_github_pr_checker_wiring",
+  "handler": "generate_file",
+  "output_file": "github_pr_checker_wiring_v2.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.9,
+  "description": "Rebuild github_pr_checker_wiring.py targeting last_error: 'failed in cohort_1_n3' per quality map retry budget. This file is needed for GitHub PR commit wiring per Phase 9 integration candidates. Must: (1) use the same module interface as the original (check_single_instance, signal_handler, ws_query, ws_write); (2) wire to approval_workflow at :8780 for verdict-check; (3) never auto-commit HIGH_RISK_ISOLATED or CAUTION_LIMITED without explicit override; (4) include audit_log entry for each commit decision; (5) fix whatever caused cohort_1_n3 failure (suspected cold-start race or incomplete ws_query response handling). Spec reference: section 5 inter-daemon communication, section 7 audit requirements."
+}

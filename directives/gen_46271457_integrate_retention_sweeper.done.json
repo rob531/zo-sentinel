@@ -1,0 +1,14 @@
+{
+  "task": "integrate_retention_sweeper",
+  "handler": "generate_file",
+  "output_file": "retention_sweeper_integration.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Wire retention_sweeper.py (built previously) into assessment_scheduler to enforce the 30-day evidence_blob expiry SLA from spec section 4 (Retention). The sweeper must SELECT rows WHERE timestamp < NOW() - INTERVAL '30 days' FROM mcp_signal_scores evidence_blob columns and mcp_signal_enrichments evidence_blob columns; write new rows to archive or drop per retention policy. Must use write_service :8772 for all DB operations per spec section 5. Must NOT execute DELETE on core mcp_* tables; must use UPDATE to NULL or archive pattern instead.",
+  "reads": [
+    "retention_sweeper.py",
+    "assessment_scheduler_integration.py"
+  ],
+  "next_directive": {}
+}

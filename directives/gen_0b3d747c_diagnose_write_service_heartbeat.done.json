@@ -1,0 +1,13 @@
+{
+  "task": "diagnose_write_service_heartbeat",
+  "handler": "generate_file",
+  "output_file": "write_service_heartbeat_check.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.8,
+  "description": "Diagnostic daemon to diagnose write_service heartbeat staleness (age=17m, threshold=300s). Per spec section 6, every daemon writes to service_health at least every 60s and stale >2h = dead. This daemon should SELECT current heartbeat from service_health WHERE service='write_service', compare against NOW(), and emit a diagnostic report. Must NOT propose rebuild of write_service.py (protected file). Output diagnostic findings only; if write_service is responsive via POST :8772/write, log healthy status and exit. Reference spec section 6 (Heartbeat contract).",
+  "reads": [
+    "write_service.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "community_signal_enrichment_v2_quality_pass",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rewrite community_signal_enrichment.py to improve signal discrimination. Current version shows WEAK signal (low variety, range 60-80). MUST: read at least 4 metadata fields (download_count, stars, forks, issue_count, registry_source, publisher_verified) and apply weighted community engagement scoring. MUST NOT cluster all MCPs in a narrow score band. MUST follow the pure function contract: compute_score(metadata: dict) -> tuple[float, dict], no DB writes, no network, no imports of other project modules. Score range [0.0, 100.0]. Evidence dict must break down each component score."
+}

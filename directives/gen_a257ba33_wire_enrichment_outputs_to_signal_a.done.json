@@ -1,0 +1,17 @@
+{
+  "task": "wire_enrichment_outputs_to_signal_analyser",
+  "handler": "generate_file",
+  "output_file": "enrichment_signal_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Integration glue module that wires the four recently-built enrichment modules (community_signal_enrichment, tool_description_safety_enrichment, permission_scope_enrichment, temporal_stability_enrichment) into signal_analyser_v2. Must call each module's compute_score() with registry metadata and write results to mcp_signal_enrichments via write_service POST :8772/write. Signal contract: evidence_blob must contain {signal_type, confidence, evidence_blob}. The signal quality diagnostic shows only 4 distinct values for three signals despite enrichment modules existing\u2014this wiring is the likely gap. Daemon pattern with heartbeat to service_health every 60s.",
+  "reads": [
+    "signal_analyser_v2.py",
+    "community_signal_enrichment.py",
+    "tool_description_safety_enrichment.py",
+    "permission_scope_enrichment.py",
+    "temporal_stability_enrichment.py"
+  ],
+  "next_directive": {}
+}

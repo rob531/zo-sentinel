@@ -1,0 +1,19 @@
+{
+  "task": "cto_2026_05_02_supervisord_persistence_audit",
+  "handler": "generate_file",
+  "output_file": "supervisord_persistence_audit.py",
+  "complexity": "low",
+  "description": "Build a read-only diagnostic daemon that runs every 30 minutes and reports any Python daemon currently running under /home/workspace/ that is NOT registered in /etc/zo/supervisord-user.conf. This closes carryover #5 (supervisord persistence) by making missing-from-supervisord visible. Read /etc/zo/supervisord-user.conf as text, parse [program:NAME] sections, then enumerate ps -ef python processes and compare. Write findings to mesh_memory with agent_id='supervisord_audit' memory_type='persistence_drift' and emit a mesh_event when daemons-not-in-conf count is > 0. Exit 0 on no drift, 1 on drift. Pure read-only - never modifies supervisord-user.conf. Logs to /home/workspace/logs/supervisord_persistence_audit.log via FileHandler only (no StreamHandler).",
+  "context": {
+    "author": "CTO/CEO direct (Claude)",
+    "date": "2026-05-02",
+    "goal_link": "PROJECT_GOALS.md carryover #5",
+    "why_now": "Builder queue empty for 80min; LLM and standing_goals fallback both producing 0 directives due to already_queued() globbing .done.json. This directive bypasses dirgen entirely.",
+    "constraints": [
+      "FileHandler ONLY for logging (daemon_logging_filehandler_only convention)",
+      "ws_write for mesh_memory writes - never direct DuckDB",
+      "ISO 8601 string timestamps - never time.time() float",
+      "Idempotent: same diff each run if no state change"
+    ]
+  }
+}

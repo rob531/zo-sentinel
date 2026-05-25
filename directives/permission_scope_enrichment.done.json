@@ -1,0 +1,19 @@
+{
+  "directive_id": "permission_scope_enrichment",
+  "description": "Improve permission_scope_enrichment discrimination",
+  "content": "permission_scope_enrichment.py discrimination strengthened — 10/10 distinct scores, passes Gate 8 all checks",
+  "complexity": "low",
+  "source": "goose_tier1",
+  "created_at": "2026-05-24T23:23:45.800310+00:00",
+  "completed_at": "2026-05-24T23:29:00+00:00",
+  "status": "done",
+  "results": {
+    "discrimination": "10/10 distinct scores (exceeds MIN=5)",
+    "extended_test": "20/20 distinct scores",
+    "score_range": "31.18 - 85.55",
+    "gate8_static_safety": "PASS",
+    "gate8_import": "PASS",
+    "gate8_enrichment_contract": "PASS",
+    "compute_score_contract": "PASS — returns (float, dict) with score in [0,100]"
+  }
+}

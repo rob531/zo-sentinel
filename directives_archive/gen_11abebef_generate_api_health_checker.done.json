@@ -1,0 +1,14 @@
+{
+  "task": "generate_api_health_checker",
+  "handler": "generate_file",
+  "output_file": "api_health_checker.py",
+  "complexity": "low",
+  "phase": "11",
+  "priority": 0.82,
+  "description": "Pings all sentinel ports (8772, 8773, 8780, 8781, 8782, 8790, 8795) and writes health status to mesh_events table. Daemon that runs every 5 minutes. Uses POST to 127.0.0.1:8772/write. Implements run() + heartbeat pattern.",
+  "reads": [
+    "service_health.py",
+    "mesh_bridge.py"
+  ],
+  "next_directive": {}
+}

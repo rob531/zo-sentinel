@@ -1,0 +1,11 @@
+{
+  "task": "start_build_watcher",
+  "handler": "run_script",
+  "output_file": "",
+  "complexity": "low",
+  "phase": "infra",
+  "priority": 0.98,
+  "command": "nohup python3 /home/workspace/zo_sentinel/build_watcher_api.py >> /home/workspace/logs/build_watcher.log 2>&1 &",
+  "description": "Start build_watcher_api.py on port 8795",
+  "from": "dashboard_launch"
+}

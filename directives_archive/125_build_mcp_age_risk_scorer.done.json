@@ -1,0 +1,14 @@
+{
+  "task": "build_mcp_age_risk_scorer",
+  "handler": "generate_file",
+  "output_file": "mcp_age_risk_scorer.py",
+  "complexity": "medium",
+  "phase": "16",
+  "priority": 0.87,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "MCP package age risk scorer daemon. Reads mcp_server_registry via ws_query. For npm packages: GET https://registry.npmjs.org/{package_name} to fetch time.created field. Compute age_days = (now - created). Risk scoring: age_days < 7 = -25 to temporal_stability signal (brand new package), age_days < 30 = -15, age_days 30-90 = -5, age_days > 365 = +10 (established). Cross-reference: if age_days < 30 AND download_count < 10 = CAUTION_LIMITED floor. if age_days < 7 AND any threat in mcp_threat_associations = HIGH_RISK_ISOLATED floor. ws_write mcp_signal_scores temporal_stability signal for each server. ws_write mcp_risk_register age_risk_tier. Poll 86400s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

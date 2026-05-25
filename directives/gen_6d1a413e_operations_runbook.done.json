@@ -1,0 +1,9 @@
+{
+  "task": "operations_runbook",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Create OPERATIONS.md documentation covering: supervisord layout (which daemons run under which supervisor program), log locations for all daemons, recovery runbook for common failures (daemon stale heartbeat, write_service timeout, enrichment harness failure). Draw from live wiring map data. Include heartbeat SLA table (per-daemon thresholds). Do NOT duplicate content from ARCHITECTURE.md or sentinel_external_api.md. Store in /home/workspace/zo_sentinel/docs/ directory."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "a3f1c2d4",
+  "source": "zo-sentinel-audit",
+  "category": "reliability",
+  "severity": "high",
+  "summary": "Harden ui_server.py against unhandled exceptions and add supervisor auto-restart",
+  "details": "A single FastAPI route raising an unhandled exception currently kills the worker process and there's no supervisor restart, so the entire UI goes dark until ZO_RESTART_TS is manually bumped. This was observed at 2026-05-09T16:34Z when /admin-threats returned 521 and the root URL stayed down for >10 minutes. Single point of failure with manual recovery is unacceptable for a trust-intelligence surface that other systems depend on. Note: the supervisord conf change is a follow-up if the builder can't touch files outside ui_server.py; the middleware and /healthz changes are in-scope for ui_server.py itself. The admin-route directives (677fa0e2, etc.) should be applied alongside this so the underlying bugs get fixed AND the server can survive future ones — order doesn't matter because the middleware catches whatever the broken handlers raise.",
+  "suggested_fix": "Three changes, all in ui_server.py (or its supervisord conf — flag as a follow-up if outside scope):\n\n1. Global exception middleware. Add a FastAPI middleware that catches any unhandled exception, logs the traceback to the existing log path, and returns a clean JSON 500 with {\"error\":\"internal\",\"ray_id\":<request_id>}. Pattern:\n\n    @app.exception_handler(Exception)\n    async def unhandled(request, exc):\n        logger.exception(\"unhandled at %s\", request.url.path)\n        return JSONResponse(status_code=500, content={\"error\":\"internal\"})\n\n2. /healthz endpoint returning 200 with {\"status\":\"ok\",\"ts\":<utc>} so a watchdog (or Cloudflare health check) can detect a dead worker.\n\n3. Supervisord autorestart. In the supervisord config that owns ui_server.py (likely /etc/supervisor/conf.d/zo_sentinel.conf or similar — recon noted ~40 supervisord-managed daemons), set autorestart=true, startsecs=5, startretries=3, and redirect_stderr=true. If autorestart isn't usable (e.g., wrong supervisor variant), substitute with a systemd Restart=on-failure unit or a tiny shell loop wrapper.",
+  "observed_at": "2026-05-09T16:42:00Z",
+  "evidence": {
+    "url": "https://zo-sentinel-ui-robinc.zocomputer.io/",
+    "observed_at": "2026-05-09T16:34Z",
+    "downtime_minutes_so_far": ">10"
+  },
+  "output_file": "ui_server.py"
+}

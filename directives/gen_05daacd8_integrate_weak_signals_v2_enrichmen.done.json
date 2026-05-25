@@ -1,0 +1,9 @@
+{
+  "task": "integrate_weak_signals_v2_enrichments",
+  "handler": "generate_file",
+  "output_file": "integrate_weak_signals_v2_enrichments.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.95,
+  "description": "Wire the three v2 enrichment modules (temporal_stability_enrichment_v2.py, tool_description_safety_enrichment_v2.py, permission_scope_enrichment_v2.py) into signal_analyser.py so they actually execute. The Signal Quality Diagnostic shows these signals have only 4 distinct values across all servers - BAD SIGNAL = NO DISCRIMINATION. The v2 modules were built 2026-05-23 but may not be integrated into the scoring pipeline. Add compute_score() calls for each in signal_analyser.py's enrichment loop. Must use write_service on :8772 for any DB writes. Do not rewrite signal_analyser.py directly - create a wiring module."
+}

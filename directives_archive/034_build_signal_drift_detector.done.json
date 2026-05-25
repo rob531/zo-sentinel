@@ -1,0 +1,14 @@
+{
+  "task": "build_signal_drift_detector",
+  "handler": "generate_file",
+  "output_file": "signal_drift_detector.py",
+  "complexity": "medium",
+  "phase": "9",
+  "priority": 0.82,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Signal drift detector daemon. Every 43200s: for each server with >2 assessments in mcp_signal_scores history, compare current score vs 7-day-old score per signal. If any signal drifted >20 points: ws_write mesh_events {event_type=signal_drift_detected,payload={server_id,signal,old_score,new_score,delta},severity=WARNING}. If trust_score drifted >15: trigger re-attestation by ws_write mesh_memory {agent_id=zo_sentinel.directive,memory_type=build_directive,content=re-attest task}. Log drift summary. Heartbeat.",
+  "context": "",
+  "from": "claude_batch"
+}

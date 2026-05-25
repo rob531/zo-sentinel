@@ -1,0 +1,13 @@
+{
+  "task": "signal_analyser_v2_wiring_check",
+  "handler": "generate_file",
+  "output_file": "signal_analyser_v2_enrichment_wiring.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.84,
+  "description": "Diagnostic daemon to verify signal_analyser_v2.py correctly reads and applies enrichment scores from the four _enrichment modules. Queries mcp_signal_enrichments table for count per signal_type (permission_scope, temporal_stability, tool_description_safety, supply_chain_enrichment, community_signal_enrichment). Reports coverage percentage vs mcp_server_registry (10134 rows). Writes findings to service_health meta field. Does NOT fix signal_analyser_v2.py directly (protected). Reports gap via console log and returns non-zero exit if any enrichment has <5% coverage. Run on schedule every 6h.",
+  "reads": [
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "wire_snow_connector_to_approval_workflow",
+  "handler": "generate_file",
+  "output_file": "snow_connector_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire snow_connector.py (built 2026-04-16) into approval_workflow. Must add ServiceNow webhook endpoint handler that reads mcp_server_registry for pending approvals. Must authenticate via SNOW OAuth; must never accept unsigned webhooks. Implements numbered MUST/MUST NOT: (1) MUST validate request signature before processing, (2) MUST write decision to mcp_decisions table via write_service, (3) MUST NOT route MCP traffic or enforce policy at runtime. Reference: section 7 security, section 9 out-of-scope list."
+}

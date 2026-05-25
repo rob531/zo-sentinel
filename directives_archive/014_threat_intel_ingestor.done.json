@@ -1,0 +1,12 @@
+{
+  "task": "threat_intel_ingestor",
+  "handler": "generate_file",
+  "output_file": "threat_intel_ingestor.py",
+  "complexity": "high",
+  "reads": ["schema.py", "known_threats.py"],
+  "description": "Daemon that ingests live MCP threat intelligence from public sources and writes to mcp_threat_associations via write_service. Sources: (1) query world_articles table WHERE topics LIKE '%cybersecurity%' AND title LIKE '%mcp%' OR title LIKE '%model context%' - extract threat indicators. (2) Poll https://api.osv.dev/v1/query POST json={package:{name:'mcp',ecosystem:'npm'}} for CVEs. (3) Check npm registry for @modelcontextprotocol packages with recent publish dates and flag sudden version bumps. For each threat found: write to mcp_threat_associations {server_id, threat_type, evidence, severity: CRITICAL|HIGH|MEDIUM|LOW, reported_at}. Also write mesh_event 'threat_intel_ingested' with count. Heartbeat to service_health. Run every 2 hours as daemon.",
+  "context": "This feeds the signal_analyser community_signal dimension. Threat types: CVE_DISCLOSED, RUG_PULL_DETECTED, SUPPLY_CHAIN_COMPROMISE, PROMPT_INJECTION_PATTERN, SUSPICIOUS_PUBLISH. Severity mapping: CVE CVSS>8=CRITICAL, CVSS>5=HIGH, else MEDIUM. Rug pull=HIGH. Supply chain=CRITICAL.",
+  "priority": 0.91,
+  "from": "claude_directive",
+  "phase": "7"
+}

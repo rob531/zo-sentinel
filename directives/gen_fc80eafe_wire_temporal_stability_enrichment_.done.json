@@ -1,0 +1,14 @@
+{
+  "task": "wire_temporal_stability_enrichment_integration",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Wire the built temporal_stability_enrichment.py into signal_analyser. Must verify enrichment module produces at least 20 distinct scores across 34 fingerprints per enrichment contract. Current temporal_stability signal has only 4 distinct values (BAD SIGNAL per diagnostic). Uses ws_query to check existing mcp_signal_scores cardinality before integration. Writes integration verification rows to mcp_signal_enrichments via ws_write. References recent build timestamp 2026-05-24T09:26:09.",
+  "reads": [
+    "temporal_stability_enrichment.py",
+    "signal_analyser.py"
+  ],
+  "next_directive": {}
+}

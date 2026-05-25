@@ -1,0 +1,9 @@
+{
+  "task": "build_compliance_exporter",
+  "handler": "generate_file",
+  "output_file": "compliance_exporter.py",
+  "complexity": "medium",
+  "phase": "20",
+  "priority": 0.9,
+  "description": "Python module. export_compliance_report(output_path) queries mcp_server_registry via write_service /query, writes JSON report to output_path with fields: generated_at, total_assessed, by_verdict dict, high_risk_servers list. No uvicorn. Pure utility module. Uses requests.post to write_service /query."
+}

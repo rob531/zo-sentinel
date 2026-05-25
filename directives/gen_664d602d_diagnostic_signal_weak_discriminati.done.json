@@ -1,0 +1,13 @@
+{
+  "task": "diagnostic_signal_weak_discrimination",
+  "handler": "generate_file",
+  "output_file": "signal_discrimination_diagnosis.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnostic module that queries mcp_signal_scores and mcp_signal_enrichments to diagnose why permission_scope, temporal_stability, and tool_description_safety each produce only 4 distinct values. Must: (1) count distinct scores per signal_type, (2) sample 10 rows per signal showing score + evidence_blob, (3) check if enrichment modules are being called by inspecting mcp_signal_enrichments row counts, (4) identify if scores cluster in narrow ranges. Outputs findings to diagnostic report via write_service/execute. Does NOT fix anything\u2014pure diagnostic. Targeted at understanding why spec requirement 'BAD SIGNAL = SAME SIGNAL across all inputs' triggers for these three signals despite enrichment modules existing.",
+  "reads": [
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

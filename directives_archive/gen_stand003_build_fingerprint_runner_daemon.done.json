@@ -1,0 +1,10 @@
+{
+  "task": "build_fingerprint_runner_daemon",
+  "handler": "generate_file",
+  "output_file": "fingerprint_runner_daemon.py",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k",
+  "priority": 0.95,
+  "source": "manual_standing_goals_emit_20260427T1340",
+  "description": "Long-running daemon. Every 600s, queries mcp_server_registry via WriteService /query for up to 50 server_ids missing from mcp_fingerprints. For each, imports mcp_fingerprinter (module already exists at /home/workspace/zo_sentinel/mcp_fingerprinter.py), calls its primary fingerprint(server_row) function, and POSTs the result to /write with table='mcp_fingerprints' (server_id, fingerprint_hash, tool_count, prompt_count, resource_count, computed_at). Heartbeat thread every 30s. Single-instance lockfile at /home/workspace/logs/fingerprint_runner_daemon.lock. No duckdb/sqlite3 imports. Catches and logs exceptions per-server so one bad row never wedges the whole batch. Closes the gap that mcp_fingerprints table has 0 rows despite mcp_fingerprinter.py being built and present."
+}

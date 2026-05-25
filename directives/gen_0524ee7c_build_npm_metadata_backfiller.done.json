@@ -1,0 +1,9 @@
+{
+  "task": "build_npm_metadata_backfiller",
+  "output_file": "npm_metadata_backfiller.py",
+  "handler": "generate_file",
+  "complexity": "medium",
+  "phase": "sentinel.gap.20k.v3",
+  "priority": 0.86,
+  "description": "Long-running daemon. Every 600s, queries: SELECT server_id, name FROM mcp_server_registry WHERE registry_source = 'npm' AND (metadata IS NULL OR metadata = '{}' OR metadata NOT LIKE '%\"version\":%' OR last_scanned IS NULL OR last_scanned < now() - INTERVAL 14 DAY) LIMIT 30. For each: GET https://registry.npmjs.org/<name>/latest with 8s timeout, User-Agent 'zo-sentinel/1.0'. Parse fields {version, description, time.created, time.modified, dependencies (length), repository.url, author.name, maintainers (length), homepage}. Build new metadata JSON merging into existing metadata (preserving keys we set; new keys overwrite). ws_write mcp_server_registry UPDATE row with new metadata, last_scanned=now, scan_count=scan_count+1. ws_write mcp_registry_facts one row per metadata field as evidence (server_id, fact_type='npm_'+field, fact_value, fact_source='npm_registry_api', recorded_at=now). On 404, mark metadata.npm_404=true so signal enrichments can deprioritize. Heartbeat. Lockfile. Requests + json + hashlib + datetime + threading; no project imports, no DB drivers. Polite 250ms inter-fetch. Failure path: log npm_error_count and continue."
+}

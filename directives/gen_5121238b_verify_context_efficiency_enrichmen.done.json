@@ -1,0 +1,9 @@
+{
+  "task": "verify_context_efficiency_enrichment_wired",
+  "handler": "generate_file",
+  "output_file": "verify_context_efficiency_enrichment_wired.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.78,
+  "description": "Verification script that context_efficiency_enrichment.py (built 2026-04-29) is properly wired into signal_analyser or trust_synthesiser pipeline. Query mcp_signal_enrichments for entries with signal_type='context_efficiency'. If count is 0, output diagnostic blob indicating not wired. If count > 0, verify that trust_synthesiser reads these entries and includes them in composite calculation. Do NOT rebuild any files; this is a verification-only diagnostic."
+}

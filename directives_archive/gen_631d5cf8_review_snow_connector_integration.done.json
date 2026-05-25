@@ -1,0 +1,14 @@
+{
+  "task": "review_snow_connector_integration",
+  "handler": "generate_file",
+  "output_file": "snow_connector_integration_review.py",
+  "complexity": "low",
+  "phase": "9",
+  "priority": 0.8,
+  "description": "Build snow_connector_integration_review.py: a diagnostic that verifies snow_connector.py is properly wired into approval_workflow. The file must: (1) Read snow_connector.py and check it exposes handle_snow_webhook(payload: dict) -> dict; (2) Read approval_workflow.py and verify it imports or calls snow_connector; (3) Check for any HTTP calls between daemons (violation of spec section 5 - forbidden); (4) Report: {snow_built: bool, webhook_handler_present: bool, approval_workflow_imports: bool, inter_daemon_http: list, integration_status: str}. If integration_status != 'wired', the output suggests concrete wiring steps (e.g., 'approval_workflow.py line 45 should call snow_connector.handle_snow_webhook after decision write'). Exits 0. Diagnostic only, does not modify either file.",
+  "reads": [
+    "snow_connector.py",
+    "approval_workflow.py"
+  ],
+  "next_directive": {}
+}

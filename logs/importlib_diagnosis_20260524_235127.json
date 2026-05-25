@@ -1,0 +1,339 @@
+[
+  {
+    "module": "registry_api.py",
+    "timestamp": "2026-05-24T23:51:25.390375",
+    "checks": {
+      "pycache": {
+        "cache_exists": true,
+        "cache_path": "/home/workspace/zo_sentinel/__pycache__",
+        "pyc_file_count": 785,
+        "pyc_files": [
+          "/home/workspace/zo_sentinel/__pycache__/snow_connector_approval_wiring.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/anti_entropy_diagnosis.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_discrimination_validator.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/domain_trust_enrichment.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_quality_dashboard_patch.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_quality_weak_signal_audit.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/context_efficiency_enrichment.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/community_signal_enrichment_integration.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/temporal_stability_integration_check.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/self_diagnostics_refresh.cpython-312.pyc"
+        ],
+        "version_mismatch": true,
+        "bad_pyc_files": [
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/diagnose_import_chain_failures_v2.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/mcp_traffic_fingerprints.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/mcp_discovery_feeder.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/diagnose_attestation_refresher_wiring.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/retry_failed_build_modules.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          }
+        ]
+      },
+      "source": {
+        "exists": true,
+        "line_count": 146,
+        "first_15_lines": "#!/usr/bin/env python3\n\"\"\"\nregistry_api.py -- ZO-SENTINEL Phase 6\nFastAPI REST assessment API on port 8781.\nAll DB reads via write_service query endpoint on port 8772.\n\nEndpoints:\n  GET /v1/assess?mcp=<identifier>  -- full assessment for one MCP\n  GET /v1/registry?page=&limit=    -- paginated assessed MCP list\n  GET /v1/threats?limit=           -- recent threat intelligence\n  GET /health                      -- service health\n\"\"\"\nimport json, logging, requests, uvicorn\nfrom datetime import datetime, timezone\nfrom fastapi import FastAPI, HTTPException, Query\n",
+        "has_syntax_errors": false
+      },
+      "import_chain": {
+        "total_lines": 146,
+        "line_10_content": "GET /v1/threats?limit=           -- recent threat intelligence",
+        "line_11_content": "GET /health                      -- service health",
+        "imports_in_first_15": [
+          {
+            "line": 13,
+            "content": "import json, logging, requests, uvicorn"
+          },
+          {
+            "line": 14,
+            "content": "from datetime import datetime, timezone"
+          },
+          {
+            "line": 15,
+            "content": "from fastapi import FastAPI, HTTPException, Query"
+          }
+        ]
+      },
+      "fresh_import": {
+        "returncode": 0,
+        "stdout": "OK",
+        "stderr": "",
+        "stderr_lines": [
+          ""
+        ]
+      },
+      "smoke_logs": {
+        "log_exists": false
+      },
+      "sys_path": {
+        "path_count": 5,
+        "paths": [
+          "/home/workspace/zo_sentinel",
+          "/usr/local/lib/python312.zip",
+          "/usr/local/lib/python3.12",
+          "/usr/local/lib/python3.12/lib-dynload",
+          "/usr/local/lib/python3.12/site-packages"
+        ],
+        "has_zo_sentinel": true,
+        "has_workspace": true
+      }
+    }
+  },
+  {
+    "module": "rug_pull_monitor.py",
+    "timestamp": "2026-05-24T23:51:26.757282",
+    "checks": {
+      "pycache": {
+        "cache_exists": true,
+        "cache_path": "/home/workspace/zo_sentinel/__pycache__",
+        "pyc_file_count": 785,
+        "pyc_files": [
+          "/home/workspace/zo_sentinel/__pycache__/snow_connector_approval_wiring.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/anti_entropy_diagnosis.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_discrimination_validator.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/domain_trust_enrichment.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_quality_dashboard_patch.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_quality_weak_signal_audit.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/context_efficiency_enrichment.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/community_signal_enrichment_integration.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/temporal_stability_integration_check.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/self_diagnostics_refresh.cpython-312.pyc"
+        ],
+        "version_mismatch": true,
+        "bad_pyc_files": [
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/diagnose_import_chain_failures_v2.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/mcp_traffic_fingerprints.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/mcp_discovery_feeder.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/diagnose_attestation_refresher_wiring.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/retry_failed_build_modules.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          }
+        ]
+      },
+      "source": {
+        "exists": true,
+        "line_count": 354,
+        "first_15_lines": "#!/usr/bin/env python3\n\"\"\"\nrug_pull_monitor.py -- ZO-SENTINEL rug pull detection daemon.\nMonitors trusted MCP servers for post-approval tool definition changes.\nDetects tool mutations, server unreachability patterns, and domain changes.\nPolls every 21600s (6 hours) with heartbeat support.\n\"\"\"\nimport os\nimport sys\nimport json\nimport time\nimport hashlib\nimport signal\nimport requests\nfrom datetime import datetime, timezone\n",
+        "has_syntax_errors": false
+      },
+      "import_chain": {
+        "total_lines": 354,
+        "line_10_content": "import json",
+        "line_11_content": "import time",
+        "imports_in_first_15": [
+          {
+            "line": 8,
+            "content": "import os"
+          },
+          {
+            "line": 9,
+            "content": "import sys"
+          },
+          {
+            "line": 10,
+            "content": "import json"
+          },
+          {
+            "line": 11,
+            "content": "import time"
+          },
+          {
+            "line": 12,
+            "content": "import hashlib"
+          },
+          {
+            "line": 13,
+            "content": "import signal"
+          },
+          {
+            "line": 14,
+            "content": "import requests"
+          },
+          {
+            "line": 15,
+            "content": "from datetime import datetime, timezone"
+          }
+        ]
+      },
+      "fresh_import": {
+        "returncode": 0,
+        "stdout": "OK",
+        "stderr": "",
+        "stderr_lines": [
+          ""
+        ]
+      },
+      "smoke_logs": {
+        "log_exists": false
+      },
+      "sys_path": {
+        "path_count": 5,
+        "paths": [
+          "/home/workspace/zo_sentinel",
+          "/usr/local/lib/python312.zip",
+          "/usr/local/lib/python3.12",
+          "/usr/local/lib/python3.12/lib-dynload",
+          "/usr/local/lib/python3.12/site-packages"
+        ],
+        "has_zo_sentinel": true,
+        "has_workspace": true
+      }
+    }
+  },
+  {
+    "module": "signal_analyser.py",
+    "timestamp": "2026-05-24T23:51:27.040265",
+    "checks": {
+      "pycache": {
+        "cache_exists": true,
+        "cache_path": "/home/workspace/zo_sentinel/__pycache__",
+        "pyc_file_count": 785,
+        "pyc_files": [
+          "/home/workspace/zo_sentinel/__pycache__/snow_connector_approval_wiring.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/anti_entropy_diagnosis.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_discrimination_validator.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/domain_trust_enrichment.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_quality_dashboard_patch.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/signal_quality_weak_signal_audit.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/context_efficiency_enrichment.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/community_signal_enrichment_integration.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/temporal_stability_integration_check.cpython-312.pyc",
+          "/home/workspace/zo_sentinel/__pycache__/self_diagnostics_refresh.cpython-312.pyc"
+        ],
+        "version_mismatch": true,
+        "bad_pyc_files": [
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/diagnose_import_chain_failures_v2.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/mcp_traffic_fingerprints.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/mcp_discovery_feeder.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/diagnose_attestation_refresher_wiring.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          },
+          {
+            "file": "/home/workspace/zo_sentinel/__pycache__/retry_failed_build_modules.cpython-311.pyc",
+            "version": "cpython-311",
+            "expected": "cpython-312"
+          }
+        ]
+      },
+      "source": {
+        "exists": true,
+        "line_count": 525,
+        "first_15_lines": "#!/usr/bin/env python3\nimport sys\nsys.path.insert(0, '/home/workspace')\nimport json\nimport hashlib\nimport time\nimport uuid\nfrom datetime import datetime, timedelta\nfrom typing import Optional, Dict, Any, List\nimport requests\n\nSERVICE_NAME = 'signal_analyser'\nSERVICE_PORT = 8778\nPID_FILE = f'/tmp/{SERVICE_NAME}.pid'\nWRITE_SERVICE = 'http://127.0.0.1:8772'\n",
+        "has_syntax_errors": false
+      },
+      "import_chain": {
+        "total_lines": 525,
+        "line_10_content": "import requests",
+        "line_11_content": "",
+        "imports_in_first_15": [
+          {
+            "line": 2,
+            "content": "import sys"
+          },
+          {
+            "line": 4,
+            "content": "import json"
+          },
+          {
+            "line": 5,
+            "content": "import hashlib"
+          },
+          {
+            "line": 6,
+            "content": "import time"
+          },
+          {
+            "line": 7,
+            "content": "import uuid"
+          },
+          {
+            "line": 8,
+            "content": "from datetime import datetime, timedelta"
+          },
+          {
+            "line": 9,
+            "content": "from typing import Optional, Dict, Any, List"
+          },
+          {
+            "line": 10,
+            "content": "import requests"
+          }
+        ]
+      },
+      "fresh_import": {
+        "returncode": 0,
+        "stdout": "OK",
+        "stderr": "",
+        "stderr_lines": [
+          ""
+        ]
+      },
+      "smoke_logs": {
+        "log_exists": false
+      },
+      "sys_path": {
+        "path_count": 5,
+        "paths": [
+          "/home/workspace/zo_sentinel",
+          "/usr/local/lib/python312.zip",
+          "/usr/local/lib/python3.12",
+          "/usr/local/lib/python3.12/lib-dynload",
+          "/usr/local/lib/python3.12/site-packages"
+        ],
+        "has_zo_sentinel": true,
+        "has_workspace": true
+      }
+    }
+  }
+]

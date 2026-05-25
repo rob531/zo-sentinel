@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_import_failures_weak_signals",
+  "handler": "generate_file",
+  "output_file": "diagnose_signal_weakness_root_cause.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.82,
+  "description": "Diagnoses why permission_scope, temporal_stability, and tool_description_safety signals show only 3 distinct values each (range: 30-100, 40-90, 50-100). Reads metadata field coverage in the three enrichment modules. Checks if compute_score() reads sufficient fields per enrichment contract. Pure diagnostic, no DB writes, no network. Targets enrichment modules built 2026-05-03, not protected signal_analyser.py."
+}

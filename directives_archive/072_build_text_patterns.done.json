@@ -1,0 +1,14 @@
+{
+  "task": "build_text_patterns",
+  "handler": "generate_file",
+  "output_file": "text_patterns.py",
+  "complexity": "low",
+  "phase": "3",
+  "priority": 0.84,
+  "reads": [
+    "known_threats.py"
+  ],
+  "description": "Extended text pattern library. Extends known_threats.py. INJECTION_PATTERNS: list of strings indicating prompt injection attempts in tool descriptions (ignore previous, disregard instructions, system prompt, act as). CREDENTIAL_HARVESTING_PATTERNS: patterns suggesting credential theft (send credentials, exfiltrate, upload private key, env var dump). OBFUSCATION_PATTERNS: base64 strings in descriptions, unicode lookalikes, zero-width chars. Functions: scan_description(text)->dict {injections:list,credentials:list,obfuscation:list,score_penalty:int}. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

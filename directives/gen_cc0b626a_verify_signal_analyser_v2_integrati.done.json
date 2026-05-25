@@ -1,0 +1,13 @@
+{
+  "task": "verify_signal_analyser_v2_integration",
+  "handler": "generate_file",
+  "output_file": "verify_analyser_v2_integration.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration test to verify signal_analyser_v2.py correctly writes rows to mcp_signal_scores table with the required evidence blob shape: {\"signal_type\": \"<snake_case>\", \"confidence\": 0.0-1.0, \"evidence_blob\": {...}}. Must query the table and assert at least one row exists with valid evidence_blob from each of the 8 signal types. Tests the wiring between analyser output and the composite scoring pipeline. Exit 0 on success.",
+  "reads": [
+    "signal_analyser_v2.py"
+  ],
+  "next_directive": {}
+}

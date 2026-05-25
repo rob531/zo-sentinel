@@ -1,0 +1,9 @@
+{
+  "task": "build_mcp_detail_view_ui",
+  "handler": "generate_file",
+  "output_file": "mcp_detail_view_ui.html",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Admin UI surface for viewing individual MCP server detail. Must include: server name, all 7 signal scores with visual indicators, composite verdict badge, attestation status, threat associations count, risk register entry, last_assessed timestamp, first_seen. Must call registry_api.py on :8781 for data. Port 8790 binding. Use same styling as sentinel_status.html and dashboard.html. No direct DB access \u2014 all data via API."
+}

@@ -1,0 +1,14 @@
+{
+  "task": "rewrite_trust_synthesiser_v3",
+  "handler": "generate_file",
+  "output_file": "trust_synthesiser_v3.py",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.88,
+  "description": "Rewrite trust_synthesiser_v3.py based on audit findings \u2014 fix injection_resilience dimension handling in trust synthesiser.",
+  "reads": [
+    "trust_synthesiser_v2.py"
+  ],
+  "next_directive": {},
+  "from": "chain_review_trust_synthesiser_v2_dimension"
+}

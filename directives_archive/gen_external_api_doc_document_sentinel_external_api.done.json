@@ -1,0 +1,9 @@
+{
+  "task": "document_sentinel_external_api",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api.md",
+  "complexity": "low",
+  "phase": "13",
+  "priority": 0.70,
+  "description": "Generate companion documentation for sentinel_external_api.py (already built). The .md file must explain: (1) PURPOSE -- a read-only REST API at port 8791 for trusted external parties to look up MCP trust assessments, auth via X-API-Key header. (2) SETUP -- how to add API keys to /home/workspace/zo_sentinel/config/external_api_keys.txt (one per line, # comments allowed), restart hint via supervisord. (3) ENDPOINT REFERENCE -- for each endpoint (GET /v1/health, GET /v1/mcp/{server_id}, GET /v1/search, GET /v1/mcp/{server_id}/threats, GET /v1/mcp/{server_id}/risk) document: path, required parameters, query parameters with defaults and ranges, authentication requirement, example curl command with X-API-Key header, example JSON response using the Pydantic model shape, and all possible HTTP status codes with when they occur. (4) RATE LIMITS -- 60 requests per minute per API key, sliding window, 429 response shape with Retry-After. (5) ERROR CODES TABLE -- markdown table mapping status code to meaning (400 invalid input, 401 missing header, 403 invalid key, 404 not found, 429 rate limit, 500 internal, 503 no keys configured). (6) FITS IN ZO-SENTINEL -- one paragraph explaining this is the ONLY external read surface, all writes go through internal daemons (mcp_scanner, threat_intel_ingestor etc) and are not exposed via this API. (7) SECURITY NOTES -- keys file is mode 0600 advised, CORS empty by default so browser-origin requests blocked, server_id regex validated to prevent SQL injection, parameterized queries throughout. Length approximately 200 lines. Write in plain markdown, no HTML. Intended audience: a technical colleague who will curl this API from their own tooling."
+}

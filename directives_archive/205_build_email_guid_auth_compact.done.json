@@ -1,0 +1,12 @@
+{
+  "task": "build_email_guid_auth_compact",
+  "handler": "generate_file",
+  "output_file": "email_guid_auth.py",
+  "complexity": "high",
+  "phase": "17",
+  "priority": 0.99,
+  "pillar": "RBAC",
+  "source_note": "maturity_registry+generation_failures:build_email_guid_auth — compacted from 26950c to fit MiniMax context",
+  "description": "Email GUID auth service port 8775. FastAPI. POST /api/send-approval-email {mcp_name, submission_id, requested_by, admin_email}: generate uuid4 token_id, ws_write auth_tokens {token_id, action='approve_mcp', mcp_name, submission_id, requested_by, admin_email, expires_at=now()+24h, used=False, created_at=now()}, POST https://api.zo.computer/zo/notify json={to:admin_email, subject:'[ZO-SENTINEL] MCP Approval: {mcp_name}', body:'Approve: http://localhost:8780/api/approve?token={token_id} Deny: http://localhost:8780/api/deny?token={token_id}'}, return {sent:true, token_preview:token_id[:8]+'...'}. GET /api/validate?token={token_id}: ws_query auth_tokens WHERE token_id=? AND used=FALSE AND expires_at>now(), return {valid:bool, action, mcp_name, submission_id} or {valid:false, reason}. POST /api/consume {token_id}: ws_write auth_tokens used=TRUE used_at=now() WHERE token_id=?. GET /health. All DB via ws_write/ws_query to write_service:8772. No duckdb. uuid4 from uuid module. run() uvicorn. Heartbeat. SMOKE TEST CONTRACT: must contain 'uuid4' and 'ws_write'.",
+  "from": "architect_compact_v1"
+}

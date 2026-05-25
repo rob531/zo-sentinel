@@ -1,0 +1,14 @@
+{
+  "task": "build_exemption_manager",
+  "handler": "generate_file",
+  "output_file": "exemption_manager.py",
+  "complexity": "medium",
+  "phase": "13",
+  "priority": 0.59,
+  "reads": [
+    "schema.py"
+  ],
+  "description": "Exemption manager. Handles cases where an MCP is approved despite negative signals. grant_exemption(server_id,reason,granted_by,expires_days=30,conditions=[])->str: writes to mcp_exemptions table {server_id,reason,granted_by,expires_at,conditions_json,active=True}. check_exemption(server_id)->dict|None: returns active exemption if exists and not expired. revoke_exemption(server_id,revoked_by)->bool. list_expiring_exemptions(days=7)->list. Exemptions override policy_engine ESCALATE decisions to CONDITIONAL_ALLOW. Daily check emits warnings for expiring exemptions. No daemon.",
+  "context": "",
+  "from": "claude_batch"
+}

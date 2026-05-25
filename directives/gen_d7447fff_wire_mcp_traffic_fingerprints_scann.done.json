@@ -1,0 +1,9 @@
+{
+  "task": "wire_mcp_traffic_fingerprints_scanner",
+  "handler": "generate_file",
+  "output_file": "mcp_traffic_fingerprints_scanner_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.93,
+  "description": "Integration wiring to consume mcp_traffic_fingerprints.py library within mcp_scanner daemon. mcp_traffic_fingerprints.py was built 2026-05-23T10:19:47 and exports detect_mcp_methods, is_mcp_traffic, has_jsonrpc_version functions. This wiring module modifies mcp_scanner to call fingerprint detection when scanning candidate server responses for MCP protocol confirmation. Pure wiring, no new logic. Imports mcp_traffic_fingerprints only. No DB writes. Follows Appendix B Rule 3: detection artefact, no blocking/redirecting."
+}

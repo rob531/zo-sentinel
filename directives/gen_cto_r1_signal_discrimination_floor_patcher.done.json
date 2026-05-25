@@ -1,0 +1,11 @@
+{
+  "task": "r1_signal_discrimination_floor_patcher",
+  "handler": "generate_file",
+  "output_file": "r1_signal_discrimination_floor_patcher.py",
+  "complexity": "low",
+  "phase": "14",
+  "priority": 0.88,
+  "description": "Build a standalone Python patcher script `r1_signal_discrimination_floor_patcher.py`. When run, it edits /home/workspace/zo_sentinel/signal_bridge.py to add a non-blocking discrimination-floor invariant in the write_score function (or whichever function is the primary mcp_signal_scores writer — detect by searching for INSERT / write to mcp_signal_scores). Behavior of the new invariant: BEFORE persisting a row, query write_service /query: SELECT COUNT(DISTINCT score) FROM mcp_signal_scores WHERE signal_name = ? AND created_at > now() - INTERVAL 1 HOUR. If the recent-hour distinct count is < 5, do NOT block the write — still write the row — BUT also write to mesh_events: event_type='discrimination_floor_breach', severity='WARNING', tier='T2', payload={signal_name, current_distinct_count, proposed_score, server_id, source_module}. Maintain a module-level dict _floor_breach_streak counting consecutive breaches per signal_name. After 4 consecutive breach cycles for the same signal, additionally write file /home/workspace/shared/outputs/escalations/discrimination_floor_<signal>_<UTC>Z.brief.md containing: signal_name, current distinct count, top 5 most-recent score values for that signal, top 5 evidence strings, list of enrichment module versions currently wired (read from signal_analyser imports). Reset the streak counter when a successful >=5 distinct cycle occurs. STRICT IDEMPOTENCE: marker '# _zo_floor_v1'. Backup before edit. Smoke-test: emit 6 synthetic write_score calls with the same score for signal_name='SMOKE_FLOOR_TEST'; confirm at least one mesh_events row of event_type='discrimination_floor_breach' appears via /query; cleanup the synthetic rows. Exit codes 0/1/2/3 as in other patchers. `--dry-run` flag. NO daemon shape. Touch ONLY signal_bridge.py.",
+  "reads": ["signal_bridge.py"],
+  "next_directive": {}
+}

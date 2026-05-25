@@ -1,0 +1,9 @@
+{
+  "task": "rebuild_community_signal_enrichment_quality",
+  "handler": "generate_file",
+  "output_file": "community_signal_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Rebuild community_signal_enrichment.py to fix WEAK signal (only 3 distinct values, 60-80 range). Current version lacks variety. MUST read MULTIPLE metadata fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars. MUST implement scoring that generates broad range (e.g., 0-100) with many discrete buckets, not just 3 values. Pure function compute_score(metadata: dict) -> tuple[float, dict]. No DB writes, no network. Evidence dict lists all field contributions."
+}

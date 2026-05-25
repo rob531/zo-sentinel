@@ -1,0 +1,9 @@
+{
+  "task": "snow_connector_webhook_wiring",
+  "handler": "generate_file",
+  "output_file": "snow_connector_webhook_wiring.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Wire snow_connector_integration_completion.py into the approval_workflow. The completion file was built 2026-05-23T11:51:08 but is not yet invoked by the workflow. Add inbound webhook handler on appropriate port (8780-8789 range) that receives ServiceNow MCP request tickets, validates OAuth signature, and creates entries in mcp_submissions. Must use write_service :8772 for all DB access. No direct duckdb imports. Per spec section 5: all inter-daemon communication goes through write_service."
+}

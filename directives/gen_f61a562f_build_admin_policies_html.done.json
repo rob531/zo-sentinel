@@ -1,0 +1,9 @@
+{
+  "task": "build_admin_policies_html",
+  "handler": "generate_file",
+  "output_file": "admin_policies.html",
+  "complexity": "medium",
+  "phase": "11",
+  "priority": 0.85,
+  "description": "Admin UI surface from Appendix A. Manage mcp_policy_rules. Must expose: create rule (rule_type, pattern, action, severity), update rule, delete rule, list all rules. Uses mcp_policy_rules table via write_service API. Binds on port 8790. Must include XSS sanitization on pattern inputs. No direct DB access."
+}

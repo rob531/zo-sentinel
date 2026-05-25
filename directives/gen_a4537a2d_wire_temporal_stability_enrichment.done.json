@@ -1,0 +1,9 @@
+{
+  "task": "wire_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_integration.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.88,
+  "description": "Integration daemon that wires the existing temporal_stability_enrichment.py into the signal pipeline. Polls mcp_server_registry for MCPs without a temporal_stability score in mcp_signal_enrichments, calls temporal_stability_enrichment.compute_score(metadata) per MCP, and writes results to mcp_signal_enrichments with signal_type='temporal_stability', confidence, evidence_blob. Target: move temporal_stability from current 4 distinct values (weak discrimination) toward 20+ distinct values across the 34-fingerprint corpus. Uses write_service :8772 for all DB operations. Heartbeat every 60s to service_health."
+}

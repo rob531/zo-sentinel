@@ -1,0 +1,9 @@
+{
+  "task": "extend_external_api_signals",
+  "handler": "generate_file",
+  "output_file": "sentinel_external_api_v2_signals.py",
+  "complexity": "medium",
+  "phase": "15",
+  "priority": 0.9,
+  "description": "EXTEND EXISTING sentinel_external_api.py with a new endpoint: GET /v1/mcp/{server_id}/signals. Returns all per-signal scores for one MCP server. This is a READ-ONLY ADDITION to the existing file -- do NOT rewrite the entire file, produce a PATCH MODULE that imports and extends the existing FastAPI app. Mirror the exact patterns used by the existing endpoints (/v1/mcp/{id}/threats, /v1/mcp/{id}/risk): (1) validate server_id matches ^[a-f0-9]{32}$ or return 400; (2) check server exists in mcp_server_registry first, return 404 if not; (3) query mcp_signal_scores table WHERE server_id=? ORDER BY signal_name; (4) return list[SignalScore] where SignalScore is a Pydantic model with fields: signal_name:str, score:float, evidence:Optional[str], scored_at:Optional[str]; (5) use the same Depends(enforce_rate_limit) on the route so rate limiting applies; (6) use ws_query() helper from existing file. File must be importable and expose a register_routes(app) function that attaches the new endpoint to an existing FastAPI app instance. Reference pattern from /home/workspace/zo_sentinel/sentinel_external_api.py lines around get_mcp_threats (approx 250-280). Signal invariant per PRODUCT_SPEC.md section 5 applies."
+}

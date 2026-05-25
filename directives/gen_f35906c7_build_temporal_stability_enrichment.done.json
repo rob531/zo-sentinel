@@ -1,0 +1,9 @@
+{
+  "task": "build_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Pure enrichment module for the temporal_stability signal. Must expose compute_score(metadata: dict) -> tuple[float, dict] returning (score in [0.0, 100.0], evidence dict). Must read multiple metadata fields (age_days, last_updated, first_seen, update_frequency, version_history_count). No DB writes, no network, no imports of protected project modules. Must complete in under 2 seconds. Evidence dict must list which fields were used and partial scores derived from each. This is one of two missing signal enrichments; the other (context_efficiency) is explicitly deferred by spec until the three weak signals (permission_scope, temporal_stability, tool_description_safety) have more than 4 distinct values."
+}

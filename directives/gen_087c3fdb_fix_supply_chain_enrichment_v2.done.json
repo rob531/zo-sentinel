@@ -1,0 +1,13 @@
+{
+  "task": "fix_supply_chain_enrichment_v2",
+  "handler": "generate_file",
+  "output_file": "supply_chain_enrichment_v2.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.9,
+  "description": "Rewrites supply_chain_enrichment to achieve >20 distinct scores. Current signal has 35 distinct values OK but enrichment module has only 280 rows vs 10134 registry entries (2.8% coverage). MUST read MULTIPLE metadata fields: registry_source, age_days, download_count, dependency_count, publisher_verified, stars, npm_audit_flags, github_stars, license_type, maintenance_status. Bonus for publisher_verified, official registry, recent audits. Penalty for high dependency_count, known vulnerabilities, non-standard licenses. Pure compute_score(metadata) -> (float, dict) per enrichment contract. Exit 0 on self-smoke.",
+  "reads": [
+    "enrichment_harness.py"
+  ],
+  "next_directive": {}
+}

@@ -1,0 +1,11 @@
+{
+  "task": "r2_rescore_supply_chain_runner",
+  "handler": "generate_file",
+  "output_file": "r2_rescore_supply_chain_runner.py",
+  "complexity": "low",
+  "phase": "14",
+  "priority": 0.85,
+  "description": "Build a standalone Python runner script `r2_rescore_supply_chain_runner.py`. When invoked, it rescores all distinct server_id rows currently in mcp_signal_scores WHERE signal_name='supply_chain' (~991 rows today, may grow). Workflow: (1) verify the patcher r2_score_supply_chain_threat_assoc_patcher has been APPLIED — detect via grep for marker '# _zo_threat_assoc_v1' in signal_analyser.py; if marker missing, print 'Prerequisite not applied' and exit 1; (2) POST /query: SELECT DISTINCT server_id FROM mcp_signal_scores WHERE signal_name='supply_chain'; (3) for each server_id, POST /query SELECT name, url FROM mcp_server_registry WHERE server_id=? to get the package name; (4) call signal_analyser.score_supply_chain(server_id, name); (5) upsert via signal_bridge.write_score (or POST /write to mcp_signal_scores with the new score+evidence) — throttled to 5 calls/second using time.sleep(0.2); (6) write a rolling log to /home/workspace/logs/rescore_supply_chain_<UTC>Z.log with one line per server containing server_id|name|old_score|new_score|evidence_prefix; (7) at the end, print summary: total processed, before/after distinct value count, mean score before/after, count of evidence rows still matching 'KNOWN MALICIOUS:<server_id>' (target: drops from ~991 toward zero). Include flags: --limit N (default 10, smoke-test mode; full run requires --limit 0 to mean unlimited), --dry-run (compute new scores but do NOT write). Idempotent: signal_bridge upsert handles duplicates. Marker '# _zo_rescore_v1' at top of file. NO daemon shape, NO sleep loop — one-shot then exit. Smoke-test path: run with --limit 3 --dry-run; verify three before/after deltas printed and zero exceptions; verify log file written.",
+  "reads": ["signal_analyser.py", "signal_bridge.py"],
+  "next_directive": {}
+}

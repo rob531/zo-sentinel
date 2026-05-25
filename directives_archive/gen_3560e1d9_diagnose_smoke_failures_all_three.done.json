@@ -1,0 +1,9 @@
+{
+  "task": "diagnose_smoke_failures_all_three",
+  "handler": "generate_file",
+  "output_file": "diagnose_importlib_failures_all.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.8,
+  "description": "Diagnostic module to inspect the root cause of simultaneous smoke failures in registry_api.py, rug_pull_monitor.py, and signal_analyser.py. All three fail at line 10 with '<frozen importlib' in the traceback \u2014 a common dependency resolution failure. Must: (1) inspect sys.path and module search path, (2) check dependency versions against any pinned requirements, (3) identify the import causing failure, (4) attempt resolution via pip show, (5) log findings. DO NOT propose a rebuild of the affected files (protected). This is a diagnostic-only output. See spec DO NOT GENERATE meta-task warning \u2014 this is diagnostic, not a meta-fixer."
+}

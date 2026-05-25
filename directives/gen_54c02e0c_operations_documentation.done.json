@@ -1,0 +1,11 @@
+{
+  "task": "operations_documentation",
+  "handler": "generate_file",
+  "output_file": "OPERATIONS.md",
+  "complexity": "low",
+  "phase": "10",
+  "priority": 0.75,
+  "description": "Create OPERATIONS.md documenting operational runbook: (1) supervisord configuration location and service restart commands, (2) log file locations per daemon, (3) recovery runbook for stale heartbeat scenarios (write_service, rug_pull_monitor, self_diagnostics), (4) gate_orchestrator error recovery steps (currently in 'error' state per wiring map), (5) circuit breaker (Gate 8) state meaning and manual reset procedure. This is documentation only \u2014 no code generation. Current issues to document: rug_pull_monitor stale 643h55m, write_service stale 3h49m, gate_orchestrator in error state. Spec reference: Section 6 execution and failure contracts.",
+  "reads": [],
+  "next_directive": {}
+}

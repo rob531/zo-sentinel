@@ -1,0 +1,13 @@
+{
+  "task": "rebuild_temporal_stability_enrichment",
+  "handler": "generate_file",
+  "output_file": "temporal_stability_enrichment_v4.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.92,
+  "description": "Rebuild temporal_stability enrichment module to fix weak signal plateau (currently 3 distinct values). Current version temporal_stability_enrichment_v3.py produces narrow range (40.0-90.0) with low discrimination. MUST read MULTIPLE metadata fields including age_days, first_seen, last_updated, commit_frequency, release_regularity, and publisher_verified to produce granular scores. Enrichment contract: pure function compute_score(metadata: dict) -> tuple[float, dict], no DB writes, no network. Must yield at least 20 distinct score values.",
+  "reads": [
+    "temporal_stability_enrichment_v3.py"
+  ],
+  "next_directive": {}
+}

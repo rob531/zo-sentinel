@@ -1,0 +1,9 @@
+{
+  "task": "build_retention_sweeper_daemon",
+  "handler": "generate_file",
+  "output_file": "retention_sweeper.py",
+  "complexity": "medium",
+  "phase": "12",
+  "priority": 0.85,
+  "description": "Build retention_sweeper.py daemon per spec Appendix A. Enforces 30-day expiry on evidence_blob columns. Reads from mcp_signal_scores and mcp_signal_enrichments via write_service :8772. Calculates age via DATEDIFF from recorded_at. DELETES rows where recorded_at < NOW() - INTERVAL '30 days'. Heartbeat to service_health every 60s. Graceful degradation with 30s timeout on write_service calls. Starts uvicorn within 10s. Named daemon per spec section 4."
+}

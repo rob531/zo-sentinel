@@ -1,0 +1,16 @@
+{
+  "task": "build_prompt_injection_scanner",
+  "handler": "generate_file",
+  "output_file": "prompt_injection_scanner.py",
+  "complexity": "high",
+  "phase": "16",
+  "priority": 0.96,
+  "reads": [
+    "schema.py",
+    "known_threats.py",
+    "text_patterns.py"
+  ],
+  "description": "Passive prompt injection scanner daemon. Reads tool descriptions from mcp_server_registry via ws_query. For each server: scan description and any fetched tool schema (GET {url}/tools timeout=5s) for injection patterns: (1) hidden XML/HTML tags in descriptions, (2) system prompt override attempts: ignore previous, disregard, act as, (3) invisible unicode characters (zero-width space U+200B, soft hyphen U+00AD), (4) base64-encoded instruction blobs in description fields, (5) nested tool calls attempting to invoke other MCPs. Risk scoring: 1+ injection pattern = trust_score -= 30, severity=CRITICAL. ws_write mcp_threat_associations {server_id, threat_type=prompt_injection, evidence=pattern_found+line, severity=CRITICAL, reported_at=now}. ws_write mcp_signal_scores tool_description_safety signal update. Poll 14400s. Heartbeat.",
+  "context": "",
+  "from": "directive_factory_v2"
+}

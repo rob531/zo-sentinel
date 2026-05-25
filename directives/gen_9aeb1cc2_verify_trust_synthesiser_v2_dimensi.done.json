@@ -1,0 +1,13 @@
+{
+  "task": "verify_trust_synthesiser_v2_dimension",
+  "handler": "generate_file",
+  "output_file": "verify_trust_synthesiser_v2_dimension.py",
+  "complexity": "low",
+  "phase": "12",
+  "priority": 0.75,
+  "description": "Quality-pass verification script. Query mcp_signal_scores for dimension='injection_resilience' rows and verify trust_synthesiser_v2.py applies weight 1.6 threshold 0.80 correctly. Report findings via ws_write to audit_log. Do NOT modify trust_synthesiser_v2.py directly (protected). If weighting is incorrect, output diagnostic only \u2014 a separate directive will queue a companion module if needed.",
+  "reads": [
+    "trust_synthesiser_v2.py"
+  ],
+  "next_directive": {}
+}

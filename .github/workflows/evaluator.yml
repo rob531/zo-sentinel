@@ -48,6 +48,7 @@ jobs:
         # /home/workspace/zo_sentinel layout:
         #   tests/test_scoring.py       - pure scoring boundary tests
         #   tests/test_evaluator_smoke.py - reverse-feed fetcher smoke
+        #   tests/test_proposed_to_pending_promoter.py - Step 4b promoter
         # Other tests (test_wiring, smoke_test, test_known_threats) require
         # the live ZoComputer host or have pre-existing failures unrelated
         # to this PR; they are intentionally not in the evaluator scope.
@@ -58,6 +59,7 @@ jobs:
           python -m pytest \
             tests/test_scoring.py \
             tests/test_evaluator_smoke.py \
+            tests/test_proposed_to_pending_promoter.py \
             -q \
             --junitxml=artifacts/junit.xml
 

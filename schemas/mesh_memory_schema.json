@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-05-25T22:38:00Z",
+  "engine": "sqlite",
+  "source": "seed from gh_actions_fetcher.py docstring (regenerate via PRAGMA table_info on tower)",
+  "schema_hash": "681bf62307fb26f77d58aa182572d6fe4607114df476b5a19e0d0c001f08982f",
+  "tables": {
+    "mesh_memory": [
+      {
+        "name": "agent_id",
+        "type": "TEXT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "memory_type",
+        "type": "TEXT",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "content",
+        "type": "TEXT",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "importance",
+        "type": "REAL",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "created_at",
+        "type": "TEXT",
+        "ordinal": 5,
+        "nullable": true
+      }
+    ]
+  }
+}

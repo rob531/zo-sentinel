@@ -40,7 +40,9 @@ jobs:
           if [ -f dev/requirements-dev.txt ]; then
             pip install -r dev/requirements-dev.txt
           else
-            pip install pytest
+            # requests is needed by zo_sentinel.probes.duckdb_schema_uptime_probe
+            # (loaded at import time by its test module). Stays cheap to install.
+            pip install pytest requests
           fi
 
       - name: Run pytest (Goose-T2 cheap evaluator)
@@ -59,6 +61,8 @@ jobs:
           python -m pytest \
             tests/test_scoring.py \
             tests/test_evaluator_smoke.py \
+            tests/test_schema_loader.py \
+            tests/test_duckdb_schema_uptime_probe.py \
             tests/test_proposed_to_pending_promoter.py \
             -q \
             --junitxml=artifacts/junit.xml

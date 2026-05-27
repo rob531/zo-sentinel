@@ -31,6 +31,15 @@ DESIGN
 
 SCHEMA
 ------
+The committed snapshot at ``schemas/mesh_memory_schema.json`` is the source
+of truth for the column list of ``mesh_memory``. ``_write_via_sqlite``
+loads that snapshot via ``zo_sentinel.schemas.loader.load_mesh_memory_schema``
+and builds the INSERT statement from ``schema.column_names("mesh_memory")``,
+so a tower-side ``refresh_schema_doc.py`` re-snapshot is the only thing
+needed to track new columns. If the snapshot is missing or stale we fall
+back to the historical hardcoded 5-column INSERT so this fetcher never
+crashes on a missing/old snapshot.
+
 Rows are inserted into `mesh_memory` with:
   agent_id    = "gh_actions_evaluator"
   memory_type = "gh_check_failure"
@@ -82,6 +91,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    # Loader lives in PR #3 (feature/schema-as-code). Import is tolerant of
+    # the module not being present so this fetcher continues to work on
+    # checkouts predating PR #3 -- in that case _get_mesh_memory_schema()
+    # returns None and the sqlite write path falls back to the historical
+    # hardcoded column list.
+    from zo_sentinel.schemas.loader import (  # noqa: E402
+        SchemaSnapshot,
+        StaleSchemaError,
+        load_mesh_memory_schema,
+    )
+except Exception:  # pragma: no cover - hard import failure path
+    SchemaSnapshot = None  # type: ignore[assignment,misc]
+    StaleSchemaError = Exception  # type: ignore[assignment,misc]
+    load_mesh_memory_schema = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -108,6 +133,19 @@ IMPORTANCE = 0.7
 
 # Step-level conclusions we treat as failures worth a row.
 FAILED_CONCLUSIONS = {"failure", "timed_out", "cancelled", "action_required"}
+
+# Historical column list -- used as a fall-back if the schema snapshot is
+# missing or unreadable. Kept identical to the original hardcode so the
+# sqlite write path is bit-for-bit compatible with pre-loader behaviour.
+_FALLBACK_MESH_MEMORY_COLS: tuple[str, ...] = (
+    "agent_id", "memory_type", "content", "importance", "created_at",
+)
+
+# Module-level schema cache: loaded once per process (cheap-but-not-free
+# disk read + JSON parse + freshness check). Sentinel value ``_UNSET``
+# distinguishes "not yet looked up" from "looked up and got nothing".
+_UNSET: object = object()
+_MESH_MEMORY_SCHEMA: Any = _UNSET
 
 
 # ---------------------------------------------------------------------------
@@ -443,25 +481,114 @@ def _write_via_write_service(row: dict[str, Any]) -> bool:
         return False
 
 
+def _get_mesh_memory_schema() -> Any:
+    """Module-level cached load of the mesh_memory schema snapshot.
+
+    Returns the ``SchemaSnapshot`` on success, or ``None`` if the snapshot
+    is missing/unreadable/too stale -- in which case callers fall back to
+    ``_FALLBACK_MESH_MEMORY_COLS``. We log loudly to stderr when falling
+    back so an operator tailing the fetcher log sees the drift signal,
+    but we deliberately never raise: a missing snapshot must NOT prevent
+    the reverse-feed from running.
+    """
+    global _MESH_MEMORY_SCHEMA
+    if _MESH_MEMORY_SCHEMA is not _UNSET:
+        return _MESH_MEMORY_SCHEMA
+    if load_mesh_memory_schema is None:
+        # Import failed at module load (pre-PR#3 checkout).
+        _MESH_MEMORY_SCHEMA = None
+        return None
+    try:
+        snap = load_mesh_memory_schema()
+        # Stale snapshot is a warning, not a hard error -- the fetcher's
+        # job is more important than perfect schema freshness. The drift
+        # probe is the canonical place for that alarm.
+        try:
+            snap.assert_fresh()
+        except StaleSchemaError as e:
+            sys.stderr.write(
+                f"WARN: mesh_memory schema snapshot is stale, "
+                f"using anyway: {e}\n"
+            )
+        _MESH_MEMORY_SCHEMA = snap
+    except FileNotFoundError as e:
+        sys.stderr.write(
+            f"WARN: mesh_memory schema snapshot not found, "
+            f"using hardcoded fallback cols: {e}\n"
+        )
+        _MESH_MEMORY_SCHEMA = None
+    except (ValueError, KeyError, OSError) as e:
+        sys.stderr.write(
+            f"WARN: mesh_memory schema snapshot unreadable, "
+            f"using hardcoded fallback cols: {e}\n"
+        )
+        _MESH_MEMORY_SCHEMA = None
+    return _MESH_MEMORY_SCHEMA
+
+
+def _reset_mesh_memory_schema_cache() -> None:
+    """Test hook: clear the module-level schema cache so a unit test can
+    swap ``load_mesh_memory_schema`` between cases. Not used in production.
+    """
+    global _MESH_MEMORY_SCHEMA
+    _MESH_MEMORY_SCHEMA = _UNSET
+
+
 def _write_via_sqlite(row: dict[str, Any]) -> bool:
+    """Insert ``row`` into mesh_memory.
+
+    Columns come from the committed schema snapshot when available; the
+    INSERT statement is built dynamically so a tower-side schema refresh
+    transparently adds new columns to the write path. If the snapshot is
+    missing/stale we fall back to the historical 5-column INSERT.
+
+    Returns False (and logs to stderr) when ``row`` fails the snapshot's
+    structural validator -- we do NOT want to silently drop unknown
+    fields, since the most common failure mode is a probe naming a column
+    that no longer exists.
+    """
     if not MESH_MEMORY_DB.parent.exists():
         return False
+
+    schema = _get_mesh_memory_schema()
+    if schema is not None and schema.has_table("mesh_memory"):
+        cols: tuple[str, ...] = tuple(schema.column_names("mesh_memory"))
+        # Structural validation: catch probe authors who add a stray field
+        # to `row` without updating the snapshot. We only validate against
+        # the keys the caller actually passed; missing-required errors are
+        # advisory because some columns have DB-side defaults (importance,
+        # created_at) that we don't always echo back.
+        errs = schema.validate_row("mesh_memory", row)
+        # Filter to only the "unknown column" class -- missing-required is
+        # benign here because the live mesh_memory schema sets defaults
+        # for columns we don't supply.
+        hard_errs = [e for e in errs if e.startswith("unknown column")]
+        if hard_errs:
+            sys.stderr.write(
+                f"sqlite write skipped: row failed schema validation: "
+                f"{hard_errs}\n"
+            )
+            return False
+    else:
+        cols = _FALLBACK_MESH_MEMORY_COLS
+
+    # Bind only the columns we actually have values for. sqlite will use
+    # column defaults for any column we omit (importance / created_at
+    # both have defaults in the live mesh_memory schema).
+    present_cols = [c for c in cols if c in row]
+    if not present_cols:
+        sys.stderr.write(
+            "sqlite write skipped: row has no columns matching schema\n"
+        )
+        return False
+    placeholders = ", ".join("?" for _ in present_cols)
+    col_list = ", ".join(present_cols)
+    sql = f"INSERT INTO mesh_memory ({col_list}) VALUES ({placeholders})"
+    values = [row[c] for c in present_cols]
+
     try:
         conn = sqlite3.connect(str(MESH_MEMORY_DB))
-        # Schema is owned by another component; we INSERT the four canonical
-        # columns and let any missing-column / unique-violation propagate so
-        # the caller can fall back / surface a useful error.
-        conn.execute(
-            "INSERT INTO mesh_memory (agent_id, memory_type, content, importance, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                row["agent_id"],
-                row["memory_type"],
-                row["content"],
-                row["importance"],
-                row["created_at"],
-            ),
-        )
+        conn.execute(sql, values)
         conn.commit()
         conn.close()
         return True

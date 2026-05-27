@@ -9,3 +9,6 @@ __pycache__/
 directives/done/
 directives/pending/
 *.bak.*
+
+# Schema drift staging: duckdb_schema_uptime_probe writes here, never auto-commits
+schemas/.pending_drift/

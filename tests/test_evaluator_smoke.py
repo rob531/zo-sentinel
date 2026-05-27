@@ -362,5 +362,214 @@ class TestConstants(unittest.TestCase):
         self.assertTrue(callable(ghf.main))
 
 
+class TestSqliteWriteUsesSchemaLoader(unittest.TestCase):
+    """_write_via_sqlite must build its INSERT from the committed schema
+    snapshot when available, and fall back to the historical hardcoded
+    columns when the loader can't return one. These tests exercise the
+    full write path against a temporary on-disk sqlite db, so the only
+    real I/O is to /tmp."""
+
+    def setUp(self):
+        # Spin up a temp mesh_memory.db with the canonical 5-col schema.
+        self._tmpdir = tempfile.mkdtemp(prefix="zo_fetcher_smoke_")
+        self._db_path = Path(self._tmpdir) / "mesh_memory.db"
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(str(self._db_path))
+        conn.execute(
+            "CREATE TABLE mesh_memory ("
+            "  agent_id    TEXT, "
+            "  memory_type TEXT, "
+            "  content     TEXT, "
+            "  importance  REAL DEFAULT 0.5, "
+            "  created_at  TEXT"
+            ")"
+        )
+        conn.commit()
+        conn.close()
+        self._db_patch = mock.patch.object(ghf, "MESH_MEMORY_DB", self._db_path)
+        self._db_patch.start()
+        ghf._reset_mesh_memory_schema_cache()
+
+    def tearDown(self):
+        self._db_patch.stop()
+        ghf._reset_mesh_memory_schema_cache()
+        import shutil as _shutil
+        _shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _good_row(self) -> dict:
+        return {
+            "agent_id":    "gh_actions_evaluator",
+            "memory_type": "gh_check_failure",
+            "content":     json.dumps({"x": 1}),
+            "importance":  0.7,
+            "created_at":  "2026-05-27T12:00:00+00:00",
+        }
+
+    def _fake_schema_snapshot(self, cols):
+        """Build a minimal fake SchemaSnapshot that satisfies the parts of
+        the API _write_via_sqlite uses."""
+        from zo_sentinel.schemas.loader import ColumnSpec
+
+        class _FakeSnap:
+            def has_table(self, t):
+                return t == "mesh_memory"
+
+            def column_names(self, t):
+                return list(cols)
+
+            def columns(self, t):
+                return [
+                    ColumnSpec(name=c, type="TEXT", ordinal=i + 1, nullable=True)
+                    for i, c in enumerate(cols)
+                ]
+
+            def validate_row(self, t, row):
+                known = set(cols)
+                return [
+                    f"unknown column: {k!r} not in {t}"
+                    for k in row.keys() if k not in known
+                ]
+
+            def assert_fresh(self):
+                return None
+        return _FakeSnap()
+
+    def test_insert_uses_loader_column_names(self):
+        """When the loader snapshot lists 6 columns (canonical 5 + 1
+        hypothetical extension), the INSERT must drive off that list --
+        binding only the columns the row actually provides. This is the
+        whole point of the loader integration: a tower-side snapshot
+        refresh transparently expands what we'll bind."""
+        fake = self._fake_schema_snapshot(
+            ("agent_id", "memory_type", "content", "importance",
+             "created_at", "future_field"),
+        )
+        captured: list[tuple] = []
+        real_connect = ghf.sqlite3.connect
+
+        class _SniffConn:
+            def __init__(self, inner):
+                self._inner = inner
+
+            def execute(self, sql, params=()):
+                captured.append((sql, params))
+                return self._inner.execute(sql, params)
+
+            def commit(self):
+                return self._inner.commit()
+
+            def close(self):
+                return self._inner.close()
+
+        def _sniff_connect(path):
+            return _SniffConn(real_connect(path))
+
+        with mock.patch.object(ghf, "load_mesh_memory_schema",
+                               return_value=fake), \
+             mock.patch.object(ghf.sqlite3, "connect",
+                               side_effect=_sniff_connect):
+            ghf._reset_mesh_memory_schema_cache()
+            ok = ghf._write_via_sqlite(self._good_row())
+        self.assertTrue(ok)
+
+        # SQL must be built from the loader's column list (intersected
+        # with what's in the row). 'future_field' is not in the row, so
+        # it must NOT appear in the INSERT. The other 5 must.
+        self.assertEqual(len(captured), 1)
+        sql, params = captured[0]
+        self.assertIn("INSERT INTO mesh_memory", sql)
+        self.assertIn("agent_id", sql)
+        self.assertIn("memory_type", sql)
+        self.assertIn("content", sql)
+        self.assertIn("importance", sql)
+        self.assertIn("created_at", sql)
+        self.assertNotIn("future_field", sql)
+        self.assertEqual(len(params), 5)
+
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(str(self._db_path))
+        n = conn.execute("SELECT COUNT(*) FROM mesh_memory").fetchone()[0]
+        conn.close()
+        self.assertEqual(n, 1)
+
+    def test_validate_row_rejects_unknown_column(self):
+        """A row with a column the snapshot doesn't know about must be
+        logged and skipped, not silently inserted with NULL elsewhere."""
+        fake = self._fake_schema_snapshot(
+            ("agent_id", "memory_type", "content", "importance", "created_at"),
+        )
+        bad_row = self._good_row()
+        bad_row["this_column_does_not_exist"] = "boom"
+        with mock.patch.object(ghf, "load_mesh_memory_schema",
+                               return_value=fake):
+            ghf._reset_mesh_memory_schema_cache()
+            ok = ghf._write_via_sqlite(bad_row)
+        self.assertFalse(ok)
+
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(str(self._db_path))
+        n = conn.execute("SELECT COUNT(*) FROM mesh_memory").fetchone()[0]
+        conn.close()
+        self.assertEqual(n, 0)  # rejection means zero rows inserted
+
+    def test_fallback_when_loader_raises_file_not_found(self):
+        """If load_mesh_memory_schema() raises FileNotFoundError (missing
+        snapshot), _write_via_sqlite must fall back to the hardcoded 5-col
+        INSERT and successfully write the row."""
+        def _raise(*a, **kw):
+            raise FileNotFoundError("no snapshot here")
+        with mock.patch.object(ghf, "load_mesh_memory_schema",
+                               side_effect=_raise):
+            ghf._reset_mesh_memory_schema_cache()
+            ok = ghf._write_via_sqlite(self._good_row())
+        self.assertTrue(ok)
+
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(str(self._db_path))
+        rows = list(conn.execute(
+            "SELECT agent_id, memory_type, content, importance, created_at "
+            "FROM mesh_memory"
+        ))
+        conn.close()
+        self.assertEqual(len(rows), 1)
+        # Fallback path supplies all five canonical columns including the
+        # 0.7 importance from the row dict.
+        self.assertAlmostEqual(rows[0][3], 0.7)
+
+    def test_fallback_when_loader_module_unavailable(self):
+        """If load_mesh_memory_schema is None (import failed entirely on
+        a pre-PR#3 checkout), the fallback still writes."""
+        with mock.patch.object(ghf, "load_mesh_memory_schema", None):
+            ghf._reset_mesh_memory_schema_cache()
+            ok = ghf._write_via_sqlite(self._good_row())
+        self.assertTrue(ok)
+
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(str(self._db_path))
+        n = conn.execute("SELECT COUNT(*) FROM mesh_memory").fetchone()[0]
+        conn.close()
+        self.assertEqual(n, 1)
+
+    def test_schema_cache_loads_once(self):
+        """The schema loader is called at most once per process. Repeat
+        writes must hit the cached SchemaSnapshot, not re-read the file."""
+        fake = self._fake_schema_snapshot(
+            ("agent_id", "memory_type", "content", "importance", "created_at"),
+        )
+        call_count = {"n": 0}
+
+        def _counting_loader(*a, **kw):
+            call_count["n"] += 1
+            return fake
+
+        with mock.patch.object(ghf, "load_mesh_memory_schema",
+                               side_effect=_counting_loader):
+            ghf._reset_mesh_memory_schema_cache()
+            self.assertTrue(ghf._write_via_sqlite(self._good_row()))
+            self.assertTrue(ghf._write_via_sqlite(self._good_row()))
+            self.assertTrue(ghf._write_via_sqlite(self._good_row()))
+        self.assertEqual(call_count["n"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

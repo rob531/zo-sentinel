@@ -1,0 +1,57 @@
+name: fetch-failures (dry-run)
+
+# This is the GH-side half of the reverse-feed loop. It runs on a
+# schedule and previews what gh_actions_fetcher.py *would* write into
+# mesh_memory, as an artifact. The actual write happens on the tower
+# because mesh_memory is a tower-local SQLite store + a loopback-only
+# write_service that no GH runner can reach.
+#
+# Robin enables the tower-side fetcher separately, on his own cron /
+# supervisord — same dormant-until-explicitly-registered pattern as
+# Phase 0b. This workflow stays useful regardless: it gives visibility
+# into "what failures are queued for reverse-feed" from any browser.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 min
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dry-run fetcher
+        env:
+          # GH_TOKEN lets the `gh` CLI auth without a separate login step.
+          # GITHUB_TOKEN is the default action-scoped token; no secrets
+          # plumbing needed.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          python zo_sentinel/evaluators/gh_actions_fetcher.py \
+            --repo "${{ github.repository }}" \
+            --limit 25 \
+            --dry-run \
+            | tee artifacts/preview.ndjson
+
+      - name: Upload preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-check-failure-preview
+          path: artifacts/preview.ndjson
+          if-no-files-found: warn
+          retention-days: 7

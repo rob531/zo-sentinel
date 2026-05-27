@@ -1,0 +1,71 @@
+name: evaluator
+
+# Goose-T2 evaluator (cheap version). GH-hosted runner takes the role
+# the tower-side Goose-T2 would otherwise play: run the canonical test
+# target, naturally produce a check pass/fail, and upload junit.xml so
+# the reverse-feed fetcher can ingest structured failures into
+# mesh_memory as `gh_check_failure` rows.
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+        # No pip cache: this repo ships no dep manifest in git (dev/requirements-dev.txt
+        # is tower-local and untracked), so there is nothing for setup-python's pip
+        # cache to key off of. Install step below falls through to `pip install pytest`,
+        # which is fast enough that the cache is not worth the lockfile gymnastics.
+
+      - name: Install dependencies
+        # Only dev/requirements-dev.txt exists in this repo (no pyproject /
+        # requirements.txt). Most modules in this repo are designed for the
+        # ZoComputer host and would not import cleanly here — that's fine,
+        # the evaluator runs the small subset of environment-independent
+        # tests selected below.
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f dev/requirements-dev.txt ]; then
+            pip install -r dev/requirements-dev.txt
+          else
+            pip install pytest
+          fi
+
+      - name: Run pytest (Goose-T2 cheap evaluator)
+        # Canonical targets, picked because they import cleanly outside the
+        # /home/workspace/zo_sentinel layout:
+        #   tests/test_scoring.py       - pure scoring boundary tests
+        #   tests/test_evaluator_smoke.py - reverse-feed fetcher smoke
+        # Other tests (test_wiring, smoke_test, test_known_threats) require
+        # the live ZoComputer host or have pre-existing failures unrelated
+        # to this PR; they are intentionally not in the evaluator scope.
+        # Junit XML is the structured artifact that gh_actions_fetcher.py
+        # parses when reverse-feeding failures into mesh_memory.
+        run: |
+          mkdir -p artifacts
+          python -m pytest \
+            tests/test_scoring.py \
+            tests/test_evaluator_smoke.py \
+            -q \
+            --junitxml=artifacts/junit.xml
+
+      - name: Upload pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-junit
+          path: artifacts/junit.xml
+          if-no-files-found: warn
+          retention-days: 14

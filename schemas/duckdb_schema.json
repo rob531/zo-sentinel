@@ -1,0 +1,1006 @@
+{
+  "generated_at": "2026-05-25T22:38:00Z",
+  "engine": "duckdb",
+  "source": "seed from DB_SCHEMA.md (regenerate from write_service@127.0.0.1:8772 on tower)",
+  "schema_hash": "79666a417df2b37e0b70b3daa53d56b88ef1e9098893e3595bd9744a873ddbd6",
+  "skipped_tables": [
+    "agent_outputs",
+    "agent_runs",
+    "corrections",
+    "inference_log",
+    "perf_metrics",
+    "world_articles",
+    "world_topics",
+    "write_queue_log"
+  ],
+  "tables": {
+    "audit_log": [
+      {
+        "name": "event_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "event_type",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "actor",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "target_server_id",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "action",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "outcome",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "details_json",
+        "type": "VARCHAR",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "immutable",
+        "type": "BOOLEAN",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "timestamp",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 9,
+        "nullable": true
+      }
+    ],
+    "auth_tokens": [
+      {
+        "name": "token_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "action",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "mcp_name",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "submission_id",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "requested_by",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "admin_email",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "expires_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "used",
+        "type": "BOOLEAN",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "used_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 10,
+        "nullable": true
+      }
+    ],
+    "build_provenance": [
+      {
+        "name": "build_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "directive_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "directive_type",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "complexity",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "engine",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "model",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "backend",
+        "type": "VARCHAR",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "smoke_result",
+        "type": "VARCHAR",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "rescue_count",
+        "type": "INTEGER",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "success",
+        "type": "BOOLEAN",
+        "ordinal": 10,
+        "nullable": true
+      },
+      {
+        "name": "output_path",
+        "type": "VARCHAR",
+        "ordinal": 11,
+        "nullable": true
+      },
+      {
+        "name": "output_bytes",
+        "type": "INTEGER",
+        "ordinal": 12,
+        "nullable": true
+      },
+      {
+        "name": "error",
+        "type": "VARCHAR",
+        "ordinal": 13,
+        "nullable": true
+      },
+      {
+        "name": "built_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 14,
+        "nullable": true
+      }
+    ],
+    "github_velocity": [
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "repo_url",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "commit_velocity",
+        "type": "FLOAT",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "contributor_churn",
+        "type": "FLOAT",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "last_suspicious_commit",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "checked_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 6,
+        "nullable": true
+      }
+    ],
+    "mcp_attestations": [
+      {
+        "name": "attestation_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "attestation_text",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "scope",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "confidence_level",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "valid_until",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "risk_tier",
+        "type": "VARCHAR",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "caveats",
+        "type": "VARCHAR",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "status",
+        "type": "VARCHAR",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "generated_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 10,
+        "nullable": true
+      }
+    ],
+    "mcp_decisions": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "submission_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "analyst_name",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "decision",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "conditions",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "notes",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "expiry_days",
+        "type": "INTEGER",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "expires_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "decided_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 9,
+        "nullable": true
+      }
+    ],
+    "mcp_definition_history": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "snapshot_hash",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "snapshot_content",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "captured_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 5,
+        "nullable": true
+      }
+    ],
+    "mcp_directory_mentions": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "directory_name",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "mention_name",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "mention_url",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "mention_context",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "mention_status",
+        "type": "VARCHAR",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "mention_rank",
+        "type": "INTEGER",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "first_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "last_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 10,
+        "nullable": true
+      }
+    ],
+    "mcp_discovery_candidates": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "candidate_name",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "candidate_url",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "candidate_description",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "discovered_in_directory",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "discovered_status",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "first_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "last_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "reviewed_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "promoted",
+        "type": "BOOLEAN",
+        "ordinal": 10,
+        "nullable": true
+      }
+    ],
+    "mcp_ecosystems_metadata": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "top_package_name",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "top_package_purl",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "top_ecosystem",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "top_downloads",
+        "type": "BIGINT",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "top_latest_version",
+        "type": "VARCHAR",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "cousin_count",
+        "type": "INTEGER",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "ecosystems_observed",
+        "type": "VARCHAR",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "age_days_estimate",
+        "type": "INTEGER",
+        "ordinal": 10,
+        "nullable": true
+      },
+      {
+        "name": "stars_estimate",
+        "type": "INTEGER",
+        "ordinal": 11,
+        "nullable": true
+      },
+      {
+        "name": "raw_response_bytes",
+        "type": "INTEGER",
+        "ordinal": 12,
+        "nullable": true
+      },
+      {
+        "name": "lookup_status",
+        "type": "VARCHAR",
+        "ordinal": 13,
+        "nullable": true
+      },
+      {
+        "name": "last_error",
+        "type": "VARCHAR",
+        "ordinal": 14,
+        "nullable": true
+      },
+      {
+        "name": "fetched_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 15,
+        "nullable": true
+      }
+    ],
+    "mcp_exemptions": [
+      {
+        "name": "exemption_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "reason",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "granted_by",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "conditions_json",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "expires_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "active",
+        "type": "BOOLEAN",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 8,
+        "nullable": true
+      }
+    ],
+    "mcp_fingerprints": [
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "tool_name_hash",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "description_tokens",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "permission_scope_hash",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "domain_fingerprint",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "version_string",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "computed_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 7,
+        "nullable": true
+      }
+    ],
+    "mcp_policy_rules": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "rule_name",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "rule_type",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "pattern",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "action",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "description",
+        "type": "VARCHAR",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 7,
+        "nullable": true
+      }
+    ],
+    "mcp_registry_facts": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "registry_name",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "version",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "description",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "status",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "published_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "is_latest",
+        "type": "BOOLEAN",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "package_count",
+        "type": "INTEGER",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "primary_registry",
+        "type": "VARCHAR",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "primary_identifier",
+        "type": "VARCHAR",
+        "ordinal": 10,
+        "nullable": true
+      },
+      {
+        "name": "raw_packages",
+        "type": "VARCHAR",
+        "ordinal": 11,
+        "nullable": true
+      },
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 12,
+        "nullable": true
+      },
+      {
+        "name": "first_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 13,
+        "nullable": true
+      },
+      {
+        "name": "last_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 14,
+        "nullable": true
+      }
+    ],
+    "mcp_risk_register": [
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "risk_rank",
+        "type": "FLOAT",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "risk_tier",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "threat_count",
+        "type": "INTEGER",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "staleness_days",
+        "type": "INTEGER",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "computed_at",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 7,
+        "nullable": true
+      }
+    ],
+    "mcp_server_registry": [
+      {
+        "name": "server_id",
+        "type": "VARCHAR",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      },
+      {
+        "name": "registry_source",
+        "type": "VARCHAR",
+        "ordinal": 3,
+        "nullable": true
+      },
+      {
+        "name": "url",
+        "type": "VARCHAR",
+        "ordinal": 4,
+        "nullable": true
+      },
+      {
+        "name": "description",
+        "type": "VARCHAR",
+        "ordinal": 5,
+        "nullable": true
+      },
+      {
+        "name": "trust_score",
+        "type": "FLOAT",
+        "ordinal": 6,
+        "nullable": true
+      },
+      {
+        "name": "verdict",
+        "type": "VARCHAR",
+        "ordinal": 7,
+        "nullable": true
+      },
+      {
+        "name": "verdict_reasoning",
+        "type": "VARCHAR",
+        "ordinal": 8,
+        "nullable": true
+      },
+      {
+        "name": "confidence",
+        "type": "FLOAT",
+        "ordinal": 9,
+        "nullable": true
+      },
+      {
+        "name": "last_assessed",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 10,
+        "nullable": true
+      },
+      {
+        "name": "first_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 11,
+        "nullable": true
+      },
+      {
+        "name": "last_seen",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 12,
+        "nullable": true
+      },
+      {
+        "name": "last_scanned",
+        "type": "TIMESTAMPTZ",
+        "ordinal": 13,
+        "nullable": true
+      },
+      {
+        "name": "scan_count",
+        "type": "INTEGER",
+        "ordinal": 14,
+        "nullable": true
+      },
+      {
+        "name": "risk_tier",
+        "type": "VARCHAR",
+        "ordinal": 15,
+        "nullable": true
+      },
+      {
+        "name": "metadata",
+        "type": "VARCHAR",
+        "ordinal": 16,
+        "nullable": true
+      }
+    ],
+    "mcp_signal_enrichments": [
+      {
+        "name": "id",
+        "type": "BIGINT",
+        "ordinal": 1,
+        "nullable": true
+      },
+      {
+        "name": "run_id",
+        "type": "VARCHAR",
+        "ordinal": 2,
+        "nullable": true
+      }
+    ]
+  }
+}

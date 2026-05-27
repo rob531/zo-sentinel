@@ -58,6 +58,8 @@ jobs:
           python -m pytest \
             tests/test_scoring.py \
             tests/test_evaluator_smoke.py \
+            tests/test_schema_loader.py \
+            tests/test_duckdb_schema_uptime_probe.py \
             -q \
             --junitxml=artifacts/junit.xml
 

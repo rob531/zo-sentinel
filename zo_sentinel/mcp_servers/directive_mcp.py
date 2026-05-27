@@ -230,17 +230,25 @@ def read_pending_directives() -> dict:
 
 @mcp.tool()
 def read_failure_history(hours: int = 24) -> dict:
-    """Read recent escalation/build failures from mesh_memory.
+    """Read recent failure signals from mesh_memory.
 
-    Read-only HTTP GET to write_service /query (which is the published
-    read endpoint). Returns at most 50 rows.
+    Sources:
+      - escalation_call / build_failure / directive_generation
+          (legacy tower-side signals — unchanged behavior)
+      - gh_check_failure
+          (NEW: GitHub Actions evaluator failures fed back by
+           zo_sentinel/evaluators/gh_actions_fetcher.py — the cheap
+           Goose-T2 reverse-feed loop)
+
+    Read-only HTTP GET to write_service /query (the published read
+    endpoint). Returns at most 50 rows.
     """
     try:
         import requests
         sql = (
-            "SELECT content, created_at FROM mesh_memory "
+            "SELECT content, created_at, memory_type FROM mesh_memory "
             "WHERE memory_type IN ('escalation_call', 'build_failure', "
-            "'directive_generation') "
+            "'directive_generation', 'gh_check_failure') "
             f"AND created_at > NOW() - INTERVAL {int(hours)} HOUR "
             "ORDER BY created_at DESC LIMIT 50"
         )

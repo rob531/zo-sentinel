@@ -43,8 +43,14 @@ prompt: |-
       Returns the validator's PROTECTED_FILES set (hand-calibrated, working
       core). Proposing one of these will be rejected.
   - read_failure_history(hours=24)
-      Returns recent escalation_call / build failure rows from mesh_memory.
-      Use this to understand WHY files are quarantined.
+      Returns recent failure signals from mesh_memory. Sources:
+        * escalation_call / build_failure / directive_generation
+          (legacy tower-side signals)
+        * gh_check_failure
+          (GitHub Actions evaluator failures, fed back by
+           zo_sentinel/evaluators/gh_actions_fetcher.py)
+      Use this to understand WHY files are quarantined AND to notice
+      CI regressions on the GH side that should drive directives.
   - read_pending_directives()
       Returns task names already in directives/pending/ AND
       directives/proposed/. Use this to dedupe.

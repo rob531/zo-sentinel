@@ -55,11 +55,17 @@ SHIM_URL = "http://127.0.0.1:8796/v1/chat/completions"
 # =============================================================================
 
 def log(msg):
-    """Write to log file."""
+    """Write to log file.
+
+    NOTE: supervisord captures this daemon's stdout into the same log file
+    via stdout_logfile=/home/workspace/logs/goose_runner.log. If we ALSO
+    print(), every line lands twice with identical microsecond timestamps.
+    We keep the explicit file write (works whether or not supervisord is in
+    play) and drop the print. For ad-hoc manual runs, tail the log file.
+    """
     ts = datetime.now(timezone.utc).isoformat()
     with open(LOG_FILE, "a") as f:
         f.write(f"[{ts}] {msg}\n")
-    print(f"[{ts}] {msg}", flush=True)
 
 def get_utc_now():
     return datetime.now(timezone.utc).isoformat()

@@ -252,11 +252,39 @@ def _skip_marker_path(p: Path) -> Path:
     return p.with_name(p.name + ".skip")
 
 
+def _done_sentinel_path(directives_root: Path, directive_id: str) -> Path:
+    """Where goose_runner writes its 'already-built' sentinel.
+
+    Matches goose_runner.mark_directive_completed:
+        /home/workspace/zo_sentinel/directives/<directive_id>.done.json
+    """
+    return directives_root / f"{directive_id}.done.json"
+
+
+def _rename_duplicate(src: Path) -> None:
+    """Rename src to src.name + '.duplicate' so it isn't reconsidered.
+
+    Same shape as _rename_rejected, different suffix to distinguish:
+    .rejected = bad JSON / failed validation
+    .duplicate = valid but already-built (goose_runner has the .done.json sentinel)
+    """
+    try:
+        target = src.with_name(src.name + ".duplicate")
+        i = 1
+        while target.exists():
+            target = src.with_name(f"{src.name}.duplicate.{i}")
+            i += 1
+        os.replace(src, target)
+    except Exception as e:
+        log.error("failed to rename duplicate %s: %s", src.name, e)
+
+
 def _do_promote(
     src: Path,
     pending_dir: Path,
     dry_run: bool,
     counters: PromotionCounters,
+    directives_root: Path | None = None,
 ) -> str:
     """Validate src and move it into pending_dir. Returns outcome string."""
     try:
@@ -284,6 +312,27 @@ def _do_promote(
         if not dry_run:
             _rename_rejected(src)
         return "rejected"
+
+    # Done-sentinel idempotency: goose_runner writes
+    # <directives_root>/<directive_id>.done.json when a directive completes.
+    # If the sentinel exists, the architect has re-proposed an already-built
+    # directive (typical when a circuit breaker stays tripped and the
+    # architect keeps re-suggesting "investigate" actions). Move the
+    # proposal to .duplicate so we stop scanning it every cycle without
+    # losing it for forensics.
+    if directives_root is not None:
+        directive_id = d.get("directive_id") or d.get("id") or ""
+        if directive_id:
+            sentinel = _done_sentinel_path(directives_root, str(directive_id))
+            if sentinel.exists():
+                log.info(
+                    "skip already-built %s (directive_id=%s sentinel=%s)",
+                    src.name, directive_id, sentinel,
+                )
+                counters.skipped += 1
+                if not dry_run:
+                    _rename_duplicate(src)
+                return "already_built"
 
     dest = pending_dir / src.name
     if dest.exists():
@@ -330,14 +379,23 @@ def run_once(
     min_age_secs: int,
     max_per_cycle: int,
     dry_run: bool = False,
+    directives_root: Path | None = None,
 ) -> dict:
-    """One promotion pass. Returns the cycle counters as a dict."""
+    """One promotion pass. Returns the cycle counters as a dict.
+
+    `directives_root` enables the done-sentinel check inside _do_promote.
+    If omitted, defaults to pending_dir.parent — the canonical layout has
+    directives_root/{proposed,pending,*.done.json} as siblings.
+    """
     counters = PromotionCounters()
 
     if not proposed_dir.exists():
         log.info("proposed dir %s does not exist; nothing to do", proposed_dir)
         log.info(counters.summary_line())
         return counters.as_dict()
+
+    if directives_root is None:
+        directives_root = pending_dir.parent
 
     promoted_or_attempted = 0
     for src in _iter_proposals(proposed_dir):
@@ -362,7 +420,7 @@ def run_once(
 
         counters.eligible += 1
         promoted_or_attempted += 1
-        _do_promote(src, pending_dir, dry_run, counters)
+        _do_promote(src, pending_dir, dry_run, counters, directives_root=directives_root)
 
     log.info(counters.summary_line())
     return counters.as_dict()
@@ -381,6 +439,7 @@ def run_daemon(
     max_per_cycle: int,
     heartbeat_secs: int = 60,
     sleep_func=time.sleep,
+    directives_root: Path | None = None,
 ) -> None:
     """Forever loop: run_once, then sleep poll_secs.
 
@@ -395,7 +454,13 @@ def run_daemon(
     last_heartbeat = 0.0
     while True:
         try:
-            run_once(proposed_dir, pending_dir, min_age_secs, max_per_cycle)
+            run_once(
+                proposed_dir,
+                pending_dir,
+                min_age_secs,
+                max_per_cycle,
+                directives_root=directives_root,
+            )
         except Exception as e:
             log.exception("cycle error: %s", e)
 
@@ -473,6 +538,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report what would happen; do not move/rename anything.",
     )
+    p.add_argument(
+        "--directives-root",
+        type=Path,
+        default=None,
+        help=(
+            "Root directory where goose_runner writes <directive_id>.done.json "
+            "sentinels. Defaults to pending-dir.parent. Setting this lets the "
+            "promoter skip already-built duplicates instead of re-promoting them."
+        ),
+    )
     return p
 
 
@@ -486,6 +561,7 @@ def main(argv: list[str] | None = None) -> int:
             args.min_age_secs,
             args.max_per_cycle,
             dry_run=args.dry_run,
+            directives_root=args.directives_root,
         )
         return 0
 
@@ -501,6 +577,7 @@ def main(argv: list[str] | None = None) -> int:
         poll_secs=args.poll_secs,
         min_age_secs=args.min_age_secs,
         max_per_cycle=args.max_per_cycle,
+        directives_root=args.directives_root,
     )
     return 0
 

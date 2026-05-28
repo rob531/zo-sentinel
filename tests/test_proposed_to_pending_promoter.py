@@ -458,3 +458,197 @@ def test_validator_too_short_description(dirs):
     )
     assert counts["rejected"] == 1
     assert (proposed / "gen_short.json.rejected").exists()
+
+
+# ---------------------------------------------------------------------------
+# Done-sentinel idempotency (mirrors goose_runner.mark_directive_completed)
+# ---------------------------------------------------------------------------
+
+
+def test_done_sentinel_present_promotion_is_skipped(tmp_path):
+    """If <directives_root>/<directive_id>.done.json exists, skip promotion.
+
+    Renames the proposal to .duplicate so it does not get re-scanned.
+    Mirrors goose_runner's own already-built short-circuit.
+    """
+    directives_root = tmp_path / "directives"
+    proposed = directives_root / "proposed"
+    pending = directives_root / "pending"
+    proposed.mkdir(parents=True)
+    pending.mkdir()
+
+    # Already-built sentinel — same path shape as goose_runner writes.
+    sentinel = directives_root / "breaker_action_investigate_write_service.done.json"
+    sentinel.write_text("{}", encoding="utf-8")
+
+    directive = _valid_directive(task="breaker_action_investigate_write_service")
+    directive["directive_id"] = "breaker_action_investigate_write_service"
+    _write_proposal(proposed, "gen_aaaa1111.json", directive)
+
+    counts = promoter.run_once(
+        proposed_dir=proposed,
+        pending_dir=pending,
+        min_age_secs=60,
+        max_per_cycle=10,
+        dry_run=False,
+        directives_root=directives_root,
+    )
+
+    assert counts["promoted"] == 0
+    assert counts["skipped"] == 1
+    assert counts["rejected"] == 0
+    # Source got renamed, not moved into pending.
+    assert not (proposed / "gen_aaaa1111.json").exists()
+    assert (proposed / "gen_aaaa1111.json.duplicate").exists()
+    assert list(pending.iterdir()) == []
+
+
+def test_done_sentinel_absent_promotion_proceeds(tmp_path):
+    """No sentinel -> normal promotion path."""
+    directives_root = tmp_path / "directives"
+    proposed = directives_root / "proposed"
+    pending = directives_root / "pending"
+    proposed.mkdir(parents=True)
+    pending.mkdir()
+
+    directive = _valid_directive(task="brand_new_thing")
+    directive["directive_id"] = "brand_new_thing"
+    _write_proposal(proposed, "gen_bbbb2222.json", directive)
+
+    counts = promoter.run_once(
+        proposed_dir=proposed,
+        pending_dir=pending,
+        min_age_secs=60,
+        max_per_cycle=10,
+        dry_run=False,
+        directives_root=directives_root,
+    )
+
+    assert counts["promoted"] == 1
+    assert counts["skipped"] == 0
+    assert (pending / "gen_bbbb2222.json").exists()
+    assert not (proposed / "gen_bbbb2222.json").exists()
+
+
+def test_done_sentinel_dry_run_no_filesystem_change(tmp_path):
+    """--dry-run must not create the .duplicate rename even on sentinel hit."""
+    directives_root = tmp_path / "directives"
+    proposed = directives_root / "proposed"
+    pending = directives_root / "pending"
+    proposed.mkdir(parents=True)
+    pending.mkdir()
+
+    sentinel = directives_root / "already_done.done.json"
+    sentinel.write_text("{}", encoding="utf-8")
+
+    directive = _valid_directive(task="already_done")
+    directive["directive_id"] = "already_done"
+    src = _write_proposal(proposed, "gen_cccc3333.json", directive)
+
+    counts = promoter.run_once(
+        proposed_dir=proposed,
+        pending_dir=pending,
+        min_age_secs=60,
+        max_per_cycle=10,
+        dry_run=True,
+        directives_root=directives_root,
+    )
+
+    assert counts["promoted"] == 0
+    assert counts["skipped"] == 1
+    assert src.exists()  # untouched
+    assert not (proposed / "gen_cccc3333.json.duplicate").exists()
+    assert list(pending.iterdir()) == []
+
+
+def test_directives_root_defaults_to_pending_parent(tmp_path):
+    """When directives_root is None, it defaults to pending_dir.parent.
+
+    Layout: tmp/directives/{proposed,pending,<id>.done.json}
+    """
+    directives_root = tmp_path / "directives"
+    proposed = directives_root / "proposed"
+    pending = directives_root / "pending"
+    proposed.mkdir(parents=True)
+    pending.mkdir()
+
+    sentinel = directives_root / "auto_root.done.json"
+    sentinel.write_text("{}", encoding="utf-8")
+
+    directive = _valid_directive(task="auto_root")
+    directive["directive_id"] = "auto_root"
+    _write_proposal(proposed, "gen_dddd4444.json", directive)
+
+    counts = promoter.run_once(
+        proposed_dir=proposed,
+        pending_dir=pending,
+        min_age_secs=60,
+        max_per_cycle=10,
+        dry_run=False,
+        # directives_root deliberately omitted -> defaults to pending.parent
+    )
+
+    assert counts["promoted"] == 0
+    assert counts["skipped"] == 1
+    assert (proposed / "gen_dddd4444.json.duplicate").exists()
+
+
+def test_missing_directive_id_falls_through_to_normal_promotion(tmp_path):
+    """If the directive JSON lacks both directive_id and id, the done-sentinel
+    check has no key to look up. Don't crash; treat as normal promotion."""
+    directives_root = tmp_path / "directives"
+    proposed = directives_root / "proposed"
+    pending = directives_root / "pending"
+    proposed.mkdir(parents=True)
+    pending.mkdir()
+
+    directive = _valid_directive(task="anonymous_directive")
+    # explicitly no directive_id / id keys
+    directive.pop("directive_id", None)
+    directive.pop("id", None)
+    _write_proposal(proposed, "gen_eeee5555.json", directive)
+
+    counts = promoter.run_once(
+        proposed_dir=proposed,
+        pending_dir=pending,
+        min_age_secs=60,
+        max_per_cycle=10,
+        dry_run=False,
+        directives_root=directives_root,
+    )
+
+    assert counts["promoted"] == 1
+    assert (pending / "gen_eeee5555.json").exists()
+
+
+def test_duplicate_rename_collision_bumps_suffix(tmp_path):
+    """If a .duplicate file already exists, bump suffix to avoid overwrite."""
+    directives_root = tmp_path / "directives"
+    proposed = directives_root / "proposed"
+    pending = directives_root / "pending"
+    proposed.mkdir(parents=True)
+    pending.mkdir()
+
+    sentinel = directives_root / "collision_id.done.json"
+    sentinel.write_text("{}", encoding="utf-8")
+
+    # Pre-existing .duplicate from a previous pass
+    (proposed / "gen_ffff6666.json.duplicate").write_text("{}", encoding="utf-8")
+
+    directive = _valid_directive(task="collision_id")
+    directive["directive_id"] = "collision_id"
+    _write_proposal(proposed, "gen_ffff6666.json", directive)
+
+    counts = promoter.run_once(
+        proposed_dir=proposed,
+        pending_dir=pending,
+        min_age_secs=60,
+        max_per_cycle=10,
+        dry_run=False,
+        directives_root=directives_root,
+    )
+
+    assert counts["skipped"] == 1
+    assert (proposed / "gen_ffff6666.json.duplicate").exists()
+    assert (proposed / "gen_ffff6666.json.duplicate.1").exists()
+    assert not (proposed / "gen_ffff6666.json").exists()

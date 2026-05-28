@@ -127,14 +127,30 @@ def sanitize_for_sql(text):
     return text.replace("'", "''").replace('\\', '\\\\')[:2000]
 
 def create_tables():
+    # 2026-05-28 patch: align with full_schema_bootstrap.py's canonical
+    # mcp_threat_associations schema. Two changes:
+    #   1. Drop `evidence(100)` -- MySQL prefix-length syntax not supported
+    #      by DuckDB. Was raising parser errors every cycle, which tripped
+    #      DuckDB's heap-corruption bug and SIGABRT'd write_service (exit
+    #      code 134 / malloc tcache).
+    #   2. Use canonical column shape: id PRIMARY KEY (seq_threat_id),
+    #      add `source` column with UNIQUE (server_id, threat_type, source).
+    #      Both this CREATE and the canonical one are CREATE TABLE IF NOT
+    #      EXISTS, so whichever runs first wins; aligning here so the two
+    #      authors agree on schema if someone reads either file.
+    ws_execute('''
+        CREATE SEQUENCE IF NOT EXISTS seq_threat_id START 1
+    ''')
     ws_execute('''
         CREATE TABLE IF NOT EXISTS mcp_threat_associations (
-            server_id VARCHAR,
-            threat_type VARCHAR,
+            id BIGINT PRIMARY KEY DEFAULT nextval('seq_threat_id'),
+            server_id VARCHAR NOT NULL,
+            threat_type VARCHAR NOT NULL,
             severity VARCHAR,
             evidence TEXT,
-            reported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (server_id, threat_type, evidence(100))
+            source VARCHAR,
+            reported_at TIMESTAMPTZ DEFAULT now(),
+            UNIQUE (server_id, threat_type, source)
         )
     ''')
     ws_execute('''
@@ -312,6 +328,7 @@ def process_osv_vulns():
                         'threat_type': f'osv:{vuln_id}',
                         'severity': severity_level,
                         'evidence': evidence,
+                        'source': 'osv',
                     })
                     vuln_count += 1
                     log(f'Recorded OSV vuln {vuln_id} for server {server_id} (severity: {severity_level})')

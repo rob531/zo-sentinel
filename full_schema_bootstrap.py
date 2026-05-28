@@ -2,7 +2,7 @@
 """
 full_schema_bootstrap.py -- Creates ALL ZO-SENTINEL tables from scratch.
 Safe to re-run -- all statements use CREATE TABLE IF NOT EXISTS.
-Longer timeouts (30s) for post-reboot write_service warm-up.
+Longer timeouts (120s) for post-reboot write_service warm-up.
 
 HISTORY:
   2026-04-17: Added PRIMARY KEY and UNIQUE constraints to mcp_signal_scores
@@ -10,6 +10,13 @@ HISTORY:
               causing "Binder Error: no UNIQUE/PRIMARY KEY constraints" on
               every write_service INSERT ... ON CONFLICT attempt. Also added
               `source` column to mcp_threat_associations with UNIQUE scope.
+  2026-05-28: Bumped wait_for_ws default 30s -> 120s. On cold container
+              boot, write_service's wrapper does a 60s backoff after any
+              early crash (malloc tcache, port binding contention). The
+              old 30s window expired during that backoff, causing section
+              18 of go.sh to abort with 'write_service not ready --
+              skipping bootstrap'. 120s comfortably covers one full
+              backoff cycle plus startup latency.
 """
 import requests, time, logging, sys
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -17,8 +24,12 @@ log = logging.getLogger()
 
 WS = 'http://127.0.0.1:8772'
 
-def wait_for_ws(max_wait=30):
-    """Wait for write_service to be ready."""
+def wait_for_ws(max_wait=120):
+    """Wait for write_service to be ready.
+
+    Default bumped to 120s (was 30s) to ride out one full write_service
+    wrapper backoff cycle (60s) plus startup latency. See HISTORY 2026-05-28.
+    """
     for i in range(max_wait):
         try:
             r = requests.get(WS + '/health', timeout=3)

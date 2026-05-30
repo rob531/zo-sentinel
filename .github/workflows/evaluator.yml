@@ -69,6 +69,7 @@ jobs:
             tests/test_ingestor_governor.py \
             tests/test_breaker_autorecover.py \
             tests/test_breaker_retire.py \
+            tests/test_pr_publisher.py \
             -q \
             --junitxml=artifacts/junit.xml
 

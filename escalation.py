@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-escalation.py v0.8 -- unified inference ladder for ZO-Sentinel.
+escalation.py v0.9 -- unified inference ladder for ZO-Sentinel.
+
+v0.9 (2026-05-30): Complexity-routed start tiers + model->task mapping.
+  Until now every TASK_START_TIER entry was 0 and the ladder_shim flattened
+  every request to task_type="builder", so EVERY goose build started (and,
+  since MiniMax always returns non-empty, ended) at rung 0 -- the 16-rung
+  ladder was dead weight. Added builder_{low,medium,high,critical} start tiers
+  (0 / 1 / 10 / 14) and MODEL_TASK_MAP + task_for_model() so goose_runner can
+  route a harder directive to a HIGHER rung via its recipe's GOOSE_MODEL alias
+  (zo-ladder-{low,medium,high,critical}). Fully back-compatible: unknown/legacy
+  model ids -> "builder" -> rung 0, so existing callers are unchanged. The
+  escalation success test (text or tool_calls) is unchanged -- this only moves
+  the START rung, it does not add a quality gate (see ladder_quality follow-on).
 
 v0.8 (2026-04-30): Gemma 3 rungs added.
   Empirical evidence from gemma_probe v1.1 (gemma_20260430T155105Z.json):
@@ -201,7 +213,38 @@ TASK_START_TIER = {
     "wisdom_synthesis":  0,
     "default":           0,
     "embedding":        -1,
+    # --- Complexity-routed builder tiers --------------------------------------
+    # goose_runner picks a recipe / model alias per directive complexity; the
+    # ladder_shim maps that alias to one of these task types so a HARDER
+    # directive STARTS higher up the ladder instead of every build flattening
+    # to rung 0 (MiniMax). Cost-ordered: prefer free rungs, escalate on failure.
+    #   rung 0  = MiniMax direct (free, flat)
+    #   rung 1  = Gemini 2.5 flash-lite (free, 1M ctx)
+    #   rung 10 = zo:openai/gpt-5.4-mini (free, strong)
+    #   rung 14 = zo:anthropic/claude-sonnet-4-5 (PAID; explicit opt-in only)
+    "builder_low":       0,
+    "builder_medium":    1,
+    "builder_high":     10,
+    "builder_critical": 14,
 }
+
+# Maps the OpenAI `model` field a caller (Goose, via GOOSE_MODEL per recipe)
+# sends through the ladder_shim to one of the task types above. Lives here, with
+# the ladder, so it is testable without importing the shim's fastapi/uvicorn
+# stack. Unknown/legacy ids -> "builder" -> rung 0, so existing callers that
+# send "zo-ladder-v1" / "MiniMax-Text-01" are unaffected.
+MODEL_TASK_MAP = {
+    "zo-ladder-v1":       "builder",
+    "zo-ladder-low":      "builder_low",
+    "zo-ladder-medium":   "builder_medium",
+    "zo-ladder-high":     "builder_high",
+    "zo-ladder-critical": "builder_critical",
+}
+
+
+def task_for_model(model_id: Optional[str]) -> str:
+    """Resolve the escalation task_type for an incoming model id."""
+    return MODEL_TASK_MAP.get((model_id or "").strip(), "builder")
 
 DAILY_PRIORITY_BUDGET = 5.0
 
@@ -497,7 +540,7 @@ def _live_test():
     print(f"  latency:  {r.latency_ms}ms")
     print(f"  text:     {r.text!r}")
     if r.attempts:
-        print(f"  fallthrough (should be empty):")
+        print("  fallthrough (should be empty):")
         for a in r.attempts:
             print(f"    {a}")
     if not r.success:

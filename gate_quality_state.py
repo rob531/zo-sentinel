@@ -31,15 +31,30 @@ Per-file retry cap:
     a fresh build of that file (i.e., new cohort entry in mesh_memory)
     that fails. Repeated failures of the SAME build don't inflate.
 """
-import fcntl
 import json
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
-STATE_FILE = Path("/home/workspace/zo_sentinel/gate_quality_state.json")
+try:
+    import fcntl  # POSIX-only (the live host). Absent on Windows / CI dev boxes.
+except ImportError:  # pragma: no cover -- exercised only off-host
+    fcntl = None
+
+# State file location. Defaults to the live host path; overridable via env so
+# the module imports and tests run hermetically off-host (same env-parametrization
+# pattern as ZO_WRITE_SERVICE / GATE_ERRORS_DB elsewhere). Resolved lazily (see
+# _resolve_state_file) so a test can repoint it after import.
+_DEFAULT_STATE_FILE = "/home/workspace/zo_sentinel/gate_quality_state.json"
+STATE_FILE = Path(os.environ.get("GATE_QUALITY_STATE_FILE", _DEFAULT_STATE_FILE))
+
+
+def _resolve_state_file() -> Path:
+    """Re-read the env each call so a test can repoint the state file without
+    re-importing. Falls back to the module-level STATE_FILE."""
+    return Path(os.environ.get("GATE_QUALITY_STATE_FILE", str(STATE_FILE)))
 
 # Tunables (also documented in gate_8_new_module.py for operator reference)
 BREAKER_FAIL_THRESHOLD_SINGLE    = 0.40   # 40% in one cohort trips
@@ -47,6 +62,15 @@ BREAKER_FAIL_THRESHOLD_RUNNING   = 0.30   # 30% * 3 consecutive also trips
 BREAKER_RUNNING_WINDOW           = 3      # consecutive cohorts to watch
 MIN_COHORT_SIZE                  = 4      # cohorts smaller than this don't count
 MAX_REBUILDS                     = 3      # per-file retry budget
+
+# Auto-recovery for STALE trips. Once tripped, the breaker starves its own
+# recovery signal: the generator stops proposing rebuilds, so no fresh cohorts
+# arrive, so a "clean cohort" can never auto-close it -- it waits forever for a
+# human. This steps a stale trip (tripped > AUTO_RECOVER_AFTER_SECS ago with NO
+# failing cohort since) to half-open, which then lets ONE batch prove green
+# (record_cohort auto-closes) or re-trip. 0 disables (pure manual reset).
+# Env-overridable for ops tuning. Default 6h.
+AUTO_RECOVER_AFTER_SECS          = int(os.environ.get("BREAKER_AUTO_RECOVER_SECS", 6 * 3600))
 
 _DEFAULT_STATE = {
     "state": "closed",                 # closed | tripped | half-open
@@ -63,12 +87,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _parse_iso(ts: Optional[str]) -> Optional[float]:
+    """ISO8601 -> epoch seconds, or None if unparseable/missing."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
 class _LockedStateFile:
     """Context manager for read-modify-write with fcntl advisory lock.
     Creates the file with defaults if missing."""
 
-    def __init__(self, path: Path = STATE_FILE):
-        self.path = path
+    def __init__(self, path: Optional[Path] = None):
+        self.path = path if path is not None else _resolve_state_file()
         self.fh = None
         self.data = None
 
@@ -79,18 +113,21 @@ class _LockedStateFile:
         if not self.path.exists():
             self.path.write_text(json.dumps(_DEFAULT_STATE, indent=2))
         self.fh = open(self.path, "r+")
-        # Exclusive lock, block until acquired (bounded by 5s via timeout loop)
-        acquired = False
-        for _ in range(50):
-            try:
-                fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                acquired = True
-                break
-            except BlockingIOError:
-                time.sleep(0.1)
-        if not acquired:
-            self.fh.close()
-            raise RuntimeError(f"Could not acquire lock on {self.path} in 5s")
+        # Exclusive lock, block until acquired (bounded by 5s via timeout loop).
+        # fcntl is POSIX-only; off-host (Windows/CI) it's None and we run lockless
+        # -- safe there because callers are single-process.
+        if fcntl is not None:
+            acquired = False
+            for _ in range(50):
+                try:
+                    fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except BlockingIOError:
+                    time.sleep(0.1)
+            if not acquired:
+                self.fh.close()
+                raise RuntimeError(f"Could not acquire lock on {self.path} in 5s")
         try:
             raw = self.fh.read() or ""
             self.data = json.loads(raw) if raw.strip() else dict(_DEFAULT_STATE)
@@ -114,10 +151,11 @@ class _LockedStateFile:
                 self.fh.flush()
                 os.fsync(self.fh.fileno())
         finally:
-            try:
-                fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
-            except Exception:
-                pass
+            if fcntl is not None:
+                try:
+                    fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
+                except Exception:
+                    pass
             self.fh.close()
 
 
@@ -131,6 +169,7 @@ def snapshot() -> dict:
 
 
 def get_breaker_state() -> str:
+    maybe_auto_recover()
     return snapshot().get("state", "closed")
 
 
@@ -147,6 +186,7 @@ def may_rebuild(filename: str) -> tuple[bool, str]:
     """Primary query used by directive_knowledge_sources. Returns
     (ok, reason). Reason is always populated so the generator prompt can
     include it."""
+    maybe_auto_recover()
     snap = snapshot()
     if snap["state"] == "tripped":
         return False, "circuit breaker tripped -- manual reset required"
@@ -309,6 +349,89 @@ def set_breaker_state(new_state: str, reason: str) -> dict:
         })
         data["notes"] = data["notes"][-50:]
         return dict(data)
+
+
+# ── Auto-recovery + stale-quarantine revalidation ─────────────────────────────
+
+def maybe_auto_recover(now: Optional[float] = None) -> Optional[str]:
+    """Step a *stale* tripped breaker to half-open. Returns the new state if it
+    transitioned, else None.
+
+    A trip is "stale" when ALL of:
+      - state == "tripped"
+      - AUTO_RECOVER_AFTER_SECS > 0
+      - it tripped more than AUTO_RECOVER_AFTER_SECS ago
+      - NO cohort observed at/after the trip had fail_rate >= the running
+        threshold (i.e. nothing has actually failed since)
+
+    Cheap/safe on the read path: a lockless snapshot gates the common case, and
+    the write lock is taken only when a transition is actually due (and state is
+    re-checked under lock to avoid racing a concurrent manual reset). Going to
+    half-open (never straight to closed) preserves the invariant that a real
+    clean cohort is still required to fully close.
+    """
+    if AUTO_RECOVER_AFTER_SECS <= 0:
+        return None
+    snap = snapshot()
+    if snap.get("state") != "tripped":
+        return None
+    now = time.time() if now is None else now
+    changed_at = _parse_iso(snap.get("state_changed_at"))
+    if changed_at is None or (now - changed_at) < AUTO_RECOVER_AFTER_SECS:
+        return None
+    # A failing cohort observed at/after the trip means the trip is still live.
+    for c in snap.get("recent_cohorts", []):
+        obs = _parse_iso(c.get("observed_at"))
+        if obs is not None and obs >= changed_at and \
+                c.get("fail_rate", 0) >= BREAKER_FAIL_THRESHOLD_RUNNING:
+            return None
+    with _LockedStateFile() as data:
+        if data.get("state") != "tripped":  # raced a manual reset
+            return None
+        age_h = (now - changed_at) / 3600.0
+        data["state"] = "half-open"
+        data["state_changed_at"] = _now()
+        data["state_changed_reason"] = (
+            f"auto-recover: stale trip ({age_h:.1f}h old) with no failing cohort "
+            f">= {BREAKER_FAIL_THRESHOLD_RUNNING:.0%} since the trip"
+        )
+        data.setdefault("notes", []).append({
+            "at": _now(),
+            "action": "auto_recover",
+            "from": "tripped",
+            "to": "half-open",
+            "reason": data["state_changed_reason"],
+        })
+        data["notes"] = data["notes"][-50:]
+        return "half-open"
+
+
+def release_stale_missing(exists_fn: Callable[[str], bool] = os.path.exists,
+                          root: Optional[Path] = None) -> list:
+    """Release quarantine entries flagged 'missing_on_disk' whose file now EXISTS.
+
+    Gate 8 quarantines a file as 'missing_on_disk' when it can't find the built
+    artifact. If the file is later (re)built, that entry is stale -- the breaker
+    never re-checks disk on its own, so false positives accumulate forever. This
+    sweeps them: for each quarantined file whose reason mentions
+    'missing_on_disk', if exists_fn(<root>/<filename>) is true, release it
+    (clears quarantine + retry counter). Returns the list of released filenames.
+
+    exists_fn/root are injectable for hermetic tests; on the host they default to
+    os.path.exists against the state file's directory (the build output dir)."""
+    root = root if root is not None else _resolve_state_file().parent
+    released = []
+    snap = snapshot()
+    for filename, meta in list(snap.get("quarantined", {}).items()):
+        if "missing_on_disk" not in str(meta.get("reason", "")):
+            continue
+        if exists_fn(str(Path(root) / filename)):
+            if release_quarantine(
+                filename,
+                note="auto: missing_on_disk flag stale; file present on disk",
+            ):
+                released.append(filename)
+    return released
 
 
 if __name__ == "__main__":

@@ -67,6 +67,7 @@ jobs:
             tests/test_sft_ingest.py \
             tests/test_artifact_ingestor.py \
             tests/test_ingestor_governor.py \
+            tests/test_breaker_autorecover.py \
             -q \
             --junitxml=artifacts/junit.xml
 

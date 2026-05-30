@@ -37,6 +37,8 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.sft.schema",
     "zo_sentinel.sft.ingest",
     "zo_sentinel.sft.batch_runner",
+    # Gate-8 breaker state (fcntl-optional; env-repointable state file).
+    "gate_quality_state",
     # Net-new code-artifact ingestor (host-free; storage seam is mockable).
     "zo_sentinel.ingestor.model",
     "zo_sentinel.ingestor.contracts",

@@ -33,6 +33,10 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.probes.duckdb_schema_uptime_probe",
     "zo_sentinel.evaluators.gh_actions_fetcher",
     "zo_sentinel.promoters.proposed_to_pending_promoter",
+    # SFT training-job ingestion (host-free, stdlib-only by design).
+    "zo_sentinel.sft.schema",
+    "zo_sentinel.sft.ingest",
+    "zo_sentinel.sft.batch_runner",
 ]
 
 # Known NOT-portable (documented so nobody re-adds them by mistake):

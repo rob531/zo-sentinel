@@ -1,0 +1,30 @@
+{
+  "job_id": "sft_00000000abcd",
+  "method": "dpo",
+  "student": {
+    "base_model": "Qwen/Qwen2.5-3B-Instruct",
+    "init_adapter": "student_v1",
+    "output_name": "student_v3_dpo"
+  },
+  "dataset": {
+    "train_path": "data/train_sonnet.jsonl",
+    "fmt": "messages",
+    "manifest_path": "data/manifest.json"
+  },
+  "resources": {
+    "accelerators": {"RTXA5000": 1, "RTX3090": 1, "RTX4090": 1},
+    "cloud": "runpod",
+    "disk_size": 50,
+    "use_spot": false
+  },
+  "dispatch": {
+    "backend": "noop",
+    "dry_run": true,
+    "recipe": "sft_v3_dpo.yaml"
+  },
+  "priority": 100,
+  "provenance": {
+    "source": "zo_sentinel.trust_pipeline",
+    "notes": "example spec; mirrors zomesh-sentinel-sft v3 DPO run"
+  }
+}

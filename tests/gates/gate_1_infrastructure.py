@@ -21,8 +21,6 @@ Design notes (from this session's learnings):
       increment occurrence_count instead of spawning new novels
 """
 import sys
-import time
-from typing import Optional
 
 sys.path.insert(0, "/home/workspace/zo_sentinel/tests/gates")
 from gate_framework import Gate, gate_run, ws_query, _throttle
@@ -205,8 +203,8 @@ class Gate1Infrastructure(Gate):
                 expected="table present with >=1 column",
                 actual=f"{col_count} columns",
                 remediation=(
-                    f"Re-run /home/workspace/zo_sentinel/full_schema_bootstrap.py "
-                    f"(or enrichment_schema_bootstrap.py for mcp_signal_enrichments); "
+                    "Re-run /home/workspace/zo_sentinel/full_schema_bootstrap.py "
+                    "(or enrichment_schema_bootstrap.py for mcp_signal_enrichments); "
                     "then ensure the bootstrap is in 'zm go' so it re-runs post-reboot."
                 ),
             )

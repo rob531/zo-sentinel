@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, "/home/workspace/zo_sentinel/tests/gates")
-from gate_framework import Gate, gate_run, ws_query, ws_execute, WS
+from gate_framework import Gate, gate_run, ws_query, WS
 import requests
 from gate_framework import _throttle  # reuse framework throttle for direct calls
 

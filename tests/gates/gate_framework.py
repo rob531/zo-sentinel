@@ -41,8 +41,13 @@ from typing import Optional
 
 import requests
 
-WS                 = "http://127.0.0.1:8772"
-GATE_ERRORS_DB     = "/home/workspace/gate_errors.db"
+# Host defaults are the live ZoComputer values. CI (and any hermetic harness)
+# overrides these via env so the same gate code runs against a mock
+# write_service + an ephemeral gate_errors.db without touching the host.
+#   ZO_WRITE_SERVICE -> write_service base URL  (mock in CI)
+#   GATE_ERRORS_DB   -> path to the gate_errors DuckDB file (temp in CI)
+WS                 = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772")
+GATE_ERRORS_DB     = os.environ.get("GATE_ERRORS_DB", "/home/workspace/gate_errors.db")
 
 # Timing knobs -- overridable via env for debug/stress runs
 REQUEST_DELAY_MS   = int(os.environ.get("GATE_REQUEST_DELAY_MS", "200"))
@@ -376,7 +381,6 @@ class Gate:
         write_service time to settle any queued writes from this check.
         """
         self.checks += 1
-        started_at = time.monotonic()
         status = "pass" if condition else "fail"
         details = f"expected={expected!r} actual={actual!r}" if not condition else ""
 

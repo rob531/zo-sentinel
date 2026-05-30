@@ -21,10 +21,14 @@ Exit codes:
 Design doc: ENRICHMENT_STAGING.md (staging discussion), gate_framework.py (runtime)
 """
 import duckdb
+import os
 import sys
 import time
 
-DB_PATH = "/home/workspace/gate_errors.db"
+# Host default is the live ZoComputer path. CI overrides via GATE_ERRORS_DB
+# (kept in sync with gate_framework.GATE_ERRORS_DB) to bootstrap an ephemeral
+# gate_errors.db in the runner's temp dir.
+DB_PATH = os.environ.get("GATE_ERRORS_DB", "/home/workspace/gate_errors.db")
 
 # Lock-retry parameters -- match gate_framework for consistency
 DB_LOCK_MAX_RETRIES = 5

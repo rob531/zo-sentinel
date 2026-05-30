@@ -1,0 +1,16 @@
+# syntax_quarantine.txt -- files with KNOWN, pre-existing syntax errors.
+#
+# Tier 0 (syntax sweep) py_compile's every tracked *.py. Files listed here
+# are already broken on main and are EXCLUDED from the gate verdict so the
+# ladder can be introduced without a repo-wide cleanup first. They are still
+# reported (loudly) on every run as technical debt -- this is a ratchet, not
+# a hiding place. To clear an entry: fix the file, then delete its line here.
+#
+# Format: one repo-relative path per line. '#' comments and blanks ignored.
+#
+# Discovered 2026-05-29 (Python 3.11 py_compile):
+manual_override_api.py                 # SyntaxError: invalid syntax
+scanner_fingerprints_wiring.py         # SyntaxError: invalid character '：' (U+FF1A)
+snow_connector_wiring_v2.py            # f-string expression part cannot include a backslash (py<3.12)
+snow_webhook_inbound_wiring.py         # f-string expression part cannot include a backslash (py<3.12)
+watch.py                               # f-string expression part cannot include a backslash (py<3.12)

@@ -31,11 +31,9 @@ Learnings applied from this session:
     - conservative on stale_schema_ref to avoid false positives (L6)
 """
 import hashlib
-import json
 import re
 import sys
 import time
-from pathlib import Path
 
 sys.path.insert(0, "/home/workspace/zo_sentinel/tests/gates")
 from gate_framework import Gate, gate_run, ws_query, ws_write_row, ws_execute

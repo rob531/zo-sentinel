@@ -23,6 +23,10 @@ Usage:
     # that's a separate manual 'mv' step)
     python3 reset_breaker.py release signal_enrichment_aggregator.py "spec §5 now in prompt"
 
+    # Sweep ALL 'missing_on_disk' quarantines whose file now exists (stale
+    # false-positives -- the breaker never re-checks disk on its own)
+    python3 reset_breaker.py sweep-stale
+
     # List quarantined files
     python3 reset_breaker.py list-quarantined
 
@@ -32,7 +36,6 @@ What this script does NOT do:
     - Does not reset the 'recent_cohorts' history (intentional -- keeps
       audit trail visible)
 """
-import json
 import sys
 from pathlib import Path
 
@@ -118,6 +121,15 @@ def main():
         filename = argv[1]
         note = " ".join(argv[2:]) or ""
         _release(filename, note)
+        return 0
+    if cmd == "sweep-stale":
+        released = gqs.release_stale_missing()
+        if released:
+            print(f"[OK] released {len(released)} stale missing_on_disk quarantine(s) (file present on disk):")
+            for fn in released:
+                print(f"  - {fn}")
+        else:
+            print("[info] no stale missing_on_disk quarantines to release")
         return 0
     if cmd == "list-quarantined":
         _list_quarantined()

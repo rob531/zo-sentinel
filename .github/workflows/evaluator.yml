@@ -66,6 +66,7 @@ jobs:
             tests/test_proposed_to_pending_promoter.py \
             tests/test_sft_ingest.py \
             tests/test_artifact_ingestor.py \
+            tests/test_ingestor_governor.py \
             -q \
             --junitxml=artifacts/junit.xml
 

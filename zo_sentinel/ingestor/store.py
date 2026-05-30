@@ -29,6 +29,7 @@ class MeshStore(Protocol):
     def get_watermark(self) -> Optional[str]: ...
     def set_watermark(self, value: str) -> None: ...
     def write(self, table: str, row: dict) -> bool: ...
+    def read_latest(self, memory_type: str, agent_id: str) -> Optional[str]: ...
 
 
 class InMemoryMeshStore:
@@ -59,6 +60,14 @@ class InMemoryMeshStore:
     def write(self, table: str, row: dict) -> bool:
         self.writes.append((table, row))
         return True
+
+    def read_latest(self, memory_type: str, agent_id: str) -> Optional[str]:
+        for table, row in reversed(self.writes):
+            if (table == "mesh_memory"
+                    and row.get("memory_type") == memory_type
+                    and row.get("agent_id") == agent_id):
+                return row.get("content")
+        return None
 
     # test conveniences
     def writes_of_type(self, memory_type: str) -> list[dict]:
@@ -118,3 +127,17 @@ class HttpMeshStore:
     def write(self, table: str, row: dict) -> bool:
         resp = self._post("/write", {"table": table, "rows": [row], "wait": True})
         return bool(resp.get("ok", resp.get("rows_written", 0)))
+
+    def read_latest(self, memory_type: str, agent_id: str) -> Optional[str]:
+        sql = (
+            "SELECT content FROM mesh_memory "
+            f"WHERE agent_id = '{agent_id}' "
+            f"AND memory_type = '{memory_type}' "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+        resp = self._post("/query", {"sql": sql})
+        rows = resp.get("rows", [])
+        if rows:
+            content = rows[0].get("content")
+            return str(content) if content is not None else None
+        return None

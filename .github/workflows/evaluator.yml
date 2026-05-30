@@ -65,6 +65,7 @@ jobs:
             tests/test_duckdb_schema_uptime_probe.py \
             tests/test_proposed_to_pending_promoter.py \
             tests/test_sft_ingest.py \
+            tests/test_artifact_ingestor.py \
             -q \
             --junitxml=artifacts/junit.xml
 

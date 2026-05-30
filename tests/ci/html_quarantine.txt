@@ -1,0 +1,11 @@
+# html_quarantine.txt -- HTML files that are KNOWN placeholders/stubs, not
+# deployable views. FE0 (html parse + non-empty) reports them as quarantined
+# (warn) instead of failing the gate, so the front-end runner can be introduced
+# without first filling in stub pages. Same ratchet as syntax_quarantine.txt:
+# fill the file in, then delete its line here.
+#
+# Format: one repo-relative path per line. '#' comments and blanks ignored.
+#
+# Discovered 2026-05-29 (comment-only deployment-pointer stubs):
+builder_eye_dashboard_hr.html          # comment-only: "see builder_heath_robinson.html"
+builder_eye_dashboard_public.html      # comment-only: deploy-notes pointing at /mnt/user-data/outputs

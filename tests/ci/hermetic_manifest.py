@@ -57,13 +57,10 @@ SCHEMA_FILES = [
 MOCK_CONTRACT_TABLE = "ci_smoke_roundtrip"
 
 
-def quarantined_syntax_files() -> set[str]:
-    """Repo-relative paths Tier 0 must NOT gate on (known pre-existing breaks).
-
-    Read from tests/ci/syntax_quarantine.txt so the list is editable without
-    touching code. Inline '# ...' trailing comments are stripped.
-    """
-    qfile = Path(__file__).resolve().parent / "syntax_quarantine.txt"
+def _read_quarantine(filename: str) -> set[str]:
+    """Parse a quarantine list file (one repo-relative path per line, '#'
+    comments + trailing '  # reason' stripped). Missing file -> empty set."""
+    qfile = Path(__file__).resolve().parent / filename
     out: set[str] = set()
     if not qfile.exists():
         return out
@@ -71,8 +68,17 @@ def quarantined_syntax_files() -> set[str]:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        # strip trailing "  # reason"
         path = line.split("#", 1)[0].strip()
         if path:
             out.add(path.replace("\\", "/"))
     return out
+
+
+def quarantined_syntax_files() -> set[str]:
+    """Repo-relative paths Tier 0 must NOT gate on (known pre-existing breaks)."""
+    return _read_quarantine("syntax_quarantine.txt")
+
+
+def quarantined_html_files() -> set[str]:
+    """Repo-relative HTML paths FE0 must NOT gate on (known placeholder stubs)."""
+    return _read_quarantine("html_quarantine.txt")

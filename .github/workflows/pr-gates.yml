@@ -84,3 +84,47 @@ jobs:
           path: artifacts/ci_smoke_junit.xml
           if-no-files-found: warn
           retention-days: 14
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CI ladder deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt
+
+      - name: Stage ui_server host path
+        # ui_server.py (a PROTECTED file we boot unmodified) does a module-level
+        # mkdir on /home/workspace/zo_sentinel/logs and talks to write_service on
+        # 127.0.0.1:8772. Create + own the path so the import succeeds; the
+        # runner starts a mock on 8772 itself. FE2/FE3 self-skip if this is
+        # absent, but in CI we make them run for real.
+        run: |
+          sudo mkdir -p /home/workspace/zo_sentinel/logs
+          sudo chown -R "$(whoami)" /home/workspace
+
+      - name: Run front-end runner
+        # FE0 html -> FE1 html_interactive -> FE2 app_build -> FE3 routes,
+        # driving ui_server's FastAPI app in-process via Starlette TestClient.
+        env:
+          CI_FE_WS_PORT: "8772"
+          CI_FE_JUNIT: "artifacts/ci_frontend_junit.xml"
+        run: python -m tests.ci.run_ci_frontend
+
+      - name: Upload frontend junit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-frontend-junit
+          path: artifacts/ci_frontend_junit.xml
+          if-no-files-found: warn
+          retention-days: 14

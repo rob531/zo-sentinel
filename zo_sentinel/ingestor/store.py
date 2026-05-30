@@ -78,16 +78,42 @@ class HttpMeshStore:
     """Live store: talks to write_service (DuckDB) over HTTP. Watermark is kept
     as a mesh_memory row so it survives restarts with no extra storage."""
 
-    def __init__(self, base_url: Optional[str] = None, timeout: int = 15):
+    def __init__(self, base_url: Optional[str] = None, timeout: int = 15,
+                 connect_timeout: int = 3):
         self.base = (base_url or os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772")).rstrip("/")
         self.timeout = timeout
+        self.connect_timeout = connect_timeout
+        self.last_error: Optional[str] = None
 
     def _post(self, path: str, payload: dict) -> dict:
-        import requests
-        r = requests.post(self.base + path, json=payload, timeout=self.timeout)
+        """POST to write_service, degrading gracefully. A down/slow service
+        must NOT crash a caller (matches the codebase's fire-and-forget ws_*
+        helpers): on any error we record last_error and return {}."""
+        try:
+            import requests
+            r = requests.post(self.base + path, json=payload,
+                              timeout=(self.connect_timeout, self.timeout))
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
+            return {}
         if r.status_code == 200:
+            self.last_error = None
             return r.json()
+        self.last_error = f"HTTP {r.status_code}: {r.text[:160]}"
         return {}
+
+    def reachable(self) -> bool:
+        """Quick /health probe so the CLI can report write_service state
+        instead of hanging on the first query."""
+        try:
+            import requests
+            r = requests.get(self.base + "/health", timeout=self.connect_timeout)
+            ok = r.status_code == 200
+            self.last_error = None if ok else f"HTTP {r.status_code}"
+            return ok
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
+            return False
 
     def read_build_artifacts(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
         sql = (

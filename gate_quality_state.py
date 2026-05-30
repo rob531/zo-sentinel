@@ -79,6 +79,7 @@ _DEFAULT_STATE = {
     "recent_cohorts": [],              # list of {id, size, fail_rate, observed_at}
     "file_retries": {},                # {filename: {attempts: N, last_failed_at: iso, last_error: str}}
     "quarantined": {},                 # {filename: {quarantined_at: iso, reason: str, attempts_when_quarantined: N}}
+    "retired": {},                     # {filename: {retired_at: iso, reason: str}} -- permanently excluded from rebuild proposals
     "notes": [],                       # human-appendable operator notes
 }
 
@@ -177,6 +178,10 @@ def is_quarantined(filename: str) -> bool:
     return filename in snapshot().get("quarantined", {})
 
 
+def is_retired(filename: str) -> bool:
+    return filename in snapshot().get("retired", {})
+
+
 def retry_count(filename: str) -> int:
     q = snapshot().get("file_retries", {})
     return q.get(filename, {}).get("attempts", 0)
@@ -188,6 +193,9 @@ def may_rebuild(filename: str) -> tuple[bool, str]:
     include it."""
     maybe_auto_recover()
     snap = snapshot()
+    if filename in snap.get("retired", {}):
+        r = snap["retired"][filename]
+        return False, f"retired at {r.get('retired_at')}: {r.get('reason')}"
     if snap["state"] == "tripped":
         return False, "circuit breaker tripped -- manual reset required"
     if filename in snap.get("quarantined", {}):
@@ -325,6 +333,50 @@ def release_quarantine(filename: str, note: str = "") -> bool:
             })
             data["notes"] = data["notes"][-50:]
         return changed
+
+
+def retire(filename: str, reason: str = "") -> dict:
+    """Permanently exclude a file from rebuild proposals.
+
+    Unlike quarantine (a recoverable 'failed too much, hold off' state that the
+    generator still churns on), retirement says 'stop proposing this at all' --
+    for dead targets: one-shot patchers that already ran, or check/test scripts
+    now owned by the GitHub CI gates. Retiring also clears any quarantine/retry
+    bookkeeping for the file (it's no longer in the build loop). Idempotent:
+    the first call's timestamp/reason is preserved. Returns the retired entry."""
+    with _LockedStateFile() as data:
+        retired = data.setdefault("retired", {})
+        if filename not in retired:
+            retired[filename] = {"retired_at": _now(), "reason": reason or "no reason given"}
+            # Drop it from the active build-loop accounting -- it's gone now.
+            data.get("quarantined", {}).pop(filename, None)
+            data.get("file_retries", {}).pop(filename, None)
+            data.setdefault("notes", []).append({
+                "at": _now(),
+                "action": "retire",
+                "filename": filename,
+                "reason": reason or "no reason given",
+            })
+            data["notes"] = data["notes"][-50:]
+        return dict(retired[filename])
+
+
+def unretire(filename: str, note: str = "") -> bool:
+    """Reverse a retirement (mistake / target came back to life). Returns True
+    if the file was retired. Does NOT restore prior quarantine/retry counters --
+    the next build is treated as fresh."""
+    with _LockedStateFile() as data:
+        if filename not in data.get("retired", {}):
+            return False
+        del data["retired"][filename]
+        data.setdefault("notes", []).append({
+            "at": _now(),
+            "action": "unretire",
+            "filename": filename,
+            "note": note,
+        })
+        data["notes"] = data["notes"][-50:]
+        return True
 
 
 def set_breaker_state(new_state: str, reason: str) -> dict:

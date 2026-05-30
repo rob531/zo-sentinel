@@ -27,8 +27,15 @@ Usage:
     # false-positives -- the breaker never re-checks disk on its own)
     python3 reset_breaker.py sweep-stale
 
-    # List quarantined files
+    # Permanently stop proposing a dead target (one-shot patcher that already
+    # ran, or a check/test now owned by the GitHub CI gates). Unlike release,
+    # the generator will NOT churn on it again.
+    python3 reset_breaker.py retire github_pr_checker_wiring.py "owned by pr-gates.yml CI"
+    python3 reset_breaker.py unretire github_pr_checker_wiring.py "back in scope"
+
+    # List quarantined / retired files
     python3 reset_breaker.py list-quarantined
+    python3 reset_breaker.py list-retired
 
 What this script does NOT do:
     - Does not MOVE any files on disk -- quarantined files stay in
@@ -56,6 +63,10 @@ def _print_status():
     print(f"\nquarantined ({len(q)}):")
     for fn, meta in q.items():
         print(f"  {fn}  (at {meta['quarantined_at']}; {meta['reason']})")
+    ret = s.get("retired", {})
+    print(f"\nretired ({len(ret)}):")
+    for fn, meta in ret.items():
+        print(f"  {fn}  (at {meta.get('retired_at')}; {meta.get('reason')})")
     r = s.get("file_retries", {})
     print(f"\nfiles in retry accounting ({len(r)}):")
     for fn, meta in r.items():
@@ -121,6 +132,37 @@ def main():
         filename = argv[1]
         note = " ".join(argv[2:]) or ""
         _release(filename, note)
+        return 0
+    if cmd == "retire":
+        if len(argv) < 2:
+            print("usage: reset_breaker.py retire <filename> [reason]", file=sys.stderr)
+            return 2
+        filename = argv[1]
+        reason = " ".join(argv[2:]) or ""
+        meta = gqs.retire(filename, reason)
+        print(f"[OK] retired {filename} (at {meta.get('retired_at')}; {meta.get('reason')})")
+        print("  the generator will no longer propose rebuilds of this file.")
+        return 0
+    if cmd == "unretire":
+        if len(argv) < 2:
+            print("usage: reset_breaker.py unretire <filename> [note]", file=sys.stderr)
+            return 2
+        filename = argv[1]
+        note = " ".join(argv[2:]) or ""
+        if gqs.unretire(filename, note):
+            print(f"[OK] unretired {filename}; next build treated as fresh")
+        else:
+            print(f"[NOOP] {filename} was not retired")
+        return 0
+    if cmd == "list-retired":
+        ret = gqs.snapshot().get("retired", {})
+        if not ret:
+            print("[info] no files currently retired")
+            return 0
+        for fn, meta in ret.items():
+            print(f"{fn}")
+            print(f"  retired_at: {meta.get('retired_at')}")
+            print(f"  reason:     {meta.get('reason')}")
         return 0
     if cmd == "sweep-stale":
         released = gqs.release_stale_missing()

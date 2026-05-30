@@ -15,6 +15,7 @@ import argparse
 import json
 import sys
 
+from zo_sentinel.ingestor.governor import AutoActivationGovernor
 from zo_sentinel.ingestor.ingestor import ArtifactIngestor
 from zo_sentinel.ingestor.store import HttpMeshStore
 
@@ -22,6 +23,12 @@ from zo_sentinel.ingestor.store import HttpMeshStore
 def _make(args) -> ArtifactIngestor:
     enabled = True if getattr(args, "enable", False) else None
     return ArtifactIngestor(HttpMeshStore(), enabled=enabled)
+
+
+def _governor(args) -> AutoActivationGovernor:
+    # Host-side: HttpMeshStore + DuckDB gate_8 oracle (the governor's defaults).
+    return AutoActivationGovernor(ArtifactIngestor(HttpMeshStore()),
+                                  auto=not getattr(args, "propose", False))
 
 
 def cmd_status(args) -> int:
@@ -45,6 +52,16 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_govern(args) -> int:
+    print(json.dumps(_governor(args).run_once(), indent=2))
+    return 0
+
+
+def cmd_govern_status(args) -> int:
+    print(json.dumps(_governor(args).status(), indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m zo_sentinel.ingestor",
                                 description="net-new code-artifact ingestor")
@@ -55,6 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("run-once").set_defaults(func=cmd_run_once)
     r = sub.add_parser("run"); r.add_argument("--interval", type=int, default=300)
     r.set_defaults(func=cmd_run)
+    # auto-activation governor (decides when to flip the ingestor live)
+    g = sub.add_parser("govern", help="run one auto-activation governance cycle")
+    g.add_argument("--propose", action="store_true",
+                   help="propose-only: assess readiness but don't write the latch")
+    g.set_defaults(func=cmd_govern)
+    sub.add_parser("govern-status").set_defaults(func=cmd_govern_status)
     return p
 
 

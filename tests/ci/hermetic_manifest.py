@@ -42,6 +42,7 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.ingestor.contracts",
     "zo_sentinel.ingestor.store",
     "zo_sentinel.ingestor.ingestor",
+    "zo_sentinel.ingestor.governor",
 ]
 
 # Known NOT-portable (documented so nobody re-adds them by mistake):

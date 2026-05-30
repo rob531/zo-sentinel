@@ -255,6 +255,35 @@ class TestActivated:
         assert ing.is_enabled() is True
 
 
+# --- HttpMeshStore degrades gracefully when write_service is down -----------
+
+class TestHttpStoreDegrades:
+    def test_post_swallows_network_error(self, monkeypatch):
+        import requests
+        from zo_sentinel.ingestor.store import HttpMeshStore
+
+        def boom(*a, **k):
+            raise requests.ConnectionError("write_service down")
+
+        monkeypatch.setattr(requests, "post", boom)
+        s = HttpMeshStore("http://127.0.0.1:8772")
+        # none of these may raise -- a down service must not crash a caller
+        assert s.get_watermark() is None
+        assert s.read_build_artifacts(None, 10) == []
+        assert s.write("mesh_memory", {"a": 1}) is False
+        assert s.last_error and "ConnectionError" in s.last_error
+
+    def test_reachable_false_on_error(self, monkeypatch):
+        import requests
+        from zo_sentinel.ingestor.store import HttpMeshStore
+
+        def boom(*a, **k):
+            raise requests.ConnectionError("down")
+
+        monkeypatch.setattr(requests, "get", boom)
+        assert HttpMeshStore("http://127.0.0.1:8772").reachable() is False
+
+
 # --- watermark filtering on read --------------------------------------------
 
 def test_read_respects_watermark(tmp_path: Path):

@@ -31,8 +31,23 @@ def _governor(args) -> AutoActivationGovernor:
                                   auto=not getattr(args, "propose", False))
 
 
+def _with_write_service_health(status: dict, store) -> dict:
+    """Annotate a status dict with write_service reachability so a down service
+    shows as a clear field instead of crashing the command on the first query."""
+    if hasattr(store, "reachable"):
+        ok = store.reachable()
+        status["write_service"] = {"url": getattr(store, "base", "?"), "reachable": ok}
+        if not ok:
+            status["write_service"]["error"] = getattr(store, "last_error", None)
+            status["write_service"]["hint"] = (
+                "write_service down/slow -- check `curl -m3 "
+                "http://127.0.0.1:8772/health`; ingestor reads/writes need it.")
+    return status
+
+
 def cmd_status(args) -> int:
-    print(json.dumps(_make(args).status(), indent=2))
+    ing = _make(args)
+    print(json.dumps(_with_write_service_health(ing.status(), ing.store), indent=2))
     return 0
 
 
@@ -58,7 +73,8 @@ def cmd_govern(args) -> int:
 
 
 def cmd_govern_status(args) -> int:
-    print(json.dumps(_governor(args).status(), indent=2))
+    gov = _governor(args)
+    print(json.dumps(_with_write_service_health(gov.status(), gov.store), indent=2))
     return 0
 
 

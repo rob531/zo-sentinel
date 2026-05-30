@@ -15,7 +15,6 @@ Exit codes:
 """
 import sys
 import time
-from pathlib import Path
 
 sys.path.insert(0, "/home/workspace/zo_sentinel/tests/gates")
 from gate_framework import gate_run, INTER_GATE_SEC

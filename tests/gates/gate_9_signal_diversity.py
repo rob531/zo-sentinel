@@ -32,7 +32,6 @@ Looks at mcp_signal_scores table. Does NOT test enrichment modules
 directly -- those are upstream. Gate 9 tests OUTPUTS.
 """
 import sys
-from pathlib import Path
 
 sys.path.insert(0, "/home/workspace/zo_sentinel/tests/gates")
 sys.path.insert(0, "/home/workspace/zo_sentinel")

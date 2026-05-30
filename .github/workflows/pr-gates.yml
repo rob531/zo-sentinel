@@ -1,0 +1,86 @@
+name: pr-gates
+
+# Pull-request quality gates for the zo-sentinel app:
+#   1. static-analysis -- ruff (pyflakes + syntax/runtime errors)
+#   2. smoke-ladder     -- the recursive hermetic smoke gates (tests/ci)
+#
+# Both run on every PR and must pass to merge. They are HERMETIC: no ZoComputer
+# host, no write_service, no /home/workspace. The smoke ladder stands up a mock
+# write_service + an ephemeral DuckDB in-runner (see tests/ci/run_ci_smoke.py).
+#
+# This is the GitHub-side counterpart to the host-only gates under tests/gates/
+# (run by `zm go` / watchdog on ZoComputer). Both emit junit so
+# gh_actions_fetcher.py can reverse-feed failures into mesh_memory.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "feature/ci-smoke-gates"   # let the introducing branch self-verify pre-merge
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: python -m pip install --upgrade pip ruff
+
+      - name: Ruff (BLOCKING -- maintained surface)
+        # Real-bug rules (F = pyflakes, E9 = syntax/runtime) over the code we
+        # maintain. A new undefined name / unused import / broken f-string here
+        # fails the PR.
+        run: |
+          ruff check --select F,E9 --output-format github \
+            zo_sentinel tests/ci tests/gates
+
+      - name: Ruff (report-only -- whole repo)
+        # Visibility into the legacy root debt without blocking. Ratchet target.
+        if: always()
+        run: |
+          ruff check --select F,E9 --exit-zero --output-format github .
+
+  smoke-ladder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CI ladder deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt
+
+      - name: Run recursive smoke ladder
+        # tier0 syntax -> tier1 import -> tier2 schema -> tier3 mock-service,
+        # short-circuiting on the first tier that fails.
+        env:
+          CI_SMOKE_WS_PORT: "8772"
+          CI_SMOKE_JUNIT: "artifacts/ci_smoke_junit.xml"
+        run: python -m tests.ci.run_ci_smoke
+
+      - name: Upload smoke junit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-smoke-junit
+          path: artifacts/ci_smoke_junit.xml
+          if-no-files-found: warn
+          retention-days: 14

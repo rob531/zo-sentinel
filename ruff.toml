@@ -1,0 +1,29 @@
+# ruff.toml -- static-analysis config for the PR gate.
+#
+# Scope note: the CI gate (pr-gates.yml -> static-analysis job) runs ruff with
+# this config over the MAINTAINED surface (zo_sentinel/, tests/ci/, tests/gates/)
+# as a BLOCKING check, and over the whole repo as a non-blocking report. The
+# ~700 legacy host daemons in the repo root carry pre-existing debt and are not
+# gated yet -- they're surfaced in the report so the debt is visible and can be
+# ratcheted down file-by-file.
+#
+# Rule selection is intentionally tight: F (pyflakes) + E9 (syntax/runtime
+# errors) catch real bugs -- undefined names, unused imports, f-strings with no
+# placeholders, broken syntax -- without the style noise that would drown a
+# legacy codebase. Widen `select` as the surface gets cleaner.
+
+target-version = "py311"
+line-length = 100
+
+# Never walk into virtualenvs / caches / vendored trees.
+extend-exclude = [
+    ".venv",
+    "ci-venv",
+    "__pycache__",
+    ".patch_backups",
+    "_scratch",
+    "_drafts",
+]
+
+[lint]
+select = ["F", "E9"]

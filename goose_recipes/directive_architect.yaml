@@ -32,6 +32,12 @@ prompt: |-
   the `propose_directive` or `propose_breaker_action` tool. Inline JSON in
   text will be ignored.
 
+  PRIORITY: Your job is to ADVANCE THE BUILD. The large majority of what you
+  propose must be net-new build/wire/integrate work via propose_directive.
+  Breaker actions (investigate/accept/reset) are a rare exception, hard-capped
+  at 1 per cycle -- they are NOT a per-quarantine reflex. A cycle that proposes
+  only breaker actions is a FAILED cycle.
+
   TOOLS:
   - read_gate_quality_state(file=None)
       Returns which files are currently quarantined by the quality-gate circuit
@@ -80,14 +86,24 @@ prompt: |-
   4. Call read_failure_history(hours=24) to understand recent failure
      patterns.
   5. Based on the context_json AND the live tool reads, propose 1-6 new
-     directives:
-       - If a needed file is quarantined: use propose_breaker_action with
-         action='investigate' or 'reset' (NOT propose_directive to rebuild).
-       - If a gap exists and the target is not built/protected/quarantined:
-         use propose_directive.
-       - Prefer SMALL, FOCUSED directives over large refactors.
-       - Always include a rationale tying the directive to a specific signal
-         from the tool reads.
+     directives. PRIORITISE NET-NEW BUILD WORK over breaker bookkeeping:
+       - DEFAULT (aim for >=80% of your proposals): use propose_directive for
+         gaps where the target is NOT built/protected/quarantined. Favour
+         build_/wire_/integrate_/verify_ modules that advance the system --
+         enrichments, connectors, validators, gateway wiring, missing glue.
+       - BREAKER ACTIONS ARE A LAST RESORT, HARD-CAPPED AT 1 PER CYCLE. Only
+         use propose_breaker_action when a quarantine is ACTIVELY BLOCKING a
+         high-value build you would otherwise propose this cycle, and then pick
+         the SINGLE most-impactful file. Do NOT emit an investigate/accept for
+         every quarantined file -- most quarantines can wait (the breaker
+         self-recovers to half-open after ~6h), and re-proposing them each
+         cycle floods the queue. (This regressed badly: 35+ breaker_action_*
+         directives piled up in proposed/ and starved out real build work.)
+       - Before ANY breaker_action, check read_pending_directives(): if an
+         equivalent breaker_action for that file is already in pending/ or
+         proposed/, do NOT re-propose it.
+       - Prefer SMALL, FOCUSED directives over large refactors. Always include
+         a rationale tying the directive to a specific signal from the reads.
   6. Report a one-paragraph summary of what you proposed and why. Stop.
 
   CONTEXT BUNDLE:

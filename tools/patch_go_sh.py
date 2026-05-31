@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
 patch_go_sh.py -- one-shot host patcher for the LIVE zm-go launcher
-(/home/workspace/zo_mesh/go.sh). Applies three edits:
+(/home/workspace/zo_mesh/go.sh). Applies four edits:
 
-  1. Add the ingestion trio to the section-1 pkill list (clean restart, no dups).
-  2. Insert a "12.6b" block that launches the ingestor / governor / publisher
-     (gated -- dormant until their latch exists).
-  3. Swap the ladder_shim launch to ladder_shim_with_keys.sh so the Gemini key
-     hydration survives `zm go` (otherwise the bare relaunch loses it).
+  1.  Add the ingestion trio to the section-1 pkill list (clean restart, no dups).
+  1b. Add ladder_shim.py to the section-1 pkill list so `zm go` actually replaces
+      a stale KEYLESS shim (12.4 is health-gated and skips relaunch otherwise --
+      that left medium+ builds 502ing on "RcGeminiAPIKey not set").
+  2.  Insert a "12.6b" block that launches the ingestor / governor / publisher
+      (gated -- dormant until their latch exists).
+  3.  Swap the ladder_shim launch to ladder_shim_with_keys.sh so the Gemini key
+      hydration survives `zm go` (otherwise the bare relaunch loses it).
 
 Usage (on ZoComputer):
     python3 patch_go_sh.py            # patch in place (.bak written)
@@ -34,6 +37,17 @@ NEW_KILL = ('            registry_api.py approval_workflow.py \\\n'
             '            zo_sentinel.ingestor zo_sentinel.publisher \\\n'
             '            "${TRUST_PIPELINE[@]}" \\\n')
 SEEN_KILL = "zo_sentinel.ingestor zo_sentinel.publisher"
+
+# --- 1b: add ladder_shim.py to the pkill list -------------------------------
+# Section 12.4 is HEALTH-GATED: if :8796 already answers 200 it does NOT relaunch
+# the shim. But ladder_shim.py was never in the section-1 pkill list, so a stale
+# KEYLESS shim survives `zm go` forever -> escalation.py sees "RcGeminiAPIKey not
+# set" -> every build above rung 0 (complexity>=medium) 502s. Killing the shim in
+# section 1 frees :8796 so 12.4's else-branch relaunches the KEYED wrapper.
+# Anchors on patch-1's output, so it must run after "pkill-list trio".
+OLD_LADDERKILL = "            zo_sentinel.ingestor zo_sentinel.publisher \\\n"
+NEW_LADDERKILL = "            zo_sentinel.ingestor zo_sentinel.publisher ladder_shim.py \\\n"
+SEEN_LADDERKILL = "zo_sentinel.publisher ladder_shim.py"
 
 # --- 2: trio launch block (inserted after the Gate Scheduler block) ---------
 OLD_GATE = ("GSC=$(pgrep -f 'gate_scheduler.py' 2>/dev/null | head -1)\n"
@@ -70,6 +84,7 @@ SEEN_SHIM = "ladder_shim_with_keys.sh"
 
 PATCHES = [
     ("pkill-list trio", SEEN_KILL, OLD_KILL, NEW_KILL),
+    ("pkill-list ladder_shim", SEEN_LADDERKILL, OLD_LADDERKILL, NEW_LADDERKILL),
     ("12.6b trio launch", SEEN_GATE, OLD_GATE, NEW_GATE),
     ("keyed ladder_shim", SEEN_SHIM, OLD_SHIM, NEW_SHIM),
 ]

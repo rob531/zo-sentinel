@@ -45,6 +45,9 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.ingestor.store",
     "zo_sentinel.ingestor.ingestor",
     "zo_sentinel.ingestor.governor",
+    # goose -> GitHub-PR bridge (host-free; git/gh seam is mockable).
+    "zo_sentinel.publisher.gitops",
+    "zo_sentinel.publisher.publisher",
 ]
 
 # Known NOT-portable (documented so nobody re-adds them by mistake):

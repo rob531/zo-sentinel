@@ -183,6 +183,7 @@ for proc in write_service.py inference_router_service.py run_manager.py \
             sentinel_directive_generator.py sentinel_directive_generator_goose.py gate_scheduler.py \
             liveness_probe.py signal_bridge.py ecosystems_metadata_fetcher.py \
             registry_api.py approval_workflow.py \
+            zo_sentinel.ingestor zo_sentinel.publisher \
             "${TRUST_PIPELINE[@]}" \
             "${MESH_DAEMONS[@]}"; do
     pkill -f $proc 2>/dev/null && warn "killed $proc" || true
@@ -297,6 +298,35 @@ nohup bash $MESH/daemon_wrapper.sh gate_scheduler $SENTINEL/gate_scheduler.py >>
 sleep 2
 GSC=$(pgrep -f 'gate_scheduler.py' 2>/dev/null | head -1)
 [[ -n "$GSC" ]] && ok "GateScheduler PID $GSC" || warn "GateScheduler failed"
+
+hdr "12.6b Code-Artifact Ingestion Trio (gated -- DORMANT until latched)"
+# Consume the build_artifact rows the live goose build now emits (PR #18). All
+# three are SAFE to always run: the ingestor + publisher NO-OP until their latch
+# file exists, and the governor only flips the ingestor latch once builds prove
+# green AND agree with gate_8. To activate:
+#   ingestor:  touch $SENTINEL/.ingestor_enabled      (or let the governor do it)
+#   publisher: export PR_PUBLISHER_CLONE_DIR=<clone>; touch $SENTINEL/.pr_publisher_enabled
+# python -m needs the package on PYTHONPATH ($SENTINEL holds the zo_sentinel pkg).
+# Ingestor -- continuous (built-in --interval loop); dormant w/o .ingestor_enabled
+nohup env PYTHONPATH="$SENTINEL" python3 -m zo_sentinel.ingestor run --interval 300 \
+    >> $LOGS/artifact_ingestor.log 2>&1 &
+sleep 1
+ING=$(pgrep -f 'zo_sentinel.ingestor run' 2>/dev/null | head -1)
+[[ -n "$ING" ]] && ok "ArtifactIngestor PID $ING (dormant until .ingestor_enabled)" || warn "ArtifactIngestor failed"
+# Governor -- `govern` is one-shot; poll-loop it. Auto-activates ingestor when ready.
+nohup env PYTHONPATH="$SENTINEL" bash -c \
+    'while true; do python3 -m zo_sentinel.ingestor govern; sleep 600; done' \
+    >> $LOGS/activation_governor.log 2>&1 &
+sleep 1
+GOV=$(pgrep -f 'zo_sentinel.ingestor govern' 2>/dev/null | head -1)
+[[ -n "$GOV" ]] && ok "ActivationGovernor PID $GOV" || warn "ActivationGovernor failed"
+# Publisher -- `run-once` is one-shot; poll-loop it. Dormant w/o .pr_publisher_enabled.
+nohup env PYTHONPATH="$SENTINEL" bash -c \
+    'while true; do python3 -m zo_sentinel.publisher run-once; sleep 600; done' \
+    >> $LOGS/pr_publisher.log 2>&1 &
+sleep 1
+PUB=$(pgrep -f 'zo_sentinel.publisher run-once' 2>/dev/null | head -1)
+[[ -n "$PUB" ]] && ok "PRPublisher PID $PUB (dormant until .pr_publisher_enabled)" || warn "PRPublisher failed"
 
 hdr "12.7 Liveness Probe"
 nohup bash $MESH/daemon_wrapper.sh liveness_probe $MESH/liveness_probe.py >> $LOGS/liveness_probe.log 2>&1 &

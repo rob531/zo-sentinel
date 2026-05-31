@@ -16,6 +16,7 @@ from zo_sentinel.build_routing import (
     COMPLEXITY_TO_ALIAS,
     build_artifact_row,
     build_env_for,
+    directive_content,
     resolve_directive_id,
     tier_for_complexity,
 )
@@ -58,6 +59,25 @@ def test_build_env_default_is_rung0():
 def test_build_env_task_fallback_chain():
     assert build_env_for({"directive_id": "d9"})["ZO_BUILD_TASK"] == "d9"
     assert build_env_for({"id": 42})["ZO_BUILD_TASK"] == "42"
+
+
+def test_directive_content_uses_description_for_generator_directives():
+    # the exact shape the generator writes (no content/goal/spec)
+    d = {"task": "build_domain_trust_enrichment", "handler": "generate_file",
+         "output_file": "domain_trust_enrichment.py", "complexity": "medium",
+         "description": "NEW enrichment module exposing compute_score(metadata)."}
+    c = directive_content(d)
+    assert c is not None                       # would have been DROPPED before
+    assert "domain_trust_enrichment.py" in c   # target file threaded in
+    assert "compute_score" in c                # spec preserved
+
+
+def test_directive_content_precedence_and_empty():
+    assert directive_content({"content": "C", "description": "D"}) == "C"
+    assert directive_content({"goal": "G"}) == "G"
+    assert directive_content({"spec": "S"}) == "S"
+    assert directive_content({"description": "just a desc"}) == "just a desc"  # no output_file
+    assert directive_content({"task": "t", "handler": "x"}) is None   # nothing usable
 
 
 def test_resolve_directive_id_falls_back_to_task():

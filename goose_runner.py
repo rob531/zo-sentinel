@@ -17,7 +17,8 @@ from pathlib import Path
 from threading import Thread
 
 sys.path.insert(0, "/home/workspace/zo_sentinel")  # ensure zo_sentinel package importable
-from zo_sentinel.build_routing import build_env_for, resolve_directive_id  # noqa: E402
+from zo_sentinel.build_routing import (  # noqa: E402
+    build_env_for, directive_content, resolve_directive_id)
 
 # =============================================================================
 # CONSTANTS
@@ -208,12 +209,12 @@ def load_directives_from_mesh():
                 d = json.loads(raw)
                 if not isinstance(d, dict):
                     continue
-                if not d.get("content") and d.get("goal"):
-                    d["content"] = d["goal"]
-                if not d.get("content") and d.get("spec"):
-                    d["content"] = d["spec"]
-                if not d.get("content"):
+                # Resolve the build spec across producer field names (generator
+                # directives carry it in `description`, not content/goal/spec).
+                content = directive_content(d)
+                if not content:
                     continue
+                d["content"] = content
                 d = _parse_directive(d)
                 did = str(d.get("directive_id", d.get("id", f.stem)))
                 if did not in seen_ids:

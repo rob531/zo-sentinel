@@ -50,6 +50,25 @@ def resolve_directive_id(d: dict) -> str:
             or d.get("key") or d.get("task") or "unknown")
 
 
+def directive_content(d: dict) -> Optional[str]:
+    """Resolve the build spec a directive carries, across the field names the
+    different producers use, so goose can pass it to the architect as the task.
+
+    The directive generator emits {task, handler, output_file, description, ...}
+    -- the spec lives in `description` (+ output_file), NOT content/goal/spec.
+    goose's pending loader required content/goal/spec and silently dropped every
+    generator directive. Falls back description -> (Target file + description)."""
+    for k in ("content", "goal", "spec"):
+        v = d.get(k)
+        if v:
+            return v
+    desc = d.get("description")
+    if desc:
+        out = d.get("output_file")
+        return f"Target file: {out}\n\n{desc}" if out else desc
+    return None
+
+
 def build_env_for(directive: dict) -> dict:
     """Per-directive env for the Goose subprocess: routes the architect
     (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) by complexity and carries task/phase

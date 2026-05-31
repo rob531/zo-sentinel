@@ -40,10 +40,14 @@ from typing import List, Optional
 
 import escalation
 
-SHIM_VERSION = "1.1"
+SHIM_VERSION = "1.2"
 LADDER_MODEL_ID = "zo-ladder-v1"
 DEFAULT_TASK = "builder"
 FULL_LADDER_ATTEMPTS = 16
+
+# Per-recipe complexity routing lives in escalation.task_for_model(): the model
+# id Goose sends (set via GOOSE_MODEL per recipe) selects the ladder start tier,
+# so a harder directive no longer flattens to rung 0. See escalation.MODEL_TASK_MAP.
 
 app = FastAPI(title="Zo Mesh Ladder Shim", version=SHIM_VERSION)
 
@@ -81,9 +85,11 @@ async def chat_completions(request: ChatCompletionRequest):
     system = "\n\n".join(system_parts) if system_parts else None
     prompt = "\n\n".join(convo_parts) if convo_parts else ""
 
+    task_type = escalation.task_for_model(request.model)
+
     try:
         result = escalation.ask(
-            task_type=DEFAULT_TASK,
+            task_type=task_type,
             prompt=prompt,
             system=system,
             max_tokens=request.max_tokens or 8192,
@@ -182,6 +188,7 @@ async def chat_completions(request: ChatCompletionRequest):
         }],
         "x_zo_backend": result.backend,
         "x_zo_model": result.model,
+        "x_zo_task": task_type,
     }
 
 

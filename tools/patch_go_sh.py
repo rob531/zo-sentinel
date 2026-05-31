@@ -11,6 +11,10 @@ patch_go_sh.py -- one-shot host patcher for the LIVE zm-go launcher
       (gated -- dormant until their latch exists).
   3.  Swap the ladder_shim launch to ladder_shim_with_keys.sh so the Gemini key
       hydration survives `zm go` (otherwise the bare relaunch loses it).
+  4.  Insert a "12.5c" block launching the proposed->pending promoter daemon, so
+      the Goose Architect's proposals are drained into pending/ (otherwise
+      proposed/ jams at its cap and the Architect skips every cycle). Also adds
+      the promoter to the section-1 pkill list (1c) for a clean restart.
 
 Usage (on ZoComputer):
     python3 patch_go_sh.py            # patch in place (.bak written)
@@ -49,6 +53,14 @@ OLD_LADDERKILL = "            zo_sentinel.ingestor zo_sentinel.publisher \\\n"
 NEW_LADDERKILL = "            zo_sentinel.ingestor zo_sentinel.publisher ladder_shim.py \\\n"
 SEEN_LADDERKILL = "zo_sentinel.publisher ladder_shim.py"
 
+# --- 1c: add the proposed->pending promoter to the pkill list ---------------
+# Clean restart for the 12.5c daemon (below). Anchors on patch-1b's output, so it
+# must run after "pkill-list ladder_shim".
+OLD_PROMOKILL = "            zo_sentinel.ingestor zo_sentinel.publisher ladder_shim.py \\\n"
+NEW_PROMOKILL = ("            zo_sentinel.ingestor zo_sentinel.publisher ladder_shim.py \\\n"
+                 "            zo_sentinel.promoters.proposed_to_pending_promoter \\\n")
+SEEN_PROMOKILL = "zo_sentinel.promoters.proposed_to_pending_promoter"
+
 # --- 2: trio launch block (inserted after the Gate Scheduler block) ---------
 OLD_GATE = ("GSC=$(pgrep -f 'gate_scheduler.py' 2>/dev/null | head -1)\n"
             '[[ -n "$GSC" ]] && ok "GateScheduler PID $GSC" || warn "GateScheduler failed"\n')
@@ -82,9 +94,35 @@ NEW_SHIM = ("    nohup bash $SENTINEL/ladder_shim_with_keys.sh "
             ">> $LOGS/ladder_shim.log 2>&1 & sleep 3\n")
 SEEN_SHIM = "ladder_shim_with_keys.sh"
 
+# --- 4: proposed->pending promoter daemon (12.5c) ---------------------------
+# The Goose Architect (12.5b) writes proposals into directives/proposed/, which
+# goose_runner does NOT watch. Without a drain, proposed/ fills to its depth cap
+# and the Architect logs "proposed/ depth N >= cap; skipping cycle" forever
+# (observed jammed 2026-05-28 -> 05-31, 47 proposals stranded). This promoter
+# validates + dedups (skips any proposal whose <directive_id>.done.json sentinel
+# already exists) and atomically moves the rest into pending/ for goose to build.
+# Inserted right after the 12.5b Architect block.
+OLD_DGG = ("SDGG=$(pgrep -f 'sentinel_directive_generator_goose.py' 2>/dev/null | head -1)\n"
+           '[[ -n "$SDGG" ]] && ok "DirectiveGeneratorGoose PID $SDGG" || warn "DirectiveGeneratorGoose failed"\n')
+PROMO_BLOCK = '''
+hdr "12.5c Proposed->Pending Promoter (drains directives/proposed -> pending)"
+# Without this, the 12.5b Architect's proposals pile up in proposed/ (goose_runner
+# does not watch that dir) until the cap, and it skips every cycle. The promoter
+# dedups against <id>.done.json sentinels so already-built re-proposals are not
+# re-promoted. Stdlib-only daemon; default 60s poll.
+nohup env PYTHONPATH="$SENTINEL" python3 -m zo_sentinel.promoters.proposed_to_pending_promoter >> $LOGS/proposed_promoter.log 2>&1 &
+sleep 2
+PRM=$(pgrep -f 'zo_sentinel.promoters.proposed_to_pending_promoter' 2>/dev/null | head -1)
+[[ -n "$PRM" ]] && ok "ProposedPromoter PID $PRM" || warn "ProposedPromoter failed"
+'''
+NEW_DGG = OLD_DGG + PROMO_BLOCK
+SEEN_PROMO = "12.5c Proposed->Pending Promoter"
+
 PATCHES = [
     ("pkill-list trio", SEEN_KILL, OLD_KILL, NEW_KILL),
     ("pkill-list ladder_shim", SEEN_LADDERKILL, OLD_LADDERKILL, NEW_LADDERKILL),
+    ("pkill-list promoter", SEEN_PROMOKILL, OLD_PROMOKILL, NEW_PROMOKILL),
+    ("12.5c promoter launch", SEEN_PROMO, OLD_DGG, NEW_DGG),
     ("12.6b trio launch", SEEN_GATE, OLD_GATE, NEW_GATE),
     ("keyed ladder_shim", SEEN_SHIM, OLD_SHIM, NEW_SHIM),
 ]

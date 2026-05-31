@@ -172,8 +172,42 @@ def _parse_directive(d):
     return d
 
 
+def prune_done_pending():
+    """Move completed directives out of pending/ so the loader stops re-scanning
+    a growing pile every cycle (the "skips too high" symptom).
+
+    The generator writes gen_{key}_{task}.json, but mark_directive_completed only
+    moves {directive_id}.json -- so completed gen_* files accumulate in pending/
+    forever and are re-loaded + skipped each cycle. This relocates any pending
+    file whose `<directive_id>.done.json` sentinel already exists into done/."""
+    if not PENDING_DIR.exists():
+        return 0
+    moved = 0
+    for f in PENDING_DIR.glob("*.json"):
+        if f.name.endswith(".done.json") or f.name.endswith(".failed.json"):
+            continue
+        try:
+            d = json.loads(f.read_text())
+            if not isinstance(d, dict):
+                continue
+            did = resolve_directive_id(d)
+        except Exception:
+            continue
+        if did and did != "unknown" and (DIRECTIVES_PATH / f"{did}.done.json").exists():
+            try:
+                DONE_DIR.mkdir(parents=True, exist_ok=True)
+                f.rename(DONE_DIR / f.name)
+                moved += 1
+            except Exception:
+                pass
+    if moved:
+        log(f"Pruned {moved} completed directive(s) from pending/ -> done/")
+    return moved
+
+
 def load_directives_from_mesh():
     """Load directives from BOTH mesh_memory DB and pending dir (merged)."""
+    prune_done_pending()   # keep pending/ from growing unbounded with done files
     directives = []
     seen_ids = set()
 

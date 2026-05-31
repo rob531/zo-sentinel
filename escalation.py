@@ -228,6 +228,15 @@ TASK_START_TIER = {
     "builder_critical": 14,
 }
 
+# Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
+# Everything else is HARD-capped to the free rungs (0-11) -- a non-critical build
+# never burns paid Zo credit even if all its free rungs fail (it just exhausts
+# and the caller falls back), instead of cascading into gpt-5.4 / sonnet / opus.
+# Env-tunable (comma-separated task types). Default: only builder_critical.
+PAID_OK_TASKS = {t.strip() for t in
+                 os.environ.get("LADDER_PAID_OK_TASKS", "builder_critical").split(",")
+                 if t.strip()}
+
 # Maps the OpenAI `model` field a caller (Goose, via GOOSE_MODEL per recipe)
 # sends through the ladder_shim to one of the task types above. Lives here, with
 # the ladder, so it is testable without importing the shim's fastapi/uvicorn
@@ -483,6 +492,10 @@ def ask(task_type: str, prompt: str, system: Optional[str] = None,
         spec = LADDER[i]
         if not _limiter.available(spec.model_id, spec.rpm_limit):
             attempts.append((spec.model_id, "rate_limited", ""))
+            continue
+        if spec.cost_priority > 0 and task_type not in PAID_OK_TASKS:
+            attempts.append((spec.model_id, "cost_gated",
+                             f"paid rung blocked for {task_type}"))
             continue
         if spec.cost_priority > 0 and not _budget.can_spend(spec.cost_priority):
             attempts.append((spec.model_id, "budget_exceeded",

@@ -250,7 +250,14 @@ def load_directives_from_mesh():
                     continue
                 d["content"] = content
                 d = _parse_directive(d)
-                did = str(d.get("directive_id", d.get("id", f.stem)))
+                # If the body carried no usable id/task, fall back to the filename
+                # (gen_<hash>_<task>) so the directive keeps a STABLE UNIQUE id
+                # instead of collapsing to "unknown" and colliding on a shared
+                # unknown.done.json sentinel -- which silently masks every id-less
+                # generator directive as already-built (it never reaches the build).
+                if d.get("directive_id") in (None, "", "unknown"):
+                    d["directive_id"] = f.stem
+                did = str(d.get("directive_id", f.stem))
                 if did not in seen_ids:
                     seen_ids.add(did)
                     directives.append(d)

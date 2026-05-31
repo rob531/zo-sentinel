@@ -16,6 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Thread
 
+sys.path.insert(0, "/home/workspace/zo_sentinel")  # ensure zo_sentinel package importable
+from zo_sentinel.build_routing import build_env_for  # noqa: E402
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -279,20 +282,28 @@ def check_goose_installed():
         log(f"Goose check failed: {e}")
     return False
 
-def run_goose_task(directive_id, content):
-    """Execute Goose on task file with timeout."""
+def run_goose_task(directive_id, content, extra_env=None):
+    """Execute Goose on task file with timeout.
+
+    extra_env (from build_routing.build_env_for) routes the architect
+    (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) up the ladder by complexity and
+    carries task/phase for the build_artifact row builder_mcp emits."""
     log(f"Executing Goose for directive: {directive_id}")
-    
+
     try:
         recipe_path = PROJECT_DIR / "goose_recipes" / "architect.yaml"
         task_desc = json.dumps(content)
+        env = {**os.environ, **(extra_env or {})}
+        if extra_env:
+            log(f"[LADDER] {directive_id} -> {extra_env.get('GOOSE_MODEL')}")
         result = subprocess.run(
             ["goose", "run", "--recipe", str(recipe_path),
              "--params", f"task_description={task_desc}"],
             capture_output=True,
             text=True,
             timeout=GOOSE_TIMEOUT,
-            cwd=str(PROJECT_DIR)
+            cwd=str(PROJECT_DIR),
+            env=env
         )
         
         if result.returncode == 0:
@@ -543,7 +554,8 @@ def run():
                 
                 # Try Goose first
                 if goose_installed:
-                    result = run_goose_task(directive_id, directive.get("content", ""))
+                    result = run_goose_task(directive_id, directive.get("content", ""),
+                                            build_env_for(directive))
                     
                     if result.get("success"):
                         write_result(directive_id, True, result.get("stdout", ""))

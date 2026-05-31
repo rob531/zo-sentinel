@@ -38,6 +38,18 @@ def tier_for_complexity(complexity: Optional[str]) -> str:
     return COMPLEXITY_TO_ALIAS.get((complexity or "").strip().lower(), DEFAULT_ALIAS)
 
 
+def resolve_directive_id(d: dict) -> str:
+    """Stable id for a directive. Falls back to `task` -- the field the directive
+    generator uses as its canonical identifier -- BEFORE giving up to "unknown".
+
+    Without the `task` fallback every generator directive (which carries no
+    id/key) collapses to directive_id="unknown", dedups to a single entry, and
+    is skipped forever as already-built (directives/unknown.done.json exists).
+    Order: explicit directive_id > id > key > task > "unknown"."""
+    return (str(d.get("directive_id") or "") or str(d.get("id") or "")
+            or d.get("key") or d.get("task") or "unknown")
+
+
 def build_env_for(directive: dict) -> dict:
     """Per-directive env for the Goose subprocess: routes the architect
     (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) by complexity and carries task/phase

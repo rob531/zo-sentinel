@@ -16,6 +16,7 @@ from zo_sentinel.build_routing import (
     COMPLEXITY_TO_ALIAS,
     build_artifact_row,
     build_env_for,
+    resolve_directive_id,
     tier_for_complexity,
 )
 
@@ -57,6 +58,26 @@ def test_build_env_default_is_rung0():
 def test_build_env_task_fallback_chain():
     assert build_env_for({"directive_id": "d9"})["ZO_BUILD_TASK"] == "d9"
     assert build_env_for({"id": 42})["ZO_BUILD_TASK"] == "42"
+
+
+def test_resolve_directive_id_falls_back_to_task():
+    # generator directives carry only `task` -> must NOT collapse to "unknown"
+    assert resolve_directive_id({"task": "build_domain_trust_enrichment"}) == \
+        "build_domain_trust_enrichment"
+    # two distinct tasks resolve to two distinct ids (the actual bug)
+    a = resolve_directive_id({"task": "build_x"})
+    b = resolve_directive_id({"task": "build_y"})
+    assert a != b
+
+
+def test_resolve_directive_id_precedence():
+    assert resolve_directive_id({"directive_id": "D", "id": "i", "key": "k",
+                                 "task": "t"}) == "D"
+    assert resolve_directive_id({"id": "i", "key": "k", "task": "t"}) == "i"
+    assert resolve_directive_id({"key": "k", "task": "t"}) == "k"
+    assert resolve_directive_id({"task": "t"}) == "t"
+    assert resolve_directive_id({}) == "unknown"
+    assert resolve_directive_id({"id": 158639}) == "158639"   # numeric id stringified
 
 
 def test_build_artifact_row_schema():

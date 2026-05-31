@@ -17,7 +17,7 @@ from pathlib import Path
 from threading import Thread
 
 sys.path.insert(0, "/home/workspace/zo_sentinel")  # ensure zo_sentinel package importable
-from zo_sentinel.build_routing import build_env_for  # noqa: E402
+from zo_sentinel.build_routing import build_env_for, resolve_directive_id  # noqa: E402
 
 # =============================================================================
 # CONSTANTS
@@ -156,7 +156,7 @@ def _parse_directive(d):
             inner = json.loads(d["content"])
             if isinstance(inner, dict):
                 # hoist complexity, description, spec if missing at top level
-                for k in ("complexity", "description", "spec", "title", "key"):
+                for k in ("complexity", "description", "spec", "title", "key", "task"):
                     if k not in d and k in inner:
                         d[k] = inner[k]
                 # use spec as content if richer
@@ -164,9 +164,10 @@ def _parse_directive(d):
                     d["content"] = inner["spec"]
         except Exception:
             pass
-    # ensure directive_id exists
+    # ensure directive_id exists (falls back to `task` so generator directives
+    # don't all collapse to "unknown" and get skipped as already-built)
     if not d.get("directive_id"):
-        d["directive_id"] = str(d.get("id", "")) or d.get("key", "unknown")
+        d["directive_id"] = resolve_directive_id(d)
     return d
 
 

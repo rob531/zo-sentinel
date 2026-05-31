@@ -93,18 +93,22 @@ async def _emit_build_artifact(client, target_file, content, context_type,
 
 @mcp.tool()
 async def read_signal_quality() -> str:
-    """Read current enricher discrimination stats from the live DB."""
-    import requests as req
-    try:
-        r = req.post("http://127.0.0.1:8772/query", json={"sql": """
+    """Read current enricher discrimination stats from the live DB.
+
+    Async httpx (NOT sync requests): a blocking call inside a FastMCP @tool
+    stalls the event loop and the Goose subprocess times out (constraint #1)."""
+    sql = """
             SELECT signal_name,
                    COUNT(*) as total,
                    COUNT(DISTINCT ROUND(score,0)) as distinct_scores,
                    ROUND(AVG(score),2) as avg_score
             FROM mcp_signal_scores
             GROUP BY signal_name ORDER BY distinct_scores ASC
-        """}, timeout=15)
-        return r.text if r.status_code == 200 else f"DB error: {r.status_code}"
+        """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{WRITE_SERVICE}/query", json={"sql": sql})
+            return r.text if r.status_code == 200 else f"DB error: {r.status_code}"
     except Exception as e:
         return f"ERROR: {e}"
 

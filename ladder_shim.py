@@ -36,7 +36,7 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import escalation
 
@@ -67,7 +67,7 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = 8192
     stream: Optional[bool] = False  # accepted but shim is non-streaming
     tools: Optional[list] = None
-    tool_choice: Optional[object] = None
+    tool_choice: Optional[Any] = None  # pass-through: Pydantic must not drop Goose's tool payload
 
 
 @app.get("/health")
@@ -130,7 +130,9 @@ async def chat_completions(request: ChatCompletionRequest):
             yield f"data: {json.dumps(head)}\n\n"
             # tool_calls delta (streamed shape needs index on each call)
             if result.tool_calls:
-                ARG_CHUNK = 2048  # slice arguments so no SSE line is oversized
+                ARG_CHUNK = 1024  # slice args small: one big SSE data: line
+                #                   overflows Goose's transport buffer on >17KB
+                #                   file writes -> EOF parse error, write dropped.
                 for i, tc in enumerate(result.tool_calls):
                     fn = (tc.get("function") or {})
                     args_str = fn.get("arguments")

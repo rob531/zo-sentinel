@@ -67,6 +67,40 @@ def test_ask_starts_at_mapped_rung(monkeypatch):
     assert called[0] == escalation.LADDER[0].model_id    # low still starts at MiniMax
 
 
+def _patch_all_backends_fail(monkeypatch):
+    """Every backend returns empty (a failure) so ask() cascades through every
+    ELIGIBLE rung -- records which model_ids were actually attempted."""
+    called = []
+
+    def fail_adapter(spec, prompt, system, max_tokens, temperature, tools):
+        called.append(spec.model_id)
+        return (None, "forced-fail", None)
+
+    monkeypatch.setattr(
+        escalation, "BACKEND_ADAPTERS",
+        {k: fail_adapter for k in escalation.BACKEND_ADAPTERS},
+    )
+    return called
+
+
+_PAID_MODELS = {s.model_id for s in escalation.LADDER if s.cost_priority > 0}
+
+
+def test_paid_rungs_cost_gated_for_non_critical(monkeypatch):
+    # a medium build whose free rungs all fail must NOT cascade into paid rungs
+    called = _patch_all_backends_fail(monkeypatch)
+    r = escalation.ask("builder_medium", "x", max_attempts=16)  # full ladder
+    assert not r.success
+    assert not (set(called) & _PAID_MODELS), \
+        f"non-critical task hit paid rung(s): {set(called) & _PAID_MODELS}"
+
+
+def test_critical_may_reach_paid_rungs(monkeypatch):
+    called = _patch_all_backends_fail(monkeypatch)
+    escalation.ask("builder_critical", "x", max_attempts=16)
+    assert set(called) & _PAID_MODELS, "builder_critical never tried a paid rung"
+
+
 def test_medium_starts_at_gemini(monkeypatch):
     called = _patch_all_backends(monkeypatch)
     r = escalation.ask("builder_medium", "moderate build")

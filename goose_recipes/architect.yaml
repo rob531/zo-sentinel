@@ -13,7 +13,7 @@ extensions:
     type: stdio
     cmd: "python3"
     args:
-      - "zo_sentinel/mcp_servers/builder_mcp.py"
+      - "mcp_servers/builder_mcp.py"
 
 prompt: |-
   You are the ZoSentinel Architect. You delegate all code writing via tools.

@@ -1,0 +1,84 @@
+"""
+test_build_routing.py -- hermetic tests for the goose build-path glue.
+
+Covers the pure logic the host daemons (goose_runner, builder_mcp) delegate to:
+complexity -> ladder alias, the per-directive env, and the build_artifact row
+schema the live build now emits. Includes a drift guard asserting every alias is
+a real escalation.MODEL_TASK_MAP key (so #16 routing and this stay in sync).
+"""
+from __future__ import annotations
+
+import json
+
+import escalation
+from zo_sentinel.build_routing import (
+    BUILDER_AGENT_ID,
+    COMPLEXITY_TO_ALIAS,
+    build_artifact_row,
+    build_env_for,
+    tier_for_complexity,
+)
+
+
+def test_tier_for_complexity():
+    assert tier_for_complexity("low") == "zo-ladder-low"
+    assert tier_for_complexity("medium") == "zo-ladder-medium"
+    assert tier_for_complexity("high") == "zo-ladder-high"
+    assert tier_for_complexity("critical") == "zo-ladder-critical"
+    # unknown / missing / garbage all fall back to rung-0 (prior behaviour)
+    assert tier_for_complexity("unknown") == "zo-ladder-low"
+    assert tier_for_complexity(None) == "zo-ladder-low"
+    assert tier_for_complexity("") == "zo-ladder-low"
+    assert tier_for_complexity("WEIRD") == "zo-ladder-low"
+    assert tier_for_complexity(" Medium ") == "zo-ladder-medium"  # normalised
+
+
+def test_aliases_match_escalation_map():
+    """Drift guard: every routing alias must be a real ladder task alias (#16)."""
+    for alias in COMPLEXITY_TO_ALIAS.values():
+        assert alias in escalation.MODEL_TASK_MAP, f"{alias} missing from MODEL_TASK_MAP"
+
+
+def test_build_env_for_routes_and_carries_context():
+    env = build_env_for({"complexity": "medium", "key": "build_x", "phase": "p2"})
+    assert env["GOOSE_MODEL"] == "zo-ladder-medium"      # architect routing
+    assert env["ZO_BUILD_TIER"] == "zo-ladder-medium"    # codegen routing
+    assert env["ZO_BUILD_TASK"] == "build_x"
+    assert env["ZO_BUILD_PHASE"] == "p2"
+
+
+def test_build_env_default_is_rung0():
+    env = build_env_for({})                              # no complexity/key/phase
+    assert env["GOOSE_MODEL"] == "zo-ladder-low"
+    assert env["ZO_BUILD_TIER"] == "zo-ladder-low"
+    assert env["ZO_BUILD_TASK"] == "" and env["ZO_BUILD_PHASE"] == ""
+
+
+def test_build_env_task_fallback_chain():
+    assert build_env_for({"directive_id": "d9"})["ZO_BUILD_TASK"] == "d9"
+    assert build_env_for({"id": 42})["ZO_BUILD_TASK"] == "42"
+
+
+def test_build_artifact_row_schema():
+    row = build_artifact_row(
+        file="foo_enrichment.py", content_bytes=123, context_type="enricher",
+        tier="builder_high", model="zo:openai/gpt-5.4-mini", backend="zo_routed",
+        phase="p1", task="build_foo", built_at="2026-05-30T00:00:00Z",
+    )
+    assert row["agent_id"] == BUILDER_AGENT_ID
+    assert row["memory_type"] == "build_artifact"
+    c = json.loads(row["content"])
+    # base schema the ingestor reads
+    assert c["file"] == "foo_enrichment.py" and c["bytes"] == 123
+    assert c["interface"] == "enricher" and c["task"] == "build_foo"
+    assert c["phase"] == "p1" and c["built_at"] == "2026-05-30T00:00:00Z"
+    # new ladder provenance the publisher surfaces
+    assert c["tier"] == "builder_high"
+    assert c["model"] == "zo:openai/gpt-5.4-mini" and c["backend"] == "zo_routed"
+
+
+def test_build_artifact_row_defaults_built_at():
+    row = build_artifact_row("a.py", 10, "utility", "zo-ladder-low")
+    c = json.loads(row["content"])
+    assert c["built_at"]            # auto-stamped, non-empty
+    assert c["model"] == "" and c["task"] == ""   # optional fields default empty

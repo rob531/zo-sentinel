@@ -48,6 +48,8 @@ IMPORTABLE_MODULES = [
     # goose -> GitHub-PR bridge (host-free; git/gh seam is mockable).
     "zo_sentinel.publisher.gitops",
     "zo_sentinel.publisher.publisher",
+    # goose build-path glue: complexity->ladder routing + build_artifact schema.
+    "zo_sentinel.build_routing",
 ]
 
 # Known NOT-portable (documented so nobody re-adds them by mistake):

@@ -98,6 +98,15 @@ def main(argv=None) -> int:
         return 2
     src = path.read_text(encoding="utf-8")
 
+    # Already-patched detection (idempotent re-runs, e.g. after a reset-refresh
+    # reverts the host file): key off the patch's OWN output, not the raw
+    # "ON CONFLICT" string -- that also appears in the explanatory comment, so the
+    # check below mis-fired and exited non-zero with a scary "inspect manually" on
+    # an already-fixed file.
+    if NEW_WRITE in src and NEW_HB in src:
+        print("Already patched (both upsert sites use exists->UPDATE/INSERT). No change.")
+        return 0
+
     if "ON CONFLICT" not in src:
         print("No ON CONFLICT found -- already patched or different version. No change.")
         return 0

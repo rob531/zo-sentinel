@@ -15,6 +15,14 @@ patch_go_sh.py -- one-shot host patcher for the LIVE zm-go launcher
       the Goose Architect's proposals are drained into pending/ (otherwise
       proposed/ jams at its cap and the Architect skips every cycle). Also adds
       the promoter to the section-1 pkill list (1c) for a clean restart.
+  5.  CWD fix for the 12.6b trio: rewrite the ingestor/governor/publisher launch
+      lines to `cd /home/workspace/zo_sentinel && ...` first. Without it, `-m
+      zo_sentinel.*` is run from go.sh's CWD (/home/workspace), where the repo-root
+      dir shadows the nested package -> "No module named zo_sentinel.ingestor":
+      the actor exits, and the governor/publisher loops survive but no-op every
+      cycle (publisher created ZERO PRs). Anchors on the no-cd lines, so it only
+      fires on an already-deployed go.sh; fresh installs get the cd form from the
+      corrected 12.6b block and skip.
 
 Usage (on ZoComputer):
     python3 patch_go_sh.py            # patch in place (.bak written)
@@ -71,15 +79,15 @@ hdr "12.6b Code-Artifact Ingestion Trio (gated -- DORMANT until latched)"
 # flips the ingestor latch once builds prove green AND agree with gate_8. Activate:
 #   touch $SENTINEL/.ingestor_enabled      (or let the governor do it)
 #   export PR_PUBLISHER_CLONE_DIR=<clone>; touch $SENTINEL/.pr_publisher_enabled
-nohup env PYTHONPATH="$SENTINEL" python3 -m zo_sentinel.ingestor run --interval 300 >> $LOGS/artifact_ingestor.log 2>&1 &
+nohup env PYTHONPATH="$SENTINEL" bash -c 'cd /home/workspace/zo_sentinel && exec python3 -m zo_sentinel.ingestor run --interval 300' >> $LOGS/artifact_ingestor.log 2>&1 &
 sleep 1
 ING=$(pgrep -f 'zo_sentinel.ingestor run' 2>/dev/null | head -1)
 [[ -n "$ING" ]] && ok "ArtifactIngestor PID $ING (dormant until .ingestor_enabled)" || warn "ArtifactIngestor failed"
-nohup env PYTHONPATH="$SENTINEL" bash -c 'while true; do python3 -m zo_sentinel.ingestor govern; sleep 600; done' >> $LOGS/activation_governor.log 2>&1 &
+nohup env PYTHONPATH="$SENTINEL" bash -c 'cd /home/workspace/zo_sentinel && while true; do python3 -m zo_sentinel.ingestor govern; sleep 600; done' >> $LOGS/activation_governor.log 2>&1 &
 sleep 1
 GOV=$(pgrep -f 'zo_sentinel.ingestor govern' 2>/dev/null | head -1)
 [[ -n "$GOV" ]] && ok "ActivationGovernor PID $GOV" || warn "ActivationGovernor failed"
-nohup env PYTHONPATH="$SENTINEL" bash -c 'while true; do python3 -m zo_sentinel.publisher run-once; sleep 600; done' >> $LOGS/pr_publisher.log 2>&1 &
+nohup env PYTHONPATH="$SENTINEL" bash -c 'cd /home/workspace/zo_sentinel && while true; do python3 -m zo_sentinel.publisher run-once; sleep 600; done' >> $LOGS/pr_publisher.log 2>&1 &
 sleep 1
 PUB=$(pgrep -f 'zo_sentinel.publisher run-once' 2>/dev/null | head -1)
 [[ -n "$PUB" ]] && ok "PRPublisher PID $PUB (dormant until .pr_publisher_enabled)" || warn "PRPublisher failed"
@@ -118,6 +126,42 @@ PRM=$(pgrep -f 'zo_sentinel.promoters.proposed_to_pending_promoter' 2>/dev/null 
 NEW_DGG = OLD_DGG + PROMO_BLOCK
 SEEN_PROMO = "12.5c Proposed->Pending Promoter"
 
+# --- 5: ingestion-trio CWD fix (the launch lines must cd into $SENTINEL) -----
+# `python3 -m zo_sentinel.*` is launched from go.sh's CWD (/home/workspace under
+# supervisord). For `-m`, CWD is sys.path[0] and OUTWEIGHS PYTHONPATH -- so from
+# /home/workspace, `import zo_sentinel` binds to the REPO-ROOT dir
+# /home/workspace/zo_sentinel (a bare namespace dir, no __init__.py) instead of
+# the nested package one level down, and `zo_sentinel.ingestor` / `.publisher`
+# resolve to a path that doesn't exist -> "No module named zo_sentinel.ingestor".
+# The DIRECT-python actor then exits (process absent); the bash-loop governor and
+# publisher survive as live loops whose inner `-m` no-ops every cycle (the
+# publisher silently created ZERO PRs this way). Fix: cd into the repo root first
+# so sys.path[0] is the repo root and the nested package wins. These anchor on the
+# ORIGINAL (no-cd) lines, so they only fire on an already-deployed go.sh; a fresh
+# install gets the cd form from the (now-corrected) TRIO_BLOCK above and skips here.
+OLD_ACTOR_CWD = ('nohup env PYTHONPATH="$SENTINEL" python3 -m zo_sentinel.ingestor run '
+                 '--interval 300 >> $LOGS/artifact_ingestor.log 2>&1 &\n')
+NEW_ACTOR_CWD = ("nohup env PYTHONPATH=\"$SENTINEL\" bash -c 'cd /home/workspace/zo_sentinel && "
+                 "exec python3 -m zo_sentinel.ingestor run --interval 300' "
+                 ">> $LOGS/artifact_ingestor.log 2>&1 &\n")
+SEEN_ACTOR_CWD = "cd /home/workspace/zo_sentinel && exec python3 -m zo_sentinel.ingestor run"
+
+OLD_GOV_CWD = ("nohup env PYTHONPATH=\"$SENTINEL\" bash -c 'while true; do "
+               "python3 -m zo_sentinel.ingestor govern; sleep 600; done' "
+               ">> $LOGS/activation_governor.log 2>&1 &\n")
+NEW_GOV_CWD = ("nohup env PYTHONPATH=\"$SENTINEL\" bash -c 'cd /home/workspace/zo_sentinel && "
+               "while true; do python3 -m zo_sentinel.ingestor govern; sleep 600; done' "
+               ">> $LOGS/activation_governor.log 2>&1 &\n")
+SEEN_GOV_CWD = "cd /home/workspace/zo_sentinel && while true; do python3 -m zo_sentinel.ingestor govern"
+
+OLD_PUB_CWD = ("nohup env PYTHONPATH=\"$SENTINEL\" bash -c 'while true; do "
+               "python3 -m zo_sentinel.publisher run-once; sleep 600; done' "
+               ">> $LOGS/pr_publisher.log 2>&1 &\n")
+NEW_PUB_CWD = ("nohup env PYTHONPATH=\"$SENTINEL\" bash -c 'cd /home/workspace/zo_sentinel && "
+               "while true; do python3 -m zo_sentinel.publisher run-once; sleep 600; done' "
+               ">> $LOGS/pr_publisher.log 2>&1 &\n")
+SEEN_PUB_CWD = "cd /home/workspace/zo_sentinel && while true; do python3 -m zo_sentinel.publisher run-once"
+
 PATCHES = [
     ("pkill-list trio", SEEN_KILL, OLD_KILL, NEW_KILL),
     ("pkill-list ladder_shim", SEEN_LADDERKILL, OLD_LADDERKILL, NEW_LADDERKILL),
@@ -125,6 +169,9 @@ PATCHES = [
     ("12.5c promoter launch", SEEN_PROMO, OLD_DGG, NEW_DGG),
     ("12.6b trio launch", SEEN_GATE, OLD_GATE, NEW_GATE),
     ("keyed ladder_shim", SEEN_SHIM, OLD_SHIM, NEW_SHIM),
+    ("trio cwd: actor", SEEN_ACTOR_CWD, OLD_ACTOR_CWD, NEW_ACTOR_CWD),
+    ("trio cwd: governor", SEEN_GOV_CWD, OLD_GOV_CWD, NEW_GOV_CWD),
+    ("trio cwd: publisher", SEEN_PUB_CWD, OLD_PUB_CWD, NEW_PUB_CWD),
 ]
 
 

@@ -82,9 +82,15 @@ class InMemoryGate8Source:
 
 
 class DuckDBGate8Source:
-    """Reads gate_8's recorded verdicts from gate_errors.db (gate_checks). A file
-    is failed if any gate_8 check for it is fail/error, passed if it has only
-    passes, unknown if gate_8 hasn't checked it. Any error -> unknown (safe)."""
+    """Reads gate_8's recorded verdicts from gate_errors.db (gate_checks). Uses
+    ONLY the file's MOST RECENT gate run (by gate_checks.started_at) -- a stale
+    fail from an early cohort must not outweigh a later passing rebuild. Within
+    that latest run: failed if any check is fail/error, passed if only passes,
+    unknown if gate_8 hasn't checked it. Any error -> unknown (safe).
+
+    (Before: 'any fail across ALL history -> fail', which pinned files that
+    failed once long ago but pass now as permanent false-promotes -- the
+    activation governor could never reach lifetime_false_promotes==0.)"""
 
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = db_path or os.environ.get("GATE_ERRORS_DB", "/home/workspace/gate_errors.db")
@@ -95,10 +101,16 @@ class DuckDBGate8Source:
             import duckdb
             con = duckdb.connect(self.db_path, read_only=True)
             try:
+                # restrict to the single most-recent run_id that evaluated this
+                # file, so only its current state counts (not ancient fails).
                 rows = con.execute(
                     "SELECT status FROM gate_checks "
-                    "WHERE gate_name = 'gate_8_new_module' AND check_name LIKE ?",
-                    [f"%{base}%"],
+                    "WHERE gate_name = 'gate_8_new_module' AND check_name LIKE ? "
+                    "AND run_id = ("
+                    "    SELECT run_id FROM gate_checks "
+                    "    WHERE gate_name = 'gate_8_new_module' AND check_name LIKE ? "
+                    "    ORDER BY started_at DESC NULLS LAST LIMIT 1)",
+                    [f"%{base}%", f"%{base}%"],
                 ).fetchall()
             finally:
                 con.close()

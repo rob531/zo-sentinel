@@ -179,6 +179,19 @@ class TestEvaluate:
         assert v.action is IngestAction.QUARANTINE
         assert v.fix_directive and v.fix_directive["source"] == "artifact_ingestor"
 
+    def test_breaker_quarantined_file_not_promoted(self, tmp_path: Path, monkeypatch):
+        # A file the gate_8 breaker has quarantined must NOT be promoted, even
+        # if its current content scans clean -- gate_8 fails it, so the ingestor
+        # must agree (else a false-promote blocks the activation governor).
+        _write(tmp_path, "x_enrichment.py", GOOD_ENRICHMENT)
+        ing = ArtifactIngestor(InMemoryMeshStore(), sentinel_home=str(tmp_path))
+        monkeypatch.setattr(ing, "_is_quarantined", lambda f: True)
+        v = ing.evaluate(BuildArtifact(file="x_enrichment.py"))
+        assert not v.ok
+        assert v.contract == "quarantined"
+        assert v.action is IngestAction.QUARANTINE
+        assert v.fix_directive and v.fix_directive["source"] == "artifact_ingestor"
+
     def test_missing_output_file_quarantines(self, tmp_path: Path):
         # No _write: the declared output file was never materialised on disk
         # (investigate/diagnostic directive, or a build that emitted a row but

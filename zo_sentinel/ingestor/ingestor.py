@@ -103,9 +103,35 @@ class ArtifactIngestor:
 
     # ---- validate a single artifact ---------------------------------------
 
+    def _is_quarantined(self, file: str) -> bool:
+        """True if the gate_8 circuit breaker has quarantined this file. A
+        quarantined build was pulled for repeated gate_8 failures and must
+        never be promoted -- gate_8 reports it as failed, so the ingestor must
+        agree or the activation governor sees a false-promote. Best-effort: if
+        the breaker-state module/file isn't importable (e.g. CI), return False
+        so we never invent a quarantine."""
+        try:
+            from gate_quality_state import is_quarantined
+            return bool(is_quarantined(Path(file).name))
+        except Exception:
+            return False
+
     def evaluate(self, artifact: BuildArtifact) -> IngestVerdict:
         atype = classify(artifact.file)
         path = self._resolve(artifact)
+        if self._is_quarantined(artifact.file):
+            # The gate_8 circuit breaker pulled this file. Never promote a
+            # quarantined build, regardless of how its current content scans --
+            # gate_8 fails it, so the ingestor must too (else: false-promote
+            # that blocks the governor forever).
+            verdict = IngestVerdict(
+                artifact=artifact, artifact_type=atype, ok=False,
+                contract="quarantined",
+                detail="gate_8 circuit breaker has quarantined this file",
+                action=IngestAction.QUARANTINE, safety_block=False,
+            )
+            verdict.fix_directive = self._fix_directive(verdict)
+            return verdict
         if not path.exists():
             # gate_8's `built_file_missing` check: a directive can declare an
             # output_file that never lands on disk -- investigate/diagnostic

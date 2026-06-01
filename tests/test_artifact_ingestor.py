@@ -179,6 +179,19 @@ class TestEvaluate:
         assert v.action is IngestAction.QUARANTINE
         assert v.fix_directive and v.fix_directive["source"] == "artifact_ingestor"
 
+    def test_missing_output_file_quarantines(self, tmp_path: Path):
+        # No _write: the declared output file was never materialised on disk
+        # (investigate/diagnostic directive, or a build that emitted a row but
+        # no file). Must QUARANTINE -- mirrors gate_8's built_file_missing so the
+        # two graders agree instead of the ingestor false-promoting a phantom.
+        ing = ArtifactIngestor(InMemoryMeshStore(), sentinel_home=str(tmp_path))
+        v = ing.evaluate(BuildArtifact(file="never_built_enrichment.py"))
+        assert not v.ok
+        assert v.contract == "built_file_missing"
+        assert v.action is IngestAction.QUARANTINE
+        assert not v.safety_block
+        assert v.fix_directive and v.fix_directive["source"] == "artifact_ingestor"
+
 
 # --- ingestor: DORMANCY is the headline contract ----------------------------
 

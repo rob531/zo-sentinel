@@ -13,6 +13,20 @@ Dormant by design: when not enabled, run_once() returns the plans it WOULD
 publish (action="dry_run") and writes nothing. Enabled only when
 `.pr_publisher_enabled` exists or PR_PUBLISHER_ENABLED is truthy.
 
+Rate governance (the repo is PRIVATE -- 2000 GitHub Actions min/month, and every
+PR fires pr-gates.yml on hosted runners ~8-10 min each):
+  - WATERMARK   -- reads only build_artifacts with built_at > watermark, via the
+                   store's read_build_artifacts_since (the plain read ignores the
+                   bound and would replay the oldest window forever). Advances the
+                   watermark as it goes, so it never re-scans the backlog. Seed it
+                   to "now" before enabling (tools/seed_publisher_watermark.py) so
+                   the historical backlog is skipped entirely.
+  - DAILY CAP   -- at most `daily_cap` PRs per UTC day (default 8 -> ~1900 Actions
+                   min/month). Cap-deferred artifacts are NOT skipped: the
+                   watermark is not advanced past them, so they publish next day.
+  - PR SPACING  -- a sleep between PRs so a burst doesn't trip GitHub's secondary
+                   (abuse) rate limits. GitOps adds Retry-After backoff on top.
+
 Reuses zo_sentinel.ingestor: the MeshStore seam, BuildArtifact, classify(),
 and static_safety_scan().
 """
@@ -21,6 +35,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional
 
@@ -31,10 +47,14 @@ from zo_sentinel.publisher.gitops import FakeGitOps, GitOps, PublishPlan
 
 PUBLISHER_AGENT_ID = "zo_sentinel.pr_publisher"
 PR_PUBLISHED_TYPE = "pr_published"          # mesh row holding the published dedup_keys
+WATERMARK_TYPE = "pr_publish_watermark"     # highest built_at scanned (ISO string)
+BUDGET_TYPE = "pr_publish_budget"           # {"day": "YYYY-MM-DD", "count": N}
 SENTINEL_NAME = ".pr_publisher_enabled"
 DEFAULT_HOME = "/home/workspace/zo_sentinel"
 DEFAULT_BRANCH_PREFIX = "auto/build"
 DEFAULT_LABEL = "autonomous-build"
+DEFAULT_DAILY_CAP = 8                        # ~8 PRs/day * ~8 Actions-min stays < 2000/mo
+DEFAULT_PR_SPACING_SEC = 5.0
 
 
 def _slug(text: str, n: int = 40) -> str:
@@ -42,18 +62,36 @@ def _slug(text: str, n: int = 40) -> str:
     return (s[:n] or "artifact").strip("-")
 
 
+def _max_iso(a: Optional[str], b: Optional[str]) -> Optional[str]:
+    """The later of two ISO timestamps (lexicographic == chronological for ISO);
+    tolerates either being None/empty."""
+    if not b:
+        return a
+    if not a or b > a:
+        return b
+    return a
+
+
 class Publisher:
     def __init__(self, store: MeshStore, gitops: Optional[GitOps] = None,
                  home: str = DEFAULT_HOME,
                  content_resolver: Optional[Callable[[BuildArtifact], Optional[str]]] = None,
                  repo_url: str = "https://github.com/rob531/zo-sentinel",
-                 enabled_override: Optional[bool] = None):
+                 enabled_override: Optional[bool] = None,
+                 daily_cap: int = DEFAULT_DAILY_CAP,
+                 pr_spacing_sec: float = DEFAULT_PR_SPACING_SEC,
+                 clock: Optional[Callable[[], datetime]] = None,
+                 sleep: Optional[Callable[[float], None]] = None):
         self.store = store
         self.gitops = gitops or FakeGitOps(repo_url)
         self.home = Path(home)
         self.repo_url = repo_url.rstrip("/")
         self._resolver = content_resolver or self._read_from_home
         self._enabled_override = enabled_override
+        self.daily_cap = max(0, int(daily_cap))
+        self.pr_spacing_sec = max(0.0, float(pr_spacing_sec))
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._sleep = sleep or time.sleep
 
     # --- dormancy -----------------------------------------------------------
     def is_enabled(self) -> bool:
@@ -86,6 +124,37 @@ class Publisher:
             return set(data) if isinstance(data, list) else set()
         except (json.JSONDecodeError, TypeError):
             return set()
+
+    # --- watermark + daily budget ------------------------------------------
+    def _load_watermark(self) -> Optional[str]:
+        return self.store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) or None
+
+    def _save_watermark(self, value: str) -> None:
+        self.store.write("mesh_memory", {
+            "agent_id": PUBLISHER_AGENT_ID,
+            "memory_type": WATERMARK_TYPE,
+            "content": value,
+            "importance": 0.3,
+        })
+
+    def _load_budget(self) -> tuple:
+        """(day, count) for the persisted daily budget; ('', 0) if none."""
+        raw = self.store.read_latest(BUDGET_TYPE, PUBLISHER_AGENT_ID)
+        if not raw:
+            return "", 0
+        try:
+            d = json.loads(raw)
+            return str(d.get("day", "")), int(d.get("count", 0) or 0)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return "", 0
+
+    def _save_budget(self, day: str, count: int) -> None:
+        self.store.write("mesh_memory", {
+            "agent_id": PUBLISHER_AGENT_ID,
+            "memory_type": BUDGET_TYPE,
+            "content": json.dumps({"day": day, "count": count}),
+            "importance": 0.3,
+        })
 
     # --- planning -----------------------------------------------------------
     @staticmethod
@@ -129,22 +198,39 @@ class Publisher:
     def run_once(self, limit: int = 20) -> List[dict]:
         enabled = self.is_enabled()
         published = self._already_published()
+        watermark = self._load_watermark()
+
+        # Daily budget (UTC day). Reset the in-memory count when the day rolls,
+        # so the cap is per-calendar-day. Dormant dry-runs don't consume budget.
+        today = self._clock().strftime("%Y-%m-%d")
+        bud_day, bud_count = self._load_budget()
+        if bud_day != today:
+            bud_count = 0
+        remaining = max(0, self.daily_cap - bud_count)
+
         results: List[dict] = []
         new_keys: List[str] = []
+        advance_wm = watermark
+        published_now = 0
 
-        for row_id, raw in self.store.read_build_artifacts(None, limit):
+        for row_id, raw in self.store.read_build_artifacts_since(watermark, limit):
             art = BuildArtifact.from_mesh_content(raw, row_id)
-            if art is None or art.dedup_key in published:
+            if art is None:
+                continue
+            if art.dedup_key in published:
+                advance_wm = _max_iso(advance_wm, art.built_at)   # already done; skip past it
                 continue
             content = self._resolver(art)
             if not content:
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
                                 "action": "skip", "detail": "content unresolved/empty"})
+                advance_wm = _max_iso(advance_wm, art.built_at)
                 continue
             safety = static_safety_scan(content)
             if safety:
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
                                 "action": "blocked", "detail": safety})
+                advance_wm = _max_iso(advance_wm, art.built_at)
                 continue
             tier = self._tier_of(raw)
             plan = self.plan(art, content, tier)
@@ -152,24 +238,48 @@ class Publisher:
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
                                 "action": "dry_run", "branch": plan.branch, "tier": tier})
                 continue
+            if remaining <= 0:
+                # Daily cap hit. Do NOT advance the watermark past this artifact
+                # (or it'd be lost); stop so the next day resumes from here.
+                results.append({"dedup_key": art.dedup_key, "file": art.file,
+                                "action": "deferred_cap",
+                                "detail": f"daily cap {self.daily_cap} reached"})
+                break
             res = self.gitops.publish(plan)
             results.append({"dedup_key": art.dedup_key, "file": art.file,
                             "action": "published" if res.ok else "failed",
                             "pr_url": res.pr_url, "detail": res.detail, "tier": tier})
-            if res.ok:
-                new_keys.append(art.dedup_key)
+            if not res.ok:
+                # Publish failed (network / rate-limit even after GitOps backoff).
+                # Stop and do NOT advance past it, so we retry it next cycle.
+                break
+            new_keys.append(art.dedup_key)
+            remaining -= 1
+            bud_count += 1
+            published_now += 1
+            advance_wm = _max_iso(advance_wm, art.built_at)
+            if self.pr_spacing_sec and remaining > 0:
+                self._sleep(self.pr_spacing_sec)
 
-        if enabled and new_keys:
-            self.store.write("mesh_memory", {
-                "agent_id": PUBLISHER_AGENT_ID,
-                "memory_type": PR_PUBLISHED_TYPE,
-                "content": json.dumps(sorted(published | set(new_keys))),
-                "importance": 0.3,
-            })
-            self.store.write("audit_log", {
-                "event_type": "PR_PUBLISHED",
-                "actor": PUBLISHER_AGENT_ID,
-                "outcome": "ok",
-                "details_json": json.dumps({"count": len(new_keys), "keys": new_keys}),
-            })
+        if enabled:
+            if new_keys:
+                self.store.write("mesh_memory", {
+                    "agent_id": PUBLISHER_AGENT_ID,
+                    "memory_type": PR_PUBLISHED_TYPE,
+                    "content": json.dumps(sorted(published | set(new_keys))),
+                    "importance": 0.3,
+                })
+                self.store.write("audit_log", {
+                    "event_type": "PR_PUBLISHED",
+                    "actor": PUBLISHER_AGENT_ID,
+                    "outcome": "ok",
+                    "details_json": json.dumps({"count": len(new_keys), "keys": new_keys}),
+                })
+            if published_now:
+                self._save_budget(today, bud_count)
+            # advance_wm only ever covers rows we published or definitively
+            # skipped -- never a cap-deferred/failed row (we break before
+            # updating it), so those re-surface on the next pass.
+            if advance_wm and advance_wm != watermark:
+                self._save_watermark(advance_wm)
         return results

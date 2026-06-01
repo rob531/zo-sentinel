@@ -11,6 +11,7 @@ WOULD hit mesh_memory without a live service.
 """
 from __future__ import annotations
 
+import json
 import os
 from typing import Optional, Protocol
 
@@ -24,8 +25,28 @@ DIRECTIVE_AGENT_ID = "zo_sentinel.directive"        # what goose_runner polls
 BUILD_DIRECTIVE_TYPE = "build_directive"
 
 
+def _content_built_at(content: object) -> str:
+    """built_at of a build_artifact row, tolerant of dict OR JSON-string content
+    (the Http store returns JSON text; tests seed dicts-or-text)."""
+    if isinstance(content, str):
+        try:
+            content = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if isinstance(content, dict):
+        return str(content.get("built_at", ""))
+    return ""
+
+
 class MeshStore(Protocol):
     def read_build_artifacts(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]: ...
+    def read_build_artifacts_since(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
+        """Like read_build_artifacts, but ACTUALLY filters to rows with
+        built_at > since_built_at (the plain read_build_artifacts ignores the
+        bound in the Http impl). Ordered by built_at ASC. The publisher's
+        watermark relies on this honoring the bound so it never replays the
+        backlog or stalls on the oldest window."""
+        ...
     def get_watermark(self) -> Optional[str]: ...
     def set_watermark(self, value: str) -> None: ...
     def write(self, table: str, row: dict) -> bool: ...
@@ -49,6 +70,14 @@ class InMemoryMeshStore:
                     return str(c.get("built_at", ""))
                 return ""
             rows = [(rid, c) for (rid, c) in rows if _ts(c) > since_built_at]
+        return rows[:limit]
+
+    def read_build_artifacts_since(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
+        rows = list(self._artifacts)
+        if since_built_at:
+            rows = [(rid, c) for (rid, c) in rows
+                    if _content_built_at(c) > since_built_at]
+        rows.sort(key=lambda rc: _content_built_at(rc[1]))
         return rows[:limit]
 
     def get_watermark(self) -> Optional[str]:
@@ -121,6 +150,31 @@ class HttpMeshStore:
             f"WHERE agent_id = '{BUILDER_AGENT_ID}' "
             f"AND memory_type = '{BUILD_ARTIFACT_TYPE}' "
             "ORDER BY created_at ASC "
+            f"LIMIT {int(limit)}"
+        )
+        resp = self._post("/query", {"sql": sql})
+        out: list[tuple[str, object]] = []
+        for row in resp.get("rows", []):
+            out.append((str(row.get("id", "")), row.get("content")))
+        return out
+
+    def read_build_artifacts_since(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
+        # Filters on the artifact's own built_at (json field), unlike
+        # read_build_artifacts which ignores the bound. since_built_at is our
+        # own watermark (an ISO timestamp), never user input; quote defensively.
+        where_since = ""
+        if since_built_at:
+            safe = str(since_built_at).replace("'", "''")
+            where_since = (
+                "AND json_extract_string(content, '$.built_at') > "
+                f"'{safe}' "
+            )
+        sql = (
+            "SELECT id, content FROM mesh_memory "
+            f"WHERE agent_id = '{BUILDER_AGENT_ID}' "
+            f"AND memory_type = '{BUILD_ARTIFACT_TYPE}' "
+            f"{where_since}"
+            "ORDER BY json_extract_string(content, '$.built_at') ASC "
             f"LIMIT {int(limit)}"
         )
         resp = self._post("/query", {"sql": sql})

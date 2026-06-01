@@ -22,7 +22,9 @@ def _make_publisher() -> Publisher:
     store = HttpMeshStore()
     clone = os.environ.get("PR_PUBLISHER_CLONE_DIR")
     gitops = CliGitOps(clone) if clone else FakeGitOps()
-    return Publisher(store, gitops=gitops)
+    cap = int(os.environ.get("PR_PUBLISHER_DAILY_CAP", "8"))
+    spacing = float(os.environ.get("PR_PUBLISHER_PR_SPACING_SEC", "5"))
+    return Publisher(store, gitops=gitops, daily_cap=cap, pr_spacing_sec=spacing)
 
 
 def main(argv=None) -> int:
@@ -33,8 +35,12 @@ def main(argv=None) -> int:
     if cmd == "status":
         results = pub.run_once()  # dry-run when dormant; reports plans
         enabled = pub.is_enabled()
+        bud_day, bud_count = pub._load_budget()
         print(f"enabled:           {enabled}")
         print(f"gitops:            {type(pub.gitops).__name__}")
+        print(f"watermark:         {pub._load_watermark() or '(unset -- seed before enabling)'}")
+        print(f"daily_cap:         {pub.daily_cap}  (used today {bud_day}: {bud_count})")
+        print(f"pr_spacing_sec:    {pub.pr_spacing_sec}")
         print(f"unpublished/plans: {len(results)}")
         for r in results[:10]:
             print(f"  [{r['action']}] {r.get('file')}  tier={r.get('tier','-')}")

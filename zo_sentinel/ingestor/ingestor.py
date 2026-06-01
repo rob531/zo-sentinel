@@ -106,6 +106,24 @@ class ArtifactIngestor:
     def evaluate(self, artifact: BuildArtifact) -> IngestVerdict:
         atype = classify(artifact.file)
         path = self._resolve(artifact)
+        if not path.exists():
+            # gate_8's `built_file_missing` check: a directive can declare an
+            # output_file that never lands on disk -- investigate/diagnostic
+            # directives that don't call delegate_to_builder, or a build whose
+            # file was quarantined/deleted after the build_artifact row was
+            # emitted. validate_file would happily pass the stored content, so
+            # the ingestor would PROMOTE a phantom that gate_8 fails -> a
+            # false-promote that pins the governor below its arming bar. Treat a
+            # missing output file as a contract failure (quarantine), mirroring
+            # gate_8 so the two graders agree.
+            verdict = IngestVerdict(
+                artifact=artifact, artifact_type=atype, ok=False,
+                contract="built_file_missing",
+                detail=f"declared output file not on disk: {path}",
+                action=IngestAction.QUARANTINE, safety_block=False,
+            )
+            verdict.fix_directive = self._fix_directive(verdict)
+            return verdict
         ok, contract, detail, safety_block = validate_file(path, atype)
         action = IngestAction.PROMOTE if ok else IngestAction.QUARANTINE
         verdict = IngestVerdict(

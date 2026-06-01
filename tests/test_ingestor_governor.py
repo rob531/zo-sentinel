@@ -20,6 +20,7 @@ from zo_sentinel.ingestor.store import InMemoryMeshStore  # noqa: E402
 from zo_sentinel.ingestor.governor import (  # noqa: E402
     ActivationCriteria,
     AutoActivationGovernor,
+    DuckDBGate8Source,
     InMemoryGate8Source,
 )
 
@@ -64,6 +65,44 @@ def test_gate8_source_matches_by_basename():
     assert g.verdict_for("/abs/path/a.py") is True
     assert g.verdict_for("b.py") is False
     assert g.verdict_for("unknown.py") is None
+
+
+def test_duckdb_gate8_uses_latest_run(tmp_path: Path):
+    """A stale early-cohort fail must NOT outweigh a later passing rebuild --
+    verdict_for keys off the most-recent run only (the sticky-fail fix)."""
+    import pytest
+    duckdb = pytest.importorskip("duckdb")
+    db = str(tmp_path / "gate_errors.db")
+    con = duckdb.connect(db)
+    con.execute(
+        "CREATE TABLE gate_checks (check_id VARCHAR, run_id VARCHAR, "
+        "gate_name VARCHAR, check_name VARCHAR, status VARCHAR, "
+        "duration_ms INTEGER, started_at TIMESTAMPTZ, details TEXT)"
+    )
+
+    def ins(cid, run, status, when):
+        con.execute(
+            "INSERT INTO gate_checks VALUES (?,?,?,?,?,?,?,?)",
+            [cid, run, "gate_8_new_module",
+             f"gate_8: foo.py static_safety [{run}]", status, 1, when, None])
+
+    ins("c1", "run_old", "fail", "2026-01-01T00:00:00+00:00")   # ancient fail
+    ins("c2", "run_new", "pass", "2026-06-01T00:00:00+00:00")   # recent pass
+    con.close()
+    # latest run passed -> True, despite the old fail in history
+    assert DuckDBGate8Source(db_path=db).verdict_for("foo.py") is True
+
+    con = duckdb.connect(db)
+    con.execute(
+        "INSERT INTO gate_checks VALUES (?,?,?,?,?,?,?,?)",
+        ["c3", "run_newest", "gate_8_new_module",
+         "gate_8: foo.py import [run_newest]", "fail", 1,
+         "2026-06-02T00:00:00+00:00", None])
+    con.close()
+    # newest run failed -> False
+    assert DuckDBGate8Source(db_path=db).verdict_for("foo.py") is False
+    # never-evaluated file -> None
+    assert DuckDBGate8Source(db_path=db).verdict_for("never.py") is None
 
 
 # --- assessment -------------------------------------------------------------

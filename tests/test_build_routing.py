@@ -24,9 +24,7 @@ from zo_sentinel.build_routing import (
 
 def test_tier_for_complexity():
     assert tier_for_complexity("low") == "zo-ladder-low"
-    # medium pinned to rung-0/MiniMax: the Gemini (zo-ladder-medium) rung was
-    # timing out goose's GOOSE_TIMEOUT mid-build so no file was produced.
-    assert tier_for_complexity("medium") == "zo-ladder-low"
+    assert tier_for_complexity("medium") == "zo-ladder-medium"
     assert tier_for_complexity("high") == "zo-ladder-high"
     assert tier_for_complexity("critical") == "zo-ladder-critical"
     # unknown / missing / garbage all fall back to rung-0 (prior behaviour)
@@ -34,7 +32,7 @@ def test_tier_for_complexity():
     assert tier_for_complexity(None) == "zo-ladder-low"
     assert tier_for_complexity("") == "zo-ladder-low"
     assert tier_for_complexity("WEIRD") == "zo-ladder-low"
-    assert tier_for_complexity(" Medium ") == "zo-ladder-low"  # normalised, pinned to rung-0
+    assert tier_for_complexity(" Medium ") == "zo-ladder-medium"  # normalised
 
 
 def test_aliases_match_escalation_map():
@@ -44,19 +42,11 @@ def test_aliases_match_escalation_map():
 
 
 def test_build_env_for_routes_and_carries_context():
-    env = build_env_for({"complexity": "high", "key": "build_x", "phase": "p2"})
-    assert env["GOOSE_MODEL"] == "zo-ladder-high"        # architect routing
-    assert env["ZO_BUILD_TIER"] == "zo-ladder-high"      # codegen routing
+    env = build_env_for({"complexity": "medium", "key": "build_x", "phase": "p2"})
+    assert env["GOOSE_MODEL"] == "zo-ladder-medium"      # architect routing
+    assert env["ZO_BUILD_TIER"] == "zo-ladder-medium"    # codegen routing
     assert env["ZO_BUILD_TASK"] == "build_x"
     assert env["ZO_BUILD_PHASE"] == "p2"
-
-
-def test_medium_pinned_to_rung0():
-    # regression guard: medium must route to rung-0/MiniMax (Gemini rung timed
-    # out goose mid-build -> no file). Flip back only when medium-tier is fixed.
-    env = build_env_for({"complexity": "medium", "key": "build_y"})
-    assert env["GOOSE_MODEL"] == "zo-ladder-low"
-    assert env["ZO_BUILD_TIER"] == "zo-ladder-low"
 
 
 def test_build_env_default_is_rung0():

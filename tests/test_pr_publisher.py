@@ -225,3 +225,49 @@ def test_cligitops_missing_label_does_not_fail_pr(tmp_path, monkeypatch):
     assert res.pr_url == "https://github.com/rob531/zo-sentinel/pull/7"
     create = next(c for c in seen if c[:3] == ["gh", "pr", "create"])
     assert "--label" not in create                          # labels NOT on the create call
+
+
+def test_cligitops_already_exists_is_success(tmp_path, monkeypatch):
+    """A branch that already has a PR is idempotent SUCCESS (recover its URL),
+    not a failure -- otherwise a dropped state-write stalls the publisher forever
+    re-attempting an already-open PR and the watermark never advances."""
+    import zo_sentinel.publisher.gitops as gmod
+
+    def fake_run(args, **kw):
+        if args[:3] == ["gh", "pr", "create"]:
+            return types.SimpleNamespace(
+                returncode=1, stdout="",
+                stderr='a pull request for branch "auto/build/x" into "main" already exists')
+        if args[:3] == ["gh", "pr", "view"]:
+            return types.SimpleNamespace(
+                returncode=0, stdout="https://github.com/rob531/zo-sentinel/pull/9\n", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(gmod.subprocess, "run", fake_run)
+    g = gmod.CliGitOps(str(tmp_path), sleep=lambda *_: None)
+    plan = gmod.PublishPlan(branch="auto/build/x", title="t", body="b", file_path="x.py",
+                            content="c\n", dedup_key="k", labels=[])
+    res = g.publish(plan)
+    assert res.ok is True and res.detail == "already exists"
+    assert res.pr_url == "https://github.com/rob531/zo-sentinel/pull/9"
+
+
+def test_watermark_persists_through_flaky_writes():
+    """A transient write_service drop must not lose the watermark -- _write_durable
+    retries, so the publisher keeps its place across the known :8772 instability."""
+    class _FlakyStore(InMemoryMeshStore):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._wm_fails_left = 2          # first 2 watermark writes "time out"
+
+        def write(self, table, row):
+            if (row.get("memory_type") == WATERMARK_TYPE
+                    and self._wm_fails_left > 0):
+                self._wm_fails_left -= 1
+                return False                  # simulate dropped write_service write
+            return super().write(table, row)
+
+    store = _FlakyStore(artifacts=[_artifact("a.py", built_at="2026-05-30T00:00:00Z")])
+    _pub(store, enabled=True).run_once()
+    # despite 2 dropped writes, the 3rd retry lands -> watermark persisted
+    assert store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) == "2026-05-30T00:00:00Z"

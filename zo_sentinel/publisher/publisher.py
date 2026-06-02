@@ -126,11 +126,23 @@ class Publisher:
             return set()
 
     # --- watermark + daily budget ------------------------------------------
+    def _write_durable(self, table: str, row: dict, attempts: int = 3) -> bool:
+        """store.write, retried a few times. The state writes (watermark / dedup
+        / budget) MUST land or the publisher loses its place and re-attempts
+        already-open PRs next cycle -- and write_service (:8772) drops writes
+        intermittently. store.write returns False on a dropped write; retry."""
+        for i in range(max(1, attempts)):
+            if self.store.write(table, row):
+                return True
+            if i + 1 < attempts:
+                self._sleep(1.0)   # let a flaky write_service recover
+        return False
+
     def _load_watermark(self) -> Optional[str]:
         return self.store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) or None
 
     def _save_watermark(self, value: str) -> None:
-        self.store.write("mesh_memory", {
+        self._write_durable("mesh_memory", {
             "agent_id": PUBLISHER_AGENT_ID,
             "memory_type": WATERMARK_TYPE,
             "content": value,
@@ -149,7 +161,7 @@ class Publisher:
             return "", 0
 
     def _save_budget(self, day: str, count: int) -> None:
-        self.store.write("mesh_memory", {
+        self._write_durable("mesh_memory", {
             "agent_id": PUBLISHER_AGENT_ID,
             "memory_type": BUDGET_TYPE,
             "content": json.dumps({"day": day, "count": count}),
@@ -263,7 +275,7 @@ class Publisher:
 
         if enabled:
             if new_keys:
-                self.store.write("mesh_memory", {
+                self._write_durable("mesh_memory", {
                     "agent_id": PUBLISHER_AGENT_ID,
                     "memory_type": PR_PUBLISHED_TYPE,
                     "content": json.dumps(sorted(published | set(new_keys))),

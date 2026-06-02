@@ -19,6 +19,8 @@ from threading import Thread
 sys.path.insert(0, "/home/workspace/zo_sentinel")  # ensure zo_sentinel package importable
 from zo_sentinel.build_routing import (  # noqa: E402
     build_env_for, directive_content, resolve_directive_id)
+from zo_sentinel.build_completion import (  # noqa: E402
+    MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, output_confirmed)
 
 # =============================================================================
 # CONSTANTS
@@ -268,21 +270,20 @@ def load_directives_from_mesh():
     return directives
 
 def is_goose_eligible(directive):
-    """Check if directive is eligible for Goose execution."""
-    content = directive.get("content", directive.get("description", ""))
-    complexity = directive.get("complexity", "")
-    source = directive.get("source", "")
-    
-    # Accept all directives -- Goose handles any complexity
-    # Only skip if already built (idempotent check)
+    """Check if directive is eligible for Goose execution.
+
+    Accept all complexities (Goose/fallback handle any). Skip only when a
+    sentinel says we're finished with it: `.done.json` (built -- verified by
+    output_confirmed at completion time) or `.failed.json` (gave up after
+    repeated ghost builds; surfaced, so don't churn). high-complexity coworker
+    handoff is decided in the main loop, not here.
+    """
     directive_id_val = directive.get("directive_id") or directive.get("id", "unknown")
-    done_file = Path("/home/workspace/zo_sentinel/directives") / f"{directive_id_val}.done.json"
-    if done_file.exists():
-        return False  # Already built
-    eligible = True  # Accept all complexities
-    
-    # high complexity -> coworker handoff (handled separately in main loop)
-    # low/medium/unknown -> Goose recipe
+    sentinels = Path("/home/workspace/zo_sentinel/directives")
+    if (sentinels / f"{directive_id_val}.done.json").exists():
+        return False
+    if (sentinels / f"{directive_id_val}.failed.json").exists():
+        return False
     return True
 
 # =============================================================================
@@ -502,6 +503,66 @@ def mark_directive_completed(directive):
         except Exception as e:
             log(f"Failed to move directive file: {e}")
 
+def _complete(directive, directive_id, result_text, fallback_used=False):
+    """A directive's declared output IS on disk -> record + mark done for real."""
+    write_result(directive_id, True, result_text, fallback_used=fallback_used)
+    mark_directive_completed(directive)
+    clear_ghost(DIRECTIVES_PATH, directive_id)
+
+def _mark_directive_failed(directive, directive_id, reason):
+    """Give up after repeated ghost builds: write a .failed sentinel (so the
+    runner stops churning and the generator stops re-proposing) + surface it.
+    NOT a .done -- it never built; this makes the failure visible instead of
+    masquerading as success the way ghost-completion did."""
+    log(f"[ghost-guard] {directive_id}: GIVING UP after {MAX_GHOST_ATTEMPTS} ghost builds -- {reason}")
+    try:
+        Path(f"{DIRECTIVES_PATH}/{directive_id}.failed.json").write_text(
+            json.dumps({"directive_id": directive_id, "reason": reason,
+                        "failed_at": get_utc_now()}))
+    except Exception as e:
+        log(f"Failed to write .failed sentinel for {directive_id}: {e}")
+    try:
+        ws_write("mesh_events", {
+            "agent_id": "goose_tier1",
+            "event_type": "DIRECTIVE_GHOST_FAILED",
+            "payload": json.dumps({"directive_id": directive_id, "reason": reason}),
+            "severity": "WARNING",
+            "created_at": get_utc_now(),
+        })
+    except Exception:
+        pass
+    clear_ghost(DIRECTIVES_PATH, directive_id)
+    pending_file = PENDING_DIR / f"{directive_id}.json"
+    if pending_file.exists():
+        try:
+            pending_file.unlink()
+        except Exception:
+            pass
+
+def _ghost_or_fail(directive, directive_id):
+    """goose/fallback reported success but the declared output never appeared.
+    Count the ghost attempt; requeue for another try, or fail it once the cap
+    is hit. Crucially we do NOT mark it .done -- that was the regression."""
+    n = bump_ghost(DIRECTIVES_PATH, directive_id, get_utc_now())
+    if n >= MAX_GHOST_ATTEMPTS:
+        _mark_directive_failed(directive, directive_id,
+                               "declared output never produced (ghost build)")
+        return
+    write_result(directive_id, False,
+                 error="ghost build: declared output_file was not produced")
+    try:
+        ws_write("mesh_events", {
+            "event_type": "directive",
+            "content": directive.get("content", ""),
+            "complexity": "medium",
+            "source": "zo_builder",
+            "retry_count": n,
+            "created_at": get_utc_now(),
+        })
+        log(f"[ghost-guard] {directive_id}: ghost attempt {n}/{MAX_GHOST_ATTEMPTS}, requeued for retry")
+    except Exception as e:
+        log(f"Failed to requeue {directive_id}: {e}")
+
 def log_directive_routed(directive_id, source, complexity, method):
     """Log directive routing decision."""
     log(f"[ROUTE] directive_id={directive_id} complexity={complexity} source={source} method={method}")
@@ -594,68 +655,37 @@ def run():
                 
                 # Write task spec
                 write_task_spec(directive)
-                
-                # Try Goose first
+
+                # Build via Goose, falling back to MiniMax. CRITICAL: a directive
+                # is "done" ONLY when its declared output_file actually lands on
+                # disk (output_confirmed). Both goose and the fallback can report
+                # success WITHOUT producing the file -- stamping that .done was the
+                # ghost-completion regression that burned directives forever.
+                produced = False
                 if goose_installed:
                     result = run_goose_task(directive_id, directive.get("content", ""),
                                             build_env_for(directive))
-                    
-                    if result.get("success"):
-                        write_result(directive_id, True, result.get("stdout", ""))
-                        mark_directive_completed(directive)
+                    if result.get("success") and output_confirmed(directive):
+                        _complete(directive, directive_id, result.get("stdout", ""))
+                        produced = True
+                    elif result.get("success"):
+                        log(f"[ghost-guard] {directive_id}: goose reported success but declared "
+                            f"output {declared_output(directive)} is absent -- not completing")
                     else:
-                        # Goose failed - try fallback
                         log(f"Goose failed for {directive_id}: {result.get('error')}")
-                        fallback_result = call_minimax_fallback(directive)
-                        
-                        if fallback_result.get("success"):
-                            write_result(
-                                directive_id, 
-                                True, 
-                                fallback_result.get("result", ""),
-                                fallback_used=True
-                            )
-                            mark_directive_completed(directive)
-                        else:
-                            write_result(
-                                directive_id,
-                                False,
-                                error=fallback_result.get("error", "All methods failed"),
-                                fallback_used=True
-                            )
-                            # Requeue to zo_builder
-                            try:
-                                ws_write("mesh_events", {
-                                    "event_type": "directive",
-                                    "content": directive.get("content", ""),
-                                    "complexity": "medium",
-                                    "source": "zo_builder",
-                                    "retry_count": 1,
-                                    "created_at": get_utc_now()
-                                })
-                                log(f"Requeued to zo_builder: {directive_id}")
-                            except Exception as e:
-                                log(f"Failed to requeue: {e}")
-                else:
-                    # Goose not installed - go straight to fallback
+
+                if not produced:
                     fallback_result = call_minimax_fallback(directive)
-                    
-                    if fallback_result.get("success"):
-                        write_result(
-                            directive_id,
-                            True,
-                            fallback_result.get("result", ""),
-                            fallback_used=True
-                        )
-                        mark_directive_completed(directive)
-                    else:
-                        write_result(
-                            directive_id,
-                            False,
-                            error=fallback_result.get("error", "All methods failed"),
-                            fallback_used=True
-                        )
-                
+                    if fallback_result.get("success") and output_confirmed(directive):
+                        _complete(directive, directive_id,
+                                  fallback_result.get("result", ""), fallback_used=True)
+                        produced = True
+
+                if not produced:
+                    # Neither path produced the declared output -> ghost build.
+                    # Retry (bounded) instead of stamping a bogus .done.
+                    _ghost_or_fail(directive, directive_id)
+
                 # Small delay between directives
                 time.sleep(2)
             

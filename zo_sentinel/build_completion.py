@@ -1,0 +1,94 @@
+"""
+build_completion.py -- the single definition of "a directive actually built".
+
+A directive is DONE only when its declared output_file lands on disk. goose_runner
+historically stamped `<id>.done.json` whenever the goose PROCESS exited 0 -- even
+when no file was produced -- so a directive goose "ran" but never built got a
+permanent .done sentinel and was skipped forever after ("non-eligible"). Those
+ghost-completions accumulated into a graveyard that starves the build loop.
+
+These are PURE helpers (no host paths baked in beyond an overridable default, no
+import-time side effects) so both sides agree on one definition:
+  - goose_runner uses output_confirmed() to gate completion (PREVENT), and the
+    ghost-attempt counters to cap retries before giving up.
+  - tools/sweep_ghost_done.py uses declared_output()/output_present() to find and
+    clear bogus .done sentinels left by the regression (REMEDIATE).
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Optional
+
+DEFAULT_HOME = "/home/workspace/zo_sentinel"
+MIN_OUTPUT_BYTES = 32        # a real module/file is never smaller; rejects empty stubs
+MAX_GHOST_ATTEMPTS = 3       # ghost runs tolerated before a directive is failed, not done
+
+
+def declared_output(directive: dict, home: str = DEFAULT_HOME) -> Optional[Path]:
+    """The file a directive claims it will produce, resolved under `home`.
+
+    None when the directive declares no single output (goal-based / wire /
+    investigate directives that modify existing files) -- those can't be verified
+    by file existence, so the caller trusts process success for them."""
+    out = directive.get("output_file") or directive.get("target_file")
+    if not out or not isinstance(out, str):
+        return None
+    p = Path(out)
+    return p if p.is_absolute() else Path(home) / out
+
+
+def output_present(path: Path, min_bytes: int = MIN_OUTPUT_BYTES) -> bool:
+    """True if `path` is a non-trivial file (exists and >= min_bytes)."""
+    try:
+        return path.is_file() and path.stat().st_size >= min_bytes
+    except OSError:
+        return False
+
+
+def output_confirmed(directive: dict, home: str = DEFAULT_HOME,
+                     min_bytes: int = MIN_OUTPUT_BYTES) -> bool:
+    """True if the directive produced its declared output (or declares none).
+
+    False ONLY when it declares an output_file that is missing or empty -- the
+    ghost-completion signature."""
+    out = declared_output(directive, home)
+    if out is None:
+        return True
+    return output_present(out, min_bytes)
+
+
+# --- ghost-attempt tracking -------------------------------------------------
+# A sidecar next to the .done/.failed sentinels, so a directive goose keeps
+# "succeeding" on without producing its file is retried a bounded number of
+# times and then failed (surfaced) rather than retried forever.
+
+def _ghost_path(directives_dir, directive_id: str) -> Path:
+    return Path(directives_dir) / f"{directive_id}.ghost.json"
+
+
+def ghost_attempts(directives_dir, directive_id: str) -> int:
+    try:
+        data = json.loads(_ghost_path(directives_dir, directive_id).read_text(encoding="utf-8"))
+        return int(data.get("attempts", 0))
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
+def bump_ghost(directives_dir, directive_id: str, when: str) -> int:
+    """Record one ghost attempt; return the new running count."""
+    n = ghost_attempts(directives_dir, directive_id) + 1
+    try:
+        _ghost_path(directives_dir, directive_id).write_text(
+            json.dumps({"attempts": n, "last": when}), encoding="utf-8")
+    except OSError:
+        pass
+    return n
+
+
+def clear_ghost(directives_dir, directive_id: str) -> None:
+    """Drop the ghost counter -- called on a real (file-confirmed) completion."""
+    try:
+        _ghost_path(directives_dir, directive_id).unlink()
+    except OSError:
+        pass

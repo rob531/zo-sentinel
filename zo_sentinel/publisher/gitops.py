@@ -183,6 +183,22 @@ class CliGitOps:
             lambda: subprocess.run(gh_args, capture_output=True, text=True,
                                    cwd=str(self.clone_dir)))
         if pr.returncode != 0:
+            err = ((pr.stderr or "") + (pr.stdout or "")).lower()
+            if "already exists" in err:
+                # Idempotent: a PR for this branch already exists -- typically a
+                # prior cycle opened it but its mesh state-write was dropped (e.g.
+                # write_service timeout), so the publisher re-attempts. Treat as
+                # SUCCESS (the PR is the desired end state) and recover its URL,
+                # so the watermark can finally advance instead of stalling here.
+                view = subprocess.run(
+                    ["gh", "pr", "view", plan.branch, "--repo", self.repo,
+                     "--json", "url", "-q", ".url"],
+                    capture_output=True, text=True, cwd=str(self.clone_dir))
+                pr_url = view.stdout.strip() if view.returncode == 0 else None
+                if pr_url:
+                    self._apply_labels_best_effort(pr_url, plan.labels)
+                return PublishResult(ok=True, pr_url=pr_url, branch=plan.branch,
+                                     detail="already exists")
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(pr.stderr or "gh pr create failed")[:300])
         pr_url = pr.stdout.strip()

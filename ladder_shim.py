@@ -25,6 +25,7 @@ Design notes:
 Port 8796 (add to port registry).
 """
 import os
+import subprocess
 import sys
 import time
 import uuid
@@ -194,6 +195,50 @@ async def chat_completions(request: ChatCompletionRequest):
     }
 
 
+KEY_HYDRATOR = "/home/workspace/zo_mesh/key_hydrator.py"
+HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY")
+
+
+def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.sleep):
+    """Resolve the LLM keys into THIS process's env via the canonical
+    key_hydrator, so the shim is keyed HOWEVER it's launched -- a bare
+    `python3 ladder_shim.py`, a crash/watchdog restart, anything -- not only via
+    ladder_shim_with_keys.sh. Without this, escalation.ask() sees
+    'RcGeminiAPIKey not set' and every rung above MiniMax 502s (the recurring
+    regression). In-process mirror of that wrapper, plus a short retry loop for
+    the boot-race where the vault/Tower isn't ready on the first pass (same
+    reason key_hydrator retries). `runner`/`sleep` are injectable for tests."""
+    runner = runner or (lambda k: subprocess.run(
+        ["python3", kh, "--get", k], capture_output=True, text=True, timeout=30).stdout.strip())
+
+    def _pull():
+        for k in HYDRATE_KEYS:
+            if os.environ.get(k):
+                continue  # already injected (Modal canonical / wrapper) -- keep it
+            try:
+                v = runner(k)
+                if v:
+                    os.environ[k] = v
+            except Exception as e:  # never let hydration crash the shim
+                print(f"[ladder_shim] self-hydrate {k} failed: {e}", file=sys.stderr)
+        # escalation checks RcGeminiAPIKey first, then GEMINI_API_KEY -- mirror it.
+        if os.environ.get("GEMINI_API_KEY") and not os.environ.get("RcGeminiAPIKey"):
+            os.environ["RcGeminiAPIKey"] = os.environ["GEMINI_API_KEY"]
+
+    for i in range(max(1, attempts)):
+        _pull()
+        if os.environ.get("RcGeminiAPIKey"):  # the rung-unblocker
+            print(f"[ladder_shim] keys hydrated (gemini present after pass {i + 1})",
+                  file=sys.stderr)
+            return True
+        if i + 1 < attempts:
+            sleep(3)
+    print("[ladder_shim] WARNING: RcGeminiAPIKey still unresolved after self-hydrate "
+          "-- gemini/gemma rungs will 502", file=sys.stderr)
+    return False
+
+
 if __name__ == "__main__":
+    _self_hydrate_keys()   # keyed regardless of launch path (bare or wrapper)
     # 0.0.0.0 required on Modal (see v1.1 note). Reached via 127.0.0.1 loopback.
     uvicorn.run(app, host="0.0.0.0", port=8796, log_level="info")

@@ -1,18 +1,69 @@
-#!/bin/bash
-# ZO-SENTINEL: Master Startup Script
+#!/bin/sh
+set -e
+set -u
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "=== ZO-SENTINEL Startup ==="
+API_PORT=8795
+MAX_CHECKS=30
+CHECK_INTERVAL=2
 
-# Start all services
-python3 "$SCRIPT_DIR/email_guid_auth.py" &
-python3 "$SCRIPT_DIR/advanced_filter_api.py" &
-python3 "$SCRIPT_DIR/forensic_detail_api.py" &
-python3 "$SCRIPT_DIR/manual_override_api.py" &
-python3 "$SCRIPT_DIR/supervisor_auto_updater.py" &
+SUPERVISORD_PID=""
+DAEMONS=""
 
-# Start UI server
-python3 "$SCRIPT_DIR/ui_server.py" &
+wait_for_build_watcher() {
+    i=0
+    while [ $i -lt $MAX_CHECKS ]; do
+        if nc -z -w 2 localhost $API_PORT 2>/dev/null; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep $CHECK_INTERVAL
+    done
+    return 1
+}
 
-echo "All services launched. Use 'bash start_all.sh stop' to halt."
-wait
+start_supervisord() {
+    if [ ! -f /usr/bin/supervisord ] && [ ! -f /usr/local/bin/supervisord ]; then
+        return 1
+    fi
+    supervisord -c /etc/supervisord.conf 2>&1 &
+    SUPERVISORD_PID=$!
+    sleep 1
+    return 0
+}
+
+start_daemons() {
+    DAEMONS=$(supervisorctl available 2>/dev/null | awk '{print $1}')
+    for daemon in $DAEMONS; do
+        supervisorctl start $daemon 2>/dev/null || true
+    done
+    return 0
+}
+
+stop_daemons() {
+    if [ -n "$SUPERVISORD_PID" ]; then
+        supervisorctl shutdown 2>/dev/null || kill -TERM $SUPERVISORD_PID 2>/dev/null || true
+    fi
+    return 0
+}
+
+cleanup() {
+    stop_daemons
+    if [ -n "$SUPERVISORD_PID" ]; then
+        kill -TERM $SUPERVISORD_PID 2>/dev/null || true
+    fi
+    exit 0
+}
+
+trap cleanup TERM INT
+
+if ! wait_for_build_watcher; then
+    exit 1
+fi
+
+if ! start_supervisord; then
+    exit 2
+fi
+
+start_daemons
+
+exit 0

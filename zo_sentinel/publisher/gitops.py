@@ -171,16 +171,37 @@ class CliGitOps:
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(push.stderr or "git push failed")[:300])
 
+        # Create the PR WITHOUT --label: a missing label makes `gh pr create`
+        # fail and open NO pr (observed: "could not add label: 'autonomous-build'
+        # not found" -> every publish failed, watermark stuck). Labels are
+        # cosmetic; attach them best-effort AFTER the PR exists so a label issue
+        # can never block a PR.
         gh_args = ["gh", "pr", "create", "--repo", self.repo,
                    "--base", plan.base, "--head", plan.branch,
                    "--title", plan.title, "--body", plan.body]
-        for lab in plan.labels:
-            gh_args += ["--label", lab]
         pr = self._run_with_backoff(
             lambda: subprocess.run(gh_args, capture_output=True, text=True,
                                    cwd=str(self.clone_dir)))
         if pr.returncode != 0:
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(pr.stderr or "gh pr create failed")[:300])
-        return PublishResult(ok=True, pr_url=pr.stdout.strip(), branch=plan.branch,
+        pr_url = pr.stdout.strip()
+        self._apply_labels_best_effort(pr_url, plan.labels)
+        return PublishResult(ok=True, pr_url=pr_url, branch=plan.branch,
                              detail="published")
+
+    def _apply_labels_best_effort(self, pr_url: str, labels: List[str]) -> None:
+        """Attach labels to an already-open PR, creating any that don't exist.
+        Every step is swallowed -- labels must never fail a published PR."""
+        if not labels:
+            return
+        for lab in labels:
+            # idempotent create (--force: create or no-op-update); ignore failure
+            subprocess.run(["gh", "label", "create", lab, "--repo", self.repo, "--force"],
+                           capture_output=True, text=True, cwd=str(self.clone_dir))
+        add_args = ["gh", "pr", "edit", pr_url, "--repo", self.repo]
+        for lab in labels:
+            add_args += ["--add-label", lab]
+        r = subprocess.run(add_args, capture_output=True, text=True, cwd=str(self.clone_dir))
+        if r.returncode != 0:
+            self.last_error = f"labels best-effort failed (PR still open): {(r.stderr or '')[:160]}"

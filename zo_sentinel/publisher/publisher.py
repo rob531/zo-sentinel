@@ -15,7 +15,7 @@ publish (action="dry_run") and writes nothing. Enabled only when
 
 Rate governance (the repo is PRIVATE -- 2000 GitHub Actions min/month, and every
 PR fires pr-gates.yml on hosted runners ~8-10 min each):
-  - WATERMARK   -- reads only build_artifacts with built_at > watermark, via the
+  - WATERMARK   -- reads only build_artifacts with created_at > watermark, via the
                    store's read_build_artifacts_since (the plain read ignores the
                    bound and would replay the oldest window forever). Advances the
                    watermark as it goes, so it never re-scans the backlog. Seed it
@@ -213,24 +213,24 @@ class Publisher:
         advance_wm = watermark
         published_now = 0
 
-        for row_id, raw in self.store.read_build_artifacts_since(watermark, limit):
+        for row_id, raw, created_at in self.store.read_build_artifacts_since(watermark, limit):
             art = BuildArtifact.from_mesh_content(raw, row_id)
             if art is None:
                 continue
             if art.dedup_key in published:
-                advance_wm = _max_iso(advance_wm, art.built_at)   # already done; skip past it
+                advance_wm = _max_iso(advance_wm, created_at)   # already done; skip past it
                 continue
             content = self._resolver(art)
             if not content:
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
                                 "action": "skip", "detail": "content unresolved/empty"})
-                advance_wm = _max_iso(advance_wm, art.built_at)
+                advance_wm = _max_iso(advance_wm, created_at)
                 continue
             safety = static_safety_scan(content)
             if safety:
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
                                 "action": "blocked", "detail": safety})
-                advance_wm = _max_iso(advance_wm, art.built_at)
+                advance_wm = _max_iso(advance_wm, created_at)
                 continue
             tier = self._tier_of(raw)
             plan = self.plan(art, content, tier)
@@ -257,7 +257,7 @@ class Publisher:
             remaining -= 1
             bud_count += 1
             published_now += 1
-            advance_wm = _max_iso(advance_wm, art.built_at)
+            advance_wm = _max_iso(advance_wm, created_at)
             if self.pr_spacing_sec and remaining > 0:
                 self._sleep(self.pr_spacing_sec)
 

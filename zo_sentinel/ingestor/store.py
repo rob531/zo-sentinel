@@ -40,12 +40,15 @@ def _content_built_at(content: object) -> str:
 
 class MeshStore(Protocol):
     def read_build_artifacts(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]: ...
-    def read_build_artifacts_since(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
+    def read_build_artifacts_since(self, since_created_at: Optional[str], limit: int) -> list[tuple[str, object, str]]:
         """Like read_build_artifacts, but ACTUALLY filters to rows with
-        built_at > since_built_at (the plain read_build_artifacts ignores the
-        bound in the Http impl). Ordered by built_at ASC. The publisher's
-        watermark relies on this honoring the bound so it never replays the
-        backlog or stalls on the oldest window."""
+        created_at > since_created_at (the plain read_build_artifacts ignores
+        the bound in the Http impl). Returns (id, content, created_at) ordered
+        by created_at ASC. Filters on the real created_at COLUMN, never on a
+        json field of content -- json_extract over mesh_memory errors when the
+        optimizer reaches non-object rows (e.g. ingest_watermark bare
+        timestamps) before the type filter. The publisher's watermark relies on
+        this honoring the bound so it never replays the backlog or stalls."""
         ...
     def get_watermark(self) -> Optional[str]: ...
     def set_watermark(self, value: str) -> None: ...
@@ -72,12 +75,14 @@ class InMemoryMeshStore:
             rows = [(rid, c) for (rid, c) in rows if _ts(c) > since_built_at]
         return rows[:limit]
 
-    def read_build_artifacts_since(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
-        rows = list(self._artifacts)
-        if since_built_at:
-            rows = [(rid, c) for (rid, c) in rows
-                    if _content_built_at(c) > since_built_at]
-        rows.sort(key=lambda rc: _content_built_at(rc[1]))
+    def read_build_artifacts_since(self, since_created_at: Optional[str], limit: int) -> list[tuple[str, object, str]]:
+        # Tests have no real created_at column; use the artifact's built_at as a
+        # stand-in (monotonic with insertion order in fixtures), which matches
+        # the Http store's created_at ordering closely enough for the publisher.
+        rows = [(rid, c, _content_built_at(c)) for (rid, c) in self._artifacts]
+        if since_created_at:
+            rows = [t for t in rows if t[2] > since_created_at]
+        rows.sort(key=lambda t: t[2])
         return rows[:limit]
 
     def get_watermark(self) -> Optional[str]:
@@ -158,29 +163,30 @@ class HttpMeshStore:
             out.append((str(row.get("id", "")), row.get("content")))
         return out
 
-    def read_build_artifacts_since(self, since_built_at: Optional[str], limit: int) -> list[tuple[str, object]]:
-        # Filters on the artifact's own built_at (json field), unlike
-        # read_build_artifacts which ignores the bound. since_built_at is our
-        # own watermark (an ISO timestamp), never user input; quote defensively.
+    def read_build_artifacts_since(self, since_created_at: Optional[str], limit: int) -> list[tuple[str, object, str]]:
+        # Filter/order by the real created_at COLUMN (a timestamp), NEVER a json
+        # field. json_extract_string(content,...) errors when DuckDB's optimizer
+        # reaches non-object rows (e.g. ingest_watermark bare timestamps) before
+        # the type filter, failing the whole query. created_at needs no parsing;
+        # built_at is extracted in Python by the caller. since_created_at is our
+        # own watermark, never user input; quote defensively all the same.
         where_since = ""
-        if since_built_at:
-            safe = str(since_built_at).replace("'", "''")
-            where_since = (
-                "AND json_extract_string(content, '$.built_at') > "
-                f"'{safe}' "
-            )
+        if since_created_at:
+            safe = str(since_created_at).replace("'", "''")
+            where_since = f"AND created_at > '{safe}' "
         sql = (
-            "SELECT id, content FROM mesh_memory "
+            "SELECT id, content, created_at FROM mesh_memory "
             f"WHERE agent_id = '{BUILDER_AGENT_ID}' "
             f"AND memory_type = '{BUILD_ARTIFACT_TYPE}' "
             f"{where_since}"
-            "ORDER BY json_extract_string(content, '$.built_at') ASC "
+            "ORDER BY created_at ASC "
             f"LIMIT {int(limit)}"
         )
         resp = self._post("/query", {"sql": sql})
-        out: list[tuple[str, object]] = []
+        out: list[tuple[str, object, str]] = []
         for row in resp.get("rows", []):
-            out.append((str(row.get("id", "")), row.get("content")))
+            out.append((str(row.get("id", "")), row.get("content"),
+                        str(row.get("created_at", ""))))
         return out
 
     def get_watermark(self) -> Optional[str]:

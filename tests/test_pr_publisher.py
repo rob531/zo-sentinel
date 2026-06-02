@@ -194,3 +194,34 @@ def test_gitops_no_retry_on_ordinary_failure():
     g = CliGitOps("/tmp/nope", sleep=lambda s: None)
     r = g._run_with_backoff(fake)
     assert r.returncode == 1 and calls["n"] == 1   # no retry on non-rate-limit
+
+
+def test_cligitops_missing_label_does_not_fail_pr(tmp_path, monkeypatch):
+    """A missing GitHub label must NOT fail a PR: create without --label, then
+    attach best-effort. Regression guard for 'could not add label ... not found'
+    that stuck the publisher (every publish failed, watermark never advanced)."""
+    import zo_sentinel.publisher.gitops as gmod
+
+    seen = []
+
+    def fake_run(args, **kw):
+        seen.append(list(args))
+        if args[:3] == ["gh", "pr", "create"]:
+            return types.SimpleNamespace(
+                returncode=0, stdout="https://github.com/rob531/zo-sentinel/pull/7\n", stderr="")
+        if args[:3] == ["gh", "pr", "edit"]:   # label attach fails (label missing)
+            return types.SimpleNamespace(
+                returncode=1, stdout="", stderr="could not add label: 'autonomous-build' not found")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")   # git steps, label create
+
+    monkeypatch.setattr(gmod.subprocess, "run", fake_run)
+    g = gmod.CliGitOps(str(tmp_path), sleep=lambda *_: None)
+    plan = gmod.PublishPlan(branch="auto/build/x", title="t", body="b", file_path="x.py",
+                            content="print(1)\n", dedup_key="k",
+                            labels=["autonomous-build", "ladder:builder_low"])
+    res = g.publish(plan)
+
+    assert res.ok is True                                   # PR succeeds despite label failure
+    assert res.pr_url == "https://github.com/rob531/zo-sentinel/pull/7"
+    create = next(c for c in seen if c[:3] == ["gh", "pr", "create"])
+    assert "--label" not in create                          # labels NOT on the create call

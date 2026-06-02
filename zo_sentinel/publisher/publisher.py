@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -136,6 +137,14 @@ class Publisher:
                 return True
             if i + 1 < attempts:
                 self._sleep(1.0)   # let a flaky write_service recover
+        # All attempts failed. Surface WHY -- these writes were failing silently,
+        # so the watermark never persisted while the publisher kept publishing.
+        # store.last_error (set by HttpMeshStore._post) is the actual reason.
+        sys.stderr.write(
+            f"[publisher] WARN: durable write to {table} "
+            f"(memory_type={row.get('memory_type')}) failed after {attempts} attempts: "
+            f"{getattr(self.store, 'last_error', '?')}\n")
+        sys.stderr.flush()
         return False
 
     def _load_watermark(self) -> Optional[str]:

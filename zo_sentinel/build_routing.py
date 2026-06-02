@@ -21,18 +21,14 @@ from typing import Optional
 
 # Aliases MUST match keys in escalation.MODEL_TASK_MAP (PR #16); the drift guard
 # in test_build_routing.py asserts this.
-# NOTE (2026-06-02): `medium` is pinned to zo-ladder-low (rung 0 / MiniMax), the
-# proven-fast codegen+tool-calling path. Routing medium -> zo-ladder-medium (the
-# Gemini rung) was timing out goose's 600s GOOSE_TIMEOUT mid-delegate_to_builder
-# (and/or goose's tool-calling flailing on that rung): the process was killed
-# before the file was written, so EVERY medium directive produced no file ->
-# build_completion flagged it ghost -> .failed. Low-complexity diagnostics built
-# fine because they were already on rung 0. This is the path that demonstrably
-# writes files + emits build_artifacts; restore medium -> zo-ladder-medium only
-# after the medium-tier latency/cascade is fixed (see ladder-key-hydration memo).
+# medium routes to its own Gemini rung. NB: PR #58 briefly pinned this to rung-0
+# on a "medium times out" theory -- but that symptom was actually the ladder_shim
+# missing RcGeminiAPIKey, so EVERY gemini rung 502'd (not a slow rung, not a
+# timeout). Fixed by relaunching the keyed shim (ladder_shim_with_keys.sh);
+# medium returns clean code on the Gemini rung again, so the pin is reverted.
 COMPLEXITY_TO_ALIAS = {
     "low": "zo-ladder-low",
-    "medium": "zo-ladder-low",
+    "medium": "zo-ladder-medium",
     "high": "zo-ladder-high",
     "critical": "zo-ladder-critical",
     "unknown": "zo-ladder-low",

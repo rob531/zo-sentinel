@@ -36,7 +36,7 @@ NL_QUERY_URL = "http://127.0.0.1:8784"
 
 POLL_SECS = 60
 HEARTBEAT_INTERVAL = 30
-GOOSE_TIMEOUT = 600
+GOOSE_TIMEOUT = 900   # headroom for the architect loop + delegate_to_builder codegen
 
 PROJECT_DIR = Path("/home/workspace/zo_sentinel")
 LOGS_DIR = Path("/home/workspace/logs")

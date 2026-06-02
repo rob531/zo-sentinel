@@ -23,6 +23,11 @@ patch_go_sh.py -- one-shot host patcher for the LIVE zm-go launcher
       cycle (publisher created ZERO PRs). Anchors on the no-cd lines, so it only
       fires on an already-deployed go.sh; fresh installs get the cd form from the
       corrected 12.6b block and skip.
+  6.  Publisher clone dir: set PR_PUBLISHER_CLONE_DIR on the 12.6b publisher
+      launch (env-overridable, default /home/workspace/zo_sentinel_pub_clone) +
+      clone the repo if missing. Without it `zm go` relaunches the publisher with
+      no clone -> FakeGitOps -> zero real PRs. Anchors on the cd-form publisher
+      line so it survives restarts.
 
 Usage (on ZoComputer):
     python3 patch_go_sh.py            # patch in place (.bak written)
@@ -162,6 +167,27 @@ NEW_PUB_CWD = ("nohup env PYTHONPATH=\"$SENTINEL\" bash -c 'cd /home/workspace/z
                ">> $LOGS/pr_publisher.log 2>&1 &\n")
 SEEN_PUB_CWD = "cd /home/workspace/zo_sentinel && while true; do python3 -m zo_sentinel.publisher run-once"
 
+# --- 6: publisher clone dir (survive zm go) ---------------------------------
+# The 12.6b publisher launch had no PR_PUBLISHER_CLONE_DIR, so `zm go` relaunched
+# it with no clone -> the publisher falls back to FakeGitOps -> ZERO real PRs.
+# Set it (env-overridable, default /home/workspace/zo_sentinel_pub_clone) and
+# clone the repo if the dir is missing (best-effort, for container rebuilds that
+# wipe the on-disk clone; `|| true` so a failed clone never aborts go.sh).
+# Anchors on the cd-form publisher line (host has it post trio-cwd / TRIO_BLOCK).
+OLD_PUB_CLONE = NEW_PUB_CWD
+NEW_PUB_CLONE = (
+    'PR_PUBLISHER_CLONE_DIR="${PR_PUBLISHER_CLONE_DIR:-/home/workspace/zo_sentinel_pub_clone}"\n'
+    '[ -d "$PR_PUBLISHER_CLONE_DIR/.git" ] || git clone https://github.com/rob531/zo-sentinel '
+    '"$PR_PUBLISHER_CLONE_DIR" >> $LOGS/pr_publisher.log 2>&1 || true\n'
+    "nohup env PYTHONPATH=\"$SENTINEL\" PR_PUBLISHER_CLONE_DIR=\"$PR_PUBLISHER_CLONE_DIR\" "
+    "bash -c 'cd /home/workspace/zo_sentinel && "
+    "while true; do python3 -m zo_sentinel.publisher run-once; sleep 600; done' "
+    ">> $LOGS/pr_publisher.log 2>&1 &\n"
+)
+# Unique to the NEW form -- NOT 'PR_PUBLISHER_CLONE_DIR=' (that already appears in
+# the 12.6b activation comment, which would make this patch always skip).
+SEEN_PUB_CLONE = '[ -d "$PR_PUBLISHER_CLONE_DIR/.git" ]'
+
 PATCHES = [
     ("pkill-list trio", SEEN_KILL, OLD_KILL, NEW_KILL),
     ("pkill-list ladder_shim", SEEN_LADDERKILL, OLD_LADDERKILL, NEW_LADDERKILL),
@@ -172,6 +198,7 @@ PATCHES = [
     ("trio cwd: actor", SEEN_ACTOR_CWD, OLD_ACTOR_CWD, NEW_ACTOR_CWD),
     ("trio cwd: governor", SEEN_GOV_CWD, OLD_GOV_CWD, NEW_GOV_CWD),
     ("trio cwd: publisher", SEEN_PUB_CWD, OLD_PUB_CWD, NEW_PUB_CWD),
+    ("publisher clone dir", SEEN_PUB_CLONE, OLD_PUB_CLONE, NEW_PUB_CLONE),
 ]
 
 

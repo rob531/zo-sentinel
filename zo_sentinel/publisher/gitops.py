@@ -9,10 +9,32 @@ AgentVault-hydrated token on the host), never a raw env secret.
 """
 from __future__ import annotations
 
+import random
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import Callable, List, Optional, Protocol
+
+# Substrings GitHub emits when it throttles content creation (push / pr create).
+# Hitting these means back off and retry, NOT give up -- a burst of PRs trips the
+# secondary (abuse) rate limit even while the primary 5000/hr budget is healthy.
+_RATE_LIMIT_MARKERS = (
+    "rate limit",
+    "secondary rate limit",
+    "abuse detection",
+    "retry-after",
+    "api rate limit exceeded",
+    "was submitted too quickly",
+    "you have exceeded a secondary rate limit",
+    "try again later",
+    "please wait a few minutes",
+)
+
+
+def _is_rate_limited(text: Optional[str]) -> bool:
+    t = (text or "").lower()
+    return any(m in t for m in _RATE_LIMIT_MARKERS)
 
 
 @dataclass
@@ -66,19 +88,51 @@ class CliGitOps:
     def __init__(self, clone_dir: str, repo: str = "rob531/zo-sentinel",
                  remote: str = "origin",
                  author_name: str = "zo-sentinel-bot",
-                 author_email: str = "bot@zocomputer.io"):
+                 author_email: str = "bot@zocomputer.io",
+                 max_retries: int = 4,
+                 backoff_base_sec: float = 30.0,
+                 backoff_cap_sec: float = 600.0,
+                 sleep: Optional[Callable[[float], None]] = None,
+                 rng: Optional[random.Random] = None):
         self.clone_dir = Path(clone_dir)
         self.repo = repo
         self.remote = remote
         self.author_name = author_name
         self.author_email = author_email
         self.last_error: Optional[str] = None
+        # Backoff for GitHub secondary-rate-limit on the network steps.
+        self.max_retries = max(0, int(max_retries))
+        self.backoff_base_sec = float(backoff_base_sec)
+        self.backoff_cap_sec = float(backoff_cap_sec)
+        self._sleep = sleep or time.sleep
+        self._rng = rng or random.Random()
 
     def _git(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git", "-C", str(self.clone_dir), *args],
             capture_output=True, text=True,
         )
+
+    def _run_with_backoff(self, fn: Callable[[], subprocess.CompletedProcess]
+                          ) -> subprocess.CompletedProcess:
+        """Run a network step; on a GitHub rate-limit signal, exponential
+        backoff (with jitter) and retry up to max_retries. Non-rate-limit
+        failures return immediately (the caller surfaces them as ok=False)."""
+        attempt = 0
+        while True:
+            r = fn()
+            if r.returncode == 0:
+                return r
+            err = (r.stderr or "") + (r.stdout or "")
+            if attempt >= self.max_retries or not _is_rate_limited(err):
+                return r
+            delay = min(self.backoff_cap_sec,
+                        self.backoff_base_sec * (2 ** attempt))
+            delay += self._rng.uniform(0.0, delay * 0.25)   # jitter, no thundering herd
+            self.last_error = (f"rate-limited; backoff {delay:.0f}s "
+                               f"(attempt {attempt + 1}/{self.max_retries})")
+            self._sleep(delay)
+            attempt += 1
 
     def publish(self, plan: PublishPlan) -> PublishResult:
         steps = [
@@ -111,7 +165,8 @@ class CliGitOps:
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(commit.stderr or "git commit failed")[:300])
 
-        push = self._git("push", "-u", self.remote, plan.branch, "--force-with-lease")
+        push = self._run_with_backoff(
+            lambda: self._git("push", "-u", self.remote, plan.branch, "--force-with-lease"))
         if push.returncode != 0:
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(push.stderr or "git push failed")[:300])
@@ -121,8 +176,9 @@ class CliGitOps:
                    "--title", plan.title, "--body", plan.body]
         for lab in plan.labels:
             gh_args += ["--label", lab]
-        pr = subprocess.run(gh_args, capture_output=True, text=True,
-                            cwd=str(self.clone_dir))
+        pr = self._run_with_backoff(
+            lambda: subprocess.run(gh_args, capture_output=True, text=True,
+                                   cwd=str(self.clone_dir)))
         if pr.returncode != 0:
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(pr.stderr or "gh pr create failed")[:300])

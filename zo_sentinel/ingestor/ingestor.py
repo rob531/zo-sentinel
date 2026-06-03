@@ -186,14 +186,17 @@ class ArtifactIngestor:
             "content": json.dumps(verdict.to_record()),
             "importance": 0.6,
         })
-        # reverse-feed the fix-directive that goose_runner will pick up
-        if verdict.fix_directive:
-            self.store.write("mesh_memory", {
-                "agent_id": DIRECTIVE_AGENT_ID,
-                "memory_type": BUILD_DIRECTIVE_TYPE,
-                "content": json.dumps(verdict.fix_directive),
-                "importance": 0.6,
-            })
+        # NO reverse-feed into the build queue. We used to write a `fix_<file>`
+        # build_directive here for goose_runner to rebuild -- but that directive
+        # is spec-less by construction (it carries the contract failure, not WHAT
+        # the file should do), so goose can't build it: it ghosts -> the file
+        # re-quarantines -> we reverse-feed again. That flood also pinned the
+        # directive generator's queue gate (MIN_QUEUE_TO_SKIP), gagging the rich
+        # architect (the 2026-06-03 drift). Quarantines are the BREAKER's job
+        # (retire/accept/investigate via reset_breaker.py); a genuine rebuild --
+        # WITH a real spec -- is the directive generator's job (it reads the
+        # gaps_map + failure history). verdict.fix_directive is still populated on
+        # the verdict (and recorded in artifact_quarantined above) for diagnostics.
 
     def _heartbeat(self, processed: int) -> None:
         self.store.write("service_health", {

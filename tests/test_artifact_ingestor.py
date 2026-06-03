@@ -238,19 +238,19 @@ class TestActivated:
         assert len(store.writes_of_type("artifact_promoted")) == 1
         assert len(store.writes_of_type("artifact_quarantined")) == 0
 
-    def test_quarantine_reverse_feeds_fix_directive(self, tmp_path: Path):
+    def test_quarantine_does_not_reverse_feed_build_directive(self, tmp_path: Path):
+        # Quarantine records the verdict but must NOT reverse-feed a spec-less
+        # build_directive into the queue: that flood ghosted goose and gagged the
+        # directive generator's queue gate (the 2026-06-03 drift). Quarantines go
+        # to the breaker; a real rebuild (with a spec) is the generator's job.
+        # The verdict still carries fix_directive for diagnostics.
         _write(tmp_path, "danger.py", DANGEROUS_PY)
         store = InMemoryMeshStore([_artifact("danger.py")])
         ing = ArtifactIngestor(store, sentinel_home=str(tmp_path), enabled=True)
-        ing.run_once()
+        verdicts = ing.run_once()
         assert len(store.writes_of_type("artifact_quarantined")) == 1
-        directives = store.writes_of_type("build_directive")
-        assert len(directives) == 1
-        d = directives[0]
-        assert d["agent_id"] == "zo_sentinel.directive"   # what goose_runner polls
-        payload = json.loads(d["content"])
-        assert payload["file"] == "danger.py"
-        assert payload["origin"] == "artifact_ingestion_quarantine"
+        assert len(store.writes_of_type("build_directive")) == 0   # no reverse-feed
+        assert verdicts[0].fix_directive is not None               # still on the verdict
 
     def test_watermark_advances(self, tmp_path: Path):
         _write(tmp_path, "ok.py", GOOD_PLAIN_PY)

@@ -56,6 +56,7 @@ async def delegate_to_builder(target_file: str, strict_specification: str, conte
             r.raise_for_status()
             data = r.json()
             content = data["choices"][0]["message"]["content"]
+            content = _strip_code_fences(content)   # rungs add ```python despite "ONLY the file"
             # Write the file
             out = f"/home/workspace/zo_sentinel/{target_file}"
             os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -89,6 +90,54 @@ async def _emit_build_artifact(client, target_file, content, context_type,
                           json={"table": "mesh_memory", "rows": [row], "wait": True})
     except Exception:
         pass
+
+
+@mcp.tool()
+async def register_build(target_file: str, context_type: str) -> str:
+    """Record a goose-built file as a build_artifact (provenance for the
+    ingestor / governor / publisher). Call this ONCE, at the END of a build,
+    ONLY after YOU (goose) wrote the file with the developer extension AND
+    `python -m py_compile` passed.
+
+    delegate_to_builder is the legacy single-shot path that writes + registers
+    in one call; register_build is its counterpart for the Phase 1 flow where
+    goose writes the file itself and verifies it before registering.
+
+    Args:
+        target_file: Path written, relative to /home/workspace/zo_sentinel/
+        context_type: 'enricher', 'daemon', 'schema', 'utility'
+    """
+    out = f"/home/workspace/zo_sentinel/{target_file}"
+    if not os.path.exists(out):
+        return f"REGISTER_ERROR: {target_file} not on disk -- write it first."
+    with open(out) as f:
+        content = f.read()
+    if len(content.strip()) < 32:
+        return (f"REGISTER_ERROR: {target_file} is {len(content)}b -- too small to be a "
+                "real build; do not register a stub.")
+    tier = os.environ.get("ZO_BUILD_TIER", "zo-ladder-low")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await _emit_build_artifact(client, target_file, content, context_type,
+                                       tier, os.environ.get("GOOSE_MODEL", ""),
+                                       "goose_developer")
+        return (f"REGISTERED: {target_file} ({content.count(chr(10))} lines, "
+                f"tier={tier}, backend=goose_developer)")
+    except Exception as e:
+        return f"REGISTER_ERROR: {type(e).__name__}: {e}"
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove a leading ```lang fence + trailing ``` some models add despite the
+    'output ONLY the file' instruction -- writing them verbatim breaks py_compile."""
+    s = text.strip()
+    if not s.startswith("```"):
+        return text
+    lines = s.split("\n")
+    lines = lines[1:]                                  # drop ```python / ```
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
 
 
 @mcp.tool()

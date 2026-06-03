@@ -280,8 +280,24 @@ def is_goose_eligible(directive):
     """
     directive_id_val = directive.get("directive_id") or directive.get("id", "unknown")
     sentinels = Path("/home/workspace/zo_sentinel/directives")
-    if (sentinels / f"{directive_id_val}.done.json").exists():
-        return False
+    done = sentinels / f"{directive_id_val}.done.json"
+    if done.exists():
+        # SELF-HEAL stale ghost .done: a sentinel claiming completion whose declared
+        # output file is absent on disk (output_confirmed False => there IS a declared
+        # output and it's missing). The "completion" was a ghost, or the file was
+        # quarantined/deleted afterward. Delete the stale sentinel and re-admit the
+        # directive instead of skipping it forever. Folds tools/sweep_ghost_done.py
+        # into the live loop -- no manual rm, no zm go bloat. NOTE: .failed is NOT
+        # self-healed (a genuine give-up; auto-retrying would loop on unbuildable
+        # directives -- clear those deliberately on a builder upgrade).
+        if output_confirmed(directive):
+            return False
+        try:
+            done.unlink()
+            log(f"[self-heal] stale ghost .done for {directive_id_val} "
+                f"(declared output {declared_output(directive)} absent) -- re-admitting")
+        except OSError:
+            return False   # couldn't remove -> leave skipped, don't churn
     if (sentinels / f"{directive_id_val}.failed.json").exists():
         return False
     return True

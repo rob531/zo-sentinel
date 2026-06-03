@@ -41,10 +41,12 @@ def test_aliases_match_escalation_map():
         assert alias in escalation.MODEL_TASK_MAP, f"{alias} missing from MODEL_TASK_MAP"
 
 
-def test_build_env_for_routes_and_carries_context():
+def test_build_env_for_pins_orchestrator_and_routes_codegen():
     env = build_env_for({"complexity": "medium", "key": "build_x", "phase": "p2"})
-    assert env["GOOSE_MODEL"] == "zo-ladder-medium"      # architect routing
-    assert env["ZO_BUILD_TIER"] == "zo-ladder-medium"    # codegen routing
+    # Phase 1: GOOSE_MODEL is PINNED to rung-0 (no mid-build model switching);
+    # only the codegen TIER follows complexity (for the delegate fallback + provenance).
+    assert env["GOOSE_MODEL"] == "zo-ladder-low"         # pinned orchestrator/builder
+    assert env["ZO_BUILD_TIER"] == "zo-ladder-medium"    # codegen tier still routed
     assert env["ZO_BUILD_TASK"] == "build_x"
     assert env["ZO_BUILD_PHASE"] == "p2"
 

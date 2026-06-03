@@ -78,10 +78,20 @@ def build_env_for(directive: dict) -> dict:
     """Per-directive env for the Goose subprocess: routes the architect
     (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) by complexity and carries task/phase
     so builder_mcp can stamp a complete build_artifact row."""
-    alias = tier_for_complexity(directive.get("complexity"))
+    codegen_tier = tier_for_complexity(directive.get("complexity"))
     return {
-        "GOOSE_MODEL": alias,
-        "ZO_BUILD_TIER": alias,
+        # PHASE 1 (2026-06-03): PIN the architect/builder model to one reliable
+        # coder (MiniMax rung-0) for the WHOLE goose session. escalation.ask() is
+        # per-call with NO session affinity, so a complexity-routed GOOSE_MODEL
+        # lets different rungs answer different turns of one multi-turn build ->
+        # incoherent edits (MiniMax writes, Gemini "fixes", Gemma re-breaks). A
+        # pinned rung-0 (MiniMax always returns non-empty -> never escalates
+        # mid-build) gives goose's write/verify/iterate loop a coherent brain.
+        # Codegen TIER is kept complexity-routed for the delegate_to_builder
+        # fallback + build_artifact provenance. Phase 2 layers a multi-model
+        # ensemble on top for high/critical (diversity at the CANDIDATE level).
+        "GOOSE_MODEL": DEFAULT_ALIAS,          # zo-ladder-low = MiniMax rung 0 (pinned)
+        "ZO_BUILD_TIER": codegen_tier,
         "ZO_BUILD_TASK": str(directive.get("key") or directive.get("directive_id")
                              or directive.get("id") or ""),
         "ZO_BUILD_PHASE": str(directive.get("phase", "")),

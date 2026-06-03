@@ -154,9 +154,27 @@ def get_failed_modules() -> list[str]:
         return []
 
 def get_queue_depth() -> int:
-    """Count active (non-done) directive files."""
-    return len([f for f in DIRECTIVE_DIR.glob("*.json")
-                if ".done." not in f.name])
+    """Count active, BUILDABLE directive files. Spec-less reverse-feed directives
+    (the ingestor's `fix_*` quarantine directives, origin=artifact_ingestion_quarantine)
+    are NOT counted: they carry no buildable spec, so goose can't build them, and a
+    flood of them would otherwise pin the queue at MIN_QUEUE_TO_SKIP and gag this
+    generator forever -- the architect goes dormant while the queue is full of
+    un-buildable churn (the 2026-06-03 drift). Quarantines are the breaker's job."""
+    n = 0
+    for f in DIRECTIVE_DIR.glob("*.json"):
+        if ".done." in f.name:
+            continue
+        try:
+            d = json.loads(f.read_text())
+        except Exception:
+            n += 1   # unparseable -> count it (conservative; never under-count)
+            continue
+        if (str(d.get("directive_id", "")).startswith("fix_")
+                or d.get("origin") == "artifact_ingestion_quarantine"
+                or d.get("source") == "artifact_ingestor"):
+            continue   # spec-less reverse-feed -> not buildable; don't let it gag us
+        n += 1
+    return n
 
 def get_recent_build_failures() -> str:
     """Recent smoke_fail records from mesh_memory."""

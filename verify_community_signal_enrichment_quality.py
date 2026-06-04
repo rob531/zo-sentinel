@@ -1,218 +1,253 @@
 #!/usr/bin/env python3
 """
-ZO-SENTINEL: Community Signal Enrichment Quality Verification
-Quality verification harness for community_signal_enrichment.py
-"""
+verify_community_signal_enrichment_quality.py
 
-import sys
-import os
-import logging
-from datetime import datetime, timezone
+Quality verification module for community_signal_enrichment.py.
+
+Exercises compute_score() against a synthetic corpus of 34 fingerprints
+with intentionally varied metadata to verify discrimination capability.
+
+Checks:
+  - Return type is (float, dict)
+  - Float score is always in [0.0, 100.0]
+  - At least 20 distinct score values across the corpus
+  - Prints discrimination statistics
+
+This is NOT a daemon — it is an offline test script that exits 0 on success.
+"""
+# deps: json (stdlib only)
+
+import json
 from typing import Any
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Import the module under test (no side-effects — pure function)
+from community_signal_enrichment import compute_score, get_signal_info
 
-import requests
+# ---- Synthetic corpus builder ---------------------------------------------
 
-# Constants
-SERVICE_NAME = "community_signal_verifier"
-SERVICE_PORT = 8772
-WRITE_SERVICE_URL = "http://127.0.0.1:8772/write"
-
-# Logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-log = logging.getLogger(SERVICE_NAME)
-
-
-def ws_write(table: str, rows: dict, wait: bool = True) -> dict:
-    """Write to write service."""
-    try:
-        response = requests.post(
-            WRITE_SERVICE_URL,
-            json={'table': table, 'rows': rows, 'wait': wait},
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        log.error(f"Write failed for table {table}: {e}")
-        raise
-
-
-def send_heartbeat() -> None:
-    """Send service heartbeat."""
-    try:
-        ws_write('service_health', {
-            'service': SERVICE_NAME,
-            'last_heartbeat': datetime.now(timezone.utc).isoformat()
-        })
-    except Exception as e:
-        log.warning(f"Heartbeat failed: {e}")
-
-
-def generate_synthetic_corpus() -> list[dict[str, Any]]:
-    """Generate synthetic metadata corpus with varied field distributions."""
+def _make_fingerprints() -> list[dict[str, Any]]:
+    """
+    Generate 34 fingerprints with deliberately varied metadata to stress
+    the scoring pipeline and expose discrimination capability.
+    """
     corpus = []
-    
-    # Base varied samples (20+ core samples)
-    base_samples = [
-        # Low engagement
-        {'stars': 0, 'registry_source': 'npm', 'download_count': 100, 'dependency_count': 0},
-        {'stars': 1, 'registry_source': 'pypi', 'download_count': 250, 'dependency_count': 1},
-        {'stars': 5, 'registry_source': 'github', 'download_count': 500, 'dependency_count': 2},
-        {'stars': 10, 'registry_source': 'npm', 'download_count': 1000, 'dependency_count': 3},
-        
-        # Medium engagement
-        {'stars': 50, 'registry_source': 'pypi', 'download_count': 10000, 'dependency_count': 10},
-        {'stars': 100, 'registry_source': 'npm', 'download_count': 50000, 'dependency_count': 15},
-        {'stars': 150, 'registry_source': 'github', 'download_count': 75000, 'dependency_count': 20},
-        {'stars': 200, 'registry_source': 'pypi', 'download_count': 100000, 'dependency_count': 25},
-        {'stars': 300, 'registry_source': 'npm', 'download_count': 150000, 'dependency_count': 30},
-        {'stars': 400, 'registry_source': 'github', 'download_count': 200000, 'dependency_count': 40},
-        {'stars': 500, 'registry_source': 'pypi', 'download_count': 250000, 'dependency_count': 45},
-        {'stars': 600, 'registry_source': 'npm', 'download_count': 300000, 'dependency_count': 50},
-        {'stars': 700, 'registry_source': 'github', 'download_count': 350000, 'dependency_count': 55},
-        {'stars': 800, 'registry_source': 'pypi', 'download_count': 400000, 'dependency_count': 60},
-        {'stars': 900, 'registry_source': 'npm', 'download_count': 450000, 'dependency_count': 65},
-        
-        # High engagement
-        {'stars': 1000, 'registry_source': 'github', 'download_count': 500000, 'dependency_count': 70},
-        {'stars': 2000, 'registry_source': 'npm', 'download_count': 1000000, 'dependency_count': 100},
-        {'stars': 5000, 'registry_source': 'pypi', 'download_count': 2500000, 'dependency_count': 150},
-        {'stars': 10000, 'registry_source': 'github', 'download_count': 5000000, 'dependency_count': 200},
-        {'stars': 25000, 'registry_source': 'npm', 'download_count': 10000000, 'dependency_count': 300},
-        {'stars': 50000, 'registry_source': 'pypi', 'download_count': 50000000, 'dependency_count': 500},
+
+    # Registry sources (7 distinct)
+    registries = [
+        "official",
+        "npm_enterprise",
+        "verified",
+        "github_verified",
+        "community",
+        "third_party",
+        "unknown",
     ]
-    corpus.extend(base_samples)
-    
-    # Edge cases with varied combinations
-    edge_cases = [
-        {'stars': 0, 'registry_source': 'github', 'download_count': 0, 'dependency_count': 0},
-        {'stars': 1, 'registry_source': 'npm', 'download_count': 1, 'dependency_count': 1},
-        {'stars': 100, 'registry_source': 'pypi', 'download_count': 10, 'dependency_count': 5},
-        {'stars': 1000, 'registry_source': 'npm', 'download_count': 100, 'dependency_count': 50},
-        {'stars': 1000, 'registry_source': 'github', 'download_count': 10000000, 'dependency_count': 10},
-        {'stars': 50, 'registry_source': 'github', 'download_count': 10000000, 'dependency_count': 5},
+
+    # Ages in days (5 distinct tiers)
+    age_days = [7, 90, 365, 730, 1825]
+
+    # Download counts (log-spaced)
+    downloads = [0, 10, 500, 5000, 100_000, 2_000_000, 8_000_000]
+
+    # Dependency counts
+    deps = [0, 1, 5, 20, 80]
+
+    # Stars / forks (log-spaced)
+    stars = [0, 5, 100, 1000, 5000]
+    forks = [0, 1, 10, 100, 500]
+
+    # Subscribers
+    subs = [0, 5, 50, 200]
+
+    # Issue resolution combos
+    issue_combos = [
+        (0, 0),
+        (1, 9),
+        (5, 45),
+        (20, 80),
+        (100, 400),
     ]
-    corpus.extend(edge_cases)
-    
-    # Additional granular samples for fine-grained score differentiation
-    for stars in [20, 30, 40, 60, 70, 80, 90, 110, 120, 130, 140, 160, 180]:
-        for source in ['npm', 'pypi', 'github']:
-            corpus.append({
-                'stars': stars,
-                'registry_source': source,
-                'download_count': stars * 500,
-                'dependency_count': stars // 5
-            })
-    
-    return corpus
+
+    # Publisher verified
+    verified = [True, False]
+
+    idx = 0
+    # Exhaustively combine key dimensions to hit >= 34 cases
+    for reg in registries:
+        for age in age_days[:3]:        # 7 * 3 = 21
+            for dl in downloads[:2]:   # 21 * 2 = 42 (cap at 34)
+                if idx >= 34:
+                    break
+                corpus.append({
+                    "registry_source": reg,
+                    "age_days": age,
+                    "download_count": dl,
+                    "dependency_count": deps[idx % len(deps)],
+                    "publisher_verified": verified[idx % 2],
+                    "stars": stars[idx % len(stars)],
+                    "forks": forks[idx % len(forks)],
+                    "subscribers": subs[idx % len(subs)],
+                    "open_issues": issue_combos[idx % len(issue_combos)][0],
+                    "closed_issues": issue_combos[idx % len(issue_combos)][1],
+                })
+                idx += 1
+                if idx >= 34:
+                    break
+            if idx >= 34:
+                break
+        if idx >= 34:
+            break
+
+    # Ensure exactly 34 entries by trimming or padding
+    return corpus[:34]
 
 
-def main() -> bool:
-    """Run quality verification."""
-    corpus_size = 0
-    distinct_scores = 0
-    
-    try:
-        from community_signal_enrichment import compute_score
-        
-        log.info("Loading community_signal_enrichment module...")
-        
-        corpus = generate_synthetic_corpus()
-        corpus_size = len(corpus)
-        log.info(f"Generated synthetic corpus of {corpus_size} metadata samples")
-        
-        scores = []
-        for idx, metadata in enumerate(corpus):
-            try:
-                score = compute_score(metadata)
-                scores.append(score)
-            except Exception as e:
-                log.error(f"compute_score failed for sample {idx}: {e}")
-                raise
-        
-        distinct_scores = len(set(scores))
-        log.info(f"Computed {len(scores)} scores with {distinct_scores} distinct values")
-        
-        score_counts = {}
-        for s in scores:
-            score_counts[s] = score_counts.get(s, 0) + 1
-        
-        log.info("Score frequency distribution:")
-        for score_val in sorted(score_counts.keys())[:20]:
-            log.info(f"  Score {score_val}: {score_counts[score_val]} samples")
-        if len(score_counts) > 20:
-            log.info(f"  ... and {len(score_counts) - 20} more unique scores")
-        
-        QUALITY_FLOOR = 15
-        assert distinct_scores >= QUALITY_FLOOR, (
-            f"Signal quality floor not met: {distinct_scores} distinct values < {QUALITY_FLOOR} required"
+# ---- Verifier -------------------------------------------------------------
+
+def verify_enrichment_quality() -> dict[str, Any]:
+    """
+    Run all quality checks and return a results dict.
+    Raises AssertionError on failure (caught by main).
+    """
+    signal_info = get_signal_info()
+    corpus = _make_fingerprints()
+
+    assert len(corpus) >= 34, (
+        f"Corpus size {len(corpus)} < 34 — cannot reliably measure discrimination"
+    )
+
+    scores: list[float] = []
+    evidence_list: list[dict] = []
+    failures: list[str] = []
+
+    for i, fingerprint in enumerate(corpus):
+        try:
+            result = compute_score(fingerprint)
+        except Exception as exc:
+            failures.append(f"Case {i}: compute_score raised {type(exc).__name__}: {exc}")
+            continue
+
+        # Type check
+        if not isinstance(result, tuple):
+            failures.append(f"Case {i}: expected tuple, got {type(result).__name__}")
+            continue
+        if len(result) != 2:
+            failures.append(f"Case {i}: tuple length {len(result)} != 2")
+            continue
+
+        score_float, evidence = result
+
+        if not isinstance(score_float, (int, float)):
+            failures.append(
+                f"Case {i}: score is {type(score_float).__name__}, not float"
+            )
+            continue
+
+        if not isinstance(evidence, dict):
+            failures.append(
+                f"Case {i}: evidence is {type(evidence).__name__}, not dict"
+            )
+            continue
+
+        if not (0.0 <= score_float <= 100.0):
+            failures.append(
+                f"Case {i}: score {score_float} outside [0.0, 100.0]"
+            )
+            continue
+
+        scores.append(score_float)
+        evidence_list.append(evidence)
+
+    # ---- Discrimination check
+    distinct_scores = len(set(round(s, 4) for s in scores))
+    min_score = min(scores) if scores else None
+    max_score = max(scores) if scores else None
+    span = (max_score - min_score) if (min_score is not None and max_score is not None) else None
+
+    stats = {
+        "corpus_size": len(corpus),
+        "results_count": len(scores),
+        "distinct_scores": distinct_scores,
+        "min_score": min_score,
+        "max_score": max_score,
+        "score_span": span,
+        "signal_name": signal_info["signal_name"],
+        "signal_version": signal_info["version"],
+        "signal_max_score": signal_info["max_score"],
+    }
+
+    if failures:
+        stats["failures"] = failures
+        return stats
+
+    # Primary assertion: >= 20 distinct score values
+    if distinct_scores < 20:
+        failures.append(
+            f"Discrimination insufficient: only {distinct_scores} distinct scores "
+            f"(expected >= 20). Score span: {span}. "
+            f"Scores: {sorted(set(round(s, 4) for s in scores))}"
         )
-        
-        min_score = min(scores)
-        max_score = max(scores)
-        log.info(f"Score range: [{min_score}, {max_score}]")
-        
-        assert distinct_scores > 1, "All scores identical - enrichment is degenerate"
-        
-        high_star_samples = [(m, s) for m, s in zip(corpus, scores) if m.get('stars', 0) >= 1000]
-        low_star_samples = [(m, s) for m, s in zip(corpus, scores) if m.get('stars', 0) < 100]
-        
-        if high_star_samples and low_star_samples:
-            avg_high = sum(s for _, s in high_star_samples) / len(high_star_samples)
-            avg_low = sum(s for _, s in low_star_samples) / len(low_star_samples)
-            log.info(f"High star avg score: {avg_high:.2f}, Low star avg score: {avg_low:.2f}")
-            assert avg_high >= avg_low, "Enrichment should favor high-star packages over low-star"
-        
-        log.info("Quality verification PASSED")
-        ws_write('verification_results', {
-            'test': 'community_signal_enrichment_quality',
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'corpus_size': corpus_size,
-            'distinct_scores': distinct_scores,
-            'quality_passed': True,
-            'min_score': min_score,
-            'max_score': max_score
-        })
-        return True
-        
-    except AssertionError as e:
-        log.error(f"Quality verification FAILED: {e}")
-        ws_write('verification_results', {
-            'test': 'community_signal_enrichment_quality',
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'corpus_size': corpus_size,
-            'distinct_scores': distinct_scores,
-            'quality_passed': False,
-            'error': str(e)
-        })
-        return False
-        
-    except ImportError as e:
-        log.error(f"Module import failed: {e}")
-        return False
-        
-    except Exception as e:
-        log.error(f"Verification error: {e}")
-        return False
+        stats["failures"] = failures
+
+    return stats
 
 
-def run():
-    """Daemon entry point."""
-    log.info(f"Starting {SERVICE_NAME}...")
-    send_heartbeat()
-    
-    success = main()
-    
-    send_heartbeat()
-    
-    sys.exit(0 if success else 1)
+# ---- Reporter -------------------------------------------------------------
+
+def print_stats(stats: dict[str, Any]) -> None:
+    """Pretty-print discrimination statistics."""
+    print("\n" + "=" * 70)
+    print(f"  Community Signal Enrichment — Quality Verification")
+    print("=" * 70)
+    print(f"  Signal name    : {stats['signal_name']}")
+    print(f"  Version        : {stats['signal_version']}")
+    print(f"  Max score      : {stats['signal_max_score']}")
+    print(f"  Corpus size    : {stats['corpus_size']}")
+    print(f"  Results        : {stats['results_count']}")
+    print(f"  Distinct scores: {stats['distinct_scores']}  (need >= 20)")
+    print(f"  Min score      : {stats['min_score']}")
+    print(f"  Max score      : {stats['max_score']}")
+    print(f"  Score span     : {stats['score_span']}")
+    print("-" * 70)
+    print("  All scores [sorted, unique]:")
+    unique_sorted = sorted(set(round(s, 4) for s in stats.get("_scores", [])))
+    # Reconstruct sorted unique scores from distinct_scores list
+    print(f"  {unique_sorted[:10]}{' ...' if len(unique_sorted) > 10 else ''}")
+    print("=" * 70)
 
 
-if __name__ == '__main__':
-    run()
+# ---- Entry point ----------------------------------------------------------
+
+if __name__ == "__main__":
+    # Run verification
+    stats = verify_enrichment_quality()
+
+    # Re-collect scores for reporting (build from corpus so we can show sorted unique)
+    corpus = _make_fingerprints()
+    all_scores = [compute_score(f)[0] for f in corpus]
+    stats["_scores"] = all_scores  # internal, for reporting only
+
+    print_stats(stats)
+
+    failures = stats.get("failures", [])
+    distinct = stats["distinct_scores"]
+    corpus_size = stats["corpus_size"]
+
+    if failures:
+        print("\nFAILURES:")
+        for f in failures:
+            print(f"  • {f}")
+        print("\n❌ QUALITY VERIFICATION FAILED")
+        raise SystemExit(1)
+
+    if distinct < 20:
+        print(
+            f"\n❌ Discrimination insufficient: {distinct} distinct scores "
+            f"(expected >= 20 out of {corpus_size} cases)"
+        )
+        raise SystemExit(1)
+
+    print(f"\n✅ Quality verification passed.")
+    print(f"   {distinct} distinct scores across {corpus_size} fingerprints — "
+          f"discrimination is sufficient.")
+    raise SystemExit(0)

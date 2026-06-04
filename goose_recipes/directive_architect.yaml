@@ -38,6 +38,32 @@ prompt: |-
   at 1 per cycle -- they are NOT a per-quarantine reflex. A cycle that proposes
   only breaker actions is a FAILED cycle.
 
+  SPEC QUALITY -- THE SINGLE BIGGEST LEVER ON WHETHER A BUILD SUCCEEDS. goose
+  builds a directive from your `description` and NOTHING ELSE; it builds CLEAR
+  specs and GHOSTS vague ones (a one-line "build an enrichment for X" produces no
+  file at all). So every CREATION directive's `description` MUST be a COMPLETE,
+  self-contained build spec (>= 200 chars) that states CONCRETELY:
+    - PURPOSE: one line on what the file does.
+    - INTERFACE: the exact public signature(s) to produce, e.g.
+        compute_score(metadata: dict) -> tuple[float, dict]
+    - INPUTS: the exact fields/args it consumes (names + types).
+    - OUTPUT: the exact return shape / side effects.
+    - CONSTRAINTS: stdlib-only unless named; no DB writes / no network unless
+        specified; do NOT import protected modules.
+    - ACCEPTANCE: a concrete self-test goose can run to prove it works -- a
+        __main__ block with asserts, or an importable check with expected values.
+  GOLD STANDARD (copy this concreteness -- specs like this build cleanly):
+    "Pure enrichment module exposing compute_score(metadata: dict) -> (float, dict).
+     Reads registry_source, age_days, download_count, dependency_count,
+     publisher_verified, stars from metadata; weighted formula (weights sum to 1.0);
+     a missing field contributes 0 and is appended to evidence['missing']. Returns
+     (score in 0..100, evidence dict with keys 'verdict' and 'missing'). No DB
+     writes, no network, no imports of protected modules. ACCEPTANCE: a __main__
+     self-test calling compute_score({'registry_source':'npm'}) that asserts
+     0<=score<=100 and 'verdict' in evidence, printing PASS."
+  For wire_/edit tasks: name the EXACT file(s) to edit, the precise change, a
+  backup + an idempotency marker, and a smoke-test (the r1_r2 kit style).
+
   TOOLS:
   - read_gate_quality_state(file=None)
       Returns which files are currently quarantined by the quality-gate circuit
@@ -69,7 +95,9 @@ prompt: |-
       Writes a directive to directives/proposed/. Validator runs server-side.
       handler must be one of: generate_file, write_raw, run_script.
       complexity must be one of: low, medium, high.
-      description must be >= 50 chars.
+      description must be a COMPLETE build spec >= 200 chars (see SPEC QUALITY
+        above): interface + inputs + output + constraints + acceptance self-test.
+        A thin one-liner WILL ghost -- goose cannot build from it.
       output_file: the NEW file a creation task produces (e.g. build_X -> X.py).
         For wire_/rewire_/integrate_/migrate_/refactor_/patch_ tasks that EDIT
         existing files, OMIT output_file (leave it empty) -- they create no new

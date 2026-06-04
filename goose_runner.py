@@ -552,8 +552,18 @@ def _emit_build_artifact_for(directive):
             task=resolve_directive_id(directive),
         )
         row["created_at"] = get_utc_now()
-        ws_write("mesh_memory", row)
-        log(f"Emitted build_artifact for {rel} ({size} bytes)")
+        resp = ws_write("mesh_memory", row)
+        if not (isinstance(resp, dict) and resp.get("ok")):
+            # ws_write swallows errors and returns {"ok": False}; do NOT let a
+            # failed write masquerade as "Emitted" (the silent-drop we chased:
+            # build on disk + .done, but no build_artifact -> publisher blind).
+            log(f"[artifact] ws_write returned {resp} for {rel} -- retrying once")
+            resp = ws_write("mesh_memory", row)
+        if isinstance(resp, dict) and resp.get("ok"):
+            log(f"Emitted build_artifact for {rel} ({size} bytes) resp={resp}")
+        else:
+            log(f"[artifact] FAILED to persist build_artifact for {rel}: resp={resp} "
+                f"-- publisher will NOT see this build")
     except Exception as e:
         log(f"Failed to emit build_artifact for "
             f"{directive.get('directive_id') or directive.get('id')}: {e}")
@@ -609,11 +619,13 @@ def _ghost_or_fail(directive, directive_id):
                  error="ghost build: declared output_file was not produced")
     try:
         ws_write("mesh_events", {
-            "event_type": "directive",
-            "content": directive.get("content", ""),
-            "complexity": "medium",
-            "source": "zo_builder",
-            "retry_count": n,
+            # mesh_events.agent_id is NOT NULL, and content/complexity/source/
+            # retry_count are not columns -> the old row 500'd (constraint) + got
+            # its keys dropped. Use the real schema (agent_id + payload).
+            "agent_id": "goose_tier1",
+            "event_type": "DIRECTIVE_GHOST_RETRY",
+            "payload": json.dumps({"directive_id": directive_id, "retry_count": n}),
+            "severity": "WARNING",
             "created_at": get_utc_now(),
         })
         log(f"[ghost-guard] {directive_id}: ghost attempt {n}/{MAX_GHOST_ATTEMPTS}, requeued for retry")

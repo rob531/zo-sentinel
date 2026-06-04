@@ -164,8 +164,10 @@ def _validate(d: dict) -> tuple[bool, str]:
             except Exception as e:
                 _log(f"may_rebuild check raised {e}; failing closed")
                 return False, f"breaker check error: {e}"
-    if len(d.get("description", "")) < 50:
-        return False, "description too short (<50 chars)"
+    if len(d.get("description", "")) < 200:
+        return False, ("description too thin (<200 chars) -- goose builds clear specs and "
+                       "GHOSTS vague ones. Provide interface + inputs + output + constraints "
+                       "+ an acceptance self-test (see the directive_architect SPEC QUALITY block).")
     return True, "ok"
 
 

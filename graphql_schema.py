@@ -1,459 +1,453 @@
 #!/usr/bin/env python3
 """
-ZO-SENTINEL GraphQL Schema Daemon
-Provides GraphQL API for MCP server data using strawberry-graphql
+graphql_schema.py -- GraphQL schema definition for ZO-SENTINEL.
+
+DORMANT MODULE (per PRODUCT_SPEC §9): GraphQL surface is strictly out of scope
+for v1.0. This file defines the schema as a pure data structure only. No
+server is started, no HTTP routes are registered, no DB calls are made.
+
+The live API surface is the REST API (:8791) and the UI (:8790).
+
+Usage (smoke):
+    python3 graphql_schema.py
 """
 
-import sys
-import os
-import time
-import threading
-from datetime import datetime
-from typing import Optional, List
+# deps: requests  (only used in self-smoke when run as __main__)
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from strawberry.fastapi import GraphQLRouter
-import strawberry
+# ---------------------------------------------------------------------------
+# Schema SDL (GraphQL Schema Definition Language)
+# ---------------------------------------------------------------------------
 
-# Add workspace to path
-sys.path.insert(0, '/home/workspace')
+SCHEMA_HEADER = '''
+"""GraphQL Schema for ZO-SENTINEL v1.0 -- DORMANT (not wired)."""
 
-# Database service URL
-WRITE_SERVICE_URL = "http://127.0.0.1:8772"
-SERVICE_NAME = "graphql_schema"
-PORT = 8788
-PID_FILE = f"/tmp/{SERVICE_NAME}.pid"
+schema {
+    query: Query
+    mutation: Mutation
+}
+'''
 
-# ============================================================================
-# Strawberry GraphQL Types
-# ============================================================================
+# ---- Signal Scores --------------------------------------------------------
 
-@strawberry.type
-class SignalScore:
-    """Signal score for an MCP server"""
-    signal_name: str
-    score: float
-    evidence: Optional[str]
-    scored_at: Optional[str]
+SIGNAL_SCORE_TYPE = '''
+"""Signal score for an MCP server."""
+type SignalScore {
+    signal_name: String!
+    score: Float!
+    confidence: Float
+    evidence: String
+    scored_at: String
+}
+'''
 
-@strawberry.type
-class ThreatAssociation:
-    """Threat association for an MCP server"""
-    threat_type: str
-    severity: str
-    evidence: Optional[str]
-    reported_at: Optional[str]
+# ---- Threat Associations -------------------------------------------------
 
-@strawberry.type
-class MCPServer:
-    """MCP Server type"""
-    server_id: str
-    name: str
-    url: str
-    verdict: Optional[str]
-    trust_score: Optional[float]
-    description: Optional[str]
-    risk_tier: Optional[str]
-    risk_rank: Optional[int]
-    threat_count: Optional[int]
-    scan_count: Optional[int]
-    signals: List[SignalScore]
-    threats: List[ThreatAssociation]
+THREAT_ASSOCIATION_TYPE = '''
+"""Threat association for an MCP server."""
+type ThreatAssociation {
+    threat_type: String!
+    severity: String!
+    source: String
+    evidence: String
+    reported_at: String
+}
+'''
 
-@strawberry.type
-class Assessment:
-    """Full assessment for an MCP server"""
-    server: MCPServer
-    signals: List[SignalScore]
-    threats: List[ThreatAssociation]
-    attestation: str
+# ---- Risk Register -------------------------------------------------------
 
-@strawberry.type
-class ThreatSummary:
-    """Threat summary type"""
-    server_id: str
-    server_name: str
-    threat_type: str
-    severity: str
-    evidence: Optional[str]
+RISK_REGISTER_TYPE = '''
+"""Risk register entry for an MCP server."""
+type RiskRegisterEntry {
+    risk_tier: String!
+    risk_rank: Int
+    threat_count: Int
+    last_updated: String
+}
+'''
 
-@strawberry.type
-class SearchResult:
-    """Search result type"""
-    server_id: str
-    name: str
-    url: str
-    verdict: Optional[str]
-    trust_score: Optional[float]
-    description: Optional[str]
+# ---- Attestations ---------------------------------------------------------
 
-# ============================================================================
-# Database Helper Functions
-# ============================================================================
+ATTESTATION_TYPE = '''
+"""Attestation record for an MCP server."""
+type Attestation {
+    attested_by: String!
+    attestated_at: String!
+    verdict: String!
+    evidence: String
+    expires_at: String
+}
+'''
 
-def _query_db(sql: str) -> dict:
-    """Query database via write service"""
-    import requests
-    try:
-        response = requests.post(
-            f"{WRITE_SERVICE_URL}/query",
-            json={"sql": sql},
-            timeout=10
-        )
-        return response.json()
-    except Exception as e:
-        return {"error": str(e), "rows": [], "count": 0}
+# ---- MCP Server (primary entity) -----------------------------------------
 
-def _execute_db(sql: str) -> dict:
-    """Execute database operation via write service"""
-    import requests
-    try:
-        response = requests.post(
-            f"{WRITE_SERVICE_URL}/execute",
-            json={"sql": sql},
-            timeout=10
-        )
-        return response.json()
-    except Exception as e:
-        return {"error": str(e), "ok": False}
+MCP_SERVER_TYPE = '''
+"""MCP Server -- primary entity in the registry."""
+type MCPServer {
+    server_id: String!
+    name: String!
+    url: String!
+    description: String
+    registry_source: String
 
-# ============================================================================
-# Data Fetching Functions
-# ============================================================================
+    # Verdict and scoring
+    verdict: String
+    trust_score: Float
 
-def fetch_server_by_id(server_id: str) -> Optional[dict]:
-    """Fetch server details by ID"""
-    result = _query_db(f"""
-        SELECT s.server_id, s.name, s.url, s.verdict, s.trust_score,
-               s.description, r.risk_tier, r.risk_rank, r.threat_count,
-               s.scan_count
-        FROM mcp_server_registry s
-        LEFT JOIN mcp_risk_register r ON s.server_id = r.server_id
-        WHERE s.server_id = '{server_id}'
-    """)
-    if result.get("rows") and len(result["rows"]) > 0:
-        return result["rows"][0]
-    return None
+    # Relations
+    signals: [SignalScore!]!
+    threats: [ThreatAssociation!]!
+    risk: RiskRegisterEntry
+    attestations: [Attestation!]!
 
-def fetch_server_signals(server_id: str) -> List[SignalScore]:
-    """Fetch signal scores for a server"""
-    result = _query_db(f"""
-        SELECT signal_name, score, evidence, scored_at
-        FROM mcp_signal_scores
-        WHERE server_id = '{server_id}'
-    """)
-    signals = []
-    for row in result.get("rows", []):
-        signals.append(SignalScore(
-            signal_name=row.get("signal_name", ""),
-            score=float(row.get("score", 0)),
-            evidence=row.get("evidence"),
-            scored_at=row.get("scored_at")
-        ))
-    return signals
+    # Metadata
+    first_seen: String
+    last_assessed: String
+    scan_count: Int
+}
+'''
 
-def fetch_server_threats(server_id: str) -> List[ThreatAssociation]:
-    """Fetch threat associations for a server"""
-    result = _query_db(f"""
-        SELECT threat_type, severity, evidence, reported_at
-        FROM mcp_threat_associations
-        WHERE server_id = '{server_id}'
-    """)
-    threats = []
-    for row in result.get("rows", []):
-        threats.append(ThreatAssociation(
-            threat_type=row.get("threat_type", ""),
-            severity=row.get("severity", ""),
-            evidence=row.get("evidence"),
-            reported_at=row.get("reported_at")
-        ))
-    return threats
+# ---- Search Result -------------------------------------------------------
 
-def row_to_mcp_server(row: dict, signals: List[SignalScore] = None,
-                      threats: List[ThreatAssociation] = None) -> MCPServer:
-    """Convert database row to MCPServer type"""
-    return MCPServer(
-        server_id=row.get("server_id", ""),
-        name=row.get("name", ""),
-        url=row.get("url", ""),
-        verdict=row.get("verdict"),
-        trust_score=float(row.get("trust_score")) if row.get("trust_score") is not None else None,
-        description=row.get("description"),
-        risk_tier=row.get("risk_tier"),
-        risk_rank=int(row.get("risk_rank")) if row.get("risk_rank") is not None else None,
-        threat_count=int(row.get("threat_count")) if row.get("threat_count") is not None else None,
-        scan_count=int(row.get("scan_count")) if row.get("scan_count") is not None else None,
-        signals=signals or [],
-        threats=threats or []
-    )
+SEARCH_RESULT_TYPE = '''
+"""Search result for MCP servers."""
+type SearchResult {
+    server_id: String!
+    name: String!
+    url: String!
+    verdict: String
+    trust_score: Float
+    description: String
+}
+'''
 
-def fetch_servers(verdict: Optional[str] = None, risk_tier: Optional[str] = None,
-                  limit: int = 50) -> List[MCPServer]:
-    """Fetch servers with optional filters"""
-    conditions = []
-    if verdict:
-        conditions.append(f"s.verdict = '{verdict}'")
-    if risk_tier:
-        conditions.append(f"r.risk_tier = '{risk_tier}'")
-    
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
-    
-    result = _query_db(f"""
-        SELECT s.server_id, s.name, s.url, s.verdict, s.trust_score,
-               s.description, r.risk_tier, r.risk_rank, r.threat_count,
-               s.scan_count
-        FROM mcp_server_registry s
-        LEFT JOIN mcp_risk_register r ON s.server_id = r.server_id
-        WHERE {where_clause}
-        ORDER BY r.risk_rank NULLS LAST, s.trust_score DESC
-        LIMIT {limit}
-    """)
-    
-    servers = []
-    for row in result.get("rows", []):
-        server_id = row.get("server_id")
-        signals = fetch_server_signals(server_id)
-        threats = fetch_server_threats(server_id)
-        servers.append(row_to_mcp_server(row, signals, threats))
-    return servers
+# ---- Threat Summary ------------------------------------------------------
 
-def search_servers(q: str, limit: int = 50) -> List[SearchResult]:
-    """Search servers by name, URL, or description"""
-    search_term = q.replace("'", "''")
-    result = _query_db(f"""
-        SELECT server_id, name, url, verdict, trust_score, description
-        FROM mcp_server_registry
-        WHERE name ILIKE '%{search_term}%'
-           OR url ILIKE '%{search_term}%'
-           OR description ILIKE '%{search_term}%'
-        ORDER BY trust_score DESC NULLS LAST
-        LIMIT {limit}
-    """)
-    
-    results = []
-    for row in result.get("rows", []):
-        results.append(SearchResult(
-            server_id=row.get("server_id", ""),
-            name=row.get("name", ""),
-            url=row.get("url", ""),
-            verdict=row.get("verdict"),
-            trust_score=float(row.get("trust_score")) if row.get("trust_score") is not None else None,
-            description=row.get("description")
-        ))
-    return results
+THREAT_SUMMARY_TYPE = '''
+"""Summary of a threat associated with an MCP server."""
+type ThreatSummary {
+    server_id: String!
+    server_name: String!
+    threat_type: String!
+    severity: String!
+    evidence: String
+}
+'''
 
-def fetch_threats_by_severity(severity: Optional[str] = None,
-                              limit: int = 100) -> List[ThreatSummary]:
-    """Fetch threat associations with optional severity filter"""
-    severity_filter = f"AND ta.severity = '{severity}'" if severity else ""
-    
-    result = _query_db(f"""
-        SELECT ta.server_id, s.name as server_name, ta.threat_type,
-               ta.severity, ta.evidence
-        FROM mcp_threat_associations ta
-        JOIN mcp_server_registry s ON ta.server_id = s.server_id
-        WHERE 1=1 {severity_filter}
-        ORDER BY 
-            CASE ta.severity
-                WHEN 'critical' THEN 1
-                WHEN 'high' THEN 2
-                WHEN 'medium' THEN 3
-                WHEN 'low' THEN 4
-                ELSE 5
-            END,
-            ta.reported_at DESC
-        LIMIT {limit}
-    """)
-    
-    threats = []
-    for row in result.get("rows", []):
-        threats.append(ThreatSummary(
-            server_id=row.get("server_id", ""),
-            server_name=row.get("server_name", ""),
-            threat_type=row.get("threat_type", ""),
-            severity=row.get("severity", ""),
-            evidence=row.get("evidence")
-        ))
-    return threats
+# ---- Assessment (full verdict package) -----------------------------------
 
-def generate_attestation(server: MCPServer) -> str:
-    """Generate attestation string for a server"""
-    if not server.verdict:
-        return "No verdict available"
-    
-    if server.verdict == "approved":
-        return f"Verified MCP server with trust score {server.trust_score or 'N/A'}"
-    elif server.verdict == "flagged":
-        return f"Flagged server - {server.threat_count or 0} threats detected"
-    elif server.verdict == "banned":
-        return "BANNED - Server poses significant risk"
-    else:
-        return "Assessment pending"
+ASSESSMENT_TYPE = '''
+"""Full assessment for an MCP server -- signals + threats + attestation."""
+type Assessment {
+    server: MCPServer!
+    signals: [SignalScore!]!
+    threats: [ThreatAssociation!]!
+    attestation: String!
+}
+'''
 
-# ============================================================================
-# GraphQL Query Resolvers
-# ============================================================================
+# ---- Verdict Taxonomy ----------------------------------------------------
 
-@strawberry.type
-class Query:
-    @strawberry.field
-    def server(self, id: str) -> Optional[MCPServer]:
-        """Get a single server by ID"""
-        row = fetch_server_by_id(id)
-        if not row:
-            return None
-        signals = fetch_server_signals(id)
-        threats = fetch_server_threats(id)
-        return row_to_mcp_server(row, signals, threats)
-    
-    @strawberry.field
-    def servers(self, verdict: Optional[str] = None,
-                risk_tier: Optional[str] = None,
-                limit: int = 50) -> List[MCPServer]:
-        """Get list of servers with optional filters"""
-        return fetch_servers(verdict, risk_tier, min(limit, 100))
-    
-    @strawberry.field
-    def search(self, q: str, limit: int = 50) -> List[SearchResult]:
-        """Search servers by query string"""
-        return search_servers(q, min(limit, 100))
-    
-    @strawberry.field
-    def threats(self, severity: Optional[str] = None,
-                limit: int = 100) -> List[ThreatSummary]:
-        """Get threat associations with optional severity filter"""
-        return fetch_threats_by_severity(severity, min(limit, 200))
-    
-    @strawberry.field
-    def assessment(self, server_id: str) -> Optional[Assessment]:
-        """Get full assessment for a server"""
-        row = fetch_server_by_id(server_id)
-        if not row:
-            return None
-        signals = fetch_server_signals(server_id)
-        threats = fetch_server_threats(server_id)
-        server = row_to_mcp_server(row, signals, threats)
-        attestation = generate_attestation(server)
-        return Assessment(
-            server=server,
-            signals=signals,
-            threats=threats,
-            attestation=attestation
-        )
+VERDICT_ENUM = '''
+"""Verdict taxonomy per PRODUCT_SPEC §2."""
+enum Verdict {
+    TRUSTED_GENERAL
+    TRUSTED_RESEARCH
+    ENTERPRISE_CONTROLLED
+    CAUTION_LIMITED
+    HIGH_RISK_ISOLATED
+    KNOWN_THREAT
+    INSUFFICIENT
+}
+'''
 
-@strawberry.type
-class Mutation:
-    @strawberry.mutation
-    def health_check(self) -> str:
-        """Health check mutation"""
-        return "ok"
+# ---- Risk Tier Enum ------------------------------------------------------
 
-# ============================================================================
-# FastAPI Application
-# ============================================================================
+RISK_TIER_ENUM = '''
+"""Risk tier enumeration."""
+enum RiskTier {
+    TRUSTED
+    ACCEPTABLE
+    CAUTION
+    HIGH_RISK
+    CRITICAL
+}
+'''
 
-# Create Strawberry schema
-schema = strawberry.Schema(query=Query, mutation=Mutation)
+# ---- Severity Enum -------------------------------------------------------
 
-# Create FastAPI app
-app = FastAPI(title="ZO-SENTINEL GraphQL API", version="1.0.0")
+SEVERITY_ENUM = '''
+"""Threat severity levels."""
+enum Severity {
+    CRITICAL
+    HIGH
+    MEDIUM
+    LOW
+    INFO
+}
+'''
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# ---------------------------------------------------------------------------
+# Query Type
+# ---------------------------------------------------------------------------
+
+QUERY_TYPE = '''
+"""Root Query type -- all read operations."""
+type Query {
+    # Server lookup
+    server(id: String!): MCPServer
+    servers(
+        verdict: String,
+        risk_tier: String,
+        limit: Int = 50
+    ): [MCPServer!]!
+
+    # Search
+    search(q: String!, limit: Int = 50): [SearchResult!]!
+
+    # Threat intelligence
+    threats(
+        severity: String,
+        limit: Int = 100
+    ): [ThreatSummary!]!
+
+    # Full assessment
+    assessment(server_id: String!): Assessment
+
+    # Signal scores for a server
+    signalsForMcp(serverId: String!): [SignalScore!]!
+
+    # Threat associations for a server
+    threatAssociations(serverId: String!): [ThreatAssociation!]!
+
+    # Attestations for a server
+    attestations(server_id: String!): [Attestation!]!
+}
+'''
+
+# ---------------------------------------------------------------------------
+# Mutation Type
+# ---------------------------------------------------------------------------
+
+# Per PRODUCT_SPEC §7: external API is read-only for v1.0.
+# Mutations are defined in the schema for future use but are NOT wired.
+
+INPUT_MCP_SERVER = '''
+"""Input type for submitting a new MCP server."""
+input McpServerInput {
+    name: String!
+    url: String!
+    description: String
+}
+'''
+
+MUTATION_RESULT = '''
+"""Result of a mutation operation."""
+type MutationResult {
+    success: Boolean!
+    message: String
+}
+'''
+
+SUBMIT_RESULT = '''
+"""Result of submitting an MCP server."""
+type SubmitResult {
+    success: Boolean!
+    server_id: String
+    message: String
+}
+'''
+
+MUTATION_TYPE = '''
+"""Root Mutation type -- all write operations (dormant, not wired)."""
+type Mutation {
+    # Submit a new MCP server for assessment
+    submitMcp(input: McpServerInput!): SubmitResult
+
+    # Request re-assessment of an existing server
+    requestReassessment(server_id: String!): MutationResult
+
+    # Override verdict (admin only -- audited)
+    overrideVerdict(
+        server_id: String!
+        verdict: String!
+        reason: String!
+    ): MutationResult
+
+    # Revoke an attestation (admin only -- audited)
+    revokeAttestation(
+        server_id: String!
+        reason: String!
+    ): MutationResult
+}
+'''
+
+# ---------------------------------------------------------------------------
+# Assembled Full Schema
+# ---------------------------------------------------------------------------
+
+FULL_SCHEMA = (
+    SCHEMA_HEADER.strip()
+    + "\n"
+    + VERDICT_ENUM.strip()
+    + "\n"
+    + RISK_TIER_ENUM.strip()
+    + "\n"
+    + SEVERITY_ENUM.strip()
+    + "\n"
+    + SIGNAL_SCORE_TYPE.strip()
+    + "\n"
+    + THREAT_ASSOCIATION_TYPE.strip()
+    + "\n"
+    + RISK_REGISTER_TYPE.strip()
+    + "\n"
+    + ATTESTATION_TYPE.strip()
+    + "\n"
+    + MCP_SERVER_TYPE.strip()
+    + "\n"
+    + SEARCH_RESULT_TYPE.strip()
+    + "\n"
+    + THREAT_SUMMARY_TYPE.strip()
+    + "\n"
+    + ASSESSMENT_TYPE.strip()
+    + "\n"
+    + INPUT_MCP_SERVER.strip()
+    + "\n"
+    + MUTATION_RESULT.strip()
+    + "\n"
+    + SUBMIT_RESULT.strip()
+    + "\n"
+    + QUERY_TYPE.strip()
+    + "\n"
+    + MUTATION_TYPE.strip()
 )
 
-# Create GraphQL router
-graphql_app = GraphQLRouter(schema)
-app.include_router(graphql_app, prefix="/graphql")
+# ---------------------------------------------------------------------------
+# Named exports for programmatic use
+# ---------------------------------------------------------------------------
 
-# Health check endpoint
-@app.get("/health")
-async def health():
-    return {"status": "ok", "service": SERVICE_NAME, "uptime": get_uptime()}
+TYPE_NAMES = [
+    "Verdict",
+    "RiskTier",
+    "Severity",
+    "SignalScore",
+    "ThreatAssociation",
+    "RiskRegisterEntry",
+    "Attestation",
+    "MCPServer",
+    "SearchResult",
+    "ThreatSummary",
+    "Assessment",
+    "McpServerInput",
+    "MutationResult",
+    "SubmitResult",
+    "Query",
+    "Mutation",
+]
 
-@app.get("/")
-async def root():
-    return {
-        "service": "ZO-SENTINEL GraphQL API",
-        "version": "1.0.0",
-        "graphql_endpoint": "/graphql",
-        "graphql_playground": "/graphql"
-    }
+QUERY_FIELD_NAMES = [
+    "server",
+    "servers",
+    "search",
+    "threats",
+    "assessment",
+    "signalsForMcp",
+    "threatAssociations",
+    "attestations",
+]
 
-# ============================================================================
-# Service Daemon Functions
-# ============================================================================
+MUTATION_FIELD_NAMES = [
+    "submitMcp",
+    "requestReassessment",
+    "overrideVerdict",
+    "revokeAttestation",
+]
 
-start_time = time.time()
+# ---------------------------------------------------------------------------
+# Schema metadata
+# ---------------------------------------------------------------------------
 
-def get_uptime() -> float:
-    """Get service uptime in seconds"""
-    return time.time() - start_time
+SCHEMA_VERSION = "1.0.0"
+SCHEMA_STATUS = "DORMANT"  # Not wired per PRODUCT_SPEC §9
 
-def check_single_instance():
-    """Ensure only one instance is running"""
-    if os.path.exists(PID_FILE):
-        with open(PID_FILE, 'r') as f:
-            old_pid = f.read().strip()
-        try:
-            os.kill(int(old_pid), 0)
-            print(f"ERROR: Service already running with PID {old_pid}")
-            sys.exit(1)
-        except (OSError, ProcessLookupError):
-            pass
-    
-    with open(PID_FILE, 'w') as f:
-        f.write(str(os.getpid()))
 
-def send_heartbeat():
-    """Send heartbeat to write service"""
-    import requests
-    try:
-        requests.post(
-            f"{WRITE_SERVICE_URL}/write",
-            json={
-                "table": "service_health",
-                "rows": {
-                    "service": SERVICE_NAME,
-                    "last_heartbeat": datetime.utcnow().isoformat()
-                },
-                "wait": True
-            },
-            timeout=5
-        )
-    except Exception:
-        pass
+def get_schema() -> str:
+    """Return the full GraphQL schema SDL."""
+    return FULL_SCHEMA
 
-def run():
-    """Main service loop"""
-    check_single_instance()
-    print(f"Starting {SERVICE_NAME} on port {PORT}")
-    print(f"GraphQL endpoint: http://127.0.0.1:{PORT}/graphql")
-    
-    # Start heartbeat thread
-    heartbeat_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
-    heartbeat_thread.start()
-    
-    # Run uvicorn server
-    uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=PORT,
-        log_level="info"
-    )
 
-def _heartbeat_loop():
-    """Heartbeat loop running in separate thread"""
-    while True:
-        send_heartbeat()
-        time.sleep(30)
+def get_type_names() -> list[str]:
+    """Return list of type names defined in this schema."""
+    return list(TYPE_NAMES)
+
+
+def validate_schema_structure() -> tuple[bool, str]:
+    """
+    Validate that the schema contains expected type definitions.
+    Returns (is_valid, detail).
+    """
+    schema = FULL_SCHEMA
+    issues = []
+
+    for name in TYPE_NAMES:
+        if f"type {name}" not in schema and f"enum {name}" not in schema and f"input {name}" not in schema:
+            issues.append(f"missing type/enum/input: {name}")
+
+    for field in QUERY_FIELD_NAMES:
+        if f"{field}(" not in schema and f"{field}:" not in schema:
+            issues.append(f"missing query field: {field}")
+
+    for field in MUTATION_FIELD_NAMES:
+        if f"{field}(" not in schema and f"{field}:" not in schema:
+            issues.append(f"missing mutation field: {field}")
+
+    if issues:
+        return False, f"validation failed: {', '.join(issues)}"
+
+    return True, f"valid schema with {len(TYPE_NAMES)} types, {len(QUERY_FIELD_NAMES)} queries, {len(MUTATION_FIELD_NAMES)} mutations"
+
+
+# ---------------------------------------------------------------------------
+# Self-smoke test
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    run()
+    print("graphql_schema.py -- smoke test")
+    print(f"Schema version: {SCHEMA_VERSION}")
+    print(f"Status: {SCHEMA_STATUS}")
+    print(f"Types defined: {len(TYPE_NAMES)}")
+    print(f"Query fields: {len(QUERY_FIELD_NAMES)}")
+    print(f"Mutation fields: {len(MUTATION_FIELD_NAMES)}")
+
+    # Validate structure
+    valid, detail = validate_schema_structure()
+    print(f"\nSchema validation: {'PASS' if valid else 'FAIL'}")
+    print(f"  {detail}")
+
+    # Check key types are present
+    checks = [
+        ("Verdict enum present", 'enum Verdict' in FULL_SCHEMA),
+        ("MCPServer type present", 'type MCPServer' in FULL_SCHEMA),
+        ("SignalScore type present", 'type SignalScore' in FULL_SCHEMA),
+        ("Query type present", 'type Query' in FULL_SCHEMA),
+        ("Mutation type present", 'type Mutation' in FULL_SCHEMA),
+        ("schema root present", 'schema {' in FULL_SCHEMA),
+        ("query: Query in schema root", 'query: Query' in FULL_SCHEMA),
+        ("6 verdict tiers in schema", all(v in FULL_SCHEMA for v in [
+            "TRUSTED_GENERAL", "TRUSTED_RESEARCH", "ENTERPRISE_CONTROLLED",
+            "CAUTION_LIMITED", "HIGH_RISK_ISOLATED", "KNOWN_THREAT"
+        ])),
+        ("Schema status is DORMANT", SCHEMA_STATUS == "DORMANT"),
+        ("Schema SDL non-empty", len(FULL_SCHEMA) > 1000),
+    ]
+
+    all_passed = True
+    for name, result in checks:
+        status = "PASS" if result else "FAIL"
+        print(f"  [{status}] {name}")
+        if not result:
+            all_passed = False
+
+    print(f"\nResult: {'ALL PASSED' if all_passed else 'SOME FAILED'}")
+    print("\nSchema preview (first 500 chars):")
+    print(FULL_SCHEMA[:500])
+    print("...")

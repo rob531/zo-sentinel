@@ -24,13 +24,38 @@ DEFAULT_HOME = "/home/workspace/zo_sentinel"
 MIN_OUTPUT_BYTES = 32        # a real module/file is never smaller; rejects empty stubs
 MAX_GHOST_ATTEMPTS = 3       # ghost runs tolerated before a directive is failed, not done
 
+# Edit-class task verbs MODIFY existing files (or wire/migrate things together)
+# rather than creating a new <task>.py -- so output-file existence can't verify
+# them; trust process success (the directive's own smoke-test is the real check).
+# The directive_architect's propose_directive requires an output_file, so it
+# stamps a bogus output_file=<task>.py on these, which made the ghost-guard fail
+# them forever (e.g. wire_admin_submissions_html_to_registry_api.py, never
+# created). This list makes the guard ignore that. Keep in sync with the copy in
+# zo_sentinel/mcp_servers/directive_mcp.py.
+EDIT_TASK_PREFIXES = ("wire_", "rewire_", "unwire_", "integrate_",
+                      "migrate_", "refactor_", "patch_")
+
+
+def is_edit_task(directive: dict) -> bool:
+    """True if the directive edits existing files / wires things together rather
+    than creating a new output file (so output-file existence can't verify it)."""
+    name = str(directive.get("task") or directive.get("directive_id")
+               or directive.get("key") or directive.get("id") or "")
+    return name.startswith(EDIT_TASK_PREFIXES)
+
 
 def declared_output(directive: dict, home: str = DEFAULT_HOME) -> Optional[Path]:
     """The file a directive claims it will produce, resolved under `home`.
 
     None when the directive declares no single output (goal-based / wire /
     investigate directives that modify existing files) -- those can't be verified
-    by file existence, so the caller trusts process success for them."""
+    by file existence, so the caller trusts process success for them.
+
+    Edit-class tasks (wire/rewire/integrate/...) likewise return None even when a
+    bogus output_file was stamped on them -- they modify existing files, so there
+    is no new file to confirm."""
+    if is_edit_task(directive):
+        return None
     out = directive.get("output_file") or directive.get("target_file")
     if not out or not isinstance(out, str):
         return None

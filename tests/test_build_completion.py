@@ -48,6 +48,24 @@ def test_declared_output_absent_is_ghost(tmp_path):
     assert output_confirmed(d, home=str(tmp_path)) is False
 
 
+def test_edit_task_trusted_despite_bogus_output_file(tmp_path):
+    # the wire_* ghost: directive_architect must declare an output_file, so it
+    # stamps output_file=<task>.py on an edit task that creates no such file.
+    # That must be TRUSTED on process success, not ghost-failed forever.
+    d = {"task": "wire_admin_submissions_html_to_registry_api",
+         "handler": "generate_file",
+         "output_file": "wire_admin_submissions_html_to_registry_api.py"}
+    assert declared_output(d, home=str(tmp_path)) is None
+    assert output_confirmed(d, home=str(tmp_path)) is True
+
+
+def test_build_task_still_requires_its_file(tmp_path):
+    # guard: the edit-task exemption must NOT leak to real build_ tasks
+    d = {"task": "build_tool_security_enrichment",
+         "output_file": "tool_security_enrichment.py"}
+    assert output_confirmed(d, home=str(tmp_path)) is False
+
+
 def test_empty_output_is_ghost(tmp_path):
     (tmp_path / "stub.py").write_text("x" * (MIN_OUTPUT_BYTES - 1), encoding="utf-8")
     assert output_confirmed({"output_file": "stub.py"}, home=str(tmp_path)) is False

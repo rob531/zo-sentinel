@@ -160,6 +160,13 @@ LADDER = [
     ModelSpec("minimax_direct", "MiniMax-M2.7",                   205_000, 60, 0.0,
               "MiniMax 2.7 (direct, flat $10/mo)"),
 
+    # Tier 0b -- MiniMax M3 direct (stronger coder; same key, 200 RPM). The pinned
+    # builder for complexity=medium (builder_medium starts HERE) -- a MiniMax
+    # primary so it returns non-empty and does NOT escalate mid-build (#73); 429s
+    # back off + retry the same rung (see _call_minimax_direct).
+    ModelSpec("minimax_direct", "MiniMax-M3",                     205_000, 200, 0.0,
+              "MiniMax M3 (direct, stronger coder, 200 RPM)"),
+
     # Tier 1a -- Gemini stable free-tier (confirmed RPM allocations)
     ModelSpec("gemini_direct",  "gemini-2.5-flash-lite",        1_000_000, 10, 0.0,
               "Gemini 2.5 Flash Lite (free, ~10 RPM) -- CONFIRMED"),
@@ -218,14 +225,15 @@ TASK_START_TIER = {
     # ladder_shim maps that alias to one of these task types so a HARDER
     # directive STARTS higher up the ladder instead of every build flattening
     # to rung 0 (MiniMax). Cost-ordered: prefer free rungs, escalate on failure.
-    #   rung 0  = MiniMax direct (free, flat)
-    #   rung 1  = Gemini 2.5 flash-lite (free, 1M ctx)
-    #   rung 10 = zo:openai/gpt-5.4-mini (free, strong)
-    #   rung 14 = zo:anthropic/claude-sonnet-4-5 (PAID; explicit opt-in only)
+    #   rung 0  = MiniMax M2.7 (free, flat)
+    #   rung 1  = MiniMax M3 (free, flat, 200 RPM -- stronger coder)
+    #   rung 2  = Gemini 2.5 flash-lite (free, 1M ctx)
+    #   rung 11 = zo:openai/gpt-5.4-mini (free, strong)
+    #   rung 15 = zo:anthropic/claude-sonnet-4-5 (PAID; explicit opt-in only)
     "builder_low":       0,
     "builder_medium":    1,
-    "builder_high":     10,
-    "builder_critical": 14,
+    "builder_high":     11,
+    "builder_critical": 15,
 }
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
@@ -315,6 +323,20 @@ _budget = _BudgetTracker(DAILY_PRIORITY_BUDGET)
 # Backend adapters (v0.8: gemini adapter branches on gemma- prefix)
 # ---------------------------------------------------------------------------
 
+_MINIMAX_429_RETRIES = 4
+
+
+def _retry_after_secs(resp, default: float) -> float:
+    """Backoff seconds for a 429: prefer the Retry-After header, else `default`."""
+    ra = resp.headers.get("Retry-After") or resp.headers.get("retry-after")
+    if ra:
+        try:
+            return max(0.0, float(ra))
+        except (TypeError, ValueError):
+            pass
+    return float(default)
+
+
 def _call_minimax_direct(spec, prompt, system, max_tokens, temperature, tools=None):
     import requests
     key = os.environ.get("MINIMAX_API_KEY")
@@ -324,34 +346,44 @@ def _call_minimax_direct(spec, prompt, system, max_tokens, temperature, tools=No
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    try:
-        payload = {"model": spec.model_id,
-                   "messages": messages,
-                   "max_tokens": max_tokens,
-                   "temperature": temperature,
-                   "reasoning_split": True}
-        if tools:
-            payload["tools"] = tools
-        r = requests.post(
-            "https://api.minimax.io/v1/chat/completions",
-            headers={"Authorization": f"Bearer {key}",
-                     "Content-Type": "application/json"},
-            json=payload,
-            timeout=240,
-        )
-        r.raise_for_status()
-        choices = r.json().get("choices", [])
-        if not choices:
-            return None, "empty choices", None
-        msg  = choices[0].get("message", {})
-        raw  = (msg.get("content", "") or "").strip()
-        tool_calls = msg.get("tool_calls")
-        content = _normalize_response(raw) if raw else ""
-        if not content and not tool_calls:
-            return None, "empty content and no tools", None
-        return (content or None), None, tool_calls
-    except Exception as e:
-        return None, f"{type(e).__name__}: {e}", None
+    payload = {"model": spec.model_id,
+               "messages": messages,
+               "max_tokens": max_tokens,
+               "temperature": temperature,
+               "reasoning_split": True}
+    if tools:
+        payload["tools"] = tools
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    url = "https://api.minimax.io/v1/chat/completions"
+    # M3 (200 RPM) returns 429 + a backoff header when rate-limited. Back off and
+    # retry the SAME model rather than letting the ladder escalate goose's builder
+    # mid-build (the #73 coherence guarantee). Bounded; on exhaustion, surface the
+    # error so the ladder can fall through as a last resort. (Helps M2.7 too.)
+    for attempt in range(_MINIMAX_429_RETRIES + 1):
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=240)
+        except Exception as e:
+            return None, f"{type(e).__name__}: {e}", None
+        if r.status_code == 429:
+            if attempt < _MINIMAX_429_RETRIES:
+                time.sleep(min(_retry_after_secs(r, 2.0 * (attempt + 1)), 30.0))
+                continue
+            return None, "429 rate-limited (backoff exhausted)", None
+        try:
+            r.raise_for_status()
+            choices = r.json().get("choices", [])
+            if not choices:
+                return None, "empty choices", None
+            msg  = choices[0].get("message", {})
+            raw  = (msg.get("content", "") or "").strip()
+            tool_calls = msg.get("tool_calls")
+            content = _normalize_response(raw) if raw else ""
+            if not content and not tool_calls:
+                return None, "empty content and no tools", None
+            return (content or None), None, tool_calls
+        except Exception as e:
+            return None, f"{type(e).__name__}: {e}", None
+    return None, "429 retries exhausted", None
 
 
 def _call_gemini_direct(spec, prompt, system, max_tokens, temperature, tools=None):

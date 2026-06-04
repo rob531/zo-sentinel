@@ -79,18 +79,18 @@ def build_env_for(directive: dict) -> dict:
     (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) by complexity and carries task/phase
     so builder_mcp can stamp a complete build_artifact row."""
     codegen_tier = tier_for_complexity(directive.get("complexity"))
+    complexity = (directive.get("complexity") or "").strip().lower()
+    # The goose builder is PINNED to ONE model for the whole session (escalation
+    # has no session affinity, so a routed model would switch rungs mid-build ->
+    # incoherent edits, #73). low/high/critical stay on rung-0 MiniMax M2.7;
+    # MEDIUM pins to zo-ladder-medium, which now STARTS at the MiniMax-M3 rung -- a
+    # stronger MiniMax primary that returns non-empty and BACKS OFF on 429 rather
+    # than escalating, so it is still ONE coherent model per build, just a better
+    # one for the harder directives. ZO_BUILD_TIER stays complexity-routed for the
+    # delegate_to_builder fallback + build_artifact provenance.
+    goose_model = "zo-ladder-medium" if complexity == "medium" else DEFAULT_ALIAS
     return {
-        # PHASE 1 (2026-06-03): PIN the architect/builder model to one reliable
-        # coder (MiniMax rung-0) for the WHOLE goose session. escalation.ask() is
-        # per-call with NO session affinity, so a complexity-routed GOOSE_MODEL
-        # lets different rungs answer different turns of one multi-turn build ->
-        # incoherent edits (MiniMax writes, Gemini "fixes", Gemma re-breaks). A
-        # pinned rung-0 (MiniMax always returns non-empty -> never escalates
-        # mid-build) gives goose's write/verify/iterate loop a coherent brain.
-        # Codegen TIER is kept complexity-routed for the delegate_to_builder
-        # fallback + build_artifact provenance. Phase 2 layers a multi-model
-        # ensemble on top for high/critical (diversity at the CANDIDATE level).
-        "GOOSE_MODEL": DEFAULT_ALIAS,          # zo-ladder-low = MiniMax rung 0 (pinned)
+        "GOOSE_MODEL": goose_model,
         "ZO_BUILD_TIER": codegen_tier,
         "ZO_BUILD_TASK": str(directive.get("key") or directive.get("directive_id")
                              or directive.get("id") or ""),

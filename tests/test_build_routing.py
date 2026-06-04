@@ -43,12 +43,15 @@ def test_aliases_match_escalation_map():
 
 def test_build_env_for_pins_orchestrator_and_routes_codegen():
     env = build_env_for({"complexity": "medium", "key": "build_x", "phase": "p2"})
-    # Phase 1: GOOSE_MODEL is PINNED to rung-0 (no mid-build model switching);
-    # only the codegen TIER follows complexity (for the delegate fallback + provenance).
-    assert env["GOOSE_MODEL"] == "zo-ladder-low"         # pinned orchestrator/builder
-    assert env["ZO_BUILD_TIER"] == "zo-ladder-medium"    # codegen tier still routed
+    # medium pins to zo-ladder-medium (= the MiniMax-M3 rung) -- still ONE coherent
+    # model per build, just stronger. low/high/critical stay on rung-0 M2.7.
+    assert env["GOOSE_MODEL"] == "zo-ladder-medium"      # M3-pinned builder
+    assert env["ZO_BUILD_TIER"] == "zo-ladder-medium"    # codegen tier (routed)
     assert env["ZO_BUILD_TASK"] == "build_x"
     assert env["ZO_BUILD_PHASE"] == "p2"
+    # only medium gets M3; everything else stays pinned to rung-0 M2.7
+    assert build_env_for({"complexity": "high"})["GOOSE_MODEL"] == "zo-ladder-low"
+    assert build_env_for({"complexity": "low"})["GOOSE_MODEL"] == "zo-ladder-low"
 
 
 def test_build_env_default_is_rung0():

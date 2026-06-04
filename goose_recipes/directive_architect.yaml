@@ -70,6 +70,11 @@ prompt: |-
       handler must be one of: generate_file, write_raw, run_script.
       complexity must be one of: low, medium, high.
       description must be >= 50 chars.
+      output_file: the NEW file a creation task produces (e.g. build_X -> X.py).
+        For wire_/rewire_/integrate_/migrate_/refactor_/patch_ tasks that EDIT
+        existing files, OMIT output_file (leave it empty) -- they create no new
+        file and are verified by their own smoke-test, not by a file landing.
+        Stamping output_file=<task>.py on an edit task makes it fail forever.
   - propose_breaker_action(file, action, rationale)
       Special directive that targets the quality-gate breaker itself, not a
       file rebuild. action must be one of:

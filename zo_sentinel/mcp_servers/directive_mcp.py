@@ -79,7 +79,17 @@ def _log(msg: str) -> None:
 VALID_HANDLERS = {"generate_file", "write_raw", "run_script"}
 VALID_COMPLEXITY = {"low", "medium", "high"}
 VALID_BREAKER_ACTIONS = {"investigate", "reset", "accept"}
-REQUIRED_FIELDS = {"task", "handler", "output_file", "description"}
+REQUIRED_FIELDS = {"task", "handler", "description"}   # output_file required only for non-edit tasks (see _validate)
+
+# Edit-class task verbs MODIFY existing files -> they declare NO creation output.
+# Mirrors zo_sentinel/build_completion.py EDIT_TASK_PREFIXES (keep in sync; that
+# copy is the authority used by goose_runner's ghost-guard).
+EDIT_TASK_PREFIXES = ("wire_", "rewire_", "unwire_", "integrate_",
+                      "migrate_", "refactor_", "patch_")
+
+
+def _is_edit_task(task: str) -> bool:
+    return str(task or "").startswith(EDIT_TASK_PREFIXES)
 
 # Fallback hardcoded sets, used ONLY if sentinel_directive_generator cannot
 # be imported. Keeping them here ensures the MCP fails closed (rejecting too
@@ -131,24 +141,29 @@ def _validate(d: dict) -> tuple[bool, str]:
         return False, f"invalid handler: {d['handler']}"
     if d.get("complexity") and d["complexity"] not in VALID_COMPLEXITY:
         return False, f"invalid complexity: {d['complexity']}"
-    output = d.get("output_file", "")
-    already, protected = _import_validator_sets()
-    if output in already:
-        return False, f"already built: {output}"
-    if output in protected:
-        return False, f"protected (hand-calibrated, do not regenerate): {output}"
-    gqs = _gate_state()
-    if gqs is not None:
-        try:
-            ok, reason = gqs.may_rebuild(output)
-            if not ok:
-                return False, (
-                    f"quality gate blocks rebuild of {output}: {reason}. "
-                    f"Use propose_breaker_action instead."
-                )
-        except Exception as e:
-            _log(f"may_rebuild check raised {e}; failing closed")
-            return False, f"breaker check error: {e}"
+    output = (d.get("output_file") or "").strip()
+    # Edit-class tasks modify existing files and declare no creation output;
+    # every other task must name the file it will create.
+    if not _is_edit_task(d.get("task", "")) and not output:
+        return False, "non-edit task must declare output_file"
+    if output:
+        already, protected = _import_validator_sets()
+        if output in already:
+            return False, f"already built: {output}"
+        if output in protected:
+            return False, f"protected (hand-calibrated, do not regenerate): {output}"
+        gqs = _gate_state()
+        if gqs is not None:
+            try:
+                ok, reason = gqs.may_rebuild(output)
+                if not ok:
+                    return False, (
+                        f"quality gate blocks rebuild of {output}: {reason}. "
+                        f"Use propose_breaker_action instead."
+                    )
+            except Exception as e:
+                _log(f"may_rebuild check raised {e}; failing closed")
+                return False, f"breaker check error: {e}"
     if len(d.get("description", "")) < 50:
         return False, "description too short (<50 chars)"
     return True, "ok"
@@ -267,8 +282,8 @@ def read_failure_history(hours: int = 24) -> dict:
 def propose_directive(
     task: str,
     handler: str,
-    output_file: str,
     description: str,
+    output_file: str = "",
     complexity: str = "medium",
     phase: str | None = None,
     priority: float | None = None,
@@ -276,12 +291,23 @@ def propose_directive(
 ) -> dict:
     """Validate and write a directive JSON to directives/proposed/.
 
+    output_file: the NEW file the task creates -- REQUIRED for creation tasks
+    (build_*, etc.). LEAVE EMPTY for edit-class tasks (wire_/rewire_/integrate_/
+    ...) that modify EXISTING files: they create no new file and are verified by
+    process success + their own smoke-test. Stamping a bogus output_file=<task>.py
+    on an edit task makes the ghost-guard fail it forever.
+
     Returns: {"status": "written"|"duplicate"|"rejected", "path": str?, "reason": str?}
     """
+    # Edit-class tasks never create a <task>.py -- drop any output_file the model
+    # supplied so the directive is honest and the ghost-guard trusts process
+    # success (build_completion.is_edit_task does the same defensively).
+    if _is_edit_task(task):
+        output_file = ""
     d = {
         "task": task,
         "handler": handler,
-        "output_file": output_file,
+        "output_file": output_file or None,
         "complexity": complexity,
         "description": description,
         "source": "directive_architect",

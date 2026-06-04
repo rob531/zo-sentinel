@@ -18,7 +18,8 @@ from threading import Thread
 
 sys.path.insert(0, "/home/workspace/zo_sentinel")  # ensure zo_sentinel package importable
 from zo_sentinel.build_routing import (  # noqa: E402
-    build_env_for, directive_content, resolve_directive_id)
+    build_artifact_row, build_env_for, directive_content, resolve_directive_id,
+    tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, output_confirmed)
 
@@ -519,9 +520,49 @@ def mark_directive_completed(directive):
         except Exception as e:
             log(f"Failed to move directive file: {e}")
 
+def _emit_build_artifact_for(directive):
+    """Emit the build_artifact mesh row for a confirmed creation build.
+
+    RESTORES the emission builder_mcp.delegate_to_builder used to guarantee. #73
+    moved goose to the developer extension (it writes files itself) and made the
+    artifact depend on the model calling register_build -- which it does NOT do
+    reliably, so confirmed builds landed on disk + .done but produced NO
+    build_artifact -> the ingestor/governor/publisher were blind -> no PR. We know
+    the file + tier here, so emit it directly, decoupled from the model.
+
+    Edit-class directives (declared_output None -- wire/rewire/...) create no
+    single new file, so no artifact (their multi-file diffs need a separate
+    publisher path)."""
+    out = declared_output(directive)
+    if out is None or not out.is_file():
+        return
+    try:
+        size = out.stat().st_size
+        rel = (str(out.relative_to(PROJECT_DIR))
+               if str(out).startswith(str(PROJECT_DIR)) else out.name)
+        row = build_artifact_row(
+            file=rel,
+            content_bytes=size,
+            context_type=str(directive.get("interface")
+                             or directive.get("context_type") or "utility"),
+            tier=tier_for_complexity(directive.get("complexity")),
+            model=os.environ.get("GOOSE_MODEL", ""),
+            backend="goose_developer",
+            phase=str(directive.get("phase", "")),
+            task=resolve_directive_id(directive),
+        )
+        row["created_at"] = get_utc_now()
+        ws_write("mesh_memory", row)
+        log(f"Emitted build_artifact for {rel} ({size} bytes)")
+    except Exception as e:
+        log(f"Failed to emit build_artifact for "
+            f"{directive.get('directive_id') or directive.get('id')}: {e}")
+
+
 def _complete(directive, directive_id, result_text, fallback_used=False):
     """A directive's declared output IS on disk -> record + mark done for real."""
     write_result(directive_id, True, result_text, fallback_used=fallback_used)
+    _emit_build_artifact_for(directive)   # restore publisher feed (#73 dropped this)
     mark_directive_completed(directive)
     clear_ghost(DIRECTIVES_PATH, directive_id)
 

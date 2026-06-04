@@ -206,6 +206,8 @@ def test_cligitops_missing_label_does_not_fail_pr(tmp_path, monkeypatch):
 
     def fake_run(args, **kw):
         seen.append(list(args))
+        if args[:1] == ["git"] and args[3:4] == ["diff"]:   # staged diff present -> proceed to commit
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="")
         if args[:3] == ["gh", "pr", "create"]:
             return types.SimpleNamespace(
                 returncode=0, stdout="https://github.com/rob531/zo-sentinel/pull/7\n", stderr="")
@@ -234,6 +236,8 @@ def test_cligitops_already_exists_is_success(tmp_path, monkeypatch):
     import zo_sentinel.publisher.gitops as gmod
 
     def fake_run(args, **kw):
+        if args[:1] == ["git"] and args[3:4] == ["diff"]:   # staged diff present -> proceed
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="")
         if args[:3] == ["gh", "pr", "create"]:
             return types.SimpleNamespace(
                 returncode=1, stdout="",
@@ -250,6 +254,77 @@ def test_cligitops_already_exists_is_success(tmp_path, monkeypatch):
     res = g.publish(plan)
     assert res.ok is True and res.detail == "already exists"
     assert res.pr_url == "https://github.com/rob531/zo-sentinel/pull/9"
+
+
+def test_cligitops_nothing_to_commit_is_noop_success(tmp_path, monkeypatch):
+    """An artifact byte-identical to base stages no diff -> `git commit` exits 1
+    with 'nothing to commit' on STDOUT (empty stderr -> bare 'git commit failed').
+    That must be an idempotent no-op SUCCESS, never a hard failure -- the bug that
+    head-of-line blocked every PR behind a rebuilt-identical OPERATIONS.md."""
+    import zo_sentinel.publisher.gitops as gmod
+
+    seen = []
+
+    def fake_run(args, **kw):
+        seen.append(list(args))
+        # args = ["git", "-C", dir, <subcmd>, ...] for _git; gh otherwise
+        sub = args[3] if args[:1] == ["git"] else None
+        if sub == "diff":                      # `git diff --cached --quiet` -> 0 = no staged changes
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if sub == "commit":                    # would be "nothing to commit", but we must NOT reach it
+            return types.SimpleNamespace(returncode=1, stdout="nothing to commit, working tree clean", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(gmod.subprocess, "run", fake_run)
+    g = gmod.CliGitOps(str(tmp_path), sleep=lambda *_: None)
+    plan = gmod.PublishPlan(branch="auto/build/x", title="t", body="b", file_path="x.py",
+                            content="already-on-base\n", dedup_key="k", labels=[])
+    res = g.publish(plan)
+    assert res.ok is True and res.noop is True
+    assert "nothing to commit" in res.detail
+    # never attempted to commit, push, or open a PR for a no-op
+    assert not any(c[:1] == ["git"] and c[3:4] == ["commit"] for c in seen)
+    assert not any(c[:1] == ["git"] and c[3:4] == ["push"] for c in seen)
+    assert not any(c[:3] == ["gh", "pr", "create"] for c in seen)
+
+
+class _NoopForFiles(FakeGitOps):
+    """FakeGitOps that reports a no-op (content already on base) for given files."""
+
+    def __init__(self, noop_files, **kw):
+        super().__init__(**kw)
+        self._noop = set(noop_files)
+
+    def publish(self, plan):
+        if plan.file_path in self._noop:
+            from zo_sentinel.publisher.gitops import PublishResult
+            return PublishResult(ok=True, noop=True, branch=plan.branch,
+                                 detail="no-op: artifact already on base (nothing to commit)")
+        return super().publish(plan)
+
+
+def test_noop_artifact_does_not_block_queue_or_burn_cap():
+    """A no-op artifact (already on base) must dedup + advance the watermark so the
+    newer artifact behind it still publishes -- and must NOT consume a daily-cap
+    slot. Regression for the OPERATIONS.md head-of-line block."""
+    store = InMemoryMeshStore(artifacts=[
+        _artifact("OPERATIONS.md", built_at="2026-06-04T17:56:00Z", task="write_operations_doc"),
+        _artifact("real.py", built_at="2026-06-04T18:00:00Z", task="build_real"),
+    ])
+    gitops = _NoopForFiles(["OPERATIONS.md"])
+    res = _pub(store, enabled=True, gitops=gitops, daily_cap=1).run_once()
+    actions = {r["file"]: r["action"] for r in res}
+    assert actions["OPERATIONS.md"] == "noop"
+    # the no-op did NOT eat the daily_cap=1 slot -> real.py still publishes
+    assert actions["real.py"] == "published"
+    assert len(gitops.published) == 1 and gitops.published[0].file_path == "real.py"
+    # watermark advanced past BOTH (no head-of-line stall on the no-op)
+    assert store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) == "2026-06-04T18:00:00Z"
+    # both dedup keys recorded so neither is retried
+    pub_rows = store.writes_of_type(PR_PUBLISHED_TYPE)
+    recorded = json.loads(pub_rows[-1]["content"])
+    assert any("OPERATIONS.md" in k for k in recorded)
+    assert any("real.py" in k for k in recorded)
 
 
 def test_watermark_persists_through_flaky_writes():

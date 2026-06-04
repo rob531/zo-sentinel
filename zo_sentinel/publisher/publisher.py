@@ -267,18 +267,27 @@ class Publisher:
                                 "detail": f"daily cap {self.daily_cap} reached"})
                 break
             res = self.gitops.publish(plan)
+            noop = bool(getattr(res, "noop", False))
+            action = "noop" if (res.ok and noop) else ("published" if res.ok else "failed")
             results.append({"dedup_key": art.dedup_key, "file": art.file,
-                            "action": "published" if res.ok else "failed",
+                            "action": action,
                             "pr_url": res.pr_url, "detail": res.detail, "tier": tier})
             if not res.ok:
                 # Publish failed (network / rate-limit even after GitOps backoff).
                 # Stop and do NOT advance past it, so we retry it next cycle.
                 break
+            # Dedup + advance past this artifact whether it opened a PR or was a
+            # no-op (content already on base). A no-op MUST advance too -- otherwise
+            # an artifact goose rebuilt byte-identically head-of-line blocks the
+            # queue forever (the bug that stalled every PR behind OPERATIONS.md).
             new_keys.append(art.dedup_key)
+            advance_wm = _max_iso(advance_wm, created_at)
+            if noop:
+                # Nothing was opened: don't consume a daily-cap slot or PR spacing.
+                continue
             remaining -= 1
             bud_count += 1
             published_now += 1
-            advance_wm = _max_iso(advance_wm, created_at)
             if self.pr_spacing_sec and remaining > 0:
                 self._sleep(self.pr_spacing_sec)
 

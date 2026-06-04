@@ -55,6 +55,11 @@ class PublishResult:
     pr_url: Optional[str] = None
     branch: Optional[str] = None
     detail: str = ""
+    # True when there was genuinely nothing to do because the artifact's content
+    # already matches base (goose rebuilt an existing file byte-identically) -- a
+    # SUCCESS (desired end state reached), not a failure, and NOT a real PR. The
+    # publisher dedups + advances past it but does not burn a daily-cap slot.
+    noop: bool = False
 
 
 class GitOps(Protocol):
@@ -156,6 +161,16 @@ class CliGitOps:
         if add.returncode != 0:
             return PublishResult(ok=False, branch=plan.branch,
                                  detail=(add.stderr or "git add failed")[:300])
+        # Nothing staged => the artifact is byte-identical to base (goose rebuilt
+        # an existing file). `git commit` would exit 1 with "nothing to commit" on
+        # STDOUT (empty stderr -> the bare "git commit failed" fallback), which the
+        # publisher loop treats as a hard failure and BREAKS on -- head-of-line
+        # blocking every newer artifact behind a no-op forever. Detect it here and
+        # report an idempotent no-op success instead. (`git diff --cached --quiet`
+        # exits 0 when there are no staged changes, 1 when there are.)
+        if self._git("diff", "--cached", "--quiet").returncode == 0:
+            return PublishResult(ok=True, noop=True, branch=plan.branch,
+                                 detail="no-op: artifact already on base (nothing to commit)")
         commit = self._git(
             "-c", f"user.name={self.author_name}",
             "-c", f"user.email={self.author_email}",

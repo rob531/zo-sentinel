@@ -37,6 +37,36 @@ def _is_rate_limited(text: Optional[str]) -> bool:
     return any(m in t for m in _RATE_LIMIT_MARKERS)
 
 
+# Substrings git/gh emit on a TRANSIENT network failure -- a blip, not a real
+# error. These must back off + retry (same as rate-limits) rather than break the
+# whole publish cycle: a broken pipe on `git fetch` is recoverable, and treating
+# it as a hard failure stalls the queue exactly like the no-op-commit bug did.
+_TRANSIENT_NET_MARKERS = (
+    "broken pipe",
+    "send failure",
+    "connection reset",
+    "connection timed out",
+    "could not resolve host",
+    "failed to connect",
+    "could not read from remote repository",
+    "unexpected disconnect",
+    "rpc failed",
+    "ssl_read",
+    "gnutls_handshake",
+    "timed out",
+    "temporary failure in name resolution",
+)
+
+
+def _is_transient_net(text: Optional[str]) -> bool:
+    t = (text or "").lower()
+    return any(m in t for m in _TRANSIENT_NET_MARKERS)
+
+
+def _is_retryable(text: Optional[str]) -> bool:
+    return _is_rate_limited(text) or _is_transient_net(text)
+
+
 @dataclass
 class PublishPlan:
     branch: str
@@ -120,16 +150,17 @@ class CliGitOps:
 
     def _run_with_backoff(self, fn: Callable[[], subprocess.CompletedProcess]
                           ) -> subprocess.CompletedProcess:
-        """Run a network step; on a GitHub rate-limit signal, exponential
-        backoff (with jitter) and retry up to max_retries. Non-rate-limit
-        failures return immediately (the caller surfaces them as ok=False)."""
+        """Run a network step; on a GitHub rate-limit OR transient-network signal
+        (broken pipe, connection reset, DNS blip, ...), exponential backoff (with
+        jitter) and retry up to max_retries. Other failures return immediately
+        (the caller surfaces them as ok=False)."""
         attempt = 0
         while True:
             r = fn()
             if r.returncode == 0:
                 return r
             err = (r.stderr or "") + (r.stdout or "")
-            if attempt >= self.max_retries or not _is_rate_limited(err):
+            if attempt >= self.max_retries or not _is_retryable(err):
                 return r
             delay = min(self.backoff_cap_sec,
                         self.backoff_base_sec * (2 ** attempt))
@@ -140,11 +171,16 @@ class CliGitOps:
             attempt += 1
 
     def publish(self, plan: PublishPlan) -> PublishResult:
+        # fetch + checkout go through backoff: a transient network blip (broken
+        # pipe, connection reset, DNS) on these pre-steps is recoverable and must
+        # not break the whole cycle -- it would otherwise stall the queue the way
+        # the no-op-commit bug did, just on a flakier trigger.
         steps = [
-            self._git("fetch", self.remote, plan.base),
-            self._git("checkout", "-B", plan.branch, f"{self.remote}/{plan.base}"),
+            lambda: self._git("fetch", self.remote, plan.base),
+            lambda: self._git("checkout", "-B", plan.branch, f"{self.remote}/{plan.base}"),
         ]
-        for r in steps:
+        for step in steps:
+            r = self._run_with_backoff(step)
             if r.returncode != 0:
                 self.last_error = (r.stderr or r.stdout)[:300]
                 return PublishResult(ok=False, branch=plan.branch, detail=self.last_error)

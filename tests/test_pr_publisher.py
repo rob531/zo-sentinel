@@ -13,7 +13,12 @@ import random
 import types
 
 from zo_sentinel.ingestor.store import InMemoryMeshStore
-from zo_sentinel.publisher.gitops import CliGitOps, FakeGitOps, _is_rate_limited
+from zo_sentinel.publisher.gitops import (
+    CliGitOps,
+    FakeGitOps,
+    _is_rate_limited,
+    _is_transient_net,
+)
 from zo_sentinel.publisher.publisher import (
     PR_PUBLISHED_TYPE,
     PUBLISHER_AGENT_ID,
@@ -182,6 +187,34 @@ def test_gitops_backs_off_then_succeeds():
     r = g._run_with_backoff(fake)
     assert r.returncode == 0 and calls["n"] == 3
     assert len(slept) == 2          # backed off twice before the 3rd success
+
+
+def test_is_transient_net_markers():
+    assert _is_transient_net("fatal: unable to access '...': Send failure: Broken pipe")
+    assert _is_transient_net("Connection reset by peer")
+    assert _is_transient_net("Could not resolve host: github.com")
+    assert not _is_transient_net("fatal: not a git repository")
+    assert not _is_transient_net("")
+
+
+def test_gitops_backs_off_on_transient_net_then_succeeds():
+    """A broken pipe on a git step is a transient blip -> back off + retry, never
+    a hard break. Regression for the post-deploy 'Send failure: Broken pipe' on
+    `git fetch` that failed a whole publish cycle."""
+    calls = {"n": 0}
+
+    def fake():
+        calls["n"] += 1
+        if calls["n"] < 2:
+            return types.SimpleNamespace(
+                returncode=1, stdout="",
+                stderr="fatal: unable to access '...': Send failure: Broken pipe")
+        return types.SimpleNamespace(returncode=0, stderr="", stdout="ok")
+
+    slept = []
+    g = CliGitOps("/tmp/nope", sleep=lambda s: slept.append(s), rng=random.Random(0))
+    r = g._run_with_backoff(fake)
+    assert r.returncode == 0 and calls["n"] == 2 and len(slept) == 1
 
 
 def test_gitops_no_retry_on_ordinary_failure():

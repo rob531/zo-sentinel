@@ -27,8 +27,6 @@ from zo_sentinel.ingestor.model import (
     IngestVerdict,
 )
 from zo_sentinel.ingestor.store import (
-    DIRECTIVE_AGENT_ID,
-    BUILD_DIRECTIVE_TYPE,
     INGESTOR_AGENT_ID,
     HttpMeshStore,
     MeshStore,

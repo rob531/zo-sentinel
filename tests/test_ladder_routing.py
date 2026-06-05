@@ -32,8 +32,10 @@ def test_start_tiers_are_distinct():
     t = escalation.TASK_START_TIER
     assert t["builder_low"] == 0
     assert t["builder_medium"] == 1
-    assert t["builder_high"] == 10
-    assert t["builder_critical"] == 14
+    # #80 inserted the MiniMax-M3 rung at index 1, shifting every higher rung +1:
+    # builder_high 10->11, builder_critical 14->15.
+    assert t["builder_high"] == 11
+    assert t["builder_critical"] == 15
     # the legacy default is still rung 0 (unchanged behaviour)
     assert t["builder"] == 0 and t["default"] == 0
 
@@ -59,7 +61,7 @@ def test_ask_starts_at_mapped_rung(monkeypatch):
 
     r = escalation.ask("builder_high", "build a complex thing")
     assert r.success
-    assert called[0] == escalation.LADDER[10].model_id  # started at rung 10, not 0
+    assert called[0] == escalation.LADDER[11].model_id  # started at rung 11 (#80 shift), not 0
 
     called.clear()
     r2 = escalation.ask("builder_low", "build a trivial thing")
@@ -101,9 +103,10 @@ def test_critical_may_reach_paid_rungs(monkeypatch):
     assert set(called) & _PAID_MODELS, "builder_critical never tried a paid rung"
 
 
-def test_medium_starts_at_gemini(monkeypatch):
+def test_medium_starts_at_minimax_m3(monkeypatch):
     called = _patch_all_backends(monkeypatch)
     r = escalation.ask("builder_medium", "moderate build")
     assert r.success
-    assert called[0] == escalation.LADDER[1].model_id    # rung 1 = first Gemini
-    assert called[0] != escalation.LADDER[0].model_id    # explicitly NOT MiniMax
+    # #80: rung 1 is MiniMax-M3 (the medium-pinned rung), NOT rung-0 MiniMax-M2.7.
+    assert called[0] == escalation.LADDER[1].model_id    # rung 1 = MiniMax-M3
+    assert called[0] != escalation.LADDER[0].model_id    # explicitly NOT rung-0 M2.7

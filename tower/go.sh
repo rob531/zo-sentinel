@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
-# go.sh v2.9 -- ZOMesh SOA recovery
+# go.sh v2.9.1 -- ZOMesh SOA recovery
+#
+# RESYNCED 2026-06-07 from the live host (/home/workspace/zo_mesh/go.sh) to
+# mirror the DuckDB-contention hardening applied during the 2026-06-05 incident
+# firefight (the 651-lock storm) that never made it back into source control:
+#   - Section 1 (v2.9.1): aggressive DuckDB lock cleanup -- fuser the writer DB,
+#     kill -9 any straggler holding the lock, rm stale .wal/.lock so the new
+#     write_service starts clean (fixes wrapper-restart stale-lock races).
+#   - Section 3b (PR #75): WriteService readiness gate -- wait up to 90s for a
+#     healthy :8772 BEFORE starting the ~40-daemon herd, so they don't pile onto
+#     a not-ready single writer.
+#   - curl health probes get -m5/-m3 timeouts so a hung probe can't stall boot.
+# NOTE: the live host go.sh has additional, unrelated drift not pulled in here
+#   (builder retirement at 12, ladder_shim_with_keys.sh, the proposed->pending
+#   promoter at 12.5c). Those are separate workstreams -- sync them deliberately.
 #
 # 2026-05-28 patches:
 #   - Section 0.0 Tailscale (userspace networking) added at the top, before
@@ -140,12 +154,12 @@ done
 
 if [[ "$MODE" == "verify" ]]; then
   hdr "VERIFY (no restarts; SUMMARY only)"
-  echo "  :8772 WriteService:      $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
-  echo "  :8773 InferenceRouter:   $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
-  echo "  :8780 ApprovalWorkflow:  $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
-  echo "  :8781 RegistryAPI:       $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
-  echo "  :8790 SentinelUI:        $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
-  echo "  :8795 BuildWatcher:      $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
+  echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
+  echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
+  echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
+  echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
+  echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
+  echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
   echo "  tailscaled procs:        $(pgrep -af tailscaled 2>/dev/null | wc -l | tr -d ' ')"
   PYCOUNT=$(pgrep -af python3 2>/dev/null | wc -l | tr -d ' ')
   echo "  python3 procs running:   $PYCOUNT"
@@ -202,25 +216,59 @@ for sc in "${TRUST_PIPELINE[@]}" "${MESH_DAEMONS[@]}"; do
   rm -f "$LOGS/${NAME}.lock" 2>/dev/null || true
 done
 sleep 3
+# Aggressive DuckDB lock cleanup (NEW v2.9.1)
+# After pkill, some write_service.py processes may still hold the DuckDB lock
+# (mid-transaction, zombie, or wrapper-restart race). Force-kill any straggler
+# and remove stale lock files so the new writer can start clean.
+DB_PATH=/home/workspace/Datasets/zo-mesh/data.duckdb
+for _ in $(seq 1 3); do
+  STALE_PID=$(fuser "$DB_PATH" 2>/dev/null | tr -d ' ')
+  if [[ -n "$STALE_PID" ]]; then
+    warn "DuckDB still locked by PID(s) $STALE_PID -- force killing"
+    kill -9 $STALE_PID 2>/dev/null || true
+    sleep 2
+  fi
+done
+# Remove stale WAL and lock files so DuckDB starts fresh
+rm -f "${DB_PATH}.wal" "${DB_PATH}.lock" 2>/dev/null || true
+# Verify unlock
+if fuser "$DB_PATH" 2>/dev/null | grep -q .; then
+  warn "DuckDB LOCK STILL HELD after cleanup -- boot may fail"
+else
+  ok "DuckDB lock released"
+fi
 
 hdr "2. Ollama"
-curl -s http://localhost:11434/api/tags >/dev/null 2>&1 \
+curl -m5 -s http://localhost:11434/api/tags >/dev/null 2>&1 \
     && ok "already running" \
     || { nohup ollama serve >> $LOGS/ollama.log 2>&1 & sleep 4 && ok "started"; }
 
 hdr "3. WriteService :8772"
 chmod +x $MESH/write_service_wrapper.sh
 nohup bash $MESH/write_service_wrapper.sh >> $LOGS/write_service.log 2>&1 & sleep 4
-CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8772/health 2>/dev/null || echo 000)
+CODE=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8772/health 2>/dev/null || echo 000)
 [[ "$CODE" == "200" ]] && ok ":8772 up" || warn ":8772 not responding ($CODE)"
 
+hdr "3b. WriteService readiness gate (gate the herd on a ready writer)"
+# The ~40 daemons below mostly write to :8772 (the single DuckDB writer). Starting
+# them before write_service is healthy piles a thundering herd onto a not-ready
+# writer -> DuckDB lock contention, timeouts, the recurring instability + slow
+# boots. Wait up to 90s for :8772 HERE, before the herd (the old readiness wait
+# lived at section 18 -- after everything had already started hammering it).
+WS_GATE=0
+for i in $(seq 1 30); do
+    if [[ "$(curl -m3 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)" == "200" ]]; then WS_GATE=1; break; fi
+    sleep 3
+done
+[[ "$WS_GATE" == "1" ]] && ok ":8772 ready -- starting dependent daemons" || warn ":8772 NOT ready after 90s -- daemons may contend"
+
 hdr "4. InferenceRouter :8773"
-IR=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8773/health 2>/dev/null || echo 000)
+IR=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8773/health 2>/dev/null || echo 000)
 if [[ "$IR" == "200" ]]; then
     ok ":8773 already running"
 else
     nohup python3 $MESH/inference_router_service.py >> $LOGS/inference_router.log 2>&1 & sleep 3
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8773/health 2>/dev/null || echo 000)
+    CODE=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8773/health 2>/dev/null || echo 000)
     [[ "$CODE" == "200" ]] && ok ":8773 started" || warn ":8773 failed ($CODE)"
 fi
 
@@ -266,12 +314,12 @@ ZSB=$(pgrep -f 'zo_sentinel_builder.py' 2>/dev/null | head -1)
 [[ -n "$ZSB" ]] && ok "SentinelBuilder PID $ZSB" || warn "SentinelBuilder failed"
 
 hdr "12.4 Ladder Shim :8796"
-LS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8796/health 2>/dev/null || echo 000)
+LS=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8796/health 2>/dev/null || echo 000)
 if [[ "$LS" == "200" ]]; then
     ok ":8796 ladder_shim already running"
 else
     nohup bash $MESH/daemon_wrapper.sh ladder_shim $SENTINEL/ladder_shim.py >> $LOGS/ladder_shim.log 2>&1 & sleep 3
-    LS2=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8796/health 2>/dev/null || echo 000)
+    LS2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8796/health 2>/dev/null || echo 000)
     [[ "$LS2" == "200" ]] && ok ":8796 ladder_shim started" || warn ":8796 ladder_shim failed ($LS2)"
 fi
 
@@ -347,20 +395,20 @@ EMF=$(pgrep -f 'ecosystems_metadata_fetcher.py' 2>/dev/null | head -1)
 [[ -n "$EMF" ]] && ok "EcosystemsFetcher PID $EMF" || warn "EcosystemsFetcher failed"
 
 hdr "12.10 Sentinel APIs (registry_api :8781 + approval_workflow :8780)"
-RA=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8781/health 2>/dev/null || echo 000)
+RA=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8781/health 2>/dev/null || echo 000)
 if [[ "$RA" == "200" ]]; then
     ok ":8781 registry_api already running"
 else
     nohup python3 $SENTINEL/registry_api.py >> $LOGS/sentinel_registry_api.log 2>&1 & sleep 3
-    RA2=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8781/health 2>/dev/null || echo 000)
+    RA2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8781/health 2>/dev/null || echo 000)
     [[ "$RA2" == "200" ]] && ok ":8781 registry_api started" || warn ":8781 registry_api failed ($RA2)"
 fi
-AW=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8780/health 2>/dev/null || echo 000)
+AW=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8780/health 2>/dev/null || echo 000)
 if [[ "$AW" == "200" ]]; then
     ok ":8780 approval_workflow already running"
 else
     nohup python3 $SENTINEL/approval_workflow.py >> $LOGS/sentinel_approval.log 2>&1 & sleep 3
-    AW2=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8780/health 2>/dev/null || echo 000)
+    AW2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8780/health 2>/dev/null || echo 000)
     [[ "$AW2" == "200" ]] && ok ":8780 approval_workflow started" || warn ":8780 approval_workflow failed ($AW2)"
 fi
 
@@ -439,7 +487,7 @@ hdr "18. ZO-SENTINEL Schema Bootstrap"
 echo "  Waiting up to 120s for write_service..."
 WS_READY=0
 for i in $(seq 1 40); do
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8772/health 2>/dev/null || echo 000)
+    CODE=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8772/health 2>/dev/null || echo 000)
     if [[ "$CODE" == "200" ]]; then WS_READY=1; break; fi
     sleep 3
 done
@@ -452,12 +500,12 @@ else
 fi
 
 hdr "SUMMARY"
-echo "  :8772 WriteService:      $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
-echo "  :8773 InferenceRouter:   $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
-echo "  :8780 ApprovalWorkflow:  $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
-echo "  :8781 RegistryAPI:       $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
-echo "  :8790 SentinelUI:        $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
-echo "  :8795 BuildWatcher:      $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
+echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
+echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
+echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
+echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
+echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
+echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
 echo "  tailscaled procs:        $(pgrep -af tailscaled 2>/dev/null | wc -l | tr -d ' ')"
 TP_RUNNING=0
 for sc in "${TRUST_PIPELINE[@]}"; do pgrep -f "$sc" >/dev/null 2>&1 && TP_RUNNING=$((TP_RUNNING + 1)); done

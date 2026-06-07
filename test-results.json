@@ -1,0 +1,36 @@
+{
+  "contract": "default-fail",
+  "updated_at": "2026-06-07T20:02:45.238244+00:00",
+  "steps": {
+    "blueprint1_uv_gates": {
+      "status": "PASS",
+      "proof": "uv_gate_runner.py PEP723; Tier0 in-proc + Tier1 via 'uv run --isolated' both PASS on state_loopback.py",
+      "updated_at": "2026-06-07T20:02:44.604862+00:00"
+    },
+    "blueprint2_graphify_index": {
+      "status": "PASS",
+      "proof": "graphifyy[mcp] v0.8.35 uv-tool installed; code-only index built 24394 nodes/34948 edges; semantic via local ladder shim with loopback-only guard",
+      "updated_at": "2026-06-07T20:02:44.733469+00:00"
+    },
+    "blueprint3_db_decoupling": {
+      "status": "PASS",
+      "proof": "Verified builder_mcp/goose_runner/ladder_shim route all DB I/O through ws_query/ws_write -> write_service:8772; zero direct duckdb imports; declined blueprint#3 literal (forbidden direct duckdb.connect per CLAUDE.md:250)",
+      "updated_at": "2026-06-07T20:02:44.854017+00:00"
+    },
+    "blueprint4_loopback_contract": {
+      "status": "PASS",
+      "proof": "state_loopback.py: Default-FAIL test-results.json + PROGRESS.md resume-cursor + git checkpoint commit; no duckdb/no network; CLI exercised",
+      "updated_at": "2026-06-07T20:02:44.991937+00:00"
+    },
+    "evaluator_readonly": {
+      "status": "PASS",
+      "proof": "agents/evaluator.md created; tool allowlist is read-only (Read/Grep/Glob + read-only gate/status bash); no write/db tools",
+      "updated_at": "2026-06-07T20:02:45.116104+00:00"
+    },
+    "mcp_graphify_registration": {
+      "status": "PASS",
+      "proof": ".mcp.json valid JSON; stdio server 'graphify' uses exact spec command: uv run --with graphifyy[mcp] python -m graphify.serve graphify-out/graph.json",
+      "updated_at": "2026-06-07T20:02:45.238244+00:00"
+    }
+  }
+}

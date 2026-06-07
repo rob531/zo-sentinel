@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# go.sh v2.9.1 -- ZOMesh SOA recovery
+# go.sh v2.9.2 -- ZOMesh SOA recovery
+#
+# v2.9.2 (2026-06-07): STAGGERED STARTUP. The 3b gate ensures the writer is UP
+#   before the herd; v2.9.2 ensures the herd doesn't all hit it AT ONCE once it
+#   is up. Daemons now start in writer-gated waves: wait_writer_calm() pauses
+#   between waves and inside the 13-daemon trust-pipeline loop (every 3rd daemon)
+#   until :8772 answers /health quickly, with a hard cap (WAVE_GATE_MAX) so boot
+#   always completes. Tunable: STAGGER_SECS / WAVE_GATE_SECS / WAVE_GATE_MAX.
 #
 # RESYNCED 2026-06-07 from the live host (/home/workspace/zo_mesh/go.sh) to
 # mirror the DuckDB-contention hardening applied during the 2026-06-05 incident
@@ -52,6 +59,33 @@ SENTINEL=/home/workspace/zo_sentinel
 LOGS=/home/workspace/logs
 SUPCTL="supervisorctl -c /etc/zo/supervisord-user.conf"
 mkdir -p $LOGS
+
+# -----------------------------------------------------------------------------
+# Staggered startup knobs + writer-calm gate (NEW v2.9.2)
+# -----------------------------------------------------------------------------
+# The ~40 daemons below mostly write to the single DuckDB writer (:8772). The 3b
+# gate ensures the writer is UP before the herd; these knobs ensure the herd does
+# not all hit it AT ONCE once it's up -- the boot-herd lock storm (651 conflicts
+# on 2026-06-05). Daemons start in waves; wait_writer_calm() pauses between waves
+# (and inside the trust-pipeline loop) until the writer answers /health quickly,
+# with a hard cap so boot always completes. All knobs are env-overridable.
+STAGGER_SECS="${STAGGER_SECS:-4}"      # per-daemon stagger inside a wave
+WAVE_GATE_SECS="${WAVE_GATE_SECS:-3}"  # poll interval while waiting for calm
+WAVE_GATE_MAX="${WAVE_GATE_MAX:-20}"   # max polls (~60s) before proceeding anyway
+wait_writer_calm() {
+  # Return once :8772 answers /health in under ~1s (writer not saturated), or
+  # after WAVE_GATE_MAX polls. Never blocks boot indefinitely.
+  local i t0 t1 code
+  for i in $(seq 1 "$WAVE_GATE_MAX"); do
+    t0=$(date +%s%3N)
+    code=$(curl -m3 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null || echo 000)
+    t1=$(date +%s%3N)
+    if [[ "$code" == "200" && $((t1 - t0)) -lt 1000 ]]; then return 0; fi
+    sleep "$WAVE_GATE_SECS"
+  done
+  warn "writer still busy after $((WAVE_GATE_MAX * WAVE_GATE_SECS))s gate -- proceeding anyway"
+  return 0
+}
 
 # -----------------------------------------------------------------------------
 # 0.0 Tailscale (userspace networking)
@@ -413,10 +447,17 @@ else
 fi
 
 hdr "12.11 Trust Pipeline Cluster (13 daemons)"
+# Wave boundary: let the core-services wave (4-12.10) drain on the writer before
+# releasing the 13 heavy continuous writers below.
+wait_writer_calm
+TP_N=0
 for sc in "${TRUST_PIPELINE[@]}"; do
     NAME="${sc%.py}"
     nohup bash $MESH/daemon_wrapper.sh "$NAME" "$SENTINEL/$sc" >> "$LOGS/${NAME}.log" 2>&1 &
-    sleep 1
+    TP_N=$((TP_N + 1))
+    # Stagger each daemon; re-gate on writer calm every 3rd so 13 writers don't
+    # pile onto :8772 at once (was a flat `sleep 1`).
+    if [[ $((TP_N % 3)) -eq 0 ]]; then wait_writer_calm; else sleep "$STAGGER_SECS"; fi
     PID=$(pgrep -f "$sc" 2>/dev/null | head -1)
     [[ -n "$PID" ]] && ok "$NAME PID $PID" || warn "$NAME failed to start"
 done
@@ -430,6 +471,8 @@ for sc in "${MESH_DAEMONS[@]}"; do
     [[ -n "$PID" ]] && ok "$NAME PID $PID" || warn "$NAME failed to start"
 done
 
+# Wave boundary before the remaining periodic writers.
+wait_writer_calm
 hdr "13. World Article Feeder"
 nohup python3 $MESH/world_article_feeder.py >> $LOGS/world_article_feeder.log 2>&1 & sleep 2
 WAF=$(pgrep -f 'world_article_feeder.py' 2>/dev/null | head -1)

@@ -219,27 +219,36 @@ async def graph_neighbors(target: str) -> str:
 
 @mcp.tool()
 async def graph_path(src: str, dst: str) -> str:
-    """Shortest dependency path (<=5 hops) between two files/symbols, via a
-    bounded recursive traversal of the code graph (cycle-guarded). Shows how a
-    change in one place can reach another.
+    """Shortest connection path (<=5 hops) between two files/symbols, via a
+    bounded, cycle-guarded recursive traversal of the code graph. The graph is
+    undirected, so this walks edges in BOTH directions -- it shows how a change
+    in one place can reach another (call/import/containment chain).
 
     Args:
         src: source file/symbol fragment.
         dst: destination file/symbol fragment.
     """
+    # Undirected: at each step move to the OTHER endpoint of any incident edge.
+    # Resolve endpoints among CODE nodes only (the ~360 'rationale' annotation
+    # nodes also match a bare %fragment% and would mis-resolve the target).
+    nxt = "CASE WHEN e.src=r.id THEN e.dst ELSE e.src END"
     sql = (
         "WITH RECURSIVE "
-        "s AS (SELECT id FROM code_nodes WHERE (source_file LIKE ? OR norm_label LIKE ? OR id=?) LIMIT 1), "
-        "d AS (SELECT id FROM code_nodes WHERE (source_file LIKE ? OR norm_label LIKE ? OR id=?) LIMIT 1), "
+        "s AS (SELECT id FROM code_nodes WHERE file_type='code' "
+        "AND (id=? OR source_file LIKE ? OR norm_label LIKE ?) "
+        "ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, length(source_file) LIMIT 1), "
+        "t AS (SELECT id FROM code_nodes WHERE file_type='code' "
+        "AND (id=? OR source_file LIKE ? OR norm_label LIKE ?) "
+        "ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, length(source_file) LIMIT 1), "
         "reach(id, depth, path) AS ("
         "  SELECT id, 0, [id] FROM s "
         "  UNION ALL "
-        "  SELECT e.dst, r.depth+1, list_append(r.path, e.dst) "
-        "  FROM reach r JOIN code_edges e ON e.src=r.id "
-        "  WHERE r.depth < 5 AND NOT list_contains(r.path, e.dst)) "
-        "SELECT depth, path FROM reach WHERE id = (SELECT id FROM d) ORDER BY depth LIMIT 1")
+        f"  SELECT {nxt}, r.depth+1, list_append(r.path, {nxt}) "
+        "  FROM reach r JOIN code_edges e ON (e.src=r.id OR e.dst=r.id) "
+        f"  WHERE r.depth < 5 AND e.relation <> 'rationale_for' AND NOT list_contains(r.path, {nxt})) "
+        "SELECT depth, path FROM reach WHERE id = (SELECT id FROM t) ORDER BY depth LIMIT 1")
     sl, dl = f"%{src}%", f"%{dst}%"
-    p = [sl, sl.lower(), src, dl, dl.lower(), dst]
+    p = [src, sl, sl.lower(), src, dst, dl, dl.lower(), dst]
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             rows = await _gquery(client, sql, p)

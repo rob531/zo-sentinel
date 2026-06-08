@@ -35,6 +35,7 @@ import json
 import pathlib
 import subprocess
 import sys
+import time
 from collections import Counter
 
 WS = "http://127.0.0.1:8772"
@@ -136,9 +137,20 @@ def execute(sql, params=None):
                               "agent_id": "graph_loader", "wait": True}, 60)
 
 
-def write_batch(table, rows):
-    return _post("/write", {"table": table, "rows": rows,
-                            "agent_id": "graph_loader", "wait": True}, 120)
+def write_batch(table, rows, attempts=5):
+    """POST a batch with retry+backoff. The single writer also serves the live
+    trust pipeline + periodic CHECKPOINTs, so a batch can occasionally exceed
+    write_service's 10s wait -> 502. Retrying is SAFE here: INSERT OR IGNORE +
+    the PK make a re-send idempotent (any rows that did land are skipped)."""
+    last = None
+    for k in range(attempts):
+        try:
+            return _post("/write", {"table": table, "rows": rows,
+                                    "agent_id": "graph_loader", "wait": True}, 60)
+        except Exception as e:
+            last = e
+            time.sleep(min(0.5 * (2 ** k), 8.0))   # 0.5,1,2,4,8s -- let the writer drain
+    raise last
 
 
 def query(sql, params=None):
@@ -148,13 +160,14 @@ def query(sql, params=None):
 def push(table, rows, batch):
     for i in range(0, len(rows), batch):
         write_batch(table, rows[i:i + batch])
-        print(f"  {table}: {min(i + batch, len(rows))}/{len(rows)}")
+        print(f"  {table}: {min(i + batch, len(rows))}/{len(rows)}", flush=True)
+        time.sleep(0.15)   # don't monopolise the single writer; let others interleave
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Load graphify graph.json into DuckDB via :8772")
     ap.add_argument("--dry-run", action="store_true", help="parse + count only; no writes")
-    ap.add_argument("--batch", type=int, default=1000, help="rows per /write POST (default 1000)")
+    ap.add_argument("--batch", type=int, default=500, help="rows per /write POST (default 500)")
     ap.add_argument("--purge-old", action="store_true", help="after load, delete rows from other commits")
     args = ap.parse_args(argv)
 

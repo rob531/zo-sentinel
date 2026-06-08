@@ -183,6 +183,37 @@ def push(table, rows, batch):
         time.sleep(0.15)   # don't monopolise the single writer; let others interleave
 
 
+def _write_ndjson(path, rows):
+    with open(path, "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r))
+            f.write("\n")
+
+
+def _bulk_insert(table, ndjson_path, select_cols, expected):
+    """ONE `INSERT ... SELECT FROM read_json_auto(...)` over the bus instead of
+    ~150 batched POSTs. ~100x faster and far gentler on the single writer (one
+    operation, not a batch storm that contends with the live trust pipeline and
+    triggered timeouts/502s/assertions). Plain INSERT (data is _clean'd) avoids
+    the INSERT OR IGNORE conflict path entirely. Verifies by COUNT so a slow
+    response can't be mistaken for failure."""
+    p = str(ndjson_path).replace("\\", "/")
+    try:
+        execute(f"INSERT INTO {table} SELECT {select_cols} FROM read_json_auto('{p}')")
+    except Exception as e:
+        print(f"  ({table}: execute returned {type(e).__name__}; verifying by count)")
+    n = 0
+    for _ in range(20):
+        rows = query(f"SELECT COUNT(*) AS c FROM {table}").get("rows", [])
+        n = rows[0].get("c", 0) if rows else 0
+        if n >= expected:
+            print(f"  {table}: {n} rows loaded")
+            return True
+        time.sleep(3)
+    print(f"  WARN {table}: {n}/{expected} rows after wait")
+    return False
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Load graphify graph.json into DuckDB via :8772")
     ap.add_argument("--dry-run", action="store_true", help="parse + count only; no writes")
@@ -230,10 +261,21 @@ def main(argv=None):
     execute(DDL_NODES)
     execute(DDL_EDGES)
 
-    print(f"loading {len(node_rows)} nodes...")
-    push("code_nodes", node_rows, args.batch)
-    print(f"loading {len(edge_rows)} edges...")
-    push("code_edges", edge_rows, args.batch)
+    # Bulk load: write NDJSON next to graph.json, then ONE read_json INSERT per
+    # table (gentle on the single writer; no batch storm). Files live under
+    # graphify-out/ so write_service (same box, /home/workspace) can read them.
+    nf = GRAPH.parent / "_code_nodes.ndjson"
+    ef = GRAPH.parent / "_code_edges.ndjson"
+    _write_ndjson(nf, node_rows)
+    _write_ndjson(ef, edge_rows)
+    print(f"bulk-loading {len(node_rows)} nodes + {len(edge_rows)} edges via read_json...")
+    _bulk_insert("code_nodes", nf,
+                 "id,label,norm_label,file_type,source_file,source_location,"
+                 "CAST(community AS INTEGER),built_at_commit", len(node_rows))
+    _bulk_insert("code_edges", ef,
+                 "src,dst,relation,CAST(weight AS DOUBLE),confidence,"
+                 "CAST(confidence_score AS DOUBLE),source_file,source_location,built_at_commit",
+                 len(edge_rows))
 
     if args.purge_old:
         execute("DELETE FROM code_nodes WHERE built_at_commit <> ?", [commit])

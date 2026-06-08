@@ -162,5 +162,95 @@ async def read_signal_quality() -> str:
         return f"ERROR: {e}"
 
 
+async def _gquery(client, sql, params=None):
+    """POST a read to write_service /query. Returns the rows list, or None if the
+    query failed (e.g. code_nodes not seeded yet -> 400)."""
+    r = await client.post(f"{WRITE_SERVICE}/query",
+                          json={"sql": sql, "params": params or [], "limit": 60})
+    if r.status_code != 200:
+        return None
+    return r.json().get("rows", [])
+
+
+_GRAPH_RELS = "('calls','imports','imports_from','uses','inherits','references')"
+
+
+@mcp.tool()
+async def graph_neighbors(target: str) -> str:
+    """Code-graph neighborhood of a file or symbol: what it DEPENDS ON (you
+    call/import these -- keep their signatures) and what DEPENDS ON IT (these
+    break if you change a contract). Query this BEFORE writing so your change
+    respects the existing call/import structure.
+
+    Reads the DuckDB code graph (code_nodes/code_edges) through write_service.
+    If the graph isn't seeded yet it says so -- just proceed without it.
+
+    Args:
+        target: a file name/path fragment or a symbol/label
+                (e.g. 'builder_mcp.py' or 'delegate_to_builder').
+    """
+    deps_sql = (
+        "SELECT DISTINCT e.relation AS rel, n2.label AS name, n2.source_file AS file "
+        "FROM code_edges e JOIN code_nodes n1 ON e.src=n1.id JOIN code_nodes n2 ON e.dst=n2.id "
+        "WHERE (n1.source_file LIKE ? OR n1.norm_label LIKE ? OR n1.id = ?) "
+        f"AND e.relation IN {_GRAPH_RELS} ORDER BY e.relation LIMIT 40")
+    dependents_sql = (
+        "SELECT DISTINCT e.relation AS rel, n1.label AS name, n1.source_file AS file "
+        "FROM code_edges e JOIN code_nodes n1 ON e.src=n1.id JOIN code_nodes n2 ON e.dst=n2.id "
+        "WHERE (n2.source_file LIKE ? OR n2.norm_label LIKE ? OR n2.id = ?) "
+        f"AND e.relation IN {_GRAPH_RELS} ORDER BY e.relation LIMIT 40")
+    like = f"%{target}%"
+    p = [like, like.lower(), target]
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            deps = await _gquery(client, deps_sql, p)
+            dependents = await _gquery(client, dependents_sql, p)
+    except Exception as e:
+        return f"graph_neighbors: graph unavailable ({type(e).__name__}) -- proceed without it."
+    if deps is None and dependents is None:
+        return "graph_neighbors: code graph not seeded yet -- proceed without it."
+    out = [f"GRAPH NEIGHBORHOOD for '{target}':",
+           "DEPENDS ON (you reference these -- keep their signatures):"]
+    out += [f"  {r['rel']} -> {r['name']} ({r['file']})" for r in (deps or [])] or ["  (none found)"]
+    out.append("DEPENDED ON BY (these break if you change the contract):")
+    out += [f"  {r['rel']} <- {r['name']} ({r['file']})" for r in (dependents or [])] or ["  (none found)"]
+    return "\n".join(out)
+
+
+@mcp.tool()
+async def graph_path(src: str, dst: str) -> str:
+    """Shortest dependency path (<=5 hops) between two files/symbols, via a
+    bounded recursive traversal of the code graph (cycle-guarded). Shows how a
+    change in one place can reach another.
+
+    Args:
+        src: source file/symbol fragment.
+        dst: destination file/symbol fragment.
+    """
+    sql = (
+        "WITH RECURSIVE "
+        "s AS (SELECT id FROM code_nodes WHERE (source_file LIKE ? OR norm_label LIKE ? OR id=?) LIMIT 1), "
+        "d AS (SELECT id FROM code_nodes WHERE (source_file LIKE ? OR norm_label LIKE ? OR id=?) LIMIT 1), "
+        "reach(id, depth, path) AS ("
+        "  SELECT id, 0, [id] FROM s "
+        "  UNION ALL "
+        "  SELECT e.dst, r.depth+1, list_append(r.path, e.dst) "
+        "  FROM reach r JOIN code_edges e ON e.src=r.id "
+        "  WHERE r.depth < 5 AND NOT list_contains(r.path, e.dst)) "
+        "SELECT depth, path FROM reach WHERE id = (SELECT id FROM d) ORDER BY depth LIMIT 1")
+    sl, dl = f"%{src}%", f"%{dst}%"
+    p = [sl, sl.lower(), src, dl, dl.lower(), dst]
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            rows = await _gquery(client, sql, p)
+    except Exception as e:
+        return f"graph_path: graph unavailable ({type(e).__name__})."
+    if not rows:
+        return (f"graph_path: no path from '{src}' to '{dst}' within 5 hops "
+                "(or graph not seeded).")
+    r = rows[0]
+    return f"PATH {src} -> {dst} ({r.get('depth')} hops): " + " -> ".join(r.get("path", []))
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

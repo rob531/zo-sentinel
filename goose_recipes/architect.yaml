@@ -40,10 +40,18 @@ prompt: |-
     file as a build_artifact (provenance for the ingestor/publisher). Call this
     EXACTLY ONCE, at the very end, only AFTER py_compile passes.
   - read_signal_quality(): live DB discrimination stats (optional context).
+  - graph_neighbors(target): code-graph neighborhood of a file/symbol -- what it
+    depends on and what depends on it. Call this BEFORE writing so you respect
+    existing call/import contracts (don't break a signature something depends on).
+  - graph_path(src, dst): shortest dependency path between two files/symbols.
   - delegate_to_builder(...): legacy single-shot codegen. Do NOT use it; you
     write the file yourself now.
 
   WORKFLOW:
+  0. CONTEXT: call graph_neighbors(<target file or key symbol>) to see callers,
+     dependents, and imports of what you're about to change. Respect those
+     contracts. (A GRAPH CONTEXT block may also be folded into the TASK below;
+     if the graph isn't seeded the tool says so -- just proceed.)
   1. Parse the task: identify the exact target file path and the spec.
   2. Write the COMPLETE file with the developer text_editor. Write ONLY the
      target file (plus any file the spec explicitly names). Do NOT create

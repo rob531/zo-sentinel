@@ -352,6 +352,34 @@ def check_goose_installed():
         log(f"Goose check failed: {e}")
     return False
 
+def _graph_context(directive):
+    """Best-effort code-graph neighborhood for the directive's target file,
+    folded into the task so even a weak rung that ignores the graph_neighbors
+    tool still gets structure. Pure read via ws_query (the architect's DuckDB
+    copy of the graph). Returns '' on ANY error -- e.g. code_nodes not seeded --
+    so it can never block or fail a build. No new dependency, no DB write."""
+    try:
+        out = declared_output(directive)
+        if out is None:
+            return ""
+        fname = str(out.name).replace("'", "''")   # basename; escape quotes (ws_query has no params)
+        if not fname:
+            return ""
+        res = ws_query(
+            "SELECT DISTINCT e.relation AS rel, n1.label AS who, n1.source_file AS file "
+            "FROM code_edges e JOIN code_nodes n1 ON e.src=n1.id JOIN code_nodes n2 ON e.dst=n2.id "
+            f"WHERE n2.source_file LIKE '%{fname}' "
+            "AND e.relation IN ('calls','imports','imports_from','uses','inherits') LIMIT 20")
+        rows = res.get("rows", []) if isinstance(res, dict) else []
+        if not rows:
+            return ""
+        lines = [f"  - {r.get('who')} ({r.get('file')}) {r.get('rel')} it" for r in rows]
+        return ("GRAPH CONTEXT -- existing code that depends on " + str(out.name) +
+                " (do NOT break these contracts):\n" + "\n".join(lines))
+    except Exception:
+        return ""
+
+
 def run_goose_task(directive_id, content, extra_env=None):
     """Execute Goose on task file with timeout.
 
@@ -800,8 +828,11 @@ def run():
                 # .done was the ghost-completion regression that burned directives.
                 produced = False
                 if goose_installed:
-                    result = run_goose_task(directive_id, directive.get("content", ""),
-                                            build_env_for(directive))
+                    _task = directive.get("content", "")
+                    _gctx = _graph_context(directive)   # Phase 3: fold graph structure into the task
+                    if _gctx:
+                        _task = f"{_task}\n\n{_gctx}"
+                    result = run_goose_task(directive_id, _task, build_env_for(directive))
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""))

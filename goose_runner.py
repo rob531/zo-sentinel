@@ -23,6 +23,15 @@ from zo_sentinel.build_routing import (  # noqa: E402
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, output_confirmed)
 
+# Phase-1 feedback edge (file-based only -- NO DB load; "zo_db_query destabilizes
+# write_service" per the 2026-05-31 ops note). state_loopback lives beside this
+# file; uv_gate_runner is the isolated Tier-0/1 gate.
+import state_loopback as sl  # noqa: E402
+try:
+    from tools.uv_gate_runner import run_gates  # noqa: E402
+except Exception:  # tools/ not importable in some launch contexts -> gate becomes a no-op
+    run_gates = None
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -569,12 +578,56 @@ def _emit_build_artifact_for(directive):
             f"{directive.get('directive_id') or directive.get('id')}: {e}")
 
 
+# Git commit of the state files is OFF by default: the host zo_sentinel clone is
+# `git reset --hard origin/main` on every refresh (2026-05-31 ops note), so a
+# local checkpoint commit there is futile/conflicting. The on-disk manifest is
+# the resume source (it survives reset --hard because the state files are
+# gitignored, and survives Modal reboot because the disk persists). Opt in with
+# ZO_STATE_GIT_COMMIT=1 only off-host.
+ZO_STATE_GIT_COMMIT = os.environ.get("ZO_STATE_GIT_COMMIT", "") not in ("", "0", "false", "False")
+
+
+def _syntax_gate(directive, directive_id):
+    """Tier-0 syntax gate on the declared output, recorded to the Default-FAIL
+    manifest. Returns True when the file parses, or when there is no single
+    declared .py output to gate (edit-class directives -- output_confirmed
+    already validated those). Tier-1 import is deliberately NOT a hard gate:
+    host-only deps (mcp/httpx/abs paths) false-FAIL it (workflow caveat), so it
+    would block valid builds -- it is recorded as advisory in a later phase, not
+    a completion blocker here. Never raises: a gate error must not regress a
+    build that output_confirmed already proved landed on disk."""
+    if run_gates is None:
+        return True
+    out = declared_output(directive)
+    if out is None or out.suffix != ".py" or not out.is_file():
+        return True
+    try:
+        report = run_gates(out, [0])           # syntax only -- cheap, no false-fails
+        sl.record_gate_result(directive_id, report)
+        if not report.get("passed"):
+            log(f"[eval-gate] {directive_id}: Tier-0 syntax FAIL on {out.name} -- not completing")
+        return bool(report.get("passed"))
+    except Exception as e:
+        log(f"[eval-gate] {directive_id}: gate error ({e}) -- allowing (output_confirmed held)")
+        return True
+
+
 def _complete(directive, directive_id, result_text, fallback_used=False):
-    """A directive's declared output IS on disk -> record + mark done for real."""
+    """A directive's declared output IS on disk AND passed the Tier-0 gate ->
+    record + mark done for real."""
     write_result(directive_id, True, result_text, fallback_used=fallback_used)
     _emit_build_artifact_for(directive)   # restore publisher feed (#73 dropped this)
     mark_directive_completed(directive)
     clear_ghost(DIRECTIVES_PATH, directive_id)
+    # Default-FAIL contract: record the proven PASS + checkpoint for crash-resume.
+    # Idempotent (record_pass overwrites; checkpoint refreshes the cursor).
+    try:
+        sl.record_pass(directive_id, f"output_confirmed + Tier-0 gate: {declared_output(directive)}")
+        sl.checkpoint(directive_id, "complete")
+        if ZO_STATE_GIT_COMMIT:
+            sl.commit_checkpoint(f"chore(state): {directive_id} complete")
+    except Exception as e:
+        log(f"[loopback] checkpoint failed for {directive_id}: {e}")
 
 def _mark_directive_failed(directive, directive_id, reason):
     """Give up after repeated ghost builds: write a .failed sentinel (so the
@@ -611,6 +664,10 @@ def _ghost_or_fail(directive, directive_id):
     Count the ghost attempt; requeue for another try, or fail it once the cap
     is hit. Crucially we do NOT mark it .done -- that was the regression."""
     n = bump_ghost(DIRECTIVES_PATH, directive_id, get_utc_now())
+    try:
+        sl.record_fail(directive_id, f"ghost/gate fail, attempt {n}")  # Default-FAIL history
+    except Exception:
+        pass
     if n >= MAX_GHOST_ATTEMPTS:
         _mark_directive_failed(directive, directive_id,
                                "declared output never produced (ghost build)")
@@ -670,7 +727,16 @@ def run():
     
     ensure_directories()
     check_single_instance()
-    
+
+    # Default-FAIL loop-back: surface the last checkpoint so a crash-restarted
+    # container shows where it left off (file-based; survives reboot + refresh).
+    try:
+        cursor = sl.resume()
+        if cursor:
+            log(f"[loopback] resume cursor: last_step={cursor.get('last_step')} at={cursor.get('at')}")
+    except Exception as e:
+        log(f"[loopback] resume read failed: {e}")
+
     # Setup signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
@@ -724,28 +790,33 @@ def run():
                 
                 # Write task spec
                 write_task_spec(directive)
+                sl.init_manifest([directive_id])   # Default-FAIL until proven (idempotent: setdefault)
 
                 # Build via Goose, falling back to MiniMax. CRITICAL: a directive
                 # is "done" ONLY when its declared output_file actually lands on
-                # disk (output_confirmed). Both goose and the fallback can report
-                # success WITHOUT producing the file -- stamping that .done was the
-                # ghost-completion regression that burned directives forever.
+                # disk (output_confirmed) AND the file parses (Tier-0 gate). Both
+                # goose and the fallback can report success WITHOUT producing the
+                # file, or produce a syntactically broken one -- stamping that
+                # .done was the ghost-completion regression that burned directives.
                 produced = False
                 if goose_installed:
                     result = run_goose_task(directive_id, directive.get("content", ""),
                                             build_env_for(directive))
-                    if result.get("success") and output_confirmed(directive):
+                    if (result.get("success") and output_confirmed(directive)
+                            and _syntax_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""))
                         produced = True
                     elif result.get("success"):
-                        log(f"[ghost-guard] {directive_id}: goose reported success but declared "
-                            f"output {declared_output(directive)} is absent -- not completing")
+                        log(f"[ghost-guard] {directive_id}: goose reported success but output "
+                            f"missing or failed Tier-0 gate ({declared_output(directive)}) "
+                            f"-- not completing")
                     else:
                         log(f"Goose failed for {directive_id}: {result.get('error')}")
 
                 if not produced:
                     fallback_result = call_minimax_fallback(directive)
-                    if fallback_result.get("success") and output_confirmed(directive):
+                    if (fallback_result.get("success") and output_confirmed(directive)
+                            and _syntax_gate(directive, directive_id)):
                         _complete(directive, directive_id,
                                   fallback_result.get("result", ""), fallback_used=True)
                         produced = True

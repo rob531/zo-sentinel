@@ -41,17 +41,22 @@ WS = "http://127.0.0.1:8772"
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GRAPH = ROOT / "graphify-out" / "graph.json"
 
+# write_service inserts via INSERT OR IGNORE (ON CONFLICT DO NOTHING), which
+# DuckDB rejects unless the table has a PRIMARY KEY/UNIQUE constraint -- so these
+# tables MUST declare one. Verified unique on the real graph: node id is unique;
+# (src,dst,relation) is unique. PK columns are all non-null.
 DDL_NODES = (
     "CREATE TABLE IF NOT EXISTS code_nodes ("
     "id VARCHAR, label VARCHAR, norm_label VARCHAR, file_type VARCHAR, "
     "source_file VARCHAR, source_location VARCHAR, community INTEGER, "
-    "built_at_commit VARCHAR)"
+    "built_at_commit VARCHAR, PRIMARY KEY (id, built_at_commit))"
 )
 DDL_EDGES = (
     "CREATE TABLE IF NOT EXISTS code_edges ("
     "src VARCHAR, dst VARCHAR, relation VARCHAR, weight DOUBLE, "
     "confidence VARCHAR, confidence_score DOUBLE, source_file VARCHAR, "
-    "source_location VARCHAR, built_at_commit VARCHAR)"
+    "source_location VARCHAR, built_at_commit VARCHAR, "
+    "PRIMARY KEY (src, dst, relation, built_at_commit))"
 )
 
 
@@ -173,12 +178,16 @@ def main(argv=None):
         print("DRY-RUN -- no DB writes.")
         return 0
 
-    print("DDL (idempotent)...")
+    # DROP+recreate: migrates any pre-existing PK-less table (an earlier seed
+    # created them without the PK that INSERT OR IGNORE needs) and gives a clean
+    # full-snapshot reload. The loader always reloads the whole graph, so a
+    # single current snapshot is the right model (avoids the MAX(commit-hash)
+    # ordering problem of an append model).
+    print("DDL: drop + recreate with PRIMARY KEY...")
+    execute("DROP TABLE IF EXISTS code_nodes")
+    execute("DROP TABLE IF EXISTS code_edges")
     execute(DDL_NODES)
     execute(DDL_EDGES)
-    print(f"clearing prior rows for commit {commit} (idempotent reload)...")
-    execute("DELETE FROM code_nodes WHERE built_at_commit = ?", [commit])
-    execute("DELETE FROM code_edges WHERE built_at_commit = ?", [commit])
 
     print(f"loading {len(node_rows)} nodes...")
     push("code_nodes", node_rows, args.batch)

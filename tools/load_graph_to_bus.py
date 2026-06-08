@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -48,16 +49,16 @@ GRAPH = ROOT / "graphify-out" / "graph.json"
 # (src,dst,relation) is unique. PK columns are all non-null.
 DDL_NODES = (
     "CREATE TABLE IF NOT EXISTS code_nodes ("
-    "id VARCHAR, label VARCHAR, norm_label VARCHAR, file_type VARCHAR, "
+    "repo VARCHAR, id VARCHAR, label VARCHAR, norm_label VARCHAR, file_type VARCHAR, "
     "source_file VARCHAR, source_location VARCHAR, community INTEGER, "
-    "built_at_commit VARCHAR, PRIMARY KEY (id, built_at_commit))"
+    "built_at_commit VARCHAR, PRIMARY KEY (repo, id, built_at_commit))"
 )
 DDL_EDGES = (
     "CREATE TABLE IF NOT EXISTS code_edges ("
-    "src VARCHAR, dst VARCHAR, relation VARCHAR, weight DOUBLE, "
+    "repo VARCHAR, src VARCHAR, dst VARCHAR, relation VARCHAR, weight DOUBLE, "
     "confidence VARCHAR, confidence_score DOUBLE, source_file VARCHAR, "
     "source_location VARCHAR, built_at_commit VARCHAR, "
-    "PRIMARY KEY (src, dst, relation, built_at_commit))"
+    "PRIMARY KEY (repo, src, dst, relation, built_at_commit))"
 )
 
 
@@ -88,8 +89,8 @@ def git_head() -> str:
         return "unknown"
 
 
-def load_graph():
-    data = json.loads(GRAPH.read_text(encoding="utf-8"))
+def load_graph(graph_path):
+    data = json.loads(pathlib.Path(graph_path).read_text(encoding="utf-8"))
     nodes = data.get("nodes", [])
     links = data.get("links", data.get("edges", []))
     # Prefer the commit the graph was built at; fall back to current HEAD.
@@ -97,8 +98,9 @@ def load_graph():
     return nodes, links, commit
 
 
-def node_row(n, commit):
+def node_row(n, commit, repo):
     return {
+        "repo": repo,
         "id": _s(n.get("id")),
         "label": _s(n.get("label")),
         "norm_label": _s(n.get("norm_label") or (n.get("label") or "").lower()),
@@ -110,8 +112,9 @@ def node_row(n, commit):
     }
 
 
-def edge_row(e, commit):
+def edge_row(e, commit, repo):
     return {
+        "repo": repo,
         "src": _s(e.get("source")),
         "dst": _s(e.get("target")),
         "relation": _s(e.get("relation")),
@@ -190,13 +193,13 @@ def _write_ndjson(path, rows):
             f.write("\n")
 
 
-def _bulk_insert(table, ndjson_path, select_cols, expected):
+def _bulk_insert(table, ndjson_path, select_cols, expected, count_where=""):
     """ONE `INSERT ... SELECT FROM read_json_auto(...)` over the bus instead of
     ~150 batched POSTs. ~100x faster and far gentler on the single writer (one
     operation, not a batch storm that contends with the live trust pipeline and
     triggered timeouts/502s/assertions). Plain INSERT (data is _clean'd) avoids
-    the INSERT OR IGNORE conflict path entirely. Verifies by COUNT so a slow
-    response can't be mistaken for failure."""
+    the INSERT OR IGNORE conflict path entirely. Verifies by COUNT (scoped to
+    count_where so a per-repo append can't false-pass on another repo's rows)."""
     p = str(ndjson_path).replace("\\", "/")
     try:
         execute(f"INSERT INTO {table} SELECT {select_cols} FROM read_json_auto('{p}')")
@@ -204,7 +207,7 @@ def _bulk_insert(table, ndjson_path, select_cols, expected):
         print(f"  ({table}: execute returned {type(e).__name__}; verifying by count)")
     n = 0
     for _ in range(20):
-        rows = query(f"SELECT COUNT(*) AS c FROM {table}").get("rows", [])
+        rows = query(f"SELECT COUNT(*) AS c FROM {table} {count_where}").get("rows", [])
         n = rows[0].get("c", 0) if rows else 0
         if n >= expected:
             print(f"  {table}: {n} rows loaded")
@@ -217,25 +220,35 @@ def _bulk_insert(table, ndjson_path, select_cols, expected):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Load graphify graph.json into DuckDB via :8772")
     ap.add_argument("--dry-run", action="store_true", help="parse + count only; no writes")
+    ap.add_argument("--repo", default="zo_sentinel", help="repo tag for this graph (default zo_sentinel)")
+    ap.add_argument("--graph", default=str(GRAPH), help="path to graph.json (default this repo's)")
+    ap.add_argument("--keep", action="store_true",
+                    help="append this --repo without dropping the tables (re-loads only this repo)")
     ap.add_argument("--batch", type=int, default=500, help="rows per /write POST (default 500)")
-    ap.add_argument("--purge-old", action="store_true", help="after load, delete rows from other commits")
+    ap.add_argument("--purge-old", action="store_true",
+                    help="after load, delete this repo's rows from other commits")
     args = ap.parse_args(argv)
 
-    if not GRAPH.is_file():
-        print(f"ERROR: {GRAPH} not found -- build it first: uv run tools/index_graph.py",
+    if not re.match(r"^[A-Za-z0-9_]+$", args.repo):
+        print(f"ERROR: --repo must be alphanumeric/underscore, got {args.repo!r}", file=sys.stderr)
+        return 2
+    graph_path = pathlib.Path(args.graph)
+    if not graph_path.is_file():
+        print(f"ERROR: {graph_path} not found -- build it first (graphify update <root>)",
               file=sys.stderr)
         return 2
 
-    nodes, links, commit = load_graph()
-    node_rows = [node_row(n, commit) for n in nodes]
-    edge_rows = [edge_row(e, commit) for e in links]
-    print(f"graph.json: {len(node_rows)} nodes, {len(edge_rows)} edges; built_at_commit={commit}")
+    nodes, links, commit = load_graph(graph_path)
+    node_rows = [node_row(n, commit, args.repo) for n in nodes]
+    edge_rows = [edge_row(e, commit, args.repo) for e in links]
+    print(f"{graph_path.name} [repo={args.repo}]: {len(node_rows)} nodes, "
+          f"{len(edge_rows)} edges; built_at_commit={commit}")
 
     # PK-clean the data (drop NULL-PK rows + dedupe) so INSERT OR IGNORE never
     # hits the NULL/conflict path that crashed on the box's edge set.
-    node_rows, nn, nd = _clean(node_rows, ("id",), ("id", "built_at_commit"))
+    node_rows, nn, nd = _clean(node_rows, ("id",), ("repo", "id", "built_at_commit"))
     edge_rows, en, ed = _clean(edge_rows, ("src", "dst", "relation"),
-                               ("src", "dst", "relation", "built_at_commit"))
+                               ("repo", "src", "dst", "relation", "built_at_commit"))
     if nn or nd or en or ed:
         print(f"cleaned: nodes -{nn} null/-{nd} dup -> {len(node_rows)}; "
               f"edges -{en} null/-{ed} dup -> {len(edge_rows)}")
@@ -255,36 +268,50 @@ def main(argv=None):
     # full-snapshot reload. The loader always reloads the whole graph, so a
     # single current snapshot is the right model (avoids the MAX(commit-hash)
     # ordering problem of an append model).
-    print("DDL: drop + recreate with PRIMARY KEY...")
-    execute("DROP TABLE IF EXISTS code_nodes")
-    execute("DROP TABLE IF EXISTS code_edges")
-    execute(DDL_NODES)
-    execute(DDL_EDGES)
+    if args.keep:
+        # Append this repo: keep the tables; clear only THIS repo's rows so the
+        # other repo's graph survives. Idempotent re-load of one --repo.
+        print(f"DDL: ensure tables; clearing prior rows for repo={args.repo}...")
+        execute(DDL_NODES)
+        execute(DDL_EDGES)
+        execute("DELETE FROM code_nodes WHERE repo = ?", [args.repo])
+        execute("DELETE FROM code_edges WHERE repo = ?", [args.repo])
+    else:
+        # Fresh load: drop + recreate (also migrates an older repo-less/PK-less
+        # schema). Use this for the FIRST repo; add others with --keep.
+        print("DDL: drop + recreate with PRIMARY KEY...")
+        execute("DROP TABLE IF EXISTS code_nodes")
+        execute("DROP TABLE IF EXISTS code_edges")
+        execute(DDL_NODES)
+        execute(DDL_EDGES)
 
-    # Bulk load: write NDJSON next to graph.json, then ONE read_json INSERT per
-    # table (gentle on the single writer; no batch storm). Files live under
-    # graphify-out/ so write_service (same box, /home/workspace) can read them.
-    nf = GRAPH.parent / "_code_nodes.ndjson"
-    ef = GRAPH.parent / "_code_edges.ndjson"
+    # Bulk load: write repo-scoped NDJSON, then ONE read_json INSERT per table
+    # (gentle on the single writer; no batch storm). Files live next to the
+    # graph so write_service (same box, /home/workspace) can read them.
+    cw = f"WHERE repo='{args.repo}'"
+    nf = graph_path.parent / f"_{args.repo}_nodes.ndjson"
+    ef = graph_path.parent / f"_{args.repo}_edges.ndjson"
     _write_ndjson(nf, node_rows)
     _write_ndjson(ef, edge_rows)
     print(f"bulk-loading {len(node_rows)} nodes + {len(edge_rows)} edges via read_json...")
     _bulk_insert("code_nodes", nf,
-                 "id,label,norm_label,file_type,source_file,source_location,"
-                 "CAST(community AS INTEGER),built_at_commit", len(node_rows))
+                 "repo,id,label,norm_label,file_type,source_file,source_location,"
+                 "CAST(community AS INTEGER),built_at_commit", len(node_rows), cw)
     _bulk_insert("code_edges", ef,
-                 "src,dst,relation,CAST(weight AS DOUBLE),confidence,"
+                 "repo,src,dst,relation,CAST(weight AS DOUBLE),confidence,"
                  "CAST(confidence_score AS DOUBLE),source_file,source_location,built_at_commit",
-                 len(edge_rows))
+                 len(edge_rows), cw)
 
     if args.purge_old:
-        execute("DELETE FROM code_nodes WHERE built_at_commit <> ?", [commit])
-        execute("DELETE FROM code_edges WHERE built_at_commit <> ?", [commit])
-        print("purged rows from other commits")
+        execute("DELETE FROM code_nodes WHERE repo = ? AND built_at_commit <> ?", [args.repo, commit])
+        execute("DELETE FROM code_edges WHERE repo = ? AND built_at_commit <> ?", [args.repo, commit])
+        print("purged rows from other commits of this repo")
 
-    nc = query("SELECT COUNT(*) AS c FROM code_nodes WHERE built_at_commit = ?", [commit])
-    ec = query("SELECT COUNT(*) AS c FROM code_edges WHERE built_at_commit = ?", [commit])
-    print(f"verify: code_nodes={nc.get('rows')} code_edges={ec.get('rows')} for {commit}")
+    nc = query("SELECT COUNT(*) AS c FROM code_nodes WHERE repo = ?", [args.repo])
+    ec = query("SELECT COUNT(*) AS c FROM code_edges WHERE repo = ?", [args.repo])
+    tot = query("SELECT COUNT(DISTINCT repo) AS r, COUNT(*) AS n FROM code_nodes")
+    print(f"verify: repo={args.repo} code_nodes={nc.get('rows')} code_edges={ec.get('rows')}; "
+          f"all repos: {tot.get('rows')}")
     print("Done. Phase 3 (architect graph tools) reads these tables via the bus.")
     return 0
 

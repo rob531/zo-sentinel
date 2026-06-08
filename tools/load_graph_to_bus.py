@@ -124,6 +124,25 @@ def edge_row(e, commit):
     }
 
 
+def _clean(rows, required, pk):
+    """Drop rows with a NULL/empty value in any PK column, then dedupe on the PK
+    tuple. This keeps the data PK-clean so write_service's INSERT OR IGNORE never
+    exercises its NULL/conflict path -- which, on the box's larger graph, hit a
+    DuckDB internal assertion. Returns (clean_rows, dropped_null, dropped_dup)."""
+    seen, out, dn, dd = set(), [], 0, 0
+    for r in rows:
+        if any(r.get(c) in (None, "") for c in required):
+            dn += 1
+            continue
+        k = tuple(r.get(c) for c in pk)
+        if k in seen:
+            dd += 1
+            continue
+        seen.add(k)
+        out.append(r)
+    return out, dn, dd
+
+
 # --- bus helpers (lazy requests import so --dry-run needs no deps) ------------
 def _post(path, payload, timeout):
     import requests
@@ -180,6 +199,15 @@ def main(argv=None):
     node_rows = [node_row(n, commit) for n in nodes]
     edge_rows = [edge_row(e, commit) for e in links]
     print(f"graph.json: {len(node_rows)} nodes, {len(edge_rows)} edges; built_at_commit={commit}")
+
+    # PK-clean the data (drop NULL-PK rows + dedupe) so INSERT OR IGNORE never
+    # hits the NULL/conflict path that crashed on the box's edge set.
+    node_rows, nn, nd = _clean(node_rows, ("id",), ("id", "built_at_commit"))
+    edge_rows, en, ed = _clean(edge_rows, ("src", "dst", "relation"),
+                               ("src", "dst", "relation", "built_at_commit"))
+    if nn or nd or en or ed:
+        print(f"cleaned: nodes -{nn} null/-{nd} dup -> {len(node_rows)}; "
+              f"edges -{en} null/-{ed} dup -> {len(edge_rows)}")
 
     if args.dry_run:
         rels = Counter(e["relation"] for e in edge_rows)

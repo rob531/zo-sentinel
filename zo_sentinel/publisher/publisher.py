@@ -273,7 +273,15 @@ class Publisher:
                             "action": action,
                             "pr_url": res.pr_url, "detail": res.detail, "tier": tier})
             if not res.ok:
-                # Publish failed (network / rate-limit even after GitOps backoff).
+                if getattr(res, "permanent", False):
+                    # DETERMINISTIC failure (bad path, unwritable, malformed) --
+                    # retrying can't fix it. QUARANTINE: mark, advance past it, and
+                    # keep going, so one poison artifact can't head-of-line-block
+                    # every newer PR forever (the absolute-path stall, 2026-06-08).
+                    results[-1]["action"] = "quarantined"
+                    advance_wm = _max_iso(advance_wm, created_at)
+                    continue
+                # Transient (network / rate-limit even after GitOps backoff).
                 # Stop and do NOT advance past it, so we retry it next cycle.
                 break
             # Dedup + advance past this artifact whether it opened a PR or was a

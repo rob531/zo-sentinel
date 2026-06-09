@@ -298,6 +298,26 @@ TABLES = [
         error          TEXT,
         built_at       TIMESTAMPTZ DEFAULT now()
     )""", 'build_provenance'),
+
+    # key_topology -- the secret-HYDRATION dependency map (names + topology ONLY;
+    # secret VALUES are NEVER stored here). One row per (key, consumer) so a single
+    # key with two delivery paths (e.g. ANTHROPIC via secretless-ai [works] vs via
+    # key_hydrator [broken]) is explicit. Turns "which rung is down and why" from a
+    # multi-log trace into one query. Hand-maintained: graphify can't derive
+    # subprocess/cross-host/config edges, so update this when the hydration path
+    # changes. JOIN target for live health.
+    ("""CREATE TABLE IF NOT EXISTS key_topology (
+        key_name    VARCHAR,      -- env var NAME only -- NEVER the secret value
+        consumer    VARCHAR,      -- daemon/service that needs the key
+        ladder_rung VARCHAR,      -- escalation alias/rung this key enables (or '')
+        source      VARCHAR,      -- origin: tower_vault | zo_secrets | zo_env | modal
+        delivery    VARCHAR,      -- mechanism THIS consumer uses: secretless_ai |
+                                  -- boot_zo_env | key_hydrator_ondemand | key_dispatch
+        status      VARCHAR,      -- working | degraded | broken
+        note        VARCHAR,
+        updated_at  TIMESTAMPTZ DEFAULT now(),
+        PRIMARY KEY (key_name, consumer)
+    )""", 'key_topology'),
 ]
 
 created = sum(1 for sql, label in TABLES if ex(sql, label))
@@ -322,6 +342,21 @@ SELECT
 FROM build_provenance
 GROUP BY directive_type, complexity, model
 """, 'failure_matrix (view)')
+
+# key_chain_status -- read model over key_topology that surfaces BROKEN/degraded
+# hydration chains first, so "which rung is down and why" is the top row. Pairs
+# each (key,consumer) with whether a WORKING delivery exists for that same key on
+# any other consumer (has_working_path) -- i.e. "the key is fine, this consumer is
+# just on the wrong path" vs "the key is unavailable everywhere".
+ex("""
+CREATE OR REPLACE VIEW key_chain_status AS
+SELECT t.key_name, t.consumer, t.ladder_rung, t.source, t.delivery, t.status,
+       EXISTS (SELECT 1 FROM key_topology w
+               WHERE w.key_name = t.key_name AND w.status = 'working') AS key_has_working_path,
+       t.note
+FROM key_topology t
+ORDER BY CASE t.status WHEN 'broken' THEN 0 WHEN 'degraded' THEN 1 ELSE 2 END, t.key_name
+""", 'key_chain_status (view)')
 
 # Verify the critical one
 try:

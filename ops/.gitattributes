@@ -1,0 +1,4 @@
+# These are host scripts that run on the Linux container -- force LF so a Windows
+# checkout can't introduce CRLF that would break the shebang / shell parsing.
+*.sh text eol=lf
+watchdog.sh text eol=lf

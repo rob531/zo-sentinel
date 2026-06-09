@@ -9,12 +9,33 @@ AgentVault-hydrated token on the host), never a raw env secret.
 """
 from __future__ import annotations
 
+import os
 import random
 import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Protocol
+
+
+def _repo_relative(file_path: str) -> str:
+    """Coerce an artifact path to repo-relative. Producers sometimes emit an
+    ABSOLUTE path into the live tree (e.g. /home/workspace/zo_sentinel/foo.py).
+    Joined onto the pub clone, an absolute right operand WINS
+    (Path('/clone') / '/abs' == Path('/abs')), so the write escapes the clone and
+    `git add /abs` fatals 'outside repository' -- which then head-of-line-blocks
+    the whole queue. Strip the known source root; fall back to basename if it
+    still points outside the repo."""
+    if not os.path.isabs(file_path):
+        return file_path
+    src_root = os.environ.get("ZO_SENTINEL_ROOT", "/home/workspace/zo_sentinel")
+    try:
+        rel = os.path.relpath(file_path, src_root)
+    except ValueError:
+        rel = os.path.basename(file_path)
+    if rel.startswith("..") or os.path.isabs(rel):
+        rel = os.path.basename(file_path)
+    return rel.replace("\\", "/")   # git wants forward slashes on every OS
 
 # Substrings GitHub emits when it throttles content creation (push / pr create).
 # Hitting these means back off and retry, NOT give up -- a burst of PRs trips the
@@ -90,6 +111,11 @@ class PublishResult:
     # SUCCESS (desired end state reached), not a failure, and NOT a real PR. The
     # publisher dedups + advances past it but does not burn a daily-cap slot.
     noop: bool = False
+    # True for a DETERMINISTIC failure that re-running cannot fix (bad path,
+    # unwritable, malformed) -- as opposed to a transient network/rate-limit blip.
+    # The publisher QUARANTINES a permanent failure (advances past it) instead of
+    # breaking, so one poison artifact can't head-of-line-block every newer PR.
+    permanent: bool = False
 
 
 class GitOps(Protocol):
@@ -185,17 +211,20 @@ class CliGitOps:
                 self.last_error = (r.stderr or r.stdout)[:300]
                 return PublishResult(ok=False, branch=plan.branch, detail=self.last_error)
 
-        target = self.clone_dir / plan.file_path
+        # Coerce to repo-relative FIRST: an absolute path escapes the clone and
+        # fatals git-add 'outside repository' (deterministic -> permanent).
+        rel_path = _repo_relative(plan.file_path)
+        target = self.clone_dir / rel_path
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(plan.content, encoding="utf-8")
         except Exception as e:
-            return PublishResult(ok=False, branch=plan.branch,
-                                 detail=f"write {plan.file_path}: {e}")
+            return PublishResult(ok=False, branch=plan.branch, permanent=True,
+                                 detail=f"write {rel_path}: {e}")
 
-        add = self._git("add", plan.file_path)
+        add = self._git("add", rel_path)
         if add.returncode != 0:
-            return PublishResult(ok=False, branch=plan.branch,
+            return PublishResult(ok=False, branch=plan.branch, permanent=True,
                                  detail=(add.stderr or "git add failed")[:300])
         # Nothing staged => the artifact is byte-identical to base (goose rebuilt
         # an existing file). `git commit` would exit 1 with "nothing to commit" on

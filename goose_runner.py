@@ -608,12 +608,15 @@ def _emit_build_artifact_for(directive):
 
 
 def _record_build_provenance(directive, success, smoke_result, attempt,
-                             rescue_count, error=""):
+                             rescue_count, routed_model="", error=""):
     """Write one build_provenance row per ATTEMPT -- the failure-matrix substrate
     (Phase 4). build_provenance was defined-but-unwired, so the goose path recorded
     no per-attempt rung+outcome. Best-effort: a write_service hiccup must never fail
-    the build (mirrors _emit_build_artifact_for). The resolved GOOSE_MODEL alias is
-    the rung the matrix learns on; attempt drives the deterministic build_id."""
+    the build (mirrors _emit_build_artifact_for). `routed_model` is the alias this
+    build ACTUALLY routed to (build_env_for's GOOSE_MODEL) -- the rung the matrix
+    learns on; we record THAT, not the daemon's ambient GOOSE_MODEL env (which is a
+    single global and would make every row look identical). attempt drives the
+    deterministic build_id."""
     try:
         out = declared_output(directive)
         output_path, output_bytes = "", 0
@@ -626,8 +629,8 @@ def _record_build_provenance(directive, success, smoke_result, attempt,
             directive_type=str(directive.get("interface")
                                or directive.get("context_type") or "utility"),
             complexity=str(directive.get("complexity") or "unknown"),
-            model=os.environ.get("GOOSE_MODEL", "") or tier_for_complexity(
-                directive.get("complexity")),
+            model=(routed_model or os.environ.get("GOOSE_MODEL", "")
+                   or tier_for_complexity(directive.get("complexity"))),
             success=bool(success),
             smoke_result=smoke_result,
             attempt=attempt,
@@ -678,7 +681,8 @@ def _syntax_gate(directive, directive_id):
         return True
 
 
-def _complete(directive, directive_id, result_text, fallback_used=False):
+def _complete(directive, directive_id, result_text, fallback_used=False,
+              routed_model=""):
     """A directive's declared output IS on disk AND passed the Tier-0 gate ->
     record + mark done for real."""
     write_result(directive_id, True, result_text, fallback_used=fallback_used)
@@ -687,7 +691,8 @@ def _complete(directive, directive_id, result_text, fallback_used=False):
     # Provenance BEFORE clear_ghost so rescue_count reflects the retries it took.
     prior_ghosts = ghost_attempts(DIRECTIVES_PATH, directive_id)
     _record_build_provenance(directive, success=True, smoke_result="pass",
-                             attempt=prior_ghosts + 1, rescue_count=prior_ghosts)
+                             attempt=prior_ghosts + 1, rescue_count=prior_ghosts,
+                             routed_model=routed_model)
     clear_ghost(DIRECTIVES_PATH, directive_id)
     # Default-FAIL contract: record the proven PASS + checkpoint for crash-resume.
     # Idempotent (record_pass overwrites; checkpoint refreshes the cursor).
@@ -729,7 +734,7 @@ def _mark_directive_failed(directive, directive_id, reason):
         except Exception:
             pass
 
-def _ghost_or_fail(directive, directive_id):
+def _ghost_or_fail(directive, directive_id, routed_model=""):
     """goose/fallback reported success but the declared output never appeared.
     Count the ghost attempt; requeue for another try, or fail it once the cap
     is hit. Crucially we do NOT mark it .done -- that was the regression."""
@@ -739,7 +744,7 @@ def _ghost_or_fail(directive, directive_id):
     except Exception:
         pass
     _record_build_provenance(directive, success=False, smoke_result="ghost",
-                             attempt=n, rescue_count=n,
+                             attempt=n, rescue_count=n, routed_model=routed_model,
                              error="ghost build: declared output_file was not produced")
     if n >= MAX_GHOST_ATTEMPTS:
         _mark_directive_failed(directive, directive_id,
@@ -871,20 +876,24 @@ def run():
                 # goose and the fallback can report success WITHOUT producing the
                 # file, or produce a syntactically broken one -- stamping that
                 # .done was the ghost-completion regression that burned directives.
+                # Phase 5: route by the prior ghost-retry count so a re-asserted
+                # directive escalates up the ladder (no-op unless ZO_ESCALATE set).
+                # Capture the routed alias here so build_provenance records the rung
+                # the build ACTUALLY used (not the daemon's ambient GOOSE_MODEL).
+                _attempt = ghost_attempts(DIRECTIVES_PATH, directive_id)
+                _routed_env = build_env_for(directive, attempt=_attempt)
+                _routed_model = _routed_env.get("GOOSE_MODEL", "")
                 produced = False
                 if goose_installed:
                     _task = directive.get("content", "")
                     _gctx = _graph_context(directive)   # Phase 3: fold graph structure into the task
                     if _gctx:
                         _task = f"{_task}\n\n{_gctx}"
-                    # Phase 5: pass the prior ghost-retry count so a re-asserted
-                    # directive escalates up the ladder (no-op unless ZO_ESCALATE set).
-                    _attempt = ghost_attempts(DIRECTIVES_PATH, directive_id)
-                    result = run_goose_task(directive_id, _task,
-                                            build_env_for(directive, attempt=_attempt))
+                    result = run_goose_task(directive_id, _task, _routed_env)
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)):
-                        _complete(directive, directive_id, result.get("stdout", ""))
+                        _complete(directive, directive_id, result.get("stdout", ""),
+                                  routed_model=_routed_model)
                         produced = True
                     elif result.get("success"):
                         log(f"[ghost-guard] {directive_id}: goose reported success but output "
@@ -898,13 +907,14 @@ def run():
                     if (fallback_result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)):
                         _complete(directive, directive_id,
-                                  fallback_result.get("result", ""), fallback_used=True)
+                                  fallback_result.get("result", ""), fallback_used=True,
+                                  routed_model=_routed_model)
                         produced = True
 
                 if not produced:
                     # Neither path produced the declared output -> ghost build.
                     # Retry (bounded) instead of stamping a bogus .done.
-                    _ghost_or_fail(directive, directive_id)
+                    _ghost_or_fail(directive, directive_id, routed_model=_routed_model)
 
                 # Small delay between directives
                 time.sleep(2)

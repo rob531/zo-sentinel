@@ -92,53 +92,16 @@ from typing import Optional
 # 2026-04-21). Same docstring/code as v0.7.
 # ---------------------------------------------------------------------------
 
-_REASONING_CLOSED_RX = re.compile(
-    r"<(think|reasoning|thinking|analysis)\b[^>]*>.*?</\1>",
-    flags=re.DOTALL | re.IGNORECASE
+# LLM-payload sanitizers now live in minimax_utils.py (the canonical, consolidated
+# copy -- byte-identical logic). Imported under the existing private names so every
+# call site in this module is unchanged. minimax_utils is stdlib-only and ships in
+# the same package, so this import is safe even on the build-critical ladder path.
+from minimax_utils import (  # noqa: E402
+    strip_reasoning as _strip_reasoning_preamble,
+    strip_code_fences as _strip_code_fences,
+    normalize as _normalize_response,
+    _REASONING_CLOSED_RX, _REASONING_OPEN_RX, _CODE_START_MARKERS,
 )
-_REASONING_OPEN_RX = re.compile(
-    r"^\s*<(think|reasoning|thinking|analysis)\b[^>]*>",
-    flags=re.IGNORECASE
-)
-_CODE_START_MARKERS = (
-    "<!DOCTYPE", "#!/", "import ", "from ", "def ", "class ",
-    "```", "<html", "<!--", "function ", "const ", "let ", "var ",
-)
-
-
-def _strip_reasoning_preamble(text: str) -> str:
-    if not text:
-        return text
-    original = text
-    text = _REASONING_CLOSED_RX.sub("", text).strip()
-    if _REASONING_OPEN_RX.match(text):
-        candidates = [text.find(m) for m in _CODE_START_MARKERS]
-        candidates = [c for c in candidates if c != -1]
-        if candidates:
-            text = text[min(candidates):]
-    stripped = text.strip()
-    return stripped if stripped else original
-
-
-def _strip_code_fences(text: str) -> str:
-    if not text:
-        return text
-    stripped = text.strip()
-    if not stripped.startswith("```"):
-        return text
-    lines = stripped.split("\n")
-    end = len(lines) - 1
-    while end > 0 and lines[end].strip() in ("", "```"):
-        end -= 1
-    result = "\n".join(lines[1:end + 1])
-    cleaned = result.strip()
-    return cleaned if cleaned else text
-
-
-def _normalize_response(text: str) -> str:
-    text = _strip_reasoning_preamble(text)
-    text = _strip_code_fences(text)
-    return text
 
 
 # ---------------------------------------------------------------------------

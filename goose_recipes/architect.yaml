@@ -44,6 +44,10 @@ prompt: |-
     depends on and what depends on it. Call this BEFORE writing so you respect
     existing call/import contracts (don't break a signature something depends on).
   - graph_path(src, dst): shortest dependency path between two files/symbols.
+  - build_success_stats(directive_type, complexity): historical success rate of
+    builds like this one, by model/rung (the failure-pattern matrix). Optional
+    context -- if a directive class historically needs rescues, be extra careful to
+    verify before registering.
 
   WORKFLOW:
   0. CONTEXT: call graph_neighbors(<target file or key symbol>) to see callers,

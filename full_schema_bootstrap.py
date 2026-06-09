@@ -303,6 +303,26 @@ TABLES = [
 created = sum(1 for sql, label in TABLES if ex(sql, label))
 log.info('Bootstrap complete: %d/%d tables OK', created, len(TABLES))
 
+# failure_matrix -- the Phase 4 read model over build_provenance. A VIEW (always
+# live over the current table), aggregated by (directive_type, complexity, model)
+# so the architect/router can see which rung succeeds for which kind of work.
+# Idempotent: CREATE OR REPLACE. Depends on build_provenance, so it runs after it.
+ex("""
+CREATE OR REPLACE VIEW failure_matrix AS
+SELECT
+    directive_type,
+    complexity,
+    model,
+    COUNT(*)                                                  AS attempts,
+    SUM(CASE WHEN success THEN 1 ELSE 0 END)                  AS successes,
+    ROUND(100.0 * AVG(CASE WHEN success THEN 1 ELSE 0 END), 1) AS success_pct,
+    ROUND(AVG(rescue_count), 2)                               AS avg_rescues,
+    MAX(built_at)                                             AS last_seen,
+    arg_max(error, built_at) FILTER (WHERE NOT success)       AS last_error
+FROM build_provenance
+GROUP BY directive_type, complexity, model
+""", 'failure_matrix (view)')
+
 # Verify the critical one
 try:
     r = requests.post(WS + '/query',

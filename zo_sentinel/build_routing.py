@@ -16,6 +16,7 @@ Default low = zo-ladder-low = rung 0 (MiniMax) = exactly the prior behaviour.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -35,8 +36,33 @@ COMPLEXITY_TO_ALIAS = {
 }
 DEFAULT_ALIAS = "zo-ladder-low"          # rung 0 (MiniMax) -- prior behaviour
 
+# Phase 5 escalation ladder (cost-ordered). A FAILED directive re-asserts UP this
+# list on its next attempt -- one alias per attempt (preserve #73; the bump is
+# BETWEEN attempts, never mid-build, since each retry is a fresh goose subprocess
+# pinned to one model). Indices map to escalation.py rungs: low=0, medium=1,
+# high=11, critical=15. zo-ladder-critical (rung 15 = claude-sonnet-4-5) is PAID,
+# so a non-critical directive is capped at the top FREE rung (zo-ladder-high); the
+# escalation.py cost gate (LADDER_PAID_OK_TASKS) is the ultimate spend backstop.
+_ESCALATION_LADDER = ["zo-ladder-low", "zo-ladder-medium", "zo-ladder-high",
+                      "zo-ladder-critical"]
+_FREE_CAP_INDEX = 2   # zo-ladder-high -- highest rung reachable without paid credit
+
 BUILDER_AGENT_ID = "t1.zo_sentinel_builder"   # so the ingestor/publisher consume it
 BUILD_ARTIFACT_TYPE = "build_artifact"
+
+
+def _escalate_alias(base: str, attempt: int, complexity: str) -> str:
+    """Bump `base` UP the escalation ladder by `attempt` steps. Non-critical
+    directives are capped at the top free rung; only complexity=critical may reach
+    the paid critical rung (and even then escalation.py's cost gate governs spend)."""
+    try:
+        start = _ESCALATION_LADDER.index(base)
+    except ValueError:
+        start = 0
+    target = min(start + attempt, len(_ESCALATION_LADDER) - 1)
+    if complexity != "critical":
+        target = min(target, _FREE_CAP_INDEX)
+    return _ESCALATION_LADDER[target]
 
 
 def tier_for_complexity(complexity: Optional[str]) -> str:
@@ -74,10 +100,16 @@ def directive_content(d: dict) -> Optional[str]:
     return None
 
 
-def build_env_for(directive: dict) -> dict:
+def build_env_for(directive: dict, attempt: int = 0) -> dict:
     """Per-directive env for the Goose subprocess: routes the architect
     (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) by complexity and carries task/phase
-    so builder_mcp can stamp a complete build_artifact row."""
+    so builder_mcp can stamp a complete build_artifact row.
+
+    `attempt` is the prior ghost-retry count (Phase 5). When ZO_ESCALATE is set and
+    attempt>0, the FAILED directive re-asserts UP the ladder -- still ONE alias for
+    this whole attempt (#73; the bump is between attempts, not mid-build). When
+    ZO_ESCALATE is unset, attempt is IGNORED and the pinned env is returned exactly
+    as before -- zero behaviour change until the flag is flipped."""
     codegen_tier = tier_for_complexity(directive.get("complexity"))
     complexity = (directive.get("complexity") or "").strip().lower()
     # The goose builder is PINNED to ONE model for the whole session (escalation
@@ -89,6 +121,8 @@ def build_env_for(directive: dict) -> dict:
     # one for the harder directives. ZO_BUILD_TIER stays complexity-routed for the
     # delegate_to_builder fallback + build_artifact provenance.
     goose_model = "zo-ladder-medium" if complexity == "medium" else DEFAULT_ALIAS
+    if attempt > 0 and os.environ.get("ZO_ESCALATE"):
+        goose_model = _escalate_alias(goose_model, attempt, complexity)
     return {
         "GOOSE_MODEL": goose_model,
         "ZO_BUILD_TIER": codegen_tier,
@@ -121,4 +155,37 @@ def build_artifact_row(file: str, content_bytes: int, context_type: str,
             "backend": backend,
         }),
         "importance": 0.5,
+    }
+
+
+def build_provenance_row(directive_id: str, directive_type: str, complexity: str,
+                         model: str, success: bool, smoke_result: str,
+                         attempt: int = 1, rescue_count: int = 0,
+                         output_path: str = "", output_bytes: int = 0,
+                         error: str = "", engine: str = "goose",
+                         backend: str = "goose_developer",
+                         built_at: Optional[str] = None) -> dict:
+    """One `build_provenance` row per build ATTEMPT -- the matrix substrate
+    (Phase 4). Captures the per-attempt rung+outcome the goose path never recorded
+    (build_provenance was defined-but-unwired). `build_id` is deterministic
+    (directive:outcome:attempt:day) so a re-emit of the same attempt is idempotent
+    under write_service's INSERT OR IGNORE (build_id PK), while a genuine rebuild on
+    a later day records a fresh row."""
+    ts = built_at or datetime.now(timezone.utc).isoformat()
+    build_id = f"{directive_id}:{smoke_result}:a{attempt}:{ts[:10]}"
+    return {
+        "build_id": build_id,
+        "directive_id": directive_id,
+        "directive_type": directive_type,
+        "complexity": complexity,
+        "engine": engine,
+        "model": model,
+        "backend": backend,
+        "smoke_result": smoke_result,
+        "rescue_count": rescue_count,
+        "success": success,
+        "output_path": output_path,
+        "output_bytes": output_bytes,
+        "error": error,
+        "built_at": ts,
     }

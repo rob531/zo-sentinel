@@ -1,6 +1,9 @@
 # Design: graph-native feedback loop (goose + DuckDB + graphify)
 
-Status: **Phase 1 implemented** (this PR). Phases 2–6 specced below.
+Status: **Phases 1–5 implemented + deployed.** Phase 6 wiring guard added. Phase 1
+shipped first; Phases 2–3 (graph→DuckDB + architect graph tools) deployed on the
+box; Phases 4–5 (failure-pattern matrix + escalation) landed 2026-06-09 (matrix
+LIVE, escalation behind `ZO_ESCALATE`, default OFF).
 Decision source: 2026-06-07 ultracode 17-agent evaluation + adversarial verification.
 Related memory: substrate refactor (uv/graphifyy/state_loopback), `go.sh` lock-hardening + v2.9.2 wave startup, DuckDB lock root-cause.
 
@@ -27,11 +30,14 @@ Give the build sessions richer, grounded context and make the **directive genera
 | Phase | What | Touches | Status |
 |---|---|---|---|
 | **1** | Eval edge: `state_loopback`+`uv_gate_runner` in the loop; Tier-0 gate replaces output-only check; FAIL history + resume | `goose_runner.py`, `.gitignore` | **DONE** |
-| 2 | Persist graph → DuckDB | new `tools/load_graph_to_bus.py` | todo |
-| 3 | Structural-context edge: `graph_neighbors`/`graph_path` tools + architect step-0 + pre-blob | `builder_mcp.py`, `architect.yaml`, `goose_runner.py` | todo |
-| 4 | Keep graph fresh post-PASS (`index_graph.py update` + reload) | `goose_runner.py` | todo |
-| 5 | Escalation edge (⚠ behind a flag, last) | `build_routing.py`, `goose_runner.py` | todo |
-| 6 | Wiring guard test (no `import duckdb`, tools round-trip `:8772`, loader stamps `built_at_commit`) | new `tools/test_graph_native_wiring.py` | todo |
+| **2** | Persist graph → DuckDB (multi-repo, bulk `read_json` load, `built_at_commit`) | `tools/load_graph_to_bus.py` | **DONE** (deployed) |
+| **3** | Structural-context edge: `graph_neighbors`/`graph_path` tools + architect step-0 + pre-blob | `builder_mcp.py`, `architect.yaml`, `goose_runner.py` | **DONE** (deployed) |
+| **4a** | **Instrumentation:** `build_provenance` row per build ATTEMPT (the matrix substrate, previously defined-but-unwired) | `build_routing.py`, `goose_runner.py` | **DONE** |
+| **4b** | **Failure-pattern matrix:** `failure_matrix` view + `build_success_stats` MCP tool | `full_schema_bootstrap.py`, `builder_mcp.py`, `architect.yaml` | **DONE** |
+| **5** | **Escalation edge** (⚠ behind `ZO_ESCALATE`, default OFF): a FAILED directive re-asserts UP the ladder, one alias per attempt | `build_routing.py`, `goose_runner.py` | **DONE** (flagged off) |
+| **6** | Wiring guard test (no `import duckdb`; escalation off=pinned/on=bumped+free-capped; provenance id idempotent) | `tools/test_graph_native_wiring.py` | **DONE** |
+| — | Keep graph fresh post-PASS (auto `index_graph.py update` + reload in the loop) — mechanism exists as host scripts; not yet auto-triggered | `goose_runner.py` | follow-on |
+| — | **Matrix-driven** rung selection (read `failure_matrix` to pick the best rung per class, replacing the static bump) — needs `build_provenance` volume | `build_routing.py` | follow-on |
 
 ## Regression caveats (from May-2026 session memory) — MUST hold
 
@@ -60,3 +66,37 @@ Give the build sessions richer, grounded context and make the **directive genera
 - `.gitignore`: `test-results.json`, `PROGRESS.md` untracked.
 
 Verified: `py_compile` clean; isolated sim shows a broken build held at FAIL while a good build passes, idempotent across re-init.
+
+## Phase 4–5 — what shipped (2026-06-09)
+
+**Linchpin:** the escalation edge couldn't learn because the per-attempt
+rung+outcome data was never captured — `build_provenance` was defined-but-unwired
+(`full_schema_bootstrap.py`), `inference_log` only covers enrichment, and the
+build path pinned HIGH/CRITICAL to rung-0. So the real order was **instrument →
+aggregate → escalate**.
+
+- **4a instrumentation** — `build_routing.build_provenance_row()` (pure helper,
+  deterministic `build_id = directive:outcome:attempt:day` → idempotent under
+  `INSERT OR IGNORE`); `goose_runner._record_build_provenance()` (best-effort
+  `ws_write`, never fails the build) called from `_complete` (success/`pass`) and
+  `_ghost_or_fail` (per-attempt `ghost`). Every attempt now records
+  complexity/model/smoke_result/rescue_count/success/error.
+- **4b matrix** — `failure_matrix` view aggregates `build_provenance` by
+  (directive_type, complexity, model) → success%, avg_rescues, last_error.
+  `build_success_stats` MCP tool exposes it to the architect (read-only,
+  `:8772/query`); listed in `architect.yaml`.
+- **5 escalation** — `build_env_for(directive, attempt=)` bumps `GOOSE_MODEL` up
+  `_ESCALATION_LADDER` (low→medium→high→critical) by the prior ghost count,
+  **capped at the top free rung** unless complexity=critical (the paid rung 15 is
+  governed by escalation.py's cost gate regardless). `goose_runner` passes
+  `ghost_attempts()`. **Behind `ZO_ESCALATE`: unset → attempt ignored, pinned env
+  exactly as before** (zero regression). Each retry is a fresh goose subprocess
+  pinned to one alias, so #73 (no mid-build switching) holds for free.
+
+Verified: `tools/test_graph_native_wiring.py` (6 tests) — no `duckdb` import;
+flag-off ignores attempt; flag-on bumps + free-caps non-critical; critical reaches
+the paid rung; provenance id idempotent and collision-free.
+
+**Activation:** set `ZO_ESCALATE=1` in the goose_runner env on the box once
+`build_provenance` has accrued enough rows to trust the climb. Then the follow-on
+(matrix-driven rung selection) replaces the static bump.

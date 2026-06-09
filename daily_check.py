@@ -88,11 +88,11 @@ def age_mins(iso_str):
 
 # ── CHECK 1: Builder ──────────────────────────────────────────────────────────────────
 def check_builder():
-    pids = pgrep("zo_sentinel_builder.py")
+    pids = pgrep("goose_runner.py")  # the live Tier-1 builder (zo_sentinel_builder retired)
     if not pids:
         record("builder_process", "CRITICAL", "not running -- run zm go")
         return
-    rows = ws_query("SELECT last_heartbeat FROM service_health WHERE service='zo_sentinel_builder'")
+    rows = ws_query("SELECT last_heartbeat FROM service_health WHERE service='goose_runner'")
     if not rows:
         record("builder_process", "WARNING", f"PID {pids[0]} running but no heartbeat")
         return
@@ -109,7 +109,7 @@ def check_minimax():
         return
     content = env_file.read_text()
     if "MINIMAX_API_KEY" in content and 'sk-' in content:
-        log_path = LOGS / "zo_sentinel_builder.log"
+        log_path = LOGS / "goose_runner.log"
         if log_path.exists():
             tail = subprocess.run(["tail", "-200", str(log_path)],
                                   capture_output=True, text=True).stdout
@@ -125,7 +125,7 @@ def check_minimax():
 def check_last_build():
     rows = ws_query("""
         SELECT created_at FROM mesh_events
-        WHERE agent_id='t1.zo_sentinel_builder' AND event_type='build_complete'
+        WHERE agent_id='goose_tier1' AND event_type='DIRECTIVE_COMPLETE'
         ORDER BY created_at DESC LIMIT 1""")
     if not rows:
         record("last_build", "WARNING", "No build_complete events found")
@@ -139,7 +139,7 @@ def check_last_build():
 def check_recent_builds():
     rows = ws_query("""
         SELECT payload, created_at FROM mesh_events
-        WHERE agent_id='t1.zo_sentinel_builder' AND event_type='build_complete'
+        WHERE agent_id='goose_tier1' AND event_type='DIRECTIVE_COMPLETE'
           AND created_at > NOW() - INTERVAL '24 hours'
         ORDER BY created_at DESC LIMIT 20""")
     if not rows:

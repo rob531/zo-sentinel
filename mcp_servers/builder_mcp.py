@@ -98,6 +98,52 @@ async def read_signal_quality() -> str:
         return f"ERROR: {e}"
 
 
+@mcp.tool()
+async def build_success_stats(directive_type: str = "", complexity: str = "") -> str:
+    """How often builds like THIS one succeed, and at which model/rung -- the
+    failure-pattern matrix (Phase 4). Query it BEFORE a hard build to see whether a
+    directive class historically needs more rescues or a stronger rung.
+
+    Reads the `failure_matrix` view (aggregated build_provenance) over write_service.
+    Both args are optional substring filters; omit them for the whole matrix. If no
+    builds have been recorded yet the view is simply empty -- proceed without it.
+
+    Args:
+        directive_type: filter to an interface/context_type (e.g. 'enricher').
+        complexity:     filter to 'low'|'medium'|'high'|'critical'.
+    """
+    where, params = [], []
+    if directive_type:
+        where.append("directive_type ILIKE ?")
+        params.append(f"%{directive_type}%")
+    if complexity:
+        where.append("complexity ILIKE ?")
+        params.append(f"%{complexity}%")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    sql = ("SELECT directive_type, complexity, model, attempts, successes, "
+           "success_pct, avg_rescues, last_error FROM failure_matrix" + clause +
+           " ORDER BY attempts DESC LIMIT 40")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{WRITE_SERVICE}/query",
+                                  json={"sql": sql, "params": params, "limit": 40})
+    except Exception as e:
+        return f"build_success_stats: matrix unavailable ({type(e).__name__}) -- proceed without it."
+    if r.status_code != 200:
+        return ("build_success_stats: failure_matrix not available yet "
+                f"(HTTP {r.status_code}) -- proceed without it.")
+    rows = r.json().get("rows", [])
+    if not rows:
+        return "build_success_stats: no builds recorded for that filter yet -- proceed without it."
+    out = ["BUILD SUCCESS MATRIX (directive_type / complexity / model -> success%):"]
+    for r_ in rows:
+        out.append(f"  {r_['directive_type']}/{r_['complexity']} @ {r_['model']}: "
+                   f"{r_['success_pct']}% ({r_['successes']}/{r_['attempts']}, "
+                   f"avg_rescues={r_['avg_rescues']})"
+                   + (f" last_error={r_['last_error']}" if r_.get('last_error') else ""))
+    return "\n".join(out)
+
+
 async def _gquery(client, sql, params=None):
     """POST a read to write_service /query. Returns the rows list, or None if the
     query failed (e.g. code_nodes not seeded yet -> 400)."""

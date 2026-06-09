@@ -18,10 +18,11 @@ from threading import Thread
 
 sys.path.insert(0, "/home/workspace/zo_sentinel")  # ensure zo_sentinel package importable
 from zo_sentinel.build_routing import (  # noqa: E402
-    build_artifact_row, build_env_for, directive_content, resolve_directive_id,
-    tier_for_complexity)
+    build_artifact_row, build_provenance_row, build_env_for, directive_content,
+    resolve_directive_id, tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
-    MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, output_confirmed)
+    MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
+    output_confirmed)
 
 # Phase-1 feedback edge (file-based only -- NO DB load; "zo_db_query destabilizes
 # write_service" per the 2026-05-31 ops note). state_loopback lives beside this
@@ -606,6 +607,43 @@ def _emit_build_artifact_for(directive):
             f"{directive.get('directive_id') or directive.get('id')}: {e}")
 
 
+def _record_build_provenance(directive, success, smoke_result, attempt,
+                             rescue_count, error=""):
+    """Write one build_provenance row per ATTEMPT -- the failure-matrix substrate
+    (Phase 4). build_provenance was defined-but-unwired, so the goose path recorded
+    no per-attempt rung+outcome. Best-effort: a write_service hiccup must never fail
+    the build (mirrors _emit_build_artifact_for). The resolved GOOSE_MODEL alias is
+    the rung the matrix learns on; attempt drives the deterministic build_id."""
+    try:
+        out = declared_output(directive)
+        output_path, output_bytes = "", 0
+        if out is not None and out.is_file():
+            output_path = (str(out.relative_to(PROJECT_DIR))
+                           if str(out).startswith(str(PROJECT_DIR)) else out.name)
+            output_bytes = out.stat().st_size
+        row = build_provenance_row(
+            directive_id=resolve_directive_id(directive),
+            directive_type=str(directive.get("interface")
+                               or directive.get("context_type") or "utility"),
+            complexity=str(directive.get("complexity") or "unknown"),
+            model=os.environ.get("GOOSE_MODEL", "") or tier_for_complexity(
+                directive.get("complexity")),
+            success=bool(success),
+            smoke_result=smoke_result,
+            attempt=attempt,
+            rescue_count=rescue_count,
+            output_path=output_path,
+            output_bytes=output_bytes,
+            error=str(error or ""),
+        )
+        resp = ws_write("build_provenance", row)
+        if not (isinstance(resp, dict) and resp.get("ok")):
+            log(f"[provenance] ws_write returned {resp} for {row['build_id']}")
+    except Exception as e:
+        log(f"[provenance] failed for "
+            f"{directive.get('directive_id') or directive.get('id')}: {e}")
+
+
 # Git commit of the state files is OFF by default: the host zo_sentinel clone is
 # `git reset --hard origin/main` on every refresh (2026-05-31 ops note), so a
 # local checkpoint commit there is futile/conflicting. The on-disk manifest is
@@ -646,6 +684,10 @@ def _complete(directive, directive_id, result_text, fallback_used=False):
     write_result(directive_id, True, result_text, fallback_used=fallback_used)
     _emit_build_artifact_for(directive)   # restore publisher feed (#73 dropped this)
     mark_directive_completed(directive)
+    # Provenance BEFORE clear_ghost so rescue_count reflects the retries it took.
+    prior_ghosts = ghost_attempts(DIRECTIVES_PATH, directive_id)
+    _record_build_provenance(directive, success=True, smoke_result="pass",
+                             attempt=prior_ghosts + 1, rescue_count=prior_ghosts)
     clear_ghost(DIRECTIVES_PATH, directive_id)
     # Default-FAIL contract: record the proven PASS + checkpoint for crash-resume.
     # Idempotent (record_pass overwrites; checkpoint refreshes the cursor).
@@ -696,6 +738,9 @@ def _ghost_or_fail(directive, directive_id):
         sl.record_fail(directive_id, f"ghost/gate fail, attempt {n}")  # Default-FAIL history
     except Exception:
         pass
+    _record_build_provenance(directive, success=False, smoke_result="ghost",
+                             attempt=n, rescue_count=n,
+                             error="ghost build: declared output_file was not produced")
     if n >= MAX_GHOST_ATTEMPTS:
         _mark_directive_failed(directive, directive_id,
                                "declared output never produced (ghost build)")
@@ -832,7 +877,11 @@ def run():
                     _gctx = _graph_context(directive)   # Phase 3: fold graph structure into the task
                     if _gctx:
                         _task = f"{_task}\n\n{_gctx}"
-                    result = run_goose_task(directive_id, _task, build_env_for(directive))
+                    # Phase 5: pass the prior ghost-retry count so a re-asserted
+                    # directive escalates up the ladder (no-op unless ZO_ESCALATE set).
+                    _attempt = ghost_attempts(DIRECTIVES_PATH, directive_id)
+                    result = run_goose_task(directive_id, _task,
+                                            build_env_for(directive, attempt=_attempt))
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""))

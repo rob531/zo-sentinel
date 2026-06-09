@@ -44,8 +44,6 @@ prompt: |-
     depends on and what depends on it. Call this BEFORE writing so you respect
     existing call/import contracts (don't break a signature something depends on).
   - graph_path(src, dst): shortest dependency path between two files/symbols.
-  - delegate_to_builder(...): legacy single-shot codegen. Do NOT use it; you
-    write the file yourself now.
 
   WORKFLOW:
   0. CONTEXT: call graph_neighbors(<target file or key symbol>) to see callers,

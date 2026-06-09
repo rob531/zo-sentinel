@@ -1,5 +1,6 @@
+# wire_admin_pages_ui_server: applied
 from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import hashlib
@@ -400,6 +401,28 @@ def create_app():
             ORDER BY created_at DESC
         """)
         return {"policies": result.get("rows", [])}
+    
+    # Admin HTML page routes (PRODUCT_SPEC Appendix A)
+    @app.get("/admin/exemptions")
+    async def admin_exemptions():
+        html_path = PROJECT_DIR / "admin_exemptions.html"
+        if html_path.exists():
+            return HTMLResponse(content=html_path.read_text(), media_type="text/html")
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    
+    @app.get("/admin/policies")
+    async def admin_policies():
+        html_path = PROJECT_DIR / "admin_policies.html"
+        if html_path.exists():
+            return HTMLResponse(content=html_path.read_text(), media_type="text/html")
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    
+    @app.get("/admin/submissions")
+    async def admin_submissions():
+        html_path = PROJECT_DIR / "admin_submissions.html"
+        if html_path.exists():
+            return HTMLResponse(content=html_path.read_text(), media_type="text/html")
+        return JSONResponse(status_code=404, content={"error": "Not found"})
     
     return app
 

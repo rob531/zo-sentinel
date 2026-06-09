@@ -127,6 +127,29 @@ def edge_row(e, commit, repo):
     }
 
 
+def _is_archived(source_file) -> bool:
+    """A node under an archive/ directory -- retired code we deliberately keep on
+    disk for reversibility but do NOT want memorialized in the knowledge layer.
+    graphify itself honors .graphifyignore (archive/), but this is the belt-and-
+    suspenders at the layer the agent tools actually read (DuckDB): a graph built
+    without the ignore file still can't leak archived code into code_nodes."""
+    if not source_file:
+        return False
+    sf = str(source_file).replace("\\", "/")
+    return sf.startswith("archive/") or "/archive/" in sf
+
+
+def _drop_archived(node_rows, edge_rows):
+    """Remove archive/ nodes and any edge incident to one. Returns
+    (nodes, edges, dropped_nodes, dropped_edges)."""
+    kept_nodes = [n for n in node_rows if not _is_archived(n.get("source_file"))]
+    kept_ids = {n["id"] for n in kept_nodes}
+    kept_edges = [e for e in edge_rows
+                  if e.get("src") in kept_ids and e.get("dst") in kept_ids]
+    return (kept_nodes, kept_edges,
+            len(node_rows) - len(kept_nodes), len(edge_rows) - len(kept_edges))
+
+
 def _clean(rows, required, pk):
     """Drop rows with a NULL/empty value in any PK column, then dedupe on the PK
     tuple. This keeps the data PK-clean so write_service's INSERT OR IGNORE never
@@ -243,6 +266,13 @@ def main(argv=None):
     edge_rows = [edge_row(e, commit, args.repo) for e in links]
     print(f"{graph_path.name} [repo={args.repo}]: {len(node_rows)} nodes, "
           f"{len(edge_rows)} edges; built_at_commit={commit}")
+
+    # Never memorialize archived code: drop archive/ nodes + incident edges. The
+    # knowledge layer should mirror LIVE code only (graphify's .graphifyignore is
+    # the first gate; this guards a graph built without it).
+    node_rows, edge_rows, an, ae = _drop_archived(node_rows, edge_rows)
+    if an or ae:
+        print(f"excluded archive/: -{an} nodes, -{ae} incident edges")
 
     # PK-clean the data (drop NULL-PK rows + dedupe) so INSERT OR IGNORE never
     # hits the NULL/conflict path that crashed on the box's edge set.

@@ -1,0 +1,9 @@
+# Files graphify must NOT memorialize into the code graph.
+# graphify reads this (gitignore syntax, last-match-wins); falls back to
+# .gitignore if absent. archive/ is TRACKED in git (retired code kept for
+# reversibility) so .gitignore can't exclude it -- it must live here.
+archive/
+
+# Build/scan artifacts (not source the agents should reason over).
+graphify-out/
+.venv/

@@ -472,40 +472,9 @@ def call_ollama(prompt: str) -> str:
 # <think>...</think> blocks by default mid-April 2026, breaking the
 # existing parse strategies which assumed clean JSON / object / fenced /
 # bracket-recoverable shapes but not reasoning-wrapped output.
-_REASONING_CLOSED_RX = re.compile(
-    r"<(think|reasoning|thinking|analysis)\b[^>]*>.*?</\1>",
-    flags=re.DOTALL | re.IGNORECASE
-)
-_REASONING_OPEN_RX = re.compile(
-    r"^\s*<(think|reasoning|thinking|analysis)\b[^>]*>",
-    flags=re.IGNORECASE
-)
-
-
-def _strip_reasoning_preamble(text: str) -> tuple[str, bool]:
-    """Remove reasoning-mode tags that some LLMs emit before the structured
-    output. Returns (cleaned_text, did_strip).
-
-    Handles:
-      1. Balanced <think>...</think> / <reasoning>...</reasoning> blocks
-         anywhere in the text. Stripped entirely.
-      2. An UNCLOSED opening tag at the start of the response, followed by
-         reasoning prose, eventually followed by the actual JSON. Skips
-         from the start-of-text up to the first JSON start character.
-
-    Conservative: never touches content unless one of these patterns is
-    clearly present, so clean responses pass through untouched.
-    """
-    original = text
-    # 1. Remove all balanced reasoning blocks
-    text = _REASONING_CLOSED_RX.sub("", text).strip()
-    # 2. If an unclosed reasoning tag still opens the response, skip to
-    #    the first [ or { that follows (the JSON payload start).
-    if _REASONING_OPEN_RX.match(text):
-        json_starts = [i for i in (text.find("["), text.find("{")) if i != -1]
-        if json_starts:
-            text = text[min(json_starts):]
-    return text.strip(), (text != original)
+# Reasoning sanitizer (JSON-target variant) consolidated into minimax_utils.py.
+# Imported under the existing name so generate_directives' call site is unchanged.
+from minimax_utils import strip_reasoning_json as _strip_reasoning_preamble  # noqa: E402
 
 
 def generate_directives(prompt: str) -> list:

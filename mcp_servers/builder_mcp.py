@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 
 sys.path.insert(0, "/home/workspace/zo_sentinel")  # for the zo_sentinel package
 from zo_sentinel.build_routing import build_artifact_row  # noqa: E402
+from minimax_utils import strip_code_fences  # noqa: E402  (canonical LLM sanitizer)
 
 mcp = FastMCP("Zo Sentinel Builder Bridge")
 
@@ -129,15 +130,9 @@ async def register_build(target_file: str, context_type: str) -> str:
 
 def _strip_code_fences(text: str) -> str:
     """Remove a leading ```lang fence + trailing ``` some models add despite the
-    'output ONLY the file' instruction -- writing them verbatim breaks py_compile."""
-    s = text.strip()
-    if not s.startswith("```"):
-        return text
-    lines = s.split("\n")
-    lines = lines[1:]                                  # drop ```python / ```
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    return "\n".join(lines)
+    'output ONLY the file' instruction. Delegates to the canonical sanitizer
+    (minimax_utils) so the bridge, ladder, and generator strip identically."""
+    return strip_code_fences(text)
 
 
 @mcp.tool()

@@ -31,23 +31,27 @@ RAW_PORT_PREFIX = {
 # raw-port prefixes above PLUS the relative API namespaces the UI already calls
 # same-origin (those don't need a codemod, just routing).
 ROUTES = {
-    # --- relative API namespaces (already same-origin in the HTML) ---
-    "/api/pathway": 8790,   # pathway_api      # VERIFY (may be its own port)
-    "/api":         8790,   # ui_server (auth, servers, submissions, dashboard, audit, policies, attestations)
-    "/v1/bulk":     8784,   # bulk_assess_api  (evidenced: MVP audit)
-    "/v1":          8782,   # registry_api     # VERIFY
-    "/servers":     8779,   # forensic_detail_api_v2 (evidenced: MVP audit)
-    "/dashboard":   8785,   # dashboard_api    # VERIFY
-    "/risks":       8786,   # search_api       # VERIFY
-    "/audit":       8788,   # registry_api_v2  # VERIFY
-    # --- raw-port prefixes (mirror RAW_PORT_PREFIX; the codemod targets these) ---
-    "/bus":      8772,
-    "/build":    8795,
-    "/override": 8776,
-    "/attest":   8780,
-    "/svc8781":  8781,
-    "/svc8773":  8773,
-    "/svc8775":  8775,
+    # --- RUNNING -- confirmed by on-box /healthz + ss port map (2026-06-10) ---
+    "/api/submit":     8780,  # approval_workflow.py (submission intake)
+    "/api/decision":   8780,  # approval_workflow.py (analyst decision)
+    "/api/submission": 8780,  # approval_workflow.py (GET /api/submission/{id})
+    "/api/audit":      8780,  # approval_workflow.py (decision audit)
+    "/api":            8790,  # ui_server.py (auth, servers, dashboard, policies, attestations, audit-log)
+    "/v1":             8781,  # registry_api.py        (FIXED from 8782)
+    "/bus":            8772,  # write_service.py
+    "/build":          8795,  # build_watcher_api.py
+    "/svc8781":        8781,  # registry_api.py (the UI's REGISTRY_API alias)
+    "/svc8773":        8773,  # inference_router_service.py
+    "/attest":         8780,  # NOTE: :8780 is approval_workflow; a dedicated attestation engine is NOT running
+    # --- DOWN -- service not listening on the box right now -> shell returns 502.
+    #     This is a LAUNCH/supervisor gap, not a port error. Ports best-known.
+    "/v1/bulk":        8784,  # bulk_assess_api.py        DOWN
+    "/servers":        8779,  # forensic_detail_api_v2.py DOWN
+    "/override":       8776,  # manual_override_api.py    DOWN
+    "/dashboard":      8785,  # dashboard_api.py          DOWN (port unconfirmed)
+    "/risks":          8786,  # search_api.py             DOWN (port unconfirmed)
+    "/audit":          8788,  # registry_api_v2.py        DOWN (port unconfirmed)
+    "/svc8775":        8775,  # DOWN
 }
 
 # clean URL -> (html filename, requires_admin). Serving these same-origin is the

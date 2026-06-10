@@ -74,7 +74,7 @@ def override_trust(server_id: str = Body(...), new_score: int = Body(...), actor
 @app.post("/override/verdict")
 def override_verdict(server_id: str = Body(...), new_verdict: str = Body(...), actor: str = Body(...)):
     """Manually override verdict for a server."""
-    valid_ verdicts = ["trusted", "suspicious", "malicious", "unknown"]
+    valid_verdicts = ["trusted", "suspicious", "malicious", "unknown"]
     if new_verdict not in valid_verdicts:
         raise HTTPException(status_code=400, detail=f"Verdict must be one of: {valid_verdicts}")
     

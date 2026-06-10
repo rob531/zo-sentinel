@@ -307,6 +307,29 @@ CREATE TABLE IF NOT EXISTS npm_typosquat_alerts (
     flagged_at       TIMESTAMPTZ DEFAULT now()
 );
 
+-- ---------------------------------------------------------------------
+-- Bulk operations  (ADOPTED 2026-06-10 -- the bulk_assess_api's own job +
+-- import trackers, served by /v1/bulk/assess + /v1/bulk/status + /v1/bulk/import.
+-- Were flagged as drift; clean single definitions, no conflict -> straight adopt.)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bulk_assess_jobs (
+    id            BIGINT PRIMARY KEY,
+    job_id        VARCHAR UNIQUE NOT NULL,
+    mcp_list      TEXT,
+    status        VARCHAR,
+    submitted_at  TIMESTAMPTZ DEFAULT now(),
+    completed_at  TIMESTAMPTZ,
+    results_count INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS bulk_imports (
+    id            BIGINT PRIMARY KEY,
+    import_id     VARCHAR UNIQUE NOT NULL,
+    servers_count INTEGER,
+    status        VARCHAR,
+    imported_at   TIMESTAMPTZ DEFAULT now()
+);
+
 -- =====================================================================
 -- CALLER-SIDE PORTABILITY (not DDL, but the bus router must translate):
 --   DuckDB `INSERT OR IGNORE INTO t ...`

@@ -402,6 +402,8 @@ def create_app():
         """)
         return {"policies": result.get("rows", [])}
     
+    # ADMIN_PAGES_WIRED_20260609
+    # ADMIN_PAGES_WIRED_20260609
     # Admin HTML page routes (PRODUCT_SPEC Appendix A)
     @app.get("/admin/exemptions")
     async def admin_exemptions():

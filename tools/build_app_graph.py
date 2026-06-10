@@ -32,6 +32,7 @@ CANON = {
     "mcp_fingerprints", "mcp_exemptions", "auth_tokens", "perf_metrics",
     "shodan_results", "github_velocity", "npm_typosquat_alerts",
     "mcp_discovery_candidates", "mcp_signal_enrichments",  # adopted 2026-06-10
+    "bulk_assess_jobs", "bulk_imports",                    # adopted 2026-06-10
 }
 BUGWORDS = ("wrong table", "not in schema", "absent from schema", "mismatch",
             "WRONG", "effectively false")
@@ -77,7 +78,7 @@ def main():
             # endpoint -> table edges parsed from the io text (canonical + drift tables)
             verb = "writes" if re.search(r"write|update|insert", io, re.I) else "reads"
             for tok in set(TABLE_RE.findall(io)):
-                if tok in CANON or tok in {"mesh_events", "policy_rules", "bulk_assess_jobs"}:
+                if tok in CANON or tok in {"mesh_events", "policy_rules"}:
                     tn = f"table:{tok}"
                     node(tn, kind="table", name=tok, area=a["name"],
                          detail=("" if tok in CANON else "NOT in app.sql (drift)"))

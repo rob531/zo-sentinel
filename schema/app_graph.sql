@@ -20,8 +20,9 @@ INSERT INTO app_node VALUES ('ep:GET:/v1/registry','endpoint','GET /v1/registry'
 INSERT INTO app_node VALUES ('ep:GET:/v1/assess','endpoint','GET /v1/assess','Registry/Assessment','registry_api.py','',NULL,TRUE,FALSE,'reads registry+signals+threats+attestations');
 INSERT INTO app_node VALUES ('ep:GET:/v1/threats','endpoint','GET /v1/threats','Registry/Assessment','registry_api.py','',NULL,TRUE,FALSE,'reads mcp_threat_associations join registry');
 INSERT INTO app_node VALUES ('ep:POST:/v1/bulk/assess','endpoint','POST /v1/bulk/assess','Registry/Assessment','bulk_assess_api.py','',NULL,TRUE,FALSE,'reads mcp_server_registry, writes bulk_assess_jobs');
-INSERT INTO app_node VALUES ('table:bulk_assess_jobs','table','bulk_assess_jobs','Registry/Assessment','','',NULL,NULL,NULL,'NOT in app.sql (drift)');
+INSERT INTO app_node VALUES ('table:bulk_assess_jobs','table','bulk_assess_jobs','Registry/Assessment','','',NULL,NULL,NULL,'');
 INSERT INTO app_node VALUES ('ep:POST:/v1/bulk/import','endpoint','POST /v1/bulk/import','Registry/Assessment','bulk_assess_api.py','',NULL,TRUE,FALSE,'writes mcp_server_registry, bulk_imports');
+INSERT INTO app_node VALUES ('table:bulk_imports','table','bulk_imports','Registry/Assessment','','',NULL,NULL,NULL,'');
 INSERT INTO app_node VALUES ('ep:GET:/v1/export/csv','endpoint','GET /v1/export/csv','Registry/Assessment','bulk_assess_api.py','',NULL,TRUE,FALSE,'reads mcp_server_registry');
 INSERT INTO app_node VALUES ('ui:sentinel_status.html','uipage','sentinel_status.html','Registry/Assessment','','',FALSE,NULL,NULL,'calls /v1/registry,/v1/threats but no FileResponse/StaticFiles/route serves this file');
 INSERT INTO app_node VALUES ('ui:mcp_detail_view.html','uipage','mcp_detail_view.html','Registry/Assessment','','',FALSE,NULL,NULL,'orphaned; mcp_detail_view_ui.py returns its own INLINE HTMLResponse, never this file');
@@ -224,6 +225,7 @@ INSERT INTO app_edge VALUES ('ep:POST:/override/verdict','table:mcp_server_regis
 INSERT INTO app_edge VALUES ('ep:POST:/servers/{server_id}/override','table:audit_log','writes');
 INSERT INTO app_edge VALUES ('ep:POST:/v1/bulk/assess','table:bulk_assess_jobs','writes');
 INSERT INTO app_edge VALUES ('ep:POST:/v1/bulk/assess','table:mcp_server_registry','writes');
+INSERT INTO app_edge VALUES ('ep:POST:/v1/bulk/import','table:bulk_imports','writes');
 INSERT INTO app_edge VALUES ('ep:POST:/v1/bulk/import','table:mcp_server_registry','writes');
 
 -- ============================ COMPLETENESS QUERIES (plain SQL) ===============

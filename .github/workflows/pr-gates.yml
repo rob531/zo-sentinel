@@ -22,6 +22,21 @@ permissions:
   contents: read
 
 jobs:
+  capmap-check:
+    # The "check these pulls" gate: a deterministic capmap scan -> schema-drift +
+    # orphaned-UI report on every PR. Pure stdlib static scan (no host, no deps).
+    # Report-only for now (there is existing drift); flip to blocking -- drop the
+    # `|| echo` -- once tools/pull_check.py reports drift=0.
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Deterministic capmap pull-check (report-only)
+        run: python tools/pull_check.py || echo "::warning::pull_check found schema drift (report-only -- see log)"
+
   static-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 6

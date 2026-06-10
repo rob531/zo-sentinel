@@ -24,3 +24,4 @@ app_observed_edges.ndjson
 schema/app_graph_observed.sql
 feature_completeness.html
 graph_directives/
+capmap.json

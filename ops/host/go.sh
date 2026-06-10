@@ -458,6 +458,12 @@ hdr "12.10b Sentinel APIs -- revived 2026-06-10 (forensic_v2 :8779, bulk_assess 
 # manual_override_api also needs PR #141 (syntax fix) merged or it crashes on import.
 # Uses a "!=000" listening check (not strict /health==200) so services without a
 # /health route still register as up.
+# WRITER-GATED: wait for :8772 to be calm before launching, so these (each does a
+# startup heartbeat + bulk/forensic create-tables) don't add to the boot herd that
+# caused the 651-conflict lock storm. They are idle-after-startup APIs (search +
+# manual_override heartbeat once; bulk + forensic every 30s), not continuous
+# writers -- but gate anyway, and keep the per-service `sleep` stagger below.
+wait_writer_calm
 for _svc in "forensic_detail_api_v2:8779:forensic_detail" \
             "bulk_assess_api:8784:bulk_assess" \
             "search_api:8782:search_api" \

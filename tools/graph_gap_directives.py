@@ -98,12 +98,26 @@ for area, ep, file, bad in drift:
         "from": "graph_gap", "needs_review": True, "gap": "schema_drift",
     })
 
-# --- write proposal-only (skip if already emitted) ---------------------------
+# --- write proposal-only (skip if already in flight ANYWHERE) ----------------
+# Dedup across the whole pipeline so a promoted/in-flight gap is never re-emitted:
+# graph_directives/ (awaiting review) + directives/{proposed,pending}/ (promoted).
+# Once the fix lands, capmap regenerates and the gap disappears on its own.
+def _dirs_root():
+    repo = os.path.join(ROOT, "directives")
+    return repo if os.path.isdir(repo) else "/home/workspace/zo_sentinel/directives"
+
+_INFLIGHT = [args.out,
+             os.path.join(_dirs_root(), "proposed"),
+             os.path.join(_dirs_root(), "pending")]
+
+def _in_flight(task):
+    return any(os.path.exists(os.path.join(d, f"{task}.json")) for d in _INFLIGHT)
+
 os.makedirs(args.out, exist_ok=True)
 written, skipped = 0, 0
 for d in directives:
     fp = os.path.join(args.out, f"{d['task']}.json")
-    if os.path.exists(fp):
+    if _in_flight(d["task"]):
         skipped += 1
         continue
     with open(fp, "w", encoding="utf-8") as f:

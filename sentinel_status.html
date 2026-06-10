@@ -174,12 +174,12 @@ ZO-SENTINEL SECURITY INTELLIGENCE | ENTERPRISE INFOSEC
 (function() {
 'use strict';
 const REFRESH_INTERVAL = 30000;
-const WRITE_SERVICE = 'http://127.0.0.1:8772';
-const QUERY_SERVICE = 'http://127.0.0.1:8772';
-const REGISTRY_API = 'http://127.0.0.1:8781';
-const INFERENCE_API = 'http://127.0.0.1:8773';
-const EMAIL_AUTH = 'http://127.0.0.1:8775';
-const OVERRIDE_API = 'http://127.0.0.1:8776';
+const WRITE_SERVICE = '/bus';
+const QUERY_SERVICE = '/bus';
+const REGISTRY_API = '/svc8781';
+const INFERENCE_API = '/svc8773';
+const EMAIL_AUTH = '/svc8775';
+const OVERRIDE_API = '/override';
 const SERVICES = [
 { id: 'health-write', url: WRITE_SERVICE + '/health', name: 'write' },
 { id: 'health-query', url: QUERY_SERVICE + '/query', name: 'query', post: true },

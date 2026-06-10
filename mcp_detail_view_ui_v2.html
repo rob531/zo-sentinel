@@ -69,7 +69,7 @@
     </div>
 
     <script>
-        fetch('http://127.0.0.1:8781/write', {
+        fetch('/svc8781/write', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -103,7 +103,7 @@
 
         const signalBreakdownBars = document.querySelectorAll('.signal-breakdown-bars');
 
-        fetch('http://127.0.0.1:8781/write', {
+        fetch('/svc8781/write', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -129,7 +129,7 @@
 
         const verdictBadge = document.querySelector('.verdict-badge');
 
-        fetch('http://127.0.0.1:8781/write', {
+        fetch('/svc8781/write', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -148,7 +148,7 @@
 
         const threatAssociationsList = document.getElementById('threat-associations');
 
-        fetch('http://127.0.0.1:8781/write', {
+        fetch('/svc8781/write', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

@@ -104,6 +104,55 @@ CREATE TABLE IF NOT EXISTS mcp_fingerprints (
 );
 
 -- ---------------------------------------------------------------------
+-- Discovery + enrichment  (ADOPTED 2026-06-10 -- previously flagged as
+-- schema drift by the app-model graph because they predate this split, but
+-- they are real product tables: the pathway/funnel endpoint counts both,
+-- and the enrichment subsystem feeds signal assessment.)
+-- PORTABILITY: JSON -> Postgres jsonb; DOUBLE -> double precision;
+--   `INTERVAL 30 days` -> Postgres `INTERVAL '30 days'`.
+-- ---------------------------------------------------------------------
+
+-- Pre-registry discovery funnel (PyPI / registry ingestors -> candidates).
+-- CANON NOTE: 4 files define this table with TWO different PK shapes --
+-- discovery_pypi_paginator_v2 uses `server_id VARCHAR PK` (repo convention,
+-- adopted here) vs mcp_directory_ingestor's `candidate_id INTEGER PK`. The
+-- ingestors should converge on THIS shape; app.sql is the canon they match.
+CREATE TABLE IF NOT EXISTS mcp_discovery_candidates (
+    server_id           VARCHAR PRIMARY KEY,
+    source              VARCHAR NOT NULL,
+    name                VARCHAR NOT NULL,
+    version             VARCHAR,
+    description         TEXT,
+    author              VARCHAR,
+    author_email        VARCHAR,
+    url                 VARCHAR,
+    repository          VARCHAR,
+    license             VARCHAR,
+    keywords            VARCHAR,
+    created_at          VARCHAR,
+    latest_release      VARCHAR,
+    downloads_last_week BIGINT,
+    ingested_at         VARCHAR NOT NULL,
+    status              VARCHAR DEFAULT 'pending',
+    metadata            JSON
+);
+
+-- Signal enrichments (supply-chain / community / ecosystem scores that enrich
+-- mcp_signal_scores). Written by enrichment daemons, read by assessment + the
+-- pathway endpoint. evidence is JSON; rows carry a 30-day TTL.
+CREATE TABLE IF NOT EXISTS mcp_signal_enrichments (
+    id              BIGINT PRIMARY KEY,
+    mcp_server_id   VARCHAR NOT NULL,
+    enrichment_type VARCHAR NOT NULL,
+    score           DOUBLE,
+    evidence        JSON,
+    computed_at     TIMESTAMPTZ DEFAULT now(),
+    expires_at      TIMESTAMPTZ DEFAULT (now() + INTERVAL 30 days)
+);
+CREATE INDEX IF NOT EXISTS idx_enrichments_server_type
+    ON mcp_signal_enrichments (mcp_server_id, enrichment_type);
+
+-- ---------------------------------------------------------------------
 -- Intake -> decision -> policy  (the analyst workflow the admin UI drives)
 -- ---------------------------------------------------------------------
 -- PORTABILITY: `gen_random_uuid()::VARCHAR` -> Postgres `gen_random_uuid()`

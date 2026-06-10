@@ -86,8 +86,8 @@ INSERT INTO app_node VALUES ('ui:builder_eye_dashboard_hr.html','uipage','builde
 INSERT INTO app_node VALUES ('ui:pathway_to_20k.html','uipage','pathway_to_20k.html','Pathway/Funnel','','',FALSE,NULL,NULL,'consumes all /api/pathway/* endpoints but is orphaned - no route serves it');
 INSERT INTO app_node VALUES ('area:Pathway/Funnel','area','Pathway/Funnel','Pathway/Funnel','','partial',NULL,NULL,NULL,'pathway endpoints are fully wired but the consuming UI (pathway_to_20k.html) is orphaned; some counts query tables not in app.sql (mcp_discovery_candidates, mcp_signal_enrichments)');
 INSERT INTO app_node VALUES ('ep:GET:/api/pathway/totals','endpoint','GET /api/pathway/totals','Pathway/Funnel','pathway_api.py','',NULL,TRUE,FALSE,'counts registry/fingerprints/signals/attestations (also mcp_discovery_candidates, mcp_signal_enrichments not in app.sql)');
-INSERT INTO app_node VALUES ('table:mcp_signal_enrichments','table','mcp_signal_enrichments','Pathway/Funnel','','',NULL,NULL,NULL,'NOT in app.sql (drift)');
-INSERT INTO app_node VALUES ('table:mcp_discovery_candidates','table','mcp_discovery_candidates','Pathway/Funnel','','',NULL,NULL,NULL,'NOT in app.sql (drift)');
+INSERT INTO app_node VALUES ('table:mcp_signal_enrichments','table','mcp_signal_enrichments','Pathway/Funnel','','',NULL,NULL,NULL,'');
+INSERT INTO app_node VALUES ('table:mcp_discovery_candidates','table','mcp_discovery_candidates','Pathway/Funnel','','',NULL,NULL,NULL,'');
 INSERT INTO app_node VALUES ('ep:GET:/api/pathway/funnel','endpoint','GET /api/pathway/funnel','Pathway/Funnel','pathway_api.py','',NULL,TRUE,FALSE,'reads registry/fingerprints/signals velocity');
 INSERT INTO app_node VALUES ('ep:GET:/api/pathway/velocity','endpoint','GET /api/pathway/velocity','Pathway/Funnel','pathway_api.py','',NULL,TRUE,FALSE,'reads registry/fingerprints/attestations hourly');
 INSERT INTO app_node VALUES ('ep:GET:/api/pathway/eta','endpoint','GET /api/pathway/eta','Pathway/Funnel','pathway_api.py','',NULL,TRUE,FALSE,'computes from registry counts');

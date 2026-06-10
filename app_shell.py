@@ -29,6 +29,8 @@ stay drop-in) gates /bus/execute and /bus/write; flip it OFF once those raw-SQL
 calls are replaced by real endpoints. /bus/query (read) is always allowed.
 """
 import os
+import time
+import json as _json
 import httpx
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -39,6 +41,17 @@ UI_DIR = os.environ.get("UI_DIR", os.path.dirname(os.path.abspath(__file__)))
 PORT = int(os.environ.get("PORT", "8080"))
 UPSTREAM_HOST = os.environ.get("UPSTREAM_HOST", "127.0.0.1")
 BUS_ALLOW_WRITES = os.environ.get("BUS_ALLOW_WRITES", "1") == "1"
+# OBSERVED LAYER: the shell is the single chokepoint every UI->API and API->bus
+# call flows through, so it is the natural place to emit the *runtime* app-model
+# graph. Each proxied request appends one observed edge (which UI page called
+# which endpoint on which service, + status) to an ndjson the loader ingests into
+# app_edge as rel='observed_calls'. This is the "is" layer: gap = should - observed,
+# and it self-corrects the static "orphaned UI" false-positive (an orphaned-looking
+# page that actually makes live calls shows up here as active).
+OBSERVE = os.environ.get("OBSERVE", "1") == "1"
+OBSERVE_LOG = os.environ.get(
+    "OBSERVE_LOG",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_observed_edges.ndjson"))
 # hop-by-hop headers must not be forwarded
 _HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
         "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
@@ -104,6 +117,7 @@ async def _proxy(request: Request, prefix: str, port: int):
         upstream = await _client.send(req, stream=True)
     except httpx.ConnectError:
         raise HTTPException(502, f"upstream {port} unreachable (check app_routes.py / go.sh)")
+    _observe(request, prefix, port, upstream.status_code)
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP}
     return StreamingResponse(
         upstream.aiter_raw(),
@@ -116,6 +130,21 @@ async def _proxy(request: Request, prefix: str, port: int):
 def _closer(upstream):
     from starlette.background import BackgroundTask
     return BackgroundTask(upstream.aclose)
+
+
+def _observe(request: Request, prefix: str, port: int, status: int):
+    """Append one observed app-model edge (best-effort; never breaks a request)."""
+    if not OBSERVE:
+        return
+    try:
+        ref = request.headers.get("referer", "")
+        ui = ref.rsplit("/", 1)[-1].split("?")[0] if ref else ""   # the calling UI page
+        rec = {"ts": round(time.time(), 3), "ui": ui, "method": request.method,
+               "path": request.url.path, "prefix": prefix, "port": port, "status": status}
+        with open(OBSERVE_LOG, "a", encoding="utf-8") as fh:
+            fh.write(_json.dumps(rec) + "\n")
+    except Exception:
+        pass
 
 
 @app.api_route("/{full_path:path}",

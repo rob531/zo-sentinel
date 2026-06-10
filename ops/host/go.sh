@@ -57,6 +57,10 @@ hdr(){  echo -e "\n${BOLD}=== $1 ===${NC}"; }
 MESH=/home/workspace/zo_mesh
 SENTINEL=/home/workspace/zo_sentinel
 LOGS=/home/workspace/logs
+# Launcher version -- auto-read from this file's own header line (# go.sh vX.Y).
+# Used by the boot marker (end of file) so "which go.sh is live?" is one query.
+GO_SH_VERSION=$(grep -m1 -oE 'go\.sh v[0-9.]+' "$0" 2>/dev/null | grep -oE '[0-9.]+' | head -1)
+GO_SH_VERSION=${GO_SH_VERSION:-2.9.2}
 SUPCTL="supervisorctl -c /etc/zo/supervisord-user.conf"
 mkdir -p $LOGS
 
@@ -582,6 +586,21 @@ echo "  Trust pipeline:          ${TP_RUNNING}/${#TRUST_PIPELINE[@]} daemons up"
 echo "  Mesh daemons:            ${MD_RUNNING}/${#MESH_DAEMONS[@]} daemons up"
 echo "  ZO_API_KEY:              $([[ -n "$ZO_API_KEY" ]] && echo SET || echo NOT_SET)"
 echo "  MINIMAX_API_KEY:         $([[ -n "$MINIMAX_API_KEY" ]] && echo SET || echo NOT_SET)"
+
+# === Boot version marker (telemetry: launcher version becomes one query) ===
+# Enumerate the live launcher:  SELECT meta FROM service_health WHERE service='go_sh';
+#   -> "go.sh v2.9.2 booted <iso8601>"  -- no file-read or behavioral fingerprint.
+# Best-effort; never fails the boot. service_health PK is `service` so this upserts.
+_gm=$(mktemp); _gm_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cat > "$_gm" <<JSON
+{"sql": "INSERT INTO service_health (service, status, last_heartbeat, meta) VALUES ('go_sh', 'running', now(), 'go.sh v$GO_SH_VERSION booted $_gm_ts') ON CONFLICT (service) DO UPDATE SET status=excluded.status, last_heartbeat=excluded.last_heartbeat, meta=excluded.meta", "agent_id": "go_sh_boot", "wait": true}
+JSON
+if curl -m5 -s -X POST http://127.0.0.1:8772/execute -H 'Content-Type: application/json' -d @"$_gm" >/dev/null 2>&1; then
+  ok "boot marker: go_sh v$GO_SH_VERSION recorded to service_health"
+else
+  warn "boot marker write failed (non-fatal)"
+fi
+rm -f "$_gm"
 
 # === SUPERVISORD_KEEPALIVE_TAIL_v1 ===
 if [[ "$SUPERVISORD_KEEPALIVE" == "1" ]]; then

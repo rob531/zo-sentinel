@@ -1,42 +1,40 @@
-# ZO-SENTINEL External API Reference
+# ZO-Sentinel External API Reference
 
 **Version:** 1.0  
+**Port:** 8791  
 **Base URL:** `http://localhost:8791`  
 **Protocol:** REST/JSON  
-**Last Updated:** 2024
+**Read-Only:** Yes (per PRODUCT_SPEC §7)
 
 ---
 
-## Appendix A: External API Reference
+## Overview
 
-This document describes the external API for ZO-SENTINEL, providing programmatic access to MCP server safety intelligence.
+The Sentinel External API provides read-only access to MCP server intelligence, including trust verdicts, signal scores, attestation records, and threat associations. This API is designed for external consumers such as gateways, portals, and compliance tools.
+
+**Note:** All endpoints are read-only. There are no write, create, or update endpoints on this port.
 
 ---
 
-## Authentication
+## 1. Authentication
 
-All requests must include a valid API key in the request header:
+All requests must include a valid API key in the `X-API-Key` header.
 
 ```
 X-API-Key: <your-api-key>
 ```
 
-API keys are provisioned through the Sentinel administrative interface. Keys are scoped to specific capabilities based on the associated service principal.
+### Rate Limits
 
-**Important:** Never expose API keys in logs, URLs, or version control. Rotate compromised keys immediately through the Sentinel admin console.
-
----
-
-## Rate Limiting
-
-| Limit Type | Value |
-|------------|-------|
+| Parameter | Value |
+|-----------|-------|
 | Requests per minute | 60 |
 | Per API key | Yes |
-| Burst allowance | 10 requests |
 | Window | Sliding 60-second |
 
-Rate limit headers are included in every response:
+### Rate Limit Response Headers
+
+Every response includes rate limit information:
 
 ```
 X-RateLimit-Limit: 60
@@ -44,430 +42,411 @@ X-RateLimit-Remaining: <n>
 X-RateLimit-Reset: <unix-timestamp>
 ```
 
-When limits are exceeded, the API returns `429 Too Many Requests`.
-
 ---
 
-## Endpoints
+## 2. Endpoints
 
-### 1. Search MCP Server by Name
+### 2.1 List MCP Servers
 
-Search the MCP server registry for entries matching a server name or pattern.
+Retrieve a paginated list of MCP servers with optional filtering.
 
-**Endpoint:** `GET /api/v1/mcp/search`
+**Endpoint:** `GET /servers`
 
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | string | Yes | Server name or partial name match |
-| `limit` | integer | No | Max results (default: 10, max: 100) |
+| `verdict` | string | No | Filter by verdict level (e.g., `TRUSTED_GENERAL`, `HIGH_RISK_ISOLATED`) |
+| `registry` | string | No | Filter by registry source (e.g., `github`, `npm`) |
+| `limit` | integer | No | Max results per page (default: 20, max: 100) |
 | `offset` | integer | No | Pagination offset (default: 0) |
 
-**Request Example:**
-```bash
-curl -X GET "http://localhost:8791/api/v1/mcp/search?name=openai&limit=5" \
-  -H "X-API-Key: your-api-key"
-```
+**Response Shape:**
 
-**Response (200 OK):**
 ```json
 {
-  "query": "openai",
-  "total": 2,
-  "results": [
+  "servers": [
     {
-      "server_id": "srv_mcp_openai_001",
-      "name": "openai-mcp-server",
-      "vendor": "OpenAI",
-      "version": "1.2.0",
-      "capabilities": ["text-generation", "embedding"],
-      "trust_score": 0.87,
-      "last_seen": "2024-01-15T10:30:00Z",
-      "risk_flags": []
-    },
-    {
-      "server_id": "srv_mcp_openai_assist_002",
-      "name": "openai-assistant-mcp",
-      "vendor": "OpenAI",
-      "version": "0.9.1",
-      "capabilities": ["chat", "function-calling"],
-      "trust_score": 0.82,
-      "last_seen": "2024-01-14T22:15:00Z",
-      "risk_flags": ["sandbox-required"]
+      "server_id": "abc123def456...",
+      "name": "string",
+      "registry_source": "string",
+      "verdict": "string",
+      "trust_score": 0.0,
+      "last_assessed": "2024-01-15T12:00:00Z"
     }
-  ]
-}
-```
-
-**Referenced by:** `signal_analyser.py` (search operations)
-
----
-
-### 2. Get Trust Verdict
-
-Retrieve the composite trust verdict for a specific MCP server.
-
-**Endpoint:** `GET /api/v1/mcp/{server_id}/verdict`
-
-**Path Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `server_id` | string | Yes | Unique server identifier |
-
-**Request Example:**
-```bash
-curl -X GET "http://localhost:8791/api/v1/mcp/srv_mcp_openai_001/verdict" \
-  -H "X-API-Key: your-api-key"
-```
-
-**Response (200 OK):**
-```json
-{
-  "server_id": "srv_mcp_openai_001",
-  "verdict": {
-    "level": "trusted",
-    "score": 0.87,
-    "confidence": "high",
-    "factors": [
-      {"factor": "vendor-reputation", "weight": 0.4, "score": 0.95},
-      {"factor": "attestation-count", "weight": 0.3, "score": 0.90},
-      {"factor": "vulnerability-history", "weight": 0.2, "score": 0.75},
-      {"factor": "sandbox-compliance", "weight": 0.1, "score": 0.80}
-    ],
-    "computed_at": "2024-01-15T12:00:00Z"
-  },
-  "recommendations": [
-    "Approved for general use",
-    "Monitor for new vulnerability disclosures"
   ],
-  "restrictions": []
+  "total": 0,
+  "limit": 20,
+  "offset": 0
 }
 ```
 
-**Verdict Levels:**
+**Null Handling:** Missing fields are returned as `null`. For example, a server without a verdict would have `"verdict": null`.
 
-| Level | Score Range | Meaning |
-|-------|-------------|---------|
-| `trusted` | 0.75 - 1.00 | Approved for production use |
-| `conditional` | 0.50 - 0.74 | Use with safeguards enabled |
-| `restricted` | 0.25 - 0.49 | Limited use, enhanced monitoring |
-| `blocked` | 0.00 - 0.24 | Do not use in any context |
+**curl Example:**
 
-**Referenced by:** `trust_synthesiser.py` (verdict computation), Sentinel dashboard
+```bash
+# List all servers
+curl -X GET "http://localhost:8791/servers" \
+  -H "X-API-Key: your-api-key"
+
+# Filter by verdict
+curl -X GET "http://localhost:8791/servers?verdict=TRUSTED_GENERAL&limit=10" \
+  -H "X-API-Key: your-api-key"
+
+# Paginate results
+curl -X GET "http://localhost:8791/servers?limit=20&offset=40" \
+  -H "X-API-Key: your-api-key"
+```
 
 ---
 
-### 3. Get Signal Summary
+### 2.2 Get Server Details
 
-Retrieve the aggregated security signals for a specific MCP server.
+Retrieve the full record for a specific MCP server, including signal scores and enrichment data.
 
-**Endpoint:** `GET /api/v1/mcp/{server_id}/signals`
+**Endpoint:** `GET /servers/{server_id}`
 
 **Path Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `server_id` | string | Yes | Unique server identifier |
+| `server_id` | string | Yes | 32-character MD5 hash identifier |
 
-**Query Parameters:**
+**Response Shape:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `window_days` | integer | No | Analysis window in days (default: 30, max: 365) |
+```json
+{
+  "server_id": "abc123def456...",
+  "name": "string",
+  "url": "string",
+  "verdict": "string",
+  "trust_score": 0.0,
+  "verdict_reasoning": "string",
+  "confidence": 0.0,
+  "risk_tier": "RISK_TIER_1",
+  "last_assessed": "2024-01-15T12:00:00Z",
+  "registry_source": "string"
+}
+```
 
-**Request Example:**
+**Null Handling:** All optional fields return `null` if not populated. For example: `"verdict_reasoning": null`.
+
+**curl Example:**
+
 ```bash
-curl -X GET "http://localhost:8791/api/v1/mcp/srv_mcp_openai_001/signals?window_days=30" \
+curl -X GET "http://localhost:8791/servers/abc123def456789012345678901234" \
   -H "X-API-Key: your-api-key"
 ```
 
-**Response (200 OK):**
+---
+
+### 2.3 Get Attestation Record
+
+Retrieve the attestation text and expiry information for a specific server.
+
+**Endpoint:** `GET /servers/{server_id}/attestation`
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `server_id` | string | Yes | 32-character MD5 hash identifier |
+
+**Response Shape:**
+
 ```json
 {
-  "server_id": "srv_mcp_openai_001",
-  "analysis_window": {
-    "start": "2023-12-16T00:00:00Z",
-    "end": "2024-01-15T23:59:59Z",
-    "days": 30
-  },
-  "signals": {
-    "threat_intel": {
-      "score": 0.90,
-      "indicators": [
-        {"type": "known-vendor", "source": "otx", "age_hours": 720}
-      ]
-    },
-    "vulnerability": {
-      "score": 0.75,
-      "cves_detected": 0,
-      "last_patched": "2024-01-10T00:00:00Z"
-    },
-    "behavior": {
-      "score": 0.82,
-      "anomalies": [],
-      "permission_requests": ["network-outbound", "data-read"]
-    },
-    "reputation": {
-      "score": 0.88,
-      "community_rating": 4.2,
-      "attestation_count": 156
+  "server_id": "abc123def456...",
+  "attestation_text": "string",
+  "attested_at": "2024-01-15T12:00:00Z",
+  "expires_at": "2025-01-15T12:00:00Z",
+  "attestor": "string",
+  "status": "valid"
+}
+```
+
+**Null Handling:** If no attestation exists, all fields return `null`.
+
+**curl Example:**
+
+```bash
+curl -X GET "http://localhost:8791/servers/abc123def456789012345678901234/attestation" \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+### 2.4 Get Threat Associations
+
+Retrieve threat associations for a specific server, if any exist.
+
+**Endpoint:** `GET /servers/{server_id}/threats`
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `server_id` | string | Yes | 32-character MD5 hash identifier |
+
+**Response Shape:**
+
+```json
+{
+  "server_id": "abc123def456...",
+  "threats": [
+    {
+      "threat_type": "string",
+      "severity": "string",
+      "evidence": "string",
+      "reported_at": "2024-01-15T12:00:00Z"
     }
+  ],
+  "threat_count": 0
+}
+```
+
+**Null Handling:** If no threats exist, `threats` is an empty array `[]` and `threat_count` is `0`.
+
+**curl Example:**
+
+```bash
+curl -X GET "http://localhost:8791/servers/abc123def456789012345678901234/threats" \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+### 2.5 Get Aggregated Verdicts
+
+Retrieve aggregated verdict counts across all MCP servers.
+
+**Endpoint:** `GET /verdicts`
+
+**Response Shape:**
+
+```json
+{
+  "verdicts": {
+    "TRUSTED_GENERAL": 150,
+    "TRUSTED_RESEARCH": 75,
+    "ENTERPRISE_CONTROLLED": 30,
+    "CAUTION_LIMITED": 45,
+    "HIGH_RISK_ISOLATED": 12,
+    "KNOWN_THREAT": 3,
+    "INSUFFICIENT": 25
   },
-  "composite_score": 0.84,
+  "total_servers": 340,
   "computed_at": "2024-01-15T12:00:00Z"
 }
 ```
 
-**Referenced by:** `signal_analyser.py` (signal aggregation)
+**curl Example:**
 
----
-
-### 4. Get Attestation Records
-
-Retrieve attestation records proving trust assessment by authorized parties.
-
-**Endpoint:** `GET /api/v1/mcp/{server_id}/attestations`
-
-**Path Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `server_id` | string | Yes | Unique server identifier |
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `attestor` | string | No | Filter by specific attestor ID |
-| `status` | string | No | Filter by attestation status: `valid`, `revoked`, `expired` |
-| `limit` | integer | No | Max results (default: 20, max: 200) |
-
-**Request Example:**
 ```bash
-curl -X GET "http://localhost:8791/api/v1/mcp/srv_mcp_openai_001/attestations?status=valid&limit=10" \
+curl -X GET "http://localhost:8791/verdicts" \
   -H "X-API-Key: your-api-key"
 ```
 
-**Response (200 OK):**
+---
+
+### 2.6 Get Service Health
+
+Retrieve the current health status of the Sentinel service.
+
+**Endpoint:** `GET /health`
+
+**Response Shape:**
+
 ```json
 {
-  "server_id": "srv_mcp_openai_001",
-  "attestations": [
-    {
-      "attestation_id": "attest_2024_001",
-      "attestor": {
-        "id": "attestor_zocompanion_001",
-        "name": "ZoCompanion",
-        "type": "internal-service"
-      },
-      "claimed_trust_level": "trusted",
-      "scope": ["production", "sandbox"],
-      "evidence": {
-        "code_review_date": "2024-01-05T00:00:00Z",
-        "pen_test_date": "2023-12-20T00:00:00Z",
-        "compliance_framework": "SOC2-TypeII"
-      },
-      "attested_at": "2024-01-05T18:30:00Z",
-      "expires_at": "2025-01-05T18:30:00Z",
-      "status": "valid",
-      "signature": "sha256:abc123..."
-    },
-    {
-      "attestation_id": "attest_2023_089",
-      "attestor": {
-        "id": "attestor_zo_agent_health_001",
-        "name": "Sentinel Agent Health",
-        "type": "automated-monitor"
-      },
-      "claimed_trust_level": "trusted",
-      "scope": ["production"],
-      "evidence": {
-        "runtime_verification": true,
-        "uptime_percent": 99.95
-      },
-      "attested_at": "2024-01-10T00:00:00Z",
-      "expires_at": "2024-02-10T00:00:00Z",
-      "status": "valid",
-      "signature": "sha256:def456..."
-    }
-  ],
-  "total": 2
+  "status": "healthy",
+  "service": "sentinel_external_api",
+  "version": "1.0.0",
+  "timestamp": "2024-01-15T12:00:00Z",
+  "dependencies": {
+    "write_service": "connected",
+    "signal_store": "connected"
+  }
 }
 ```
 
-**Referenced by:** `attestations.py` (attestation management), compliance audit systems
+**Note:** This endpoint does not require authentication.
+
+**curl Example:**
+
+```bash
+curl -X GET "http://localhost:8791/health"
+```
 
 ---
 
-## Error Codes
+## 3. Response Schema Reference
+
+### Server Object
+
+| Field | Type | Description | Nullable |
+|-------|------|-------------|----------|
+| `server_id` | string | 32-char MD5 hash | No |
+| `name` | string | Display name | Yes |
+| `url` | string | Registry URL | Yes |
+| `verdict` | string | Verdict level | Yes |
+| `trust_score` | float | Score 0-100 | Yes |
+| `verdict_reasoning` | string | Explanation | Yes |
+| `confidence` | float | Confidence 0-1 | Yes |
+| `risk_tier` | string | RISK_TIER_1 through RISK_TIER_5 | Yes |
+| `last_assessed` | datetime | ISO 8601 timestamp | Yes |
+| `registry_source` | string | Source registry name | Yes |
+
+### Attestation Object
+
+| Field | Type | Description | Nullable |
+|-------|------|-------------|----------|
+| `attestation_text` | string | Attestation content | Yes |
+| `attested_at` | datetime | When attested | Yes |
+| `expires_at` | datetime | Expiry date | Yes |
+| `attestor` | string | Attesting party | Yes |
+| `status` | string | valid, expired, revoked | Yes |
+
+### Threat Object
+
+| Field | Type | Description | Nullable |
+|-------|------|-------------|----------|
+| `threat_type` | string | Type classification | No |
+| `severity` | string | low, medium, high, critical | No |
+| `evidence` | string | Evidence description | Yes |
+| `reported_at` | datetime | When reported | Yes |
+
+---
+
+## 4. Error Codes
 
 All error responses follow this structure:
 
 ```json
 {
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable description",
-    "details": {},
-    "request_id": "req_abc123"
-  }
+  "error": "ERROR_CODE",
+  "detail": "Human-readable description",
+  "request_id": "req_abc123"
 }
 ```
 
 ### HTTP Status Codes
 
-| Status | Code | Description | Remediation |
-|--------|------|-------------|-------------|
-| `400` | `INVALID_REQUEST` | Malformed request or missing parameters | Check request format and parameters |
-| `401` | `AUTHENTICATION_REQUIRED` | Missing or invalid API key | Provide valid X-API-Key header |
-| `403` | `AUTHORIZATION_FAILED` | Valid key but insufficient permissions | Request additional scopes from admin |
-| `404` | `SERVER_NOT_FOUND` | Requested server_id does not exist | Verify server identifier |
-| `422` | `VALIDATION_ERROR` | Request valid but failed semantic validation | Review error details field |
-| `429` | `RATE_LIMIT_EXCEEDED` | Too many requests | Wait and retry; check X-RateLimit-Reset |
-| `500` | `INTERNAL_ERROR` | Server-side failure | Contact Sentinel operations team |
-| `503` | `SERVICE_UNAVAILABLE` | API temporarily offline | Monitor status endpoint; retry later |
+| Status | Error Code | Description |
+|--------|------------|-------------|
+| 401 | `AUTHENTICATION_REQUIRED` | Missing or invalid API key |
+| 404 | `SERVER_NOT_FOUND` | Requested server_id does not exist |
+| 429 | `RATE_LIMIT_EXCEEDED` | Rate limit exceeded (60 req/min) |
+| 500 | `INTERNAL_ERROR` | Internal server error |
 
 ### Error Response Examples
 
 **401 Unauthorized:**
+
 ```json
 {
-  "error": {
-    "code": "AUTHENTICATION_REQUIRED",
-    "message": "API key is required for all requests",
-    "details": {"header": "X-API-Key"},
-    "request_id": "req_7f8a9b"
-  }
+  "error": "AUTHENTICATION_REQUIRED",
+  "detail": "API key is required for all requests",
+  "request_id": "req_7f8a9b"
 }
 ```
 
-**403 Forbidden:**
+**404 Not Found:**
+
 ```json
 {
-  "error": {
-    "code": "AUTHORIZATION_FAILED",
-    "message": "API key lacks required scope: mcp:write",
-    "details": {"required_scope": "mcp:write", "current_scopes": ["mcp:read"]},
-    "request_id": "req_8g9b0c"
-  }
+  "error": "SERVER_NOT_FOUND",
+  "detail": "Server with ID 'abc123def456...' not found",
+  "request_id": "req_8g9b0c"
 }
 ```
 
 **429 Too Many Requests:**
+
 ```json
 {
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Rate limit of 60 requests per minute exceeded",
-    "details": {
-      "limit": 60,
-      "reset_at": "2024-01-15T12:01:00Z",
-      "retry_after_seconds": 45
-    },
-    "request_id": "req_9h0c1d"
-  }
+  "error": "RATE_LIMIT_EXCEEDED",
+  "detail": "Rate limit of 60 requests per minute exceeded",
+  "request_id": "req_9h0c1d"
 }
 ```
 
 **500 Internal Server Error:**
+
 ```json
 {
-  "error": {
-    "code": "INTERNAL_ERROR",
-    "message": "An unexpected error occurred processing your request",
-    "details": {},
-    "request_id": "req_0i1d2e"
-  }
+  "error": "INTERNAL_ERROR",
+  "detail": "An unexpected error occurred processing your request",
+  "request_id": "req_0i1d2e"
 }
 ```
 
 ---
 
-## Health Check
+## 5. Complete curl Examples
 
-**Endpoint:** `GET /health`
+### List Servers
 
-Returns API service health status. Does not require authentication.
+```bash
+curl -X GET "http://localhost:8791/servers" \
+  -H "X-API-Key: your-api-key"
+```
 
-**Response (200 OK):**
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "uptime_seconds": 86400,
-  "dependencies": {
-    "write_service": "connected",
-    "duckdb": "connected",
-    "mesh_memory": "connected"
-  },
-  "timestamp": "2024-01-15T12:00:00Z"
-}
+### List Servers with Filters
+
+```bash
+curl -X GET "http://localhost:8791/servers?verdict=TRUSTED_GENERAL&registry=github&limit=10&offset=20" \
+  -H "X-API-Key: your-api-key"
+```
+
+### Get Server Details
+
+```bash
+curl -X GET "http://localhost:8791/servers/abc123def456789012345678901234" \
+  -H "X-API-Key: your-api-key"
+```
+
+### Get Attestation
+
+```bash
+curl -X GET "http://localhost:8791/servers/abc123def456789012345678901234/attestation" \
+  -H "X-API-Key: your-api-key"
+```
+
+### Get Threats
+
+```bash
+curl -X GET "http://localhost:8791/servers/abc123def456789012345678901234/threats" \
+  -H "X-API-Key: your-api-key"
+```
+
+### Get Verdicts
+
+```bash
+curl -X GET "http://localhost:8791/verdicts" \
+  -H "X-API-Key: your-api-key"
+```
+
+### Get Health (No Auth Required)
+
+```bash
+curl -X GET "http://localhost:8791/health"
 ```
 
 ---
 
-## SDK Integration
+## 6. Verdict Levels Reference
 
-### Python Client Example
-
-```python
-import requests
-
-class SentinelAPIClient:
-    def __init__(self, api_key: str, base_url: str = "http://localhost:8791"):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.session = requests.Session()
-        self.session.headers.update({"X-API-Key": api_key})
-    
-    def search_mcp(self, name: str, limit: int = 10) -> dict:
-        response = self.session.get(
-            f"{self.base_url}/api/v1/mcp/search",
-            params={"name": name, "limit": limit},
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def get_verdict(self, server_id: str) -> dict:
-        response = self.session.get(
-            f"{self.base_url}/api/v1/mcp/{server_id}/verdict",
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def get_signals(self, server_id: str, window_days: int = 30) -> dict:
-        response = self.session.get(
-            f"{self.base_url}/api/v1/mcp/{server_id}/signals",
-            params={"window_days": window_days},
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def get_attestations(self, server_id: str, status: str = None) -> dict:
-        params = {"status": status} if status else {}
-        response = self.session.get(
-            f"{self.base_url}/api/v1/mcp/{server_id}/attestations",
-            params=params,
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.json()
-```
-
----
-
-## Appendix: Referenced Modules
-
-| Module | Purpose | API Role |
-|--------|---------|----------|
-| `signal_analyser.py` | Analyzes MCP server behavior and aggregates security signals | Provides signal data for `/signals` and search operations |
-| `trust_synthesiser.py` | Computes composite trust verdicts from multiple signal sources | Powers verdict computation for `/verdict` endpoint |
-| `attestations.py` | Manages trust attestations from authorized parties | Serves attestation records via `/attestations` endpoint |
+| Verdict | Description |
+|---------|-------------|
+| `TRUSTED_GENERAL` | Approved for general production use |
+| `TRUSTED_RESEARCH` | Approved for research/development use |
+| `ENTERPRISE_CONTROLLED` | Enterprise-managed, additional controls |
+| `CAUTION_LIMITED` | Use with caution, limited scope |
+| `HIGH_RISK_ISOLATED` | High risk, requires isolation |
+| `KNOWN_THREAT` | Confirmed threat, do not use |
+| `INSUFFICIENT` | Not enough data for assessment |
 
 ---
 

@@ -23,17 +23,17 @@ CAP = sys.argv[1] if len(sys.argv) > 1 else "C:/tmp/capmap.json"
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema", "app_graph.sql")
 
-# canonical app tables (from schema/app.sql) -- anything an endpoint references
-# OUTSIDE this set is schema drift.
-CANON = {
-    "mcp_server_registry", "mcp_signal_scores", "mcp_threat_associations",
-    "mcp_submissions", "mcp_decisions", "mcp_policy_rules", "mcp_definition_history",
-    "mcp_risk_register", "mcp_attestations", "audit_log", "mcp_tool_hashes",
-    "mcp_fingerprints", "mcp_exemptions", "auth_tokens", "perf_metrics",
-    "shodan_results", "github_velocity", "npm_typosquat_alerts",
-    "mcp_discovery_candidates", "mcp_signal_enrichments",  # adopted 2026-06-10
-    "bulk_assess_jobs", "bulk_imports",                    # adopted 2026-06-10
-}
+# canonical app tables -- read straight from schema/app.sql so there's ONE source
+# of truth (adopting a table = editing app.sql only; no second list to maintain).
+# Anything an endpoint references OUTSIDE this set is schema drift.
+def _canon_tables():
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema", "app.sql")
+    try:
+        return set(re.findall(r'CREATE TABLE IF NOT EXISTS (\w+)', open(p, encoding="utf-8").read()))
+    except Exception:
+        return set()
+
+CANON = _canon_tables()
 BUGWORDS = ("wrong table", "not in schema", "absent from schema", "mismatch",
             "WRONG", "effectively false")
 TABLE_RE = re.compile(r"[a-z_][a-z0-9_]{3,}")

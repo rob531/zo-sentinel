@@ -330,6 +330,27 @@ CREATE TABLE IF NOT EXISTS bulk_imports (
     imported_at   TIMESTAMPTZ DEFAULT now()
 );
 
+-- ---------------------------------------------------------------------
+-- Manual override audit  (ADOPTED 2026-06-10 -- the deterministic capmap scan
+-- found manual_override_api_v2 writes/reads this table but it was only ever
+-- CREATEd in a quarantined test, so /override/history was silently broken --
+-- writes went to a non-existent table. Schema taken from the LIVE ws_write (the
+-- truth); the quarantine def had different, stale column names. Append-only event
+-- log -> synthetic id PK so multiple overrides per server are kept.)
+-- ---------------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS seq_override_id START 1;
+CREATE TABLE IF NOT EXISTS manual_override_metadata (
+    id               BIGINT PRIMARY KEY DEFAULT nextval('seq_override_id'),
+    server_id        VARCHAR NOT NULL,
+    previous_verdict VARCHAR,
+    new_verdict      VARCHAR,
+    override_reason  TEXT,
+    override_type    VARCHAR,
+    override_by      VARCHAR,
+    overridden_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_override_server ON manual_override_metadata (server_id);
+
 -- =====================================================================
 -- CALLER-SIDE PORTABILITY (not DDL, but the bus router must translate):
 --   DuckDB `INSERT OR IGNORE INTO t ...`

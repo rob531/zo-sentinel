@@ -59,8 +59,10 @@ SENTINEL=/home/workspace/zo_sentinel
 LOGS=/home/workspace/logs
 # Launcher version -- auto-read from this file's own header line (# go.sh vX.Y).
 # Used by the boot marker (end of file) so "which go.sh is live?" is one query.
-GO_SH_VERSION=$(grep -m1 -oE 'go\.sh v[0-9.]+' "$0" 2>/dev/null | grep -oE '[0-9.]+' | head -1)
-GO_SH_VERSION=${GO_SH_VERSION:-2.9.2}
+# Hardcoded (was auto-read from "$0", which is empty when `zm go` SOURCES this
+# script -> the marker stamped a blank "v." on 2026-06-10). Bump this line when the
+# header version above changes.
+GO_SH_VERSION="2.9.2"
 SUPCTL="supervisorctl -c /etc/zo/supervisord-user.conf"
 mkdir -p $LOGS
 
@@ -469,12 +471,17 @@ for _svc in "forensic_detail_api_v2:8779:forensic_detail" \
             "search_api:8782:search_api" \
             "manual_override_api:8776:manual_override"; do
     _file="${_svc%%:*}"; _rest="${_svc#*:}"; _port="${_rest%%:*}"; _log="${_rest#*:}"
-    _h=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/health 2>/dev/null || echo 000)
+    # NB: curl -w "%{http_code}" ALREADY prints 000 on a dead port. Do NOT add
+    # `|| echo 000` -- on a dead port curl prints 000 AND exits non-zero, so the
+    # `||` appends a 2nd 000 -> "000000" -> "!= 000" is TRUE -> falsely "already
+    # running" -> the launch is SKIPPED (the 2026-06-10 no-log-files bug). Use
+    # `:-000` only to cover the rare empty-output case.
+    _h=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/health 2>/dev/null); _h=${_h:-000}
     if [[ "$_h" != "000" ]]; then
         ok ":$_port $_file already running"
     else
         nohup python3 $SENTINEL/$_file.py >> $LOGS/sentinel_$_log.log 2>&1 & sleep 2
-        _h2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/ 2>/dev/null || echo 000)
+        _h2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/ 2>/dev/null); _h2=${_h2:-000}
         [[ "$_h2" != "000" ]] && ok ":$_port $_file started" \
             || warn ":$_port $_file not listening -- check $LOGS/sentinel_$_log.log"
     fi

@@ -1,5 +1,18 @@
 #!/bin/zsh
-# watchdog.v3.7 - autonomous self-healer for ZOMesh
+# watchdog.v3.8 - autonomous self-healer for ZOMesh
+#
+# CHANGELOG vs v3.7 (this change):
+#   - ADD: build->publish pipeline janitor, invoked each tick (see the
+#     `sentinel_janitor` hook near the end + tools/sentinel_janitor.sh). It (a)
+#     sweeps the GHOST .done graveyard that makes goose_runner skip every
+#     directive as "non-eligible" (build side goes idle after ~2-3 days), and (b)
+#     heals the publisher/ingestor/governor `python3 -m zo_sentinel.<mod>` loops
+#     when they crash-loop on `No module named zo_sentinel.<mod>` (the cwd/
+#     module-shadow bug a sourced `zm go` reintroduces on every boot). Both used
+#     to require a manual host relaunch each time; now they self-heal here.
+#     DELIBERATELY placed here, NOT in go.sh: go.sh's bootstrap is overloaded and
+#     hangs the container when extended (harden_go_sh.py / patch_go_sh*.py
+#     graveyard). The watchdog tick is the container's standing "scheduled task".
 #
 # CHANGELOG vs v3.6 (shipped 2026-06-09 via tower MCP bridge):
 #   - ADD: proposed_to_pending_promoter to _daemon coverage. It promotes
@@ -217,6 +230,13 @@ _daemon wisdom_synthesiser.py    wisdom_synthesiser.log   Wisdom          "pytho
 _daemon run_manager.py           manager.log              Manager         "python3 $MESH/run_manager.py daemon"
 _daemon goose_runner.py          goose_runner.log         GooseRunner     "env ZO_ESCALATE=1 python3 $SENTINEL/goose_runner.py"
 _daemon proposed_to_pending_promoter proposed_to_pending_promoter.log PromoterP2P "bash -c 'cd $SENTINEL && exec python3 -m zo_sentinel.promoters.proposed_to_pending_promoter'"
+
+# v3.8: build->publish pipeline janitor -- ghost .done sweep + heal the
+# publisher/ingestor/governor `python3 -m` loops when they crash-loop on the
+# module-shadow import bug. Self-contained in tools/sentinel_janitor.sh so this
+# precious file stays minimal and go.sh stays out of it entirely. Idempotent and
+# non-thrashing (only acts on a broken/absent loop), so safe every tick.
+bash $SENTINEL/tools/sentinel_janitor.sh >> $LOGS/sentinel_janitor.log 2>&1 || true
 
 for sc in "${TRUST_PIPELINE[@]}"; do
     _daemon_tp "$sc"

@@ -10,8 +10,7 @@
 # decoupled from boot. This script is the "scheduled task" the container lacks a
 # cron for.
 #
-# Fixes TWO independent failure modes, both of which silently halt PR output
-# after a couple of days of running:
+# Fixes THREE independent failure modes that silently halt PR output:
 #
 #   1. GHOST .done GRAVEYARD (build side). goose_runner skips any directive whose
 #      <id>.done.json sentinel exists ("non-eligible"). Ghost sentinels -- goose
@@ -36,9 +35,18 @@
 #      loop's log and relaunch it with the cwd fix (cd $SENTINEL && ...), the same
 #      idiom watchdog.sh already uses for proposed_to_pending_promoter.
 #
+#   3. KEYLESS LADDER SHIM (build side, post-reboot). go.sh launches ladder_shim
+#      BARE on boot; its key_hydrator self-hydrate times out, so RcGeminiAPIKey is
+#      unresolved AND the rung-0 MiniMax key the low/med BUILDERS use is absent ->
+#      every goose build GHOSTS (model unreachable) -> directives get .failed ->
+#      the build pipeline silently dies. relaunch_ladder_keyed.sh rewires the shim
+#      onto /root/.zo_secrets + secretless-ai but is NOT durable across reboot, so
+#      we detect the keyless signature in ladder_shim.log and re-key it here.
+#
 # Idempotent + non-thrashing: a loop is touched ONLY when its process is absent
-# OR its log shows the import error. A healthy loop is left strictly alone, so
-# in-flight builds/publishes are never interrupted. Safe to run every tick.
+# OR its log shows the import error; the rekey fires ONLY on the keyless signature
+# and is throttled. Healthy state is left strictly alone, so in-flight
+# builds/publishes are never interrupted. Safe to run every tick.
 set -u
 
 SENTINEL=/home/workspace/zo_sentinel
@@ -47,11 +55,11 @@ TS=$(date '+%Y-%m-%d %H:%M:%S')
 log() { echo "[$TS] sentinel_janitor: $1"; }
 
 cd "$SENTINEL" 2>/dev/null || { log "FATAL: $SENTINEL not found"; exit 1; }
+now=$(date +%s)
 
 # --- 1. ghost .done sweep (throttled to ~hourly) --------------------------
 # Cheap + idempotent, but throttled so the janitor log isn't spammed every tick.
 STAMP="$LOGS/.sentinel_janitor_sweep_stamp"
-now=$(date +%s)
 last=0; [ -f "$STAMP" ] && last=$(stat -c %Y "$STAMP" 2>/dev/null || echo 0)
 if [ $(( now - last )) -ge 3600 ]; then
     log "running ghost .done sweep (sweep_ghost_done.py --apply)"
@@ -94,5 +102,26 @@ heal 'zo_sentinel.ingestor run' artifact_ingestor.log \
 # carries 'zo_sentinel.ingestor govern', so pgrep matches across the sleep).
 heal 'zo_sentinel.ingestor govern' activation_governor.log \
     "nohup env PYTHONPATH=$SENTINEL bash -c 'cd $SENTINEL && while true; do python3 -m zo_sentinel.ingestor govern; sleep 600; done' >> $LOGS/activation_governor.log 2>&1 &"
+
+# --- 3. ensure the ladder_shim is KEYED (re-key if it booted bare) ---------
+# After a reboot go.sh starts ladder_shim BARE -> key_hydrator times out ->
+# RcGeminiAPIKey unresolved AND the rung-0 MiniMax builder key is absent -> every
+# goose build ghosts -> .failed graveyard. relaunch_ladder_keyed.sh fixes it but
+# isn't durable, so re-key here when the shim log shows the keyless signature.
+# Throttled (>=600s) so a genuinely secret-less box can't thrash the shim (the
+# rekey script itself also pre-verifies and falls back to bare on its own).
+REKEY="$SENTINEL/relaunch_ladder_keyed.sh"
+RK_STAMP="$LOGS/.sentinel_janitor_rekey_stamp"
+if [ -f "$REKEY" ]; then
+    shim_tail=$(tail -n 30 "$LOGS/ladder_shim.log" 2>/dev/null)
+    rk_last=0; [ -f "$RK_STAMP" ] && rk_last=$(stat -c %Y "$RK_STAMP" 2>/dev/null || echo 0)
+    if echo "$shim_tail" | grep -q 'RcGeminiAPIKey.*unresolved' \
+       && ! echo "$shim_tail" | grep -q 'keys hydrated' \
+       && [ $(( now - rk_last )) -ge 600 ]; then
+        log "ladder_shim KEYLESS (RcGeminiAPIKey unresolved) -- re-keying (relaunch_ladder_keyed.sh)"
+        bash "$REKEY" 2>&1 | sed 's/^/  rekey: /'
+        : > "$RK_STAMP"
+    fi
+fi
 
 log "tick complete"

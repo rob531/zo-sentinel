@@ -53,11 +53,14 @@ LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
 
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
-GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 300))
+GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 IDLE_GATE       = os.environ.get("DGG_IDLE_GATE", "1") == "1"   # batch-when-idle (herd-safe)
 IDLE_MIN        = int(os.environ.get("DGG_IDLE_MIN", 8))        # build side quiet >= N min = idle
-CTX_MODULE_BUDGET = 58000   # byte ceiling for ctx incl. module list (< the 60000 dumps cap)
+CTX_MODULE_BUDGET = 16000   # byte ceiling for ctx incl. module list. Kept LEAN: the full
+                            # ~999-module dump (~38KB ctx) made the architect's MiniMax-via-shim
+                            # loop exceed the goose timeout and emit NOTHING (regression). ~16KB
+                            # (~250 modules) preserves the dedup signal at a fraction of the prompt.
 HEARTBEAT_URL   = "http://127.0.0.1:8772/write"
 WS_QUERY_URL    = "http://127.0.0.1:8772/query"
 

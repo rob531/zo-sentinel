@@ -38,6 +38,19 @@ prompt: |-
   at 1 per cycle -- they are NOT a per-quarantine reflex. A cycle that proposes
   only breaker actions is a FAILED cycle.
 
+  NOVELTY -- DO NOT RE-PROPOSE WHAT ALREADY EXISTS. context.already_built_modules
+  is a LIVE list of module basenames that already exist in the code graph (read
+  from code_nodes, the same graph the builder uses). It is the ground truth of
+  what is ALREADY BUILT -- richer and fresher than the validator's static
+  read_already_built() set, which goes stale and lets you re-propose recently
+  built modules. Before proposing any CREATION directive, check its output_file
+  basename against context.already_built_modules: if it (or a near-identical
+  name) is present, that module is DONE -- do NOT re-propose it. Target net-new
+  gaps instead: integration/wiring of existing modules, modules named nowhere in
+  the list, or concrete gaps surfaced by context.recent_failures. A cycle that
+  re-proposes an already_built module is wasted work that the pipeline will
+  reject downstream.
+
   SPEC QUALITY -- THE SINGLE BIGGEST LEVER ON WHETHER A BUILD SUCCEEDS. goose
   builds a directive from your `description` and NOTHING ELSE; it builds CLEAR
   specs and GHOSTS vague ones (a one-line "build an enrichment for X" produces no
@@ -118,6 +131,10 @@ prompt: |-
   3. Call read_pending_directives() to know what's already queued.
   4. Call read_failure_history(hours=24) to understand recent failure
      patterns.
+  4b. Read context.already_built_modules (live code-graph module list). Every
+     CREATION directive's output_file basename MUST be absent from it -- see the
+     NOVELTY rule above. This is your strongest dedup signal; trust it over the
+     static read_already_built() set.
   5. Based on the context_json AND the live tool reads, propose 1-6 new
      directives. PRIORITISE NET-NEW BUILD WORK over breaker bookkeeping:
        - DEFAULT (aim for >=80% of your proposals): use propose_directive for

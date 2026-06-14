@@ -214,14 +214,23 @@ def _existing_modules() -> list:
 
 
 def _builder_idle() -> bool:
-    """True when the BUILD side is quiet -- no DIRECTIVE_* event in the last
-    IDLE_MIN minutes. The generator is a BATCH process: fire only when goose is idle
-    so the graph read + goose subprocess never contend with an active build (the
-    lock-storm / boot-herd trap we are avoiding). Bus-routed, best-effort; returns
-    True on any error so a check fault never STARVES generation -- strictly no
-    regression vs the prior always-fire behaviour."""
-    sql = ("SELECT MAX(created_at) AS last_at FROM mesh_events WHERE event_type IN "
-           "('DIRECTIVE_COMPLETE','DIRECTIVE_GHOST_RETRY','DIRECTIVE_GHOST_FAILED')")
+    """True when the BUILD side is quiet -- no NEW build_artifact emitted in the
+    last IDLE_MIN minutes.
+
+    Keys on build_artifact EMISSION (mesh_memory) NOT raw DIRECTIVE_* events: the
+    edit-class wire_*/integrate_* directives emit DIRECTIVE_COMPLETE but produce NO
+    build_artifact by design (declared_output is None). Keying on DIRECTIVE_* (the
+    prior behaviour) let that constant edit churn read as "builder active" every
+    cycle and DEFER generation indefinitely -> novel CREATE proposals starved
+    (verified live 2026-06-14). A build_artifact row means a real CREATE build just
+    landed, so defer for IDLE_MIN to keep the graph read + goose subprocess from
+    contending with the active build chain (the anti-herd intent is preserved).
+
+    The generator is a BATCH process. Bus-routed, best-effort; returns True (idle)
+    on any error so a check fault never STARVES generation -- strictly no regression
+    vs the prior fail-open behaviour."""
+    sql = ("SELECT MAX(created_at) AS last_at FROM mesh_memory "
+           "WHERE memory_type = 'build_artifact'")
     try:
         r = requests.post(WS_QUERY_URL, json={"sql": sql}, timeout=8)
         if r.status_code == 200:
@@ -303,7 +312,7 @@ def run_goose_cycle() -> dict:
     # Batch-when-idle: only generate when the build side is quiet, so the graph
     # read + goose subprocess never contend with an active build. Herd-safe.
     if IDLE_GATE and not _builder_idle():
-        log.info("builder active (DIRECTIVE_* within %dm); deferring generation", IDLE_MIN)
+        log.info("builder active (build_artifact within %dm); deferring generation", IDLE_MIN)
         return {"status": "skipped", "reason": "builder_busy"}
 
     ctx = build_context()

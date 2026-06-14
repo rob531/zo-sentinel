@@ -57,13 +57,15 @@ GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 IDLE_GATE       = os.environ.get("DGG_IDLE_GATE", "1") == "1"   # batch-when-idle (herd-safe)
 IDLE_MIN        = int(os.environ.get("DGG_IDLE_MIN", 8))        # build side quiet >= N min = idle
-CTX_MODULE_BUDGET = 52000   # byte ceiling for the WHOLE ctx incl. the module list, under the
-                            # 60000 json.dumps cap. NOTE: the base ctx (schema+layer1 knowledge
-                            # maps+failures) is already ~38KB, so an earlier 16000 ceiling was
-                            # SMALLER than the base -> already_built_modules trimmed to 0 (dedup
-                            # signal silently empty). 52000 leaves ~14KB for ~400 modules ON TOP of
-                            # layer1 (total ~52KB < 60KB cap). The architect completes well within
-                            # GOOSE_TIMEOUT at this size (a 38KB ctx cycle finished in ~213s).
+LAYER1_FIELD_CAP = int(os.environ.get("DGG_LAYER1_FIELD_CAP", 4000))  # per-field char cap on the
+                            # layer1 knowledge maps. The FULL maps made the base ctx ~38KB, which at
+                            # 52KB total (with the module list) made the slow ladder architect TIME
+                            # OUT on ~half its 480s cycles. Capping each of the 4 fields to ~4KB
+                            # keeps the highest-signal head, shrinks base ctx to ~16-20KB.
+CTX_MODULE_BUDGET = 30000   # byte ceiling for the WHOLE ctx incl. the module list, under the 60000
+                            # json.dumps cap. With layer1 capped, base ctx ~20KB; 30000 leaves ~10KB
+                            # for ~300 already_built_modules. Total ctx ~30KB -> architect completes
+                            # reliably (the prior 38KB cycle finished rc=0 in ~213s; 52KB was flaky).
 HEARTBEAT_URL   = "http://127.0.0.1:8772/write"
 WS_QUERY_URL    = "http://127.0.0.1:8772/query"
 
@@ -235,10 +237,19 @@ def _builder_idle() -> bool:
     return True
 
 
+def _cap_layer1(l1):
+    """Cap each layer1 knowledge-map field to LAYER1_FIELD_CAP chars so the base
+    ctx stays small enough for the slow ladder architect to finish within the goose
+    timeout. Best-effort: non-dict / non-str values pass through unchanged."""
+    if not isinstance(l1, dict):
+        return l1
+    return {k: (v[:LAYER1_FIELD_CAP] if isinstance(v, str) else v) for k, v in l1.items()}
+
+
 def build_context() -> dict:
     ctx = {
         "schema":            _try_load_schema(),
-        "layer1":            _try_import_layer1(),
+        "layer1":            _cap_layer1(_try_import_layer1()),
         "recent_failures":   _query_recent_failures(),
         "proposed_depth":    _count_proposed(),
         "generated_at":      _now_iso(),

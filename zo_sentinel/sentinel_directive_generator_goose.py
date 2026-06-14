@@ -57,10 +57,13 @@ GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 IDLE_GATE       = os.environ.get("DGG_IDLE_GATE", "1") == "1"   # batch-when-idle (herd-safe)
 IDLE_MIN        = int(os.environ.get("DGG_IDLE_MIN", 8))        # build side quiet >= N min = idle
-CTX_MODULE_BUDGET = 16000   # byte ceiling for ctx incl. module list. Kept LEAN: the full
-                            # ~999-module dump (~38KB ctx) made the architect's MiniMax-via-shim
-                            # loop exceed the goose timeout and emit NOTHING (regression). ~16KB
-                            # (~250 modules) preserves the dedup signal at a fraction of the prompt.
+CTX_MODULE_BUDGET = 52000   # byte ceiling for the WHOLE ctx incl. the module list, under the
+                            # 60000 json.dumps cap. NOTE: the base ctx (schema+layer1 knowledge
+                            # maps+failures) is already ~38KB, so an earlier 16000 ceiling was
+                            # SMALLER than the base -> already_built_modules trimmed to 0 (dedup
+                            # signal silently empty). 52000 leaves ~14KB for ~400 modules ON TOP of
+                            # layer1 (total ~52KB < 60KB cap). The architect completes well within
+                            # GOOSE_TIMEOUT at this size (a 38KB ctx cycle finished in ~213s).
 HEARTBEAT_URL   = "http://127.0.0.1:8772/write"
 WS_QUERY_URL    = "http://127.0.0.1:8772/query"
 

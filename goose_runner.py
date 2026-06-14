@@ -443,6 +443,18 @@ def run_goose_task(directive_id, content, extra_env=None):
             "directive_id": directive_id
         }
 
+def _strip_code_fences(txt):
+    """Strip a leading ```lang fence + trailing ``` if the model wrapped the file."""
+    s = txt.strip()
+    if s.startswith("```"):
+        lines = s.split("\n")
+        lines = lines[1:]                          # drop opening ``` / ```python
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]                     # drop closing ```
+        s = "\n".join(lines)
+    return s
+
+
 def call_minimax_fallback(directive):
     """Goose subprocess failed/unavailable -> route directive through the
     ladder shim (escalation.py, all 16 rungs). One HTTP call; the shim does
@@ -462,6 +474,23 @@ def call_minimax_fallback(directive):
         }, timeout=600)
         if resp.status_code == 200:
             txt = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            # PERSIST the generated code to the declared output. goose-developer
+            # ghosted (no file on disk); the fallback historically returned the code
+            # as TEXT and discarded it -> output_confirmed() always False -> a
+            # GUARANTEED ghost for any directive goose itself couldn't build. Write it
+            # so the EXISTING output_confirmed + Tier-0 py_compile gate in the main loop
+            # can validate -- non-compiling/garbage output still re-ghosts (it is never
+            # auto-completed). declared_output() is None for edit-class tasks
+            # (wire_/rewire_/...), so those are skipped and keep trusting process success.
+            try:
+                _out = declared_output(directive)
+                _code = _strip_code_fences(txt) if txt else ""
+                if _out is not None and _code.strip():
+                    _out.parent.mkdir(parents=True, exist_ok=True)
+                    _out.write_text(_code, encoding="utf-8")
+                    log(f"[fallback] wrote {len(_code)} bytes -> {_out.name} (Tier-0 gate will validate)")
+            except Exception as _e:
+                log(f"[fallback] write failed: {type(_e).__name__}: {_e}")
             return {"success": bool(txt), "result": txt, "fallback": "ladder_shim", "directive_id": directive_id}
         return {"success": False, "error": f"shim {resp.status_code}: {resp.text[:200]}", "directive_id": directive_id}
     except Exception as e:

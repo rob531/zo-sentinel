@@ -9,7 +9,6 @@
 # Format: one repo-relative path per line. '#' comments and blanks ignored.
 #
 # Discovered 2026-05-29 (Python 3.11 py_compile):
-manual_override_api.py                 # SyntaxError: invalid syntax
 scanner_fingerprints_wiring.py         # SyntaxError: invalid character '：' (U+FF1A)
 snow_connector_wiring_v2.py            # f-string expression part cannot include a backslash (py<3.12)
 snow_webhook_inbound_wiring.py         # f-string expression part cannot include a backslash (py<3.12)

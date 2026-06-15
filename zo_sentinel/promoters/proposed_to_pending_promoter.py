@@ -34,7 +34,8 @@ PROMOTION RULES (per ROLLOUT.md Step 4b):
      generator.validate_directive). Invalid files are renamed to .rejected
      so they do not get reconsidered every cycle.
   4. Atomic move: os.replace(src, pending/<basename>). If the destination
-     already exists, log and skip (do NOT overwrite).
+     already exists AND its occupant is a stale terminal squatter, supersede
+     it; otherwise log and skip (do NOT overwrite a live/in-flight pending).
   5. Per-cycle cap: --max-per-cycle (default 10) so a deep backlog doesn't
      all land in pending at once.
 
@@ -279,6 +280,48 @@ def _rename_duplicate(src: Path) -> None:
         log.error("failed to rename duplicate %s: %s", src.name, e)
 
 
+def _pending_is_terminal(pending_file: Path, directives_root: Path) -> bool:
+    """True if the directive occupying a pending slot is already TERMINAL --
+    it has a <directive_id>.done.json or <directive_id>.failed.json sentinel,
+    so goose_runner will never rebuild it and it is a stale squatter that
+    permanently blocks any new proposal sharing its filename.
+
+    Reads the pending file to recover its OWN directive_id (NOT the gen_<hash>
+    filename -- sentinels are keyed by the bare directive_id, the classic
+    key-mismatch trap). Best-effort; returns False on any error so we NEVER
+    supersede a pending file we cannot prove is terminal (a non-terminal
+    pending file may be a legitimate in-flight/queued build -- do NOT clobber).
+    """
+    try:
+        d = json.loads(pending_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("cannot read pending %s for terminal check: %s", pending_file.name, e)
+        return False
+    if not isinstance(d, dict):
+        return False
+    did = str(d.get("directive_id") or d.get("id") or "").strip()
+    if not did:
+        return False
+    done = directives_root / f"{did}.done.json"
+    failed = directives_root / f"{did}.failed.json"
+    return done.exists() or failed.exists()
+
+
+def _archive_superseded(pending_file: Path) -> None:
+    """Move a stale terminal pending squatter aside (-> .superseded) so the
+    fresh proposal can take its slot, without losing the old file for forensics.
+    """
+    try:
+        target = pending_file.with_name(pending_file.name + ".superseded")
+        i = 1
+        while target.exists():
+            target = pending_file.with_name(f"{pending_file.name}.superseded.{i}")
+            i += 1
+        os.replace(pending_file, target)
+    except Exception as e:
+        log.error("failed to archive superseded %s: %s", pending_file.name, e)
+
+
 def _do_promote(
     src: Path,
     pending_dir: Path,
@@ -336,7 +379,31 @@ def _do_promote(
 
     dest = pending_dir / src.name
     if dest.exists():
-        log.warning("destination collision %s already in pending; skip", src.name)
+        # Terminal-supersede: if the pending file occupying this slot is
+        # already terminal (.done/.failed sentinel for ITS OWN directive_id),
+        # it is a stale squatter goose_runner will never reconsume -- it would
+        # otherwise block this (distinct, newer) proposal FOREVER (the 5-stuck
+        # collision deadlock observed 2026-06-14). Archive it and take the slot.
+        # A pending file with NO terminal sentinel may be a legitimate in-flight
+        # build, so we must NOT clobber it -- skip as before.
+        if directives_root is not None and _pending_is_terminal(dest, directives_root):
+            log.info("superseding stale terminal pending squatter %s", src.name)
+            if dry_run:
+                log.info("DRY-RUN would supersede %s -> %s", src.name, dest)
+                counters.promoted += 1
+                return "promoted"
+            _archive_superseded(dest)
+            try:
+                pending_dir.mkdir(parents=True, exist_ok=True)
+                os.replace(src, dest)
+            except Exception as e:
+                log.error("supersede os.replace failed for %s: %s", src.name, e)
+                counters.skipped += 1
+                return "move_failed"
+            log.info("PROMOTED (superseded stale squatter) %s -> %s", src.name, dest)
+            counters.promoted += 1
+            return "promoted"
+        log.warning("destination collision %s already in pending (non-terminal); skip", src.name)
         counters.skipped += 1
         return "collision"
 

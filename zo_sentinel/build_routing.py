@@ -139,13 +139,25 @@ def build_artifact_row(file: str, content_bytes: int, context_type: str,
     """The mesh_memory `build_artifact` row a live goose build emits. The base
     schema {file, built_at, phase, bytes, interface, task} matches what the
     ingestor reads; tier/model/backend are the new ladder provenance the
-    publisher surfaces as a `ladder:<tier>` label."""
+    publisher surfaces as a `ladder:<tier>` label.
+
+    `id` is supplied EXPLICITLY (epoch microseconds, BIGINT). write_service._write
+    does `INSERT OR IGNORE INTO mesh_memory` for these rows, which SILENTLY drops a
+    row whose service-assigned id collides or is NULL -- /write still returns
+    ok:True, no error. After the 2026-06-14 reboot the auto-id path started
+    colliding, so EVERY goose build_artifact was dropped (0 rows since 22:06Z) ->
+    the publisher went blind -> no PRs, even though builds kept succeeding and
+    landing in build_provenance. A caller-supplied unique id (well above the ~20k
+    sequential range, correct BIGINT type) makes the insert collision-proof
+    regardless of write_service's _next_id runtime state or _NO_AUTO_ID set."""
+    ts = built_at or datetime.now(timezone.utc).isoformat()
     return {
+        "id": int(datetime.now(timezone.utc).timestamp() * 1_000_000),
         "agent_id": BUILDER_AGENT_ID,
         "memory_type": BUILD_ARTIFACT_TYPE,
         "content": json.dumps({
             "file": file,
-            "built_at": built_at or datetime.now(timezone.utc).isoformat(),
+            "built_at": ts,
             "phase": phase,
             "bytes": content_bytes,
             "interface": context_type,

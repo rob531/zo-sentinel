@@ -57,13 +57,15 @@ GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 IDLE_GATE       = os.environ.get("DGG_IDLE_GATE", "1") == "1"   # batch-when-idle (herd-safe)
 IDLE_MIN        = int(os.environ.get("DGG_IDLE_MIN", 8))        # build side quiet >= N min = idle
-CTX_MODULE_BUDGET = 52000   # byte ceiling for the WHOLE ctx incl. the module list, under the
-                            # 60000 json.dumps cap. NOTE: the base ctx (schema+layer1 knowledge
-                            # maps+failures) is already ~38KB, so an earlier 16000 ceiling was
-                            # SMALLER than the base -> already_built_modules trimmed to 0 (dedup
-                            # signal silently empty). 52000 leaves ~14KB for ~400 modules ON TOP of
-                            # layer1 (total ~52KB < 60KB cap). The architect completes well within
-                            # GOOSE_TIMEOUT at this size (a 38KB ctx cycle finished in ~213s).
+LAYER1_FIELD_CAP = int(os.environ.get("DGG_LAYER1_FIELD_CAP", 4000))  # per-field char cap on the
+                            # layer1 knowledge maps. The FULL maps made the base ctx ~38KB, which at
+                            # 52KB total (with the module list) made the slow ladder architect TIME
+                            # OUT on ~half its 480s cycles. Capping each of the 4 fields to ~4KB
+                            # keeps the highest-signal head, shrinks base ctx to ~16-20KB.
+CTX_MODULE_BUDGET = 30000   # byte ceiling for the WHOLE ctx incl. the module list, under the 60000
+                            # json.dumps cap. With layer1 capped, base ctx ~20KB; 30000 leaves ~10KB
+                            # for ~300 already_built_modules. Total ctx ~30KB -> architect completes
+                            # reliably (the prior 38KB cycle finished rc=0 in ~213s; 52KB was flaky).
 HEARTBEAT_URL   = "http://127.0.0.1:8772/write"
 WS_QUERY_URL    = "http://127.0.0.1:8772/query"
 
@@ -212,14 +214,23 @@ def _existing_modules() -> list:
 
 
 def _builder_idle() -> bool:
-    """True when the BUILD side is quiet -- no DIRECTIVE_* event in the last
-    IDLE_MIN minutes. The generator is a BATCH process: fire only when goose is idle
-    so the graph read + goose subprocess never contend with an active build (the
-    lock-storm / boot-herd trap we are avoiding). Bus-routed, best-effort; returns
-    True on any error so a check fault never STARVES generation -- strictly no
-    regression vs the prior always-fire behaviour."""
-    sql = ("SELECT MAX(created_at) AS last_at FROM mesh_events WHERE event_type IN "
-           "('DIRECTIVE_COMPLETE','DIRECTIVE_GHOST_RETRY','DIRECTIVE_GHOST_FAILED')")
+    """True when the BUILD side is quiet -- no NEW build_artifact emitted in the
+    last IDLE_MIN minutes.
+
+    Keys on build_artifact EMISSION (mesh_memory) NOT raw DIRECTIVE_* events: the
+    edit-class wire_*/integrate_* directives emit DIRECTIVE_COMPLETE but produce NO
+    build_artifact by design (declared_output is None). Keying on DIRECTIVE_* (the
+    prior behaviour) let that constant edit churn read as "builder active" every
+    cycle and DEFER generation indefinitely -> novel CREATE proposals starved
+    (verified live 2026-06-14). A build_artifact row means a real CREATE build just
+    landed, so defer for IDLE_MIN to keep the graph read + goose subprocess from
+    contending with the active build chain (the anti-herd intent is preserved).
+
+    The generator is a BATCH process. Bus-routed, best-effort; returns True (idle)
+    on any error so a check fault never STARVES generation -- strictly no regression
+    vs the prior fail-open behaviour."""
+    sql = ("SELECT MAX(created_at) AS last_at FROM mesh_memory "
+           "WHERE memory_type = 'build_artifact'")
     try:
         r = requests.post(WS_QUERY_URL, json={"sql": sql}, timeout=8)
         if r.status_code == 200:
@@ -235,10 +246,19 @@ def _builder_idle() -> bool:
     return True
 
 
+def _cap_layer1(l1):
+    """Cap each layer1 knowledge-map field to LAYER1_FIELD_CAP chars so the base
+    ctx stays small enough for the slow ladder architect to finish within the goose
+    timeout. Best-effort: non-dict / non-str values pass through unchanged."""
+    if not isinstance(l1, dict):
+        return l1
+    return {k: (v[:LAYER1_FIELD_CAP] if isinstance(v, str) else v) for k, v in l1.items()}
+
+
 def build_context() -> dict:
     ctx = {
         "schema":            _try_load_schema(),
-        "layer1":            _try_import_layer1(),
+        "layer1":            _cap_layer1(_try_import_layer1()),
         "recent_failures":   _query_recent_failures(),
         "proposed_depth":    _count_proposed(),
         "generated_at":      _now_iso(),
@@ -292,7 +312,7 @@ def run_goose_cycle() -> dict:
     # Batch-when-idle: only generate when the build side is quiet, so the graph
     # read + goose subprocess never contend with an active build. Herd-safe.
     if IDLE_GATE and not _builder_idle():
-        log.info("builder active (DIRECTIVE_* within %dm); deferring generation", IDLE_MIN)
+        log.info("builder active (build_artifact within %dm); deferring generation", IDLE_MIN)
         return {"status": "skipped", "reason": "builder_busy"}
 
     ctx = build_context()

@@ -1,0 +1,46 @@
+name: auto-merge
+
+# Owner-directed: enable GitHub auto-merge (squash) on autonomous-build PRs once
+# ALL required checks pass (capmap-check, static-analysis, smoke-ladder, frontend,
+# pytest -- defined in branch protection). This overrides the earlier
+# no-auto-merge stance, per explicit owner instruction.
+#
+# HARD GUARD (training-convergence freeze): a PR that touches the scoring /
+# enrichment modules is NEVER auto-merged -- it is labelled `freeze-hold` and
+# left for manual review until the LLM-risk cutover. Fail-closed: if the changed
+# file list can't be read, auto-merge is skipped.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    # Only machine-built PRs, and not drafts.
+    if: contains(github.event.pull_request.labels.*.name, 'autonomous-build') && github.event.pull_request.draft == false
+    steps:
+      - name: Convergence-freeze guard + enable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if ! files=$(gh pr view "$PR" -R "$REPO" --json files -q '.files[].path'); then
+            echo "::warning::cannot read changed files for #$PR -> skip auto-merge (fail-closed)"
+            exit 0
+          fi
+          echo "changed files:"; echo "$files"
+          if echo "$files" | grep -Eiq 'trust_synthesiser|risk_ranker|enrichment|signal_analyser|mcp_llm_'; then
+            echo "::notice::#$PR touches FROZEN scoring/enrichment paths -> NOT auto-merging (convergence freeze)"
+            gh pr edit "$PR" -R "$REPO" --add-label freeze-hold || true
+            gh pr merge "$PR" -R "$REPO" --disable-auto || true
+            exit 0
+          fi
+          echo "::notice::enabling squash auto-merge for #$PR"
+          gh pr merge "$PR" -R "$REPO" --auto --squash

@@ -103,6 +103,26 @@ heal 'zo_sentinel.ingestor run' artifact_ingestor.log \
 heal 'zo_sentinel.ingestor govern' activation_governor.log \
     "nohup env PYTHONPATH=$SENTINEL bash -c 'cd $SENTINEL && while true; do python3 -m zo_sentinel.ingestor govern; sleep 600; done' >> $LOGS/activation_governor.log 2>&1 &"
 
+# --- 2b. one-shot promoter restart (deploy merged code onto the running loop) --
+# proposed_to_pending_promoter is a healthy long-running SINGLETON; nothing in the
+# recovery allowlist restarts a HEALTHY promoter (reload_daemon excludes it;
+# watchdog.sh only acts on pgrep count==0 or >1). So a merged code change to the
+# promoter (e.g. #187's terminal-collision archival, which stops stuck ghosts from
+# starving the per-cycle cap) cannot reach the already-running process. Drop a
+# one-shot sentinel (touch /home/workspace/logs/promoter_RESTART) and this cycles
+# the promoter onto the current on-disk code, then deletes the sentinel so it
+# fires exactly once. Same pgrep + relaunch idiom watchdog.sh uses for this daemon
+# (the watchdog's own _daemon check ran earlier this tick, so no double-launch).
+if [ -f "$LOGS/promoter_RESTART" ]; then
+    log "promoter_RESTART sentinel present -- cycling proposed_to_pending_promoter onto current code"
+    rm -f "$LOGS/promoter_RESTART"
+    pkill -f 'python.*proposed_to_pending_promoter' 2>/dev/null || true
+    sleep 2
+    nohup bash -c "cd $SENTINEL && exec python3 -m zo_sentinel.promoters.proposed_to_pending_promoter" \
+        >> "$LOGS/proposed_to_pending_promoter.log" 2>&1 &
+    log "promoter relaunched (pid $!)"
+fi
+
 # --- 3. ensure the ladder_shim is KEYED (re-key if it booted bare) ---------
 # After a reboot go.sh starts ladder_shim BARE -> key_hydrator times out ->
 # RcGeminiAPIKey unresolved AND the rung-0 MiniMax builder key is absent -> every

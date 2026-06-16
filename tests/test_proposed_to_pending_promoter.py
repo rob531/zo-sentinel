@@ -621,8 +621,11 @@ def test_missing_directive_id_falls_through_to_normal_promotion(tmp_path):
     assert (pending / "gen_eeee5555.json").exists()
 
 
-def test_duplicate_rename_collision_bumps_suffix(tmp_path):
-    """If a .duplicate file already exists, bump suffix to avoid overwrite."""
+def test_duplicate_rename_is_bounded_no_suffix_bump(tmp_path):
+    """A re-archived duplicate CLOBBERS the single .duplicate (bounded, no suffix
+    bump). The architect re-proposes terminal directives every cycle, so
+    suffix-bumping would flood proposed/ with .duplicate.1/.2/... -- PR #187 made
+    _rename_duplicate clobber to exactly one .duplicate per basename."""
     directives_root = tmp_path / "directives"
     proposed = directives_root / "proposed"
     pending = directives_root / "pending"
@@ -650,5 +653,6 @@ def test_duplicate_rename_collision_bumps_suffix(tmp_path):
 
     assert counts["skipped"] == 1
     assert (proposed / "gen_ffff6666.json.duplicate").exists()
-    assert (proposed / "gen_ffff6666.json.duplicate.1").exists()
+    # bounded: clobber to a single .duplicate, never bump a .1 suffix (PR #187)
+    assert not (proposed / "gen_ffff6666.json.duplicate.1").exists()
     assert not (proposed / "gen_ffff6666.json").exists()

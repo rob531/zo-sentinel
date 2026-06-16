@@ -4,6 +4,7 @@ snow_approval_integration.py
 Phase 9: Wire snow_connector.py into approval_workflow daemon.
 """
 
+import os
 import time
 import hmac
 import hashlib
@@ -16,9 +17,9 @@ from pydantic import BaseModel
 
 # Service configuration
 PORT = 8780
-SNOW_INSTANCE = "dev177699.service-now.com"
-SNOW_CLIENT_ID = "f8c3Za3eG5fF4gLH1jN6oP2qR8sT3uV0"
-SNOW_CLIENT_SECRET = "xK9mP2nL5qR8sT3uV0wX1yZ4aB6cD7eF"
+SNOW_INSTANCE = os.environ.get("SNOW_INSTANCE", "")
+SNOW_CLIENT_ID = os.environ.get("SNOW_CLIENT_ID", "")
+SNOW_CLIENT_SECRET = os.environ.get("SNOW_CLIENT_SECRET", "")
 SNOW_TOKEN_URL = f"https://{SNOW_INSTANCE}/oauth_token.do"
 SNOW_API_BASE = f"https://{SNOW_INSTANCE}/api/now/table"
 
@@ -94,7 +95,7 @@ def ensure_valid_token() -> str:
     data = {
         "grant_type": "client_credentials",
         "client_id": SNOW_CLIENT_ID,
-        "client_secret": SNOW_CLIENT_CLIENT_SECRET,
+        "client_secret": SNOW_CLIENT_SECRET,
         "scope": "incident.write"
     }
     

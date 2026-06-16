@@ -1,0 +1,52 @@
+name: integration
+
+# Real-DB integration tier (vs the hermetic dict-mock smoke-ladder).
+# Stands up tests/integration/it_write_service.py -- the write_service HTTP
+# contract over a REAL ephemeral DuckDB loaded from schemas/duckdb_schema.json --
+# and runs payload/query round-trip tests through it (the production access path).
+# Catches real DB-path bugs the dict-mock can't (e.g. the #174 write-but-no-land).
+#
+# NOT (yet) a required check in branch protection -- it runs + reports while it
+# beds in; promote it to required once stable so auto-merge gates on it too.
+#
+# DuckDB today. When the app migrates to Postgres
+# (docs/POSTGRES_APP_MIGRATION_SCOPE.md) this job gains a `services: postgres:16`
+# container and sets IT_DB_BACKEND=postgres -- the tests run unchanged.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  db-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt
+      - name: Start real-DuckDB write_service
+        env:
+          IT_WS_PORT: "8772"
+        run: |
+          nohup python tests/integration/it_write_service.py > /tmp/it_ws.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8772/health >/dev/null 2>&1 && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8772/health || { echo "service failed to start"; cat /tmp/it_ws.log; exit 1; }
+          echo "write_service up: $(curl -s http://127.0.0.1:8772/health)"
+      - name: Run DB integration tests
+        env:
+          ZO_WRITE_SERVICE: "http://127.0.0.1:8772"
+        run: python -m pytest tests/integration -v
+      - name: Service log (on failure)
+        if: failure()
+        run: cat /tmp/it_ws.log || true

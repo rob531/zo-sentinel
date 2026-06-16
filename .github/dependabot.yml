@@ -1,0 +1,22 @@
+# Dependabot configuration — https://docs.github.com/code-security/dependabot
+# Free on public repos. Alerts + security/version updates run on GitHub's
+# infrastructure (not this repo's Actions minutes), so they function regardless
+# of Actions billing state. (Version-update PRs that get opened will, however,
+# only run CI once Actions billing is restored.)
+version: 2
+updates:
+  # Python dependencies. The repo's only pip manifest is the CI requirements
+  # file; point Dependabot at it so the test/gate toolchain stays patched.
+  - package-ecosystem: "pip"
+    directory: "/tests/ci"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Keep the GitHub Actions used by the workflows (checkout, setup-python,
+  # upload-artifact, …) current and security-patched.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

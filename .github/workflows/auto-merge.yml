@@ -1,14 +1,13 @@
 name: auto-merge
 
-# Owner-directed: enable GitHub auto-merge (squash) on autonomous-build PRs once
-# ALL required checks pass (capmap-check, static-analysis, smoke-ladder, frontend,
-# pytest -- defined in branch protection). This overrides the earlier
-# no-auto-merge stance, per explicit owner instruction.
-#
-# HARD GUARD (training-convergence freeze): a PR that touches the scoring /
-# enrichment modules is NEVER auto-merged -- it is labelled `freeze-hold` and
-# left for manual review until the LLM-risk cutover. Fail-closed: if the changed
-# file list can't be read, auto-merge is skipped.
+# Owner-directed auto-merge:
+#   (A) autonomous-build PRs -> squash auto-merge once all required checks pass,
+#       EXCEPT scoring/enrichment paths (training-convergence freeze -> labelled
+#       freeze-hold, left for manual review until the LLM-risk cutover).
+#   (B) Dependabot PRs -> squash auto-merge patch + minor updates once green;
+#       MAJOR bumps fall through to manual review (breaking-change risk).
+# Required checks are enforced by branch protection (capmap-check, static-analysis,
+# smoke-ladder, frontend, pytest); enforce_admins=false keeps a manual escape hatch.
 
 on:
   pull_request_target:
@@ -19,9 +18,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  enable:
+  autonomous-build:
     runs-on: ubuntu-latest
-    # Only machine-built PRs, and not drafts.
     if: contains(github.event.pull_request.labels.*.name, 'autonomous-build') && github.event.pull_request.draft == false
     steps:
       - name: Convergence-freeze guard + enable auto-merge
@@ -32,8 +30,7 @@ jobs:
         run: |
           set -uo pipefail
           if ! files=$(gh pr view "$PR" -R "$REPO" --json files -q '.files[].path'); then
-            echo "::warning::cannot read changed files for #$PR -> skip auto-merge (fail-closed)"
-            exit 0
+            echo "::warning::cannot read changed files for #$PR -> skip auto-merge (fail-closed)"; exit 0
           fi
           echo "changed files:"; echo "$files"
           if echo "$files" | grep -Eiq 'trust_synthesiser|risk_ranker|enrichment|signal_analyser|mcp_llm_'; then
@@ -44,3 +41,31 @@ jobs:
           fi
           echo "::notice::enabling squash auto-merge for #$PR"
           gh pr merge "$PR" -R "$REPO" --auto --squash
+
+  dependabot:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.draft == false
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ github.token }}
+      - name: Auto-merge patch + minor (major held)
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "::notice::Dependabot ${{ steps.meta.outputs.update-type }} for #$PR -> squash auto-merge"
+          gh pr merge "$PR" -R "$REPO" --auto --squash
+      - name: Hold majors for review
+        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "::notice::Dependabot MAJOR update for #$PR -> held for manual review"
+          gh pr edit "$PR" -R "$REPO" --add-label major-hold || true

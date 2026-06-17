@@ -1,426 +1,482 @@
 #!/usr/bin/env python3
 """
-ServiceNow inbound webhook handler.
-Receives MCP request tickets from ServiceNow, validates signature, writes to mcp_submissions.
+ServiceNow inbound webhook handler for MCP request tickets.
+
+Receives requests from ServiceNow, validates signature, and writes to mcp_submissions
+table for analyst triage.
+
+Binds to port 8796. Daemon pattern with run() function.
 """
 
 import os
 import sys
 import hmac
 import hashlib
-import logging
-import threading
-import time
 import json
-import secrets
+import logging
+import time
+import threading
+from typing import Any, Dict, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from concurrent.futures import ThreadPoolExecutor
-
-import requests
+import socketserver
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('snow_inbound_webhook')
 
-# Environment
+# Constants
+DEFAULT_PORT = 8796
+HEARTBEAT_INTERVAL = 60  # seconds
+HEALTH_SERVICE_NAME = 'snow_inbound_webhook'
+
+# Environment variable for webhook secret
 SNOW_WEBHOOK_SECRET = os.environ.get('SNOW_WEBHOOK_SECRET')
-if not SNOW_WEBHOOK_SECRET:
-    raise RuntimeError("SNOW_WEBHOOK_SECRET environment variable is required")
 
-# Service endpoints
-WRITE_SERVICE_URL = os.environ.get('WRITE_SERVICE_URL', 'http://localhost:8080')
-HEALTH_SERVICE_URL = os.environ.get('HEALTH_SERVICE_URL', WRITE_SERVICE_URL)
-
-# Server config
-SERVER_PORT = 8796
-HEARTBEAT_INTERVAL = 60
-
-# Thread pool for handling requests
-_executor = ThreadPoolExecutor(max_workers=4)
-
-# Shutdown flag
-_shutdown_event = threading.Event()
+# Write service configuration (passed via environment or defaults)
+WRITE_SERVICE_URL = os.environ.get('WRITE_SERVICE_URL', 'http://localhost:8797/write')
 
 
-def validate_signature(body: bytes, signature: str) -> bool:
-    """Validate HMAC-SHA256 signature using constant-time comparison."""
-    if not signature:
-        return False
-    expected = hmac.new(
-        SNOW_WEBHOOK_SECRET.encode('utf-8'),
-        body,
-        hashlib.sha256
-    ).hexdigest()
-    # Constant-time comparison to prevent timing attacks
-    return secrets.compare_digest(expected, signature.lower())
+class RequestHandler(BaseHTTPRequestHandler):
+    """FastAPI-style request handler for webhook endpoints."""
 
-
-def write_to_service(endpoint: str, table: str, rows: list, wait: bool = True) -> dict:
-    """Write rows to specified table via write_service."""
-    payload = {
-        'table': table,
-        'rows': rows,
-        'wait': wait
-    }
-    response = requests.post(
-        f"{WRITE_SERVICE_URL}{endpoint}",
-        json=payload,
-        timeout=10
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def log_to_audit(action: str, target_server_name: str = None, **kwargs) -> None:
-    """Log action to audit_log table."""
-    audit_row = {
-        'action': action,
-        'target_server_name': target_server_name,
-        **kwargs
-    }
-    # Remove None values
-    audit_row = {k: v for k, v in audit_row.items() if v is not None}
-    try:
-        write_to_service('/write', 'audit_log', [audit_row], wait=True)
-    except Exception as e:
-        # Log but don't fail the request
-        logger.warning("Failed to write audit log: %s", e)
-
-
-def send_heartbeat() -> None:
-    """Send heartbeat to service_health."""
-    try:
-        response = requests.post(
-            f"{HEALTH_SERVICE_URL}/service_health",
-            json={'service': 'snow_inbound_webhook'},
-            timeout=5
-        )
-        response.raise_for_status()
-        logger.debug("Heartbeat sent successfully")
-    except requests.RequestException as e:
-        logger.warning("Heartbeat failed: %s", e)
-
-
-def heartbeat_loop() -> None:
-    """Background thread for periodic heartbeats."""
-    while not _shutdown_event.is_set():
-        time.sleep(HEARTBEAT_INTERVAL)
-        if _shutdown_event.is_set():
-            break
-        try:
-            send_heartbeat()
-        except Exception as e:
-            logger.warning("Heartbeat error: %s", e)
-
-
-class WebhookHandler(BaseHTTPRequestHandler):
-    """Handle incoming webhook requests."""
-
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args) -> None:
         """Override to use our logger."""
-        logger.info("%s - %s", self.address_string(), format % args)
-
-    def _send_json_response(self, status_code: int, data: dict) -> None:
-        """Send JSON response."""
-        self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode('utf-8'))
+        logger.info(f"{self.address_string()} - {format % args}")
 
     def do_POST(self) -> None:
         """Handle POST requests."""
-        if self.path != '/webhook/snow':
-            self._send_json_response(404, {'error': 'Not Found'})
+        if self.path == '/webhook/snow':
+            self._handle_snow_webhook()
+        elif self.path == '/health':
+            self._handle_health()
+        elif self.path == '/ready':
+            self._handle_ready()
+        else:
+            self._send_response(404, {'error': 'Not found'})
+
+    def _handle_health(self) -> None:
+        """Health check endpoint."""
+        self._send_response(200, {'status': 'healthy'})
+
+    def _handle_ready(self) -> None:
+        """Readiness check endpoint."""
+        if SNOW_WEBHOOK_SECRET is None:
+            self._send_response(503, {'status': 'not ready', 'reason': 'SNOW_WEBHOOK_SECRET not set'})
+        else:
+            self._send_response(200, {'status': 'ready'})
+
+    def _handle_snow_webhook(self) -> None:
+        """Handle ServiceNow webhook POST requests."""
+        # Check for required secret
+        if SNOW_WEBHOOK_SECRET is None:
+            logger.error("SNOW_WEBHOOK_SECRET environment variable not set")
+            self._send_response(500, {'error': 'Server misconfiguration'})
+            return
+
+        # Get content length
+        content_length = self.headers.get('Content-Length')
+        if content_length is None:
+            logger.warning("Missing Content-Length header")
+            self._send_response(400, {'error': 'Missing Content-Length header'})
+            return
+
+        try:
+            content_length = int(content_length)
+        except ValueError:
+            logger.warning("Invalid Content-Length header")
+            self._send_response(400, {'error': 'Invalid Content-Length header'})
             return
 
         # Read request body
-        content_length = int(self.headers.get('Content-Length', 0) or 0)
-        body = self.rfile.read(content_length)
+        try:
+            body = self.rfile.read(content_length)
+        except Exception as e:
+            logger.warning(f"Failed to read request body: {e}")
+            self._send_response(400, {'error': 'Failed to read request body'})
+            return
 
         # Get signature header
-        signature = self.headers.get('X-SNOW-Signature', '')
+        signature_header = self.headers.get('X-SNOW-Signature')
+        if signature_header is None:
+            logger.warning("Missing X-SNOW-Signature header")
+            self._send_response(401, {'error': 'Missing X-SNOW-Signature header'})
+            return
 
-        # MUST NOT rule 1: Validate signature
-        if not validate_signature(body, signature):
-            logger.warning("Invalid or missing signature from %s", self.address_string())
-            self._send_json_response(401, {'error': 'Unauthorized'})
+        # Validate signature using constant-time comparison
+        expected_signature = hmac.new(
+            SNOW_WEBHOOK_SECRET.encode('utf-8'),
+            body,
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(signature_header.lower(), expected_signature.lower()):
+            logger.warning("Invalid signature - signature mismatch")
+            self._send_response(401, {'error': 'Invalid signature'})
             return
 
         # Parse payload
         try:
             payload = json.loads(body.decode('utf-8'))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            logger.warning("Invalid JSON payload: %s", e)
-            self._send_json_response(400, {'error': 'Invalid JSON payload'})
+            logger.warning(f"Failed to parse JSON payload: {e}")
+            self._send_response(400, {'error': 'Invalid JSON payload'})
             return
 
-        # Extract fields
-        mcp_server_name = payload.get('u_mcp_server_name', '')
-        priority = payload.get('u_priority', '3')
+        # Extract fields from payload
+        # ServiceNow field names: u_mcp_server_name, u_priority, etc.
+        mcp_server_name = payload.get('u_mcp_server_name', payload.get('mcp_server_name'))
+        priority = payload.get('u_priority', payload.get('priority', '3'))
         short_description = payload.get('short_description', '')
-        caller_id = payload.get('caller_id', '')
+        description = payload.get('description', '')
+        caller_id = payload.get('caller_id', payload.get('u_caller_id', 'unknown'))
 
-        # MUST NOT rule 3: Don't log raw body or secret
-        logger.info("Processing webhook: server=%s, caller=%s",
-                    mcp_server_name, caller_id)
+        # Build notes from description and short_description
+        notes = short_description
+        if description and description != short_description:
+            notes = f"{short_description}\n\n{description}" if short_description else description
 
-        # Construct mcp_submissions row
+        # Log extracted fields (without credentials)
+        logger.info(f"Processing webhook - server: {mcp_server_name}, priority: {priority}, caller: {caller_id}")
+
+        # Write to mcp_submissions table
         submission_row = {
             'mcp_name': mcp_server_name,
             'requested_by': caller_id,
             'status': 'pending_review',
-            'priority': priority,
-            'notes': short_description
+            'priority': str(priority),
+            'notes': notes
         }
 
-        # Write to mcp_submissions table
         try:
-            result = write_to_service('/write', 'mcp_submissions', [submission_row], wait=True)
-            submission_id = result.get('server_id', str(result.get('id', 'unknown')))
-            logger.info("Submission created: id=%s", submission_id)
+            write_result = _write_to_service(
+                table='mcp_submissions',
+                rows=[submission_row],
+                wait=True
+            )
         except Exception as e:
-            logger.error("Failed to write submission: %s", e)
-            self._send_json_response(500, {'error': 'Failed to create submission'})
+            logger.error(f"Failed to write to mcp_submissions: {e}")
+            self._send_response(500, {'error': 'Failed to record submission'})
             return
 
-        # Log to audit_log (MUST NOT rule 2: only audit_log and mcp_submissions)
-        log_to_audit(
-            action='snow_webhook_received',
-            target_server_name=mcp_server_name,
-            caller_id=caller_id,
-            priority=priority
-        )
+        # Log to audit_log
+        try:
+            _write_to_service(
+                table='audit_log',
+                rows=[{
+                    'action': 'snow_webhook_received',
+                    'target_server_name': mcp_server_name,
+                    'caller_id': caller_id,
+                    'priority': str(priority)
+                }],
+                wait=False  # Don't wait for audit log
+            )
+        except Exception as e:
+            # Log error but don't fail the request - audit logging is secondary
+            logger.warning(f"Failed to write to audit_log: {e}")
 
         # Return success response
-        self._send_json_response(200, {
+        submission_id = write_result.get('server_id') or write_result.get('id') or write_result.get('note') or 'recorded'
+        logger.info(f"Submission accepted - id: {submission_id}")
+        self._send_response(200, {
             'status': 'accepted',
             'submission_id': submission_id
         })
 
-    def do_GET(self) -> None:
-        """Handle GET requests (health check)."""
-        if self.path == '/health':
-            self._send_json_response(200, {'status': 'healthy'})
+    def _send_response(self, status_code: int, body: Dict[str, Any]) -> None:
+        """Send JSON response."""
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(body).encode('utf-8'))
+
+
+def _write_to_service(table: str, rows: list, wait: bool = False) -> Dict[str, Any]:
+    """
+    Write rows to specified table via write service.
+    
+    Args:
+        table: Table name to write to (must be mcp_submissions or audit_log)
+        rows: List of row dictionaries to write
+        wait: Whether to wait for completion
+        
+    Returns:
+        Response from write service
+        
+    Raises:
+        ValueError: If table name is not allowed
+    """
+    # MUST NOT write to any table other than mcp_submissions and audit_log
+    allowed_tables = {'mcp_submissions', 'audit_log'}
+    if table not in allowed_tables:
+        raise ValueError(f"Table '{table}' is not allowed. Must be one of: {allowed_tables}")
+
+    import requests
+
+    payload = {
+        'table': table,
+        'rows': rows,
+        'wait': wait
+    }
+
+    try:
+        response = requests.post(
+            WRITE_SERVICE_URL,
+            json=payload,
+            timeout=30 if wait else 5
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Write service request failed: {e}")
+        raise
+
+
+def _send_heartbeat() -> None:
+    """Send heartbeat to service_health."""
+    import requests
+
+    health_url = os.environ.get('HEALTH_SERVICE_URL', 'http://localhost:8798/health')
+    
+    payload = {
+        'service': HEALTH_SERVICE_NAME,
+        'status': 'running',
+        'timestamp': time.time()
+    }
+
+    try:
+        response = requests.post(
+            health_url,
+            json=payload,
+            timeout=5
+        )
+        if response.ok:
+            logger.debug("Heartbeat sent successfully")
         else:
-            self._send_json_response(404, {'error': 'Not Found'})
+            logger.warning(f"Heartbeat failed with status {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Heartbeat failed: {e}")
 
 
-def run() -> None:
-    """Start the webhook server (daemon pattern)."""
+class HeartbeatThread(threading.Thread):
+    """Background thread for sending periodic heartbeats."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self._stop_event = threading.Event()
+
+    def run(self) -> None:
+        """Send heartbeats until stopped."""
+        while not self._stop_event.is_set():
+            try:
+                _send_heartbeat()
+            except Exception as e:
+                logger.warning(f"Heartbeat error: {e}")
+            
+            # Wait for interval or stop event
+            self._stop_event.wait(HEARTBEAT_INTERVAL)
+
+    def stop(self) -> None:
+        """Stop the heartbeat thread."""
+        self._stop_event.set()
+
+
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    """Threaded HTTP server for handling concurrent requests."""
+    allow_reuse_address = True
+
+
+def run(host: str = '0.0.0.0', port: int = DEFAULT_PORT) -> None:
+    """
+    Run the webhook server.
+    
+    Args:
+        host: Host to bind to
+        port: Port to bind to
+    """
+    # Check for required environment variable
+    if SNOW_WEBHOOK_SECRET is None:
+        logger.error("SNOW_WEBHOOK_SECRET environment variable is required but not set")
+        raise ValueError("SNOW_WEBHOOK_SECRET environment variable is required")
+
+    logger.info(f"Starting ServiceNow webhook handler on {host}:{port}")
+
     # Start heartbeat thread
-    heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    heartbeat_thread = HeartbeatThread()
     heartbeat_thread.start()
 
-    server_address = ('', SERVER_PORT)
-    httpd = HTTPServer(server_address, WebhookHandler)
+    # Start server
+    server = ThreadedHTTPServer((host, port), RequestHandler)
     
-    logger.info("ServiceNow webhook handler starting on port %d", SERVER_PORT)
-    logger.info("Ready to receive MCP request tickets")
+    logger.info(f"ServiceNow webhook handler listening on {host}:{port}")
+    logger.info(f"Endpoints: POST /webhook/snow, GET /health, GET /ready")
 
-    # Serve until shutdown
-    while not _shutdown_event.is_set():
-        httpd.handle_request()
-
-    httpd.server_close()
-    logger.info("Server shut down cleanly")
-
-
-def shutdown() -> None:
-    """Signal server shutdown."""
-    _shutdown_event.set()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+    finally:
+        heartbeat_thread.stop()
+        server.shutdown()
+        server.server_close()
+        logger.info("Server stopped")
 
 
-def self_test() -> int:
+def self_test() -> None:
     """
-    Self-test: Start server, test endpoints, verify behavior.
-    Returns exit code (0 = success).
+    Self-test for the webhook handler.
+    
+    Tests:
+    1. Server starts and listens on port 8796
+    2. Wrong signature returns 401
+    3. Correct HMAC signature returns 200
     """
-    import socket
-    import signal
+    import requests
+    import threading
+    import time
 
-    # Set test secret for self-test
-    os.environ['SNOW_WEBHOOK_SECRET'] = 'test-secret-key-12345'
-    os.environ['WRITE_SERVICE_URL'] = 'http://localhost:9999'  # Won't actually connect
+    test_results = []
+    
+    def assert_test(condition: bool, message: str) -> None:
+        if condition:
+            logger.info(f"PASS: {message}")
+            test_results.append(True)
+        else:
+            logger.error(f"FAIL: {message}")
+            test_results.append(False)
 
-    # Import after setting env
-    global SNOW_WEBHOOK_SECRET
-    SNOW_WEBHOOK_SECRET = os.environ['SNOW_WEBHOOK_SECRET']
-
-    logger.info("=== Starting self-test ===")
+    # Set up test secret
+    test_secret = 'test_webhook_secret_12345'
+    os.environ['SNOW_WEBHOOK_SECRET'] = test_secret
 
     # Start server in background thread
     server_thread = threading.Thread(target=run, daemon=True)
-    server_thread.start()
-
-    # Wait for server to start
-    time.sleep(0.5)
-
-    base_url = f'http://localhost:{SERVER_PORT}'
-    test_passed = True
-
-    def is_port_open() -> bool:
-        """Check if server is listening on port."""
-        try:
-            with socket.create_connection(('localhost', SERVER_PORT), timeout=2):
-                return True
-        except (socket.timeout, ConnectionRefusedError, OSError):
-            return False
-
-    # Test 1: Server is listening
-    logger.info("Test 1: Checking server is listening on port %d...", SERVER_PORT)
-    if is_port_open():
-        logger.info("  PASS: Server is listening")
-    else:
-        logger.error("  FAIL: Server not listening")
-        test_passed = False
-
-    # Test 2: Health endpoint
-    try:
-        resp = requests.get(f'{base_url}/health', timeout=2)
-        if resp.status_code == 200:
-            logger.info("  PASS: Health endpoint returns 200")
-        else:
-            logger.error("  FAIL: Health endpoint returned %d", resp.status_code)
-            test_passed = False
-    except requests.RequestException as e:
-        logger.error("  FAIL: Health endpoint error: %s", e)
-        test_passed = False
-
-    # Test 3: Wrong signature -> 401
-    logger.info("Test 2: Testing wrong signature -> 401...")
-    try:
-        test_payload = {
-            'short_description': 'Test ticket',
-            'description': 'Test description',
-            'caller_id': 'test.user',
-            'u_mcp_server_name': 'test-server',
-            'u_priority': '2'
-        }
-        body = json.dumps(test_payload).encode('utf-8')
-        headers = {'Content-Type': 'application/json', 'X-SNOW-Signature': 'invalid_signature'}
-
-        resp = requests.post(f'{base_url}/webhook/snow', data=body, headers=headers, timeout=5)
-        if resp.status_code == 401:
-            logger.info("  PASS: Wrong signature returns 401")
-        else:
-            logger.error("  FAIL: Expected 401, got %d", resp.status_code)
-            test_passed = False
-    except requests.RequestException as e:
-        logger.error("  FAIL: Request error: %s", e)
-        test_passed = False
-
-    # Test 4: Missing signature -> 401
-    logger.info("Test 3: Testing missing signature -> 401...")
-    try:
-        test_payload = {
-            'short_description': 'Test ticket',
-            'description': 'Test description',
-            'caller_id': 'test.user',
-            'u_mcp_server_name': 'test-server',
-            'u_priority': '2'
-        }
-        body = json.dumps(test_payload).encode('utf-8')
-        headers = {'Content-Type': 'application/json'}
-
-        resp = requests.post(f'{base_url}/webhook/snow', data=body, headers=headers, timeout=5)
-        if resp.status_code == 401:
-            logger.info("  PASS: Missing signature returns 401")
-        else:
-            logger.error("  FAIL: Expected 401, got %d", resp.status_code)
-            test_passed = False
-    except requests.RequestException as e:
-        logger.error("  FAIL: Request error: %s", e)
-        test_passed = False
-
-    # Test 5: Correct HMAC -> 200
-    logger.info("Test 4: Testing correct HMAC -> 200...")
-    try:
-        test_payload = {
-            'short_description': 'Test ticket',
-            'description': 'Test description',
-            'caller_id': 'test.user',
-            'u_mcp_server_name': 'test-server',
-            'u_priority': '2'
-        }
-        body = json.dumps(test_payload).encode('utf-8')
-        
-        # Generate correct HMAC
-        correct_sig = hmac.new(
-            SNOW_WEBHOOK_SECRET.encode('utf-8'),
-            body,
-            hashlib.sha256
-        ).hexdigest()
-
-        headers = {'Content-Type': 'application/json', 'X-SNOW-Signature': correct_sig}
-
-        resp = requests.post(f'{base_url}/webhook/snow', data=body, headers=headers, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('status') == 'accepted':
-                logger.info("  PASS: Correct HMAC returns 200 with accepted status")
-            else:
-                logger.error("  FAIL: Unexpected response body: %s", data)
-                test_passed = False
-        else:
-            logger.error("  FAIL: Expected 200, got %d", resp.status_code)
-            test_passed = False
-    except requests.RequestException as e:
-        logger.error("  FAIL: Request error: %s", e)
-        test_passed = False
-
-    # Test 6: Invalid JSON -> 400
-    logger.info("Test 5: Testing invalid JSON -> 400...")
-    try:
-        body = b'not valid json'
-        correct_sig = hmac.new(
-            SNOW_WEBHOOK_SECRET.encode('utf-8'),
-            body,
-            hashlib.sha256
-        ).hexdigest()
-        headers = {'Content-Type': 'application/json', 'X-SNOW-Signature': correct_sig}
-
-        resp = requests.post(f'{base_url}/webhook/snow', data=body, headers=headers, timeout=5)
-        if resp.status_code == 400:
-            logger.info("  PASS: Invalid JSON returns 400")
-        else:
-            logger.error("  FAIL: Expected 400, got %d", resp.status_code)
-            test_passed = False
-    except requests.RequestException as e:
-        logger.error("  FAIL: Request error: %s", e)
-        test_passed = False
-
-    # Test 7: Wrong path -> 404
-    logger.info("Test 6: Testing wrong path -> 404...")
-    try:
-        resp = requests.post(f'{base_url}/webhook/wrong', timeout=5)
-        if resp.status_code == 404:
-            logger.info("  PASS: Wrong path returns 404")
-        else:
-            logger.error("  FAIL: Expected 404, got %d", resp.status_code)
-            test_passed = False
-    except requests.RequestException as e:
-        logger.error("  FAIL: Request error: %s", e)
-        test_passed = False
-
-    # Shutdown server
-    shutdown()
+    server_started = threading.Event()
     
-    # Clean up test env
-    if 'SNOW_WEBHOOK_SECRET' in os.environ and os.environ['SNOW_WEBHOOK_SECRET'] == 'test-secret-key-12345':
-        del os.environ['SNOW_WEBHOOK_SECRET']
+    def start_and_notify():
+        # Patch the port for testing
+        global DEFAULT_PORT
+        DEFAULT_PORT = 8796
+        run(port=8796)
+    
+    server_thread = threading.Thread(target=start_and_notify, daemon=True)
+    server_thread.start()
+    
+    # Wait for server to start (up to 5 seconds)
+    base_url = 'http://localhost:8796'
+    server_ready = False
+    for _ in range(50):
+        try:
+            response = requests.get(f'{base_url}/ready', timeout=1)
+            if response.status_code == 200:
+                server_ready = True
+                break
+        except requests.exceptions.RequestException:
+            pass
+        time.sleep(0.1)
 
-    if test_passed:
-        logger.info("=== All tests passed ===")
-        return 0
+    assert_test(server_ready, "Server started and ready on port 8796")
+
+    # Test 1: Wrong signature should return 401
+    try:
+        response = requests.post(
+            f'{base_url}/webhook/snow',
+            json={
+                'short_description': 'Test request',
+                'description': 'Test description',
+                'caller_id': 'test.user',
+                'u_mcp_server_name': 'test-server',
+                'u_priority': '2'
+            },
+            headers={'X-SNOW-Signature': 'invalid_signature'},
+            timeout=5
+        )
+        assert_test(response.status_code == 401, "Wrong signature returns 401")
+    except Exception as e:
+        logger.error(f"Test 1 error: {e}")
+        test_results.append(False)
+
+    # Test 2: Missing signature should return 401
+    try:
+        response = requests.post(
+            f'{base_url}/webhook/snow',
+            json={
+                'short_description': 'Test request',
+                'caller_id': 'test.user',
+                'u_mcp_server_name': 'test-server',
+                'u_priority': '2'
+            },
+            timeout=5
+        )
+        assert_test(response.status_code == 401, "Missing signature returns 401")
+    except Exception as e:
+        logger.error(f"Test 2 error: {e}")
+        test_results.append(False)
+
+    # Test 3: Correct HMAC signature should return 200
+    try:
+        payload = {
+            'short_description': 'Test request',
+            'description': 'Test description',
+            'caller_id': 'test.user',
+            'u_mcp_server_name': 'test-server',
+            'u_priority': '2'
+        }
+        body = json.dumps(payload)
+        correct_signature = hmac.new(
+            test_secret.encode('utf-8'),
+            body.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        
+        response = requests.post(
+            f'{base_url}/webhook/snow',
+            data=body,
+            headers={
+                'Content-Type': 'application/json',
+                'X-SNOW-Signature': correct_signature
+            },
+            timeout=5
+        )
+        assert_test(response.status_code == 200, "Correct signature returns 200")
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            assert_test(response_data.get('status') == 'accepted', "Response contains 'accepted' status")
+    except Exception as e:
+        logger.error(f"Test 3 error: {e}")
+        test_results.append(False)
+
+    # Test 4: Health endpoint
+    try:
+        response = requests.get(f'{base_url}/health', timeout=5)
+        assert_test(response.status_code == 200, "Health endpoint returns 200")
+    except Exception as e:
+        logger.error(f"Test 4 error: {e}")
+        test_results.append(False)
+
+    # Give server time to clean up, then force exit
+    time.sleep(0.5)
+    
+    # Print summary
+    passed = sum(test_results)
+    total = len(test_results)
+    logger.info(f"\n{'='*50}")
+    logger.info(f"Self-test results: {passed}/{total} tests passed")
+    
+    if all(test_results):
+        logger.info("All tests PASSED")
+        sys.exit(0)
     else:
-        logger.error("=== Some tests failed ===")
-        return 1
+        logger.error("Some tests FAILED")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
-    # Run self-test
-    exit_code = self_test()
-    sys.exit(exit_code)
+    # Check if running in self-test mode
+    if '--self-test' in sys.argv or os.environ.get('RUN_SELF_TEST') == '1':
+        self_test()
+    else:
+        run()

@@ -22,6 +22,21 @@ permissions:
   contents: read
 
 jobs:
+  capmap-check:
+    # The "check these pulls" gate: a deterministic capmap scan -> schema-drift +
+    # orphaned-UI report on every PR. Pure stdlib static scan (no host, no deps).
+    # BLOCKING as of 2026-06-10: drift is 0, so any PR that introduces a wrong-table
+    # reference (endpoint -> table not in schema/app.sql) now fails the gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Deterministic capmap pull-check (BLOCKING -- fails on schema drift)
+        run: python tools/pull_check.py
+
   static-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 6

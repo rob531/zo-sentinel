@@ -16,12 +16,22 @@ recovery**, but the **live copies live on the container** and are deployed via t
 | `ops/zo_mesh/*.sh` | `/home/workspace/zo_mesh/` |
 | `ops/host/*.sh` | `/home/workspace/zo_sentinel/` |
 
+> **Note:** `tools/sentinel_janitor.sh` (invoked by `watchdog.sh` v3.8 each tick)
+> is NOT an `ops/` file — it lives in the `zo_sentinel` git checkout and ships to
+> the box via `ops/host/refresh_code.sh` (`git reset --hard origin/main`), so it
+> updates automatically on the next code refresh. Only `watchdog.sh` itself must
+> be hand-deployed via `zo_write_file` after merge.
+
 ## Inventory
 
 ### `ops/zo_mesh/` (mesh supervisor + zo_mesh-scoped ops)
-- **`watchdog.sh`** (v3.7) — the mesh self-healer. `watchdog_daemon.py` runs it
+- **`watchdog.sh`** (v3.8) — the mesh self-healer. `watchdog_daemon.py` runs it
   each ~6–9 min tick; it restarts dead daemons (incl. `goose_runner` with
-  `env ZO_ESCALATE=1`, and `proposed_to_pending_promoter` as of v3.7). This file
+  `env ZO_ESCALATE=1`, and `proposed_to_pending_promoter` as of v3.7) and, as of
+  **v3.8**, invokes `tools/sentinel_janitor.sh` each tick — which sweeps the ghost
+  `.done` graveyard (build side) and heals the publisher/ingestor/governor
+  `python3 -m zo_sentinel.<mod>` loops when they crash-loop on the module-shadow
+  import bug (publish side). Both were recurring manual-relaunch outages. This file
   is the hardest to reconstruct — the main reason `ops/` exists.
 - `archive_dead_dev_scripts.sh` — move retired zo_mesh dev one-offs to `archive/`.
 - `prune_archived_graph_nodes.sh` — evict archived nodes from the code graph.

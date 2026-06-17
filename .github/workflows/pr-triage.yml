@@ -1,0 +1,48 @@
+name: pr-triage
+
+# Read-only review-assist for autonomous-build PRs.
+#
+# The pipeline opens auto/build/* PRs but nothing merges them, so a mixed-quality
+# backlog accumulates. This workflow LABELS each open `autonomous-build` PR with
+# exactly one triage:{solid,dup,scaffold,stale} bucket and refreshes a single
+# ranked digest (this run's step-summary + a tracking issue) so a human can merge
+# the solid set fast. It MERGES NOTHING and CLOSES NOTHING -- the only writes are
+# reversible label changes + a digest comment.
+#
+# Deliberately NOT an auto-merge: the free MiniMax builder is quality-capped and
+# the PR gates are shallow (syntax/import/boot/schema-drift), so machine output
+# must clear a human merge gate. See tools/pr_triage.py.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 hours
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Least privilege: label PRs + upsert one digest issue. NO merge/close scope.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: pr-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      # Base-repo checkout (pull_request_target context); we never execute PR code.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Triage open autonomous-build PRs (read-only -- labels + digest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/pr_triage.py

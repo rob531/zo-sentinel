@@ -34,7 +34,11 @@ PROMOTION RULES (per ROLLOUT.md Step 4b):
      generator.validate_directive). Invalid files are renamed to .rejected
      so they do not get reconsidered every cycle.
   4. Atomic move: os.replace(src, pending/<basename>). If the destination
-     already exists, log and skip (do NOT overwrite).
+     already exists AND its occupant is a stale TERMINAL squatter (.done/
+     .failed), the fresh proposal is a duplicate of already-resolved work ->
+     archive it as .duplicate (clears the collision deadlock WITHOUT
+     rebuilding). Otherwise (non-terminal == possibly in-flight) log and skip
+     -- never clobber a live pending.
   5. Per-cycle cap: --max-per-cycle (default 10) so a deep backlog doesn't
      all land in pending at once.
 
@@ -174,6 +178,29 @@ def _validate(d: dict) -> Tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
+# Directive identity
+# ---------------------------------------------------------------------------
+
+
+def _resolve_directive_id(d: dict) -> str:
+    """Resolve a directive's identity the SAME way goose_runner.resolve_directive_id
+    does: directive_id | id | key | task.
+
+    THIS IS LOAD-BEARING. goose_runner names its terminal sentinels
+    (<id>.done.json / <id>.failed.json) off this resolved id, and generator
+    proposals (gen_<hash>_<task>.json) carry ONLY a `task` field -- no
+    directive_id/id. If the promoter resolved identity differently (the old
+    `directive_id or id` only) it computed "" for every generator directive,
+    so it could never find their sentinels -> judged terminal squatters
+    "non-terminal" -> the proposed->pending collision deadlock. Mirror the
+    builder exactly so the two halves agree on identity.
+    """
+    return str(
+        d.get("directive_id") or d.get("id") or d.get("key") or d.get("task") or ""
+    ).strip()
+
+
+# ---------------------------------------------------------------------------
 # Promotion pass
 # ---------------------------------------------------------------------------
 
@@ -252,31 +279,65 @@ def _skip_marker_path(p: Path) -> Path:
     return p.with_name(p.name + ".skip")
 
 
-def _done_sentinel_path(directives_root: Path, directive_id: str) -> Path:
-    """Where goose_runner writes its 'already-built' sentinel.
+def _terminal_sentinels(directives_root: Path, directive_id: str) -> Tuple[Path, Path]:
+    """Return (done_sentinel, failed_sentinel) paths goose_runner writes.
 
     Matches goose_runner.mark_directive_completed:
-        /home/workspace/zo_sentinel/directives/<directive_id>.done.json
+        <directives_root>/<directive_id>.done.json   (built ok)
+        <directives_root>/<directive_id>.failed.json (ghost give-up)
     """
-    return directives_root / f"{directive_id}.done.json"
+    return (
+        directives_root / f"{directive_id}.done.json",
+        directives_root / f"{directive_id}.failed.json",
+    )
 
 
 def _rename_duplicate(src: Path) -> None:
-    """Rename src to src.name + '.duplicate' so it isn't reconsidered.
+    """Move src aside to <name>.duplicate so an already-resolved re-proposal
+    stops being scanned every cycle.
 
-    Same shape as _rename_rejected, different suffix to distinguish:
-    .rejected = bad JSON / failed validation
-    .duplicate = valid but already-built (goose_runner has the .done.json sentinel)
+    .duplicate = valid but already-resolved (goose_runner has a .done/.failed
+    sentinel for it). Distinct from .rejected (bad JSON / failed validation).
+
+    BOUNDED: exactly ONE .duplicate per basename, clobbered on repeat. The
+    architect re-proposes terminal directives every cycle (it sees them as
+    "not built"), so suffix-bumping (.duplicate.1, .2, ...) would flood
+    proposed/ with thousands of forensic copies within hours. One file is
+    enough; the log line is the real forensic trail.
     """
     try:
         target = src.with_name(src.name + ".duplicate")
-        i = 1
-        while target.exists():
-            target = src.with_name(f"{src.name}.duplicate.{i}")
-            i += 1
-        os.replace(src, target)
+        os.replace(src, target)  # clobbers any prior .duplicate -> bounded to one
     except Exception as e:
         log.error("failed to rename duplicate %s: %s", src.name, e)
+
+
+def _pending_is_terminal(pending_file: Path, directives_root: Path) -> bool:
+    """True if the directive occupying a pending slot is already TERMINAL --
+    it has a <directive_id>.done.json or <directive_id>.failed.json sentinel,
+    so goose_runner will never rebuild it and it is a stale squatter that
+    permanently blocks any new proposal sharing its filename.
+
+    Resolves the pending file's OWN directive_id via _resolve_directive_id
+    (directive_id|id|key|task) -- the SAME resolver goose_runner uses to name
+    the sentinel. The old code keyed on directive_id/id only, which is "" for
+    generator directives (task-keyed) -> always returned False -> the 9-stuck
+    collision deadlock. Best-effort; returns False on any error so we NEVER
+    supersede/clobber a pending file we cannot prove is terminal (a
+    non-terminal pending file may be a legitimate in-flight build).
+    """
+    try:
+        d = json.loads(pending_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("cannot read pending %s for terminal check: %s", pending_file.name, e)
+        return False
+    if not isinstance(d, dict):
+        return False
+    did = _resolve_directive_id(d)
+    if not did:
+        return False
+    done, failed = _terminal_sentinels(directives_root, did)
+    return done.exists() or failed.exists()
 
 
 def _do_promote(
@@ -313,30 +374,58 @@ def _do_promote(
             _rename_rejected(src)
         return "rejected"
 
-    # Done-sentinel idempotency: goose_runner writes
-    # <directives_root>/<directive_id>.done.json when a directive completes.
-    # If the sentinel exists, the architect has re-proposed an already-built
-    # directive (typical when a circuit breaker stays tripped and the
-    # architect keeps re-suggesting "investigate" actions). Move the
-    # proposal to .duplicate so we stop scanning it every cycle without
-    # losing it for forensics.
+    # Terminal idempotency: goose_runner writes <directive_id>.done.json on a
+    # successful build and <directive_id>.failed.json on a ghost give-up. If
+    # EITHER sentinel exists, the architect has re-proposed an already-resolved
+    # directive (typical when a circuit breaker stays tripped, or for the
+    # MiniMax-unbuildable hard class that keeps re-failing). Archive the
+    # proposal to .duplicate so we stop scanning it every cycle WITHOUT
+    # re-promoting it -- re-promoting a .failed directive would re-run work the
+    # builder already gave up on (ghost-rebuild thrash). Resolves the id via
+    # _resolve_directive_id so it works for task-keyed generator directives.
     if directives_root is not None:
-        directive_id = d.get("directive_id") or d.get("id") or ""
+        directive_id = _resolve_directive_id(d)
         if directive_id:
-            sentinel = _done_sentinel_path(directives_root, str(directive_id))
-            if sentinel.exists():
+            done_sentinel, failed_sentinel = _terminal_sentinels(
+                directives_root, directive_id
+            )
+            done_exists = done_sentinel.exists()
+            failed_exists = failed_sentinel.exists()
+            if done_exists or failed_exists:
                 log.info(
-                    "skip already-built %s (directive_id=%s sentinel=%s)",
-                    src.name, directive_id, sentinel,
+                    "skip already-resolved %s (directive_id=%s done=%s failed=%s)",
+                    src.name, directive_id, done_exists, failed_exists,
                 )
                 counters.skipped += 1
                 if not dry_run:
                     _rename_duplicate(src)
-                return "already_built"
+                return "already_resolved"
 
     dest = pending_dir / src.name
     if dest.exists():
-        log.warning("destination collision %s already in pending; skip", src.name)
+        # Terminal collision: if the pending file occupying this slot is
+        # already terminal (.done/.failed sentinel for ITS OWN resolved id),
+        # goose_runner will never reconsume it -- it would otherwise block this
+        # (distinct, newer) proposal FOREVER (the collision deadlock observed
+        # 2026-06-14..16). The fresh proposal is a duplicate of already-resolved
+        # work, so ARCHIVE it as .duplicate to clear the jam. We do NOT
+        # supersede + re-promote: re-promoting a .failed directive re-runs work
+        # the builder already gave up on (ghost-rebuild THRASH prior councils
+        # forbade), and a stale ghost-.done is self-healed by
+        # goose_runner.is_goose_eligible (which deletes the stale sentinel and
+        # re-admits the directive) -- the promoter must not own that retry.
+        # A pending file with NO terminal sentinel may be a legitimate in-flight
+        # build, so we must NOT touch it -- skip as before.
+        if directives_root is not None and _pending_is_terminal(dest, directives_root):
+            log.info(
+                "terminal squatter occupies %s slot -- archiving proposed duplicate (no rebuild)",
+                src.name,
+            )
+            counters.skipped += 1
+            if not dry_run:
+                _rename_duplicate(src)
+            return "terminal_dup_archived"
+        log.warning("destination collision %s already in pending (non-terminal); skip", src.name)
         counters.skipped += 1
         return "collision"
 
@@ -383,7 +472,7 @@ def run_once(
 ) -> dict:
     """One promotion pass. Returns the cycle counters as a dict.
 
-    `directives_root` enables the done-sentinel check inside _do_promote.
+    `directives_root` enables the terminal-sentinel checks inside _do_promote.
     If omitted, defaults to pending_dir.parent — the canonical layout has
     directives_root/{proposed,pending,*.done.json} as siblings.
     """
@@ -544,8 +633,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Root directory where goose_runner writes <directive_id>.done.json "
-            "sentinels. Defaults to pending-dir.parent. Setting this lets the "
-            "promoter skip already-built duplicates instead of re-promoting them."
+            "and <directive_id>.failed.json sentinels. Defaults to "
+            "pending-dir.parent. Setting this lets the promoter skip "
+            "already-resolved duplicates instead of re-promoting them."
         ),
     )
     return p

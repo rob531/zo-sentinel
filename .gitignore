@@ -20,3 +20,8 @@ graphify-out/
 # origin/main on refresh, which would revert live build state. Untracked files survive.
 test-results.json
 PROGRESS.md
+app_observed_edges.ndjson
+schema/app_graph_observed.sql
+feature_completeness.html
+graph_directives/
+capmap.json

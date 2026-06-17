@@ -53,8 +53,19 @@ LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
 
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
-GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 300))
+GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
+IDLE_GATE       = os.environ.get("DGG_IDLE_GATE", "1") == "1"   # batch-when-idle (herd-safe)
+IDLE_MIN        = int(os.environ.get("DGG_IDLE_MIN", 8))        # build side quiet >= N min = idle
+LAYER1_FIELD_CAP = int(os.environ.get("DGG_LAYER1_FIELD_CAP", 4000))  # per-field char cap on the
+                            # layer1 knowledge maps. The FULL maps made the base ctx ~38KB, which at
+                            # 52KB total (with the module list) made the slow ladder architect TIME
+                            # OUT on ~half its 480s cycles. Capping each of the 4 fields to ~4KB
+                            # keeps the highest-signal head, shrinks base ctx to ~16-20KB.
+CTX_MODULE_BUDGET = 30000   # byte ceiling for the WHOLE ctx incl. the module list, under the 60000
+                            # json.dumps cap. With layer1 capped, base ctx ~20KB; 30000 leaves ~10KB
+                            # for ~300 already_built_modules. Total ctx ~30KB -> architect completes
+                            # reliably (the prior 38KB cycle finished rc=0 in ~213s; 52KB was flaky).
 HEARTBEAT_URL   = "http://127.0.0.1:8772/write"
 WS_QUERY_URL    = "http://127.0.0.1:8772/query"
 
@@ -166,14 +177,113 @@ def _query_recent_failures() -> list:
     return []
 
 
+def _existing_modules() -> list:
+    """Live-graph dedup signal: distinct module files already in the code graph,
+    so the architect proposes NOVEL capabilities instead of re-proposing modules
+    that already exist (the static read_already_built() set goes stale, which is why
+    recently-built files keep getting re-proposed). Bus-routed (/query on :8772, NOT
+    direct duckdb), best-effort -> [] on any error. One query per cycle, and only on
+    an idle cycle (see _builder_idle), so it adds no lock/herd pressure."""
+    # Precise dedup universe: distinct .py MODULE basenames only. The graph also
+    # indexes directives/*.done.json, directives_archive/* and breaker_actions/* --
+    # those are artifacts, not modules an architect would propose, so we exclude
+    # them (drops ~1600 noise names, leaving ~1000 real modules). Basename DISTINCT
+    # is done in-SQL so the cap bounds modules, not alpha-early full paths.
+    sql = ("SELECT DISTINCT regexp_replace(source_file, '^.*/', '') AS mod "
+           "FROM code_nodes "
+           "WHERE source_file LIKE '%.py' "
+           "AND source_file NOT LIKE 'directives/%' "
+           "AND source_file NOT LIKE 'directives_archive/%' "
+           "AND source_file NOT LIKE 'breaker_actions/%' "
+           "ORDER BY mod LIMIT 1200")
+    try:
+        # POST json body -- matches the builder's proven ws_query transport,
+        # which returns {"rows": [...]} (the shape parsed below). One serialized
+        # read on the same :8772 writer; best-effort.
+        r = requests.post(WS_QUERY_URL, json={"sql": sql}, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            rows = data.get("rows", []) if isinstance(data, dict) else data
+            mods = sorted({str(row.get("mod", "")).strip()
+                           for row in rows
+                           if isinstance(row, dict) and row.get("mod")})
+            return [m for m in mods if m]
+    except Exception as e:
+        log.warning("ws_query existing_modules: %s", e)
+    return []
+
+
+def _builder_idle() -> bool:
+    """True when the BUILD side is quiet -- no NEW build_artifact emitted in the
+    last IDLE_MIN minutes.
+
+    Keys on build_artifact EMISSION (mesh_memory) NOT raw DIRECTIVE_* events: the
+    edit-class wire_*/integrate_* directives emit DIRECTIVE_COMPLETE but produce NO
+    build_artifact by design (declared_output is None). Keying on DIRECTIVE_* (the
+    prior behaviour) let that constant edit churn read as "builder active" every
+    cycle and DEFER generation indefinitely -> novel CREATE proposals starved
+    (verified live 2026-06-14). A build_artifact row means a real CREATE build just
+    landed, so defer for IDLE_MIN to keep the graph read + goose subprocess from
+    contending with the active build chain (the anti-herd intent is preserved).
+
+    The generator is a BATCH process. Bus-routed, best-effort; returns True (idle)
+    on any error so a check fault never STARVES generation -- strictly no regression
+    vs the prior fail-open behaviour."""
+    sql = ("SELECT MAX(created_at) AS last_at FROM mesh_memory "
+           "WHERE memory_type = 'build_artifact'")
+    try:
+        r = requests.post(WS_QUERY_URL, json={"sql": sql}, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            rows = data.get("rows", []) if isinstance(data, dict) else data
+            last = rows[0].get("last_at") if rows and isinstance(rows[0], dict) else None
+            if not last:
+                return True
+            dt = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+            return (datetime.now(timezone.utc) - dt).total_seconds() / 60.0 >= IDLE_MIN
+    except Exception as e:
+        log.warning("ws_query idle-check: %s", e)
+    return True
+
+
+def _cap_layer1(l1):
+    """Cap each layer1 knowledge-map field to LAYER1_FIELD_CAP chars so the base
+    ctx stays small enough for the slow ladder architect to finish within the goose
+    timeout. Best-effort: non-dict / non-str values pass through unchanged."""
+    if not isinstance(l1, dict):
+        return l1
+    return {k: (v[:LAYER1_FIELD_CAP] if isinstance(v, str) else v) for k, v in l1.items()}
+
+
 def build_context() -> dict:
-    return {
+    ctx = {
         "schema":            _try_load_schema(),
-        "layer1":            _try_import_layer1(),
+        "layer1":            _cap_layer1(_try_import_layer1()),
         "recent_failures":   _query_recent_failures(),
         "proposed_depth":    _count_proposed(),
         "generated_at":      _now_iso(),
     }
+    # Fit the live-graph module list into whatever ctx budget remains so the
+    # downstream json.dumps[:CTX_CAP] truncation never silently eats the list
+    # tail (its at-risk end -- recently-built modules) OR a later field. We add
+    # the modules LAST and trim them to the remaining bytes, not the recipe.
+    mods = _existing_modules()
+    if mods:
+        used = len(json.dumps(ctx, default=str))
+        budget = max(0, CTX_MODULE_BUDGET - used)
+        kept, size = [], 0
+        for m in mods:
+            size += len(m) + 4            # quotes + comma overhead
+            if size > budget:
+                break
+            kept.append(m)
+        if len(kept) < len(mods):
+            log.info("already_built_modules trimmed to %d/%d for ctx budget",
+                     len(kept), len(mods))
+        ctx["already_built_modules"] = kept
+    else:
+        ctx["already_built_modules"] = []
+    return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +308,12 @@ def run_goose_cycle() -> dict:
     if depth >= MAX_PROPOSED:
         log.info("proposed/ depth %d >= cap %d; skipping cycle", depth, MAX_PROPOSED)
         return {"status": "skipped", "reason": "depth_cap", "depth": depth}
+
+    # Batch-when-idle: only generate when the build side is quiet, so the graph
+    # read + goose subprocess never contend with an active build. Herd-safe.
+    if IDLE_GATE and not _builder_idle():
+        log.info("builder active (build_artifact within %dm); deferring generation", IDLE_MIN)
+        return {"status": "skipped", "reason": "builder_busy"}
 
     ctx = build_context()
     ctx_json = json.dumps(ctx, default=str)[:60000]   # MiniMax prompt cap headroom

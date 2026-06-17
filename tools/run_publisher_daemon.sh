@@ -13,6 +13,12 @@ set -u
 
 SENTINEL=/home/workspace/zo_sentinel
 CLONE="${PR_PUBLISHER_CLONE_DIR:-/home/workspace/zo_sentinel_pub_clone}"
+# Daily PR cap. The legacy default (8) existed ONLY to stay under the free
+# 2000 Actions-min/mo on a PRIVATE repo (see publisher.py DEFAULT_DAILY_CAP).
+# The repo is now PUBLIC -> Actions minutes are free, so that rationale is gone.
+# Raised to 20 (staged; council 2026-06-16) to let the post-#187 novel build flow
+# publish without flooding main. Override with PR_PUBLISHER_DAILY_CAP=<n>.
+CAP="${PR_PUBLISHER_DAILY_CAP:-20}"
 LOG=/home/workspace/logs/pr_publisher.log
 
 echo "stopping any existing publisher loop..."
@@ -25,8 +31,8 @@ if [ ! -d "$CLONE/.git" ]; then
     echo "  git clone https://github.com/rob531/zo-sentinel $CLONE"
 fi
 
-echo "launching publisher (PYTHONPATH=$SENTINEL, clone=$CLONE)..."
-nohup env PYTHONPATH="$SENTINEL" PR_PUBLISHER_CLONE_DIR="$CLONE" bash -c \
+echo "launching publisher (PYTHONPATH=$SENTINEL, clone=$CLONE, daily_cap=$CAP)..."
+nohup env PYTHONPATH="$SENTINEL" PR_PUBLISHER_CLONE_DIR="$CLONE" PR_PUBLISHER_DAILY_CAP="$CAP" bash -c \
     "cd $SENTINEL && while true; do python3 -m zo_sentinel.publisher run-once; sleep 600; done" \
     >> "$LOG" 2>&1 &
 

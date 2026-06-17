@@ -201,8 +201,21 @@ class CliGitOps:
         # pipe, connection reset, DNS) on these pre-steps is recoverable and must
         # not break the whole cycle -- it would otherwise stall the queue the way
         # the no-op-commit bug did, just on a flakier trigger.
+        #
+        # fetch ALL refs (+ --prune), not just `base`: the push below uses
+        # --force-with-lease, whose lease compares the LOCAL origin/<branch>
+        # tracking ref against the remote. After a container reboot the pub clone's
+        # tracking refs go STALE, so re-touching a branch that already has an open
+        # PR fails the lease -- "! [rejected] ... (stale info) / failed to push
+        # some refs" -- which the publisher treats as transient -> break -> it
+        # head-of-line-blocks every NEWER artifact (observed 2026-06-15 post-reboot:
+        # real PRs stuck at #178 while builds kept producing artifacts). Fetching
+        # all refs first makes origin/<branch> current so the lease is accurate: it
+        # succeeds on a stale-but-unchanged branch and still safely REFUSES if a
+        # human actually pushed to the branch (lease kept -- not downgraded to a
+        # blind --force).
         steps = [
-            lambda: self._git("fetch", self.remote, plan.base),
+            lambda: self._git("fetch", "--prune", self.remote),
             lambda: self._git("checkout", "-B", plan.branch, f"{self.remote}/{plan.base}"),
         ]
         for step in steps:

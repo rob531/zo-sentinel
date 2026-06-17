@@ -1,0 +1,54 @@
+name: e2e-nightly
+
+# Nightly FULL-PIPELINE end-to-end test: directive -> promoter -> build_artifact
+# -> publisher, with the real plumbing modules wired together and run against the
+# real-DuckDB write_service (tests/integration/it_write_service.py). The two
+# LLM-bearing rungs (architect, goose build) are stubbed -- a runner has no
+# LLM/ladder -- but every hand-off module between them is the real thing.
+#
+# Heavier + broader than the per-PR `integration` tier (which checks the DB
+# contract in isolation), so it runs NIGHTLY rather than on every PR. Also
+# dispatchable on demand. Not a required check.
+#
+# When the app migrates to Postgres (docs/POSTGRES_APP_MIGRATION_SCOPE.md) this
+# job gains a `services: postgres:16` container + IT_DB_BACKEND=postgres, same as
+# the integration tier; the pipeline test runs unchanged.
+
+on:
+  schedule:
+    - cron: "23 7 * * *"   # 07:23 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt pytest requests
+      - name: Start real-DuckDB write_service
+        env:
+          IT_WS_PORT: "8772"
+        run: |
+          nohup python tests/integration/it_write_service.py > /tmp/it_ws.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8772/health >/dev/null 2>&1 && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8772/health || { echo "service failed to start"; cat /tmp/it_ws.log; exit 1; }
+          echo "write_service up: $(curl -s http://127.0.0.1:8772/health)"
+      - name: Run full-pipeline E2E
+        env:
+          ZO_WRITE_SERVICE: "http://127.0.0.1:8772"
+        run: python -m pytest tests/integration/test_pipeline_e2e.py -v
+      - name: Service log (on failure)
+        if: failure()
+        run: cat /tmp/it_ws.log || true

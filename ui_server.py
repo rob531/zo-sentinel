@@ -349,9 +349,9 @@ def create_app():
     @app.get("/api/submissions")
     async def list_submissions(request: Request):
         result = ws_query("""
-            SELECT submission_id, server_name, url, submitted_by, status, verdict, created_at
-            FROM mesh_events WHERE event_type = 'submission'
-            ORDER BY created_at DESC LIMIT 100
+            SELECT submission_id, mcp_name, url, requested_by, status, submitted_at
+            FROM mcp_submissions
+            ORDER BY submitted_at DESC LIMIT 100
         """)
         return {"submissions": result.get("rows", [])}
     
@@ -360,15 +360,16 @@ def create_app():
         import uuid
         submission_id = str(uuid.uuid4())
         
-        ws_write("mesh_events", [{
-            "event_id": submission_id,
-            "event_type": "submission",
-            "server_name": body.get("server_name", ""),
+        ws_write("mcp_submissions", [{
+            "submission_id": submission_id,
+            "mcp_name": body.get("server_name", body.get("mcp_name", "")),
             "url": body.get("url", ""),
-            "submitted_by": body.get("submitted_by", "anonymous"),
+            "description": body.get("description", ""),
+            "requested_by": body.get("submitted_by", body.get("requested_by", "anonymous")),
+            "business_purpose": body.get("business_purpose", ""),
+            "environment": body.get("environment", ""),
             "status": "pending",
-            "verdict": None,
-            "created_at": utc_now_iso()
+            "submitted_at": utc_now_iso()
         }])
         
         return {"submission_id": submission_id, "status": "pending"}
@@ -396,8 +397,8 @@ def create_app():
     @app.get("/api/policies")
     async def list_policies(request: Request):
         result = ws_query("""
-            SELECT policy_id, name, description, rule_json, active, created_at
-            FROM policy_rules
+            SELECT id, rule_name, rule_type, pattern, action, description, created_at
+            FROM mcp_policy_rules
             ORDER BY created_at DESC
         """)
         return {"policies": result.get("rows", [])}

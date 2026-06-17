@@ -1,103 +1,90 @@
-# ZO-SENTINEL — MCP Trust Intelligence
-## Builder Agent Architecture
+# ZO-SENTINEL
 
-### The Async Build Pipeline
+**Trust intelligence for Model Context Protocol (MCP) servers — built by an autonomous agent pipeline.**
 
-```
-Robin prompts Claude (this conversation)
-         ↓
-Claude writes directive to mesh_memory
-  agent_id = 'zo_sentinel.directive'
-  memory_type = 'build_directive'
-         ↓ (also written to /directives/*.json as fallback)
-zo_sentinel_builder.py polls every 5 min
-         ↓
-Builder generates code via inference stack:
-  Ollama local (free) → InferenceRouter → ZoComputer credits
-         ↓
-Code written to /home/workspace/zo_sentinel/
-         ↓
-Completion written back to mesh_events + mesh_memory
-         ↓
-Claude reads status on next session via MCP tools
-```
+ZO-SENTINEL is two things at once:
 
-### Directive Format
+1. **A product** — an intelligence layer that assesses MCP servers and assigns a deterministic security **verdict**, for a security architect deciding whether a given MCP server is safe to deploy.
+2. **A self-building system** — the code in this repository is continuously *proposed, built, graded, and opened as pull requests* by an autonomous agent pipeline. Most modules here are machine-generated; humans review and merge.
+
+> ⚠️ **Experimental research system.** The repository root holds hundreds of autonomously-generated modules of varying maturity. The curated, structured core lives under [`zo_sentinel/`](zo_sentinel/). Treat root-level `*.py` files as generated artifacts, not a hand-maintained, stable API.
+
+---
+
+## The product — what it does
+
+Sentinel discovers MCP servers from public registries, scores each across a set of independent **trust signals**, combines them into a composite, and assigns one of six verdict tiers (plus a data-gap state).
+
+It is an **intelligence layer only**: it produces signals, verdicts, and detection artifacts for *other* systems to consume. It does **not** proxy MCP traffic, authenticate users, or enforce policy at call time. See [`SENTINEL_SCOPE_BOUNDARY.md`](SENTINEL_SCOPE_BOUNDARY.md).
+
+### Verdict taxonomy
+
+| Verdict | Composite | Meaning |
+|---|---|---|
+| `TRUSTED_GENERAL` | > 75 | Approved for general enterprise use |
+| `TRUSTED_RESEARCH` | > 60 | Safe for research / exploratory use |
+| `ENTERPRISE_CONTROLLED` | > 45 | Acceptable with documented security controls |
+| `CAUTION_LIMITED` | > 30 | Requires additional review |
+| `HIGH_RISK_ISOLATED` | > 15 | Sandboxed environments only |
+| `KNOWN_THREAT` | ≤ 15 | Matched a known-threat signal |
+| `INSUFFICIENT` | — | Too many signals missing to assess (a data-gap state, not a risk tier) |
+
+### Signal model
+
+Each server is scored across independent signals — *domain trust, tool-description safety, permission scope, supply chain, community, temporal stability, prompt-injection resilience,* and ecosystem-enrichment signals. Every signal producer emits a row with the invariant shape:
+
 ```json
-{
-  "task":        "unique_task_id",
-  "handler":     "generate_file | write_raw | run_script",
-  "output_file": "relative/path/to/output.py",
-  "description": "What to build in detail",
-  "complexity":  "low | medium | high",
-  "priority":    0.0-1.0,
-  "context":     "Additional architecture context",
-  "from":        "claude_directive | cli_inject | robin_prompt"
-}
+{ "signal_type": "<snake_case_name>", "confidence": 0.0, "evidence_blob": { } }
 ```
 
-### Injecting a Directive (CLI)
-```bash
-# From description
-python3 /home/workspace/zo_sentinel/inject_directive.py \
-  --task phase4_registry_api \
-  --description "Build FastAPI REST endpoint for live registry queries" \
-  --file registry_api.py \
-  --complexity high
+The authoritative signal list and scoring contract live in [`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-# From JSON file
-python3 /home/workspace/zo_sentinel/inject_directive.py \
-  --json /home/workspace/zo_sentinel/directives/my_task.json
+---
+
+## The system — how the code gets built
+
+```
+directive architect → promoter → builder (LLM coding agent) → build artifact → governor → publisher → auto/build/* PR → CI gates → human merge
 ```
 
-### Project Structure
-```
-/home/workspace/zo_sentinel/
-├── __init__.py
-├── schema.py              # DuckDB table creation
-├── mcp_scanner.py         # T1: crawls npm/GitHub/Smithery
-├── signal_analyser.py     # T2: scores 6 signal dimensions
-├── trust_synthesiser.py   # T3: composite verdict generation
-├── registry_api.py        # Phase 4: FastAPI REST endpoint
-├── inject_directive.py    # CLI directive injector
-└── directives/            # Pending build tasks
-    ├── 000_sentinel_schema.json
-    ├── 001_phase2_mcp_scanner.json
-    └── 002_phase3_signal_analyser.json
-```
+- **Directive architect** proposes build tasks ("directives") into `directives/proposed/`.
+- **Promoter** ([`zo_sentinel/promoters/`](zo_sentinel/promoters/)) validates and moves directives to `directives/pending/`.
+- **Builder** generates each file via an LLM coding agent.
+- **Governor / ingestor** ([`zo_sentinel/ingestor/`](zo_sentinel/ingestor/)) grades each build artifact and quarantines failures.
+- **Publisher** ([`zo_sentinel/publisher/`](zo_sentinel/publisher/)) opens an `auto/build/*` pull request per artifact, labelled `autonomous-build`.
+- **CI gates** ([`.github/workflows/pr-gates.yml`](.github/workflows/pr-gates.yml)) run `ruff`, a hermetic smoke-ladder, a front-end check, and a schema-drift (capmap) check on every PR.
 
-### DuckDB Tables
-- `mcp_server_registry`    — master record per discovered server
-- `mcp_signal_scores`      — per-signal per-server scores (time-series)
-- `mcp_definition_history` — snapshots for rug-pull detection
-- `mcp_threat_associations`— links to CVEs, campaigns, threat actors
+Machine output must pass the gates **and a human merge** — there is deliberately **no auto-merge**. A read-only triage bot ([`tools/pr_triage.py`](tools/pr_triage.py)) classifies the open PR queue (`solid` / `dup` / `scaffold` / `stale`) to make review fast.
 
-### Verdict Taxonomy
-| Score | Verdict | Meaning |
-|-------|---------|--------|
-| >75   | TRUSTED_GENERAL | Safe for most production contexts |
-| 60-75 | TRUSTED_RESEARCH | Safe for R&D, no sensitive data |
-| 45-60 | ENTERPRISE_CONTROLLED | Safe with formal security controls |
-| 30-45 | CAUTION_LIMITED | Scoped use only, human oversight |
-| 15-30 | HIGH_RISK_ISOLATED | Test environments only |
-| <15   | KNOWN_THREAT | Do not deploy |
-| null  | INSUFFICIENT | Cannot assess — treat as untrusted |
+### Shared state
 
-### Phases
-- Phase 1: UI Lookup — COMPLETE (React artifact)
-- Phase 2: MCP Scanner T1 — IN BUILD
-- Phase 3: Signal Analyser T2 + Trust Synthesiser T3 — IN BUILD
-- Phase 4: Live Registry + REST API — PENDING
-- Phase 5: Enterprise licensing + commercial API — PLANNED
+All daemons share state **exclusively** through a single write-service over a DuckDB store — modules never open the database directly. Core tables include `mcp_server_registry`, `mcp_signal_scores`, `mcp_signal_enrichments`, `mcp_definition_history`, `mcp_threat_associations`, and `mcp_risk_register`. See [`DB_SCHEMA.md`](DB_SCHEMA.md).
 
-### Activating the Builder
-```bash
-# One-time: add to supervisord
-cat /home/workspace/zo_mesh/supervisord_sentinel_builder.conf >> /etc/zo/supervisord-user.conf
-supervisorctl -c /etc/zo/supervisord-user.conf reread
-supervisorctl -c /etc/zo/supervisord-user.conf update
+---
 
-# Or add to go.sh manually:
-nohup python3 /home/workspace/zo_mesh/zo_sentinel_builder.py \
-  >> /home/workspace/logs/zo_sentinel_builder.log 2>&1 &
-```
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| [`zo_sentinel/`](zo_sentinel/) | Curated core package — `promoters/`, `publisher/`, `ingestor/`, `evaluators/`, `mcp_servers/`, `probes/`, `schemas/` |
+| [`tools/`](tools/) | Operational scripts — CI helpers, the PR-triage classifier, janitors |
+| [`tests/`](tests/) | CI smoke-ladder + gate tests (hermetic — stand up their own mocks, no external services) |
+| [`directives/`](directives/) | The autonomous build-task queue (`proposed/` → `pending/`, plus completion sentinels) |
+| `.github/workflows/` | `pr-gates`, `pr-triage`, `evaluator`, `fetch-failures` |
+| `*.py` (root) | Autonomously-generated product modules — scanners, scorers, enrichers, APIs, daemons. Generated; maturity varies. |
+| `*.md` (root) | Design specs, architecture notes, and the agent's own engineering journals |
+
+---
+
+## Key documents
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — authoritative system design
+- [`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) — product contract (signals, verdicts, invariants)
+- [`SENTINEL_SCOPE_BOUNDARY.md`](SENTINEL_SCOPE_BOUNDARY.md) — what Sentinel is and is not
+- [`DB_SCHEMA.md`](DB_SCHEMA.md) — the data model
+
+---
+
+## Status
+
+Active, autonomous, and experimental. Pull requests labelled `autonomous-build` are machine-generated and pending human review. The structured core under `zo_sentinel/` is the part to read first.

@@ -1,466 +1,532 @@
-#!/usr/bin/env python3
-"""
-Approval Verdict Gate Utility
-
-FastAPI endpoint acting as a policy gate that blocks deployment of MCPs
-below a configurable trust threshold. Validates incoming deployment requests
-against mcp_risk_register and mcp_decisions tables via write_service.
-"""
-
-import os
-import json
 import logging
-import uuid
+import os
+import signal
+import sys
+import time
 from datetime import datetime, timezone
-from typing import Optional
-from dataclasses import dataclass, asdict
-
-from fastapi import FastAPI, HTTPException, Header, Path
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pathlib import Path
 
 import requests
+import uvicorn
+from fastapi import FastAPI, HTTPException, Header, Depends
+from pydantic import BaseModel
 
-# Configure logging
+LOG_DIR = Path('/home/workspace/logs')
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_DIR / 'approval_verdict_gate.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
-# Configuration from environment
-GATE_MIN_SCORE = float(os.environ.get('GATE_MIN_SCORE', '45'))
-GATE_OVERRIDE_REQUIRE_REASON = os.environ.get('GATE_OVERRIDE_REQUIRE_REASON', 'true').lower() == 'true'
-WRITE_SERVICE_URL = os.environ.get('WRITE_SERVICE_URL', 'http://127.0.0.1:8772')
+SERVICE_NAME = 'approval_verdict_gate'
+PORT = 8792
+WRITE_SERVICE_URL = 'http://localhost:8772'
+QUERY_SERVICE_URL = 'http://localhost:8772'
+EXECUTE_SERVICE_URL = 'http://localhost:8772'
+PID_FILE = f'/tmp/{SERVICE_NAME}.pid'
 
-# Verdict tier definitions (score thresholds)
-VERDICT_TIERS = {
-    'TRUSTED_GENERAL': 75,
-    'TRUSTED_RESEARCH': 60,
-    'ENTERPRISE_CONTROLLED': 45,
-    'CAUTION_LIMITED': 30,
-    'HIGH_RISK_ISOLATED': 15,
-    'KNOWN_THREAT': 0,
-}
+HEARTBEAT_INTERVAL = 60
+VERDICT_ALLOWED = {'TRUSTED', 'ENTERPRISE_CONTROLLED', 'AMBER_UNVERIFIED'}
+VERDICT_BLOCKED = {'UNTRUSTED', 'KNOWN_THREAT', 'HIGH_RISK_ISOLATED'}
 
-# Reverse lookup: score -> verdict tier
-def get_verdict_tier(score: float) -> str:
-    """Determine verdict tier based on composite score."""
-    if score >= 75:
-        return 'TRUSTED_GENERAL'
-    elif score >= 60:
-        return 'TRUSTED_RESEARCH'
-    elif score >= 45:
-        return 'ENTERPRISE_CONTROLLED'
-    elif score >= 30:
-        return 'CAUTION_LIMITED'
-    elif score >= 15:
-        return 'HIGH_RISK_ISOLATED'
-    else:
-        return 'KNOWN_THREAT'
+app = FastAPI()
+
+_api_keys = {}
 
 
-@dataclass
-class DeployGateResponse:
-    """Response model for deployment gate check."""
-    allowed: bool
-    verdict: str
-    composite_score: float
-    blocking_signals: list[str]
-    requires_override: bool
+def load_api_keys():
+    global _api_keys
+    key = os.environ.get('SENTINEL_API_KEY', '')
+    if key:
+        _api_keys[key] = 'admin'
+    logger.info('API keys loaded: %s', 'configured' if _api_keys else 'none')
 
 
-@dataclass
-class OverrideResponse:
-    """Response model for override action."""
-    success: bool
-    override_logged: bool
+def verify_api_key(authorization: str = Header(None)):
+    if not _api_keys:
+        return 'anonymous'
+    if authorization and authorization.startswith('Bearer '):
+        token = authorization[7:]
+        if token in _api_keys:
+            return _api_keys[token]
+    raise HTTPException(status_code=401, detail='Invalid or missing API key')
 
 
-class OverrideRequest(BaseModel):
-    """Request model for override action."""
-    mcp_name: str = Field(..., description="Name of the MCP to override")
-    reason: Optional[str] = Field(None, description="Reason for override (required if GATE_OVERRIDE_REQUIRE_REASON=true)")
-    analyst_guid: Optional[str] = Field(None, description="Analyst GUID for the override")
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Approval Verdict Gate",
-    description="Policy gate for MCP deployment requests that validates against ZO-SENTINEL verdicts",
-    version="1.0.0"
-)
+def ws_query(sql: str, params: list = None):
+    payload = {'sql': sql}
+    if params:
+        payload['params'] = params
+    resp = requests.post(QUERY_SERVICE_URL + '/query', json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
 
 
-def _make_write_service_request(method: str, endpoint: str, data: Optional[dict] = None) -> dict:
-    """
-    Make a request to the write_service.
-    
-    All database access goes through write_service at 127.0.0.1:8772.
-    """
-    url = f"{WRITE_SERVICE_URL}{endpoint}"
-    headers = {'Content-Type': 'application/json'}
-    
+def ws_write(table: str, rows: list):
+    payload = {'table': table, 'rows': rows}
+    resp = requests.post(WRITE_SERVICE_URL + '/write', json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ws_execute(sql: str, params: list = None):
+    payload = {'sql': sql}
+    if params:
+        payload['params'] = params
+    resp = requests.post(EXECUTE_SERVICE_URL + '/execute', json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def check_single_instance():
+    pid_file = Path(PID_FILE)
+    if pid_file.exists():
+        old_pid = pid_file.read_text().strip()
+        try:
+            os.kill(int(old_pid), 0)
+            logger.error('Another instance is running with PID %s', old_pid)
+            sys.exit(1)
+        except (OSError, ValueError):
+            logger.warning('Stale PID file found, removing')
+            pid_file.unlink()
+    pid_file.write_text(str(os.getpid()))
+    logger.info('PID file written: %s = %s', PID_FILE, os.getpid())
+
+
+def remove_pid_file():
     try:
-        if method.upper() == 'GET':
-            response = requests.get(url, headers=headers, params=data, timeout=10)
-        elif method.upper() == 'POST':
-            response = requests.post(url, headers=headers, json=data, timeout=10)
-        elif method.upper() == 'PUT':
-            response = requests.put(url, headers=headers, json=data, timeout=10)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
-        
-        response.raise_for_status()
-        return response.json() if response.content else {}
-    
-    except requests.exceptions.Timeout:
-        logger.error(f"Timeout connecting to write_service at {url}")
-        raise HTTPException(status_code=503, detail="Write service unavailable (timeout)")
-    except requests.exceptions.ConnectionError:
-        logger.error(f"Connection error connecting to write_service at {url}")
-        raise HTTPException(status_code=503, detail="Write service unavailable")
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error from write_service: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        Path(PID_FILE).unlink(missing_ok=True)
+        logger.info('PID file removed')
     except Exception as e:
-        logger.error(f"Unexpected error calling write_service: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        logger.warning('Failed to remove PID file: %s', e)
 
 
-def query_mcp_risk_register(mcp_name: str) -> Optional[dict]:
+def signal_handler(signum, frame):
+    logger.info('Received signal %d, shutting down gracefully', signum)
+    remove_pid_file()
+    sys.exit(0)
+
+
+def send_heartbeat(status: str = 'running', meta: dict = None):
+    row = {
+        'service': SERVICE_NAME,
+        'last_heartbeat': utc_now_iso(),
+        'status': status,
+        'ts': utc_now_iso(),
+        'meta': meta or {}
+    }
+    try:
+        ws_write('service_health', [row])
+    except Exception as e:
+        logger.warning('Failed to send heartbeat: %s', e)
+
+
+def ensure_tables():
+    create_approval_gates_sql = """
+    CREATE TABLE IF NOT EXISTS approval_verdict_gates (
+        gate_id VARCHAR PRIMARY KEY,
+        submission_id VARCHAR NOT NULL,
+        server_id VARCHAR NOT NULL,
+        verdict VARCHAR,
+        risk_tier VARCHAR,
+        trust_score DOUBLE,
+        gate_action VARCHAR,
+        gate_reason VARCHAR,
+        evaluated_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
     """
-    Query mcp_risk_register for composite_score and dominant_verdict.
+    create_policy_sql = """
+    CREATE TABLE IF NOT EXISTS approval_verdict_policies (
+        policy_id VARCHAR PRIMARY KEY,
+        policy_name VARCHAR NOT NULL,
+        allowed_verdicts VARCHAR[],
+        blocked_verdicts VARCHAR[],
+        require_trust_score_min DOUBLE,
+        allow_analyst_override BOOLEAN DEFAULT FALSE,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
     """
     try:
-        result = _make_write_service_request(
-            'POST',
-            '/query',
-            {
-                'table': 'mcp_risk_register',
-                'filters': {'mcp_name': mcp_name},
-                'columns': ['mcp_name', 'composite_score', 'dominant_verdict', 'last_updated']
-            }
-        )
+        ws_execute(create_approval_gates_sql)
+        ws_execute(create_policy_sql)
+        logger.info('Tables ensured: approval_verdict_gates, approval_verdict_policies')
+    except Exception as e:
+        logger.error('Failed to ensure tables: %s', e)
+
+
+def get_default_policy():
+    sql = """
+    SELECT policy_id, policy_name, allowed_verdicts, blocked_verdicts,
+           require_trust_score_min, allow_analyst_override
+    FROM approval_verdict_policies
+    WHERE active = TRUE
+    ORDER BY created_at DESC
+    LIMIT 1
+    """
+    try:
+        result = ws_query(sql)
         rows = result.get('rows', [])
-        return rows[0] if rows else None
-    except HTTPException:
-        # Fallback: try as direct SQL query endpoint
-        try:
-            result = _make_write_service_request(
-                'GET',
-                '/mcp_risk_register',
-                {'mcp_name': mcp_name}
-            )
-            return result
-        except HTTPException:
-            return None
-
-
-def query_mcp_signal_scores(mcp_name: str) -> list[dict]:
-    """
-    Query mcp_signal_scores for per-signal breakdown.
-    """
-    try:
-        result = _make_write_service_request(
-            'POST',
-            '/query',
-            {
-                'table': 'mcp_signal_scores',
-                'filters': {'mcp_name': mcp_name},
-                'columns': ['signal_name', 'score', 'threshold', 'passed']
-            }
-        )
-        return result.get('rows', [])
-    except HTTPException:
-        # Fallback: try as direct endpoint
-        try:
-            result = _make_write_service_request(
-                'GET',
-                '/mcp_signal_scores',
-                {'mcp_name': mcp_name}
-            )
-            return result if isinstance(result, list) else result.get('rows', [])
-        except HTTPException:
-            return []
-
-
-def insert_audit_log(entry: dict) -> bool:
-    """
-    Insert an audit_log entry for a gate decision.
-    """
-    try:
-        _make_write_service_request(
-            'POST',
-            '/insert',
-            {
-                'table': 'audit_log',
-                'data': entry
-            }
-        )
-        return True
-    except HTTPException:
-        logger.error("Failed to insert audit log entry")
-        return False
-
-
-def insert_mcp_decision(decision: dict) -> bool:
-    """
-    Insert a mcp_decisions entry for an override action.
-    """
-    try:
-        _make_write_service_request(
-            'POST',
-            '/insert',
-            {
-                'table': 'mcp_decisions',
-                'data': decision
-            }
-        )
-        return True
-    except HTTPException:
-        logger.error("Failed to insert mcp_decisions entry")
-        return False
-
-
-def create_audit_entry(
-    mcp_name: str,
-    analyst_guid: Optional[str],
-    decision: str,
-    composite_score: float,
-    verdict: str,
-    blocking_signals: list[str],
-    override_used: bool = False
-) -> dict:
-    """
-    Create an audit log entry.
-    """
+        if rows:
+            return rows[0]
+    except Exception:
+        pass
     return {
-        'event_type': 'DEPLOYMENT_GATE_DECISION',
-        'mcp_name': mcp_name,
-        'analyst_guid': analyst_guid or 'SYSTEM',
-        'decision': decision,  # ALLOWED, DENIED, OVERRIDE
-        'composite_score': composite_score,
-        'dominant_verdict': verdict,
-        'blocking_signals': json.dumps(blocking_signals),
-        'min_threshold': GATE_MIN_SCORE,
-        'override_used': override_used,
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        'event_id': str(uuid.uuid4())
+        'policy_id': 'default',
+        'policy_name': 'default',
+        'allowed_verdicts': list(VERDICT_ALLOWED),
+        'blocked_verdicts': list(VERDICT_BLOCKED),
+        'require_trust_score_min': 0.0,
+        'allow_analyst_override': False
     }
 
 
-@app.get('/gate/deploy/{mcp_name}', response_model=DeployGateResponse)
-def check_deploy_gate(
-    mcp_name: str = Path(..., description="Name of the MCP to check for deployment"),
-    authorization: Optional[str] = Header(None, description="Authorization header with analyst GUID")
-) -> DeployGateResponse:
+def get_server_verdict(server_id: str):
+    sql = """
+    SELECT r.server_id, r.verdict, r.trust_score, r.risk_tier
+    FROM mcp_server_registry r
+    WHERE r.server_id = ?
+    LIMIT 1
     """
-    Check if an MCP is allowed to be deployed based on its trust score.
-    
-    Returns:
-        - allowed: Whether deployment is permitted
-        - verdict: The verdict tier for this MCP
-        - composite_score: The calculated trust score
-        - blocking_signals: List of signals that are below threshold (if blocked)
-        - requires_override: Whether an override is needed to proceed
-    """
-    analyst_guid = None
-    if authorization:
-        # Extract GUID from Bearer token or raw value
-        if authorization.startswith('Bearer '):
-            analyst_guid = authorization[7:]
-        else:
-            analyst_guid = authorization
-    
-    logger.info(f"Gate check requested for MCP: {mcp_name} by analyst: {analyst_guid or 'SYSTEM'}")
-    
-    # Query risk register
-    risk_data = query_mcp_risk_register(mcp_name)
-    
-    if risk_data is None:
-        logger.warning(f"MCP not found in risk register: {mcp_name}")
-        # MCP not found - treat as high risk, require override
-        response = DeployGateResponse(
-            allowed=False,
-            verdict='UNKNOWN',
-            composite_score=0.0,
-            blocking_signals=['MCP_NOT_IN_REGISTRY'],
-            requires_override=True
-        )
-    else:
-        composite_score = float(risk_data.get('composite_score', 0))
-        dominant_verdict = risk_data.get('dominant_verdict', 'UNKNOWN')
-        
-        # Determine verdict tier
-        verdict = dominant_verdict if dominant_verdict in VERDICT_TIERS else get_verdict_tier(composite_score)
-        
-        # Check if score meets threshold
-        meets_threshold = composite_score >= GATE_MIN_SCORE
-        
-        # Get blocking signals
-        blocking_signals = []
-        if not meets_threshold:
-            signal_scores = query_mcp_signal_scores(mcp_name)
-            for sig in signal_scores:
-                if not sig.get('passed', True):
-                    threshold = sig.get('threshold', 0)
-                    score = sig.get('score', 0)
-                    blocking_signals.append(
-                        f"{sig.get('signal_name', 'UNKNOWN')}: score={score}, threshold={threshold}"
-                    )
-            
-            # If no signal data, add general threshold failure
-            if not blocking_signals:
-                blocking_signals.append(f'composite_score below threshold: {composite_score} < {GATE_MIN_SCORE}')
-        
-        response = DeployGateResponse(
-            allowed=meets_threshold,
-            verdict=verdict,
-            composite_score=composite_score,
-            blocking_signals=blocking_signals,
-            requires_override=not meets_threshold
-        )
-    
-    # Log the gate decision
-    audit_entry = create_audit_entry(
-        mcp_name=mcp_name,
-        analyst_guid=analyst_guid,
-        decision='ALLOWED' if response.allowed else 'DENIED',
-        composite_score=response.composite_score,
-        verdict=response.verdict,
-        blocking_signals=response.blocking_signals,
-        override_used=False
-    )
-    insert_audit_log(audit_entry)
-    
-    logger.info(
-        f"Gate decision for {mcp_name}: allowed={response.allowed}, "
-        f"verdict={response.verdict}, score={response.composite_score}"
-    )
-    
-    return response
+    try:
+        result = ws_query(sql, [server_id])
+        rows = result.get('rows', [])
+        if rows:
+            return rows[0]
+    except Exception as e:
+        logger.error('Failed to query server verdict for %s: %s', server_id, e)
+    return None
 
 
-@app.post('/gate/override', response_model=OverrideResponse)
-def submit_override(
-    request: OverrideRequest,
-    authorization: Optional[str] = Header(None, description="Authorization header with analyst GUID")
-) -> OverrideResponse:
-    """
-    Submit an override for a blocked MCP deployment.
-    
-    Args:
-        request: Override request containing mcp_name and optional reason
-        authorization: Authorization header with analyst GUID
-    
-    Returns:
-        - success: Whether the override was processed
-        - override_logged: Whether the override was logged to the database
-    """
-    analyst_guid = request.analyst_guid
-    if not analyst_guid and authorization:
-        if authorization.startswith('Bearer '):
-            analyst_guid = authorization[7:]
-        else:
-            analyst_guid = authorization
-    
-    # Validate reason requirement
-    if GATE_OVERRIDE_REQUIRE_REASON and not request.reason:
-        raise HTTPException(
-            status_code=400,
-            detail="Override reason is required. Set GATE_OVERRIDE_REQUIRE_REASON=false to disable."
-        )
-    
-    logger.info(f"Override requested for MCP: {request.mcp_name} by analyst: {analyst_guid}")
-    
-    # Create decision record
-    decision_id = str(uuid.uuid4())
-    timestamp = datetime.now(timezone.utc).isoformat()
-    
-    decision_record = {
-        'decision_id': decision_id,
-        'mcp_name': request.mcp_name,
-        'decision_type': 'OVERRIDE',
-        'analyst_guid': analyst_guid or 'UNKNOWN',
-        'reason': request.reason or 'No reason provided',
-        'timestamp': timestamp,
-        'gate_min_score': GATE_MIN_SCORE,
-        'status': 'APPLIED'
+def evaluate_gate(submission_id: str, server_id: str, policy: dict):
+    server_data = get_server_verdict(server_id)
+    if not server_data:
+        return {
+            'gate_action': 'BLOCK',
+            'gate_reason': 'Server not found in registry',
+            'verdict': None,
+            'risk_tier': None,
+            'trust_score': None
+        }
+
+    verdict = server_data.get('verdict', 'UNKNOWN')
+    trust_score = server_data.get('trust_score') or 0.0
+    risk_tier = server_data.get('risk_tier')
+
+    allowed = policy.get('allowed_verdicts') or list(VERDICT_ALLOWED)
+    blocked = policy.get('blocked_verdicts') or list(VERDICT_BLOCKED)
+    min_score = policy.get('require_trust_score_min', 0.0)
+
+    if verdict in blocked:
+        return {
+            'gate_action': 'BLOCK',
+            'gate_reason': f'Verdict {verdict} is in blocked list',
+            'verdict': verdict,
+            'risk_tier': risk_tier,
+            'trust_score': trust_score
+        }
+
+    if verdict not in allowed and verdict != 'UNKNOWN':
+        return {
+            'gate_action': 'BLOCK',
+            'gate_reason': f'Verdict {verdict} not in allowed list',
+            'verdict': verdict,
+            'risk_tier': risk_tier,
+            'trust_score': trust_score
+        }
+
+    if trust_score < min_score:
+        return {
+            'gate_action': 'BLOCK',
+            'gate_reason': f'Trust score {trust_score:.2f} below minimum {min_score:.2f}',
+            'verdict': verdict,
+            'risk_tier': risk_tier,
+            'trust_score': trust_score
+        }
+
+    return {
+        'gate_action': 'APPROVE',
+        'gate_reason': f'Verdict {verdict} passes gate with score {trust_score:.2f}',
+        'verdict': verdict,
+        'risk_tier': risk_tier,
+        'trust_score': trust_score
     }
-    
-    # Insert decision record
-    override_logged = insert_mcp_decision(decision_record)
-    
-    # Log the override in audit log
-    audit_entry = create_audit_entry(
-        mcp_name=request.mcp_name,
-        analyst_guid=analyst_guid,
-        decision='OVERRIDE',
-        composite_score=0.0,  # May want to fetch actual score
-        verdict='OVERRIDE_APPLIED',
-        blocking_signals=[],
-        override_used=True
-    )
-    audit_entry['override_decision_id'] = decision_id
-    audit_entry['override_reason'] = request.reason
-    insert_audit_log(audit_entry)
-    
-    logger.info(f"Override processed for {request.mcp_name}: logged={override_logged}")
-    
-    return OverrideResponse(
-        success=True,
-        override_logged=override_logged
-    )
+
+
+def record_gate_event(gate_id: str, submission_id: str, server_id: str, evaluation: dict):
+    sql = """
+    INSERT INTO approval_verdict_gates
+        (gate_id, submission_id, server_id, verdict, risk_tier, trust_score,
+         gate_action, gate_reason, evaluated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (gate_id) DO UPDATE SET
+        verdict = excluded.verdict,
+        risk_tier = excluded.risk_tier,
+        trust_score = excluded.trust_score,
+        gate_action = excluded.gate_action,
+        gate_reason = excluded.gate_reason,
+        evaluated_at = excluded.evaluated_at
+    """
+    row = evaluation.copy()
+    row['gate_id'] = gate_id
+    row['submission_id'] = submission_id
+    row['server_id'] = server_id
+    row['evaluated_at'] = utc_now_iso()
+    try:
+        ws_execute(sql, [
+            row['gate_id'],
+            row['submission_id'],
+            row['server_id'],
+            row['verdict'],
+            row['risk_tier'],
+            row['trust_score'],
+            row['gate_action'],
+            row['gate_reason'],
+            row['evaluated_at']
+        ])
+        logger.info('Recorded gate event: %s -> %s', gate_id, row['gate_action'])
+    except Exception as e:
+        logger.error('Failed to record gate event: %s', e)
+
+
+class GateRequest(BaseModel):
+    submission_id: str
+    server_id: str
+    analyst_override: bool = False
+    override_reason: str = None
+
+
+class PolicyCreate(BaseModel):
+    policy_name: str
+    allowed_verdicts: list[str] = None
+    blocked_verdicts: list[str] = None
+    require_trust_score_min: float = 0.0
+    allow_analyst_override: bool = False
+
+
+class PolicyToggle(BaseModel):
+    policy_id: str
+    active: bool
+
+
+def compute_gate_id(submission_id: str, server_id: str):
+    import hashlib
+    raw = f'{submission_id}:{server_id}'.encode('utf-8')
+    return hashlib.sha256(raw).hexdigest()[:16]
 
 
 @app.get('/health')
-def health_check():
-    """Health check endpoint."""
-    return {'status': 'healthy', 'service': 'approval_verdict_gate'}
+def health():
+    return {'status': 'ok', 'service': SERVICE_NAME, 'ts': utc_now_iso()}
 
 
-@app.get('/gate/config')
-def get_gate_config():
-    """Get current gate configuration."""
+@app.post('/gate/evaluate')
+def evaluate_gate_endpoint(req: GateRequest, auth: str = Depends(verify_api_key)):
+    policy = get_default_policy()
+    evaluation = evaluate_gate(req.submission_id, req.server_id, policy)
+    gate_id = compute_gate_id(req.submission_id, req.server_id)
+
+    if req.analyst_override and policy.get('allow_analyst_override'):
+        if req.override_reason:
+            evaluation['gate_action'] = 'APPROVE'
+            evaluation['gate_reason'] = f'Analyst override: {req.override_reason}'
+        else:
+            evaluation['gate_reason'] += ' (override attempted but no reason provided)'
+
+    record_gate_event(gate_id, req.submission_id, req.server_id, evaluation)
+
     return {
-        'min_score_threshold': GATE_MIN_SCORE,
-        'override_require_reason': GATE_OVERRIDE_REQUIRE_REASON,
-        'write_service_url': WRITE_SERVICE_URL,
-        'verdict_tiers': VERDICT_TIERS
+        'gate_id': gate_id,
+        'submission_id': req.submission_id,
+        'server_id': req.server_id,
+        'gate_action': evaluation['gate_action'],
+        'gate_reason': evaluation['gate_reason'],
+        'verdict': evaluation['verdict'],
+        'risk_tier': evaluation['risk_tier'],
+        'trust_score': evaluation['trust_score'],
+        'evaluated_at': utc_now_iso(),
+        'policy': policy.get('policy_name')
     }
 
 
+@app.post('/gate/approve')
+def gate_approve(req: GateRequest, auth: str = Depends(verify_api_key)):
+    gate_id = compute_gate_id(req.submission_id, req.server_id)
+    evaluation = evaluate_gate(req.submission_id, req.server_id, get_default_policy())
+
+    if evaluation['gate_action'] != 'APPROVE':
+        if not (req.analyst_override and get_default_policy().get('allow_analyst_override')):
+            return {
+                'approved': False,
+                'gate_id': gate_id,
+                'reason': evaluation['gate_reason'],
+                'verdict': evaluation['verdict'],
+                'requires_override': True
+            }
+
+    evaluation['gate_action'] = 'APPROVE'
+    if req.analyst_override and req.override_reason:
+        evaluation['gate_reason'] = f'Analyst override: {req.override_reason}'
+    record_gate_event(gate_id, req.submission_id, req.server_id, evaluation)
+
+    sql = """
+    UPDATE approval_submissions
+    SET status = 'APPROVED', approved_at = ?, approved_by = ?
+    WHERE submission_id = ?
+    """
+    try:
+        ws_execute(sql, [utc_now_iso(), auth, req.submission_id])
+    except Exception as e:
+        logger.warning('Could not update approval_submissions: %s', e)
+
+    return {
+        'approved': True,
+        'gate_id': gate_id,
+        'submission_id': req.submission_id,
+        'server_id': req.server_id,
+        'verdict': evaluation['verdict'],
+        'trust_score': evaluation['trust_score'],
+        'approved_at': utc_now_iso()
+    }
+
+
+@app.post('/gate/deny')
+def gate_deny(req: GateRequest, auth: str = Depends(verify_api_key)):
+    gate_id = compute_gate_id(req.submission_id, req.server_id)
+    evaluation = evaluate_gate(req.submission_id, req.server_id, get_default_policy())
+
+    evaluation['gate_action'] = 'DENIED'
+    evaluation['gate_reason'] = req.override_reason or evaluation['gate_reason']
+    record_gate_event(gate_id, req.submission_id, req.server_id, evaluation)
+
+    sql = """
+    UPDATE approval_submissions
+    SET status = 'DENIED', denied_at = ?, denied_reason = ?
+    WHERE submission_id = ?
+    """
+    try:
+        ws_execute(sql, [utc_now_iso(), evaluation['gate_reason'], req.submission_id])
+    except Exception as e:
+        logger.warning('Could not update approval_submissions: %s', e)
+
+    return {
+        'denied': True,
+        'gate_id': gate_id,
+        'submission_id': req.submission_id,
+        'server_id': req.server_id,
+        'reason': evaluation['gate_reason'],
+        'verdict': evaluation['verdict'],
+        'denied_at': utc_now_iso()
+    }
+
+
+@app.get('/gate/history/{submission_id}')
+def get_gate_history(submission_id: str, auth: str = Depends(verify_api_key)):
+    sql = """
+    SELECT gate_id, submission_id, server_id, verdict, risk_tier, trust_score,
+           gate_action, gate_reason, evaluated_at
+    FROM approval_verdict_gates
+    WHERE submission_id = ?
+    ORDER BY evaluated_at DESC
+    LIMIT 50
+    """
+    try:
+        result = ws_query(sql, [submission_id])
+        return {'rows': result.get('rows', [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/policy')
+def create_policy(policy: PolicyCreate, auth: str = Depends(verify_api_key)):
+    if auth != 'admin':
+        raise HTTPException(status_code=403, detail='Admin role required')
+    import hashlib
+    policy_id = hashlib.sha256(policy.policy_name.encode()).hexdigest()[:12]
+    sql = """
+    INSERT INTO approval_verdict_policies
+        (policy_id, policy_name, allowed_verdicts, blocked_verdicts,
+         require_trust_score_min, allow_analyst_override, active)
+    VALUES (?, ?, ?, ?, ?, ?, TRUE)
+    ON CONFLICT (policy_id) DO UPDATE SET
+        policy_name = excluded.policy_name,
+        allowed_verdicts = excluded.allowed_verdicts,
+        blocked_verdicts = excluded.blocked_verdicts,
+        require_trust_score_min = excluded.require_trust_score_min,
+        allow_analyst_override = excluded.allow_analyst_override
+    """
+    try:
+        ws_execute(sql, [
+            policy_id,
+            policy.policy_name,
+            policy.allowed_verdicts or list(VERDICT_ALLOWED),
+            policy.blocked_verdicts or list(VERDICT_BLOCKED),
+            policy.require_trust_score_min,
+            policy.allow_analyst_override
+        ])
+        return {'policy_id': policy_id, 'created': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/policy')
+def list_policies(auth: str = Depends(verify_api_key)):
+    sql = """
+    SELECT policy_id, policy_name, allowed_verdicts, blocked_verdicts,
+           require_trust_score_min, allow_analyst_override, active, created_at
+    FROM approval_verdict_policies
+    ORDER BY created_at DESC
+    """
+    try:
+        result = ws_query(sql)
+        return {'rows': result.get('rows', [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/policy/toggle')
+def toggle_policy(toggle: PolicyToggle, auth: str = Depends(verify_api_key)):
+    if auth != 'admin':
+        raise HTTPException(status_code=403, detail='Admin role required')
+    sql = "UPDATE approval_verdict_policies SET active = ? WHERE policy_id = ?"
+    try:
+        ws_execute(sql, [toggle.active, toggle.policy_id])
+        return {'policy_id': toggle.policy_id, 'active': toggle.active}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def heartbeat_loop():
+    while True:
+        try:
+            send_heartbeat('running', {'port': PORT})
+        except Exception as e:
+            logger.warning('Heartbeat failed: %s', e)
+        time.sleep(HEARTBEAT_INTERVAL)
+
+
+def run():
+    check_single_instance()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    load_api_keys()
+    ensure_tables()
+    import threading
+    t = threading.Thread(target=heartbeat_loop, daemon=True)
+    t.start()
+    logger.info('Starting %s on port %d', SERVICE_NAME, PORT)
+    uvicorn.run(app, host='0.0.0.0', port=PORT)
+
+
 if __name__ == '__main__':
-    import sys
-    
-    # Smoke test: verify the module imports cleanly
-    print("Testing module import...")
-    import approval_verdict_gate
-    assert hasattr(approval_verdict_gate, 'app'), "app attribute not found"
-    
-    # Verify routes are registered
-    routes = [r.path for r in approval_verdict_gate.app.routes]
-    print(f"Registered routes: {routes}")
-    
-    assert '/gate/deploy/{mcp_name}' in routes, f"Route /gate/deploy/{{mcp_name}} not found. Found: {routes}"
-    assert '/gate/override' in routes, f"Route /gate/override not found. Found: {routes}"
-    
-    # Verify config
-    assert hasattr(approval_verdict_gate, 'GATE_MIN_SCORE'), "GATE_MIN_SCORE not found"
-    assert approval_verdict_gate.GATE_MIN_SCORE == 45.0, f"Expected default GATE_MIN_SCORE of 45, got {approval_verdict_gate.GATE_MIN_SCORE}"
-    
-    # Verify verdict tiers
-    assert 'TRUSTED_GENERAL' in approval_verdict_gate.VERDICT_TIERS
-    assert 'ENTERPRISE_CONTROLLED' in approval_verdict_gate.VERDICT_TIERS
-    assert 'KNOWN_THREAT' in approval_verdict_gate.VERDICT_TIERS
-    
-    # Verify helper function
-    assert approval_verdict_gate.get_verdict_tier(80) == 'TRUSTED_GENERAL'
-    assert approval_verdict_gate.get_verdict_tier(50) == 'ENTERPRISE_CONTROLLED'
-    assert approval_verdict_gate.get_verdict_tier(10) == 'KNOWN_THREAT'
-    
-    print("PASS: approval_verdict_gate imports and routes registered")
-    print(f"  - Min score threshold: {approval_verdict_gate.GATE_MIN_SCORE}")
-    print(f"  - Verdict tiers: {list(approval_verdict_gate.VERDICT_TIERS.keys())}")
-    sys.exit(0)
+    run()

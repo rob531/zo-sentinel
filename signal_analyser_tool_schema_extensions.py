@@ -3,452 +3,433 @@
 signal_analyser_tool_schema_extensions.py
 
 Companion module extending signal_analyser with mcp_tool_schema_patterns detection.
-Reads MCP tool definitions, classifies progressive-disclosure vs brute-force enumeration
-patterns, and writes results to mcp_signal_enrichments.
-
-This is a pure companion module — signal_analyser.py is protected and cannot be edited directly.
+Reads MCP tool definitions from mcp_fingerprints or mcp_tool_hashes,
+classifies progressive-disclosure vs brute-force enumeration patterns,
+and writes results to mcp_signal_enrichments.
 """
 
 import json
 import time
-import logging
-import random
+import threading
 from datetime import datetime, timedelta
 from typing import Optional
 
 import requests
 
+# Import the pure mcp_tool_schema_patterns library
+from mcp_tool_schema_patterns import classify_tool_schema
+
 # Configuration
 WRITE_SERVICE_HOST = "127.0.0.1"
 WRITE_SERVICE_PORT = 8772
-WRITE_SERVICE_TIMEOUT = 10  # seconds
-HEALTH_CHECK_INTERVAL = 60  # seconds
-MAX_RETRIES = 5
-BASE_BACKOFF_DELAY = 1.0
+WRITE_SERVICE_URL = f"http://{WRITE_SERVICE_HOST}:{WRITE_SERVICE_PORT}"
+REQUEST_TIMEOUT = 10
+HEARTBEAT_INTERVAL = 60  # seconds
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Global state
+_last_heartbeat = None
+_heartbeat_lock = threading.Lock()
 
 
-class WriteServiceClient:
-    """Client for write_service with exponential backoff on 5xx errors."""
+def _make_request(method: str, endpoint: str, data: Optional[dict] = None, retries: int = 3) -> dict:
+    """
+    Make HTTP request to write_service with exponential backoff on 5xx errors.
     
-    def __init__(self, host: str = WRITE_SERVICE_HOST, port: int = WRITE_SERVICE_PORT):
-        self.base_url = f"http://{host}:{port}"
-        self.timeout = WRITE_SERVICE_TIMEOUT
-    
-    def _calculate_backoff_delay(self, attempt: int) -> float:
-        """Calculate exponential backoff delay with jitter."""
-        delay = BASE_BACKOFF_DELAY * (2 ** attempt)
-        jitter = delay * 0.1 * random.random()
-        return min(delay + jitter, 60.0)
-    
-    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict:
-        """Make HTTP request with exponential backoff on 5xx errors."""
-        url = f"{self.base_url}{endpoint}"
+    Args:
+        method: HTTP method (GET, POST, etc.)
+        endpoint: API endpoint path
+        data: Optional JSON payload
+        retries: Maximum retry attempts
         
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = requests.request(
-                    method=method,
-                    url=url,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                if 200 <= response.status_code < 500:
-                    response.raise_for_status()
-                    return response.json() if response.content else {}
-                
-                if 500 <= response.status_code < 600:
-                    logger.warning(
-                        f"Attempt {attempt + 1}/{MAX_RETRIES}: "
-                        f"Server error {response.status_code}"
-                    )
-                    if attempt < MAX_RETRIES - 1:
-                        delay = self._calculate_backoff_delay(attempt)
-                        logger.info(f"Retrying in {delay:.1f}s...")
-                        time.sleep(delay)
-                        continue
-                    else:
-                        raise requests.exceptions.HTTPError(
-                            f"Server error {response.status_code} after {MAX_RETRIES} attempts"
-                        )
-                        
-            except requests.exceptions.Timeout:
-                logger.warning(f"Attempt {attempt + 1}/{MAX_RETRIES}: Request timeout")
-                if attempt < MAX_RETRIES - 1:
-                    delay = self._calculate_backoff_delay(attempt)
-                    logger.info(f"Retrying in {delay:.1f}s...")
-                    time.sleep(delay)
-                    continue
-                else:
-                    raise
-                    
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Attempt {attempt + 1}/{MAX_RETRIES}: {e}")
-                if attempt < MAX_RETRIES - 1:
-                    delay = self._calculate_backoff_delay(attempt)
-                    logger.info(f"Retrying in {delay:.1f}s...")
-                    time.sleep(delay)
-                    continue
-                else:
-                    raise
+    Returns:
+        Response data as dict
         
-        return {}
+    Raises:
+        requests.RequestException: On failure after retries exhausted
+    """
+    url = f"{WRITE_SERVICE_URL}{endpoint}"
+    headers = {"Content-Type": "application/json"}
     
-    def query(self, sql: str, params: Optional[dict] = None) -> list:
-        """Execute SELECT query against write_service."""
-        data = {"sql": sql, "params": params or {}}
-        result = self._make_request("POST", "/query", data)
-        return result.get("data", [])
+    backoff = 1.0  # Start with 1 second backoff
     
-    def execute(self, sql: str, params: Optional[dict] = None) -> dict:
-        """Execute non-SELECT query (INSERT/UPDATE/DELETE) against write_service."""
-        data = {"sql": sql, "params": params or {}}
-        return self._make_request("POST", "/execute", data)
-
-
-class HealthMonitor:
-    """Reports heartbeat to service_health at regular intervals."""
-    
-    def __init__(self, client: WriteServiceClient, interval: int = HEALTH_CHECK_INTERVAL):
-        self.client = client
-        self.interval = interval
-        self.last_heartbeat: Optional[datetime] = None
-    
-    def heartbeat(self, processed_count: int = 0, is_final: bool = False) -> None:
-        """Send heartbeat to service_health."""
-        now = datetime.utcnow()
-        
-        if self.last_heartbeat and (now - self.last_heartbeat).total_seconds() < self.interval and not is_final:
-            return
-        
-        sql = """
-            INSERT INTO service_health (service_name, status, last_heartbeat, details)
-            VALUES (?, ?, ?, ?)
-        """
-        details = {
-            "processed_count": processed_count,
-            "is_final": is_final
-        }
-        params = {
-            "service_name": "signal_analyser_tool_schema_extensions",
-            "status": "completed" if is_final else "running",
-            "last_heartbeat": now.isoformat(),
-            "details": json.dumps(details)
-        }
-        
+    for attempt in range(retries + 1):
         try:
-            self.client.execute(sql, params)
-            self.last_heartbeat = now
-            logger.debug(f"Heartbeat sent: processed={processed_count}, final={is_final}")
-        except Exception as e:
-            logger.warning(f"Failed to send heartbeat: {e}")
+            response = requests.request(
+                method=method,
+                url=url,
+                json=data,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT
+            )
+            
+            # Success
+            if 200 <= response.status_code < 300:
+                return response.json() if response.content else {}
+            
+            # Server error - retry with backoff
+            if 500 <= response.status_code < 600:
+                if attempt < retries:
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                    
+            # Client error or exhausted retries
+            response.raise_for_status()
+            
+        except requests.exceptions.Timeout:
+            if attempt < retries:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            raise
+        except requests.exceptions.ConnectionError:
+            if attempt < retries:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            raise
+        except requests.RequestException:
+            raise
+    
+    return {}
+
+
+def _heartbeat() -> None:
+    """
+    Send heartbeat to service_health endpoint.
+    Must be called at least every 60 seconds.
+    """
+    global _last_heartbeat
+    
+    try:
+        payload = {
+            "service": "signal_analyser_tool_schema_extensions",
+            "timestamp": datetime.utcnow().isoformat(),
+            "status": "running"
+        }
+        _make_request("POST", "/service_health", data=payload)
+        
+        with _heartbeat_lock:
+            _last_heartbeat = datetime.utcnow()
+    except Exception as e:
+        # Log but don't fail - heartbeat is best-effort
+        print(f"Warning: Heartbeat failed: {e}")
+
+
+def _should_send_heartbeat() -> bool:
+    """Check if enough time has passed to warrant a new heartbeat."""
+    with _heartbeat_lock:
+        if _last_heartbeat is None:
+            return True
+        elapsed = (datetime.utcnow() - _last_heartbeat).total_seconds()
+        return elapsed >= HEARTBEAT_INTERVAL
 
 
 def _classify_server_tools(tools: list) -> dict:
     """
-    Classify a list of tools using mcp_tool_schema_patterns.
+    Classify server tools using mcp_tool_schema_patterns.
+    
+    This is a passthrough to the mcp_tool_schema_patterns library.
     
     Args:
-        tools: List of tool definitions (each tool should have 'name' and optionally 'description')
+        tools: List of tool definitions (each with 'name', 'description', etc.)
         
     Returns:
-        Dictionary with pattern classification and evidence
+        Classification result dict with pattern, confidence, evidence, etc.
     """
-    try:
-        from mcp_tool_schema_patterns import classify_tool_schema
-        return classify_tool_schema(tools)
-    except ImportError:
-        logger.warning("mcp_tool_schema_patterns not available, using fallback classification")
-        return _fallback_classification(tools)
-    except Exception as e:
-        logger.error(f"Classification error: {e}")
-        return {
-            "pattern": "unknown",
-            "confidence": 0.0,
-            "evidence": {"error": str(e)}
-        }
+    return classify_tool_schema(tools)
 
 
-def _fallback_classification(tools: list) -> dict:
-    """Fallback classification when mcp_tool_schema_patterns is unavailable."""
-    if not tools:
-        return {
-            "pattern": "unknown",
-            "confidence": 0.0,
-            "evidence": "No tools provided for classification"
-        }
-    
-    tool_count = len(tools)
-    
-    # Simple heuristic based on tool count
-    if tool_count <= 5:
-        return {
-            "pattern": "progressive_disclosure",
-            "confidence": 0.6,
-            "evidence": {
-                "method": "count_heuristic",
-                "reason": f"Small tool count ({tool_count}) suggests progressive disclosure pattern"
-            }
-        }
-    elif tool_count <= 20:
-        return {
-            "pattern": "hybrid",
-            "confidence": 0.5,
-            "evidence": {
-                "method": "count_heuristic",
-                "reason": f"Moderate tool count ({tool_count}) suggests hybrid pattern"
-            }
-        }
-    else:
-        return {
-            "pattern": "brute_force_enumeration",
-            "confidence": 0.6,
-            "evidence": {
-                "method": "count_heuristic",
-                "reason": f"Large tool count ({tool_count}) suggests brute force enumeration pattern"
-            }
-        }
-
-
-def _get_mcp_tools_from_fingerprints(client: WriteServiceClient, limit: int = 100) -> list:
-    """Retrieve MCP tools from mcp_fingerprints table."""
-    query = """
-        SELECT 
-            mcp_fingerprints.server_id,
-            mcp_fingerprints.mcp_name,
-            mcp_fingerprints.registry_source,
-            mcp_fingerprints.tool_definitions
-        FROM mcp_fingerprints
-        WHERE mcp_fingerprints.tool_definitions IS NOT NULL
-        AND mcp_fingerprints.tool_definitions != '[]'
-        AND mcp_fingerprints.tool_definitions != ''
-        LIMIT ?
+def _get_mcp_fingerprints() -> list:
     """
-    try:
-        result = client.query(query, {"limit": limit})
-        return result
-    except Exception as e:
-        logger.error(f"Failed to query mcp_fingerprints: {e}")
-        return []
-
-
-def _get_mcp_tools_from_hashes(client: WriteServiceClient, limit: int = 100) -> list:
-    """Retrieve MCP tools from mcp_tool_hashes table as alternative source."""
-    query = """
-        SELECT 
-            mcp_tool_hashes.server_id,
-            mcp_tool_hashes.mcp_name,
-            mcp_tool_hashes.registry_source,
-            mcp_tool_hashes.tools
-        FROM mcp_tool_hashes
-        WHERE mcp_tool_hashes.tools IS NOT NULL
-        AND mcp_tool_hashes.tools != '[]'
-        AND mcp_tool_hashes.tools != ''
-        LIMIT ?
-    """
-    try:
-        result = client.query(query, {"limit": limit})
-        return result
-    except Exception as e:
-        logger.error(f"Failed to query mcp_tool_hashes: {e}")
-        return []
-
-
-def _parse_tools(tool_definitions) -> list:
-    """Parse tool definitions from various formats."""
-    if not tool_definitions:
-        return []
+    Fetch MCP fingerprints from the database.
     
-    if isinstance(tool_definitions, list):
-        return tool_definitions
-    
-    if isinstance(tool_definitions, str):
-        try:
-            return json.loads(tool_definitions)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse tool_definitions JSON")
-            return []
-    
-    return []
-
-
-def _check_existing_enrichment(client: WriteServiceClient, server_id: str) -> bool:
-    """Check if enrichment already exists for this server (idempotency check)."""
-    query = """
-        SELECT 1 FROM mcp_signal_enrichments
-        WHERE server_id = ?
-        AND signal_type = 'tool_schema_pattern'
-        LIMIT 1
+    Returns:
+        List of fingerprint records with tool_definitions
     """
-    try:
-        result = client.query(query, {"server_id": server_id})
-        return len(result) > 0
-    except Exception as e:
-        logger.error(f"Failed to check existing enrichment: {e}")
-        return False
-
-
-def _write_enrichment(client: WriteServiceClient, enrichment: dict) -> bool:
-    """Write enrichment record to mcp_signal_enrichments."""
-    sql = """
-        INSERT INTO mcp_signal_enrichments 
-        (server_id, mcp_name, signal_type, evidence_blob, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """
-    params = {
-        "server_id": enrichment["server_id"],
-        "mcp_name": enrichment["mcp_name"],
-        "signal_type": "tool_schema_pattern",
-        "evidence_blob": json.dumps(enrichment["evidence_blob"]),
-        "created_at": datetime.utcnow().isoformat()
+    query = {
+        "table": "mcp_fingerprints",
+        "columns": ["server_id", "mcp_name", "registry_source", "tool_definitions", "updated_at"]
     }
+    
+    result = _make_request("POST", "/query", data=query)
+    return result.get("data", [])
+
+
+def _get_mcp_tool_hashes() -> list:
+    """
+    Fetch MCP tool hashes from the database.
+    
+    Returns:
+        List of tool hash records with tools field
+    """
+    query = {
+        "table": "mcp_tool_hashes",
+        "columns": ["server_id", "mcp_name", "tools", "updated_at"]
+    }
+    
+    result = _make_request("POST", "/query", data=query)
+    return result.get("data", [])
+
+
+def _get_existing_signals(server_id: str) -> list:
+    """
+    Check for existing tool_schema_pattern signals for a server.
+    
+    Args:
+        server_id: The server identifier
+        
+    Returns:
+        List of existing signal records
+    """
+    query = {
+        "table": "mcp_signal_enrichments",
+        "columns": ["id", "signal_type"],
+        "filters": {
+            "server_id": server_id,
+            "signal_type": "tool_schema_pattern"
+        }
+    }
+    
+    result = _make_request("POST", "/query", data=query)
+    return result.get("data", [])
+
+
+def _write_enrichment(server_id: str, mcp_name: str, pattern: str, 
+                      tool_count: int, evidence: dict) -> bool:
+    """
+    Write enrichment record to mcp_signal_enrichments.
+    
+    Args:
+        server_id: The server identifier
+        mcp_name: Name of the MCP server
+        pattern: Classification pattern
+        tool_count: Number of tools analyzed
+        evidence: Detailed evidence blob
+        
+    Returns:
+        True if write successful, False otherwise
+    """
+    evidence_blob = {
+        "pattern": pattern,
+        "tool_count": tool_count,
+        "evidence": evidence,
+        "analyzed_at": datetime.utcnow().isoformat()
+    }
+    
+    record = {
+        "table": "mcp_signal_enrichments",
+        "data": {
+            "server_id": server_id,
+            "mcp_name": mcp_name,
+            "signal_type": "tool_schema_pattern",
+            "evidence_blob": json.dumps(evidence_blob),
+            "created_at": datetime.utcnow().isoformat()
+        }
+    }
+    
     try:
-        client.execute(sql, params)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to write enrichment: {e}")
+        result = _make_request("POST", "/insert", data=record)
+        return result.get("success", False) or result.get("affected_rows", 0) > 0
+    except Exception:
         return False
 
 
-def _process_server_tools(client: WriteServiceClient, server_record: dict) -> dict:
-    """Process tools for a single server and create enrichment."""
-    server_id = server_record["server_id"]
-    mcp_name = server_record["mcp_name"]
-    registry_source = server_record.get("registry_source", "unknown")
+def _process_fingerprint_record(record: dict) -> bool:
+    """
+    Process a single mcp_fingerprints record.
     
-    # Get tools from appropriate field
-    tool_definitions = server_record.get("tool_definitions") or server_record.get("tools", [])
+    Args:
+        record: Fingerprint record with tool_definitions
+        
+    Returns:
+        True if processing succeeded, False otherwise
+    """
+    server_id = record.get("server_id")
+    mcp_name = record.get("mcp_name", "unknown")
+    registry_source = record.get("registry_source", "unknown")
+    
+    if not server_id:
+        return False
+    
+    # Check for existing signal (idempotency)
+    existing = _get_existing_signals(server_id)
+    if existing:
+        return True  # Already processed, consider it success
+    
+    # Parse tool definitions
+    tool_defs_raw = record.get("tool_definitions")
+    if not tool_defs_raw:
+        return False
+    
+    try:
+        if isinstance(tool_defs_raw, str):
+            tools = json.loads(tool_defs_raw)
+        elif isinstance(tool_defs_raw, list):
+            tools = tool_defs_raw
+        else:
+            return False
+    except (json.JSONDecodeError, TypeError):
+        return False
+    
+    if not tools:
+        return False
+    
+    # Classify the tools
+    classification = _classify_server_tools(tools)
+    pattern = classification.get("pattern", "unknown")
+    evidence = classification.get("evidence", {})
+    tool_count = classification.get("tool_count", len(tools))
+    
+    # Write enrichment
+    return _write_enrichment(server_id, mcp_name, pattern, tool_count, evidence)
+
+
+def _process_tool_hash_record(record: dict) -> bool:
+    """
+    Process a single mcp_tool_hashes record.
+    
+    Args:
+        record: Tool hash record with tools field
+        
+    Returns:
+        True if processing succeeded, False otherwise
+    """
+    server_id = record.get("server_id")
+    mcp_name = record.get("mcp_name", "unknown")
+    
+    if not server_id:
+        return False
+    
+    # Check for existing signal (idempotency)
+    existing = _get_existing_signals(server_id)
+    if existing:
+        return True  # Already processed
     
     # Parse tools
-    tools = _parse_tools(tool_definitions)
+    tools_raw = record.get("tools")
+    if not tools_raw:
+        return False
+    
+    try:
+        if isinstance(tools_raw, str):
+            tools = json.loads(tools_raw)
+        elif isinstance(tools_raw, list):
+            tools = tools_raw
+        else:
+            return False
+    except (json.JSONDecodeError, TypeError):
+        return False
     
     if not tools:
-        return {
-            "server_id": server_id,
-            "status": "skipped",
-            "reason": "no_tools"
-        }
+        return False
     
-    # Classify using mcp_tool_schema_patterns
+    # Classify the tools
     classification = _classify_server_tools(tools)
+    pattern = classification.get("pattern", "unknown")
+    evidence = classification.get("evidence", {})
+    tool_count = classification.get("tool_count", len(tools))
     
-    # Build evidence blob
-    evidence_blob = {
-        "pattern": classification["pattern"],
-        "tool_count": len(tools),
-        "evidence": classification.get("evidence", {}),
-        "registry_source": registry_source,
-        "confidence": classification.get("confidence", 0.5)
-    }
-    
-    # Create enrichment record
-    enrichment = {
-        "server_id": server_id,
-        "mcp_name": mcp_name,
-        "evidence_blob": evidence_blob
-    }
-    
-    # Write to database
-    success = _write_enrichment(client, enrichment)
-    
-    return {
-        "server_id": server_id,
-        "mcp_name": mcp_name,
-        "status": "success" if success else "failed",
-        "pattern": classification["pattern"],
-        "tool_count": len(tools)
-    }
+    # Write enrichment
+    return _write_enrichment(server_id, mcp_name, pattern, tool_count, evidence)
 
 
-def run() -> int:
+def _process_batch(records: list, source: str) -> int:
     """
-    Main entry point for processing MCP tool schema patterns.
+    Process a batch of records.
     
-    Reads MCP tool definitions, classifies patterns, and writes to mcp_signal_enrichments.
-    
+    Args:
+        records: List of records to process
+        source: Source table name for logging
+        
     Returns:
-        Number of servers processed successfully
+        Number of successfully processed records
     """
-    logger.info("Starting MCP tool schema pattern analysis")
+    processed = 0
     
-    client = WriteServiceClient(WRITE_SERVICE_HOST, WRITE_SERVICE_PORT)
-    health_monitor = HealthMonitor(client)
-    
-    batch_size = 100
-    total_processed = 0
-    batch_count = 0
-    
-    last_health_report = time.time()
-    
-    while True:
-        # Send heartbeat if needed (every <=60s)
-        current_time = time.time()
-        if current_time - last_health_report >= HEALTH_CHECK_INTERVAL:
-            health_monitor.heartbeat(total_processed)
-            last_health_report = current_time
-        
-        # Get tools from fingerprints (primary source)
-        fingerprints = _get_mcp_tools_from_fingerprints(client, batch_size)
-        
-        # Get tools from hashes (alternative source)
-        hashes = _get_mcp_tools_from_hashes(client, batch_size)
-        
-        # Combine and deduplicate by server_id
-        all_servers = {}
-        for record in fingerprints:
-            server_id = record.get("server_id")
-            if server_id and server_id not in all_servers:
-                all_servers[server_id] = record
-        
-        for record in hashes:
-            server_id = record.get("server_id")
-            if server_id and server_id not in all_servers:
-                all_servers[server_id] = record
-        
-        if not all_servers:
-            logger.info("No more servers to process")
-            break
-        
-        batch_count += 1
-        logger.info(f"Processing batch {batch_count} with {len(all_servers)} servers")
-        
-        for server_id, server_record in all_servers.items():
-            # Check idempotency - skip if already processed
-            if _check_existing_enrichment(client, server_id):
-                logger.debug(f"Skipping {server_id} - already processed")
+    for record in records:
+        try:
+            if source == "mcp_fingerprints":
+                success = _process_fingerprint_record(record)
+            elif source == "mcp_tool_hashes":
+                success = _process_tool_hash_record(record)
+            else:
                 continue
             
-            # Process the server
-            result = _process_server_tools(client, server_record)
-            
-            if result["status"] == "success":
-                total_processed += 1
-                logger.debug(f"Processed {server_id}: {result['pattern']}")
-            else:
-                logger.warning(f"Failed to process {server_id}: {result.get('reason')}")
+            if success:
+                processed += 1
+                
+            # Send heartbeat periodically
+            if _should_send_heartbeat():
+                _heartbeat()
+                
+        except Exception as e:
+            print(f"Error processing record from {source}: {e}")
+            continue
+    
+    return processed
+
+
+def run(batch_size: int = 100) -> int:
+    """
+    Main entry point - process all MCP servers in batches.
+    
+    Reads MCP tool definitions from mcp_fingerprints or mcp_tool_hashes,
+    classifies patterns using mcp_tool_schema_patterns, and writes
+    results to mcp_signal_enrichments.
+    
+    Args:
+        batch_size: Number of records to process per batch
         
-        logger.info(f"Batch {batch_count} complete. Total processed: {total_processed}")
+    Returns:
+        Total number of records processed across all sources
+    """
+    total_processed = 0
     
-    # Final health report
-    health_monitor.heartbeat(total_processed, is_final=True)
+    # Initial heartbeat
+    _heartbeat()
     
-    logger.info(f"MCP tool schema pattern analysis complete. Processed {total_processed} servers.")
+    # Process mcp_fingerprints
+    try:
+        fingerprints = _get_mcp_fingerprints()
+        
+        for i in range(0, len(fingerprints), batch_size):
+            batch = fingerprints[i:i + batch_size]
+            processed = _process_batch(batch, "mcp_fingerprints")
+            total_processed += processed
+            print(f"Fingerprints batch {i // batch_size + 1}: processed {processed}")
+            
+    except Exception as e:
+        print(f"Error processing mcp_fingerprints: {e}")
+    
+    # Process mcp_tool_hashes
+    try:
+        tool_hashes = _get_mcp_tool_hashes()
+        
+        for i in range(0, len(tool_hashes), batch_size):
+            batch = tool_hashes[i:i + batch_size]
+            processed = _process_batch(batch, "mcp_tool_hashes")
+            total_processed += processed
+            print(f"Tool hashes batch {i // batch_size + 1}: processed {processed}")
+            
+    except Exception as e:
+        print(f"Error processing mcp_tool_hashes: {e}")
+    
+    # Final heartbeat
+    _heartbeat()
+    
+    print(f"Total records processed: {total_processed}")
     return total_processed
 
 
 if __name__ == "__main__":
-    # Smoke: import mcp_tool_schema_patterns and verify pattern classification
-    from mcp_tool_schema_patterns import classify_tool_schema
+    # Smoke test: verify mcp_tool_schema_patterns classification
+    print("Running smoke test...")
     result = classify_tool_schema([{'name': 'cmd', 'description': 'run command'}] * 3)
-    assert result['pattern'] in ('progressive_disclosure', 'brute_force_enumeration', 'hybrid')
-    print('PASS: tool_schema_patterns classification works')
+    assert result['pattern'] in ('progressive_disclosure', 'brute_force_enumeration', 'hybrid'), \
+        f"Unexpected pattern: {result['pattern']}"
+    print(f"PASS: tool_schema_patterns classification works (pattern={result['pattern']})")
     
-    # Run against a sample of servers
+    # Run against sample servers
+    print("\nRunning against sample servers...")
     run()

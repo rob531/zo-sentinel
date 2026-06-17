@@ -58,14 +58,28 @@ def _create_schema(con) -> set:
     return set(spec.keys())
 
 
-@app.on_event("startup")
-def _startup():
-    global _con, _tables, _tcols
-    _con = _connect()
-    _tables = _create_schema(_con)
+def _refresh_catalog():
+    """Re-derive the known-table set + columns from the LIVE DB catalog. Called at
+    startup AND after every /execute, so a table created via DDL (e.g. the builder's
+    mesh_memory, not one of the app schema tables) becomes writable -- the real
+    write_service supports CREATE-then-write, and the integration tier must too."""
+    global _tables, _tcols
+    rows = _con.execute(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+    ).fetchall()
+    _tables = {r[0] for r in rows}
+    _tcols = {}
     for t in _tables:
         cur = _con.execute(f'SELECT * FROM "{t}" LIMIT 0')
         _tcols[t] = [d[0] for d in cur.description]
+
+
+@app.on_event("startup")
+def _startup():
+    global _con
+    _con = _connect()
+    _create_schema(_con)
+    _refresh_catalog()
 
 
 def _next_id(table: str) -> int:
@@ -119,6 +133,7 @@ async def execute(request: Request):
     body = await request.json()
     try:
         _con.execute(body.get("sql", ""))
+        _refresh_catalog()  # a CREATE/DROP changes which tables are writable
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
     return {"ok": True}

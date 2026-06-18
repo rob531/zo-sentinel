@@ -1,160 +1,149 @@
 """
-tool_hashes_collector.py - Pure daemon module that collects SHA-256 tool hashes from the MCP registry
-and writes fingerprint rows to the mcp_tool_hashes table.
+tool_hashes_collector.py
 
-Consumed by aidr_commit_gateway and dependency_chain_auditor for commit-enforcement decisions.
+Pure daemon module that collects SHA-256 tool hashes from the MCP registry
+and writes fingerprint rows to the mcp_tool_hashes table.
 """
 
 import hashlib
 import json
-import threading
 import time
+import threading
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
 
-# Service endpoints
-WRITE_SERVICE_URL = "http://localhost:8080"
-HEALTH_SERVICE_URL = "http://localhost:8081/health"
-
 
 def compute_tool_hash(tool_name: str, input_schema: dict) -> str:
     """
-    Compute a stable SHA-256 fingerprint of a tool's input schema.
+    Compute a stable SHA-256 fingerprint of a tool's schema.
     
     Args:
         tool_name: Name of the tool
-        input_schema: JSON schema dict for the tool's input parameters
+        input_schema: JSON schema of tool's input parameters
         
     Returns:
-        SHA-256 hex digest (64 characters)
+        64-character hexadecimal SHA-256 hash
     """
-    # Canonical representation for stable hashing
-    canonical = {
-        "tool_name": tool_name,
-        "schema": input_schema
-    }
+    # Canonicalize by sorting keys and using stable JSON encoding
+    canonical = json.dumps(
+        {"tool_name": tool_name, "input_schema": input_schema},
+        sort_keys=True,
+        separators=(',', ':')
+    )
+    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
+def _heartbeat():
+    """
+    Internal heartbeat that POSTs to service_health every 60 seconds.
+    Continues firing even if collection cycles fail.
+    """
+    def _send_heartbeat():
+        while True:
+            try:
+                requests.post(
+                    "http://localhost:8080/service_health",
+                    json={"component": "tool_hashes_collector", "status": "running"},
+                    timeout=5
+                )
+            except requests.RequestException:
+                pass  # Heartbeat failures are silent
+            time.sleep(60)
     
-    # Sort keys for determinism across runs
-    serialized = json.dumps(canonical, sort_keys=True, separators=(',', ':'))
+    thread = threading.Thread(target=_send_heartbeat, daemon=True)
+    thread.start()
+
+
+def _query_registry(sql: str) -> list:
+    """
+    Query the MCP server registry via write_service.
     
-    return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
-
-
-def _heartbeat() -> None:
-    """
-    Internal function that sends heartbeat POST to service_health every 60 seconds.
-    Runs in a separate thread from the main collection loop.
-    """
-    while True:
-        try:
-            requests.post(
-                HEALTH_SERVICE_URL,
-                json={"service": "tool_hashes_collector", "status": "alive"},
-                timeout=5
-            )
-        except requests.RequestException:
-            pass  # Swallow network errors to keep heartbeat running
-        time.sleep(60)
-
-
-def _query_registry() -> list:
-    """
-    Query the mcp_server_registry for servers with tool schemas.
-    
+    Args:
+        sql: SQL query to execute
+        
     Returns:
-        List of dicts with mcp_name and tool_schema keys
+        List of result rows as dicts
     """
     response = requests.post(
-        f"{WRITE_SERVICE_URL}/query",
-        json={
-            "sql": "SELECT mcp_name, tool_schema FROM mcp_server_registry WHERE tool_schema IS NOT NULL"
-        },
+        "http://localhost:8080/write_service/query",
+        json={"sql": sql},
         timeout=30
     )
     response.raise_for_status()
     return response.json()
 
 
-def _write_hash(mcp_name: str, tool_name: str, schema_hash: str) -> None:
+def _write_tool_hashes(rows: list) -> None:
     """
-    Write a single tool hash row to the mcp_tool_hashes table.
+    Write tool hash rows to mcp_tool_hashes table via write_service.
     
     Args:
-        mcp_name: Name of the MCP server
-        tool_name: Name of the tool
-        schema_hash: SHA-256 hash of the tool's input schema
+        rows: List of row dicts with keys: mcp_name, tool_name, schema_hash, collected_at
     """
-    requests.post(
-        f"{WRITE_SERVICE_URL}/write",
-        json={
-            "table": "mcp_tool_hashes",
-            "rows": [{
-                "mcp_name": mcp_name,
-                "tool_name": tool_name,
-                "schema_hash": schema_hash,
-                "collected_at": time.time()
-            }]
-        },
+    response = requests.post(
+        "http://localhost:8080/write_service/write",
+        json={"table": "mcp_tool_hashes", "rows": rows},
         timeout=30
     )
-
-
-def _process_server(server: dict) -> list:
-    """
-    Extract individual tool hashes from a server's tool_schema.
-    
-    Args:
-        server: Dict with mcp_name and tool_schema (list of tool definitions)
-        
-    Returns:
-        List of (tool_name, schema_hash) tuples
-    """
-    results = []
-    mcp_name = server["mcp_name"]
-    tool_schema = server.get("tool_schema") or []
-    
-    for tool_def in tool_schema:
-        if isinstance(tool_def, dict) and "name" in tool_def:
-            tool_name = tool_def["name"]
-            input_schema = tool_def.get("input_schema", {})
-            schema_hash = compute_tool_hash(tool_name, input_schema)
-            results.append((mcp_name, tool_name, schema_hash))
-    
-    return results
+    response.raise_for_status()
 
 
 def run() -> None:
     """
     Main daemon entry point.
-    Collects tool hashes from registry and writes to mcp_tool_hashes table.
-    Runs indefinitely with 60-second heartbeat interval.
+    
+    Reads mcp_server_registry via write_service /query,
+    computes SHA-256 fingerprints for each tool schema,
+    and writes results to mcp_tool_hashes via write_service /write.
+    
+    Heartbeat fires every 60s regardless of collection cycle status.
     """
-    # Start heartbeat in background thread - fires independently of collection cycle
-    heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
-    heartbeat_thread.start()
+    _heartbeat()
     
     while True:
         try:
             # Query registry for MCP servers with tool schemas
-            servers = _query_registry()
+            results = _query_registry(
+                "SELECT mcp_name, tool_schema FROM mcp_server_registry WHERE tool_schema IS NOT NULL"
+            )
             
-            # Process each server and write hashes
-            for server in servers:
-                for mcp_name, tool_name, schema_hash in _process_server(server):
-                    _write_hash(mcp_name, tool_name, schema_hash)
-                    
+            rows = []
+            collected_at = datetime.now(timezone.utc).isoformat()
+            
+            for row in results:
+                mcp_name = row["mcp_name"]
+                tool_schema = json.loads(row["tool_schema"])
+                
+                # Iterate over tools in the schema
+                for tool_name, input_schema in tool_schema.items():
+                    schema_hash = compute_tool_hash(tool_name, input_schema)
+                    rows.append({
+                        "mcp_name": mcp_name,
+                        "tool_name": tool_name,
+                        "schema_hash": schema_hash,
+                        "collected_at": collected_at
+                    })
+            
+            # Write results if any
+            if rows:
+                _write_tool_hashes(rows)
+        
         except Exception:
-            # Continue running even if collection cycle raises
-            # Heartbeat continues independently in its thread
+            # Collection cycle failed - heartbeat continues independently
             pass
         
         # Sleep between collection cycles
         time.sleep(60)
 
 
-if __name__ == "__main__":
-    result = compute_tool_hash('list_files', {'type': 'object', 'properties': {'path': {'type': 'string'}}})
+if __name__ == '__main__':
+    # Acceptance test
+    result = compute_tool_hash(
+        'list_files',
+        {'type': 'object', 'properties': {'path': {'type': 'string'}}}
+    )
     assert len(result) == 64, f"Expected 64 chars, got {len(result)}"
     assert result.isalnum(), f"Expected alphanumeric, got {result}"
     print("PASS")

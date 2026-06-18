@@ -147,6 +147,10 @@ def _validate(d: dict) -> tuple[bool, str]:
     if not _is_edit_task(d.get("task", "")) and not output:
         return False, "non-edit task must declare output_file"
     if output:
+        from zo_sentinel.build_completion import output_file_is_sane
+        _ok_of, _reason_of = output_file_is_sane(output)
+        if not _ok_of:
+            return False, _reason_of
         already, protected = _import_validator_sets()
         if output in already:
             return False, f"already built: {output}"

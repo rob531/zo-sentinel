@@ -29,6 +29,7 @@ import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -198,8 +199,67 @@ async def chat_completions(request: ChatCompletionRequest):
 KEY_HYDRATOR = "/home/workspace/zo_mesh/key_hydrator.py"
 HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY")
 
+# Raised from 30s: key_hydrator --get round-trips to the Windows tower vault
+# responder, which can exceed 30s under load -> the call was killed, gemini/
+# anthropic rungs 502'd, and every build fell to MiniMax-only (the recurring
+# ghost-stall, 2026-06-18). Env-overridable. Paired with the on-disk cache below
+# so a warm restart skips the round-trip entirely.
+HYDRATE_TIMEOUT = int(os.environ.get("LADDER_HYDRATE_TIMEOUT", "120"))
 
-def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.sleep):
+# Persisted outside the repo clone (on the workspace disk, so it survives the
+# `git reset --hard` refresh AND Modal reboot). Once keys resolve we cache them;
+# the NEXT shim start (watchdog restart / reboot) loads them instantly and never
+# blocks on key_hydrator's slow Tower round-trip. 0600.
+KEY_CACHE_FILE = Path(os.environ.get(
+    "LADDER_KEY_CACHE", "/home/workspace/.zo_ladder_keys.cache"))
+
+
+def _load_key_cache(path=None):
+    """Populate env from a previously-written key cache (instant, no subprocess).
+    Returns the set of keys loaded. Best-effort; never raises. Does not clobber a
+    key already present in env (Modal canonical / wrapper wins)."""
+    path = Path(path) if path is not None else KEY_CACHE_FILE
+    loaded = set()
+    try:
+        if not path.exists():
+            return loaded
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip()
+            if k and v and not os.environ.get(k):
+                os.environ[k] = v
+                loaded.add(k)
+    except Exception as e:  # never let the cache crash the shim
+        print(f"[ladder_shim] key-cache read failed: {e}", file=sys.stderr)
+    return loaded
+
+
+def _write_key_cache(path=None):
+    """Persist currently-resolved HYDRATE_KEYS so the next shim start hydrates
+    instantly. Atomic write, 0600, never raises."""
+    path = Path(path) if path is not None else KEY_CACHE_FILE
+    try:
+        lines = [f"{k}={os.environ[k]}" for k in HYDRATE_KEYS if os.environ.get(k)]
+        if not lines:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        tmp.replace(path)
+    except Exception as e:
+        print(f"[ladder_shim] key-cache write failed: {e}", file=sys.stderr)
+
+
+
+def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.sleep,
+                       timeout=None, cache=True):
     """Resolve the LLM keys into THIS process's env via the canonical
     key_hydrator, so the shim is keyed HOWEVER it's launched -- a bare
     `python3 ladder_shim.py`, a crash/watchdog restart, anything -- not only via
@@ -208,8 +268,13 @@ def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.slee
     regression). In-process mirror of that wrapper, plus a short retry loop for
     the boot-race where the vault/Tower isn't ready on the first pass (same
     reason key_hydrator retries). `runner`/`sleep` are injectable for tests."""
+    if timeout is None:
+        timeout = HYDRATE_TIMEOUT
+    if cache:
+        _load_key_cache()   # warm path: skip the slow Tower round-trip entirely
     runner = runner or (lambda k: subprocess.run(
-        ["python3", kh, "--get", k], capture_output=True, text=True, timeout=30).stdout.strip())
+        ["python3", kh, "--get", k], capture_output=True, text=True,
+        timeout=timeout).stdout.strip())
 
     def _pull():
         for k in HYDRATE_KEYS:
@@ -230,6 +295,8 @@ def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.slee
         if os.environ.get("RcGeminiAPIKey"):  # the rung-unblocker
             print(f"[ladder_shim] keys hydrated (gemini present after pass {i + 1})",
                   file=sys.stderr)
+            if cache:
+                _write_key_cache()   # persist so the next restart is instant
             return True
         if i + 1 < attempts:
             sleep(3)

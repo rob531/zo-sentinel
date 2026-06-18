@@ -1,45 +1,47 @@
-import logging
-import hashlib
+"""
+context_efficiency_enrichment.py
+
+Pure enrichment module exposing compute_score(metadata: dict) -> (float, dict).
+
+Scores how efficiently an MCP server uses context -- servers that require
+large context windows, many round-trips, or verbose tool schemas score lower.
+
+Higher scores = lean, efficient MCP servers.
+
+Inputs:
+  - tool_count: int -- number of tools exposed by the MCP server
+  - avg_tool_desc_length: int -- average characters in tool descriptions
+  - schema_complexity: int -- number of top-level schema keys (0 if unknown)
+  - requires_context_window: bool -- whether the server needs large context
+  - round_trip_estimate: int -- estimated API round trips per typical operation (0 if unknown)
+
+All fields are optional; a missing field contributes 0 to the score and is
+appended to evidence['missing'].
+
+Formula (pure, no DB, no network):
+  Base: 60.0
+  + (30 - min(tool_count, 30)) * 0.8    (fewer tools = simpler, +0 to +24; 0 if missing)
+  + (20 - min(avg_tool_desc_length, 20)) * 0.5  (shorter descs = cleaner, +0 to +10; 0 if missing)
+  + (10 - min(schema_complexity, 10)) * 0.8   (simpler schema = better, +0 to +8; 0 if missing)
+  + (10 if not requires_context_window else 0)  (no large context = +10; 0 if missing)
+  - min(round_trip_estimate * 2, 15)      (many round trips = -15 to 0; 0 if missing)
+  Clamp final to [0.0, 100.0].
+"""
+
+from __future__ import annotations
+
 from typing import Any
 
-from mcp_tool_schema_patterns import detect_tool_pattern
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    handlers=[logging.FileHandler("/home/workspace/logs/context_efficiency_enrichment.log")],
-)
-log = logging.getLogger("context_efficiency_enrichment")
 
 SIGNAL_NAME = "context_efficiency"
 VERSION = "1.0.0"
-MAX_SCORE = 100.0
-PROGRESSIVE_DISCLOSURE_TOOL_THRESHOLD = 4
-BRUTE_FORCE_TOOL_THRESHOLD = 20
-
-
-def sigmoid(x: float) -> float:
-    return 1.0 / (1.0 + max(500.0, min(-500.0, -x)))
-
-
-def softmax_weight(value: float, all_values: list[float]) -> float:
-    if not all_values or max(all_values) == min(all_values):
-        return 1.0 / max(1, len(all_values))
-    exp_val = max(0.0, value)
-    exp_sum = sum(max(0.0, v) for v in all_values)
-    if exp_sum == 0:
-        return 1.0 / max(1, len(all_values))
-    return exp_val / exp_sum
-
-
-def log_normalize(value: float) -> float:
-    import math
-    return math.log1p(max(0.0, value))
-
-
-def hash_string(s: str) -> int:
-    h = hashlib.sha256(s.encode("utf-8")).digest()
-    return int.from_bytes(h[:4], byteorder="big")
+REQUIRED_FIELDS = frozenset([
+    "tool_count",
+    "avg_tool_desc_length",
+    "schema_complexity",
+    "requires_context_window",
+    "round_trip_estimate",
+])
 
 
 def compute_score(metadata: dict[str, Any]) -> tuple[float, dict[str, Any]]:
@@ -47,144 +49,164 @@ def compute_score(metadata: dict[str, Any]) -> tuple[float, dict[str, Any]]:
     Compute context efficiency signal score from server metadata.
 
     Args:
-        metadata: Server metadata dict. Expected keys:
-            - tool_pattern: str ('progressive_disclosure' | 'brute_force' | 'hybrid')
-            - tool_count: int (number of tools)
-            - schema_complexity: float (normalized 0-1, e.g. avg param count / 10)
-            - publisher_verified: bool
+        metadata: Server metadata dict. Expected optional keys:
+            - tool_count: int
+            - avg_tool_desc_length: int
+            - schema_complexity: int
+            - requires_context_window: bool
+            - round_trip_estimate: int
 
     Returns:
         (score, evidence) where score in [0.0, 100.0]
     """
-    tool_pattern = metadata.get("tool_pattern", "unknown")
-    tool_count = int(metadata.get("tool_count", 0))
-    schema_complexity = float(metadata.get("schema_complexity", 0.0))
-    publisher_verified = bool(metadata.get("publisher_verified", False))
+    # Collect missing fields
+    missing: list[str] = [f for f in REQUIRED_FIELDS if f not in metadata]
 
-    tool_patterns_all = ["progressive_disclosure", "brute_force", "hybrid", "unknown"]
-    pattern_weights = {
-        "progressive_disclosure": 1.0,
-        "hybrid": 0.55,
-        "brute_force": 0.0,
-        "unknown": 0.3,
-    }
-    base_score = pattern_weights.get(tool_pattern, 0.3) * MAX_SCORE
+    # Extract raw values (only used if field is present)
+    tool_count_raw = metadata.get("tool_count")
+    avg_desc_raw = metadata.get("avg_tool_desc_length")
+    schema_raw = metadata.get("schema_complexity")
+    ctx_win_raw = metadata.get("requires_context_window")
+    round_trip_raw = metadata.get("round_trip_estimate")
 
-    if tool_pattern == "progressive_disclosure":
-        progressive_bonus = min(15.0, (PROGRESSIVE_DISCLOSURE_TOOL_THRESHOLD - tool_count) * 3.0)
-        efficiency_score = base_score + progressive_bonus
-    elif tool_pattern == "brute_force":
-        excess = max(0, tool_count - BRUTE_FORCE_TOOL_THRESHOLD)
-        brute_force_penalty = min(25.0, excess * 0.8)
-        efficiency_score = base_score - brute_force_penalty
-    elif tool_pattern == "hybrid":
-        if tool_count <= PROGRESSIVE_DISCLOSURE_TOOL_THRESHOLD:
-            hybrid_bonus = 10.0
-        elif tool_count >= BRUTE_FORCE_TOOL_THRESHOLD:
-            hybrid_penalty = 15.0
-            hybrid_bonus = -hybrid_penalty
-        else:
-            mid_range = (BRUTE_FORCE_TOOL_THRESHOLD - PROGRESSIVE_DISCLOSURE_TOOL_THRESHOLD) / 2.0
-            position = (tool_count - PROGRESSIVE_DISCLOSURE_TOOL_THRESHOLD) / mid_range
-            hybrid_bonus = 10.0 * (1.0 - position) - 5.0 * position
-        efficiency_score = base_score + hybrid_bonus
+    # Safe cast helpers
+    def to_int(val: Any) -> int | None:
+        if val is None:
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return None
+
+    def to_bool(val: Any) -> bool | None:
+        if val is None:
+            return None
+        try:
+            return bool(val)
+        except (TypeError, ValueError):
+            return None
+
+    tool_count = to_int(tool_count_raw)
+    avg_desc = to_int(avg_desc_raw)
+    schema = to_int(schema_raw)
+    ctx_win = to_bool(ctx_win_raw)
+    round_trip = to_int(round_trip_raw)
+
+    # Compute components -- ONLY if field is present
+    # When field is missing: contributes 0 (not max bonus from defaulting to 0)
+    tool_component = (30 - min(tool_count, 30)) * 0.8 if tool_count is not None else 0.0
+    desc_component = (20 - min(avg_desc, 20)) * 0.5 if avg_desc is not None else 0.0
+    schema_component = (10 - min(schema, 10)) * 0.8 if schema is not None else 0.0
+    context_bonus = 10.0 if (ctx_win is not None and not ctx_win) else 0.0
+    round_trip_penalty = min(round_trip * 2, 15) if round_trip is not None else 0.0
+
+    raw_score = (
+        60.0
+        + tool_component
+        + desc_component
+        + schema_component
+        + context_bonus
+        - round_trip_penalty
+    )
+
+    score = max(0.0, min(100.0, raw_score))
+
+    # Confidence: 0.8 if all fields present, 0.4 if >=3 missing
+    num_missing = len(missing)
+    if num_missing == 0:
+        confidence = 0.8
+    elif num_missing >= 3:
+        confidence = 0.4
     else:
-        efficiency_score = base_score
+        # 1 or 2 missing: linear interpolation between 0.4 and 0.8
+        confidence = 0.8 - (num_missing * 0.2)
 
-    complexity_contribution = schema_complexity * 5.0
-    publisher_contribution = 4.0 if publisher_verified else 0.0
-
-    efficiency_score = efficiency_score + complexity_contribution + publisher_contribution
-
-    efficiency_score = max(0.0, min(100.0, efficiency_score))
-
-    evidence = {
-        "signal_name": SIGNAL_NAME,
-        "version": VERSION,
-        "pattern_type": tool_pattern,
-        "tool_count": tool_count,
-        "schema_complexity": round(schema_complexity, 4),
-        "publisher_verified": publisher_verified,
-        "base_score": round(base_score, 4),
-        "complexity_contribution": round(complexity_contribution, 4),
-        "publisher_contribution": round(publisher_contribution, 4),
-        "partial_scores": {
-            "progressive_disclosure_bonus": (
-                min(15.0, (PROGRESSIVE_DISCLOSURE_TOOL_THRESHOLD - tool_count) * 3.0)
-                if tool_pattern == "progressive_disclosure"
-                else 0.0
-            ),
-            "brute_force_penalty": (
-                min(25.0, max(0, tool_count - BRUTE_FORCE_TOOL_THRESHOLD) * 0.8)
-                if tool_pattern == "brute_force"
-                else 0.0
-            ),
+    evidence_blob: dict[str, Any] = {
+        "tool_count": tool_count if tool_count is not None else 0,
+        "avg_tool_desc_length": avg_desc if avg_desc is not None else 0,
+        "schema_complexity": schema if schema is not None else 0,
+        "requires_context_window": ctx_win if ctx_win is not None else False,
+        "round_trip_estimate": round_trip if round_trip is not None else 0,
+        "components": {
+            "tool_score": round(tool_component, 4),
+            "desc_score": round(desc_component, 4),
+            "schema_score": round(schema_component, 4),
+            "context_bonus": round(context_bonus, 4),
+            "round_trip_penalty": round(round_trip_penalty, 4),
         },
-        "pattern_evidence": _build_pattern_evidence(metadata),
     }
 
-    return round(efficiency_score, 4), evidence
-
-
-def _build_pattern_evidence(metadata: dict[str, Any]) -> dict[str, Any]:
-    tool_definitions = metadata.get("tool_definitions", [])
-    if tool_definitions:
-        pattern_result = detect_tool_pattern(tool_definitions)
-        return pattern_result.get("evidence", {})
-    return {
-        "tools_analyzed": int(metadata.get("tool_count", 0)),
-        "tools_with_schema": 0,
-        "total_parameters": 0,
-        "avg_description_length": 0.0,
-        "has_dynamic_patterns": False,
-        "reason": "tool_definitions not provided; evidence derived from metadata fields",
+    evidence: dict[str, Any] = {
+        "signal_type": SIGNAL_NAME,
+        "confidence": confidence,
+        "evidence_blob": evidence_blob,
+        "missing": missing,
     }
 
-
-def get_score_band(score: float) -> str:
-    if score >= 80.0:
-        return "EXCELLENT"
-    elif score >= 60.0:
-        return "GOOD"
-    elif score >= 40.0:
-        return "MODERATE"
-    elif score >= 20.0:
-        return "WEAK"
-    else:
-        return "POOR"
+    return round(score, 4), evidence
 
 
 def compute_batch_scores(
     batch: list[dict[str, Any]],
-    weights: dict[str, float] | None = None,
 ) -> list[tuple[float, dict[str, Any]]]:
     """
-    Compute scores for a batch of server metadata.
+    Compute scores for a batch of server metadata entries.
     """
-    results = []
-    for item in batch:
-        meta = item if isinstance(item, dict) else {"tool_pattern": "unknown", "tool_count": 0}
-        score, evidence = compute_score(meta)
-        results.append((score, evidence))
-    return results
+    return [compute_score(item) for item in batch]
 
 
 if __name__ == "__main__":
-    test_metadata = {
-        "tool_pattern": "progressive_disclosure",
-        "tool_count": 3,
-        "schema_complexity": 0.4,
-        "publisher_verified": True,
-    }
-    score, evidence = compute_score(test_metadata)
-    log.info("Progressive disclosure test score: %.4f", score)
-    log.info("Evidence: %s", evidence)
-    test2 = {"tool_pattern": "brute_force", "tool_count": 25, "schema_complexity": 0.8, "publisher_verified": False}
-    score2, evidence2 = compute_score(test2)
-    log.info("Brute force test score: %.4f", score2)
-    log.info("Evidence: %s", evidence2)
-    log.info("Signal: %s v%s | MAX_SCORE=%.1f", SIGNAL_NAME, VERSION, MAX_SCORE)
-    log.info("Band for progressive: %s | Band for brute_force: %s", get_score_band(score), get_score_band(score2))
-    sys.exit(0)
+    import sys
 
-import sys
+    errors: list[str] = []
+
+    # Test 1: all-missing base case
+    score1, ev1 = compute_score({})
+    if not (abs(score1 - 60.0) < 0.001):
+        errors.append(f"Test 1 FAILED: expected score 60.0, got {score1}")
+    else:
+        print(f"Test 1 PASS: compute_score({{}}) score={score1}, missing={ev1['missing']}")
+
+    # Test 2: lean efficient server
+    score2, ev2 = compute_score({
+        "tool_count": 3,
+        "avg_tool_desc_length": 50,
+        "schema_complexity": 2,
+        "requires_context_window": False,
+        "round_trip_estimate": 1,
+    })
+    if not (score2 > 80.0 and ev2["confidence"] >= 0.8):
+        errors.append(
+            f"Test 2 FAILED: expected score>80 and confidence>=0.8, "
+            f"got score={score2} confidence={ev2['confidence']}"
+        )
+    else:
+        print(
+            f"Test 2 PASS: score={score2} (>80), "
+            f"confidence={ev2['confidence']} (>=0.8)"
+        )
+
+    # Test 3: bloated inefficient server
+    score3, ev3 = compute_score({
+        "tool_count": 50,
+        "requires_context_window": True,
+        "round_trip_estimate": 8,
+    })
+    if not (score3 < 50.0 and len(ev3["missing"]) == 2):
+        errors.append(
+            f"Test 3 FAILED: expected score<50 and 2 missing, "
+            f"got score={score3} missing={ev3['missing']}"
+        )
+    else:
+        print(
+            f"Test 3 PASS: score={score3} (<50), "
+            f"missing={ev3['missing']} (2 entries)"
+        )
+
+    if errors:
+        for e in errors:
+            print(e, file=sys.stderr)
+        sys.exit(1)
+    else:
+        print("PASS", file=sys.stderr)
+        sys.exit(0)

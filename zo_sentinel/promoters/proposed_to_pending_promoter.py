@@ -174,6 +174,15 @@ def _validate(d: dict) -> Tuple[bool, str]:
         return False, f"invalid complexity: {d.get('complexity')!r}"
     if len(d.get("description", "") or "") < 50:
         return False, "description too short (<50 chars)"
+    # Malformed output_file guard (keep in sync with
+    # build_completion.output_file_is_sane): a doubled leading prefix like
+    # 'admin_admin_ui_suite.py' can never be produced and ghost-loops forever.
+    of = (d.get("output_file") or "")
+    if of:
+        _stem = Path(str(of)).stem
+        _parts = [p for p in _stem.split("_") if p]
+        if len(_parts) >= 2 and _parts[0] == _parts[1]:
+            return False, f"malformed output_file (doubled leading prefix): {_stem!r}"
     return True, "ok"
 
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 DEFAULT_HOME = "/home/workspace/zo_sentinel"
 MIN_OUTPUT_BYTES = 32        # a real module/file is never smaller; rejects empty stubs
@@ -42,6 +42,26 @@ def is_edit_task(directive: dict) -> bool:
     name = str(directive.get("task") or directive.get("directive_id")
                or directive.get("key") or directive.get("id") or "")
     return name.startswith(EDIT_TASK_PREFIXES)
+
+
+def output_file_is_sane(output_file) -> Tuple[bool, str]:
+    """Reject an obviously-malformed declared output filename that can never be
+    produced and would ghost-loop forever -- specifically a DOUBLED LEADING
+    PREFIX like 'admin_admin_ui_suite.py' (the build_admin_ui_suite poison
+    observed 2026-06). Conservative: flags ONLY a consecutively-repeated leading
+    token in the stem, so it never false-rejects a legitimate file. An empty or
+    None output_file (edit-class directives) is sane. Returns (ok, reason).
+
+    Keep in sync with the inlined copy in
+    promoters/proposed_to_pending_promoter._validate (which is stdlib-only and
+    deliberately does not import this module)."""
+    if not output_file or not isinstance(output_file, str):
+        return True, "ok"
+    stem = Path(output_file).stem
+    parts = [p for p in stem.split("_") if p]
+    if len(parts) >= 2 and parts[0] == parts[1]:
+        return False, f"malformed output_file (doubled leading prefix): {stem!r}"
+    return True, "ok"
 
 
 def declared_output(directive: dict, home: str = DEFAULT_HOME) -> Optional[Path]:

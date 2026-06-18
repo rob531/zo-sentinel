@@ -81,6 +81,7 @@ import sys
 import json
 import re
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -300,6 +301,36 @@ def _retry_after_secs(resp, default: float) -> float:
     return float(default)
 
 
+# MiniMax sometimes emits tool calls as its native <minimax:tool_call> XML
+# envelope inside message.content instead of the OpenAI tool_calls field. Goose
+# acts only on structured tool_calls, so we convert the envelope (used by
+# _call_minimax_direct). Regexes compiled once at module load.
+_MMX_BLOCK_RX = re.compile(r"<minimax:tool_call>(.*?)</minimax:tool_call>", re.DOTALL)
+_MMX_INVOKE_RX = re.compile(r'<invoke\s+name="([^"]+)"\s*>(.*?)</invoke>', re.DOTALL)
+_MMX_PARAM_RX = re.compile(r'<parameter\s+name="([^"]+)"\s*>(.*?)</parameter>', re.DOTALL)
+
+
+def _parse_minimax_tool_calls(content):
+    """Parse MiniMax's native <minimax:tool_call> envelope from `content` into
+    OpenAI tool_calls. Returns (tool_calls | None, residual_text) where
+    residual_text is `content` with the envelope(s) stripped (surrounding prose
+    preserved). Never raises: on any miss it returns (None, content), so the
+    adapter behaves exactly as before when there is no envelope."""
+    if not content or "<minimax:tool_call>" not in content:
+        return None, content
+    tool_calls = []
+    for block in _MMX_BLOCK_RX.findall(content):
+        for name, body in _MMX_INVOKE_RX.findall(block):
+            args = {k: v.strip() for k, v in _MMX_PARAM_RX.findall(body)}
+            tool_calls.append({
+                "id": f"call_{uuid.uuid4().hex[:24]}",
+                "type": "function",
+                "function": {"name": name.strip(), "arguments": json.dumps(args)},
+            })
+    residual = _MMX_BLOCK_RX.sub("", content).strip()
+    return (tool_calls or None), residual
+
+
 def _call_minimax_direct(spec, prompt, system, max_tokens, temperature, tools=None):
     import requests
     key = os.environ.get("MINIMAX_API_KEY")
@@ -341,6 +372,15 @@ def _call_minimax_direct(spec, prompt, system, max_tokens, temperature, tools=No
             raw  = (msg.get("content", "") or "").strip()
             tool_calls = msg.get("tool_calls")
             content = _normalize_response(raw) if raw else ""
+            # MiniMax may put the call in content as <minimax:tool_call>
+            # XML rather than the structured tool_calls field. Goose acts
+            # only on structured tool_calls, so convert; prefer a real
+            # structured field if MiniMax already provided one.
+            if not tool_calls and content and "<minimax:tool_call>" in content:
+                _parsed, _residual = _parse_minimax_tool_calls(content)
+                if _parsed:
+                    tool_calls = _parsed
+                    content = _residual
             if not content and not tool_calls:
                 return None, "empty content and no tools", None
             return (content or None), None, tool_calls

@@ -21,9 +21,11 @@ PR fires pr-gates.yml on hosted runners ~8-10 min each):
                    watermark as it goes, so it never re-scans the backlog. Seed it
                    to "now" before enabling (tools/seed_publisher_watermark.py) so
                    the historical backlog is skipped entirely.
-  - DAILY CAP   -- at most `daily_cap` PRs per UTC day (default 8 -> ~1900 Actions
-                   min/month). Cap-deferred artifacts are NOT skipped: the
-                   watermark is not advanced past them, so they publish next day.
+  - DAILY CAP   -- at most `daily_cap` PRs per UTC day (default 100; the repo is
+                   PUBLIC so Actions minutes are unlimited -- the cap is now only a
+                   runaway safety valve, not a budget limit). Cap-deferred artifacts
+                   are NOT skipped: the watermark is not advanced past them, so they
+                   publish next day.
   - PR SPACING  -- a sleep between PRs so a burst doesn't trip GitHub's secondary
                    (abuse) rate limits. GitOps adds Retry-After backoff on top.
 
@@ -54,7 +56,11 @@ SENTINEL_NAME = ".pr_publisher_enabled"
 DEFAULT_HOME = "/home/workspace/zo_sentinel"
 DEFAULT_BRANCH_PREFIX = "auto/build"
 DEFAULT_LABEL = "autonomous-build"
-DEFAULT_DAILY_CAP = 8                        # ~8 PRs/day * ~8 Actions-min stays < 2000/mo
+DEFAULT_DAILY_CAP = 100                      # repo is PUBLIC -> GitHub Actions minutes are
+                                             # UNLIMITED (the old 8/day cap protected a
+                                             # private-repo 2000-min/mo budget, now obsolete).
+                                             # Kept finite as a runaway safety valve; the real
+                                             # throttle is now PR_SPACING (abuse-rate-limit). Env: PR_PUBLISHER_DAILY_CAP.
 DEFAULT_PR_SPACING_SEC = 5.0
 
 

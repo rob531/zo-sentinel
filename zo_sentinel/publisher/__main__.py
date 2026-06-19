@@ -54,7 +54,7 @@ def _make_publisher() -> Publisher:
             "real PRs). Set PR_PUBLISHER_CLONE_DIR or create the clone.\n")
         sys.stderr.flush()
         gitops = FakeGitOps()
-    cap = int(os.environ.get("PR_PUBLISHER_DAILY_CAP", "8"))
+    cap = int(os.environ.get("PR_PUBLISHER_DAILY_CAP", "100"))
     spacing = float(os.environ.get("PR_PUBLISHER_PR_SPACING_SEC", "5"))
     return Publisher(store, gitops=gitops, daily_cap=cap, pr_spacing_sec=spacing)
 

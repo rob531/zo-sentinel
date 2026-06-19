@@ -100,6 +100,23 @@ def resolve_lessons(lessons_dir, subject_ref: str, when: Optional[str] = None) -
         return False
 
 
+def format_lessons_context(lessons: List[dict], subject_ref: str) -> str:
+    """Render OPEN lessons into the prompt block that goose_runner folds into a
+    build task (the closed-loop READER's text -- the consumer half of this module).
+    Returns '' if there are no lessons. Pure/testable so the integration text is
+    unit-covered, not just sketched."""
+    if not lessons:
+        return ""
+    lines = []
+    for L in lessons[:3]:
+        lines.append(
+            f"  - [{L.get('task_type', 'failure')}] failed {L.get('recurrence', 1)}x: "
+            f"{str(L.get('observation', ''))[:200]}")
+    return ("PRIOR BUILD FAILURES on " + str(subject_ref) + " (a previous attempt "
+            "GHOSTED here -- diagnose and FIX the root cause below or this build will "
+            "fail the same way; do not retry blindly):\n" + "\n".join(lines))
+
+
 def open_lessons_for(lessons_dir, subject_ref: str) -> List[dict]:
     """The read-gate's hot-path read: the OPEN lesson(s) for a subject as one
     small file stat+read, zero DB. [] if none or resolved. Never raises."""

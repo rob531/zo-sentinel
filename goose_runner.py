@@ -23,6 +23,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
     output_confirmed)
+from zo_sentinel.build_lessons import record_lesson, resolve_lessons  # noqa: E402
 
 # Phase-1 feedback edge (file-based only -- NO DB load; "zo_db_query destabilizes
 # write_service" per the 2026-05-31 ops note). state_loopback lives beside this
@@ -58,6 +59,7 @@ SHARED_OUTPUTS = Path("/home/workspace/shared/outputs/goose")
 TASK_FILE = Path("/tmp/goose_task.txt")
 
 DIRECTIVES_PATH = Path("/home/workspace/zo_sentinel/directives")
+LESSONS_DIR = PROJECT_DIR / "lessons"   # file-based lessons index (zero DB load)
 PENDING_DIR = DIRECTIVES_PATH / "pending"
 DONE_DIR = DIRECTIVES_PATH / "done"
 
@@ -137,6 +139,7 @@ def ensure_directories():
     SHARED_OUTPUTS.mkdir(parents=True, exist_ok=True)
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
     DONE_DIR.mkdir(parents=True, exist_ok=True)
+    LESSONS_DIR.mkdir(parents=True, exist_ok=True)
 
 def ws_query(sql):
     """Query write service."""
@@ -717,6 +720,12 @@ def _complete(directive, directive_id, result_text, fallback_used=False,
     write_result(directive_id, True, result_text, fallback_used=fallback_used)
     _emit_build_artifact_for(directive)   # restore publisher feed (#73 dropped this)
     mark_directive_completed(directive)
+    # Closed-loop: a green build on this target auto-resolves any open lesson.
+    try:
+        _rout = declared_output(directive)
+        resolve_lessons(LESSONS_DIR, _rout.name if _rout is not None else directive_id)
+    except Exception:
+        pass
     # Provenance BEFORE clear_ghost so rescue_count reflects the retries it took.
     prior_ghosts = ghost_attempts(DIRECTIVES_PATH, directive_id)
     _record_build_provenance(directive, success=True, smoke_result="pass",
@@ -739,6 +748,29 @@ def _mark_directive_failed(directive, directive_id, reason):
     NOT a .done -- it never built; this makes the failure visible instead of
     masquerading as success the way ghost-completion did."""
     log(f"[ghost-guard] {directive_id}: GIVING UP after {MAX_GHOST_ATTEMPTS} ghost builds -- {reason}")
+    # Closed-loop lesson: record WHY this gave up, keyed by the target it failed
+    # on, so the architect read-gate (separate PR) can avoid re-proposing known-bad
+    # work. File-based (zero DB load) + a best-effort mesh_memory mirror for history.
+    # Wrapped: a lesson write must NEVER regress the failure path.
+    try:
+        _lout = declared_output(directive)
+        _lsub = _lout.name if _lout is not None else directive_id
+        _lstem = _lout.stem if _lout is not None else ""
+        _lparts = [x for x in _lstem.split("_") if x]
+        _lttype = ("doubled_path" if len(_lparts) >= 2 and _lparts[0] == _lparts[1]
+                   else "ghost_no_output")
+        record_lesson(LESSONS_DIR, _lsub, directive_id, _lttype, reason, severity=3)
+        ws_write("mesh_memory", {
+            "agent_id": "goose_tier1",
+            "memory_type": "lesson_learned",
+            "content": json.dumps({"subject_ref": _lsub, "directive_id": directive_id,
+                                   "task_type": _lttype, "observation": reason,
+                                   "severity": 3, "status": "open"}),
+            "importance": 0.5,
+            "created_at": get_utc_now(),
+        })
+    except Exception as _le:
+        log(f"[lesson] emit failed for {directive_id}: {_le}")
     try:
         Path(f"{DIRECTIVES_PATH}/{directive_id}.failed.json").write_text(
             json.dumps({"directive_id": directive_id, "reason": reason,

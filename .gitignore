@@ -25,3 +25,4 @@ schema/app_graph_observed.sql
 feature_completeness.html
 graph_directives/
 capmap.json
+lessons/

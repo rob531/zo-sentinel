@@ -23,7 +23,8 @@ from zo_sentinel.build_routing import (  # noqa: E402
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
     output_confirmed)
-from zo_sentinel.build_lessons import record_lesson, resolve_lessons  # noqa: E402
+from zo_sentinel.build_lessons import (  # noqa: E402
+    record_lesson, resolve_lessons, open_lessons_for, format_lessons_context)
 
 # Phase-1 feedback edge (file-based only -- NO DB load; "zo_db_query destabilizes
 # write_service" per the 2026-05-31 ops note). state_loopback lives beside this
@@ -380,6 +381,24 @@ def _graph_context(directive):
         lines = [f"  - {r.get('who')} ({r.get('file')}) {r.get('rel')} it" for r in rows]
         return ("GRAPH CONTEXT -- existing code that depends on " + str(out.name) +
                 " (do NOT break these contracts):\n" + "\n".join(lines))
+    except Exception:
+        return ""
+
+
+def _lessons_context(directive):
+    """Closed-loop READER: fold any OPEN lesson(s) for this directive's target into
+    the build task so goose sees WHY a prior attempt ghosted and fixes the root
+    cause instead of repeating it. Sits beside _graph_context in build-task
+    assembly. File-based (open_lessons_for) -> zero DB load on the build hot path
+    (the 'zo_db_query destabilizes write_service' rule). Returns '' on any miss so
+    it can never block a build."""
+    try:
+        out = declared_output(directive)
+        subject = (out.name if out is not None
+                   else (directive.get("directive_id") or directive.get("id") or ""))
+        if not subject:
+            return ""
+        return format_lessons_context(open_lessons_for(LESSONS_DIR, subject), subject)
     except Exception:
         return ""
 
@@ -950,6 +969,9 @@ def run():
                     _gctx = _graph_context(directive)   # Phase 3: fold graph structure into the task
                     if _gctx:
                         _task = f"{_task}\n\n{_gctx}"
+                    _lctx = _lessons_context(directive)   # closed-loop READER: prior failures on this target
+                    if _lctx:
+                        _task = f"{_task}\n\n{_lctx}"
                     result = run_goose_task(directive_id, _task, _routed_env)
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)):

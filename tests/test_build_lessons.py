@@ -52,3 +52,30 @@ def test_doubled_path_subject_safe_filename(tmp_path):
 def test_missing_subject_safe(tmp_path):
     assert open_lessons_for(tmp_path, "never.py") == []
     assert resolve_lessons(tmp_path, "never.py") is False
+
+
+# --- READER integration: the text goose actually receives in its build task ---
+from zo_sentinel.build_lessons import format_lessons_context
+
+
+def test_reader_renders_context_goose_sees(tmp_path):
+    # producer side: a build ghosted on this target
+    record_lesson(tmp_path, "admin_ui_suite.py", "build_admin_ui_suite",
+                  "doubled_path", "output_file admin_admin_ui_suite.py never produced",
+                  severity=3)
+    record_lesson(tmp_path, "admin_ui_suite.py", "build_admin_ui_suite",
+                  "doubled_path", "still failing", severity=3)   # recurs
+    # reader side: exactly what goose_runner folds into the build task
+    block = format_lessons_context(open_lessons_for(tmp_path, "admin_ui_suite.py"),
+                                   "admin_ui_suite.py")
+    assert "PRIOR BUILD FAILURES on admin_ui_suite.py" in block
+    assert "[doubled_path] failed 2x" in block
+    assert "do not retry blindly" in block
+
+
+def test_reader_blank_when_no_open_lessons(tmp_path):
+    assert format_lessons_context([], "x.py") == ""
+    # resolved lessons are not surfaced to goose
+    record_lesson(tmp_path, "y.py", "build_y", "ghost_no_output", "fail")
+    resolve_lessons(tmp_path, "y.py")
+    assert format_lessons_context(open_lessons_for(tmp_path, "y.py"), "y.py") == ""

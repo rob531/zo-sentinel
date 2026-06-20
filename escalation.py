@@ -121,6 +121,8 @@ class ModelSpec:
     base_url: str = ""        # for openai_compatible rungs
     key_env: str = ""         # env var holding the API key
     extra_params: dict = field(default_factory=dict)  # provider-specific tuning
+    enabled: bool = True       # False = pruned (skipped at runtime, index-safe)
+    tool_capable: bool = True  # False = text-only; skipped when caller passes tools
                                                        # (e.g. gpt-oss reasoning_effort)
 
 
@@ -140,11 +142,11 @@ LADDER = [
     ModelSpec("gemini_direct",  "gemini-2.5-flash-lite",        1_000_000, 10, 0.0,
               "Gemini 2.5 Flash Lite (free, ~10 RPM) -- CONFIRMED"),
     ModelSpec("gemini_direct",  "gemini-2.0-flash-lite",        1_000_000, 30, 0.0,
-              "Gemini 2.0 Flash Lite (free, ~30 RPM)"),
+              "Gemini 2.0 Flash Lite (free, ~30 RPM)", enabled=False),  # EOL/instant-429
     ModelSpec("gemini_direct",  "gemini-2.5-flash",             1_000_000, 10, 0.0,
               "Gemini 2.5 Flash (free, ~10 RPM)"),
     ModelSpec("gemini_direct",  "gemini-2.0-flash",             1_000_000, 15, 0.0,
-              "Gemini 2.0 Flash (free, ~15 RPM)"),
+              "Gemini 2.0 Flash (free, ~15 RPM)", enabled=False),  # EOL/instant-429
 
     # Tier 1b -- Gemini preview (may be 0 RPM on free tier, fall through gracefully)
     ModelSpec("gemini_direct",  "gemini-3.1-flash-lite-preview", 1_000_000, 15, 0.0,
@@ -157,27 +159,27 @@ LADDER = [
     # gemma-format payload (no systemInstruction); adapter detects by prefix.
     # Order: 12B fastest, 4B smallest, 27B largest reliable.
     ModelSpec("gemini_direct",  "gemma-3-12b-it",                  128_000, 15, 0.0,
-              "Gemma 3 12B Instruct (free, 1.7s, 128K ctx)"),
+              "Gemma 3 12B Instruct (free, 1.7s, 128K ctx)", tool_capable=False),
     ModelSpec("gemini_direct",  "gemma-3-4b-it",                   128_000, 15, 0.0,
-              "Gemma 3 4B Instruct (free, 2.1s, 128K ctx)"),
+              "Gemma 3 4B Instruct (free, 2.1s, 128K ctx)", tool_capable=False),
     ModelSpec("gemini_direct",  "gemma-3-27b-it",                  128_000, 15, 0.0,
-              "Gemma 3 27B Instruct (free, 2.9s, 128K ctx)"),
+              "Gemma 3 27B Instruct (free, 2.9s, 128K ctx)", tool_capable=False),
 
     # Tier 2 -- Zo free models
     ModelSpec("zo_routed", "zo:openai/gpt-5.4-mini",             400_000, 60, 0.0,
-              "GPT-5.4 mini (Zo free, 400K ctx)"),
+              "GPT-5.4 mini (Zo free, 400K ctx)", tool_capable=False),
     ModelSpec("zo_routed", "zo:zai/glm-5",                       203_000, 60, 0.0,
-              "GLM-5 (Zo free)"),
+              "GLM-5 (Zo free)", tool_capable=False),
 
     # Tier 3 -- Zo subscriber (burns Zo credits)
     ModelSpec("zo_routed", "zo:google/gemini-3.1-pro-preview",   1_000_000, 60, 1.0,
-              "Gemini 3.1 Pro (Zo sub, 1.0x)"),
+              "Gemini 3.1 Pro (Zo sub, 1.0x)", tool_capable=False),
     ModelSpec("zo_routed", "zo:openai/gpt-5.4",                  1_000_000, 60, 1.1,
-              "GPT-5.4 (Zo sub, 1.1x)"),
+              "GPT-5.4 (Zo sub, 1.1x)", tool_capable=False),
     ModelSpec("zo_routed", "zo:anthropic/claude-sonnet-4-5",     1_000_000, 60, 2.1,
-              "Sonnet 4.5 (Zo sub, 2.1x)"),
+              "Sonnet 4.5 (Zo sub, 2.1x)", tool_capable=False),
     ModelSpec("zo_routed", "zo:anthropic/claude-opus-4-7",       1_000_000, 60, 3.0,
-              "Opus 4.7 (Zo sub, 3.0x)"),
+              "Opus 4.7 (Zo sub, 3.0x)", tool_capable=False),
 
     # Tier 4 -- NVIDIA NIM (free dev credits; OpenAI SDK-compatible; tool-capable).
     # APPENDED LAST so it never shifts the index-based TASK_START_TIER map. Reached
@@ -196,7 +198,7 @@ LADDER = [
     # in the default path until promoted. Model overridable via CEREBRAS_BUILD_MODEL.
     ModelSpec("openai_compatible",
               os.environ.get("CEREBRAS_BUILD_MODEL", "gpt-oss-120b"),
-              131_072, 30, 0.2,
+              131_072, 30, 0.0,
               "Cerebras gpt-oss-120b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
               base_url="https://api.cerebras.ai/v1", key_env="CEREBRAS_API_KEY",
               extra_params={"reasoning_effort": "medium"}),
@@ -206,7 +208,7 @@ LADDER = [
     # (task builder_mistral). Model overridable via MISTRAL_BUILD_MODEL.
     ModelSpec("openai_compatible",
               os.environ.get("MISTRAL_BUILD_MODEL", "codestral-latest"),
-              256_000, 30, 0.2,
+              256_000, 30, 0.0,
               "Mistral Codestral (free tier, OpenAI-compat, tool-calling)",
               base_url="https://api.mistral.ai/v1", key_env="MISTRAL_API_KEY"),
 
@@ -215,7 +217,7 @@ LADDER = [
     # Model overridable via GROQ_BUILD_MODEL (Groq also serves openai/gpt-oss-120b).
     ModelSpec("openai_compatible",
               os.environ.get("GROQ_BUILD_MODEL", "llama-3.3-70b-versatile"),
-              131_000, 30, 0.2,
+              131_000, 30, 0.0,
               "Groq llama-3.3-70b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
               base_url="https://api.groq.com/openai/v1", key_env="GROQ_API_KEY"),
 ]
@@ -691,15 +693,23 @@ def ask(task_type: str, prompt: str, system: Optional[str] = None,
     # other FREE rung (different models) so a rate-limited/exhausted tier never
     # dead-ends. Paid rungs stay cost-gated below. (MiniMax that 429'd on its daily
     # bucket is parked + skipped here, and auto-recovers when the bucket resets.)
-    order = list(range(start_idx, end_idx))
-    order += [j for j, sp in enumerate(LADDER)
-              if j not in order and sp.cost_priority == 0]
+    win = [i for i in range(start_idx, end_idx) if LADDER[i].enabled]
+    # failover tail: every other ENABLED free rung, fast tool-capable rungs FIRST
+    # (openai_compatible = Cerebras/Groq/Mistral) so a builder reaches them in a few
+    # hops instead of crawling the whole Gemini/Gemma list.
+    tail = [j for j, sp in enumerate(LADDER)
+            if j not in win and sp.cost_priority == 0 and sp.enabled]
+    tail.sort(key=lambda j: 0 if LADDER[j].backend == "openai_compatible" else 1)
+    order = win + tail
     hard_cap = max_attempts + int(os.environ.get("LADDER_FAILOVER_EXTRA", "6"))
     calls_made = 0
     for i in order:
         if calls_made >= hard_cap:
             break
         spec = LADDER[i]
+        if tools and not spec.tool_capable:
+            attempts.append((spec.model_id, "not_tool_capable", ""))
+            continue
         if not _limiter.available(spec.model_id, spec.rpm_limit):
             attempts.append((spec.model_id, "rate_limited", ""))
             continue

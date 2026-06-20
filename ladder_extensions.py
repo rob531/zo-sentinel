@@ -15,9 +15,9 @@ from escalation import ModelSpec
 
 EXTRA_RUNGS = [
     ModelSpec("gemini_direct", "gemma-4-31b-it",  128_000, 15, 0.0,
-              "Gemma 4 31B (free via AI Studio, 15 RPM, UNLIMITED TPM)"),
+              "Gemma 4 31B (free via AI Studio, 15 RPM, UNLIMITED TPM)", tool_capable=False),
     ModelSpec("gemini_direct", "gemma-4-26b-it",  128_000, 15, 0.0,
-              "Gemma 4 26B (free via AI Studio, 15 RPM, UNLIMITED TPM)"),
+              "Gemma 4 26B (free via AI Studio, 15 RPM, UNLIMITED TPM)", tool_capable=False),
 ]
 
 TASK_MAX_ATTEMPTS = {

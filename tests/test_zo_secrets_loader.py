@@ -42,3 +42,13 @@ def test_does_not_clobber_existing_env(tmp_path, monkeypatch):
 def test_missing_file_safe(tmp_path):
     ls = _ls()
     ls._load_zo_secrets(str(tmp_path / "nope"))  # no raise
+
+
+def test_cerebras_misspelled_token_resolves(tmp_path, monkeypatch):
+    """User stored CEREBUS_API__KEY (misspelled, double underscore); the 'cereb'
+    substring token still maps it to the correctly-named CEREBRAS_API_KEY the SDK reads."""
+    ls = _ls(); import os
+    f = tmp_path / "secrets"; f.write_text("CEREBUS_API__KEY=csk-misspelled\n")
+    monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
+    ls._load_zo_secrets(str(f))
+    assert os.environ.get("CEREBRAS_API_KEY") == "csk-misspelled"

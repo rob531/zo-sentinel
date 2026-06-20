@@ -39,3 +39,18 @@ def test_adapter_reads_key_from_env(monkeypatch):
     sp = E.ModelSpec("openai_compatible", "m", 1, 256, 0.0, "l", base_url="", key_env="NVIDIA_API_KEY")
     text, err, tcs = E._call_openai_compatible(sp, "hi", None, 256, 0.0, None)
     assert "no base_url" in err  # got past the key check -> key was read
+
+
+def test_cerebras_rung_wired_nonbreaking():
+    idx = E.TASK_START_TIER["builder_cerebras"]
+    sp = E.LADDER[idx]
+    assert sp.backend == "openai_compatible"
+    assert sp.key_env == "CEREBRAS_API_KEY"
+    assert sp.base_url == "https://api.cerebras.ai/v1"   # exact (CodeQL-safe)
+    assert E.MODEL_TASK_MAP["zo-ladder-cerebras"] == "builder_cerebras"
+    assert E.task_for_model("zo-ladder-cerebras") == "builder_cerebras"
+    # NVIDIA rung refreshed off the EOL model
+    assert "qwen2.5-coder-32b" not in E.LADDER[E.TASK_START_TIER["builder_nvidia"]].model_id
+    # non-breaking: original tiers unchanged
+    assert E.TASK_START_TIER["builder_low"] == 0
+    assert E.TASK_START_TIER["builder_critical"] == 15

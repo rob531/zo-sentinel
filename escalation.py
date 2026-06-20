@@ -389,6 +389,46 @@ def _call_minimax_direct(spec, prompt, system, max_tokens, temperature, tools=No
     return None, "429 retries exhausted", None
 
 
+def _openai_tools_to_gemini(tools):
+    """Translate OpenAI `tools` (the function specs goose sends) into Gemini
+    functionDeclarations. None if there are no usable tools. Lets a Gemini rung
+    DRIVE goose's developer extension instead of returning prose (the gap that
+    pinned tool-calling to MiniMax only)."""
+    decls = []
+    for t in tools or []:
+        fn = (t or {}).get("function") if isinstance(t, dict) else None
+        if not fn or not fn.get("name"):
+            continue
+        d = {"name": fn["name"]}
+        if fn.get("description"):
+            d["description"] = fn["description"]
+        if isinstance(fn.get("parameters"), dict):
+            d["parameters"] = fn["parameters"]
+        decls.append(d)
+    return [{"functionDeclarations": decls}] if decls else None
+
+
+def _gemini_parts_to_result(parts):
+    """Parse Gemini response `parts` -> (text, tool_calls|None): functionCall
+    parts become OpenAI tool_calls; text parts are concatenated."""
+    tool_calls = []
+    text_chunks = []
+    for p in parts or []:
+        if not isinstance(p, dict):
+            continue
+        if p.get("functionCall"):
+            fc = p["functionCall"] or {}
+            tool_calls.append({
+                "id": f"call_{uuid.uuid4().hex[:24]}",
+                "type": "function",
+                "function": {"name": fc.get("name", ""),
+                             "arguments": json.dumps(fc.get("args") or {})},
+            })
+        elif isinstance(p.get("text"), str):
+            text_chunks.append(p["text"])
+    return "".join(text_chunks).strip(), (tool_calls or None)
+
+
 def _call_gemini_direct(spec, prompt, system, max_tokens, temperature, tools=None):
     """v0.8: branches on model_id prefix.
 
@@ -405,30 +445,25 @@ def _call_gemini_direct(spec, prompt, system, max_tokens, temperature, tools=Non
            f"{spec.model_id}:generateContent")
 
     is_gemma = spec.model_id.startswith("gemma-")
+    # Tool-calling: forward goose's tools as Gemini functionDeclarations (gemini
+    # models only; gemma function-calling is not reliably supported -> text-only).
+    gem_tools = None if is_gemma else _openai_tools_to_gemini(tools)
+    gen_cfg = {"maxOutputTokens": max_tokens, "temperature": temperature}
+    if not gem_tools:
+        # responseMimeType text/plain SUPPRESSES functionCall parts -> only set it
+        # when we are NOT function-calling.
+        gen_cfg["responseMimeType"] = "text/plain"
     if is_gemma:
-        # Gemma format: system inlined into user prompt, no systemInstruction.
-        # Confirmed by gemma_probe v1.1 across gemma-3-{4b,12b,27b}-it.
         combined_prompt = f"{system}\n\n{prompt}" if system else prompt
-        payload = {
-            "contents": [{"parts": [{"text": combined_prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens":   max_tokens,
-                "temperature":       temperature,
-                "responseMimeType":  "text/plain",
-            },
-        }
+        payload = {"contents": [{"parts": [{"text": combined_prompt}]}],
+                   "generationConfig": gen_cfg}
     else:
-        # Gemini format: separate systemInstruction field.
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens":   max_tokens,
-                "temperature":       temperature,
-                "responseMimeType":  "text/plain",
-            },
-        }
+        payload = {"contents": [{"parts": [{"text": prompt}]}],
+                   "generationConfig": gen_cfg}
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
+        if gem_tools:
+            payload["tools"] = gem_tools
 
     try:
         # Gemma can be a touch slower than Gemini on cold-start; use 90s
@@ -442,8 +477,11 @@ def _call_gemini_direct(spec, prompt, system, max_tokens, temperature, tools=Non
         cands = r.json().get("candidates") or []
         if not cands:
             return None, "no candidates", None
-        text = cands[0]["content"]["parts"][0]["text"].strip()
-        text = _normalize_response(text)
+        parts = ((cands[0].get("content") or {}).get("parts")) or []
+        text, tool_calls = _gemini_parts_to_result(parts)
+        text = _normalize_response(text) if text else ""
+        if tool_calls:                      # NATIVE Gemini function-calling -> drives goose
+            return (text or None), None, tool_calls
         return (text or None), (None if text else "empty"), None
     except Exception as e:
         return None, f"{type(e).__name__}: {e}", None

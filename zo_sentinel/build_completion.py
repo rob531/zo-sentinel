@@ -44,6 +44,22 @@ def is_edit_task(directive: dict) -> bool:
     return name.startswith(EDIT_TASK_PREFIXES)
 
 
+def failed_quarantined(directive_id, *dirs) -> bool:
+    """True if a <directive_id>.failed.json quarantine sentinel exists in ANY of
+    the given directories. goose_runner.is_goose_eligible uses this to honor BOTH
+    the legacy in-repo directives/ path AND a DURABLE store outside the git tree --
+    so `git clean` on a daemon respawn/refresh can no longer un-quarantine a parked
+    directive (the re-flush treadmill). Never raises."""
+    name = f"{directive_id}.failed.json"
+    for d in dirs:
+        try:
+            if (Path(d) / name).exists():
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def output_file_is_sane(output_file) -> Tuple[bool, str]:
     """Reject an obviously-malformed declared output filename that can never be
     produced and would ghost-loop forever -- specifically a DOUBLED LEADING

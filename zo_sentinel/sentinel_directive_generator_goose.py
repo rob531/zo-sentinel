@@ -255,6 +255,33 @@ def _cap_layer1(l1):
     return {k: (v[:LAYER1_FIELD_CAP] if isinstance(v, str) else v) for k, v in l1.items()}
 
 
+_DONE_DIR = Path(os.environ.get(
+    "DGG_DONE_DIR", "/home/workspace/zo_sentinel/directives/done"))
+
+
+def _recent_built_modules(limit: int = 600) -> list:
+    """Module basenames of the most-recently-built directives (directives/done/*.json
+    by mtime, newest first). The architect keeps re-proposing RECENT builds because the
+    graph dedup list is ordered alphabetically and the budget trim buries recents past
+    the cutoff. Surfacing these FIRST in the budgeted avoid-list is the targeted fix for
+    'recently-built files keep getting re-proposed'. Best-effort -> [] on any error."""
+    try:
+        files = sorted(_DONE_DIR.glob("*.json"),
+                       key=lambda f: f.stat().st_mtime, reverse=True)[:limit]
+    except Exception:
+        return []
+    out = []
+    for f in files:
+        try:
+            d = json.loads(f.read_text())
+            of = (d.get("output_file") or "").strip()
+            if of:
+                out.append(of.rsplit("/", 1)[-1])   # basename, matches graph form
+        except Exception:
+            continue
+    return out
+
+
 def build_context() -> dict:
     ctx = {
         "schema":            _try_load_schema(),
@@ -267,7 +294,15 @@ def build_context() -> dict:
     # downstream json.dumps[:CTX_CAP] truncation never silently eats the list
     # tail (its at-risk end -- recently-built modules) OR a later field. We add
     # the modules LAST and trim them to the remaining bytes, not the recipe.
-    mods = _existing_modules()
+    # Recency-first: the architect re-proposes RECENTLY-built modules, so put the
+    # newest builds at the head of the budgeted avoid-list -- the alphabetical graph
+    # order buried recents past the budget cutoff, leaving the architect blind to them.
+    graph_mods = _existing_modules()
+    recent = _recent_built_modules()
+    _seen, mods = set(), []
+    for _m in recent + graph_mods:
+        if _m and _m not in _seen:
+            _seen.add(_m); mods.append(_m)
     if mods:
         used = len(json.dumps(ctx, default=str))
         budget = max(0, CTX_MODULE_BUDGET - used)

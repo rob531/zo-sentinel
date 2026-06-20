@@ -171,7 +171,12 @@ def snapshot() -> dict:
 
 def get_breaker_state() -> str:
     maybe_auto_recover()
-    return snapshot().get("state", "closed")
+    s = snapshot().get("state", "closed")
+    # CHAIRMAN 2026-06-20: the binary "tripped" latch is non-blocking now (see
+    # may_rebuild). Report a stale trip as "half-open" so no consumer (the
+    # architect context / read_gate_quality_state) treats it as a hard generation
+    # block. The raw "tripped" is still recorded in the state file for forensics.
+    return "half-open" if s == "tripped" else s
 
 
 def is_quarantined(filename: str) -> bool:
@@ -196,8 +201,14 @@ def may_rebuild(filename: str) -> tuple[bool, str]:
     if filename in snap.get("retired", {}):
         r = snap["retired"][filename]
         return False, f"retired at {r.get('retired_at')}: {r.get('reason')}"
-    if snap["state"] == "tripped":
-        return False, "circuit breaker tripped -- manual reset required"
+    # CHAIRMAN 2026-06-20: binary GATE LATCH blocklisting DISABLED. The global
+    # "tripped" latch starved the directive generator -- it blocks ALL proposals
+    # (not just the failing file) and the architect self-censors on it, requiring a
+    # manual reset_breaker.py each time. We are rearchitecting to lessons-shaped soft
+    # signals; until then the breaker RECORDS (record_cohort + per-file quarantine
+    # below stay intact for observability) but does NOT block. To re-enable, uncomment:
+    # if snap["state"] == "tripped":
+    #     return False, "circuit breaker tripped -- manual reset required"
     if filename in snap.get("quarantined", {}):
         q = snap["quarantined"][filename]
         return False, f"quarantined at {q.get('quarantined_at')}: {q.get('reason')}"

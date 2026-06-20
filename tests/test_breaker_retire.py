@@ -97,9 +97,11 @@ def test_retired_beats_tripped_in_reason(monkeypatch, tmp_path):
     _write(m, state="tripped", retired={"x.py": {"retired_at": OLD, "reason": "dead"}})
     ok, reason = m.may_rebuild("x.py")
     assert ok is False and "retired" in reason
-    # a non-retired file still reports the trip
+    # CHAIRMAN 2026-06-20: global "tripped" latch DISABLED (it starved the
+    # generator) -- a non-retired/non-quarantined file is now ALLOWED even while
+    # state=tripped; only per-file retired/quarantined/retry-budget checks block.
     ok2, reason2 = m.may_rebuild("other.py")
-    assert ok2 is False and "tripped" in reason2
+    assert ok2 is True
 
 
 def test_forward_compat_state_without_retired_key(monkeypatch, tmp_path):

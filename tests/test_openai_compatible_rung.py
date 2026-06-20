@@ -111,3 +111,14 @@ def test_mistral_rung_wired_nonbreaking():
     # all three capacity rungs distinct + non-breaking
     assert len({E.TASK_START_TIER[k] for k in ("builder_nvidia","builder_cerebras","builder_mistral")}) == 3
     assert E.TASK_START_TIER["builder_critical"] == 15
+
+def test_groq_rung_wired_nonbreaking():
+    idx = E.TASK_START_TIER["builder_groq"]
+    sp = E.LADDER[idx]
+    assert sp.backend == "openai_compatible" and sp.key_env == "GROQ_API_KEY"
+    assert sp.base_url == "https://api.groq.com/openai/v1"   # exact (CodeQL-safe)
+    assert E.task_for_model("zo-ladder-groq") == "builder_groq"
+    # 4 capacity rungs, all distinct indices, originals intact
+    caps = {E.TASK_START_TIER[k] for k in ("builder_nvidia","builder_cerebras","builder_mistral","builder_groq")}
+    assert len(caps) == 4
+    assert E.TASK_START_TIER["builder_low"] == 0 and E.TASK_START_TIER["builder_critical"] == 15

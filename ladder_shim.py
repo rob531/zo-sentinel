@@ -200,22 +200,50 @@ KEY_HYDRATOR = "/home/workspace/zo_mesh/key_hydrator.py"
 HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NVIDIA_API_KEY")
 
 
+# /root/.zo_secrets stores keys under provider-token names (minimax, gemini,
+# nvidia, PWD_ZO_COMPUTER_ANTHROPICAPI) matched by SUBSTRING -- same convention as
+# ladder_shim_keyed.sh's _val(). Map each canonical env var to its token so a line
+# like `nvidia=nvapi-...` OR `NVIDIA_API_KEY=...` both resolve.
+_ZO_SECRET_TOKENS = {
+    "MINIMAX_API_KEY": "minimax",
+    "GEMINI_API_KEY": "gemini",
+    "ANTHROPIC_API_KEY": "anthropic",
+    "NVIDIA_API_KEY": "nvidia",
+}
+
+
 def _load_zo_secrets(path="/root/.zo_secrets"):
-    """Source KEY=value lines from /root/.zo_secrets into env for any HYDRATE_KEYS
-    not already set -- so a new key (e.g. NVIDIA_API_KEY) added to that file is
-    picked up by ANY launch path with no key_hydrator round-trip. Best-effort."""
+    """Source keys from /root/.zo_secrets into env for any HYDRATE_KEYS not already
+    set, so a key dropped in that file is picked up by ANY shim launch path with no
+    key_hydrator round-trip. Matches by SUBSTRING on the line's key name (mirrors
+    ladder_shim_keyed.sh _val), so `nvidia=`, `NVIDIA_API_KEY=`, `RcGeminiAPIKey=`
+    all resolve. Best-effort, never raises."""
     try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                k = k.strip(); v = v.strip().strip('"').strip("'")
-                if k in HYDRATE_KEYS and v and not os.environ.get(k):
-                    os.environ[k] = v
+        raw = open(path, encoding="utf-8").read().splitlines()
     except Exception:
-        pass
+        return
+    parsed = []
+    for line in raw:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        k = k.strip()
+        if k.lower().startswith("export "):
+            k = k[7:].strip()
+        v = v.strip().strip('"').strip("'")
+        if k and v:
+            parsed.append((k.lower(), v))
+    for env_name in HYDRATE_KEYS:
+        if os.environ.get(env_name):
+            continue
+        token = _ZO_SECRET_TOKENS.get(env_name, env_name.lower())
+        for kl, v in parsed:
+            if token in kl:
+                os.environ[env_name] = v
+                if env_name == "GEMINI_API_KEY" and not os.environ.get("RcGeminiAPIKey"):
+                    os.environ["RcGeminiAPIKey"] = v
+                break
 
 # Raised from 30s: key_hydrator --get round-trips to the Windows tower vault
 # responder, which can exceed 30s under load -> the call was killed, gemini/

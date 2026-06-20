@@ -1,0 +1,28 @@
+version: "1.0.0"
+title: "UI bake-off: build + treewalk a directive with the active ladder rung"
+description: >
+  Builds a single self-contained HTML UI from a directive using whatever model the
+  ladder is pointed at (GOOSE_MODEL=zo-ladder-<rung>), then runs the Playwright
+  treewalk scorer over it. Run once per rung to compare what each API produces.
+instructions: >
+  You are building one self-contained, interactive HTML file (inline CSS+JS, no
+  external deps, aria-labels on all controls). Write it to builds/{{ rung }}.html
+  using the developer extension. Then run the treewalk scorer and report the score.
+parameters:
+  - key: directive_file
+    input_type: string
+    requirement: required
+    description: Path to the directive text file to build from.
+  - key: rung
+    input_type: string
+    requirement: required
+    description: Rung label used for the output filename (e.g. cerebras, groq, gemini).
+extensions:
+  - type: builtin
+    name: developer
+prompt: |
+  1. Read the directive in {{ directive_file }}.
+  2. Build ONE complete self-contained interactive HTML file implementing it and
+     save it to builds/{{ rung }}.html (inline CSS+JS, no CDNs, aria-labels).
+  3. Run: python3 tools/bakeoff/treewalk.py --file builds/{{ rung }}.html --out builds/{{ rung }}.report.json
+  4. Report the SCORE line and any penalties verbatim.

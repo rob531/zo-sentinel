@@ -1,0 +1,9 @@
+Build the Sentinel "Exemptions Admin" single-page UI.
+
+Requirements:
+- A table of exemption requests with columns: ID, Subject, Risk Axis, Auth Strength, Status, Expiry.
+- Auth Strength must render as one of exactly 4 classes: STRONG, MODERATE, WEAK, UNKNOWN (colored badges). Do NOT invent other classes.
+- A filter bar: text search over Subject, and a dropdown to filter by Status (Pending / Approved / Denied).
+- An "Add exemption" form (Subject, Risk Axis, Auth Strength, Expiry date) that appends a row to the table.
+- Each row has Approve / Deny buttons that update that row's Status badge.
+- Seed the table with 5 example rows. All controls need aria-labels. No external dependencies.

@@ -86,6 +86,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+import rung_quota
 
 
 # ---------------------------------------------------------------------------
@@ -596,6 +597,11 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
                                    # default python-requests UA with error 1010.
                                    "User-Agent": _OAI_USER_AGENT},
                           json=payload, timeout=240)
+        try:  # best-effort quota capture (remaining-headers / 429 park)
+            rung_quota.record(spec.model_id, dict(r.headers), r.status_code,
+                              r.headers.get("retry-after") or r.headers.get("Retry-After"))
+        except Exception:
+            pass
         if r.status_code == 429:
             return None, "429 rate-limited", None
         r.raise_for_status()
@@ -657,6 +663,21 @@ class EscalationResult:
     tool_calls: Optional[list] = None
 
 
+def _backoff(n):
+    """Exponential backoff between failover attempts. Env-tunable; disabled in tests
+    via LADDER_BACKOFF=0. n is the count of calls already made this ask()."""
+    if os.environ.get("LADDER_BACKOFF", "1") == "0" or n <= 0:
+        return
+    base = float(os.environ.get("LADDER_BACKOFF_BASE", "0.4"))
+    cap = float(os.environ.get("LADDER_BACKOFF_MAX", "5"))
+    time.sleep(min(base * (2 ** (n - 1)), cap))
+
+
+def _is_rate_limit(err):
+    e = (err or "").lower()
+    return "429" in e or "rate" in e or "limit" in e or "quota" in e
+
+
 def ask(task_type: str, prompt: str, system: Optional[str] = None,
         max_tokens: int = 4096, temperature: float = 0.5,
         max_attempts: int = 4, tools: Optional[list] = None) -> EscalationResult:
@@ -666,10 +687,25 @@ def ask(task_type: str, prompt: str, system: Optional[str] = None,
                                 error=f"'{task_type}' has no escalation path")
     attempts = []
     end_idx = min(start_idx + max_attempts, len(LADDER))
-    for i in range(start_idx, end_idx):
+    # Cross-model failover: try the task's start window, THEN fall over to every
+    # other FREE rung (different models) so a rate-limited/exhausted tier never
+    # dead-ends. Paid rungs stay cost-gated below. (MiniMax that 429'd on its daily
+    # bucket is parked + skipped here, and auto-recovers when the bucket resets.)
+    order = list(range(start_idx, end_idx))
+    order += [j for j, sp in enumerate(LADDER)
+              if j not in order and sp.cost_priority == 0]
+    hard_cap = max_attempts + int(os.environ.get("LADDER_FAILOVER_EXTRA", "6"))
+    calls_made = 0
+    for i in order:
+        if calls_made >= hard_cap:
+            break
         spec = LADDER[i]
         if not _limiter.available(spec.model_id, spec.rpm_limit):
             attempts.append((spec.model_id, "rate_limited", ""))
+            continue
+        q_ok, q_why = rung_quota.available(spec.model_id)
+        if not q_ok:  # proactive: skip a rung near its quota wall / parked on 429
+            attempts.append((spec.model_id, "quota_skip", q_why))
             continue
         if spec.cost_priority > 0 and task_type not in PAID_OK_TASKS:
             attempts.append((spec.model_id, "cost_gated",
@@ -679,10 +715,13 @@ def ask(task_type: str, prompt: str, system: Optional[str] = None,
             attempts.append((spec.model_id, "budget_exceeded",
                              f"cap={_budget.status()['cap']}"))
             continue
+        if calls_made > 0:
+            _backoff(calls_made)  # back off before retrying on a different model
         t0 = time.monotonic()
         text, error, tool_calls = BACKEND_ADAPTERS[spec.backend](
             spec, prompt, system, max_tokens, temperature, tools)
         latency_ms = int((time.monotonic() - t0) * 1000)
+        calls_made += 1
         _limiter.record(spec.model_id)
         if text or tool_calls:
             if spec.cost_priority > 0:
@@ -694,6 +733,8 @@ def ask(task_type: str, prompt: str, system: Optional[str] = None,
                                     model=spec.model_id, priority=spec.cost_priority,
                                     latency_ms=latency_ms, attempts=attempts,
                                     success=True, tool_calls=tool_calls)
+        if _is_rate_limit(error):  # park the rung so we stop hammering it
+            rung_quota.park(spec.model_id)
         _log_call(spec.backend, spec.model_id, task_type,
                   len(prompt), 0, spec.cost_priority, latency_ms, False, error)
         attempts.append((spec.model_id, "call_failed", (error or "")[:100]))

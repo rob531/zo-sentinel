@@ -98,3 +98,16 @@ def test_nvidia_model_is_live_tool_built():
 
 E_TOOLS = [{"type": "function", "function": {"name": "write_file",
             "parameters": {"type": "object", "properties": {}}}}]
+
+
+def test_mistral_rung_wired_nonbreaking():
+    idx = E.TASK_START_TIER["builder_mistral"]
+    sp = E.LADDER[idx]
+    assert sp.backend == "openai_compatible"
+    assert sp.key_env == "MISTRAL_API_KEY"
+    assert sp.base_url == "https://api.mistral.ai/v1"   # exact (CodeQL-safe)
+    assert E.MODEL_TASK_MAP["zo-ladder-mistral"] == "builder_mistral"
+    assert E.task_for_model("zo-ladder-mistral") == "builder_mistral"
+    # all three capacity rungs distinct + non-breaking
+    assert len({E.TASK_START_TIER[k] for k in ("builder_nvidia","builder_cerebras","builder_mistral")}) == 3
+    assert E.TASK_START_TIER["builder_critical"] == 15

@@ -199,6 +199,15 @@ LADDER = [
               "Cerebras gpt-oss-120b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
               base_url="https://api.cerebras.ai/v1", key_env="CEREBRAS_API_KEY",
               extra_params={"reasoning_effort": "medium"}),
+
+    # Tier 4c -- Mistral La Plateforme (free tier; OpenAI-compatible; Codestral is a
+    # coding-specialist with tool-calling). Opt-in via GOOSE_MODEL=zo-ladder-mistral
+    # (task builder_mistral). Model overridable via MISTRAL_BUILD_MODEL.
+    ModelSpec("openai_compatible",
+              os.environ.get("MISTRAL_BUILD_MODEL", "codestral-latest"),
+              256_000, 30, 0.2,
+              "Mistral Codestral (free tier, OpenAI-compat, tool-calling)",
+              base_url="https://api.mistral.ai/v1", key_env="MISTRAL_API_KEY"),
 ]
 
 TASK_START_TIER = {
@@ -226,6 +235,7 @@ TASK_START_TIER = {
     "builder_critical": 15,
     "builder_nvidia":   17,   # NVIDIA NIM rung; opt-in capacity/quality
     "builder_cerebras": 18,   # Cerebras gpt-oss-120b rung; opt-in capacity (free, fast)
+    "builder_mistral":  19,   # Mistral Codestral rung; opt-in capacity (free, coder)
 }
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
@@ -250,6 +260,7 @@ MODEL_TASK_MAP = {
     "zo-ladder-critical": "builder_critical",
     "zo-ladder-nvidia":   "builder_nvidia",
     "zo-ladder-cerebras": "builder_cerebras",
+    "zo-ladder-mistral":  "builder_mistral",
 }
 
 

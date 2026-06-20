@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZO-Sentinel Routing Smoke Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #2e86c1;
+        }
+        button {
+            background-color: #2e86c1;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        button:hover {
+            background-color: #1a6caf;
+        }
+        #timestamps {
+            text-align: left;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            min-height: 50px;
+        }
+        .timestamp {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>ZO-Sentinel routing smoke test OK</h1>
+    <button id="pingButton" aria-label="Ping button to add current timestamp">Ping</button>
+    <div id="timestamps"></div>
+
+    <script>
+        document.getElementById('pingButton').addEventListener('click', function() {
+            const timestamp = new Date().toISOString();
+            const timestampElement = document.createElement('div');
+            timestampElement.className = 'timestamp';
+            timestampElement.textContent = timestamp;
+            document.getElementById('timestamps').appendChild(timestampElement);
+        });
+    </script>
+</body>
+</html>

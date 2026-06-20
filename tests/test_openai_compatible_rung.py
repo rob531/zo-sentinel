@@ -54,3 +54,47 @@ def test_cerebras_rung_wired_nonbreaking():
     # non-breaking: original tiers unchanged
     assert E.TASK_START_TIER["builder_low"] == 0
     assert E.TASK_START_TIER["builder_critical"] == 15
+
+
+def test_adapter_sends_user_agent_and_tuning(monkeypatch):
+    """Cerebras (Cloudflare) 403s default python-requests UA; gpt-oss wants
+    reasoning_effort. Adapter must send a browser UA + merge spec.extra_params."""
+    import requests
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self):
+            return {"choices": [{"message": {"content": "",
+                    "tool_calls": [{"function": {"name": "write_file", "arguments": "{}"}}]}}]}
+
+    def _fake_post(url, headers=None, json=None, timeout=None):
+        captured["url"] = url; captured["headers"] = headers; captured["json"] = json
+        return _Resp()
+
+    monkeypatch.setattr(requests, "post", _fake_post)
+    monkeypatch.setenv("CEREBRAS_API_KEY", "csk-test")
+    sp = E.ModelSpec("openai_compatible", "gpt-oss-120b", 131072, 30, 0.2, "cere",
+                     base_url="https://api.cerebras.ai/v1", key_env="CEREBRAS_API_KEY",
+                     extra_params={"reasoning_effort": "medium"})
+    text, err, tcs = E._call_openai_compatible(sp, "hi", None, 256, 0.2, E_TOOLS)
+    assert "Mozilla/" in captured["headers"]["User-Agent"]          # not python-requests
+    assert captured["json"]["reasoning_effort"] == "medium"          # SDK tuning forwarded
+    assert captured["json"]["tools"] == E_TOOLS                      # tools still forwarded
+    assert tcs and tcs[0]["function"]["name"] == "write_file"
+
+
+def test_cerebras_rung_carries_reasoning_effort():
+    sp = E.LADDER[E.TASK_START_TIER["builder_cerebras"]]
+    assert sp.extra_params.get("reasoning_effort") == "medium"
+
+
+def test_nvidia_model_is_live_tool_built():
+    sp = E.LADDER[E.TASK_START_TIER["builder_nvidia"]]
+    assert "nemotron" in sp.model_id          # mistral-nemotron (built for tool calling)
+    assert "qwen2.5-coder-32b" not in sp.model_id and "qwen3-coder-480b" not in sp.model_id
+
+
+E_TOOLS = [{"type": "function", "function": {"name": "write_file",
+            "parameters": {"type": "object", "properties": {}}}}]

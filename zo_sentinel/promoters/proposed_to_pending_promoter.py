@@ -91,13 +91,14 @@ _TOWER_DIRECTIVES = Path("/home/workspace/zo_sentinel/directives")
 
 
 def _default_directives_root() -> Path:
-    """Prefer the repo-local directives/ dir; fall back to tower path."""
-    if _REPO_DIRECTIVES.exists():
-        return _REPO_DIRECTIVES
+    """Canonical directives root: the SAME absolute tower path goose_runner and the
+    directive MCP hardcode (/home/workspace/zo_sentinel/directives), so promoted
+    directives ALWAYS land where goose watches. Repo-local is only a CI/test fallback
+    when the tower path is absent. Flipping this preference (was repo-local-first) is
+    the durable fix for the recurring "proposals land where goose can't see them"
+    funnel break -- the repo-local path drifts on every respawn/refresh/checkout."""
     if _TOWER_DIRECTIVES.exists():
         return _TOWER_DIRECTIVES
-    # Neither exists yet (fresh checkout, no tower) — pick repo-local
-    # so tests / dry-runs work; the caller can override with --proposed-dir.
     return _REPO_DIRECTIVES
 
 
@@ -652,6 +653,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
+
+    # Tripwire: the recurring funnel break is the promoter writing pending/ to a
+    # folder goose_runner does NOT watch (silent scanned=0 for weeks). Resolve the
+    # paths once at startup and ALERT loudly on any drift from goose's canonical dir.
+    _goose_pending = _TOWER_DIRECTIVES / "pending"
+    log.info("promoter paths: proposed=%s pending=%s", args.proposed_dir, args.pending_dir)
+    if _TOWER_DIRECTIVES.exists() and Path(args.pending_dir).resolve() != _goose_pending.resolve():
+        log.error("ALERT path-drift: pending-dir %s != goose pending %s -- promoted "
+                  "directives will be INVISIBLE to goose_runner (this is the recurring "
+                  "funnel break). Fix the launcher's --pending-dir or the path constant.",
+                  args.pending_dir, _goose_pending)
 
     if args.once:
         run_once(

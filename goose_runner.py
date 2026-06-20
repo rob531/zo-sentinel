@@ -22,7 +22,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
     resolve_directive_id, tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
-    output_confirmed)
+    output_confirmed, failed_quarantined)
 from zo_sentinel.build_lessons import (  # noqa: E402
     record_lesson, resolve_lessons, open_lessons_for, format_lessons_context)
 
@@ -63,6 +63,9 @@ DIRECTIVES_PATH = Path("/home/workspace/zo_sentinel/directives")
 LESSONS_DIR = PROJECT_DIR / "lessons"   # file-based lessons index (zero DB load)
 PENDING_DIR = DIRECTIVES_PATH / "pending"
 DONE_DIR = DIRECTIVES_PATH / "done"
+# Durable quarantine store OUTSIDE the repo tree, so `git clean` on daemon
+# respawn/refresh cannot wipe .failed sentinels (council 2026-06-20).
+DURABLE_QUARANTINE_DIR = Path("/home/workspace/zo_sentinel_state/quarantine")
 
 # OpenAI API key (MiniMax is OpenAI-compatible)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -141,6 +144,7 @@ def ensure_directories():
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
     DONE_DIR.mkdir(parents=True, exist_ok=True)
     LESSONS_DIR.mkdir(parents=True, exist_ok=True)
+    DURABLE_QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
 
 def ws_query(sql):
     """Query write service."""
@@ -313,7 +317,10 @@ def is_goose_eligible(directive):
                 f"(declared output {declared_output(directive)} absent) -- re-admitting")
         except OSError:
             return False   # couldn't remove -> leave skipped, don't churn
-    if (sentinels / f"{directive_id_val}.failed.json").exists():
+    # Durable-aware: a quarantine in EITHER the in-repo directives/ path OR the
+    # durable store (outside the git tree) parks the directive. The durable copy
+    # survives `git clean` on respawn, so a quarantine no longer evaporates.
+    if failed_quarantined(directive_id_val, sentinels, DURABLE_QUARANTINE_DIR):
         return False
     return True
 
@@ -790,12 +797,18 @@ def _mark_directive_failed(directive, directive_id, reason):
         })
     except Exception as _le:
         log(f"[lesson] emit failed for {directive_id}: {_le}")
+    _failed_payload = json.dumps({"directive_id": directive_id, "reason": reason,
+                                  "failed_at": get_utc_now()})
     try:
-        Path(f"{DIRECTIVES_PATH}/{directive_id}.failed.json").write_text(
-            json.dumps({"directive_id": directive_id, "reason": reason,
-                        "failed_at": get_utc_now()}))
+        Path(f"{DIRECTIVES_PATH}/{directive_id}.failed.json").write_text(_failed_payload)
     except Exception as e:
         log(f"Failed to write .failed sentinel for {directive_id}: {e}")
+    # Durable copy outside the git tree -> survives `git clean` on respawn.
+    try:
+        DURABLE_QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
+        (DURABLE_QUARANTINE_DIR / f"{directive_id}.failed.json").write_text(_failed_payload)
+    except Exception as e:
+        log(f"durable quarantine write failed for {directive_id}: {e}")
     try:
         ws_write("mesh_events", {
             "agent_id": "goose_tier1",

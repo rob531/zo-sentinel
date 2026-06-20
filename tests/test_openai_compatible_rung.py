@@ -16,7 +16,8 @@ def test_nvidia_rung_wired_nonbreaking():
     sp = E.LADDER[idx]
     assert sp.backend == "openai_compatible"
     assert sp.key_env == "NVIDIA_API_KEY"
-    assert "integrate.api.nvidia.com" in sp.base_url
+    # exact match (not a "host in url" substring check -- CodeQL flags those)
+    assert sp.base_url == "https://integrate.api.nvidia.com/v1"
     assert E.MODEL_TASK_MAP["zo-ladder-nvidia"] == "builder_nvidia"
     assert E.task_for_model("zo-ladder-nvidia") == "builder_nvidia"
     assert "openai_compatible" in E.BACKEND_ADAPTERS

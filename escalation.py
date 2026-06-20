@@ -119,6 +119,8 @@ class ModelSpec:
     label: str
     base_url: str = ""        # for openai_compatible rungs
     key_env: str = ""         # env var holding the API key
+    extra_params: dict = field(default_factory=dict)  # provider-specific tuning
+                                                       # (e.g. gpt-oss reasoning_effort)
 
 
 LADDER = [
@@ -182,7 +184,7 @@ LADDER = [
     # default builder path until promoted. Model overridable via NVIDIA_BUILD_MODEL.
     # Uses the generic openai_compatible adapter (base_url + key_env on the spec).
     ModelSpec("openai_compatible",
-              os.environ.get("NVIDIA_BUILD_MODEL", "qwen/qwen3-coder-480b-a35b-instruct"),
+              os.environ.get("NVIDIA_BUILD_MODEL", "mistralai/mistral-nemotron"),
               131_000, 40, 0.0,
               "NVIDIA NIM (free credits, OpenAI-compat, tool-calling)",
               base_url="https://integrate.api.nvidia.com/v1", key_env="NVIDIA_API_KEY"),
@@ -195,7 +197,8 @@ LADDER = [
               os.environ.get("CEREBRAS_BUILD_MODEL", "gpt-oss-120b"),
               131_072, 30, 0.2,
               "Cerebras gpt-oss-120b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
-              base_url="https://api.cerebras.ai/v1", key_env="CEREBRAS_API_KEY"),
+              base_url="https://api.cerebras.ai/v1", key_env="CEREBRAS_API_KEY",
+              extra_params={"reasoning_effort": "medium"}),
 ]
 
 TASK_START_TIER = {
@@ -536,6 +539,10 @@ def _call_zo_routed(spec, prompt, system, max_tokens, temperature, tools=None):
         return None, f"{type(e).__name__}: {e}", None
 
 
+_OAI_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+
+
 def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools=None):
     """Generic OpenAI SDK-compatible chat/completions rung. base_url + key_env come
     from the ModelSpec, so adding an OpenAI-compatible provider (NVIDIA NIM, Cerebras,
@@ -555,12 +562,17 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
     messages.append({"role": "user", "content": prompt})
     payload = {"model": spec.model_id, "messages": messages,
                "max_tokens": max_tokens, "temperature": temperature}
+    if spec.extra_params:                      # provider-specific tuning (reasoning_effort, ...)
+        payload.update(spec.extra_params)
     if tools:
         payload["tools"] = tools
     try:
         r = requests.post(f"{base}/chat/completions",
                           headers={"Authorization": f"Bearer {key}",
-                                   "Content-Type": "application/json"},
+                                   "Content-Type": "application/json",
+                                   # browser UA: Cerebras (Cloudflare) 403s the
+                                   # default python-requests UA with error 1010.
+                                   "User-Agent": _OAI_USER_AGENT},
                           json=payload, timeout=240)
         if r.status_code == 429:
             return None, "429 rate-limited", None

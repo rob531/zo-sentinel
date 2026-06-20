@@ -182,10 +182,20 @@ LADDER = [
     # default builder path until promoted. Model overridable via NVIDIA_BUILD_MODEL.
     # Uses the generic openai_compatible adapter (base_url + key_env on the spec).
     ModelSpec("openai_compatible",
-              os.environ.get("NVIDIA_BUILD_MODEL", "qwen/qwen2.5-coder-32b-instruct"),
+              os.environ.get("NVIDIA_BUILD_MODEL", "qwen/qwen3-coder-480b-a35b-instruct"),
               131_000, 40, 0.0,
               "NVIDIA NIM (free credits, OpenAI-compat, tool-calling)",
               base_url="https://integrate.api.nvidia.com/v1", key_env="NVIDIA_API_KEY"),
+
+    # Tier 4b -- Cerebras (free ~14.4k req/day, no card; OpenAI-compatible; very
+    # high tok/s). gpt-oss-120b supports function/parallel tool calling -> can drive
+    # goose. Opt-in via GOOSE_MODEL=zo-ladder-cerebras (task builder_cerebras); NOT
+    # in the default path until promoted. Model overridable via CEREBRAS_BUILD_MODEL.
+    ModelSpec("openai_compatible",
+              os.environ.get("CEREBRAS_BUILD_MODEL", "gpt-oss-120b"),
+              131_072, 30, 0.2,
+              "Cerebras gpt-oss-120b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
+              base_url="https://api.cerebras.ai/v1", key_env="CEREBRAS_API_KEY"),
 ]
 
 TASK_START_TIER = {
@@ -211,7 +221,8 @@ TASK_START_TIER = {
     "builder_medium":    1,
     "builder_high":     11,
     "builder_critical": 15,
-    "builder_nvidia":   17,   # NVIDIA NIM rung (appended last); opt-in capacity/quality
+    "builder_nvidia":   17,   # NVIDIA NIM rung; opt-in capacity/quality
+    "builder_cerebras": 18,   # Cerebras gpt-oss-120b rung; opt-in capacity (free, fast)
 }
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
@@ -235,6 +246,7 @@ MODEL_TASK_MAP = {
     "zo-ladder-high":     "builder_high",
     "zo-ladder-critical": "builder_critical",
     "zo-ladder-nvidia":   "builder_nvidia",
+    "zo-ladder-cerebras": "builder_cerebras",
 }
 
 

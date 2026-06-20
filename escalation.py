@@ -208,6 +208,15 @@ LADDER = [
               256_000, 30, 0.2,
               "Mistral Codestral (free tier, OpenAI-compat, tool-calling)",
               base_url="https://api.mistral.ai/v1", key_env="MISTRAL_API_KEY"),
+
+    # Tier 4d -- Groq (free tier ~14.4k req/day; OpenAI-compatible; extreme tok/s;
+    # tool-calling). Opt-in via GOOSE_MODEL=zo-ladder-groq (task builder_groq).
+    # Model overridable via GROQ_BUILD_MODEL (Groq also serves openai/gpt-oss-120b).
+    ModelSpec("openai_compatible",
+              os.environ.get("GROQ_BUILD_MODEL", "llama-3.3-70b-versatile"),
+              131_000, 30, 0.2,
+              "Groq llama-3.3-70b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
+              base_url="https://api.groq.com/openai/v1", key_env="GROQ_API_KEY"),
 ]
 
 TASK_START_TIER = {
@@ -236,6 +245,7 @@ TASK_START_TIER = {
     "builder_nvidia":   17,   # NVIDIA NIM rung; opt-in capacity/quality
     "builder_cerebras": 18,   # Cerebras gpt-oss-120b rung; opt-in capacity (free, fast)
     "builder_mistral":  19,   # Mistral Codestral rung; opt-in capacity (free, coder)
+    "builder_groq":     20,   # Groq llama-3.3-70b rung; opt-in capacity (free, fastest)
 }
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
@@ -261,6 +271,7 @@ MODEL_TASK_MAP = {
     "zo-ladder-nvidia":   "builder_nvidia",
     "zo-ladder-cerebras": "builder_cerebras",
     "zo-ladder-mistral":  "builder_mistral",
+    "zo-ladder-groq":     "builder_groq",
 }
 
 

@@ -117,6 +117,8 @@ class ModelSpec:
     rpm_limit: int
     cost_priority: float
     label: str
+    base_url: str = ""        # for openai_compatible rungs
+    key_env: str = ""         # env var holding the API key
 
 
 LADDER = [
@@ -173,6 +175,17 @@ LADDER = [
               "Sonnet 4.5 (Zo sub, 2.1x)"),
     ModelSpec("zo_routed", "zo:anthropic/claude-opus-4-7",       1_000_000, 60, 3.0,
               "Opus 4.7 (Zo sub, 3.0x)"),
+
+    # Tier 4 -- NVIDIA NIM (free dev credits; OpenAI SDK-compatible; tool-capable).
+    # APPENDED LAST so it never shifts the index-based TASK_START_TIER map. Reached
+    # on demand via GOOSE_MODEL=zo-ladder-nvidia (task "builder_nvidia"); NOT in the
+    # default builder path until promoted. Model overridable via NVIDIA_BUILD_MODEL.
+    # Uses the generic openai_compatible adapter (base_url + key_env on the spec).
+    ModelSpec("openai_compatible",
+              os.environ.get("NVIDIA_BUILD_MODEL", "qwen/qwen2.5-coder-32b-instruct"),
+              131_000, 40, 0.0,
+              "NVIDIA NIM (free credits, OpenAI-compat, tool-calling)",
+              base_url="https://integrate.api.nvidia.com/v1", key_env="NVIDIA_API_KEY"),
 ]
 
 TASK_START_TIER = {
@@ -198,6 +211,7 @@ TASK_START_TIER = {
     "builder_medium":    1,
     "builder_high":     11,
     "builder_critical": 15,
+    "builder_nvidia":   17,   # NVIDIA NIM rung (appended last); opt-in capacity/quality
 }
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
@@ -220,6 +234,7 @@ MODEL_TASK_MAP = {
     "zo-ladder-medium":   "builder_medium",
     "zo-ladder-high":     "builder_high",
     "zo-ladder-critical": "builder_critical",
+    "zo-ladder-nvidia":   "builder_nvidia",
 }
 
 
@@ -509,10 +524,54 @@ def _call_zo_routed(spec, prompt, system, max_tokens, temperature, tools=None):
         return None, f"{type(e).__name__}: {e}", None
 
 
+def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools=None):
+    """Generic OpenAI SDK-compatible chat/completions rung. base_url + key_env come
+    from the ModelSpec, so adding an OpenAI-compatible provider (NVIDIA NIM, Cerebras,
+    Groq, GitHub Models, ...) is a LADDER config row, NOT new code. Forwards goose's
+    `tools` and reads back structured `tool_calls` (the proven minimax_direct pattern).
+    Returns (text, error, tool_calls)."""
+    import requests
+    key = os.environ.get(spec.key_env) if spec.key_env else None
+    if not key:
+        return None, f"{spec.key_env or 'key'} not set", None
+    base = (spec.base_url or "").rstrip("/")
+    if not base:
+        return None, "no base_url on spec", None
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    payload = {"model": spec.model_id, "messages": messages,
+               "max_tokens": max_tokens, "temperature": temperature}
+    if tools:
+        payload["tools"] = tools
+    try:
+        r = requests.post(f"{base}/chat/completions",
+                          headers={"Authorization": f"Bearer {key}",
+                                   "Content-Type": "application/json"},
+                          json=payload, timeout=240)
+        if r.status_code == 429:
+            return None, "429 rate-limited", None
+        r.raise_for_status()
+        choices = r.json().get("choices", [])
+        if not choices:
+            return None, "empty choices", None
+        msg = choices[0].get("message", {}) or {}
+        raw = (msg.get("content", "") or "").strip()
+        tool_calls = msg.get("tool_calls")
+        content = _normalize_response(raw) if raw else ""
+        if not content and not tool_calls:
+            return None, "empty content and no tools", None
+        return (content or None), None, tool_calls
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}", None
+
+
 BACKEND_ADAPTERS = {
     "minimax_direct": _call_minimax_direct,
     "gemini_direct":  _call_gemini_direct,
     "zo_routed":      _call_zo_routed,
+    "openai_compatible": _call_openai_compatible,
 }
 
 

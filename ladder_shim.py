@@ -197,7 +197,25 @@ async def chat_completions(request: ChatCompletionRequest):
 
 
 KEY_HYDRATOR = "/home/workspace/zo_mesh/key_hydrator.py"
-HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY")
+HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NVIDIA_API_KEY")
+
+
+def _load_zo_secrets(path="/root/.zo_secrets"):
+    """Source KEY=value lines from /root/.zo_secrets into env for any HYDRATE_KEYS
+    not already set -- so a new key (e.g. NVIDIA_API_KEY) added to that file is
+    picked up by ANY launch path with no key_hydrator round-trip. Best-effort."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip(); v = v.strip().strip('"').strip("'")
+                if k in HYDRATE_KEYS and v and not os.environ.get(k):
+                    os.environ[k] = v
+    except Exception:
+        pass
 
 # Raised from 30s: key_hydrator --get round-trips to the Windows tower vault
 # responder, which can exceed 30s under load -> the call was killed, gemini/
@@ -272,6 +290,7 @@ def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.slee
         timeout = HYDRATE_TIMEOUT
     if cache:
         _load_key_cache()   # warm path: skip the slow Tower round-trip entirely
+    _load_zo_secrets()      # source /root/.zo_secrets (new keys e.g. NVIDIA_API_KEY)
     runner = runner or (lambda k: subprocess.run(
         ["python3", kh, "--get", k], capture_output=True, text=True,
         timeout=timeout).stdout.strip())

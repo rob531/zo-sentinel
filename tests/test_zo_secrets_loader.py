@@ -52,3 +52,12 @@ def test_cerebras_misspelled_token_resolves(tmp_path, monkeypatch):
     monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
     ls._load_zo_secrets(str(f))
     assert os.environ.get("CEREBRAS_API_KEY") == "csk-misspelled"
+
+
+def test_mistral_freeform_name_resolves(tmp_path, monkeypatch):
+    """User stored the key as 'mistralkeyfree'; 'mistral' substring token maps it."""
+    ls = _ls(); import os
+    f = tmp_path / "secrets"; f.write_text("mistralkeyfree=msk-abc\n")
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    ls._load_zo_secrets(str(f))
+    assert os.environ.get("MISTRAL_API_KEY") == "msk-abc"

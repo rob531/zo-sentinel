@@ -197,7 +197,7 @@ async def chat_completions(request: ChatCompletionRequest):
 
 
 KEY_HYDRATOR = "/home/workspace/zo_mesh/key_hydrator.py"
-HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NVIDIA_API_KEY", "CEREBRAS_API_KEY")
+HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NVIDIA_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY")
 
 
 # /root/.zo_secrets stores keys under provider-token names (minimax, gemini,
@@ -211,6 +211,7 @@ _ZO_SECRET_TOKENS = {
     "NVIDIA_API_KEY": "nvidia",
     # "cereb" matches both the correct "cerebras" and a misspelled "cerebus" line
     "CEREBRAS_API_KEY": "cereb",
+    "MISTRAL_API_KEY": "mistral",
 }
 
 

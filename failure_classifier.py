@@ -20,8 +20,8 @@ CLASSES = [
      "promoter/goose read a directory the other doesn't write (funnel invisible)",
      [r"ALERT path-drift", r"invisible to goose", r"promoted to a folder goose",
       r"lands in a folder goose", r"proposed/ depth \d+ >= cap"]),
-    ("novelty_starvation",
-     "architect emits no novel work / recycles already-built directives",
+    ("no_novel_builds",
+     "REGRESSION: architect emits +0 / recycles built work -- the graphify-native novelty design (DESIGN_graph_native_feedback.md) not delivering",
      [r"proposed_depth \d+ -> 0 \(\+0\)", r"depth_cap", r"skip already-resolved",
       r"\+0 novel"]),
     ("capacity_429",
@@ -55,6 +55,79 @@ CLASSES = [
 ]
 
 _COMPILED = [(name, blurb, [re.compile(p, re.I) for p in pats]) for name, blurb, pats in CLASSES]
+
+# Seeded from DESIGN_graph_native_feedback.md "Regression caveats -- MUST hold" (the
+# pre-existing playbook, June 2026) + the fixes verified 2026-06-20/21. The
+# false_positive field is the highest-value bit: it stops the symptom-chase.
+PLAYBOOK = {
+    "no_novel_builds": {
+        "root": "architect proposes +0 or re-proposes already-built work; the graphify "
+                "structural-context edge was meant to prevent this.",
+        "false_positive": "PROVEN FALSE-POSITIVE TRAP: +0 is usually the architect's MODEL "
+                "PATH failing, not a generation bug. CHECK ladder_shim.log for 502s/timeouts "
+                "FIRST -- if sick, it's capacity_429/key_hydration, NOT this. Also: GOOSE_MODEL "
+                "is pinned to MiniMax-Text-01 and the Phase-5 escalation edge (ZO_ESCALATE) is "
+                "default OFF, so the architect may be stuck on one rung. (Re-confirmed 2026-06-21: "
+                "shim=200 OK -> model path healthy -> residual +0/dupes are real.)",
+        "fix": "verify shim 200s; then bridge done-dedup (#355) + recency avoid-list (#349). "
+               "Deeper: turn on matrix-driven rung selection (documented follow-on).",
+        "refs": [333, 349, 355],
+    },
+    "path_drift": {
+        "root": "promoter/goose read a different directives dir than the writer; or git "
+                "reset --hard wipes untracked runtime state on host refresh.",
+        "false_positive": "scanned=0 alone is ambiguous (could be genuinely idle). Confirm via "
+                "the ALERT path-drift tripwire or proposals existing elsewhere.",
+        "fix": "canonical absolute path + tripwire (#347); keep runtime state UNTRACKED so "
+               "git reset --hard leaves it (DESIGN doc caveat).",
+        "refs": [347],
+    },
+    "write_service": {
+        "root": "write_service is a SINGLE DuckDB connection (PR #35, code-134 crash if a 2nd "
+                "writer is added); zo_db_query under load destabilizes it.",
+        "false_positive": "transient 8772 heartbeat timeouts during zm-go bootstrap are normal "
+                "(service warming) -- not a fault unless sustained.",
+        "fix": "never add a second writer; keep hot paths file-based / batched through :8772. "
+               "Schema-mismatch spam (e.g. mcp_threat_associations ON CONFLICT) = a bad upsert "
+               "writer to fix.",
+        "refs": [],
+    },
+    "ghost_build": {
+        "root": "goose reports success but writes no file (tool-call didn't land); the Tier-1 "
+                "import gate also false-FAILs on host-only deps.",
+        "false_positive": "completion gates on Tier-0 SYNTAX only; Tier-1 is advisory -- a Tier-1 "
+                "'fail' is not a real build failure.",
+        "fix": "the shim fallback writes the file; deeper fix is goose tool-call reliability + a "
+               "capable default model (bake-off: Cerebras/Groq).",
+        "refs": [251],
+    },
+    "capacity_429": {"root": "rate-limit/quota storm (MiniMax daily bucket, free-tier RPM).",
+        "false_positive": "MiniMax 429 is EXPECTED (paid daily bucket) -- it parks and auto-recovers; "
+                "don't demote it.", "fix": "quota-aware failover + park/recover (#343); capacity rungs.",
+        "refs": [343, 345]},
+    "key_hydration": {"root": "shim lost keys (vault race / hydrate timeout / GNOME keyring bug).",
+        "false_positive": "the relaunch SUCCESS line contains 'no RcGeminiAPIKey unresolved' -- not a fault.",
+        "fix": "env-var key load (keyring bypass) + substring loader (#337); relaunch_ladder_keyed.",
+        "refs": [265, 337]},
+    "publisher_noop_cap": {"root": "nothing committable (edit no-op) or daily PR cap.",
+        "false_positive": "repeated 'nothing to commit' on the SAME artifact = healthy idle, not a latch.",
+        "fix": "cap raised to 100 (#294, public repo); supply creation-class work.", "refs": [294]},
+    "dup_poison": {"root": "doubled-prefix / already-built output_file poisons the Tier-0 gate.",
+        "false_positive": "", "fix": "output_file sanity gate (#279) + durable quarantine (#334).",
+        "refs": [279, 334]},
+    "shim_5xx": {"root": "shim upstream model error (key race / capacity / timeout).",
+        "false_positive": "a single transient 502 during failover is normal; sustained 5xx is the signal.",
+        "fix": "see capacity_429 / key_hydration.", "refs": [343]},
+    "bootstrap_service": {"root": "a service failed to bind at boot (startup race / port in use).",
+        "false_positive": "the 12.10 health-check 000 during zm-go is a TIMING race -- the service "
+                "usually binds a second later (registry_api log shows clean Uvicorn startup).",
+        "fix": "startup-retry/ordering so the health-check doesn't false-red.", "refs": []},
+}
+
+
+def playbook(class_name):
+    """Return {root, false_positive, fix, refs} for a failure class, or {}."""
+    return PLAYBOOK.get(class_name, {})
 
 DEFAULT_LOGS = [
     "proposed_to_pending_promoter", "directive_generator_goose", "goose_runner",
@@ -118,6 +191,11 @@ def main():
         print(f"{n:>6}  {name:<20} {blurbs.get(name,'')}")
         if example.get(name):
             print(f"{'':>6}  {'':<20} e.g. {example[name]}")
+        pb = PLAYBOOK.get(name)
+        if pb:
+            if pb.get("false_positive"):
+                print(f"{'':>6}  {'':<20} CHECK FIRST: {pb['false_positive'][:140]}")
+            print(f"{'':>6}  {'':<20} fix: {pb.get('fix','')[:120]}  refs={pb.get('refs',[])}")
     return 0
 
 

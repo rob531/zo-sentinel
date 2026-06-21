@@ -336,6 +336,72 @@ def read_failure_history(hours: int = 24) -> dict:
         return {"status": "error", "error": str(e), "rows": []}
 
 
+# --- read-only code-graph tools (graphify) -------------------------------------
+# The directive architect PROPOSES; it must NOT execute -- so we expose only the
+# graph READ surface here (mirroring builder_mcp's code_nodes/code_edges queries
+# via write_service:8772), NOT builder_mcp's build-execution tools. These let the
+# architect range across the app's domains and check a module isn't already wired,
+# instead of working blind off a flat already_built name list.
+
+def _graph_query(sql: str, timeout: int = 8):
+    """Read-only code-graph query via write_service /query (POST). Returns a list
+    of row dicts, or [] on ANY error (graph not seeded / bus down) so the architect
+    degrades gracefully and proceeds without it."""
+    try:
+        import requests
+        r = requests.post("http://127.0.0.1:8772/query",
+                          json={"sql": sql}, timeout=timeout)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        return data.get("rows", []) if isinstance(data, dict) else (data or [])
+    except Exception as e:
+        _log(f"_graph_query error: {e}")
+        return []
+
+
+@mcp.tool()
+def list_domains(limit: int = 30) -> dict:
+    """The app's DOMAIN MAP from the code graph: Leiden communities = clusters of
+    related modules (the app's domains). Call this to RANGE ACROSS the app instead
+    of fixating on a few subjects -- favour domains that are thin/underbuilt, or
+    concrete gaps WITHIN large domains. Each row: community id, module count, an
+    example module. Read-only."""
+    sql = ("SELECT community, COUNT(*) AS modules, "
+           "MIN(regexp_replace(source_file, '^.*/', '')) AS example "
+           "FROM code_nodes WHERE source_file LIKE '%.py' "
+           "AND source_file NOT LIKE 'directives/%' "
+           "AND source_file NOT LIKE 'directives_archive/%' "
+           f"GROUP BY community ORDER BY modules DESC LIMIT {int(limit)}")
+    rows = _graph_query(sql)
+    return {"status": "ok" if rows else "empty",
+            "count": len(rows), "domains": rows}
+
+
+@mcp.tool()
+def graph_neighbors(target: str) -> dict:
+    """Code-graph neighbourhood of a module/symbol: what it DEPENDS ON and what
+    DEPENDS ON IT (code_nodes/code_edges). Call this BEFORE proposing a CREATION
+    directive to confirm the module (or its wiring) does not already exist, and to
+    find integration gaps to target. `target` = a file/path fragment or symbol
+    (e.g. 'api_gateway.py' or 'register_build'). Read-only; [] if not seeded."""
+    t = str(target).replace("'", "''")
+    tl = t.lower()
+    deps = _graph_query(
+        "SELECT DISTINCT e.relation AS rel, n2.label AS name, n2.source_file AS file "
+        "FROM code_edges e JOIN code_nodes n1 ON e.src=n1.id JOIN code_nodes n2 ON e.dst=n2.id "
+        f"WHERE (n1.source_file LIKE '%{t}%' OR n1.norm_label LIKE '%{tl}%') "
+        "AND e.relation <> 'rationale_for' ORDER BY e.relation LIMIT 40")
+    dependents = _graph_query(
+        "SELECT DISTINCT e.relation AS rel, n1.label AS name, n1.source_file AS file "
+        "FROM code_edges e JOIN code_nodes n1 ON e.src=n1.id JOIN code_nodes n2 ON e.dst=n2.id "
+        f"WHERE (n2.source_file LIKE '%{t}%' OR n2.norm_label LIKE '%{tl}%') "
+        "AND e.relation <> 'rationale_for' ORDER BY e.relation LIMIT 40")
+    return {"status": "ok", "target": target,
+            "depends_on": deps, "depended_on_by": dependents,
+            "exists_in_graph": bool(deps or dependents)}
+
+
 @mcp.tool()
 def propose_directive(
     task: str,

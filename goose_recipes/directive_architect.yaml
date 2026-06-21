@@ -51,6 +51,18 @@ prompt: |-
   re-proposes an already_built module is wasted work that the pipeline will
   reject downstream.
 
+  RANGE ACROSS DOMAINS (use the graph). You now have two read-only code-graph
+  tools on THIS bridge. Call `list_domains` FIRST each cycle: it returns the
+  app's domains (graph communities + module counts) -- spread your proposals
+  ACROSS them, favouring thin/underbuilt domains; do NOT keep proposing the same
+  3-5 subjects. Call `graph_neighbors(target)` before any CREATION directive to
+  confirm the module (or its wiring) is not already present and to pick concrete
+  integration gaps. Both are READ-only -- they never build.
+
+  PARKED -- do NOT propose build / verify / investigate work for snow_connector,
+  aidr_commit_gateway, approval_evidence_bundler, or the SNOW / AIDR external-
+  client authorization branch. It is a DEFERRED future branch, not current work.
+
   SPEC QUALITY -- THE SINGLE BIGGEST LEVER ON WHETHER A BUILD SUCCEEDS. goose
   builds a directive from your `description` and NOTHING ELSE; it builds CLEAR
   specs and GHOSTS vague ones (a one-line "build an enrichment for X" produces no

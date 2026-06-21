@@ -11,6 +11,7 @@ def test_each_class_signature():
         "error: 429 rate-limited (backoff exhausted)": "capacity_429",
         "Token Plan usage limit reached": "capacity_429",
         "self-hydrate keys timed out after 30s": "key_hydration",
+        '127.0.0.1 - "POST /v1/chat/completions HTTP/1.1" 502 Bad Gateway': "shim_5xx",
         "RcGeminiAPIKey still unresolved": "key_hydration",
         "rejected: output_file_is_sane admin_admin_ui.py": "dup_poison",
         "no-op: artifact already on base (nothing to commit)": "publisher_noop_cap",
@@ -26,6 +27,7 @@ def test_each_class_signature():
 def test_healthy_lines_are_none():
     for ln in ["POST /v1/chat/completions HTTP/1.1 200 OK",
                "Cycle 14 complete, sleeping 60s",
+               "already_built_modules trimmed to 114/1212 for ctx budget",  # per-cycle INFO, not a failure
                "promoter heartbeat: alive"]:
         assert F.classify_line(ln) is None
 

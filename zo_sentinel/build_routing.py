@@ -100,7 +100,43 @@ def directive_content(d: dict) -> Optional[str]:
     return None
 
 
-def build_env_for(directive: dict, attempt: int = 0) -> dict:
+def directive_type_of(directive: dict) -> str:
+    """The class key the failure_matrix is grouped by (matches goose_runner's
+    build_provenance derivation): interface > context_type > 'utility'."""
+    return str(directive.get("interface") or directive.get("context_type") or "utility")
+
+
+def best_model_from_matrix(rows, directive_type: str, complexity: str,
+                           min_attempts: int = 20, exclude: Optional[str] = None,
+                           min_success: float = 0.0):
+    """Pick the highest-success model for this directive_type x complexity from
+    failure_matrix `rows` (already fetched; each row: directive_type, complexity,
+    model, attempts, success_pct). Skips empty-model rows (the 0%-success routing
+    bug), rows below min_attempts (small-sample flukes), and `exclude` (the model
+    that just ghosted, for escalation). Returns a model alias/name, or None so the
+    caller falls back to the static complexity route. PURE -- no IO."""
+    dt = (directive_type or "").strip().lower()
+    cx = (complexity or "").strip().lower()
+    best, best_pct = None, -1.0
+    for r in rows or []:
+        if str(r.get("directive_type", "")).strip().lower() != dt:
+            continue
+        if str(r.get("complexity", "")).strip().lower() != cx:
+            continue
+        model = str(r.get("model", "")).strip()
+        if not model or model == exclude:
+            continue
+        try:
+            attempts = int(r.get("attempts", 0))
+            pct = float(r.get("success_pct", 0))
+        except (TypeError, ValueError):
+            continue
+        if attempts >= min_attempts and pct >= min_success and pct > best_pct:
+            best, best_pct = model, pct
+    return best
+
+
+def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
     """Per-directive env for the Goose subprocess: routes the architect
     (GOOSE_MODEL) + codegen (ZO_BUILD_TIER) by complexity and carries task/phase
     so builder_mcp can stamp a complete build_artifact row.
@@ -120,9 +156,32 @@ def build_env_for(directive: dict, attempt: int = 0) -> dict:
     # than escalating, so it is still ONE coherent model per build, just a better
     # one for the harder directives. ZO_BUILD_TIER stays complexity-routed for the
     # delegate_to_builder fallback + build_artifact provenance.
-    goose_model = "zo-ladder-medium" if complexity == "medium" else DEFAULT_ALIAS
+    # Static route (prior behaviour): medium -> MiniMax-M3 rung, else rung-0 MiniMax.
+    static_model = "zo-ladder-medium" if complexity == "medium" else DEFAULT_ALIAS
+    # Matrix-driven (evidence > static): route to the model that ACTUALLY builds this
+    # directive_type x complexity best, per failure_matrix. Falls back to static when
+    # the matrix is thin/absent. (rows are fetched + cached by the daemon -- this
+    # module stays pure.)
+    rows = matrix_rows or []
+    dtype = directive_type_of(directive)
+    base = best_model_from_matrix(rows, dtype, complexity) or static_model
+    goose_model = base
     if attempt > 0 and os.environ.get("ZO_ESCALATE"):
-        goose_model = _escalate_alias(goose_model, attempt, complexity)
+        # Matrix-aware escalation. A ghost retries on the best PROVEN-GOOD alternative
+        # model (>= floor success, NOT the one that just failed) -- never a blind climb
+        # into zo-ladder-high (~14% in the matrix). If the matrix has data but no good
+        # alternative, RETRY THE WINNER (a fresh attempt on the proven model beats a
+        # worse rung). Only fall back to the static ladder climb when the matrix has NO
+        # data for this class at all.
+        floor = float(os.environ.get("ZO_ESCALATE_FLOOR", "40"))
+        nxt = best_model_from_matrix(rows, dtype, complexity, exclude=base, min_success=floor)
+        if nxt:
+            goose_model = nxt
+        elif not best_model_from_matrix(rows, dtype, complexity):   # no data for this class
+            goose_model = _escalate_alias(
+                base if base in _ESCALATION_LADDER else static_model, attempt, complexity)
+        # else: matrix has data but no better option -> keep base (retry the winner)
+    goose_model = goose_model or DEFAULT_ALIAS          # never route to an empty model
     return {
         "GOOSE_MODEL": goose_model,
         "ZO_BUILD_TIER": codegen_tier,

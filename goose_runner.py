@@ -167,6 +167,25 @@ def ws_write(table, rows):
         log(f"Write failed: {e}")
         return {"ok": False}
 
+
+_MATRIX_CACHE = {"ts": 0.0, "rows": []}
+
+
+def failure_matrix_cached(ttl=300):
+    """failure_matrix rows for matrix-driven routing, cached (>= ttl secs) so we hit
+    the bus at most once per few minutes -- NOT per directive (write_service is a
+    single connection; zo_db_query under load destabilizes it). Best-effort -> []."""
+    now = time.time()
+    if _MATRIX_CACHE["rows"] and now - _MATRIX_CACHE["ts"] < ttl:
+        return _MATRIX_CACHE["rows"]
+    res = ws_query("SELECT directive_type, complexity, model, attempts, success_pct "
+                   "FROM failure_matrix")
+    rows = res.get("rows", []) if isinstance(res, dict) else []
+    _MATRIX_CACHE["ts"] = now
+    if rows:
+        _MATRIX_CACHE["rows"] = rows
+    return _MATRIX_CACHE["rows"]
+
 # =============================================================================
 # DIRECTIVE LOADING
 # =============================================================================
@@ -974,7 +993,8 @@ def run():
                 # Capture the routed alias here so build_provenance records the rung
                 # the build ACTUALLY used (not the daemon's ambient GOOSE_MODEL).
                 _attempt = ghost_attempts(DIRECTIVES_PATH, directive_id)
-                _routed_env = build_env_for(directive, attempt=_attempt)
+                _routed_env = build_env_for(directive, attempt=_attempt,
+                                            matrix_rows=failure_matrix_cached())
                 _routed_model = _routed_env.get("GOOSE_MODEL", "")
                 produced = False
                 if goose_installed:

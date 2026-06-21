@@ -32,6 +32,8 @@ this MCP server is never started.
 """
 import hashlib
 import json
+import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +63,36 @@ LOG_PATH = Path("/home/workspace/logs/directive_mcp.log")
 PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
 
 
+_VERSION_RE = re.compile(r"(_v\d+)+$")           # trailing _v2 / _v3_v4 etc.
+_DIAG_PREFIXES = ("investigate_", "diagnose_")   # diagnostic builds, not net-new work
+_DIAG_CAP = int(os.environ.get("ZO_INVESTIGATE_CAP", "2"))
+_diag_count = 0   # per-PROCESS; the bridge is stdio-respawned per architect cycle,
+                  # so this is effectively per-cycle and resets automatically.
+
+
+def _base_task(task: str) -> str:
+    """Strip trailing version suffix: investigate_X_v4 -> investigate_X. The architect
+    bumps the suffix to dodge the done-dedup and re-investigate the same thing forever
+    (investigate_X_v2..v11). Collapsing to the base closes that escape hatch."""
+    return _VERSION_RE.sub("", task or "")
+
+
+def _base_already_done(base: str) -> bool:
+    """True if the BASE task (any version) already has a done sentinel -- so a
+    version-bumped re-proposal of completed work is caught."""
+    if not base:
+        return False
+    try:
+        for d in (DIRECTIVE_DIR, DIRECTIVE_DIR / "done"):
+            if any(d.glob(f"{base}.done.json")) or any(d.glob(f"{base}_v*.done.json")):
+                return True
+            if any(d.glob(f"{base}.json")) or any(d.glob(f"{base}_v*.json")):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _already_done(directive_id: str, task: str) -> bool:
     """Authoritative already-built check. The promoter skips any directive whose
     <id>.done.json sentinel exists (or whose completed file sits in done/). Reject
@@ -73,6 +105,9 @@ def _already_done(directive_id: str, task: str) -> bool:
             if name and ((DIRECTIVE_DIR / f"{name}.done.json").exists()
                          or (DIRECTIVE_DIR / "done" / f"{name}.json").exists()):
                 return True
+        base = _base_task(task)               # version-collapse: investigate_X_v5 == done investigate_X
+        if base and base != task and _base_already_done(base):
+            return True
     except Exception:
         pass
     return False
@@ -349,8 +384,20 @@ def propose_directive(
         return {"status": "rejected", "reason": reason}
 
     if _already_done(d.get("directive_id") or task, task):
-        _log(f"ALREADY-DONE {task}: done sentinel exists; not re-proposing")
+        _log(f"ALREADY-DONE {task}: done sentinel (or version-collapsed base) exists; not re-proposing")
         return {"status": "duplicate", "reason": "already built (done sentinel)", "task": task}
+
+    # Diagnostic cap: investigate_/diagnose_ are diagnostic, not net-new build work
+    # (the recipe wants the MAJORITY net-new; breakers capped at 1/cycle). Without a
+    # cap the architect emits investigate_X_v2..v11 loops. Cap them per cycle so it
+    # must propose a FIX, not endless investigations.
+    global _diag_count
+    if task.startswith(_DIAG_PREFIXES):
+        if _diag_count >= _DIAG_CAP:
+            _log(f"DIAG-CAP {task}: investigate/diagnose cap {_DIAG_CAP}/cycle reached; rejecting")
+            return {"status": "rejected",
+                    "reason": f"diagnostic cap {_DIAG_CAP}/cycle reached -- propose a FIX (build_/wire_/fix_), not another investigation"}
+        _diag_count += 1
 
     key = hashlib.md5(task.encode()).hexdigest()[:8]
     fname = f"gen_{key}_{task[:35]}.json"

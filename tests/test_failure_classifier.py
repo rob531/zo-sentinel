@@ -6,8 +6,8 @@ import failure_classifier as F
 def test_each_class_signature():
     cases = {
         "ALERT path-drift: pending-dir X != goose pending": "path_drift",
-        "proposed_depth 0 -> 0 (+0)": "novelty_starvation",
-        "skip already-resolved gen_x done=True": "novelty_starvation",
+        "proposed_depth 0 -> 0 (+0)": "no_novel_builds",
+        "skip already-resolved gen_x done=True": "no_novel_builds",
         "error: 429 rate-limited (backoff exhausted)": "capacity_429",
         "Token Plan usage limit reached": "capacity_429",
         "self-hydrate keys timed out after 30s": "key_hydration",
@@ -37,3 +37,12 @@ def test_tally_counts_and_examples():
     counts, ex = F.tally(lines)
     assert counts["capacity_429"] == 2 and counts["publisher_noop_cap"] == 1
     assert "commit" in ex["publisher_noop_cap"]
+
+
+def test_playbook_has_false_positive_guard():
+    pb = F.playbook("no_novel_builds")
+    assert "shim" in pb["false_positive"].lower()      # the +0 -> check-model-first rule
+    assert 355 in pb["refs"] and 333 in pb["refs"]
+    # every class with a signature has a playbook entry
+    for name, _b, _p in F.CLASSES:
+        assert name in F.PLAYBOOK, name

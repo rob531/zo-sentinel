@@ -59,6 +59,23 @@ PENDING_DIR = DIRECTIVE_DIR / "pending"     # read-only from this module
 LOG_PATH = Path("/home/workspace/logs/directive_mcp.log")
 
 PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _already_done(directive_id: str, task: str) -> bool:
+    """Authoritative already-built check. The promoter skips any directive whose
+    <id>.done.json sentinel exists (or whose completed file sits in done/). Reject
+    re-proposals of those HERE so completed work never re-enters proposed/ and never
+    clogs it to the depth cap -- the mechanism behind the architect's +0 stall. This
+    reconciles the architect's code-GRAPH view of 'built' (which disagrees when a build
+    ghosted) with the pipeline's authoritative DONE record. Best-effort."""
+    try:
+        for name in {directive_id, task}:
+            if name and ((DIRECTIVE_DIR / f"{name}.done.json").exists()
+                         or (DIRECTIVE_DIR / "done" / f"{name}.json").exists()):
+                return True
+    except Exception:
+        pass
+    return False
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -330,6 +347,10 @@ def propose_directive(
     if not ok:
         _log(f"REJECT {task}: {reason}")
         return {"status": "rejected", "reason": reason}
+
+    if _already_done(d.get("directive_id") or task, task):
+        _log(f"ALREADY-DONE {task}: done sentinel exists; not re-proposing")
+        return {"status": "duplicate", "reason": "already built (done sentinel)", "task": task}
 
     key = hashlib.md5(task.encode()).hexdigest()[:8]
     fname = f"gen_{key}_{task[:35]}.json"

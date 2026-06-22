@@ -53,7 +53,7 @@ LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
 
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
-GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
+GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 240))   # was 480; a converging cycle is fast, a tool-call LOOP just burns -- fail it sooner
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 # Architect-scoped goose BINARY -- lets the architect run a DIFFERENT goose
 # version from the builder (goose_runner.py, which keeps bare `goose` on PATH).
@@ -400,6 +400,31 @@ def _ensure_goose_env() -> None:
         os.environ["XDG_STATE_HOME"]  = f"{iso}/.local/state"
 
 
+def _emit_nonconvergence(secs, delta, rc, kind: str) -> None:
+    """LOUD failure when an architect cycle does NOT converge to a directive (timeout, or
+    rc=0 but +0). The model burned ~secs of tool calls without landing a propose_directive
+    -- a goose tool-call LOOP / over-exploration, NOT a silent timeout. Emits a
+    failure_classifier-catchable log line + a best-effort mesh_memory row so loop_watch /
+    pipeline-watch surface it. (Stop + emit-a-failure-log, per the convergence-guard design.)"""
+    model = os.environ.get("GOOSE_MODEL", "?")
+    log.error("ARCHITECT NON-CONVERGENCE (%s): goose [%s] model=%s ran ~%ss, proposed +%d "
+              "-- did NOT reach propose_directive (tool-call loop / over-exploration); rc=%s",
+              kind, ARCHITECT_GOOSE_BIN, model, secs, max(delta or 0, 0), rc)
+    try:
+        import requests
+        requests.post("http://127.0.0.1:8772/write",
+                      json={"table": "mesh_memory", "rows": [{
+                          "agent_id": "directive_architect",
+                          "memory_type": "directive_gen_failure",
+                          "content": json.dumps({"kind": kind, "secs": secs,
+                                                 "delta": delta, "rc": rc, "model": model,
+                                                 "bin": ARCHITECT_GOOSE_BIN}),
+                          "created_at": _now_iso()}], "wait": False},
+                      timeout=5)
+    except Exception:
+        pass
+
+
 def run_goose_cycle() -> dict:
     """Invoke goose with the directive_architect recipe. Return summary dict."""
     if not RECIPE_PATH.exists():
@@ -440,6 +465,8 @@ def run_goose_cycle() -> dict:
             log.warning("goose stderr[:300]: %s", proc.stderr[:300].replace("\n", " | "))
         log.info("goose returned rc=%d; proposed_depth %d -> %d (+%d)",
                  rc, depth, new_depth, delta)
+        if delta <= 0:
+            _emit_nonconvergence(GOOSE_TIMEOUT, delta, rc, "zero_proposed")
         return {
             "status": "ok" if rc == 0 else "goose_nonzero",
             "rc": rc,
@@ -448,6 +475,7 @@ def run_goose_cycle() -> dict:
         }
     except subprocess.TimeoutExpired:
         log.error("goose TIMEOUT after %ds", GOOSE_TIMEOUT)
+        _emit_nonconvergence(GOOSE_TIMEOUT, 0, None, "timeout")
         return {"status": "timeout"}
     except FileNotFoundError:
         log.error("goose CLI not on PATH; daemon cannot continue")

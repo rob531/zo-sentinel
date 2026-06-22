@@ -63,6 +63,32 @@ def post_heartbeat() -> bool:
         logger.warning(f"Heartbeat failed: {e}")
         return False
 
+# Legacy wrapper for backward compatibility
+def heartbeat_loop() -> bool:
+    """Legacy wrapper that forwards to post_heartbeat."""
+    return post_heartbeat()
+
+    """Post heartbeat to service_health. Returns True on success."""
+    try:
+        response = requests.post(
+            HEALTH_SERVICE_URL,
+            json={
+                "service": "enrichment_dispatcher",
+                "status": "alive",
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            timeout=5
+        )
+        if response.status_code in (200, 201):
+            logger.info("heartbeat")
+            return True
+        else:
+            logger.warning(f"Heartbeat returned status {response.status_code}")
+            return False
+    except requests.RequestException as e:
+        logger.warning(f"Heartbeat failed: {e}")
+        return False
+
 
 def get_mcp_server_registry() -> List[Dict[str, Any]]:
     """Fetch the MCP server registry."""

@@ -11,7 +11,7 @@ architect log). Run on a schedule like pipeline-watch; pairs with a Cowork gauge
 
     python3 loop_watch.py            # human summary + writes loop_watch_result.json
 """
-import json, os, subprocess, sys, urllib.request
+import json, os, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone
 
 BUS          = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772") + "/query"
@@ -152,6 +152,63 @@ def loop_latency(sig):
             "directive_age_min": _age_min(sig.get("proposed_newest"), now)}
 
 
+NOTIFY_URL = os.environ.get("ZO_NOTIFY_URL", "http://api.zo.computer/zo/notify")
+NOTIFY_TO  = os.environ.get("ZO_NOTIFY_TO", "robin.craib@gmail.com")
+STATE      = os.environ.get("LW_STATE", "/home/workspace/zo_sentinel_state/loop_watch_state.json")
+RENOTIFY_H = int(os.environ.get("LW_RENOTIFY_H", 6))   # re-email an ongoing stall at most this often
+
+def _load_state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_state(d):
+    try:
+        os.makedirs(os.path.dirname(STATE), exist_ok=True)
+        with open(STATE, "w") as f:
+            json.dump(d, f)
+    except Exception:
+        pass
+
+def email_report(result, force=False):
+    """Email via the Zo notify channel (server-side, durable -- not a fragile artifact).
+    Sends ONLY on ALERT (or force), de-duped: a NEW/changed stall emails immediately; an
+    UNCHANGED ongoing stall re-emails at most every RENOTIFY_H hours. Returns True if sent."""
+    overall, stall = result["overall"], result.get("stall")
+    now = datetime.now(timezone.utc); st = _load_state(); send = force
+    if overall == "alert":
+        if stall != st.get("last_stall"):
+            send = True
+        else:
+            last = st.get("last_alert_at")
+            try:
+                send = (not last) or (now - datetime.fromisoformat(last)).total_seconds() > RENOTIFY_H * 3600
+            except Exception:
+                send = True
+    elif overall == "ok" and st.get("last_stall"):
+        send, force = True, True   # one all-clear after a stall resolves
+    if not send:
+        return False
+    subject = f"[zo-sentinel] loop {overall.upper()}" + (f" -- stall at {stall}" if stall else " -- all clear")
+    body = (f"Self-improving loop watch  ({result['ran_at']})\n\n"
+            f"OVERALL: {overall.upper()}    stall: {stall or 'none'}\n\n"
+            + "\n".join(f"  {k:<10} {v}" for k, v in result["stages"].items())
+            + f"\n\nhint: {result.get('hint','')}\n"
+            f"repo={result.get('repo_head')}  graph={result.get('graph_commit')}\n"
+            f"latency(min): {result.get('latency')}\n")
+    try:
+        import requests
+        requests.post(NOTIFY_URL, json={"to": NOTIFY_TO, "subject": subject, "body": body[:2000]}, timeout=15)
+        _save_state({"last_alert_at": now.isoformat(), "last_stall": stall if overall == "alert" else None})
+        return True
+    except Exception as e:
+        print("email_report failed:", e)
+        return False
+
+
+
 def main():
     sig = read_signals()
     verdict = assess(sig)
@@ -166,6 +223,7 @@ def main():
             json.dump(result, f, indent=2)
     except Exception:
         pass
+    email_report(result)
     print(f"LOOP {result['overall'].upper()}  stall={result['stall']}")
     for s in ("graph", "memory", "directive", "goose"):
         print(f"  {s:10} {verdict['stages'][s]}")
@@ -173,4 +231,16 @@ def main():
     return 0 if verdict["overall"] != "alert" else 2
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--interval", type=int, default=0, help="daemon loop seconds (0 = one-shot)")
+    args = ap.parse_args()
+    if args.interval > 0:
+        while True:
+            try:
+                main()
+            except Exception as e:
+                print("loop_watch cycle error:", e)
+            time.sleep(args.interval)
+    else:
+        sys.exit(main())

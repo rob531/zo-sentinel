@@ -1,0 +1,112 @@
+name: goose-canary
+
+# Eval a CANDIDATE goose version BEFORE it touches the live tower (rule #1: don't
+# break goose). Tower goose is 1.34.1 -- too old for gemini_oauth / hooks / the
+# /goal command (all 1.36/1.37/2.0). This canary proves an upgrade is safe:
+#   1. install the candidate goose,
+#   2. tool-call smoke (new goose loads a recipe + drives a model + calls a tool),
+#   3. our-recipe load check (architect.yaml / directive_architect.yaml still parse),
+#   4. full writer integration tier (real ephemeral write_service + DB round-trip),
+# then report pass/fail. Manual-only; never auto-runs.
+#
+# INSTALL METHOD -- CONFIRM AGAINST THE TOWER. Assumed: the Rust block/goose CLI
+# (matches v1.34.1 + `goose run`/`goose configure`). If the tower uses the Python
+# `goose-ai` pip package (per the stale KNOWLEDGE_BASE.md), swap the install step
+# for `pipx install goose-ai==${{ inputs.goose_version }}`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      goose_version:
+        description: "candidate goose version (e.g. 1.37.0 or 2.0.0)"
+        required: true
+        default: "1.37.0"
+      smoke_rung:
+        description: "cheap provider to drive the smoke (cerebras|groq)"
+        default: "cerebras"
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: Install candidate goose (Rust CLI -- CONFIRM method vs tower)
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh \
+            | CONFIGURE=false GOOSE_VERSION="v${{ inputs.goose_version }}" bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: goose --version
+        run: goose --version
+
+      - name: Map smoke rung to goose provider env
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.smoke_rung }}" = "cerebras" ]; then
+            echo "OPENAI_BASE_URL=https://api.cerebras.ai/v1" >> "$GITHUB_ENV"
+            echo "OPENAI_API_KEY=${{ secrets.CEREBRAS_API_KEY }}" >> "$GITHUB_ENV"
+            echo "GOOSE_MODEL=gpt-oss-120b" >> "$GITHUB_ENV"
+          elif [ "${{ inputs.smoke_rung }}" = "groq" ]; then
+            echo "OPENAI_BASE_URL=https://api.groq.com/openai/v1" >> "$GITHUB_ENV"
+            echo "OPENAI_API_KEY=${{ secrets.GROQ_API_KEY }}" >> "$GITHUB_ENV"
+            echo "GOOSE_MODEL=llama-3.3-70b-versatile" >> "$GITHUB_ENV"
+          else
+            echo "unknown rung ${{ inputs.smoke_rung }}"; exit 1
+          fi
+          echo "GOOSE_PROVIDER=openai" >> "$GITHUB_ENV"
+
+      - name: Tool-call smoke (recipe load + model + tool call)
+        run: |
+          set -euo pipefail
+          NONCE="ci-$RANDOM-$RANDOM"
+          goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
+            --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
+          if grep -q "CANARY_TOOLCALL_OK::$NONCE" /tmp/smoke.out; then
+            echo "SMOKE PASS: new goose loads recipe + drives model + calls a tool"
+          else
+            echo "SMOKE FAIL: nonce not echoed -- this goose broke our recipe/tool loop"
+            exit 1
+          fi
+
+      - name: Our-recipe load check (catch recipe-schema breaks)
+        run: |
+          set -uo pipefail
+          rc=0
+          for r in goose_recipes/directive_architect.yaml goose_recipes/architect.yaml; do
+            out="$(timeout 25 goose run --no-session --recipe "$r" 2>&1 || true)"
+            if echo "$out" | grep -qi "Loading recipe"; then
+              echo "LOAD OK: $r"
+            else
+              echo "LOAD FAIL: $r"; echo "$out" | tail -5; rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Full writer integration tier (real ephemeral write_service)
+        env:
+          IT_WS_PORT: "8772"
+          ZO_WRITE_SERVICE: "http://127.0.0.1:8772"
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt pytest
+          nohup python tests/integration/it_write_service.py > /tmp/it_ws.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8772/health >/dev/null 2>&1 && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8772/health || { echo "ws failed to start"; cat /tmp/it_ws.log; exit 1; }
+          python -m pytest tests/integration -v
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          echo "--- smoke ---"; cat /tmp/smoke.out 2>/dev/null || true
+          echo "--- write_service ---"; cat /tmp/it_ws.log 2>/dev/null || true

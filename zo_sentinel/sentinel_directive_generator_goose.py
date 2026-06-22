@@ -55,6 +55,12 @@ POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
 GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 480))
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
+# Architect-scoped goose BINARY -- lets the architect run a DIFFERENT goose
+# version from the builder (goose_runner.py, which keeps bare `goose` on PATH).
+# Default "goose" = today (both roles share the PATH binary). Point this at a
+# second install (e.g. /usr/local/bin/goose-1.38) to upgrade ONLY the architect
+# -- builder blast-radius stays zero. Reversible: unset -> back to PATH goose.
+ARCHITECT_GOOSE_BIN = os.environ.get("ZO_ARCHITECT_GOOSE_BIN", "goose")
 IDLE_GATE       = os.environ.get("DGG_IDLE_GATE", "1") == "1"   # batch-when-idle (herd-safe)
 IDLE_MIN        = int(os.environ.get("DGG_IDLE_MIN", 8))        # build side quiet >= N min = idle
 LAYER1_FIELD_CAP = int(os.environ.get("DGG_LAYER1_FIELD_CAP", 4000))  # per-field char cap on the
@@ -392,11 +398,11 @@ def run_goose_cycle() -> dict:
     ctx = build_context()
     ctx_json = json.dumps(ctx, default=str)[:60000]   # MiniMax prompt cap headroom
 
-    log.info("invoking goose (ctx %d bytes, proposed_depth=%d)", len(ctx_json), depth)
+    log.info("invoking goose [%s] (ctx %d bytes, proposed_depth=%d)", ARCHITECT_GOOSE_BIN, len(ctx_json), depth)
     _ensure_goose_env()
     try:
         proc = subprocess.run(
-            ["goose", "run", "--recipe", str(RECIPE_PATH),
+            [ARCHITECT_GOOSE_BIN, "run", "--recipe", str(RECIPE_PATH),
              "--params", f"context_json={ctx_json}"],
             capture_output=True,
             text=True,

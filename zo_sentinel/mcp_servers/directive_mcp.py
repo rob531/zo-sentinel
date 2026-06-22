@@ -402,6 +402,29 @@ def graph_neighbors(target: str) -> dict:
             "exists_in_graph": bool(deps or dependents)}
 
 
+def _record_proposal(d: dict) -> None:
+    """Best-effort: log this proposal to mesh_memory (memory_type=directive_proposed)
+    via the SINGLE writer, so the architect sees its OWN recent proposal history next
+    cycle -- including proposals later REJECTED/dropped that no longer sit in proposed/
+    -- and stops re-circling the same subjects. NEVER raises: a telemetry write must
+    never block a proposal. Routes through write_service POST /write (no new DB conn)."""
+    try:
+        import requests
+        row = {
+            "agent_id":    "directive_architect",
+            "memory_type": "directive_proposed",
+            "content":     json.dumps({"task": d.get("task"),
+                                       "output_file": d.get("output_file"),
+                                       "complexity": d.get("complexity")}),
+            "created_at":  datetime.now(timezone.utc).isoformat(),
+        }
+        requests.post("http://127.0.0.1:8772/write",
+                      json={"table": "mesh_memory", "rows": [row], "wait": False},
+                      timeout=5)
+    except Exception as e:
+        _log(f"_record_proposal (non-fatal): {e}")
+
+
 @mcp.tool()
 def propose_directive(
     task: str,
@@ -475,6 +498,7 @@ def propose_directive(
 
     try:
         path.write_text(json.dumps(d, indent=2))
+        _record_proposal(d)
         _log(f"WRITTEN {task} -> {path}")
         return {"status": "written", "path": str(path), "task": task}
     except Exception as e:

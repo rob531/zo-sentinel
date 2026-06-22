@@ -375,7 +375,24 @@ def _ensure_goose_env() -> None:
     if prov == "openai":
         os.environ.setdefault("GOOSE_MODEL",     "MiniMax-Text-01")
         os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:8796/v1")
-        os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")
+        os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")  # set => goose skips keyring
+
+    # When the architect runs a NON-default (versioned) goose binary, give it an
+    # ISOLATED config/data home. A different goose version PANICS at startup
+    # (`thread 'sq...'`) reading the ~/.config/goose + session store the builder's
+    # goose wrote -- version skew on the on-disk store. The canary proved 1.38 runs
+    # clean against a FRESH store, so we replicate that: point this goose at its own
+    # XDG dirs (env-driven provider config still applies; no config file needed).
+    if ARCHITECT_GOOSE_BIN != "goose":
+        iso = os.environ.get("ZO_ARCHITECT_GOOSE_HOME", "/home/workspace/.goose_architect")
+        try:
+            os.makedirs(iso, exist_ok=True)
+        except Exception:
+            pass
+        os.environ["HOME"]            = iso
+        os.environ["XDG_CONFIG_HOME"] = f"{iso}/.config"
+        os.environ["XDG_DATA_HOME"]   = f"{iso}/.local/share"
+        os.environ["XDG_STATE_HOME"]  = f"{iso}/.local/state"
 
 
 def run_goose_cycle() -> dict:

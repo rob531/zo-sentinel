@@ -1,0 +1,5 @@
+{
+  "name": "tool-budget",
+  "version": "0.1.0",
+  "description": "PreToolUse tool-budget: deny the shell after N calls (canary convergence test)."
+}

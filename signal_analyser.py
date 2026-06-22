@@ -14,6 +14,42 @@ except ImportError:
     compute_tool_description_safety = None
     compute_temporal_stability = None
 
+try:
+    from community_signal_enrichment import compute_score as community_signal_score
+except ImportError:
+    community_signal_score = None
+
+
+# [WIRED] community_signal_enrichment integration — do not re-apply
+# Added: 2026-06-22T15:22:00
+
+
+def get_enrichments(metadata: dict) -> list:
+    """
+    Community signal enricher, contributing the 'community_signal' dimension.
+
+    Calls community_signal_score(metadata) and appends the result to the
+    enrichment list.  If the module is not yet present (AttributeError at
+    call time), logs a warning and returns the list without it.
+    """
+    enrichments = []
+    # Phase 11: community_signal_enrichment
+    if community_signal_score is not None:
+        try:
+            score, evidence = community_signal_score(metadata)
+            enrichments.append({
+                'signal_name': 'community_signal',
+                'score': float(score),
+                'evidence': json.dumps(evidence) if isinstance(evidence, dict) else str(evidence),
+            })
+        except AttributeError as e:
+            log(f"community_signal_enrichment not yet available: {e}")
+        except Exception as e:
+            log(f"community_signal_enrichment error: {e}")
+    else:
+        log("community_signal_score not loaded — skipping community_signal enrichment")
+    return enrichments
+
 SERVICE_NAME = 'signal_analyser'
 SERVICE_PORT = 8778
 PID_FILE = f'/tmp/{SERVICE_NAME}.pid'

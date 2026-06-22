@@ -15,7 +15,7 @@ prompt: |-
   STOP -- do NOT propose or build anything:
 
   1. Run this and capture its full stdout:
-       python3 /home/workspace/zo_sentinel/tools/graph_domain_digest.py
+       python3 tools/graph_domain_digest.py
      It prints a compact DOMAIN MAP (the app's domains + module counts) followed by
      a PARKED list. If it errors (bus unreachable), report the error and STOP.
 

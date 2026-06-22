@@ -127,9 +127,36 @@ STALL_HINT = {
     "goose":     "goose cycles all TIMEOUT -- the 480s hang (weak model / heavy recipe / shim). capacity_429 or shim_5xx.",
 }
 
+def _write_heartbeat(verdict):
+    """Watchdog-for-the-watcher: write a loop_heartbeat row each run via the SINGLE
+    writer. If THIS stops appearing, the watcher itself died. Best-effort."""
+    try:
+        row = {"agent_id": "loop_watch", "memory_type": "loop_heartbeat",
+               "content": json.dumps({"overall": verdict["overall"], "stall": verdict["stall"]}),
+               "created_at": datetime.now(timezone.utc).isoformat()}
+        urllib.request.urlopen(urllib.request.Request(
+            BUS.replace("/query", "/write"),
+            data=json.dumps({"table": "mesh_memory", "rows": [row], "wait": False}).encode(),
+            headers={"content-type": "application/json"}, method="POST"), timeout=5)
+    except Exception:
+        pass
+
+
+def loop_latency(sig):
+    """Passive end-to-end latency proxy: how stale (minutes) the memory + directive
+    signals are -- how long a change currently takes to traverse the loop. A synthetic
+    canary without injecting anything destructive."""
+    now = datetime.fromisoformat(sig["now"])
+    mem_ts = max([v for v in sig.get("memory", {}).values() if v], default=None)
+    return {"memory_age_min": _age_min(mem_ts, now),
+            "directive_age_min": _age_min(sig.get("proposed_newest"), now)}
+
+
 def main():
     sig = read_signals()
     verdict = assess(sig)
+    verdict["latency"] = loop_latency(sig)
+    _write_heartbeat(verdict)
     result = {"watch": "loop_watch", "ran_at": sig["now"], **verdict,
               "repo_head": sig["repo_head"][:8], "graph_commit": sig["graph_commit"][:8],
               "hint": STALL_HINT.get(verdict["stall"], "loop flowing end-to-end.")}

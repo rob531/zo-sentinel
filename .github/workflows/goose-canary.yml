@@ -76,24 +76,26 @@ jobs:
             exit 1
           fi
 
-      - name: PreToolUse deny-hook test (does this goose enforce a tool budget?)
+      - name: PreToolUse hooks test (do hooks fire under `goose run`? is deny enforced?)
         run: |
           set -uo pipefail
           mkdir -p "$HOME/.agents/plugins"
           cp -R tools/canary/plugins/tool-budget "$HOME/.agents/plugins/tool-budget"
-          rm -f /tmp/tool_budget*.count /tmp/tool_budget.log /tmp/budget_exec_*
+          cp -R tools/canary/plugins/hook-probe  "$HOME/.agents/plugins/hook-probe"
+          rm -f /tmp/tool_budget*.count /tmp/tool_budget.log /tmp/budget_exec_* /tmp/hook_probe_fired
           HOOK_BUDGET=2 goose run --no-session --recipe tools/canary/hook_budget_recipe.yaml 2>&1 | tee /tmp/hook.out || true
-          echo "--- hook fired? ---"; cat /tmp/tool_budget.log 2>/dev/null || echo "(hook NEVER fired)"
-          if ! grep -q "deny" /tmp/tool_budget.log 2>/dev/null; then
-            echo "RESULT: hook did NOT deny -- hooks inactive on this goose, OR budget never reached. INCONCLUSIVE."
+          fired=no; [ -f /tmp/hook_probe_fired ] && fired=yes
+          ran=$(ls /tmp/budget_exec_* 2>/dev/null | wc -l | tr -d ' ')
+          echo "hooks_fire_under_goose_run=$fired ; tools_executed=$ran (budget=2)"
+          echo "--- tool-budget log ---"; cat /tmp/tool_budget.log 2>/dev/null || echo "(empty)"
+          if [ "$fired" = no ]; then
+            echo "VERDICT: hooks DO NOT fire under \`goose run\` -> PreToolUse approach is DEAD for the architect (it runs non-interactively). Go recipe-simplification."
             exit 1
           fi
-          ran=$(ls /tmp/budget_exec_* 2>/dev/null | wc -l | tr -d ' ')
-          echo "marker files created (tools that actually executed): $ran (budget=2)"
           if [ "$ran" -le 2 ]; then
-            echo "RESULT: PASS -- PreToolUse deny HONORED ($ran<=2). The tool-budget hook works on this goose."
+            echo "VERDICT: PASS -- hooks fire AND deny enforced ($ran<=2). Build the architect tool-budget hook."
           else
-            echo "RESULT: FAIL -- goose IGNORED the deny ($ran>2 executed). PreToolUse deny NOT enforced here."
+            echo "VERDICT: hooks fire but DENY IGNORED ($ran>2). Use exit-2 deny or another convergence lever."
             exit 1
           fi
 

@@ -1,0 +1,1 @@
+{ "name": "hook-probe", "version": "0.1.0", "description": "Touches a marker on PreToolUse to prove hooks fire under goose run." }

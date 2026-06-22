@@ -1,0 +1,1 @@
+{ "hooks": { "PreToolUse": [ { "hooks": [ { "type": "command", "command": "touch /tmp/hook_probe_fired" } ] } ] } }

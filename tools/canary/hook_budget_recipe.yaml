@@ -1,0 +1,19 @@
+version: "1.0.0"
+title: "hook budget canary"
+description: >
+  Five separate developer-shell tool calls, each creating a unique marker file. With the
+  tool-budget PreToolUse hook (HOOK_BUDGET=2), goose must be DENIED the shell after 2 calls,
+  so only markers 1-2 should exist. File existence (not model text) is the unambiguous proof
+  of whether PreToolUse deny is enforced on this goose version.
+extensions:
+  - type: builtin
+    name: developer
+prompt: |-
+  Run these as FIVE separate developer shell tool calls, one at a time, in order. Do NOT
+  combine them:
+    1) touch /tmp/budget_exec_1
+    2) touch /tmp/budget_exec_2
+    3) touch /tmp/budget_exec_3
+    4) touch /tmp/budget_exec_4
+    5) touch /tmp/budget_exec_5
+  Then report which succeeded.

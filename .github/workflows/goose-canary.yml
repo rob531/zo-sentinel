@@ -76,6 +76,27 @@ jobs:
             exit 1
           fi
 
+      - name: PreToolUse deny-hook test (does this goose enforce a tool budget?)
+        run: |
+          set -uo pipefail
+          mkdir -p "$HOME/.agents/plugins"
+          cp -R tools/canary/plugins/tool-budget "$HOME/.agents/plugins/tool-budget"
+          rm -f /tmp/tool_budget*.count /tmp/tool_budget.log /tmp/budget_exec_*
+          HOOK_BUDGET=2 goose run --no-session --recipe tools/canary/hook_budget_recipe.yaml 2>&1 | tee /tmp/hook.out || true
+          echo "--- hook fired? ---"; cat /tmp/tool_budget.log 2>/dev/null || echo "(hook NEVER fired)"
+          if ! grep -q "deny" /tmp/tool_budget.log 2>/dev/null; then
+            echo "RESULT: hook did NOT deny -- hooks inactive on this goose, OR budget never reached. INCONCLUSIVE."
+            exit 1
+          fi
+          ran=$(ls /tmp/budget_exec_* 2>/dev/null | wc -l | tr -d ' ')
+          echo "marker files created (tools that actually executed): $ran (budget=2)"
+          if [ "$ran" -le 2 ]; then
+            echo "RESULT: PASS -- PreToolUse deny HONORED ($ran<=2). The tool-budget hook works on this goose."
+          else
+            echo "RESULT: FAIL -- goose IGNORED the deny ($ran>2 executed). PreToolUse deny NOT enforced here."
+            exit 1
+          fi
+
       - name: Our-recipe load check (catch recipe-schema breaks)
         run: |
           set -uo pipefail

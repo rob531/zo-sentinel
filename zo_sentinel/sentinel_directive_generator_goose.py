@@ -398,6 +398,21 @@ def _ensure_goose_env() -> None:
         os.environ["XDG_CONFIG_HOME"] = f"{iso}/.config"
         os.environ["XDG_DATA_HOME"]   = f"{iso}/.local/share"
         os.environ["XDG_STATE_HOME"]  = f"{iso}/.local/state"
+        # Deploy the PreToolUse convergence hook into the architect's goose home so its
+        # goose-1.38 auto-discovers it (~/.agents/plugins). After a read-tool budget it denies
+        # further reads -> the architect MUST propose_directive instead of looping to the 480s
+        # timeout (canary-proven: hooks fire under `goose run` + deny is enforced on 1.38).
+        try:
+            import shutil
+            _src = SENTINEL_DIR / "goose_plugins" / "architect_budget"
+            _dst = os.path.join(iso, ".agents", "plugins", "architect_budget")
+            if _src.exists():
+                os.makedirs(os.path.dirname(_dst), exist_ok=True)
+                shutil.rmtree(_dst, ignore_errors=True)
+                shutil.copytree(str(_src), _dst)
+                os.chmod(os.path.join(_dst, "scripts", "budget.py"), 0o755)
+        except Exception:
+            pass
 
 
 def _emit_nonconvergence(secs, delta, rc, kind: str) -> None:

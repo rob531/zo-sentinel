@@ -1,0 +1,5 @@
+{
+  "name": "architect_budget",
+  "version": "0.1.0",
+  "description": "Forces the directive architect to converge to propose_directive after a read-tool budget (kills the +0 tool-call loop)."
+}

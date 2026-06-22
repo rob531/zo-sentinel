@@ -235,7 +235,7 @@ for proc in write_service.py inference_router_service.py run_manager.py \
             mesh_self_diagnostics.py data_velocity_engine.py wisdom_synthesiser.py \
             world_article_feeder.py zo_sentinel_builder.py goose_runner.py \
             sentinel_directive_generator.py sentinel_directive_generator_goose.py gate_scheduler.py \
-            liveness_probe.py signal_bridge.py ecosystems_metadata_fetcher.py \
+            liveness_probe.py loop_watch.py graph_refresh.py signal_bridge.py ecosystems_metadata_fetcher.py \
             registry_api.py approval_workflow.py \
             zo_sentinel.ingestor zo_sentinel.publisher \
             "${TRUST_PIPELINE[@]}" \
@@ -514,6 +514,21 @@ done
 
 # Wave boundary before the remaining periodic writers.
 wait_writer_calm
+hdr "12.8 Monitors (loop_watch + graph_refresh -- self-looping, crash-respawn)"
+# loop_watch: read-only end-to-end loop watcher; emails on ALERT via /zo/notify.
+# graph_refresh: self-healing re-indexer (idle-gated; loads only on a HEAD change).
+# Both self-loop via --interval; the bash while-wrapper respawns on crash. We do NOT
+# use daemon_wrapper.sh here because it does not forward trailing args (--interval);
+# this is the same direct-nohup loop pattern the publisher/governor use (12.6b).
+nohup bash -c "while true; do python3 $SENTINEL/loop_watch.py --interval 1800; sleep 30; done" >> $LOGS/loop_watch.log 2>&1 &
+sleep 2
+LW=$(pgrep -f 'loop_watch.py' 2>/dev/null | head -1)
+[[ -n "$LW" ]] && ok "LoopWatch PID $LW" || warn "LoopWatch failed"
+nohup bash -c "while true; do python3 $SENTINEL/tools/graph_refresh.py --interval 900; sleep 30; done" >> $LOGS/graph_refresh.log 2>&1 &
+sleep 2
+GRF=$(pgrep -f 'graph_refresh.py' 2>/dev/null | head -1)
+[[ -n "$GRF" ]] && ok "GraphRefresh PID $GRF" || warn "GraphRefresh failed"
+
 hdr "13. World Article Feeder"
 nohup python3 $MESH/world_article_feeder.py >> $LOGS/world_article_feeder.log 2>&1 & sleep 2
 WAF=$(pgrep -f 'world_article_feeder.py' 2>/dev/null | head -1)

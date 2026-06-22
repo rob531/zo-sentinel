@@ -1,0 +1,20 @@
+version: "1.0.0"
+title: "goose canary smoke"
+description: >
+  Minimal recipe to prove a CANDIDATE goose version still (a) loads a recipe,
+  (b) drives a model, and (c) executes a developer/shell tool call -- the three
+  things a goose upgrade is most likely to break for us. Bus-free: no zo bridges,
+  so it isolates goose-core health from our pipeline. The workflow greps stdout
+  for the nonce to assert the full loop worked.
+extensions:
+  - type: builtin
+    name: developer
+prompt: |-
+  Run exactly this shell command and report its output, then STOP:
+    echo "CANARY_TOOLCALL_OK::{{ nonce }}"
+  Do not do anything else.
+parameters:
+  - key: nonce
+    input_type: string
+    requirement: required
+    description: "unique token the CI asserts on"

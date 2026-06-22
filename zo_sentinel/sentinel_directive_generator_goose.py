@@ -373,7 +373,12 @@ def _ensure_goose_env() -> None:
     prov = os.environ.get("ZO_ARCHITECT_PROVIDER", "openai").strip() or "openai"
     os.environ["GOOSE_PROVIDER"] = prov
     if prov == "openai":
-        os.environ.setdefault("GOOSE_MODEL",     "MiniMax-Text-01")
+        # Architect-scoped MODEL on the ladder shim. Default MiniMax-Text-01 (rung 0, weak)
+        # -- the +0/fixation bottleneck. Set ZO_ARCHITECT_MODEL to a ladder alias to give the
+        # architect a STRONGER rung via the shim WITHOUT OAuth (Gemini OAuth is dead on this
+        # headless host). Recommended: zo-ladder-cerebras = Cerebras gpt-oss-120b (free,
+        # tool-calling, the bake-off winner) with free-rung failover. Reversible: unset -> MiniMax.
+        os.environ["GOOSE_MODEL"] = os.environ.get("ZO_ARCHITECT_MODEL", "MiniMax-Text-01").strip() or "MiniMax-Text-01"
         os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:8796/v1")
         os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")  # set => goose skips keyring
 

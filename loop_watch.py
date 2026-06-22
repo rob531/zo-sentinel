@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""loop_watch.py -- end-to-end watcher for the self-improving loop:
+
+    repo change  ->  graphify (code_nodes)  ->  memory (mesh_memory)  ->  directive (proposed/)  ->  goose cycle
+
+It reads the latest signal at each stage and checks FLOW, not just liveness: if an
+upstream stage is fresh but the next stage is stale past its threshold, the loop is
+STALLED there -- and we localize exactly which hop broke and classify it with the
+failure PLAYBOOK. Read-only (bus :8772 /query + local git + the proposed/ dir + the
+architect log). Run on a schedule like pipeline-watch; pairs with a Cowork gauge.
+
+    python3 loop_watch.py            # human summary + writes loop_watch_result.json
+"""
+import json, os, subprocess, sys, urllib.request
+from datetime import datetime, timezone
+
+BUS          = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772") + "/query"
+SENTINEL_DIR = os.environ.get("ZO_SENTINEL_DIR", "/home/workspace/zo_sentinel")
+ARCH_LOG     = os.environ.get("ZO_ARCH_LOG", "/home/workspace/logs/sentinel_directive_generator_goose.log")
+OUT          = os.environ.get("LW_OUT", "/home/workspace/zo_sentinel_state/loop_watch_result.json")
+
+# downstream should follow upstream within N minutes, else the loop is STALLED there.
+THRESH_MIN = {"memory":    int(os.environ.get("LW_MEM_MIN", 180)),
+              "directive": int(os.environ.get("LW_DIR_MIN", 180)),
+              "goose":     int(os.environ.get("LW_GOOSE_MIN", 30))}
+LOOP_MEM_TYPES = ("directive_proposed", "build_artifact", "graph_change_observed")
+
+
+# --- reads (best-effort; never raise) -----------------------------------------
+def _bus(sql, timeout=8):
+    try:
+        req = urllib.request.Request(BUS, data=json.dumps({"sql": sql}).encode(),
+                                     headers={"content-type": "application/json"}, method="POST")
+        d = json.loads(urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", "replace"))
+        return d.get("rows", []) if isinstance(d, dict) else (d or [])
+    except Exception:
+        return []
+
+def _git_head():
+    try:
+        return subprocess.run(["git", "-C", SENTINEL_DIR, "rev-parse", "HEAD"],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return ""
+
+def _read_goose_cycles(n=6):
+    out = []
+    try:
+        with open(ARCH_LOG, encoding="utf-8", errors="replace") as f:
+            for ln in f.readlines()[-500:]:
+                if "goose TIMEOUT" in ln:
+                    out.append({"rc": "timeout", "timeout": True})
+                elif "goose returned rc=" in ln:
+                    rc = ln.split("rc=", 1)[1].split(";", 1)[0].strip()
+                    delta = ln.split("(+", 1)[1].split(")", 1)[0] if "(+" in ln else "?"
+                    out.append({"rc": rc, "timeout": False, "delta": delta})
+    except Exception:
+        pass
+    return out[-n:]
+
+def read_signals(now=None):
+    now = now or datetime.now(timezone.utc)
+    g = _bus("SELECT built_at_commit AS c, COUNT(*) AS n FROM code_nodes "
+             "GROUP BY built_at_commit ORDER BY n DESC LIMIT 1")
+    types = ",".join("'%s'" % t for t in LOOP_MEM_TYPES)
+    m = _bus(f"SELECT memory_type AS t, MAX(created_at) AS ts FROM mesh_memory "
+             f"WHERE memory_type IN ({types}) GROUP BY memory_type")
+    pdir = os.path.join(SENTINEL_DIR, "directives", "proposed")
+    dts, dcount = None, 0
+    try:
+        fs = [os.path.join(pdir, f) for f in os.listdir(pdir)
+              if f.endswith(".json") and not f.endswith((".done.json", ".failed.json"))]
+        dcount = len(fs)
+        if fs:
+            dts = datetime.fromtimestamp(os.path.getmtime(max(fs, key=os.path.getmtime)),
+                                         timezone.utc).isoformat()
+    except Exception:
+        pass
+    return {"now": now.isoformat(), "repo_head": _git_head(),
+            "graph_commit": (g[0]["c"] if g else "") or "",
+            "memory": {r["t"]: r["ts"] for r in m},
+            "proposed_newest": dts, "proposed_count": dcount,
+            "goose": _read_goose_cycles()}
+
+
+# --- assessment (PURE: signals dict -> verdict) -------------------------------
+def _age_min(iso, now):
+    if not iso:
+        return None
+    try:
+        return (now - datetime.fromisoformat(str(iso).replace("Z", "+00:00"))).total_seconds() / 60.0
+    except Exception:
+        return None
+
+def assess(sig):
+    now = datetime.fromisoformat(sig["now"])
+    st = {}
+    # stage 1: is the graph behind the deployed repo? (commit-stamp compare)
+    head, gc = sig.get("repo_head", ""), sig.get("graph_commit", "")
+    graph_behind = bool(head and gc) and gc[:8] not in head and head[:8] not in gc
+    st["graph"] = "stale" if graph_behind else "ok"
+    # stage 2: memory writes keeping up?
+    mem_ts = max([v for v in sig.get("memory", {}).values() if v], default=None)
+    mem_age = _age_min(mem_ts, now)
+    st["memory"] = "stale" if (mem_age is None or mem_age > THRESH_MIN["memory"]) else "ok"
+    # stage 3: new directives being proposed? (this catches +0)
+    dir_age = _age_min(sig.get("proposed_newest"), now)
+    st["directive"] = "stale" if (dir_age is None or dir_age > THRESH_MIN["directive"]) else "ok"
+    # stage 4: goose cycle hang -- recent cycles ALL timing out
+    g = sig.get("goose", [])
+    timeouts = [c for c in g if c.get("timeout")]
+    st["goose"] = "hung" if (g and len(timeouts) == len(g)) else ("slow" if timeouts else "ok")
+    # localize: first stage along the flow that isn't ok
+    order = ["graph", "memory", "directive", "goose"]
+    stall = next((s for s in order if st[s] != "ok"), None)
+    overall = "ok" if stall is None else ("alert" if stall in ("graph", "goose") else "warn")
+    return {"stages": st, "stall": stall, "overall": overall,
+            "detail": {"graph_behind": graph_behind, "mem_age_min": mem_age,
+                       "dir_age_min": dir_age, "proposed_count": sig.get("proposed_count"),
+                       "goose_recent": g}}
+
+# stall stage -> a hint into the failure PLAYBOOK (failure_classifier)
+STALL_HINT = {
+    "graph":     "graphify not refreshing -- run index_graph.py + load_graph_to_bus.py (no auto-trigger on merge yet).",
+    "memory":    "graph fresh but no mesh_memory write -- the goose recipe/bridge isn't recording (check directive_mcp + shim).",
+    "directive": "memory fresh but no new proposed/ -- architect +0 (model path: check shim 502s FIRST, then novelty). no_novel_builds.",
+    "goose":     "goose cycles all TIMEOUT -- the 480s hang (weak model / heavy recipe / shim). capacity_429 or shim_5xx.",
+}
+
+def main():
+    sig = read_signals()
+    verdict = assess(sig)
+    result = {"watch": "loop_watch", "ran_at": sig["now"], **verdict,
+              "repo_head": sig["repo_head"][:8], "graph_commit": sig["graph_commit"][:8],
+              "hint": STALL_HINT.get(verdict["stall"], "loop flowing end-to-end.")}
+    try:
+        os.makedirs(os.path.dirname(OUT), exist_ok=True)
+        with open(OUT, "w") as f:
+            json.dump(result, f, indent=2)
+    except Exception:
+        pass
+    print(f"LOOP {result['overall'].upper()}  stall={result['stall']}")
+    for s in ("graph", "memory", "directive", "goose"):
+        print(f"  {s:10} {verdict['stages'][s]}")
+    print("  hint:", result["hint"])
+    return 0 if verdict["overall"] != "alert" else 2
+
+if __name__ == "__main__":
+    sys.exit(main())

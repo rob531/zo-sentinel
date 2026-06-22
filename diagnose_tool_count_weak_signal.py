@@ -120,16 +120,6 @@ def analyze_scoring_logic_issue() -> dict[str, Any]:
     Analyze the scoring logic in signal_analyser_v2.py to identify
     why only 2 distinct scores are produced from a wide range.
     """
-    # The scoring logic from signal_analyser_v2.py:
-    # def score_tool_count(tool_count: int) -> float:
-    #     if tool_count == 0: return 25.0
-    #     elif tool_count < 3: return 40.0
-    #     elif tool_count < 10: return 60.0
-    #     elif tool_count < 25: return 75.0
-    #     elif tool_count < 50: return 85.0
-    #     elif tool_count < 100: return 90.0
-    #     else: return 95.0
-    
     findings = {
         "scoring_buckets_defined": 7,
         "scoring_buckets": [

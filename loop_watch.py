@@ -12,6 +12,13 @@ architect log). Run on a schedule like pipeline-watch; pairs with a Cowork gauge
     python3 loop_watch.py            # human summary + writes loop_watch_result.json
 """
 import json, os, subprocess, sys, time, urllib.request
+
+# line-buffer stdout so the daemon's per-cycle output reaches the log immediately
+# (a never-exiting loop otherwise block-buffers stdout when redirected to a file).
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
 from datetime import datetime, timezone
 
 BUS          = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772") + "/query"

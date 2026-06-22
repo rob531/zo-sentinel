@@ -15,6 +15,13 @@ stays stale because this failed).
 """
 import argparse, json, os, subprocess, sys, time, urllib.request
 
+# line-buffer stdout so the daemon's per-cycle output reaches the log immediately
+# (a never-exiting loop otherwise block-buffers stdout when redirected to a file).
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 ROOT = os.environ.get("ZO_SENTINEL_DIR", "/home/workspace/zo_sentinel")
 BUS  = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772") + "/query"
 PY   = sys.executable or "python3"

@@ -282,12 +282,39 @@ def _recent_built_modules(limit: int = 600) -> list:
     return out
 
 
+def _recent_proposals(days: int = 3, cap: int = 25) -> list:
+    """The architect's OWN recent proposals (mesh_memory directive_proposed), newest
+    first, de-duplicated -- its cross-cycle COVERAGE memory, INCLUDING proposals since
+    rejected/dropped that no longer sit in proposed/. Lets it stop re-circling the same
+    subjects and range elsewhere. Bus-routed, best-effort -> []."""
+    sql = ("SELECT content FROM mesh_memory WHERE memory_type='directive_proposed' "
+           f"AND created_at > NOW() - INTERVAL {int(days)} DAY "
+           "ORDER BY created_at DESC LIMIT 120")
+    try:
+        r = requests.post(WS_QUERY_URL, json={"sql": sql}, timeout=8)
+        rows = r.json().get("rows", []) if r.ok else []
+    except Exception:
+        return []
+    seen, out = set(), []
+    for row in rows:
+        try:
+            task = json.loads(row.get("content") or "{}").get("task")
+        except Exception:
+            task = None
+        if task and task not in seen:
+            seen.add(task); out.append(task)
+        if len(out) >= cap:
+            break
+    return out
+
+
 def build_context() -> dict:
     ctx = {
         "schema":            _try_load_schema(),
         "layer1":            _cap_layer1(_try_import_layer1()),
         "recent_failures":   _query_recent_failures(),
         "proposed_depth":    _count_proposed(),
+        "recent_proposals":  _recent_proposals(),
         "generated_at":      _now_iso(),
     }
     # Fit the live-graph module list into whatever ctx budget remains so the

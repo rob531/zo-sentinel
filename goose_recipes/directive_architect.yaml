@@ -59,6 +59,11 @@ prompt: |-
   confirm the module (or its wiring) is not already present and to pick concrete
   integration gaps. Both are READ-only -- they never build.
 
+  COVERAGE -- context.recent_proposals lists tasks you ALREADY proposed in the
+  last few days (many were REJECTED downstream and are NOT in
+  already_built_modules). Treat them as ground already covered: do NOT
+  re-propose them -- range to domains/gaps you have not touched recently.
+
   PARKED -- do NOT propose build / verify / investigate work for snow_connector,
   aidr_commit_gateway, approval_evidence_bundler, or the SNOW / AIDR external-
   client authorization branch. It is a DEFERRED future branch, not current work.

@@ -353,11 +353,23 @@ def build_context() -> dict:
 # ---------------------------------------------------------------------------
 
 def _ensure_goose_env() -> None:
-    """Match goose_runner.py's env preset so we share the shim."""
-    os.environ.setdefault("GOOSE_PROVIDER",  "openai")
-    os.environ.setdefault("GOOSE_MODEL",     "MiniMax-Text-01")
-    os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:8796/v1")
-    os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")
+    """Select the ARCHITECT's goose provider (architect-scoped, so the builder
+    goose_runner stays on the shim ladder regardless).
+
+    Default ``openai`` = the API-key ladder shim on :8796 (today's behavior --
+    builder + architect share it). Set ZO_ARCHITECT_PROVIDER to an OAuth-subscription
+    provider (e.g. ``gemini_oauth``) to point ONLY the architect at a stronger,
+    higher-context model via your own cached OAuth session -- goose handles that
+    auth itself, so no base_url/key is needed (and the shim is bypassed for this
+    role). Reversible: unset the var -> back to the shim. The OAuth session must be
+    pre-authenticated once (``goose configure`` -> Google Gemini) and must refresh
+    non-interactively for the headless daemon."""
+    prov = os.environ.get("ZO_ARCHITECT_PROVIDER", "openai").strip() or "openai"
+    os.environ["GOOSE_PROVIDER"] = prov
+    if prov == "openai":
+        os.environ.setdefault("GOOSE_MODEL",     "MiniMax-Text-01")
+        os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:8796/v1")
+        os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")
 
 
 def run_goose_cycle() -> dict:

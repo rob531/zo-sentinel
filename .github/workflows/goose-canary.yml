@@ -20,7 +20,7 @@ on:
       goose_version:
         description: "candidate goose version (e.g. 1.37.0 or 2.0.0)"
         required: true
-        default: "1.37.0"
+        default: "1.38.0"
       smoke_rung:
         description: "cheap provider to drive the smoke (cerebras|groq)"
         default: "cerebras"
@@ -82,8 +82,8 @@ jobs:
           rc=0
           for r in goose_recipes/directive_architect.yaml goose_recipes/architect.yaml; do
             out="$(timeout 25 goose run --no-session --recipe "$r" 2>&1 || true)"
-            if echo "$out" | grep -qi "Loading recipe"; then
-              echo "LOAD OK: $r"
+            if echo "$out" | grep -qiE "Loading recipe|provide the following parameters"; then
+              echo "LOAD OK (schema parses under this goose): $r"
             else
               echo "LOAD FAIL: $r"; echo "$out" | tail -5; rc=1
             fi

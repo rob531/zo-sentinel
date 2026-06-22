@@ -20,6 +20,7 @@ BUS  = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772") + "/query"
 PY   = sys.executable or "python3"
 INDEX_TIMEOUT = int(os.environ.get("GR_INDEX_TIMEOUT", 2000))
 LOAD_TIMEOUT  = int(os.environ.get("GR_LOAD_TIMEOUT", 600))
+IDLE_MIN      = int(os.environ.get("GR_IDLE_MIN", 8))   # defer reindex while a build is active
 
 
 def needs_refresh(head: str, graph_commit: str, force: bool = False) -> bool:
@@ -54,10 +55,33 @@ def _graph_commit():
         return ""
 
 
+def _builder_active():
+    """True if a build_artifact landed within IDLE_MIN minutes. We DEFER the heavy
+    DROP+recreate+bulk-load while a build is active so it never contends with the build's
+    write burst on the single writer (write_service). Mirrors the architect's idle gate.
+    Best-effort -> False (don't block on a read failure)."""
+    try:
+        from datetime import datetime, timezone
+        req = urllib.request.Request(BUS, data=json.dumps(
+            {"sql": "SELECT MAX(created_at) AS ts FROM mesh_memory WHERE memory_type='build_artifact'"}).encode(),
+            headers={"content-type": "application/json"}, method="POST")
+        rows = json.loads(urllib.request.urlopen(req, timeout=6).read().decode("utf-8","replace")).get("rows", [])
+        ts = rows[0]["ts"] if rows else None
+        if not ts:
+            return False
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(ts).replace("Z","+00:00"))).total_seconds()/60.0
+        return age < IDLE_MIN
+    except Exception:
+        return False
+
+
 def refresh(force=False):
     head, gc = _git_head(), _graph_commit()
     if not needs_refresh(head, gc, force):
         print(f"[graph_refresh] up to date (graph at {head[:8] or '?'})")
+        return 0
+    if not force and _builder_active():
+        print("[graph_refresh] STALE but a build is active -- deferring reindex (protect write_service)")
         return 0
     print(f"[graph_refresh] STALE repo={head[:8] or '?'} graph={gc[:8] or 'none'} -> reindexing")
     try:

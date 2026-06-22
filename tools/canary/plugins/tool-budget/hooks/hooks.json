@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "developer__shell",
+        "hooks": [
+          { "type": "command", "command": "python3 ${PLUGIN_ROOT}/scripts/budget.py" }
+        ]
+      }
+    ]
+  }
+}

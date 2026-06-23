@@ -38,6 +38,19 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# DEFEND against a stale `argparse` BACKPORT shadowing the stdlib. A copy of the old
+# PyPI `argparse` package lives in this host's site-packages and lacks
+# BooleanOptionalAction, so when it wins import resolution `import mcp` dies with
+# "cannot import name 'BooleanOptionalAction' from 'argparse'" -> the bridge never
+# starts -> propose_directive is uncallable -> the architect is +0. Pin the stdlib
+# dir to the FRONT of sys.path so `import argparse` always resolves to stdlib,
+# regardless of PYTHONPATH / site ordering.
+import sysconfig as _sysconfig
+_stdlib_dir = _sysconfig.get_paths().get("stdlib")
+if _stdlib_dir:
+    sys.path.insert(0, _stdlib_dir)
+    sys.modules.pop("argparse", None)
+
 # MCP stdio framing -- minimal hand-rolled to avoid extra dependency surface.
 # Matches the protocol used by builder_mcp.py (Goose stdio extension).
 try:

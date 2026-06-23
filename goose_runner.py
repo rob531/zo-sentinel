@@ -492,15 +492,19 @@ def run_goose_task(directive_id, content, extra_env=None):
         }
 
 def _strip_code_fences(txt):
-    """Strip a leading ```lang fence + trailing ``` if the model wrapped the file."""
+    """Strip markdown code fences the model may wrap a file in -- robust to
+    ASYMMETRIC output. The old version only stripped when the response STARTED
+    with a fence, so a code-first response with a stray trailing fence wrote the
+    backticks into the .py and failed the Tier-0 py_compile gate (the 2026-06-23
+    ghost_build cause). Now: prefer the FIRST well-formed fenced block; otherwise
+    drop any standalone fence line so a leftover fence never reaches the gate."""
+    import re
     s = txt.strip()
-    if s.startswith("```"):
-        lines = s.split("\n")
-        lines = lines[1:]                          # drop opening ``` / ```python
-        if lines and lines[-1].strip().startswith("```"):
-            lines = lines[:-1]                     # drop closing ```
-        s = "\n".join(lines)
-    return s
+    _m = re.search(r"```[^\n]*\n(.*?)```", s, re.DOTALL)
+    if _m:
+        return _m.group(1).strip()
+    _lines = [ln for ln in s.splitlines() if not ln.lstrip().startswith("```")]
+    return chr(10).join(_lines).strip()
 
 
 def call_minimax_fallback(directive):

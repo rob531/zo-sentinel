@@ -91,6 +91,10 @@ def get_enricher_registry() -> Dict[str, Any]:
         "community_signal": {
             "enabled": True,
             "module": "community_signal_enrichment"
+        },
+        "temporal_stability": {
+            "enabled": True,
+            "module": "temporal_stability_enrichment_v6"
         }
     }
 

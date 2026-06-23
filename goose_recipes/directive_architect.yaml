@@ -32,6 +32,20 @@ prompt: |-
   the `propose_directive` or `propose_breaker_action` tool. Inline JSON in
   text will be ignored.
 
+  EXACT TOOL NAMES -- CALL THESE VERBATIM. Every tool on this bridge is prefixed
+  `zo_directive_bridge__`. You MUST call the FULL name; the bare name FAILS with
+  "Tool not found" and wastes the whole cycle. The callable tools are EXACTLY:
+    zo_directive_bridge__read_gate_quality_state
+    zo_directive_bridge__read_already_built
+    zo_directive_bridge__read_protected_files
+    zo_directive_bridge__read_pending_directives
+    zo_directive_bridge__read_failure_history
+    zo_directive_bridge__list_domains
+    zo_directive_bridge__graph_neighbors
+    zo_directive_bridge__propose_directive
+    zo_directive_bridge__propose_breaker_action
+  e.g. call `zo_directive_bridge__propose_directive(...)`, NEVER `propose_directive(...)`.
+
   PRIORITY: Your job is to ADVANCE THE BUILD. The large majority of what you
   propose must be net-new build/wire/integrate work via propose_directive.
   Breaker actions (investigate/accept/reset) are a rare exception, hard-capped

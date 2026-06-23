@@ -54,6 +54,7 @@ LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
 GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 240))   # was 480; a converging cycle is fast, a tool-call LOOP just burns -- fail it sooner
+ARCHITECT_MAX_TURNS = int(os.environ.get("DGG_MAX_TURNS", 12))   # CLI --max-turns: hard cap inside goose core loop; canary-proven to bound stdio-MCP bridge-tool loops where recipe settings.max_turns + PreToolUse hook did NOT. 0 = off.
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 # Architect-scoped goose BINARY -- lets the architect run a DIFFERENT goose
 # version from the builder (goose_runner.py, which keeps bare `goose` on PATH).
@@ -398,21 +399,12 @@ def _ensure_goose_env() -> None:
         os.environ["XDG_CONFIG_HOME"] = f"{iso}/.config"
         os.environ["XDG_DATA_HOME"]   = f"{iso}/.local/share"
         os.environ["XDG_STATE_HOME"]  = f"{iso}/.local/state"
-        # Deploy the PreToolUse convergence hook into the architect's goose home so its
-        # goose-1.38 auto-discovers it (~/.agents/plugins). After a read-tool budget it denies
-        # further reads -> the architect MUST propose_directive instead of looping to the 480s
-        # timeout (canary-proven: hooks fire under `goose run` + deny is enforced on 1.38).
-        try:
-            import shutil
-            _src = SENTINEL_DIR / "goose_plugins" / "architect_budget"
-            _dst = os.path.join(iso, ".agents", "plugins", "architect_budget")
-            if _src.exists():
-                os.makedirs(os.path.dirname(_dst), exist_ok=True)
-                shutil.rmtree(_dst, ignore_errors=True)
-                shutil.copytree(str(_src), _dst)
-                os.chmod(os.path.join(_dst, "scripts", "budget.py"), 0o755)
-        except Exception:
-            pass
+        # RETIRED (#447 hook): PreToolUse hooks do NOT fire for stdio-MCP extension tools
+        # (the zo_directive_bridge reads the architect loops on) -- only for builtins -- so the
+        # tool-budget deny never bound and the live cycle still ran to the 240s timeout (+0).
+        # Convergence is now enforced by the CLI --max-turns cap on the goose argv (see
+        # ARCHITECT_MAX_TURNS / run_goose_cycle), which IS enforced in goose's core loop for
+        # extension tools. The architect_budget plugin is left in-tree but no longer deployed.
 
 
 def _emit_nonconvergence(secs, delta, rc, kind: str) -> None:
@@ -463,9 +455,16 @@ def run_goose_cycle() -> dict:
     log.info("invoking goose [%s] (ctx %d bytes, proposed_depth=%d)", ARCHITECT_GOOSE_BIN, len(ctx_json), depth)
     _ensure_goose_env()
     try:
+        argv = [ARCHITECT_GOOSE_BIN, "run", "--recipe", str(RECIPE_PATH),
+                "--params", f"context_json={ctx_json}"]
+        if ARCHITECT_MAX_TURNS > 0:
+            # Hard cap enforced inside goose's core agent loop -- canary-proven (1.38) to
+            # bound the stdio-MCP bridge-tool loop the architect over-explores on, where the
+            # recipe settings.max_turns field AND the PreToolUse hook both failed to. Turns a
+            # 240s over-exploration burn into a bounded attempt that still reaches propose.
+            argv += ["--max-turns", str(ARCHITECT_MAX_TURNS)]
         proc = subprocess.run(
-            [ARCHITECT_GOOSE_BIN, "run", "--recipe", str(RECIPE_PATH),
-             "--params", f"context_json={ctx_json}"],
+            argv,
             capture_output=True,
             text=True,
             timeout=GOOSE_TIMEOUT,

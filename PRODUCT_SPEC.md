@@ -314,3 +314,23 @@ are in-scope (detection artefacts = Q2 of the three-question rule).
    exercises the detection functions against at least three known-good
    inputs and asserts non-empty results. `python3 <module>.py` exits 0 on
    success.
+
+
+---
+
+## Appendix C - Phase II/III/IV Sentinel App Capabilities (directive candidates, NOT YET BUILT)
+
+*Source: SENTINEL_ROADMAP_v2.md + addendum. These are Sentinel APP modules (MCP threat-signal product logic) -- NOT builder infrastructure. Each line is a directive candidate the architect should propose. Enricher modules follow the section 3 signal contract: compute_score(metadata: dict) -> (float in [0,100], evidence dict with keys verdict and missing); no DB writes, no network, no imports of protected modules; a __main__ self-test that prints PASS.*
+
+### Phase II - Directory ingestion (low-hanging, do first)
+- directive candidate: `directory_presence_signal.py` -- enricher; compute_score reads directory_listings (curated directories the MCP appears in, e.g. the Anthropic reference list); presence in a gatekept directory is the strongest single positive trust signal; a missing field contributes 0 and is appended to evidence['missing']; returns (0..100, {verdict, missing}); __main__ self-test on a sample metadata dict asserts 0<=score<=100 and prints PASS.
+
+### Phase III - Endpoint trust (the big one)
+- directive candidate: `mcp_endpoint_extractor.py` -- pure library; extract_endpoints(files: dict) parses default-config sources (dotenv, typescript config, python settings modules) and README text for hostnames; returns list of {hostname, source, user_configurable}; stdlib + regex only, no DB/network; __main__ self-test over 3 sample configs asserts non-empty and prints PASS.
+- directive candidate: `endpoint_trust_signal.py` -- enricher; compute_score reads endpoints (list of {hostname, tier in FIRST_PARTY|THIRD_PARTY|UNKNOWN}); composite over the tier distribution (all FIRST_PARTY = high, any UNKNOWN = lower); section 3 contract; __main__ prints PASS.
+- directive candidate: `operator_identity_signal.py` -- enricher; compute_score reads operator ({name, corporate, has_dpa}); strongest trust when endpoints resolve to a named corporate operator with a DPA on file; section 3 contract; __main__ prints PASS.
+- directive candidate: `data_residency_signal.py` -- enricher; compute_score reads endpoint_geos (ISO country codes where endpoints resolve); scores data-residency risk; section 3 contract; __main__ prints PASS.
+
+### Phase IV - Negative signals (dominant; override positive)
+- directive candidate: `threat_intel_endpoint_matcher.py` -- pure library; match_endpoints(endpoints: list, feeds: dict) checks each endpoint hostname against threat-intel feed sets; any match returns {blocked: True, feed, hostname}; negative signals dominate positive; stdlib only; __main__ over a synthetic feed asserts a known-bad match and prints PASS.
+- directive candidate: `domain_provenance_signal.py` -- enricher; compute_score reads domain_age_days, registrar, typosquat_distance; lower score for young domains, sketchy registrars, or small typosquat distance to a popular package; section 3 contract; __main__ prints PASS.

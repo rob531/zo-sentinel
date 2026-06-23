@@ -316,9 +316,27 @@ def _recent_proposals(days: int = 3, cap: int = 25) -> list:
     return out
 
 
+def _trim_schema(schema):
+    """Strip the stale static 'Already Built' + 'High-Value Targets'(snow/aidr)
+    tail from the legacy schema doc before it enters the architect context.
+
+    That tail (1) duplicates the live, fresher already_built_modules list and
+    (2) re-advertises the PARKED snow/aidr Phase-9 branch as "high-value targets"
+    -- together they fixated the architect on already-built / parked work (the
+    +0 / ~5-subject loop). We keep the invariant HEAD (technology + wiring rules,
+    DB-schema gotchas, directive JSON format, DO-NOT-GENERATE guardrails) and cut
+    from the '## Already Built' marker onward. Best-effort: non-str or
+    marker-absent -> returned unchanged.
+    """
+    if not isinstance(schema, str):
+        return schema
+    idx = schema.find("## Already Built")
+    return schema[:idx].rstrip() + "\n" if idx != -1 else schema
+
+
 def build_context() -> dict:
     ctx = {
-        "schema":            _try_load_schema(),
+        "schema":            _trim_schema(_try_load_schema()),
         "layer1":            _cap_layer1(_try_import_layer1()),
         "recent_failures":   _query_recent_failures(),
         "proposed_depth":    _count_proposed(),

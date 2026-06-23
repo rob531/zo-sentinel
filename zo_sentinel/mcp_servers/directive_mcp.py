@@ -206,6 +206,21 @@ def _validate(d: dict) -> tuple[bool, str]:
         return False, f"invalid handler: {d['handler']}"
     if d.get("complexity") and d["complexity"] not in VALID_COMPLEXITY:
         return False, f"invalid complexity: {d['complexity']}"
+    # PARKED branch enforcement -- the snow/aidr external-client authorization
+    # branch + approval_evidence_bundler are DEFERRED future work, not current. The
+    # directive_architect recipe says so in prose, but the weak architect model
+    # ignores it and lands parked work once the graph-aware already-built reject
+    # steers it off built modules (observed 2026-06-23: it wrote
+    # build_snow_connector_approval_workflow +1). Enforce deterministically here,
+    # mirroring the already-built reject, with a steer back to current domains.
+    _parked_probe = f"{d.get('task', '')} {d.get('output_file', '')}".lower()
+    if any(_p in _parked_probe for _p in ("snow", "aidr", "approval_evidence_bundler")):
+        return False, (
+            "PARKED branch (snow/aidr external-client authorization, "
+            "approval_evidence_bundler) -- a DEFERRED future branch, NOT current work. "
+            "Do NOT propose build/wire/verify work for it. Propose a NEW capability in a "
+            "CURRENT underbuilt domain instead: call list_domains and pick a thin/uncovered "
+            "one, or target a concrete integration gap.")
     output = (d.get("output_file") or "").strip()
     # Edit-class tasks modify existing files and declare no creation output;
     # every other task must name the file it will create.

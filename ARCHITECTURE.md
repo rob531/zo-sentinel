@@ -1,306 +1,303 @@
 # ZO-SENTINEL Architecture Documentation
 
-*Last updated: 2026-05-24*
-
----
-
 ## Overview
 
-ZO-SENTINEL is an autonomous intelligence pipeline that assesses Model Context Protocol (MCP) servers, enriches them with threat intelligence, and assigns a deterministic security verdict. It operates as a mesh of cooperating daemons that share state exclusively through a central write_service.
-
-**Primary user:** CISO / Security Architect looking up an MCP by name in the Search-Driven UI (port 8790) to make a deployment decision.
-
-**Scope posture:** Sentinel is an *intelligence layer*. It produces trust signals, verdicts, and detection artefacts. It does NOT route MCP traffic, authenticate users, enforce policy at call time, or block/throttle traffic.
+ZO-SENTINEL is an MCP server safety intelligence platform for enterprise InfoSec. It monitors, assesses, and scores MCP servers using trust signals derived from multiple intelligence sources.
 
 ---
 
-## 1. Verdict Taxonomy
+## 1. Daemon Topology
 
-Six tiers plus one data-gap state. The trust synthesiser is calibrated for these exact states.
+| Daemon | Port | Type | Responsibility |
+|--------|------|------|----------------|
+| `write_service` | 8772 | HTTP REST | Central governance layer for all DuckDB reads/writes |
+| `inference_router` | 8773 | HTTP REST | ML inference and signal scoring engine |
+| `threat_intel_ingestor` | — | Daemon | Ingests threat intel from AlienVault OTX, Shodan, and ecosystem.ms |
+| `sentinel_directive_generator` | — | Daemon | Generates and queues security directives |
+| `zo_mcp_server` | 8090 | FastAPI/MCP | Primary MCP tool server with FastMCP |
 
-| Verdict | Composite Score | Meaning |
-|---------|-----------------|---------|
-| `TRUSTED_GENERAL` | > 75 | Approved for general enterprise use |
-| `TRUSTED_RESEARCH` | > 60 | Safe for research / exploratory use |
-| `ENTERPRISE_CONTROLLED` | > 45 | Acceptable with documented security controls |
-| `CAUTION_LIMITED` | > 30 | Requires additional review |
-| `HIGH_RISK_ISOLATED` | > 15 | Sandboxed environments only |
-| `KNOWN_THREAT` | ≤ 15 | Matched known-threat signal |
-| `INSUFFICIENT` | — | ≥5 of 8 signals missing (data-gap state, not a risk tier) |
+### write_service (Port 8772)
+- **Role**: Sole write path to DuckDB data warehouse
+- **Responsibility**: All INSERT, UPDATE, UPSERT operations through parameterized JSON API
+- **Isolation**: Prevents lock contention and ensures audit trail
+
+### inference_router (Port 8773)
+- **Role**: ML inference endpoint
+- **Responsibility**: Signal scoring, anomaly detection, pattern recognition
+- **Interface**: Accepts JSON payloads, returns scored JSON
+
+### zo_mcp_server (Port 8090)
+- **Role**: MCP tool server for Sentinel operations
+- **Framework**: FastAPI + FastMCP
+- **Tools**: Registry scanning, attestation signing, signal querying
 
 ---
 
-## 2. Signal Model
+## 2. write_service API Contract
 
-Eight signals feed the composite score. Every signal producer writes rows to `mcp_signal_scores` or `mcp_signal_enrichments` with this invariant shape:
+**Base URL**: `http://localhost:8772`
 
-```json
+### 2.1 Write Operation
+
+```
+POST /write
+Content-Type: application/json
+
 {
-  "signal_type": "<snake_case_name>",
-  "confidence": 0.0-1.0,
-  "evidence_blob": { ... }
+  "table": "target_table_name",
+  "rows": [
+    {
+      "column1": "value1",
+      "column2": "value2",
+      ...
+    }
+  ],
+  "wait": true
 }
 ```
 
-| Signal | Table | Description |
-|--------|-------|-------------|
-| `domain_trust` | mcp_signal_scores | DNS reputation, SSL validity, age |
-| `tool_description_safety` | mcp_signal_scores | Description length, safety keywords, risky patterns |
-| `permission_scope` | mcp_signal_scores | Scope breadth and risk level |
-| `supply_chain` | mcp_signal_scores | Registry source, publisher, npm/GitHub signals |
-| `community_signal` | mcp_signal_scores | GitHub stars, npm downloads, forum mentions |
-| `temporal_stability` | mcp_signal_scores | Version change frequency, staleness |
-| `supply_chain_enrichment` | mcp_signal_enrichments | Ecosystem metadata (npm/GitHub/PyPI) |
-| `community_signal_enrichment` | mcp_signal_enrichments | Extended community metrics |
+**Key Rules**:
+- `rows` (plural) is required, not `row`
+- `wait: true` ensures synchronous confirmation
+- All values must be JSON-serializable
+- Timestamps must be ISO 8601 strings (not epoch floats)
 
-**Enricher contract (PRODUCT_SPEC §3):** pure function `compute_score(metadata: dict) -> (float in [0,100], evidence dict)`. No DB writes, no network, no imports of protected modules. Evaluated by `enrichment_harness.py` against a synthetic corpus; rejected if it yields fewer than 20 distinct scores across 34 fingerprints.
+### 2.2 Query Operation
 
----
-
-## 3. Core Loop
-
-```
-mcp_scanner / mcp_directory_ingestor
-        │
-        ▼
-mcp_discovery_feeder / mcp_registry_ingestor_v2
-        │
-        ▼
-signal_analyser + enrichment modules (8 signals)
-        │
-        ├──► mcp_signal_scores / mcp_signal_enrichments
-        │
-        ▼
-trust_synthesiser / trust_synthesiser_v2 → verdict
-        │
-        ▼
-attestation_engine → mcp_attestations
-        │
-        ▼
-risk_ranker → mcp_risk_register
-        │
-        ▼
-UI (8790) + external API (8791)
-```
-
----
-
-## 4. Daemon Topology
-
-| Service | Port | File | Responsibility |
-|---------|------|------|----------------|
-| write_service | 8772 | write_service.py | Central DuckDB write/read/execute hub |
-| inference_router | 8773 | inference_router.py | LLM inference (direct call, not peer HTTP) |
-| mcp_scanner | — | mcp_scanner.py | Periodic registry polling, server probing |
-| mcp_directory_ingestor | — | mcp_directory_ingestor.py | Scans modelplatforms.ai and directories |
-| mcp_discovery_feeder | — | mcp_discovery_feeder.py | Processes discovery candidates → registry |
-| signal_analyser | — | signal_analyser.py | Computes 6 core signals per server |
-| signal_analyser_v2 | — | signal_analyser_v2.py | Enhanced analyser with v3 enrichments |
-| trust_synthesiser | — | trust_synthesiser.py | Weighted composite → verdict |
-| trust_synthesiser_v2 | — | trust_synthesiser_v2.py | 7-dimension trust synthesis |
-| attestation_engine | — | attestation_engine.py | Generates non-binding attestations |
-| threat_intel_ingestor | — | threat_intel_ingestor.py | OTX/Alienvault pulse ingestion |
-| risk_ranker | — | risk_ranker.py | Threat overlay → risk tier |
-| assessment_scheduler | — | assessment_scheduler.py | Enforces freshness SLAs |
-| rug_pull_monitor | — | rug_pull_monitor.py | Detects npm/package name hijacking |
-| approval_workflow | 8780 | approval_workflow.py | Admin approval API |
-| registry_api | 8781 | registry_api.py | REST CRUD for registry |
-| ui_server | 8790 | ui_server.py | Search-driven dashboard UI |
-| sentinel_external_api | 8791 | sentinel_external_api.py | Read-only external API, X-API-Key auth |
-| pi_flagged_review_api | 8792 | pi_flagged_review_api.py | Flagged review API |
-| snow_connector | — | snow_connector.py | ServiceNow inbound webhook |
-| github_pr_checker | — | github_pr_checker.py | GitHub PR commit verification |
-| github_pr_webhook_receiver | — | github_pr_webhook_receiver.py | GitHub webhook handler |
-| sentinel_directive_generator | — | sentinel_directive_generator.py | Generates directives from signal data |
-| build_watcher | 8795 | build_watcher_api.py | Directive build progress tracker |
-| audit_log_writer | — | audit_log_writer.py | Admin action audit trail |
-| exemption_manager | — | exemption_manager.py | Admin exemption CRUD |
-| attestation_refresher | — | attestation_refresher.py | Regenerate expiring attestations |
-| exemption_expirer | — | exemption_expirer.py | Deactivate past-valid_until exemptions |
-| retention_sweeper | — | retention_sweeper.py | Age-based evidence_blob expiry |
-| candidate_promoter_daemon | — | candidate_promoter_daemon.py | Promote discovery candidates |
-| registry_promoter_daemon | — | registry_promoter_daemon.py | Promote vetted candidates to registry |
-| decision_emitter_daemon | — | decision_emitter_daemon.py | Emit approval decisions |
-| fingerprint_runner_daemon | — | fingerprint_runner_daemon.py | Compute MCP server fingerprints |
-| gate_scheduler | — | gate_scheduler.py | Orchestrates build pipeline gates |
-| gate_orchestrator | — | gate_orchestrator.py | Executes gate framework |
-
----
-
-## 5. write_service API Contract
-
-**Base URL:** `http://127.0.0.1:8772`
-
-**Rule (PRODUCT_SPEC §5):** No HTTP between peer daemons. All state exchange goes through write_service.
-
-### 5.1 Write
-```
-POST /write
-{"table": "table_name", "rows": [...], "wait": true}
-```
-### 5.2 Query
 ```
 POST /query
-{"sql": "SELECT ... WHERE $1 = $2", "params": [...]}
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM table WHERE condition = ?",
+  "params": ["value"]
+}
 ```
-### 5.3 Execute
+
+**Key Rules**:
+- Parameterized queries only (no f-string interpolation)
+- `params` is a list of values for `?` placeholders
+
+### 2.3 Execute Operation
+
 ```
 POST /execute
-{"sql": "CREATE TABLE ...", "params": []}
+Content-Type: application/json
+
+{
+  "sql": "CREATE TABLE IF NOT EXISTS ..."
+}
+```
+
+**Key Rules**:
+- DDL operations only
+- No user data in DDL
+
+---
+
+## 3. Signal Invariant Requirements
+
+### 3.1 Signal Score Shape
+
+```json
+{
+  "signal_id": "sha256_deterministic_id",
+  "target_server_id": "mcp_server_registry.server_id",
+  "signal_type": "threat_intel|behavioral|attestation|dependency",
+  "score": 0.0-1.0,
+  "confidence": 0.0-1.0,
+  "evidence_blob": {},
+  "computed_at": "2024-01-15T12:00:00.000Z",
+  "ttl_seconds": 86400
+}
+```
+
+### 3.2 evidence_blob Requirements
+
+The `evidence_blob` MUST contain provenance chain:
+
+```json
+{
+  "source": "alienvault_otx|shodan|ecosyste_ms|behavioral|attestation",
+  "source_url": "https://...",
+  "retrieved_at": "2024-01-15T12:00:00.000Z",
+  "raw_data": {},
+  "analysis": {
+    "findings": [],
+    "ioc_matches": [],
+    "confidence_factors": []
+  },
+  "attestation": {
+    "signer": "principal_name",
+    "signed_at": "2024-01-15T12:00:00.000Z",
+    "signature": "base64_signature"
+  }
+}
+```
+
+### 3.3 Signal Computed_at Invariant
+
+- MUST be ISO 8601 string with timezone (`Z` suffix)
+- MUST NOT be epoch float (enforced by schema type TIMESTAMPTZ)
+- Example valid: `"2024-01-15T12:00:00.000Z"`
+
+---
+
+## 4. Heartbeat SLA
+
+### 4.1 Heartbeat Schema
+
+```sql
+CREATE TABLE service_health (
+  service_name VARCHAR,
+  last_heartbeat TIMESTAMPTZ,
+  status VARCHAR,  -- 'running', 'stalled', 'crashed'
+  meta JSON
+);
+```
+
+### 4.2 SLA by Daemon Type
+
+| Daemon Type | Heartbeat Frequency | Staleness Threshold |
+|-------------|--------------------|--------------------|
+| Long-running daemon (while True loop) | Every POLL_SECS cycle | 2x POLL_SECS |
+| FastAPI service (uvicorn) | Every cycle | 30 seconds |
+| Batch job (one-shot) | N/A (exit 0 on success) | N/A |
+
+### 4.3 Heartbeat Payload
+
+```json
+{
+  "table": "service_health",
+  "rows": [{
+    "service_name": "threat_intel_ingestor",
+    "last_heartbeat": "2024-01-15T12:00:00.000Z",
+    "status": "running",
+    "meta": {"cycles": 142, "last_query_count": 50}
+  }]
+}
+```
+
+### 4.4 Implementation Pattern
+
+```python
+def run():
+    check_single_instance()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    while True:
+        cycle()
+        send_heartbeat()
+        time.sleep(POLL_SECS)
 ```
 
 ---
 
-## 6. Enrichment Modules
+## 5. Database Schema Reference
 
-Enrichers are pure functions consuming `mcp_signal_scores` rows and producing `mcp_signal_enrichments`. All live in the root directory.
+### 5.1 Core Tables
 
-| Module | Signal Type | Status |
-|--------|-------------|--------|
-| supply_chain_enrichment | supply_chain_enrichment | ACTIVE |
-| supply_chain_enrichment_v2/v3 | supply_chain_enrichment | ACTIVE |
-| community_signal_enrichment | community_signal_enrichment | ACTIVE |
-| community_signal_enrichment_v2/v3/v4 | community_signal_enrichment | ACTIVE |
-| temporal_stability_enrichment | temporal_stability | ACTIVE |
-| temporal_stability_enrichment_v2/v3/v4 | temporal_stability | ACTIVE |
-| tool_description_safety_enrichment | tool_description_safety | ACTIVE |
-| tool_description_safety_enrichment_v2/v3/v4 | tool_description_safety | ACTIVE |
-| permission_scope_enrichment | permission_scope | ACTIVE |
-| permission_scope_enrichment_v2/v3 | permission_scope | ACTIVE |
-| domain_trust_enrichment | domain_trust | ACTIVE |
-| domain_trust_enrichment_v2 | domain_trust | ACTIVE |
-| evidence_density_enrichment | evidence_density | ACTIVE |
-| injection_resilience_enrichment | injection_resilience | ACTIVE |
-| context_efficiency_enrichment | context_efficiency | ACTIVE |
-| registry_breadth_enrichment | registry_breadth | ACTIVE |
-| coverage_gap_reporter | coverage_gap | ACTIVE |
+**mcp_server_registry**
+| Column | Type | Notes |
+|--------|------|-------|
+| server_id | VARCHAR PK | Deterministic ID (SHA256 of server key fields) |
+| name | VARCHAR | Display name |
+| url | VARCHAR | MCP endpoint |
+| first_seen | TIMESTAMPTZ | ISO 8601 |
+| last_seen | TIMESTAMPTZ | ISO 8601 |
+| last_scanned | TIMESTAMPTZ | ISO 8601 |
+| last_assessed | TIMESTAMPTZ | ISO 8601 |
+| trust_score | DOUBLE | 0.0-1.0 |
+| status | VARCHAR | 'active', 'suspended', 'revoked' |
 
-Signal bridge wiring: `signal_bridge.py` (65K log entries) connects enrichment outputs to signal analyser v2.
+**mcp_attestations**
+| Column | Type | Notes |
+|--------|------|-------|
+| attestation_id | VARCHAR PK | Deterministic ID |
+| server_id | VARCHAR FK | References mcp_server_registry |
+| principal_name | VARCHAR | Attestor identity |
+| attested_at | TIMESTAMPTZ | ISO 8601 |
+| claims | JSON | Attestation payload |
+| signature | VARCHAR | Base64 signature |
 
----
+**mcp_signal_scores**
+| Column | Type | Notes |
+|--------|------|-------|
+| score_id | VARCHAR PK | Deterministic ID |
+| target_server_id | VARCHAR FK | References mcp_server_registry |
+| signal_type | VARCHAR | threat_intel\|behavioral\|attestation\|dependency |
+| score | DOUBLE | 0.0-1.0 |
+| confidence | DOUBLE | 0.0-1.0 |
+| evidence_blob | JSON | Provenance chain |
+| computed_at | TIMESTAMPTZ | ISO 8601 |
 
-## 7. Freshness SLAs
-
-| Metric | SLA |
-|--------|-----|
-| First verdict after `first_seen` | ≤ 24 hours |
-| Re-verdict cycle | ≤ 7 days |
-| Evidence blob retention | 30 days |
-| Verdict / attestation / threat association | Indefinite |
-
-Enforced by: `assessment_scheduler`, `stale_data_cleaner`, `retention_sweeper`.
-
----
-
-## 8. Security Boundaries
-
-- **External API** (8791): Read-only, `X-API-Key` auth, 60 req/min per key.
-- **Internal APIs** (8790, 8780, 8781, 8792, 8795): localhost only.
-- **Secrets:** API keys via `os.environ.get()`, keys file mode 0600.
-- **SQL injection:** All user-supplied values via `params` arrays.
-- **Audit:** Every admin-write action logged to `audit_log` with `event_type`, `actor`, `target_server_id`, `action`, `outcome`, `timestamp`.
+**service_health**
+| Column | Type | Notes |
+|--------|------|-------|
+| service_name | VARCHAR PK | Daemon identifier |
+| last_heartbeat | TIMESTAMPTZ | ISO 8601 |
+| status | VARCHAR | 'running', 'stalled', 'crashed' |
+| meta | JSON | Operational metadata |
 
 ---
 
-## 9. Build Gates
+## 6. Out of Scope
 
-Directives are validated through a gate pipeline before execution:
+### 6.1 Explicitly Excluded Domains
 
-| Gate | Purpose |
-|------|---------|
-| Gate 1 | Infrastructure check (write_service, schema) |
-| Gate 2 | Schema contracts |
-| Gate 5 | Synthesis flow |
-| Gate 7 | Threat flow |
-| Gate 8 | New module smoke test (import, static safety, signal invariant) |
-| Gate 9 | Signal diversity |
+- **Law firm operational risk register**: Not integrated
+- **Firm infrastructure details**: Not referenced
+- **Client matters database**: Isolated from Sentinel
+- **Work-Robin operational security**: Separate concern
+- **Trading account operations**: zocomptrady (acct #889310942) is trading account; Robinhood Investing (acct #886614932) is read-only
 
-Protected files: hand-calibrated, not rebuilt directly. Companion modules are the preferred change mechanism.
+### 6.2 Technical Boundaries
 
----
+- **mesh_memory.db**: SQLite at `/home/workspace/Datasets/zo-mesh/mesh_memory.db` — accessed via `sqlite3.connect()`, NOT write_service
+- **DuckDB**: Only accessed through write_service (no direct `duckdb.connect()`)
+- **Firm data**: Threat intel cross-references are Sentinel-internal only
 
-## 10. Out of Scope (v1.0)
+### 6.3 Cross-Domain Isolation
 
-- Multi-tenancy / OAuth flows (only `X-API-Key` permitted)
-- MCP gateway/proxy/portal functionality (traffic routing, call-time enforcement)
-- Outbound webhooks to third parties
-- Billing, metering, plans
-- Slack/Teams/email integrations
-- Grafana/Prometheus dashboards
-- GraphQL surface (graphql_schema_builder is dormant)
-- Retention DELETE daemons (expire by query filter, not row deletion)
-- ML anomaly detection beyond existing pattern_learner.py
+Agents operate within strict domain boundaries:
+- **Trading domain**: zocomptrady only
+- **Sentinel domain**: MCP trust-intelligence only
+- **Deputyship domain**: Legal representation only
+- **LinkedIn domain**: Social/recruiting only
+
+Cross-domain entity leakage is prevented by anti_entropy_agent enforcement.
 
 ---
 
-## 11. Data Architecture
+## 7. Service Discovery
 
-**Single source of truth:** DuckDB (`data/sentinel.db`). No replication, no cross-database joins.
+### 7.1 Health Check Pattern
 
-**Core tables (append-only or update-in-place for verdicts; NO DROP/DELETE):**
-- `mcp_server_registry` — MCP server inventory
-- `mcp_signal_scores` — Signal scores per server
-- `mcp_signal_enrichments` — Enrichment outputs per server
-- `mcp_attestations` — Attestations per server
-- `mcp_risk_register` — Risk rankings
-- `mcp_exemptions` — Admin exemptions
-- `mcp_decisions` — Analyst decisions
-- `mcp_policy_rules` — Policy rules
-- `mcp_submissions` — User submissions
-- `mcp_fingerprints` — Server fingerprints
-- `mcp_tool_hashes` — Tool hashes
-- `service_health` — Daemon heartbeats
-- `audit_log` — Admin action audit trail
-- `mcp_discovery_candidates` — Pre-registry candidates
-- `mcp_directory_mentions` — Directory-based discoveries
-- `mcp_ecosystems_metadata` — Package ecosystem data
-- `github_velocity` — GitHub repo velocity data
-- `mcp_definition_history` — Definition snapshots
-- `build_provenance` — Directive build history
-- `auth_tokens` — API auth tokens
+```bash
+# Check if daemon is alive
+pgrep -f '/zo_sentinel/threat_intel_ingestor.py'
+pgrep -f '/zo_mesh/probe_consumer.py'
 
-**Awaiting-user tables (legitimately empty until admin action):**
-- `mcp_submissions`, `mcp_exemptions`, `mcp_decisions`, `mcp_policy_rules`, `mcp_fingerprints`, `mcp_tool_hashes`
+# Check write_service
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8772/health
+```
+
+### 7.2 Canonical Paths
+
+| Component | Path |
+|-----------|------|
+| Sentinel modules | `/home/workspace/zo_sentinel/` |
+| Logs | `/home/workspace/logs/{SERVICE_NAME}.log` |
+| Mesh memory | `/home/workspace/Datasets/zo-mesh/mesh_memory.db` |
+| PID files | `/home/workspace/zo_sentinel/{SERVICE_NAME}.pid` |
 
 ---
 
-## 12. Supervisor Configuration
+## 8. Security Invariants
 
-All daemons run under supervisord. See `supervisord_sentinel.conf` for the master config.
-
-Key services:
-- `write_service` — Always on
-- `inference_router` — Always on
-- `ui_server` — Always on
-- `sentinel_external_api` — Always on
-- `gate_scheduler` — Always on
-- Scheduled daemons (assessment_scheduler, rug_pull_monitor, etc.) — `autorestart=true, startsecs=5`
-
----
-
-## 13. Detection Library Modules
-
-Pure functions (no daemons, no network, no DB) providing detection artefacts.
-
-| Module | Purpose |
-|--------|---------|
-| `mcp_traffic_fingerprints.py` | Regex detection of JSON-RPC MCP traffic |
-| `mcp_tool_schema_patterns.py` | Architectural pattern detection in tool definitions |
-| `shadow_mcp_indicators.py` | URL/hostname pattern indicators for log analysis |
-| `mcp_project_canonicalizer.py` | Canonical name normalization |
-
----
-
-## 14. Integration Points
-
-| Integration | Status |
-|-------------|--------|
-| ServiceNow (snow_connector) | INBOUND WEBHOOK ACTIVE |
-| GitHub PR Checker (github_pr_checker) | WEBHOOK RECEIVER ACTIVE |
-| AiDr Commit Gateway (aidr_commit_gateway) | VERDICT CHECK ACTIVE |
-| ecosystems_metadata_fetcher | DAILY CYCLE ACTIVE |
-| OTX/Alienvault threat feed | 15-MIN CYCLE ACTIVE |
-
----
-
-*End of ARCHITECTURE.md*
+1. **No hardcoded secrets**: API keys from `os.environ` only
+2. **Parameterized queries**: No f-string SQL interpolation
+3. **Read-only trading**: acct #886614932 never receives orders
+4. **ISO timestamps**: All TIMESTAMPTZ columns use ISO 8601 strings
+5. **Single instance**: PID guard prevents duplicate daemon runs
+6. **Signal provenance**: evidence_blob required for all scores

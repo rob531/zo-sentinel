@@ -477,6 +477,15 @@ def run_goose_cycle() -> dict:
         # we don't need to parse stdout. Just count what landed.
         new_depth = _count_proposed()
         delta = new_depth - depth
+        # Full transcript dump (debug): the truncated log tail hides the tool RESULT between
+        # a propose_directive render and the model's reply. Persist the whole exchange so a +0
+        # is fully diagnosable (did the bridge tool execute? what did it return?).
+        try:
+            with open("/home/workspace/logs/architect_last_goose.txt", "w") as _df:
+                _df.write("rc=%s delta=%s\n=== STDOUT ===\n%s\n=== STDERR ===\n%s\n"
+                          % (rc, delta, proc.stdout or "", proc.stderr or ""))
+        except Exception:
+            pass
         if proc.stderr:
             log.warning("goose stderr[:1500]: %s", proc.stderr[:1500].replace("\n", " | "))
         _elapsed = int(time.time() - _t0)

@@ -221,6 +221,12 @@ def _validate(d: dict) -> tuple[bool, str]:
             return False, f"already built: {output}"
         if output in protected:
             return False, f"protected (hand-calibrated, do not regenerate): {output}"
+        if _graph_has_module(output.rsplit("/", 1)[-1]):
+            return False, (
+                f"already built (live code graph): {output}. Do NOT re-propose this "
+                f"module -- it already exists. Propose a NEW capability in an "
+                f"underbuilt domain (call list_domains and pick a thin/uncovered one) "
+                f"or a concrete integration gap. Re-proposing a built module wastes the cycle.")
         gqs = _gate_state()
         if gqs is not None:
             try:
@@ -371,6 +377,23 @@ def _graph_query(sql: str, timeout: int = 8):
     except Exception as e:
         _log(f"_graph_query error: {e}")
         return []
+
+
+def _graph_has_module(basename: str) -> bool:
+    """True if a .py module with this basename already has nodes in the live code
+    graph (code_nodes) -- i.e. ALREADY BUILT per the FRESH graph, even when the
+    static ALREADY_BUILT set (which goes stale) omits it. Lets _validate reject the
+    freshly-built modules the architect otherwise re-proposes forever (the +0
+    fixation). Fail-open: [] / error -> False so a graph hiccup never blocks a
+    legitimate proposal."""
+    if not basename:
+        return False
+    b = str(basename).replace("'", "''")
+    rows = _graph_query(
+        "SELECT 1 FROM code_nodes "
+        "WHERE regexp_replace(source_file, '^.*/', '') = "
+        f"'{b}' LIMIT 1")
+    return bool(rows)
 
 
 @mcp.tool()

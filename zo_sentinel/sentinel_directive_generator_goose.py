@@ -36,6 +36,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -454,6 +455,7 @@ def run_goose_cycle() -> dict:
 
     log.info("invoking goose [%s] (ctx %d bytes, proposed_depth=%d)", ARCHITECT_GOOSE_BIN, len(ctx_json), depth)
     _ensure_goose_env()
+    _t0 = time.time()
     try:
         argv = [ARCHITECT_GOOSE_BIN, "run", "--recipe", str(RECIPE_PATH),
                 "--params", f"context_json={ctx_json}"]
@@ -477,18 +479,27 @@ def run_goose_cycle() -> dict:
         delta = new_depth - depth
         if proc.stderr:
             log.warning("goose stderr[:300]: %s", proc.stderr[:300].replace("\n", " | "))
-        log.info("goose returned rc=%d; proposed_depth %d -> %d (+%d)",
-                 rc, depth, new_depth, delta)
+        _elapsed = int(time.time() - _t0)
+        log.info("goose returned rc=%d in %ds; proposed_depth %d -> %d (+%d)",
+                 rc, _elapsed, depth, new_depth, delta)
         if delta <= 0:
-            _emit_nonconvergence(GOOSE_TIMEOUT, delta, rc, "zero_proposed")
+            # Log the model's transcript tail so a +0 is diagnosable (proposed & rejected?
+            # hit the --max-turns cap mid-explore? emitted inline text instead of a tool call?).
+            if proc.stdout:
+                log.warning("goose stdout[-2200:] (non-converge transcript tail): %s",
+                            proc.stdout[-2200:].replace("\n", " | "))
+            _emit_nonconvergence(_elapsed, delta, rc, "zero_proposed")
         return {
             "status": "ok" if rc == 0 else "goose_nonzero",
             "rc": rc,
             "proposed_delta": delta,
             "proposed_depth_after": new_depth,
         }
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as _te:
         log.error("goose TIMEOUT after %ds", GOOSE_TIMEOUT)
+        if getattr(_te, "stdout", None):
+            _so = _te.stdout if isinstance(_te.stdout, str) else _te.stdout.decode("utf-8","replace")
+            log.warning("goose stdout[-2200:] (timeout transcript tail): %s", _so[-2200:].replace("\n"," | "))
         _emit_nonconvergence(GOOSE_TIMEOUT, 0, None, "timeout")
         return {"status": "timeout"}
     except FileNotFoundError:

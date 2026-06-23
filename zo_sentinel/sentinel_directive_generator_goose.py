@@ -400,6 +400,23 @@ def _ensure_goose_env() -> None:
         os.environ["XDG_CONFIG_HOME"] = f"{iso}/.config"
         os.environ["XDG_DATA_HOME"]   = f"{iso}/.local/share"
         os.environ["XDG_STATE_HOME"]  = f"{iso}/.local/state"
+        # Isolating HOME also moves Python's per-user site (~/.local/lib) -- so the goose-spawned
+        # `python3` bridge (directive_mcp.py: `from mcp.server.fastmcp import FastMCP`) can no
+        # longer find `mcp`, the extension dies on startup ("Failed to start extension"), and
+        # propose_directive is never callable -> the +0. Pin PYTHONPATH to mcp's REAL location
+        # (resolved from THIS daemon's sys.path, which was built under the original HOME) so the
+        # bridge imports it regardless of HOME. THE +0 ROOT CAUSE since the 1.38/isolation switch.
+        try:
+            import importlib.util as _ilu
+            _spec = _ilu.find_spec("mcp")
+            if _spec and getattr(_spec, "submodule_search_locations", None):
+                _mcp_parent = os.path.dirname(list(_spec.submodule_search_locations)[0])
+                _ex = os.environ.get("PYTHONPATH", "")
+                if _mcp_parent and _mcp_parent not in _ex.split(os.pathsep):
+                    os.environ["PYTHONPATH"] = _mcp_parent + (os.pathsep + _ex if _ex else "")
+                    log.info("pinned PYTHONPATH for bridge mcp import: %s", _mcp_parent)
+        except Exception as _e:
+            log.warning("could not pin mcp PYTHONPATH: %s", _e)
         # RETIRED (#447 hook): PreToolUse hooks do NOT fire for stdio-MCP extension tools
         # (the zo_directive_bridge reads the architect loops on) -- only for builtins -- so the
         # tool-budget deny never bound and the live cycle still ran to the 240s timeout (+0).
@@ -478,7 +495,7 @@ def run_goose_cycle() -> dict:
         new_depth = _count_proposed()
         delta = new_depth - depth
         if proc.stderr:
-            log.warning("goose stderr[:300]: %s", proc.stderr[:300].replace("\n", " | "))
+            log.warning("goose stderr[:1500]: %s", proc.stderr[:1500].replace("\n", " | "))
         _elapsed = int(time.time() - _t0)
         log.info("goose returned rc=%d in %ds; proposed_depth %d -> %d (+%d)",
                  rc, _elapsed, depth, new_depth, delta)

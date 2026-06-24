@@ -429,7 +429,41 @@ def _lessons_context(directive):
         return ""
 
 
-def run_goose_task(directive_id, content, extra_env=None):
+_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "architect"}
+# Conservative inference: only the auth/RBAC/tenant SECURITY SPINE (where the generic
+# single-file builder produced hollow stubs) is keyword-routed to the FastAPI recipe.
+# Reports/search/etc. stay on architect.yaml unless the directive sets `recipe` explicitly.
+_BACKEND_HINTS = ("oauth", "login_service", "rbac", "role_enforc", "require_role",
+                  "tenant", "api_key", "session", "jwt", "auth_", "_auth", "org_model")
+_FRONTEND_HINTS = (".html", "_dashboard.", "frontend", "_ui.", "_view.", "react")
+
+
+def _select_recipe(directive):
+    """Pick the goose execute-recipe for a directive. Explicit `recipe` field wins
+    (allowlisted); else infer the webapp backend/frontend recipe for clear app-spine
+    modules; else None -> caller defaults to architect.yaml. Backward-compatible."""
+    try:
+        r = str(directive.get("recipe", "") or "").strip()
+        if r in _RECIPE_ALLOW and r != "architect":
+            return r
+        blob = " ".join(str(directive.get(k, "")) for k in
+                        ("directive_id", "id", "output_file", "target_file", "title", "description")).lower()
+        try:
+            _o = declared_output(directive)
+            if _o:
+                blob += " " + str(_o).lower()
+        except Exception:
+            pass
+        if any(h in blob for h in _FRONTEND_HINTS):
+            return "webapp_frontend_react"
+        if any(h in blob for h in _BACKEND_HINTS):
+            return "webapp_backend_fastapi"
+    except Exception:
+        pass
+    return None
+
+
+def run_goose_task(directive_id, content, extra_env=None, recipe=None):
     """Execute Goose on task file with timeout.
 
     extra_env (from build_routing.build_env_for) routes the architect
@@ -438,7 +472,13 @@ def run_goose_task(directive_id, content, extra_env=None):
     log(f"Executing Goose for directive: {directive_id}")
 
     try:
-        recipe_path = PROJECT_DIR / "goose_recipes" / "architect.yaml"
+        _recipe_name = recipe if recipe else "architect"
+        recipe_path = PROJECT_DIR / "goose_recipes" / f"{_recipe_name}.yaml"
+        if not recipe_path.exists():
+            log(f"[recipe] {_recipe_name}.yaml missing -> architect.yaml")
+            recipe_path = PROJECT_DIR / "goose_recipes" / "architect.yaml"
+        if recipe:
+            log(f"[recipe] {directive_id} -> {recipe_path.name}")
         task_desc = json.dumps(content)
         env = {**os.environ, **(extra_env or {})}
         if extra_env:
@@ -1009,7 +1049,7 @@ def run():
                     _lctx = _lessons_context(directive)   # closed-loop READER: prior failures on this target
                     if _lctx:
                         _task = f"{_task}\n\n{_lctx}"
-                    result = run_goose_task(directive_id, _task, _routed_env)
+                    result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""),

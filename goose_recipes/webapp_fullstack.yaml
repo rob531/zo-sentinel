@@ -1,0 +1,32 @@
+﻿title: "Zo Sentinel Webapp Full-Stack (orchestrator)"
+description: "Thin PARENT recipe that sequences the backend then the frontend sub-recipe to scaffold a full vertical slice (API module + the dashboard that consumes it) for one app feature. NOTE: the current builder runs ONE recipe -> ONE file per directive, so this orchestrator is for the future multi-file build mode and for manual `goose run` use; it is NOT yet auto-selected by goose_runner. Tracked in docs/sentinel_3tier_target_spec.md sec 4."
+version: "0.1"
+
+parameters:
+  - key: task_description
+    input_type: string
+    requirement: required
+    description: "Feature spec: the backend module contract + the dashboard that consumes it."
+
+sub_recipes:
+  - name: backend
+    path: "goose_recipes/webapp_backend_fastapi.yaml"
+    values:
+      task_description: "{{ task_description }}"
+  - name: frontend
+    path: "goose_recipes/webapp_frontend_react.yaml"
+    values:
+      task_description: "{{ task_description }}"
+
+extensions:
+  - type: builtin
+    name: developer
+
+prompt: |-
+  You are the ZoSentinel Full-Stack Orchestrator. Build a complete vertical slice for the
+  feature in the task by delegating to the two sub-recipes IN ORDER:
+  1. Run the `backend` sub-recipe to build the FastAPI module (routes + auth/RBAC + org scoping).
+  2. Run the `frontend` sub-recipe to build the dashboard/view that consumes that module's API.
+  3. Report which files were produced and stop. Each sub-recipe registers its own build.
+
+  TASK: {{ task_description }}

@@ -1,0 +1,178 @@
+import asyncio
+from typing import Dict, List, Optional, Any
+
+from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String, Float, MetaData, Table
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.sql import select
+
+# --- Pydantic Models ---
+
+class AxisScore(BaseModel):
+    label: str
+    p_top: float
+
+class VerdictResponse(BaseModel):
+    axes: Dict[str, AxisScore]
+    overall_risk: float
+    risk_tier: str
+    criteria_version: str
+
+# --- Database Setup (Portable SQL) ---
+
+DATABASE_URL = "sqlite:///:memory:"  # In-memory SQLite for testing
+engine = create_engine(DATABASE_URL)
+metadata = MetaData()
+
+mcp_llm_axis_scores = Table(
+    "mcp_llm_axis_scores",
+    metadata,
+    Column("server_id", Integer, primary_key=True),
+    Column("axis_label", String, primary_key=True),
+    Column("p_top", Float),
+    Column("overall_risk", Float),
+    Column("risk_tier", String),
+    Column("criteria_version", String),
+)
+
+metadata.create_all(engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# --- FastAPI Router ---
+
+router = APIRouter()
+
+@router.get("/servers/{server_id}/verdict", response_model=VerdictResponse)
+async def get_server_verdict(server_id: int, db: Session = Depends(get_db)):
+    stmt = select(mcp_llm_axis_scores).where(mcp_llm_axis_scores.c.server_id == server_id)
+    result = db.execute(stmt).fetchall()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Server verdict not found")
+
+    axes_data: Dict[str, AxisScore] = {}
+    overall_risk: Optional[float] = None
+    risk_tier: Optional[str] = None
+    criteria_version: Optional[str] = None
+    critical_axis_found = False
+
+    for row in result:
+        row_dict = dict(row._mapping)  # Access row data as a dictionary
+        axis_label = row_dict["axis_label"]
+        p_top = row_dict["p_top"]
+
+        if axis_label == "CRITICAL":
+            critical_axis_found = True
+
+        axes_data[axis_label] = AxisScore(label=axis_label, p_top=p_top)
+
+        if row_dict["overall_risk"] is not None:
+            overall_risk = row_dict["overall_risk"]
+        if row_dict["risk_tier"] is not None:
+            risk_tier = row_dict["risk_tier"]
+        if row_dict["criteria_version"] is not None:
+            criteria_version = row_dict["criteria_version"]
+
+    # Rule-override: a CRITICAL axis forces the tier
+    if critical_axis_found and risk_tier:
+        risk_tier = "CRITICAL"
+
+    # Ensure all required fields are present, even if not in DB for a specific server
+    # This part might need adjustment based on how your DB is structured.
+    # For this example, we assume if a server exists, all its axes and overall data are present.
+    # If not, you might need to fetch default values or handle missing data more explicitly.
+
+    if overall_risk is None or risk_tier is None or criteria_version is None:
+         raise HTTPException(status_code=500, detail="Incomplete verdict data for server")
+
+
+    return VerdictResponse(
+        axes=axes_data,
+        overall_risk=overall_risk,
+        risk_tier=risk_tier,
+        criteria_version=criteria_version
+    )
+
+# --- Self-Test ---
+
+def seed_database(db: Session):
+    db.execute(
+        mcp_llm_axis_scores.insert().values([
+            {"server_id": 1, "axis_label": "AXIS_A", "p_top": 0.8, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"},
+            {"server_id": 1, "axis_label": "AXIS_B", "p_top": 0.6, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"},
+            {"server_id": 1, "axis_label": "AXIS_C", "p_top": 0.9, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"},
+            {"server_id": 1, "axis_label": "AXIS_D", "p_top": 0.5, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"},
+            {"server_id": 1, "axis_label": "AXIS_E", "p_top": 0.7, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"},
+            {"server_id": 1, "axis_label": "AXIS_F", "p_top": 0.4, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"},
+            {"server_id": 1, "axis_label": "CRITICAL", "p_top": 0.95, "overall_risk": 0.7, "risk_tier": "HIGH", "criteria_version": "v1.0"}, # Critical axis
+            {"server_id": 2, "axis_label": "AXIS_A", "p_top": 0.2, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"},
+            {"server_id": 2, "axis_label": "AXIS_B", "p_top": 0.3, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"},
+            {"server_id": 2, "axis_label": "AXIS_C", "p_top": 0.1, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"},
+            {"server_id": 2, "axis_label": "AXIS_D", "p_top": 0.4, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"},
+            {"server_id": 2, "axis_label": "AXIS_E", "p_top": 0.25, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"},
+            {"server_id": 2, "axis_label": "AXIS_F", "p_top": 0.35, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"},
+            {"server_id": 2, "axis_label": "CRITICAL", "p_top": 0.1, "overall_risk": 0.3, "risk_tier": "LOW", "criteria_version": "v1.0"}, # Non-critical tier
+        ])
+    )
+    db.commit()
+
+def test_verdict_endpoint():
+    app = FastAPI()
+    app.include_router(router)
+
+    # Override the dependency for testing
+    def override_get_db():
+        db = SessionLocal()
+        seed_database(db)
+        yield db
+        db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    client = TestClient(app)
+
+    # Test case 1: Server with a CRITICAL axis that should override the tier
+    response1 = client.get("/servers/1/verdict")
+    assert response1.status_code == 200
+    data1 = response1.json()
+
+    assert len(data1["axes"]) == 7
+    assert "CRITICAL" in data1["axes"]
+    assert data1["axes"]["CRITICAL"]["label"] == "CRITICAL"
+    assert data1["axes"]["CRITICAL"]["p_top"] == 0.95
+    assert data1["overall_risk"] == 0.7
+    assert data1["risk_tier"] == "CRITICAL"  # Overridden due to CRITICAL axis
+    assert data1["criteria_version"] == "v1.0"
+
+    # Test case 2: Server with a CRITICAL axis but low p_top, tier should not be overridden
+    response2 = client.get("/servers/2/verdict")
+    assert response2.status_code == 200
+    data2 = response2.json()
+
+    assert len(data2["axes"]) == 7
+    assert "CRITICAL" in data2["axes"]
+    assert data2["axes"]["CRITICAL"]["label"] == "CRITICAL"
+    assert data2["axes"]["CRITICAL"]["p_top"] == 0.1
+    assert data2["overall_risk"] == 0.3
+    assert data2["risk_tier"] == "LOW"  # Not overridden
+    assert data2["criteria_version"] == "v1.0"
+
+    # Test case 3: Non-existent server
+    response3 = client.get("/servers/99/verdict")
+    assert response3.status_code == 404
+    assert response3.json() == {"detail": "Server verdict not found"}
+
+    print("PASS")
+
+if __name__ == "__main__":
+    # This block is for running the self-test
+    test_verdict_endpoint()

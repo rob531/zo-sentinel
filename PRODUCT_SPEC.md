@@ -250,93 +250,17 @@ before proposing; some may have been built since this list was last updated.
 
 ---
 
-## Appendix B — Detection Artefacts from Published Sources
+## Appendix B - [DEPRECATED 2026-06-24] detection / enumeration / signal primitives
 
-Sources of record: Cloudflare enterprise MCP reference architecture
-(blog.cloudflare.com/enterprise-mcp, 2026-04-14) publishes JSON-RPC method
-signatures, protocol-version markers, and shadow-MCP detection patterns
-that Sentinel can adopt as **library modules** (pure functions, no daemons,
-no network, no DB writes). See `SENTINEL_SCOPE_BOUNDARY.md` for why these
-are in-scope (detection artefacts = Q2 of the three-question rule).
+**Not build targets.** Detection primitives, endpoint enumerators, and signal additions are the
+old feature-extraction approach the SFT student model replaced. Do not propose or build them.
+The live build queue is Appendix E (the 3-tier app surface).
 
-**Library modules — detection/fingerprint primitives (NOT YET BUILT):**
-- `mcp_traffic_fingerprints.py` — regex-based detection of JSON-RPC MCP
-  traffic in HTTP bodies or log lines. Recognises methods: `initialize`,
-  `tools/call`, `tools/list`, `resources/read`, `resources/list`,
-  `prompts/list`, `prompts/get`, `sampling/createMessage`,
-  `notifications/initialized`, `roots/list`, and the
-  `"protocolVersion":"202[4-9]"` marker. Tolerates whitespace variation.
-  Pure library: exports compiled patterns + `detect_mcp_methods`,
-  `is_mcp_traffic`, `extract_session_indicators`. **Directive already queued
-  2026-04-22.**
-- `mcp_tool_schema_patterns.py` — pure library detecting architectural
-  patterns in an MCP server's tool definitions: (a) progressive-disclosure
-  ("Code Mode" shape — ≤4 high-level tools exposing dynamic discovery),
-  (b) brute-force enumeration (≥20 tools with full schemas upfront),
-  (c) hybrid. Output feeds a future `context_efficiency` signal — servers
-  using progressive disclosure scale better in portal deployments and
-  deserve positive signal weight. Pure function: takes a tool-definitions
-  list, returns `{pattern: str, tool_count: int, evidence: dict}`.
-- `shadow_mcp_indicators.py` — pure library providing URL-path and
-  hostname-pattern indicators (`/mcp`, `/mcp/sse`, `mcp.*` subdomains,
-  known MCP server hostnames like `mcp.stripe.com`, `mcp.cloudflare.com`)
-  for log analysis. Complements `mcp_traffic_fingerprints` (which scans
-  bodies); this one scans URLs/hostnames. Pure function, no I/O.
+## Appendix C - [DEPRECATED 2026-06-24] enricher / signal candidates
 
-**Signal additions enabled by Appendix B modules (NOT YET BUILT, deferred):**
-- `context_efficiency_enrichment.py` — consumes `mcp_tool_schema_patterns`
-  output, scores progressive-disclosure servers higher than brute-force
-  enumerators. Enrichment-contract compliant. **DEFERRED** until the three
-  weak signals (`permission_scope`, `temporal_stability`,
-  `tool_description_safety`) have moved off their current 3-distinct-values
-  plateau. Do not propose until weak-signal work is visibly progressing.
-
-**Wiring work (NOT YET BUILT):**
-- `mcp_traffic_fingerprints` → consumed by `mcp_scanner` when scanning
-  candidate server responses for MCP protocol confirmation. Directive to
-  wire this comes AFTER the library module lands and smokes clean.
-- `shadow_mcp_indicators` → consumed by future log-analysis ingestor (not
-  yet scoped). Library module stands alone until an ingestor needs it.
-
-**Rules specific to Appendix B work:**
-1. Every module here is a **pure library**. No daemons. No network. No DB.
-   No imports of protected modules. If a directive proposes a daemon or
-   scheduled job in Appendix B's name, reject it.
-2. Attribution is required in the module docstring. Source: "Cloudflare
-   enterprise MCP reference architecture, blog.cloudflare.com, 2026-04-14."
-3. These are *detection* artefacts. Any directive that adds blocking,
-   redirecting, or traffic mediation based on these patterns is out of
-   scope (section 9) and must be rejected.
-4. Regex patterns must tolerate whitespace variation as published by
-   Cloudflare (e.g. `"method"\s{0,5}:\s{0,5}"tools/call"`). Compile at
-   module load; do not recompile per-call.
-5. Each module must include an `if __name__ == '__main__'` self-smoke that
-   exercises the detection functions against at least three known-good
-   inputs and asserts non-empty results. `python3 <module>.py` exits 0 on
-   success.
-
-
----
-
-## Appendix C - Phase II/III/IV Sentinel App Capabilities (directive candidates, NOT YET BUILT)
-
-*Source: SENTINEL_ROADMAP_v2.md + addendum. These are Sentinel APP modules (MCP threat-signal product logic) -- NOT builder infrastructure. Each line is a directive candidate the architect should propose. Enricher modules follow the section 3 signal contract: compute_score(metadata: dict) -> (float in [0,100], evidence dict with keys verdict and missing); no DB writes, no network, no imports of protected modules; a __main__ self-test that prints PASS.*
-
-### Phase II - Directory ingestion (low-hanging, do first)
-- directive candidate: `directory_presence_signal.py` -- enricher; compute_score reads directory_listings (curated directories the MCP appears in, e.g. the Anthropic reference list); presence in a gatekept directory is the strongest single positive trust signal; a missing field contributes 0 and is appended to evidence['missing']; returns (0..100, {verdict, missing}); __main__ self-test on a sample metadata dict asserts 0<=score<=100 and prints PASS.
-
-### Phase III - Endpoint trust (the big one)
-- directive candidate: `mcp_endpoint_extractor.py` -- pure library; extract_endpoints(files: dict) parses default-config sources (dotenv, typescript config, python settings modules) and README text for hostnames; returns list of {hostname, source, user_configurable}; stdlib + regex only, no DB/network; __main__ self-test over 3 sample configs asserts non-empty and prints PASS.
-- directive candidate: `endpoint_trust_signal.py` -- enricher; compute_score reads endpoints (list of {hostname, tier in FIRST_PARTY|THIRD_PARTY|UNKNOWN}); composite over the tier distribution (all FIRST_PARTY = high, any UNKNOWN = lower); section 3 contract; __main__ prints PASS.
-- directive candidate: `operator_identity_signal.py` -- enricher; compute_score reads operator ({name, corporate, has_dpa}); strongest trust when endpoints resolve to a named corporate operator with a DPA on file; section 3 contract; __main__ prints PASS.
-- directive candidate: `data_residency_signal.py` -- enricher; compute_score reads endpoint_geos (ISO country codes where endpoints resolve); scores data-residency risk; section 3 contract; __main__ prints PASS.
-
-### Phase IV - Negative signals (dominant; override positive)
-- directive candidate: `threat_intel_endpoint_matcher.py` -- pure library; match_endpoints(endpoints: list, feeds: dict) checks each endpoint hostname against threat-intel feed sets; any match returns {blocked: True, feed, hostname}; negative signals dominate positive; stdlib only; __main__ over a synthetic feed asserts a known-bad match and prints PASS.
-- directive candidate: `domain_provenance_signal.py` -- enricher; compute_score reads domain_age_days, registrar, typosquat_distance; lower score for young domains, sketchy registrars, or small typosquat distance to a popular package; section 3 contract; __main__ prints PASS.
-
-
----
+**Not build targets.** The SFT student model (v3.0; 6 risk axes -> mcp_llm_axis_scores) now owns
+risk scoring, so the hand-built enricher/signal modules here are REDUNDANT. Do not propose or
+build them. See Appendix E for the live build queue.
 
 ## Appendix D - 3-Tier App Foundation (directive candidates, NOT YET BUILT)
 
@@ -357,3 +281,23 @@ are in-scope (detection artefacts = Q2 of the three-question rule).
 ### Tier-1 App Platform
 - directive candidate: `org_api_key_manager.py` -- per-org API keys: issue_key(org_id)->key (store only a hash), revoke_key(key_id), verify_key(key)->org_id, and a per-key rate-limit check. Via write_service. ACCEPTANCE: __main__ issues a key, verifies it resolves the org, revokes it, asserts verify then fails, prints PASS.
 - directive candidate: `product_audit_log.py` -- append-only audit log: record(org_id,actor,action,target) writing an audit_log row via write_service + query_audit(org_id,filters) for admins; insert-only/immutable. ACCEPTANCE: __main__ records a login + a role_change, queries them back org-scoped, asserts order + immutability, prints PASS.
+
+## Appendix E - Tier-2 App Milestones (directive candidates, NOT YET BUILT)
+
+*Added 2026-06-24. The SFT student model owns risk scoring (Appendix B/C deprecated). The live build
+queue is the 3-tier SaaS app surface (see sentinel_3tier_target_spec.md + the app/ skeleton now on
+main): wire the SFT scores into the product, then the presentation tier. Routing: backend `.py` ->
+the webapp_backend_fastapi recipe; view `.html` -> the webapp_frontend_react recipe. GOAL: a LIVE MVP.*
+
+**Scoring -> product (consume the SFT axis scores from Postgres):**
+- directive candidate: `app_scoring_consumer.py` -- data-access layer: given a server_id, read mcp_llm_axis_scores -> {axis: {label, p_top}} + overall_risk -> a risk_tier string; Postgres-portable SQL via the app DB session. The single seam the verdict/dashboard APIs read.
+- directive candidate: `verdict_view_api.py` -- FastAPI router GET /servers/{server_id}/verdict: real per-axis breakdown + overall + risk_tier + a criteria_version string (SSL-Labs weighted-axes/override pattern), reading via app_scoring_consumer. REPLACES the hollow verdict_breakdown_api stub.
+- directive candidate: `dashboard_summary_api.py` -- FastAPI router GET /dashboard/summary: verdict-tier distribution + scored/total counts + recent-scored list, reading mcp_llm_axis_scores + mcp_server_registry.
+
+**Presentation tier (self-contained dashboards that fetch the REST API; no CDN/localStorage, a11y):**
+- directive candidate: `overview_dashboard_view.html` -- verdict-tier distribution + counts + recent scans; fetches /dashboard/summary.
+- directive candidate: `entity_detail_view.html` -- single-server detail: per-axis risk breakdown + overall tier; fetches /servers/{id}/verdict.
+- directive candidate: `registry_search_view.html` -- org-scoped, filterable server list with risk tier; fetches the org_entity_search API.
+
+**App assembly (make the service serve the full surface):**
+- directive candidate: `app_router_registry.py` -- one include_app_routers(app) helper that mounts every app router (auth, rbac, verdict_view_api, dashboard_summary_api, org_entity_search_api, entity_report_exporter, ...) so app/main.py exposes the full API surface in a single call.

@@ -13,6 +13,12 @@ name: auto-merge
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, ready_for_review]
+  # The triage bot adds triage:solid with GITHUB_TOKEN, whose events (GitHub
+  # recursion guard) do NOT re-fire the 'labeled' trigger above -- so after each
+  # pr-triage run, sweep its fresh solids and enable auto-merge here.
+  workflow_run:
+    workflows: ["pr-triage"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -70,3 +76,28 @@ jobs:
         run: |
           echo "::notice::Dependabot MAJOR update for #$PR -> held for manual review"
           gh pr edit "$PR" -R "$REPO" --add-label major-hold || true
+
+  triage-solid-sweep:
+    # Enables auto-merge on the triage bot's solids (pr-triage labels with
+    # GITHUB_TOKEN, which can't re-trigger the pull_request_target job above).
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge on triage:solid autonomous-build PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          prs=$(gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number -q '.[].number') || prs=""
+          for pr in $prs; do
+            files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
+            if echo "$files" | grep -Eiq 'trust_synthesiser|risk_ranker|enrichment|signal_analyser|mcp_llm_'; then
+              echo "::notice::#$pr frozen scoring/enrichment path -> freeze-hold"
+              gh pr edit "$pr" -R "$REPO" --add-label freeze-hold || true
+              gh pr merge "$pr" -R "$REPO" --disable-auto || true
+              continue
+            fi
+            echo "::notice::#$pr triage:solid -> enabling squash auto-merge"
+            gh pr merge "$pr" -R "$REPO" --squash --auto || true
+          done

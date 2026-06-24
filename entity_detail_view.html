@@ -1,0 +1,221 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
+from typing import List, Optional
+from sqlalchemy import create_engine, Column, Integer, String, Float, MetaData, Table
+from sqlalchemy.orm import sessionmaker, declarative_base
+from contextlib import contextmanager
+
+# --- Pydantic Models ---
+
+class AxisScore(BaseModel):
+    server_id: int
+    axis_name: str
+    score: float
+    tier: str
+
+class ServerDetail(BaseModel):
+    server_id: int
+    hostname: str
+    risk_scores: List[AxisScore]
+    overall_risk: AxisScore
+    recent_activity: List[str] # Placeholder for actual recent activity data
+    total_servers: int
+
+# --- Database Setup (In-Memory SQLite for Testing) ---
+
+DATABASE_URL = "sqlite:///:memory:"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Define SQLAlchemy Table for mcp_llm_axis_scores
+metadata = MetaData()
+mcp_llm_axis_scores_table = Table(
+    'mcp_llm_axis_scores',
+    metadata,
+    Column('server_id', Integer, primary_key=True),
+    Column('axis_name', String, primary_key=True),
+    Column('score', Float),
+    Column('tier', String)
+)
+
+# Define SQLAlchemy Table for servers (to get hostname and total count)
+servers_table = Table(
+    'servers',
+    metadata,
+    Column('server_id', Integer, primary_key=True),
+    Column('hostname', String)
+)
+
+# Create tables
+metadata.create_all(engine)
+
+@contextmanager
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# --- FastAPI Application ---
+
+app = FastAPI()
+
+# --- Helper Functions ---
+
+def get_risk_tiers(score: float) -> str:
+    if score >= 0.8:
+        return "Critical"
+    elif score >= 0.5:
+        return "High"
+    elif score >= 0.2:
+        return "Medium"
+    else:
+        return "Low"
+
+def seed_database():
+    with get_db() as db:
+        # Seed mcp_llm_axis_scores
+        axis_scores_data = [
+            {"server_id": 1, "axis_name": "network_exposure", "score": 0.7, "tier": get_risk_tiers(0.7)},
+            {"server_id": 1, "axis_name": "vulnerability_density", "score": 0.4, "tier": get_risk_tiers(0.4)},
+            {"server_id": 1, "axis_name": "data_sensitivity", "score": 0.9, "tier": get_risk_tiers(0.9)},
+            {"server_id": 1, "axis_name": "access_patterns", "score": 0.6, "tier": get_risk_tiers(0.6)},
+            {"server_id": 1, "axis_name": "configuration_compliance", "score": 0.3, "tier": get_risk_tiers(0.3)},
+            {"server_id": 1, "axis_name": "threat_intelligence", "score": 0.85, "tier": get_risk_tiers(0.85)},
+            {"server_id": 2, "axis_name": "network_exposure", "score": 0.2, "tier": get_risk_tiers(0.2)},
+            {"server_id": 2, "axis_name": "vulnerability_density", "score": 0.55, "tier": get_risk_tiers(0.55)},
+            {"server_id": 2, "axis_name": "data_sensitivity", "score": 0.1, "tier": get_risk_tiers(0.1)},
+            {"server_id": 2, "axis_name": "access_patterns", "score": 0.75, "tier": get_risk_tiers(0.75)},
+            {"server_id": 2, "axis_name": "configuration_compliance", "score": 0.95, "tier": get_risk_tiers(0.95)},
+            {"server_id": 2, "axis_name": "threat_intelligence", "score": 0.35, "tier": get_risk_tiers(0.35)},
+        ]
+        for item in axis_scores_data:
+            db.execute(
+                mcp_llm_axis_scores_table.insert().values(**item)
+            )
+
+        # Seed servers
+        servers_data = [
+            {"server_id": 1, "hostname": "server-alpha.example.com"},
+            {"server_id": 2, "hostname": "server-beta.example.com"},
+            {"server_id": 3, "hostname": "server-gamma.example.com"}, # For total count
+        ]
+        for item in servers_data:
+            db.execute(
+                servers_table.insert().values(**item)
+            )
+        db.commit()
+
+# --- API Endpoint ---
+
+@app.get("/servers/{server_id}/detail", response_model=ServerDetail)
+async def get_server_detail(server_id: int):
+    with get_db() as db:
+        # Fetch server hostname
+        server_stmt = servers_table.select().where(servers_table.c.server_id == server_id)
+        server_result = db.execute(server_stmt).fetchone()
+        if not server_result:
+            raise HTTPException(status_code=404, detail="Server not found")
+        hostname = server_result.hostname
+
+        # Fetch all axis scores for the server
+        axis_scores_stmt = mcp_llm_axis_scores_table.select().where(mcp_llm_axis_scores_table.c.server_id == server_id)
+        axis_scores_results = db.execute(axis_scores_stmt).fetchall()
+
+        risk_scores = []
+        total_score = 0
+        for row in axis_scores_results:
+            score_obj = AxisScore(
+                server_id=row.server_id,
+                axis_name=row.axis_name,
+                score=row.score,
+                tier=row.tier
+            )
+            risk_scores.append(score_obj)
+            total_score += row.score
+
+        # Calculate overall risk (average of all axes)
+        overall_score = total_score / len(axis_scores_results) if axis_scores_results else 0
+        overall_risk_tier = get_risk_tiers(overall_score)
+        overall_risk_score = AxisScore(
+            server_id=server_id,
+            axis_name="overall_risk",
+            score=round(overall_score, 2),
+            tier=overall_risk_tier
+        )
+
+        # Fetch total number of servers
+        total_servers_stmt = servers_table.select()
+        total_servers_count = db.execute(total_servers_stmt).rowcount
+
+        # Placeholder for recent activity
+        recent_activity = [f"Activity log entry for server {server_id} at {i}" for i in range(3)]
+
+        return ServerDetail(
+            server_id=server_id,
+            hostname=hostname,
+            risk_scores=risk_scores,
+            overall_risk=overall_risk_score,
+            recent_activity=recent_activity,
+            total_servers=total_servers_count
+        )
+
+# --- Test Client ---
+
+client = TestClient(app)
+
+def test_server_detail_view():
+    seed_database()
+
+    # Test for server_id 1
+    response = client.get("/servers/1/detail")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["server_id"] == 1
+    assert data["hostname"] == "server-alpha.example.com"
+    assert len(data["risk_scores"]) == 6
+    assert data["overall_risk"]["axis_name"] == "overall_risk"
+    assert data["overall_risk"]["score"] is not None
+    assert data["overall_risk"]["tier"] is not None
+    assert len(data["recent_activity"]) == 3
+    assert data["total_servers"] == 3
+
+    # Verify all 6 axes are present
+    axis_names = {score["axis_name"] for score in data["risk_scores"]}
+    expected_axes = {
+        "network_exposure",
+        "vulnerability_density",
+        "data_sensitivity",
+        "access_patterns",
+        "configuration_compliance",
+        "threat_intelligence",
+    }
+    assert axis_names == expected_axes
+
+    # Test for server_id 2
+    response = client.get("/servers/2/detail")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["server_id"] == 2
+    assert data["hostname"] == "server-beta.example.com"
+    assert len(data["risk_scores"]) == 6
+    assert data["overall_risk"]["axis_name"] == "overall_risk"
+    assert data["overall_risk"]["score"] is not None
+    assert data["overall_risk"]["tier"] is not None
+    assert len(data["recent_activity"]) == 3
+    assert data["total_servers"] == 3
+
+    # Test for non-existent server
+    response = client.get("/servers/99/detail")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Server not found"}
+
+    print("PASS")
+
+if __name__ == "__main__":
+    test_server_detail_view()

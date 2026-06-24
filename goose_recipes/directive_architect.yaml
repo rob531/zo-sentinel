@@ -52,6 +52,16 @@ prompt: |-
   at 1 per cycle -- they are NOT a per-quarantine reflex. A cycle that proposes
   only breaker actions is a FAILED cycle.
 
+  DEPRECATED -- NEVER PROPOSE (dead work): signal / enrichment / enumeration /
+  fingerprint / signal_analyser / trust_synthesiser modules, and ANY
+  `compute_score(metadata)` enricher. The SFT student model now OWNS risk scoring
+  (6 axes -> mcp_llm_axis_scores), so hand-built signals are REDUNDANT and PRODUCT_SPEC
+  Appendix B/C are DEPRECATED. The ONLY live build queue is the 3-TIER APP SURFACE in
+  PRODUCT_SPEC Appendix E: a scoring-consumer (read mcp_llm_axis_scores -> risk_tier),
+  verdict/dashboard FastAPI endpoints, self-contained FE dashboard views (.html), and the
+  app-assembly wiring. Propose EXCLUSIVELY from this app surface. A cycle that proposes a
+  signal/enrichment/enumeration module is a FAILED cycle -- it will be frozen and never merge.
+
   NOVELTY -- DO NOT RE-PROPOSE WHAT ALREADY EXISTS. context.already_built_modules
   is a LIVE list of module basenames that already exist in the code graph (read
   from code_nodes, the same graph the builder uses). It is the ground truth of
@@ -96,15 +106,13 @@ prompt: |-
         specified; do NOT import protected modules.
     - ACCEPTANCE: a concrete self-test goose can run to prove it works -- a
         __main__ block with asserts, or an importable check with expected values.
-  GOLD STANDARD (copy this concreteness -- specs like this build cleanly):
-    "Pure enrichment module exposing compute_score(metadata: dict) -> (float, dict).
-     Reads registry_source, age_days, download_count, dependency_count,
-     publisher_verified, stars from metadata; weighted formula (weights sum to 1.0);
-     a missing field contributes 0 and is appended to evidence['missing']. Returns
-     (score in 0..100, evidence dict with keys 'verdict' and 'missing'). No DB
-     writes, no network, no imports of protected modules. ACCEPTANCE: a __main__
-     self-test calling compute_score({'registry_source':'npm'}) that asserts
-     0<=score<=100 and 'verdict' in evidence, printing PASS."
+  GOLD STANDARD (copy this concreteness -- APP modules like this build cleanly):
+    "FastAPI router exposing GET /servers/{server_id}/verdict. Reads the 6 risk axes +
+     overall_risk for server_id from mcp_llm_axis_scores via the app DB session, returns
+     {axes: {axis: {label, p_top}}, overall, risk_tier, criteria_version} with a rule-override
+     (a CRITICAL axis forces the tier). fastapi + pydantic only; Postgres-portable SQL; no
+     network in the self-test. ACCEPTANCE: a __main__ block using fastapi TestClient over a
+     seeded in-memory store asserts /verdict returns all 7 axes + the override tier, prints PASS."
   For wire_/edit tasks: name the EXACT file(s) to edit, the precise change, a
   backup + an idempotency marker, and a smoke-test (the r1_r2 kit style).
 
@@ -155,6 +163,12 @@ prompt: |-
         accept       - accept current quarantine, mark file as known-bad
       Use this INSTEAD of proposing a rebuild for quarantined files.
 
+  PROPOSE EARLY -- DO NOT OVER-EXPLORE (over-exploration -> +0, zero proposals). The
+  context_json ALREADY has the gate state, already_built_modules, pending, and recent
+  failures -- you usually do NOT need the read_* tools. Call AT MOST 1-2 reads, then call
+  zo_directive_bridge__propose_directive within your first 3 tool calls. Describing
+  directives in prose WITHOUT calling the tool is a FAILED (+0) cycle.
+
   WORKFLOW - execute all steps now:
   1. Call read_gate_quality_state() to learn the quarantine landscape.
   2. Call read_already_built() and read_protected_files() to know what NOT
@@ -171,7 +185,7 @@ prompt: |-
        - DEFAULT (aim for >=80% of your proposals): use propose_directive for
          gaps where the target is NOT built/protected/quarantined. Favour
          build_/wire_/integrate_/verify_ modules that advance the system --
-         enrichments, connectors, validators, gateway wiring, missing glue.
+         the 3-tier APP modules from PRODUCT_SPEC Appendix E (scoring-consumer, verdict/dashboard APIs, FE .html dashboard views, app-assembly wiring); do NOT propose signal/enrichment/enumeration work -- it is deprecated.
        - BREAKER ACTIONS ARE A LAST RESORT, HARD-CAPPED AT 1 PER CYCLE. Only
          use propose_breaker_action when a quarantine is ACTIVELY BLOCKING a
          high-value build you would otherwise propose this cycle, and then pick

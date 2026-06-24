@@ -1,0 +1,10 @@
+# Zo-Sentinel app (runtime) -- the deployable 3-tier service.
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27
+gunicorn>=21.2
+pydantic>=2.6,<3.0
+SQLAlchemy>=2.0,<2.1
+alembic>=1.13,<2.0
+PyJWT>=2.8,<3.0
+passlib>=1.7,<2.0
+psycopg[binary]>=3.1,<4.0

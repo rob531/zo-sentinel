@@ -1,0 +1,12 @@
+{
+  "name": "zo-sentinel",
+  "description": "Zo-Sentinel 3-tier threat-intel SaaS (MVP skeleton).",
+  "stack": "container",
+  "env": {
+    "APP_ENV": { "value": "production" },
+    "APP_JWT_SECRET": { "description": "JWT signing secret", "generator": "secret" },
+    "APP_CORS_ORIGINS": { "value": "*", "required": false }
+  },
+  "addons": ["heroku-postgresql:essential-0"],
+  "scripts": { "postdeploy": "alembic upgrade head" }
+}

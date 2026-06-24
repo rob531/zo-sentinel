@@ -1,0 +1,63 @@
+name: deploy-compat
+
+# Weekly DEPLOY REHEARSAL -- models the container-host deploy contract WITHOUT
+# provisioning anything. Fly.io / Render / Cloud Run / Heroku all deploy the SAME
+# artifact the SAME way, so this proves the app is deployable to the chosen infra:
+#   1. build the real Dockerfile image
+#   2. run `alembic upgrade head` IN-IMAGE against a managed Postgres (= the platform
+#      release command / Fly release_command / Heroku release phase)
+#   3. boot the container on $PORT with the prod ASGI server (gunicorn+uvicorn)
+#   4. HTTP-smoke the LIVE app (health + auth + RBAC)
+# Catches Dockerfile / migration / prod-server / Postgres-DDL breakage that the
+# sqlite TestClient unit test cannot. Not a required check; weekly + on demand.
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"   # Mondays 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zo
+          POSTGRES_PASSWORD: zo
+          POSTGRES_DB: zo_app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zo"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DSN: "postgresql://zo:zo@localhost:5432/zo_app"
+      JWT: "ci-deploy-compat-secret-at-least-32-bytes-long"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app image (the real Dockerfile)
+        run: docker build -t zo-sentinel-app:ci .
+
+      - name: Release phase -- alembic upgrade head IN-IMAGE
+        run: docker run --rm --network host -e DATABASE_URL="$DSN" zo-sentinel-app:ci alembic upgrade head
+
+      - name: Boot the container (prod ASGI server on $PORT)
+        run: |
+          docker run -d --network host --name app \
+            -e DATABASE_URL="$DSN" -e APP_JWT_SECRET="$JWT" -e APP_ENV=production -e PORT=8000 \
+            zo-sentinel-app:ci
+
+      - name: HTTP smoke the live app (health + auth + RBAC)
+        env:
+          APP_URL: "http://127.0.0.1:8000"
+        run: python tests/deploy/smoke_http.py
+
+      - name: Container logs (always)
+        if: always()
+        run: docker logs app || true

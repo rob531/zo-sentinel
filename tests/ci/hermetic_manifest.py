@@ -52,6 +52,25 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.build_routing",
 ]
 
+
+# --- App-foundation modules (3-tier SaaS app surface) ----------------------
+# Imported by the smoke ladder ONLY IF the file exists (present_app_modules
+# filters by existence), so each is import-gated as the autonomous builder lands
+# it -- without breaking the gate while a module is not yet built. Same
+# allowlist-grows-as-portable health-metric pattern as IMPORTABLE_MODULES.
+APP_FOUNDATION_MODULES = [
+    "tenant_org_model", "oauth_login_service", "rbac_enforcer",
+    "verdict_breakdown_api", "org_entity_search_api", "overview_dashboard_api",
+    "entity_report_exporter", "verdict_watchlist_service", "org_api_key_manager",
+    "product_audit_log",
+]
+
+
+def present_app_modules() -> list:
+    """APP_FOUNDATION_MODULES whose <name>.py the autonomous builder has actually
+    landed at the repo root -- import-gated as they appear; absent ones are skipped."""
+    return [m for m in APP_FOUNDATION_MODULES if (REPO_ROOT / f"{m}.py").exists()]
+
 # Known NOT-portable (documented so nobody re-adds them by mistake):
 #   zo_sentinel.mcp_servers.directive_mcp -> needs the `mcp` SDK (not a CI dep)
 NON_PORTABLE_NOTES = {

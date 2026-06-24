@@ -49,6 +49,18 @@ jobs:
         env:
           ZO_WRITE_SERVICE: "http://127.0.0.1:8772"
         run: python -m pytest tests/integration/test_pipeline_e2e.py -v
+      - name: Run app functional E2E (DB-cutover snapshot)
+        env:
+          ZO_WRITE_SERVICE: "http://127.0.0.1:8772"
+          IT_DB_BACKEND: "duckdb"
+        run: python -m pytest tests/integration/test_app_e2e.py -v
+      - name: Upload app E2E snapshot (pre/post-cutover baseline)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-e2e-snapshot-duckdb
+          path: artifacts/app_e2e_snapshot_*.json
+          retention-days: 90
       - name: Service log (on failure)
         if: failure()
         run: cat /tmp/it_ws.log || true

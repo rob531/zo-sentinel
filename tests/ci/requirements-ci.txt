@@ -9,3 +9,5 @@ requests>=2.31,<3.0
 # httpx powers Starlette's TestClient, used by the front-end runner to drive
 # ui_server's routes in-process (tests/ci/frontend_runner.py).
 httpx>=0.27,<1.0
+# PyJWT: app-foundation oauth_login_service issues/verifies JWT sessions.
+PyJWT>=2.8,<3.0

@@ -163,7 +163,7 @@ def tier1_import() -> Tier:
     t = Tier(1, "import")
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
-    for mod in M.IMPORTABLE_MODULES:
+    for mod in M.IMPORTABLE_MODULES + M.present_app_modules():
         start = time.monotonic()
         try:
             importlib.import_module(mod)

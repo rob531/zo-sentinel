@@ -31,6 +31,16 @@ REPO = Path(__file__).resolve().parents[2]
 SCHEMA = REPO / "schemas" / "duckdb_schema.json"
 BACKEND = os.environ.get("IT_DB_BACKEND", "duckdb")
 DB_PATH = os.environ.get("IT_DB_PATH", ":memory:")
+DSN = os.environ.get("IT_DB_DSN", "")
+# Dialect knobs so the SAME /write,/query,/execute contract runs on both engines:
+PARAM = "?" if BACKEND == "duckdb" else "%s"            # DuckDB qmark vs psycopg pyformat
+_CATALOG_NS = "main" if BACKEND == "duckdb" else "public"  # information_schema.table_schema
+
+
+def _col_name(d):
+    """Column name from a cursor.description entry -- DuckDB yields tuples (name
+    first); psycopg3 yields Column objects (.name)."""
+    return getattr(d, "name", None) or d[0]
 
 app = FastAPI()
 _con = None
@@ -42,15 +52,21 @@ def _connect():
     if BACKEND == "duckdb":
         import duckdb
         return duckdb.connect(DB_PATH)
-    # Postgres branch is intentionally a stub until the migration begins; the
-    # same /write,/query,/execute contract will run against a service container.
-    raise SystemExit(
-        f"IT_DB_BACKEND={BACKEND!r} not wired yet "
-        "(postgres planned -- see docs/POSTGRES_APP_MIGRATION_SCOPE.md)"
-    )
+    if BACKEND == "postgres":
+        # Same contract, now against a Postgres service container
+        # (docs/POSTGRES_APP_MIGRATION_SCOPE.md). autocommit so each write/DDL
+        # lands immediately, matching DuckDB's round-trip behaviour.
+        import psycopg
+        return psycopg.connect(DSN, autocommit=True)
+    raise SystemExit(f"IT_DB_BACKEND={BACKEND!r} not supported (duckdb|postgres)")
 
 
 def _create_schema(con) -> set:
+    # The production schema (schemas/duckdb_schema.json) is DuckDB-typed DDL. On
+    # Postgres the app E2E self-creates portable e2e_* tables and never touches
+    # product tables, so skip the prod-schema preload there.
+    if BACKEND != "duckdb":
+        return set()
     spec = json.loads(SCHEMA.read_text(encoding="utf-8")).get("tables", {})
     for table, cols in spec.items():
         coldefs = ", ".join(f'"{c["name"]}" {c["type"]}' for c in cols)
@@ -65,13 +81,13 @@ def _refresh_catalog():
     write_service supports CREATE-then-write, and the integration tier must too."""
     global _tables, _tcols
     rows = _con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{_CATALOG_NS}'"
     ).fetchall()
     _tables = {r[0] for r in rows}
     _tcols = {}
     for t in _tables:
         cur = _con.execute(f'SELECT * FROM "{t}" LIMIT 0')
-        _tcols[t] = [d[0] for d in cur.description]
+        _tcols[t] = [_col_name(d) for d in cur.description]
 
 
 @app.on_event("startup")
@@ -108,7 +124,7 @@ async def write(request: Request):
                 continue
             vals = [json.dumps(r[c]) if isinstance(r[c], (dict, list)) else r[c] for c in use]
             colsql = ", ".join(f'"{c}"' for c in use)
-            ph = ", ".join("?" for _ in use)
+            ph = ", ".join(PARAM for _ in use)
             _con.execute(f'INSERT INTO "{table}" ({colsql}) VALUES ({ph})', vals)
             n += 1
     except Exception as e:
@@ -121,7 +137,7 @@ async def query(request: Request):
     body = await request.json()
     try:
         cur = _con.execute(body.get("sql", ""))
-        cnames = [d[0] for d in cur.description] if cur.description else []
+        cnames = [_col_name(d) for d in cur.description] if cur.description else []
         rows = [dict(zip(cnames, row)) for row in cur.fetchall()]
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e), "rows": []}, status_code=500)

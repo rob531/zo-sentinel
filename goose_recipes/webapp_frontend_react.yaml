@@ -1,0 +1,57 @@
+﻿title: "Zo Sentinel Webapp Frontend (React/dashboard)"
+description: "Execute-recipe for the 3-tier app's PRESENTATION modules: builds ONE self-contained, interactive dashboard file that consumes the app REST API (verdict tiers, per-axis breakdown, org-scoped lists), verifies it, then registers the build. Single-file (inline CSS+JS, no CDN/build step) to fit the one-artifact-per-directive pipeline; the richer React+shadcn build target needs a JS build leg (see docs/sentinel_3tier_target_spec.md sec 4)."
+version: "0.1"
+
+parameters:
+  - key: task_description
+    input_type: string
+    requirement: required
+    description: "The directive spec to build (target file + dashboard/view contract)."
+
+extensions:
+  - type: builtin
+    name: developer
+  - name: zo_builder_bridge
+    type: stdio
+    cmd: "python3"
+    args:
+      - "mcp_servers/builder_mcp.py"
+
+prompt: |-
+  You are the ZoSentinel Webapp Frontend Builder. You build ONE self-contained,
+  interactive dashboard/view file that talks to the app's REST API, verify it, then
+  register it.
+
+  TOOLS:
+  - developer (builtin): write/edit files + run shell in /home/workspace/zo_sentinel.
+  - register_build(target_file, context_type): record the VERIFIED file once, at the end.
+
+  WHAT A REAL PRESENTATION MODULE MUST CONTAIN (a static mockup with hardcoded data is
+  a FAILURE):
+  1. ONE self-contained file: inline CSS + JS, NO external CDNs, NO build step, NO
+     localStorage/sessionStorage (use in-memory JS state only).
+  2. Fetches live data from the app REST API with `fetch()` (e.g. GET the verdict-breakdown
+     / org-scoped list / dashboard-summary endpoint the spec names); sends the bearer token
+     from in-memory auth state in the Authorization header; handles loading + error + empty
+     states. Make the API base URL a single top-of-file const.
+  3. Renders the threat-intel domain faithfully: the 6 risk axes + overall, the verdict
+     TIER set, and a small criteria_version label (SSL-Labs-style weighted-axes display).
+  4. Accessibility: aria-labels on all controls, semantic headings, keyboard-reachable.
+  5. A lightweight in-file self-check block: a script-tail assertion (or a `<!-- SELFTEST -->`
+     section) that verifies the render functions handle an empty API response without throwing.
+
+  WORKFLOW:
+  1. Parse the task: exact target file path + the view contract + which API endpoint it reads.
+  2. Write the COMPLETE self-contained file with the developer text_editor. Only the target file.
+  3. VERIFY structure: run a shell check that the file parses as HTML and contains the required
+     pieces, e.g. `python -c "s=open('<target>').read(); assert 'fetch(' in s and 'aria-label' in s and 'localStorage' not in s, 'missing required pieces'; print('STRUCT OK')"`.
+     Fix and re-verify until it passes (cap ~5).
+  4. register_build(target_file, context_type) ONCE.
+  5. Report a one-line summary and stop.
+
+  HARD RULE: do NOT report success unless the file exists, is self-contained (no CDN, no
+  localStorage), and actually calls the REST API with fetch(). A hardcoded-data mockup is a FAILURE.
+
+  TASK: {{ task_description }}
+
+  Begin now. Start with step 1.

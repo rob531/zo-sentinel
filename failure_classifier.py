@@ -49,6 +49,9 @@ CLASSES = [
     ("write_service",
      "write_service (:8772) unreachable / heartbeat timeout",
      [r"Heartbeat failed.*8772", r"port=8772.*timed out", r"write_service.*(unreachable|down)"]),
+    ("publisher_watermark_frozen",
+     "REGRESSION: publisher watermark write dropped by write_service -> frozen -> re-scans stale backlog, NO new PRs",
+     [r"WARN: durable write", r"watermark never persisted", r"state file write failed"]),
     ("bootstrap_service",
      "a service failed to bind at boot (startup race / port in use)",
      [r"failed \(000", r":87\d\d\b.*\bfailed\b", r"address already in use"]),
@@ -110,7 +113,9 @@ PLAYBOOK = {
         "fix": "env-var key load (keyring bypass) + substring loader (#337); relaunch_ladder_keyed.",
         "refs": [265, 337]},
     "publisher_noop_cap": {"root": "nothing committable (edit no-op) or daily PR cap.",
-        "false_positive": "repeated 'nothing to commit' on the SAME artifact = healthy idle, not a latch.",
+        "false_positive": "repeated 'nothing to commit' on the SAME artifact = healthy idle. BUT repeated "
+                "no-ops across MANY DIFFERENT OLD artifacts while NEW build_artifacts pile up = the watermark "
+                "is FROZEN (see publisher_watermark_frozen), NOT idle -- check watermark age first.",
         "fix": "cap raised to 100 (#294, public repo); supply creation-class work.", "refs": [294]},
     "dup_poison": {"root": "doubled-prefix / already-built output_file poisons the Tier-0 gate.",
         "false_positive": "", "fix": "output_file sanity gate (#279) + durable quarantine (#334).",
@@ -122,6 +127,14 @@ PLAYBOOK = {
         "false_positive": "the 12.10 health-check 000 during zm-go is a TIMING race -- the service "
                 "usually binds a second later (registry_api log shows clean Uvicorn startup).",
         "fix": "startup-retry/ordering so the health-check doesn't false-red.", "refs": []},
+    "publisher_watermark_frozen": {
+        "root": "write_service (:8772) drops the publisher's watermark write (store.write -> False); "
+                "with state only in mesh_memory the watermark freezes and the publisher re-scans the "
+                "same stale window forever, head-of-line-blocking every new PR (2026-06-23).",
+        "false_positive": "",
+        "fix": "publisher state (watermark/dedup/budget) moved to a local durable file "
+               "(PR_PUBLISHER_STATE_FILE) so a dropped write can't freeze it; seed the file forward.",
+        "refs": []},
 }
 
 
@@ -174,11 +187,33 @@ def _iter_log_lines(names, max_lines):
             continue
 
 
+def watermark_staleness_note():
+    """publisher_watermark_frozen is DB/FILE state, not a log line -- probe the
+    publisher's local watermark file and flag it if stale (> 2h), so a frozen
+    watermark is RECOGNISED, not dismissed as publisher_noop_cap idle."""
+    import json as _j, datetime as _dt, os as _os
+    p = _os.environ.get("PR_PUBLISHER_STATE_FILE", "/home/workspace/.pr_publisher_state.json")
+    try:
+        wm = _j.loads(open(p, encoding="utf-8").read()).get("watermark")
+        if not wm:
+            return None
+        age = (_dt.datetime.now(_dt.timezone.utc)
+               - _dt.datetime.fromisoformat(str(wm).replace("Z", "+00:00"))).total_seconds() / 3600.0
+        if age > 2:
+            return f"publisher watermark {age:.1f}h STALE ({wm}) -> publisher_watermark_frozen (NOT idle)"
+    except Exception:
+        return None
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-lines", type=int, default=4000, help="tail lines per log")
     ap.add_argument("--logs", default=",".join(DEFAULT_LOGS))
     a = ap.parse_args()
+    _wmnote = watermark_staleness_note()
+    if _wmnote:
+        print(f"!! {_wmnote}\n")
     names = [s.strip() for s in a.logs.split(",") if s.strip()]
     counts, example = tally(_iter_log_lines(names, a.max_lines))
     blurbs = {n: b for n, b, _ in CLASSES}

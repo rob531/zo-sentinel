@@ -14,6 +14,16 @@ except ImportError:
     compute_tool_description_safety = None
     compute_temporal_stability = None
 
+# Idempotency marker: directory_presence_signal_enrichment wiring
+# ADDED BY: wire_directory_presence_enrichment directive
+# DO NOT MODIFY - idempotent check below
+try:
+    import directory_presence_signal_enrichment as _dir_presence_mod
+    _DIRECTORY_PRESENCE_WIRED = getattr(_dir_presence_mod, '_WIRED_MARKER', True)
+except ImportError:
+    _dir_presence_mod = None
+    _DIRECTORY_PRESENCE_WIRED = False
+
 SERVICE_NAME = 'signal_analyser'
 SERVICE_PORT = 8778
 PID_FILE = f'/tmp/{SERVICE_NAME}.pid'

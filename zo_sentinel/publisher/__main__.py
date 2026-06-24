@@ -56,7 +56,10 @@ def _make_publisher() -> Publisher:
         gitops = FakeGitOps()
     cap = int(os.environ.get("PR_PUBLISHER_DAILY_CAP", "100"))
     spacing = float(os.environ.get("PR_PUBLISHER_PR_SPACING_SEC", "5"))
-    return Publisher(store, gitops=gitops, daily_cap=cap, pr_spacing_sec=spacing)
+    state_file = os.environ.get("PR_PUBLISHER_STATE_FILE",
+                                "/home/workspace/.pr_publisher_state.json")
+    return Publisher(store, gitops=gitops, daily_cap=cap, pr_spacing_sec=spacing,
+                     state_file=state_file)
 
 
 def main(argv=None) -> int:

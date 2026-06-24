@@ -88,8 +88,14 @@ class Publisher:
                  daily_cap: int = DEFAULT_DAILY_CAP,
                  pr_spacing_sec: float = DEFAULT_PR_SPACING_SEC,
                  clock: Optional[Callable[[], datetime]] = None,
-                 sleep: Optional[Callable[[float], None]] = None):
+                 sleep: Optional[Callable[[float], None]] = None,
+                 state_file: Optional[str] = None):
         self.store = store
+        # Local durable state file (watermark/dedup/budget). When set it is the
+        # AUTHORITATIVE store for the publisher's own bookkeeping so a dropped
+        # write_service write can't freeze the watermark (the 2026-06-23 stall).
+        # None (default, incl. all unit tests) -> legacy store-only behaviour.
+        self._state_file = state_file
         self.gitops = gitops or FakeGitOps(repo_url)
         self.home = Path(home)
         self.repo_url = repo_url.rstrip("/")
@@ -121,8 +127,36 @@ class Publisher:
         except Exception:
             return None
 
+    # --- local durable state (drop-proof; survives git clean) ---------------
+    def _state_load(self) -> dict:
+        if not self._state_file:
+            return {}
+        try:
+            return json.loads(Path(self._state_file).read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+
+    def _state_update(self, **kw) -> None:
+        if not self._state_file:
+            return
+        data = self._state_load()
+        data.update(kw)
+        try:
+            p = Path(self._state_file)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_name(p.name + ".tmp")
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(p)
+        except Exception as e:
+            sys.stderr.write(f"[publisher] WARN: state file write failed: {e}\n")
+            sys.stderr.flush()
+
     # --- dedup state --------------------------------------------------------
     def _already_published(self) -> set:
+        if self._state_file:
+            _pub = self._state_load().get("published")
+            if _pub is not None:
+                return set(_pub)
         raw = self.store.read_latest(PR_PUBLISHED_TYPE, PUBLISHER_AGENT_ID)
         if not raw:
             return set()
@@ -154,9 +188,14 @@ class Publisher:
         return False
 
     def _load_watermark(self) -> Optional[str]:
+        if self._state_file:
+            _wm = self._state_load().get("watermark")
+            if _wm:
+                return _wm
         return self.store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) or None
 
     def _save_watermark(self, value: str) -> None:
+        self._state_update(watermark=value)
         self._write_durable("mesh_memory", {
             "agent_id": PUBLISHER_AGENT_ID,
             "memory_type": WATERMARK_TYPE,
@@ -166,6 +205,13 @@ class Publisher:
 
     def _load_budget(self) -> tuple:
         """(day, count) for the persisted daily budget; ('', 0) if none."""
+        if self._state_file:
+            _b = self._state_load().get("budget")
+            if isinstance(_b, dict):
+                try:
+                    return str(_b.get("day", "")), int(_b.get("count", 0) or 0)
+                except (TypeError, ValueError):
+                    pass
         raw = self.store.read_latest(BUDGET_TYPE, PUBLISHER_AGENT_ID)
         if not raw:
             return "", 0
@@ -176,6 +222,7 @@ class Publisher:
             return "", 0
 
     def _save_budget(self, day: str, count: int) -> None:
+        self._state_update(budget={"day": day, "count": count})
         self._write_durable("mesh_memory", {
             "agent_id": PUBLISHER_AGENT_ID,
             "memory_type": BUDGET_TYPE,
@@ -307,6 +354,7 @@ class Publisher:
 
         if enabled:
             if new_keys:
+                self._state_update(published=sorted(published | set(new_keys)))
                 self._write_durable("mesh_memory", {
                     "agent_id": PUBLISHER_AGENT_ID,
                     "memory_type": PR_PUBLISHED_TYPE,

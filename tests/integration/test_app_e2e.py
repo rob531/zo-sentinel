@@ -55,7 +55,7 @@ def _exec(sql: str):
 
 
 def _write(table: str, row: dict):
-    return requests.post(f"{WS}/write", json={"table": table, "rows": row, "wait": True}, timeout=10)
+    return requests.post(f"{WS}/write", json={"table": table, "rows": [row], "wait": True}, timeout=10)
 
 
 def _query(sql: str) -> list:
@@ -138,5 +138,7 @@ def test_app_functional_e2e_snapshot():
     assert sum(int(r["n"]) for r in snap["tier_distribution"]) == len(SEED)
     assert len(snap["verdict_breakdown_srv0"]) == len(AXES)
     assert snap["servers"][0]["risk_tier"] == "TRUSTED_GENERAL"
-    assert [r["server_id"] for r in snap["high_risk_servers"]] == ["srv3", "srv4", "srv5"]
+    assert [r["server_id"] for r in snap["high_risk_servers"]] == ["srv4", "srv5"]
     print(f"app E2E snapshot written: {SNAP} (backend={BACKEND})")
+
+

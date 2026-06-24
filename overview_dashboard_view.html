@@ -1,0 +1,202 @@
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
+from typing import List, Dict, Any
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, Integer, String, Float, DateTime
+from datetime import datetime
+
+# --- Pydantic Models ---
+
+class AxisScore(BaseModel):
+    axis_name: str
+    score: float
+    risk_tier: str
+
+class DashboardSummary(BaseModel):
+    total_servers: int
+    recent_activity: List[Dict[str, Any]]
+    axis_scores: List[AxisScore]
+    override_tier: str
+
+# --- Database Setup ---
+
+DATABASE_URL = "sqlite:///:memory:"  # In-memory SQLite for testing
+engine = create_engine(DATABASE_URL)
+Base = declarative_base()
+
+class Server(Base):
+    __tablename__ = "servers"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    status = Column(String)
+
+class AxisScoreDB(Base):
+    __tablename__ = "axis_scores"
+    id = Column(Integer, primary_key=True, index=True)
+    server_id = Column(Integer, index=True)
+    axis_name = Column(String, index=True)
+    score = Column(Float)
+    risk_tier = Column(String)
+
+class ActivityLog(Base):
+    __tablename__ = "activity_log"
+    id = Column(Integer, primary_key=True, index=True)
+    server_id = Column(Integer, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    action = Column(String)
+
+Base.metadata.create_all(bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# --- FastAPI App ---
+
+app = FastAPI()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/overview/dashboard", response_model=DashboardSummary)
+def get_overview_dashboard(db: SessionLocal = Depends(get_db)):
+    # Fetch total servers
+    total_servers = db.query(Server).count()
+
+    # Fetch recent activity (last 5 activities)
+    recent_activity = db.query(ActivityLog).order_by(ActivityLog.timestamp.desc()).limit(5).all()
+    formatted_activity = [
+        {"server_id": log.server_id, "timestamp": log.timestamp.isoformat(), "action": log.action}
+        for log in recent_activity
+    ]
+
+    # Fetch axis scores and calculate overall override tier
+    all_axis_scores_db = db.query(AxisScoreDB).all()
+    axis_scores_list = []
+    scores_by_axis = {}
+
+    for score_db in all_axis_scores_db:
+        axis_scores_list.append(AxisScore(
+            axis_name=score_db.axis_name,
+            score=score_db.score,
+            risk_tier=score_db.risk_tier
+        ))
+        if score_db.axis_name not in scores_by_axis:
+            scores_by_axis[score_db.axis_name] = []
+        scores_by_axis[score_db.axis_name].append(score_db.score)
+
+    # Determine override tier based on the highest risk tier across all axes
+    # This is a simplified logic; a real system might have more complex rules.
+    override_tier = "Low"
+    risk_priority = {"Critical": 3, "High": 2, "Medium": 1, "Low": 0}
+    for score_db in all_axis_scores_db:
+        if risk_priority.get(score_db.risk_tier, 0) > risk_priority.get(override_tier, 0):
+            override_tier = score_db.risk_tier
+
+    return DashboardSummary(
+        total_servers=total_servers,
+        recent_activity=formatted_activity,
+        axis_scores=axis_scores_list,
+        override_tier=override_tier
+    )
+
+# --- Test Client Setup ---
+from fastapi import Depends
+
+client = TestClient(app)
+
+# --- Test Cases ---
+
+def seed_database(db):
+    # Seed servers
+    server1 = Server(id=1, name="ServerA", status="Online")
+    server2 = Server(id=2, name="ServerB", status="Offline")
+    server3 = Server(id=3, name="ServerC", status="Online")
+    db.add_all([server1, server2, server3])
+
+    # Seed axis scores for 7 axes + override tier logic
+    axes = ["CPU Usage", "Memory Usage", "Disk I/O", "Network Traffic", "Security Patches", "Uptime", "Latency"]
+    risk_tiers = ["Low", "Medium", "High", "Critical"]
+
+    # Assign scores to ensure variety and test override tier logic
+    db.add(AxisScoreDB(server_id=1, axis_name="CPU Usage", score=85.5, risk_tier="High"))
+    db.add(AxisScoreDB(server_id=1, axis_name="Memory Usage", score=60.2, risk_tier="Medium"))
+    db.add(AxisScoreDB(server_id=1, axis_name="Disk I/O", score=30.1, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=1, axis_name="Network Traffic", score=75.0, risk_tier="Medium"))
+    db.add(AxisScoreDB(server_id=1, axis_name="Security Patches", score=95.0, risk_tier="Critical"))
+    db.add(AxisScoreDB(server_id=1, axis_name="Uptime", score=99.9, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=1, axis_name="Latency", score=50.0, risk_tier="Low"))
+
+    db.add(AxisScoreDB(server_id=2, axis_name="CPU Usage", score=20.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=2, axis_name="Memory Usage", score=40.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=2, axis_name="Disk I/O", score=10.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=2, axis_name="Network Traffic", score=15.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=2, axis_name="Security Patches", score=80.0, risk_tier="High"))
+    db.add(AxisScoreDB(server_id=2, axis_name="Uptime", score=90.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=2, axis_name="Latency", score=25.0, risk_tier="Low"))
+
+    db.add(AxisScoreDB(server_id=3, axis_name="CPU Usage", score=50.0, risk_tier="Medium"))
+    db.add(AxisScoreDB(server_id=3, axis_name="Memory Usage", score=70.0, risk_tier="Medium"))
+    db.add(AxisScoreDB(server_id=3, axis_name="Disk I/O", score=45.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=3, axis_name="Network Traffic", score=65.0, risk_tier="Medium"))
+    db.add(AxisScoreDB(server_id=3, axis_name="Security Patches", score=90.0, risk_tier="High"))
+    db.add(AxisScoreDB(server_id=3, axis_name="Uptime", score=98.0, risk_tier="Low"))
+    db.add(AxisScoreDB(server_id=3, axis_name="Latency", score=40.0, risk_tier="Low"))
+
+
+    # Seed activity logs
+    db.add(ActivityLog(server_id=1, action="Server rebooted"))
+    db.add(ActivityLog(server_id=2, action="Service stopped"))
+    db.add(ActivityLog(server_id=1, action="High CPU alert"))
+    db.add(ActivityLog(server_id=3, action="Disk usage warning"))
+    db.add(ActivityLog(server_id=1, action="Security patch applied"))
+    db.add(ActivityLog(server_id=2, action="Server started"))
+
+    db.commit()
+
+def test_overview_dashboard():
+    db = SessionLocal()
+    seed_database(db)
+    db.close() # Close the seeding session
+
+    response = client.get("/overview/dashboard")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Assert total servers
+    assert data["total_servers"] == 3
+
+    # Assert recent activity
+    assert len(data["recent_activity"]) == 5
+    assert data["recent_activity"][0]["action"] == "Security patch applied"
+    assert data["recent_activity"][1]["action"] == "Disk usage warning"
+    assert data["recent_activity"][2]["action"] == "High CPU alert"
+    assert data["recent_activity"][3]["action"] == "Service stopped"
+    assert data["recent_activity"][4]["action"] == "Server rebooted"
+
+    # Assert axis scores
+    assert len(data["axis_scores"]) == 7 * 3  # 7 axes * 3 servers
+    axis_names = set(score["axis_name"] for score in data["axis_scores"])
+    assert len(axis_names) == 7
+    assert "CPU Usage" in axis_names
+    assert "Memory Usage" in axis_names
+    assert "Disk I/O" in axis_names
+    assert "Network Traffic" in axis_names
+    assert "Security Patches" in axis_names
+    assert "Uptime" in axis_names
+    assert "Latency" in axis_names
+
+    # Assert override tier (based on the seeded data, "Critical" from Security Patches on Server 1)
+    assert data["override_tier"] == "Critical"
+
+    print("PASS")
+
+if __name__ == "__main__":
+    # This block is for running the test directly
+    # In a real application, you'd use pytest to run tests
+    pytest.main([__file__])

@@ -1,0 +1,22 @@
+# Linux / dev / Fly-LOCAL Postgres for Zo-Sentinel app data (SaaS tables + registry + SFT scores).
+# The TOWER (Windows, no Docker) uses setup_tower_postgres.ps1 instead. On Fly.io you DROP this
+# file and point DATABASE_URL at the managed Postgres -- the schema is identical either way
+# (it is the alembic migrations under ../../migrations), so only the DSN changes.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zo}
+      POSTGRES_DB: ${POSTGRES_DB:-zo_sentinel}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - zo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  zo_pgdata:

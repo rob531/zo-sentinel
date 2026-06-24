@@ -5,7 +5,10 @@ sqlite (dev/CI) and Postgres (deploy).
 from __future__ import annotations
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, ForeignKey, UniqueConstraint, func
+from typing import Optional
+
+from sqlalchemy import (String, Text, Integer, BigInteger, Boolean, Float, JSON,
+                        DateTime, ForeignKey, UniqueConstraint, func)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -36,3 +39,49 @@ class ApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(255))
     label: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# --- Threat-intel data tables (the registry + SFT scores the app reads). These are
+# the app-data tables migrating off the builder's DuckDB onto this Postgres; columns
+# mirror the production DuckDB shape for a clean cutover. ---
+
+
+class McpServerRegistry(Base):
+    __tablename__ = "mcp_server_registry"
+    server_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(512))
+    registry_source: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    url: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    trust_score: Mapped[Optional[float]] = mapped_column(Float)
+    verdict: Mapped[Optional[str]] = mapped_column(String(64))
+    verdict_reasoning: Mapped[Optional[str]] = mapped_column(Text)
+    confidence: Mapped[Optional[float]] = mapped_column(Float)
+    last_assessed: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    first_seen: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_scanned: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    scan_count: Mapped[Optional[int]] = mapped_column(Integer, default=0)
+    risk_tier: Mapped[Optional[str]] = mapped_column(String(32))
+    meta: Mapped[Optional[str]] = mapped_column("metadata", Text)
+
+
+class McpLlmAxisScore(Base):
+    __tablename__ = "mcp_llm_axis_scores"
+    __table_args__ = (UniqueConstraint("server_id", "axis_name", "model_version",
+                                       name="uq_axis_scores_natural"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(String(128), index=True)
+    axis_name: Mapped[str] = mapped_column(String(64))
+    label: Mapped[Optional[str]] = mapped_column(String(64))
+    label_index: Mapped[Optional[int]] = mapped_column(Integer)
+    probs: Mapped[Optional[dict]] = mapped_column(JSON)
+    p_top: Mapped[Optional[float]] = mapped_column(Float)
+    p_critical: Mapped[Optional[float]] = mapped_column(Float)
+    p_danger: Mapped[Optional[float]] = mapped_column(Float)
+    escalated: Mapped[Optional[bool]] = mapped_column(Boolean)
+    escalated_to: Mapped[Optional[str]] = mapped_column(String(32))
+    decision_rule_version: Mapped[Optional[str]] = mapped_column(String(32))
+    model_version: Mapped[str] = mapped_column(String(64), index=True)
+    adapter_sha256: Mapped[Optional[str]] = mapped_column(String(80))
+    scored_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())

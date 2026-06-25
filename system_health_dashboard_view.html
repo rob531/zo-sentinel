@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZO-SENTINEL System Health Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #34495e;
+            color: #ecf0f1;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .status-ok {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .status-stale {
+            color: #e67e22;
+            font-weight: bold;
+        }
+        .status-error {
+            color: #c0392b;
+            font-weight: bold;
+        }
+        .status-running {
+            color: #3498db;
+            font-weight: bold;
+        }
+        .metadata {
+            font-size: 0.85em;
+            color: #7f8c8d;
+            white-space: pre-wrap; /* Preserve formatting for metadata */
+        }
+        .loading, .error {
+            text-align: center;
+            font-size: 1.2em;
+            margin-top: 20px;
+        }
+        .loading {
+            color: #7f8c8d;
+        }
+        .error {
+            color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ZO-SENTINEL System Health Dashboard</h1>
+        <div id="health-table-container">
+            <p class="loading">Loading system health data...</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const apiEndpoint = '/system_health'; // Assuming the API is served on the same origin or proxied
+            const port = 8790; // Port for the ZO-SENTINEL API
+            const fullApiUrl = `http://localhost:${port}${apiEndpoint}`;
+
+            function getStatusClass(status) {
+                switch (status.toLowerCase()) {
+                    case 'ok':
+                    case 'healthy':
+                    case 'running':
+                        return 'status-ok';
+                    case 'stale':
+                        return 'status-stale';
+                    case 'error':
+                    case 'failed':
+                        return 'status-error';
+                    default:
+                        return '';
+                }
+            }
+
+            async function fetchSystemHealth() {
+                const tableContainer = document.getElementById('health-table-container');
+                try {
+                    const response = await fetch(fullApiUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+
+                    if (!data || !Array.isArray(data.services) || data.services.length === 0) {
+                        tableContainer.innerHTML = '<p class="error">No health data received or data format is incorrect.</p>';
+                        console.error('Received empty or invalid data:', data);
+                        return;
+                    }
+
+                    let tableHtml = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Service Name</th>
+                                    <th>Last Heartbeat</th>
+                                    <th>Status</th>
+                                    <th>Metadata</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    data.services.forEach(service => {
+                        const statusClass = getStatusClass(service.status);
+                        const metadataString = service.metadata ? JSON.stringify(service.metadata, null, 2) : 'N/A';
+
+                        tableHtml += `
+                            <tr>
+                                <td>${service.name}</td>
+                                <td>${service.last_heartbeat || 'N/A'}</td>
+                                <td class="${statusClass}">${service.status || 'Unknown'}</td>
+                                <td class="metadata"><pre>${metadataString}</pre></td>
+                            </tr>
+                        `;
+                    });
+
+                    tableHtml += `
+                            </tbody>
+                        </table>
+                    `;
+                    tableContainer.innerHTML = tableHtml;
+                    console.log('Dashboard loaded successfully');
+
+                } catch (error) {
+                    console.error('Error fetching system health:', error);
+                    tableContainer.innerHTML = `<p class="error">Failed to load system health data. Please check the API endpoint (${fullApiUrl}) and ensure it's running. Error: ${error.message}</p>`;
+                }
+            }
+
+            fetchSystemHealth();
+
+            // Optional: Refresh data periodically
+            // setInterval(fetchSystemHealth, 30000); // Refresh every 30 seconds
+        });
+    </script>
+</body>
+</html>

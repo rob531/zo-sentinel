@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Policy Rules Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .edit-btn {
+            background-color: #2196F3;
+        }
+        .edit-btn:hover {
+            background-color: #0b7dda;
+        }
+        .delete-btn {
+            background-color: #f44336;
+        }
+        .delete-btn:hover {
+            background-color: #da190b;
+        }
+        .form-container {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Policy Rules Management</h1>
+
+        <div class="form-container">
+            <h2>Add New Rule</h2>
+            <form id="addRuleForm">
+                <div class="form-group">
+                    <label for="ruleName">Rule Name:</label>
+                    <input type="text" id="ruleName" name="ruleName" required>
+                </div>
+                <div class="form-group">
+                    <label for="ruleDescription">Description:</label>
+                    <textarea id="ruleDescription" name="ruleDescription" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="rulePriority">Priority:</label>
+                    <input type="text" id="rulePriority" name="rulePriority" required>
+                </div>
+                <button type="submit">Add Rule</button>
+            </form>
+        </div>
+
+        <h2>Existing Rules</h2>
+        <table id="rulesTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Priority</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rules will be added here dynamically -->
+            </tbody>
+        </table>
+
+        <div id="editFormContainer" style="display: none;">
+            <div class="form-container">
+                <h2>Edit Rule</h2>
+                <form id="editRuleForm">
+                    <input type="hidden" id="editRuleId" name="ruleId">
+                    <div class="form-group">
+                        <label for="editRuleName">Rule Name:</label>
+                        <input type="text" id="editRuleName" name="ruleName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRuleDescription">Description:</label>
+                        <textarea id="editRuleDescription" name="ruleDescription" rows="3" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRulePriority">Priority:</label>
+                        <input type="text" id="editRulePriority" name="rulePriority" required>
+                    </div>
+                    <button type="submit">Update Rule</button>
+                    <button type="button" id="cancelEdit">Cancel</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const apiBaseUrl = 'http://localhost:8080/mcp_policy_rules_management_api';
+            const rulesTableBody = document.querySelector('#rulesTable tbody');
+            const addRuleForm = document.getElementById('addRuleForm');
+            const editRuleForm = document.getElementById('editRuleForm');
+            const editFormContainer = document.getElementById('editFormContainer');
+            const cancelEditButton = document.getElementById('cancelEdit');
+
+            // Fetch and display all rules
+            function fetchRules() {
+                fetch(`${apiBaseUrl}/rules`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Fetched rules:', data);
+                        displayRules(data);
+                    })
+                    .catch(error => console.error('Error fetching rules:', error));
+            }
+
+            // Display rules in the table
+            function displayRules(rules) {
+                rulesTableBody.innerHTML = '';
+                rules.forEach(rule => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${rule.id}</td>
+                        <td>${rule.name}</td>
+                        <td>${rule.description}</td>
+                        <td>${rule.priority}</td>
+                        <td>
+                            <button class="edit-btn" data-id="${rule.id}">Edit</button>
+                            <button class="delete-btn" data-id="${rule.id}">Delete</button>
+                        </td>
+                    `;
+                    rulesTableBody.appendChild(row);
+                });
+
+                // Add event listeners to edit and delete buttons
+                document.querySelectorAll('.edit-btn').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const ruleId = this.getAttribute('data-id');
+                        fetchRuleById(ruleId);
+                    });
+                });
+
+                document.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const ruleId = this.getAttribute('data-id');
+                        deleteRule(ruleId);
+                    });
+                });
+            }
+
+            // Fetch a single rule by ID for editing
+            function fetchRuleById(ruleId) {
+                fetch(`${apiBaseUrl}/rules/${ruleId}`)
+                    .then(response => response.json())
+                    .then(rule => {
+                        console.log('Fetched rule for editing:', rule);
+                        document.getElementById('editRuleId').value = rule.id;
+                        document.getElementById('editRuleName').value = rule.name;
+                        document.getElementById('editRuleDescription').value = rule.description;
+                        document.getElementById('editRulePriority').value = rule.priority;
+                        editFormContainer.style.display = 'block';
+                    })
+                    .catch(error => console.error('Error fetching rule:', error));
+            }
+
+            // Add a new rule
+            addRuleForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(addRuleForm);
+                const ruleData = {
+                    name: formData.get('ruleName'),
+                    description: formData.get('ruleDescription'),
+                    priority: formData.get('rulePriority')
+                };
+
+                fetch(`${apiBaseUrl}/rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(ruleData),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Rule added:', data);
+                    addRuleForm.reset();
+                    fetchRules();
+                })
+                .catch(error => console.error('Error adding rule:', error));
+            });
+
+            // Update an existing rule
+            editRuleForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(editRuleForm);
+                const ruleId = formData.get('ruleId');
+                const ruleData = {
+                    name: formData.get('ruleName'),
+                    description: formData.get('ruleDescription'),
+                    priority: formData.get('rulePriority')
+                };
+
+                fetch(`${apiBaseUrl}/rules/${ruleId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(ruleData),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Rule updated:', data);
+                    editFormContainer.style.display = 'none';
+                    fetchRules();
+                })
+                .catch(error => console.error('Error updating rule:', error));
+            });
+
+            // Cancel editing
+            cancelEditButton.addEventListener('click', function() {
+                editFormContainer.style.display = 'none';
+            });
+
+            // Delete a rule
+            function deleteRule(ruleId) {
+                if (confirm('Are you sure you want to delete this rule?')) {
+                    fetch(`${apiBaseUrl}/rules/${ruleId}`, {
+                        method: 'DELETE',
+                    })
+                    .then(() => {
+                        console.log('Rule deleted:', ruleId);
+                        fetchRules();
+                    })
+                    .catch(error => console.error('Error deleting rule:', error));
+                }
+            }
+
+            // Initial fetch of rules
+            fetchRules();
+        });
+    </script>
+</body>
+</html>

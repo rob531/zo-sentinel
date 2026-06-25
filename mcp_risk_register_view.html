@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Register View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+        }
+        th:hover {
+            background-color: #e6e6e6;
+        }
+        .filter-container {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .filter-input {
+            padding: 5px;
+            width: 200px;
+        }
+        .sort-indicator {
+            margin-left: 5px;
+        }
+        .asc::after {
+            content: "↑";
+        }
+        .desc::after {
+            content: "↓";
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP Risk Register</h1>
+
+    <div class="filter-container">
+        <div>
+            <label for="serverIdFilter">Server ID:</label>
+            <input type="text" id="serverIdFilter" class="filter-input" placeholder="Filter by server ID">
+        </div>
+        <div>
+            <label for="riskTierFilter">Risk Tier:</label>
+            <input type="text" id="riskTierFilter" class="filter-input" placeholder="Filter by risk tier">
+        </div>
+        <div>
+            <label for="reasonFilter">Reason:</label>
+            <input type="text" id="reasonFilter" class="filter-input" placeholder="Filter by reason">
+        </div>
+    </div>
+
+    <table id="riskRegisterTable">
+        <thead>
+            <tr>
+                <th id="serverIdHeader" onclick="sortTable('server_id')">Server ID <span class="sort-indicator"></span></th>
+                <th id="riskTierHeader" onclick="sortTable('risk_tier')">Risk Tier <span class="sort-indicator"></span></th>
+                <th id="computedAtHeader" onclick="sortTable('computed_at')">Computed At <span class="sort-indicator"></span></th>
+                <th id="expiresAtHeader" onclick="sortTable('expires_at')">Expires At <span class="sort-indicator"></span></th>
+                <th id="reasonHeader" onclick="sortTable('reason')">Reason <span class="sort-indicator"></span></th>
+            </tr>
+        </thead>
+        <tbody id="riskRegisterBody">
+            <!-- Data will be inserted here by JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        // Mock data to simulate API response
+        const mockData = [
+            {
+                "server_id": "srv-001",
+                "risk_tier": "High",
+                "computed_at": "2023-10-01T08:00:00Z",
+                "expires_at": "2023-12-01T08:00:00Z",
+                "reason": "Multiple failed login attempts"
+            },
+            {
+                "server_id": "srv-002",
+                "risk_tier": "Medium",
+                "computed_at": "2023-10-02T09:30:00Z",
+                "expires_at": "2023-12-02T09:30:00Z",
+                "reason": "Unusual traffic patterns"
+            },
+            {
+                "server_id": "srv-003",
+                "risk_tier": "Low",
+                "computed_at": "2023-10-03T10:15:00Z",
+                "expires_at": "2023-12-03T10:15:00Z",
+                "reason": "Minor configuration issue"
+            },
+            {
+                "server_id": "srv-004",
+                "risk_tier": "High",
+                "computed_at": "2023-10-04T11:45:00Z",
+                "expires_at": "2023-12-04T11:45:00Z",
+                "reason": "Known vulnerability detected"
+            },
+            {
+                "server_id": "srv-005",
+                "risk_tier": "Medium",
+                "computed_at": "2023-10-05T13:20:00Z",
+                "expires_at": "2023-12-05T13:20:00Z",
+                "reason": "Outdated software"
+            }
+        ];
+
+        // Current sort state
+        let currentSort = {
+            column: null,
+            direction: 'asc'
+        };
+
+        // Function to fetch data (in a real scenario, this would call the API)
+        async function fetchData() {
+            // In a real implementation, this would be:
+            // const response = await fetch('/api/risk_register');
+            // return await response.json();
+
+            // For this example, we'll use mock data
+            return mockData;
+        }
+
+        // Function to render the table
+        async function renderTable() {
+            const data = await fetchData();
+            const tableBody = document.getElementById('riskRegisterBody');
+            tableBody.innerHTML = '';
+
+            data.forEach(entry => {
+                const row = document.createElement('tr');
+
+                const serverIdCell = document.createElement('td');
+                serverIdCell.textContent = entry.server_id;
+                row.appendChild(serverIdCell);
+
+                const riskTierCell = document.createElement('td');
+                riskTierCell.textContent = entry.risk_tier;
+                row.appendChild(riskTierCell);
+
+                const computedAtCell = document.createElement('td');
+                computedAtCell.textContent = new Date(entry.computed_at).toLocaleString();
+                row.appendChild(computedAtCell);
+
+                const expiresAtCell = document.createElement('td');
+                expiresAtCell.textContent = new Date(entry.expires_at).toLocaleString();
+                row.appendChild(expiresAtCell);
+
+                const reasonCell = document.createElement('td');
+                reasonCell.textContent = entry.reason;
+                row.appendChild(reasonCell);
+
+                tableBody.appendChild(row);
+            });
+
+            // Apply filters
+            applyFilters();
+        }
+
+        // Function to sort the table
+        function sortTable(column) {
+            // Reset all sort indicators
+            document.querySelectorAll('.sort-indicator').forEach(el => {
+                el.className = 'sort-indicator';
+            });
+
+            // Determine new sort direction
+            let direction = 'asc';
+            if (currentSort.column === column) {
+                direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            }
+
+            // Update current sort state
+            currentSort = { column, direction };
+
+            // Update sort indicator for current column
+            const header = document.getElementById(`${column}Header`);
+            header.querySelector('.sort-indicator').classList.add(direction);
+
+            // Get all rows
+            const rows = Array.from(document.querySelectorAll('#riskRegisterBody tr'));
+
+            // Sort rows
+            rows.sort((a, b) => {
+                const aValue = a.cells[getColumnIndex(column)].textContent;
+                const bValue = b.cells[getColumnIndex(column)].textContent;
+
+                if (direction === 'asc') {
+                    return aValue.localeCompare(bValue);
+                } else {
+                    return bValue.localeCompare(aValue);
+                }
+            });
+
+            // Re-append sorted rows
+            const tableBody = document.getElementById('riskRegisterBody');
+            tableBody.innerHTML = '';
+            rows.forEach(row => tableBody.appendChild(row));
+        }
+
+        // Helper function to get column index
+        function getColumnIndex(column) {
+            const headers = document.querySelectorAll('#riskRegisterTable th');
+            for (let i = 0; i < headers.length; i++) {
+                if (headers[i].id === `${column}Header`) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // Function to apply filters
+        function applyFilters() {
+            const serverIdFilter = document.getElementById('serverIdFilter').value.toLowerCase();
+            const riskTierFilter = document.getElementById('riskTierFilter').value.toLowerCase();
+            const reasonFilter = document.getElementById('reasonFilter').value.toLowerCase();
+
+            const rows = document.querySelectorAll('#riskRegisterBody tr');
+            rows.forEach(row => {
+                const serverId = row.cells[0].textContent.toLowerCase();
+                const riskTier = row.cells[1].textContent.toLowerCase();
+                const reason = row.cells[4].textContent.toLowerCase();
+
+                const shouldShow =
+                    (serverIdFilter === '' || serverId.includes(serverIdFilter)) &&
+                    (riskTierFilter === '' || riskTier.includes(riskTierFilter)) &&
+                    (reasonFilter === '' || reason.includes(reasonFilter));
+
+                row.style.display = shouldShow ? '' : 'none';
+            });
+        }
+
+        // Event listeners for filter inputs
+        document.getElementById('serverIdFilter').addEventListener('input', applyFilters);
+        document.getElementById('riskTierFilter').addEventListener('input', applyFilters);
+        document.getElementById('reasonFilter').addEventListener('input', applyFilters);
+
+        // Initialize the table
+        renderTable();
+    </script>
+</body>
+</html>

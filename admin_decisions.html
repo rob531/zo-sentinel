@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Decisions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+        }
+        th:hover {
+            background-color: #e6e6e6;
+        }
+        .form-container {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+        }
+        input, select, textarea {
+            padding: 5px;
+            width: 300px;
+        }
+        button {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .pagination {
+            text-align: center;
+        }
+        .pagination button {
+            margin: 0 5px;
+        }
+        .active {
+            background-color: #4CAF50;
+        }
+        .filter-container {
+            margin-bottom: 20px;
+        }
+        .filter-group {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Decisions</h1>
+
+        <div class="filter-container">
+            <h3>Filter Decisions</h3>
+            <div class="filter-group">
+                <label for="status-filter">Status:</label>
+                <select id="status-filter">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="date-filter">Date:</label>
+                <input type="date" id="date-filter">
+            </div>
+            <div class="filter-group">
+                <label for="search-filter">Search:</label>
+                <input type="text" id="search-filter" placeholder="Search by title or description">
+            </div>
+            <button id="apply-filter">Apply Filter</button>
+            <button id="clear-filter">Clear Filter</button>
+        </div>
+
+        <div class="form-container">
+            <h3>Add New Decision</h3>
+            <form id="decision-form">
+                <div class="form-group">
+                    <label for="title">Title:</label>
+                    <input type="text" id="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <textarea id="description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="status">Status:</label>
+                    <select id="status">
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="decision-date">Decision Date:</label>
+                    <input type="date" id="decision-date" required>
+                </div>
+                <button type="submit">Submit</button>
+            </form>
+        </div>
+
+        <div class="form-container" id="edit-form-container" style="display: none;">
+            <h3>Edit Decision</h3>
+            <form id="edit-decision-form">
+                <input type="hidden" id="edit-id">
+                <div class="form-group">
+                    <label for="edit-title">Title:</label>
+                    <input type="text" id="edit-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Description:</label>
+                    <textarea id="edit-description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-status">Status:</label>
+                    <select id="edit-status">
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-decision-date">Decision Date:</label>
+                    <input type="date" id="edit-decision-date" required>
+                </div>
+                <button type="submit">Update</button>
+                <button type="button" id="cancel-edit">Cancel</button>
+            </form>
+        </div>
+
+        <table id="decisions-table">
+            <thead>
+                <tr>
+                    <th data-sort="title">Title</th>
+                    <th data-sort="description">Description</th>
+                    <th data-sort="status">Status</th>
+                    <th data-sort="decision_date">Decision Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="decisions-table-body">
+                <!-- Table content will be populated by JavaScript -->
+            </tbody>
+        </table>
+
+        <div class="pagination">
+            <button id="prev-page" disabled>Previous</button>
+            <span id="page-info">Page 1 of 1</span>
+            <button id="next-page" disabled>Next</button>
+        </div>
+    </div>
+
+    <script>
+        // Mock data for demonstration purposes
+        let decisions = [
+            { id: 1, title: 'Decision 1', description: 'Description for decision 1', status: 'pending', decision_date: '2023-01-01' },
+            { id: 2, title: 'Decision 2', description: 'Description for decision 2', status: 'approved', decision_date: '2023-01-02' },
+            { id: 3, title: 'Decision 3', description: 'Description for decision 3', status: 'rejected', decision_date: '2023-01-03' },
+            { id: 4, title: 'Decision 4', description: 'Description for decision 4', status: 'pending', decision_date: '2023-01-04' },
+            { id: 5, title: 'Decision 5', description: 'Description for decision 5', status: 'approved', decision_date: '2023-01-05' },
+            { id: 6, title: 'Decision 6', description: 'Description for decision 6', status: 'rejected', decision_date: '2023-01-06' },
+            { id: 7, title: 'Decision 7', description: 'Description for decision 7', status: 'pending', decision_date: '2023-01-07' },
+            { id: 8, title: 'Decision 8', description: 'Description for decision 8', status: 'approved', decision_date: '2023-01-08' },
+            { id: 9, title: 'Decision 9', description: 'Description for decision 9', status: 'rejected', decision_date: '2023-01-09' },
+            { id: 10, title: 'Decision 10', description: 'Description for decision 10', status: 'pending', decision_date: '2023-01-10' },
+            { id: 11, title: 'Decision 11', description: 'Description for decision 11', status: 'approved', decision_date: '2023-01-11' },
+            { id: 12, title: 'Decision 12', description: 'Description for decision 12', status: 'rejected', decision_date: '2023-01-12' }
+        ];
+
+        // Pagination variables
+        let currentPage = 1;
+        const itemsPerPage = 5;
+        let filteredDecisions = [...decisions];
+
+        // DOM elements
+        const decisionsTableBody = document.getElementById('decisions-table-body');
+        const decisionForm = document.getElementById('decision-form');
+        const editDecisionForm = document.getElementById('edit-decision-form');
+        const editFormContainer = document.getElementById('edit-form-container');
+        const cancelEditBtn = document.getElementById('cancel-edit');
+        const prevPageBtn = document.getElementById('prev-page');
+        const nextPageBtn = document.getElementById('next-page');
+        const pageInfo = document.getElementById('page-info');
+        const applyFilterBtn = document.getElementById('apply-filter');
+        const clearFilterBtn = document.getElementById('clear-filter');
+        const statusFilter = document.getElementById('status-filter');
+        const dateFilter = document.getElementById('date-filter');
+        const searchFilter = document.getElementById('search-filter');
+
+        // Initialize the table
+        function renderTable() {
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const paginatedDecisions = filteredDecisions.slice(startIndex, endIndex);
+
+            decisionsTableBody.innerHTML = '';
+
+            paginatedDecisions.forEach(decision => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${decision.title}</td>
+                    <td>${decision.description}</td>
+                    <td>${decision.status}</td>
+                    <td>${decision.decision_date}</td>
+                    <td>
+                        <button class="edit-btn" data-id="${decision.id}">Edit</button>
+                        <button class="delete-btn" data-id="${decision.id}">Delete</button>
+                    </td>
+                `;
+                decisionsTableBody.appendChild(row);
+            });
+
+            updatePagination();
+        }
+
+        // Update pagination controls
+        function updatePagination() {
+            const totalPages = Math.ceil(filteredDecisions.length / itemsPerPage);
+
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+
+            prevPageBtn.disabled = currentPage === 1;
+            nextPageBtn.disabled = currentPage === totalPages;
+        }
+
+        // Handle form submission for new decisions
+        decisionForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const status = document.getElementById('status').value;
+            const decisionDate = document.getElementById('decision-date').value;
+
+            const newDecision = {
+                id: decisions.length + 1,
+                title,
+                description,
+                status,
+                decision_date: decisionDate
+            };
+
+            decisions.push(newDecision);
+            filteredDecisions = [...decisions];
+            currentPage = Math.ceil(filteredDecisions.length / itemsPerPage);
+            renderTable();
+
+            decisionForm.reset();
+            console.log('PASS: New decision added successfully');
+        });
+
+        // Handle form submission for editing decisions
+        editDecisionForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const id = parseInt(document.getElementById('edit-id').value);
+            const title = document.getElementById('edit-title').value;
+            const description = document.getElementById('edit-description').value;
+            const status = document.getElementById('edit-status').value;
+            const decisionDate = document.getElementById('edit-decision-date').value;
+
+            const decisionIndex = decisions.findIndex(d => d.id === id);
+            if (decisionIndex !== -1) {
+                decisions[decisionIndex] = {
+                    id,
+                    title,
+                    description,
+                    status,
+                    decision_date: decisionDate
+                };
+                filteredDecisions = [...decisions];
+                renderTable();
+                editFormContainer.style.display = 'none';
+                console.log('PASS: Decision updated successfully');
+            }
+        });
+
+        // Handle edit button click
+        decisionsTableBody.addEventListener('click', function(e) {
+            if (e.target.classList.contains('edit-btn')) {
+                const id = parseInt(e.target.getAttribute('data-id'));
+                const decision = decisions.find(d => d.id === id);
+
+                if (decision) {
+                    document.getElementById('edit-id').value = decision.id;
+                    document.getElementById('edit-title').value = decision.title;
+                    document.getElementById('edit-description').value = decision.description;
+                    document.getElementById('edit-status').value = decision.status;
+                    document.getElementById('edit-decision-date').value = decision.decision_date;
+
+                    editFormContainer.style.display = 'block';
+                }
+            }
+        });
+
+        // Handle delete button click
+        decisionsTableBody.addEventListener('click', function(e) {
+            if (e.target.classList.contains('delete-btn')) {
+                const id = parseInt(e.target.getAttribute('data-id'));
+                const decisionIndex = decisions.findIndex(d => d.id === id);
+
+                if (decisionIndex !== -1) {
+                    decisions.splice(decisionIndex, 1);
+                    filteredDecisions = [...decisions];
+                    currentPage = Math.max(1, currentPage - 1);
+                    renderTable();
+                    console.log('PASS: Decision deleted successfully');
+                }
+            }
+        });
+
+        // Handle cancel edit
+        cancelEditBtn.addEventListener('click', function() {
+            editFormContainer.style.display = 'none';
+        });
+
+        // Handle pagination
+        prevPageBtn.addEventListener('click', function() {
+            currentPage--;
+            renderTable();
+        });
+
+        nextPageBtn.addEventListener('click', function() {
+            currentPage++;
+            renderTable();
+        });
+
+        // Handle sorting
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', function() {
+                const sortKey = this.getAttribute('data-sort');
+                const direction = this.getAttribute('data-direction') === 'asc' ? 'desc' : 'asc';
+
+                filteredDecisions.sort((a, b) => {
+                    if (a[sortKey] < b[sortKey]) return direction === 'asc' ? -1 : 1;
+                    if (a[sortKey] > b[sortKey]) return direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                this.setAttribute('data-direction', direction);
+                renderTable();
+            });
+        });
+
+        // Handle filtering
+        applyFilterBtn.addEventListener('click', function() {
+            const status = statusFilter.value;
+            const date = dateFilter.value;
+            const search = searchFilter.value.toLowerCase();
+
+            filteredDecisions = decisions.filter(decision => {
+                let matches = true;
+
+                if (status) {
+                    matches = matches && decision.status === status;
+                }
+
+                if (date) {
+                    matches = matches && decision.decision_date === date;
+                }
+
+                if (search) {
+                    matches = matches &&
+                        (decision.title.toLowerCase().includes(search) ||
+                         decision.description.toLowerCase().includes(search));
+                }
+
+                return matches;
+            });
+
+            currentPage = 1;
+            renderTable();
+        });
+
+        clearFilterBtn.addEventListener('click', function() {
+            statusFilter.value = '';
+            dateFilter.value = '';
+            searchFilter.value = '';
+
+            filteredDecisions = [...decisions];
+            currentPage = 1;
+            renderTable();
+        });
+
+        // Initial render
+        renderTable();
+    </script>
+</body>
+</html>

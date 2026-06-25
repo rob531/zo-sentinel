@@ -1,0 +1,123 @@
+import os
+from jinja2 import Environment, FileSystemLoader
+
+# Define the content of base.html
+base_html_content = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ZoSentinel{% endblock %}</title>
+    <!-- Bootstrap CSS CDN for basic styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    {% block head_extra %}{% endblock %}
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh; /* Ensure body takes full viewport height */
+        }
+        main {
+            flex: 1; /* Allows main content to grow and push footer down */
+            padding: 20px 0;
+        }
+        footer {
+            background-color: #f8f9fa;
+            padding: 15px 0;
+            text-align: center;
+            border-top: 1px solid #e9ecef;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <header class="bg-dark text-white py-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <h1 class="h3 mb-0"><a href="/" class="text-white text-decoration-none">ZoSentinel</a></h1>
+            <nav>
+                <ul class="nav">
+                    <li class="nav-item"><a class="nav-link text-white" href="/dashboard">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link text-white" href="/search">Search</a></li>
+                    <li class="nav-item"><a class="nav-link text-white" href="/entity/detail">Entity Detail</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="mt-auto">
+        <div class="container">
+            <p class="mb-0 text-muted">&copy; 2023 ZoSentinel. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS (optional, for components like dropdowns, tooltips, etc. Not strictly needed for this basic layout) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+</body>
+</html>
+"""
+
+# --- Acceptance Test Script ---
+
+# Create a dummy templates directory and file for Jinja2 to load
+template_dir = "templates"
+os.makedirs(template_dir, exist_ok=True)
+template_file_path = os.path.join(template_dir, "base.html")
+
+with open(template_file_path, "w") as f:
+    f.write(base_html_content)
+
+# Set up Jinja2 environment
+env = Environment(loader=FileSystemLoader(template_dir))
+template = env.get_template("base.html")
+
+# Render the template
+rendered_html = template.render()
+
+# --- Assertions ---
+print("Performing assertions for base.html template...")
+
+# 1. Assertions for HTML5 structure
+assert "<!DOCTYPE html>" in rendered_html, "DOCTYPE declaration missing."
+assert '<html lang="en">' in rendered_html, "HTML tag missing or incorrect lang attribute."
+assert "<head>" in rendered_html and "</head>" in rendered_html, "Head section missing."
+assert "<body>" in rendered_html and "</body>" in rendered_html, "Body section missing."
+assert '<meta charset="UTF-8">' in rendered_html, "UTF-8 meta charset missing."
+assert '<meta name="viewport"' in rendered_html, "Viewport meta tag missing."
+
+# 2. Assertions for header and title
+assert "<title>ZoSentinel</title>" in rendered_html, "Title block default value 'ZoSentinel' not found."
+assert '<h1 class="h3 mb-0"><a href="/" class="text-white text-decoration-none">ZoSentinel</a></h1>' in rendered_html, "Header title 'ZoSentinel' not found or incorrect."
+
+# 3. Assertions for navigation links
+assert '<a class="nav-link text-white" href="/dashboard">Dashboard</a>' in rendered_html, "Dashboard navigation link not found."
+assert '<a class="nav-link text-white" href="/search">Search</a>' in rendered_html, "Search navigation link not found."
+assert '<a class="nav-link text-white" href="/entity/detail">Entity Detail</a>' in rendered_html, "Entity Detail navigation link not found."
+
+# 4. Assertions for footer
+assert '&copy; 2023 ZoSentinel. All rights reserved.</p>' in rendered_html, "Footer text not found or incorrect."
+
+# 5. Assertions for Jinja2 blocks (ensuring they are processed and not present as raw tags)
+# The default content of 'title' block is asserted above.
+assert "{% block head_extra %}" not in rendered_html, "Raw 'head_extra' block tag found, should be processed."
+assert "{% block content %}" not in rendered_html, "Raw 'content' block tag found, should be processed."
+
+# 6. Assertions for Bootstrap CDN links
+assert 'cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css' in rendered_html, "Bootstrap CSS CDN link missing."
+assert 'cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js' in rendered_html, "Bootstrap JS CDN link missing."
+
+print("All assertions passed successfully! The base.html template is correctly structured.")
+
+# Clean up the dummy templates directory and file
+os.remove(template_file_path)
+os.rmdir(template_dir)
+
+# Output the base.html content as the target file
+print("\n--- base.html content ---")
+print(base_html_content)

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compliance Overview Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .metric {
+            background-color: #e9e9e9;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            flex: 1;
+            margin: 0 10px;
+        }
+        .metric h3 {
+            margin-top: 0;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .status-compliant {
+            color: green;
+        }
+        .status-non-compliant {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>Compliance Overview Dashboard</h1>
+        </div>
+        <div class="metrics">
+            <div class="metric">
+                <h3>Total Policies</h3>
+                <p id="total-policies">Loading...</p>
+            </div>
+            <div class="metric">
+                <h3>Compliant Policies</h3>
+                <p id="compliant-policies">Loading...</p>
+            </div>
+            <div class="metric">
+                <h3>Non-Compliant Policies</h3>
+                <p id="non-compliant-policies">Loading...</p>
+            </div>
+            <div class="metric">
+                <h3>Active Exemptions</h3>
+                <p id="active-exemptions">Loading...</p>
+            </div>
+        </div>
+        <div class="section">
+            <h2>Policy Rules Summary</h2>
+            <table id="policy-rules-table">
+                <thead>
+                    <tr>
+                        <th>Policy ID</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                        <th>Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        <div class="section">
+            <h2>Recent Decisions</h2>
+            <table id="recent-decisions-table">
+                <thead>
+                    <tr>
+                        <th>Decision ID</th>
+                        <th>Policy ID</th>
+                        <th>Decision</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        <div class="section">
+            <h2>Active Exemptions</h2>
+            <table id="active-exemptions-table">
+                <thead>
+                    <tr>
+                        <th>Exemption ID</th>
+                        <th>Policy ID</th>
+                        <th>Reason</th>
+                        <th>Expiry Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/compliance/overview')
+                .then(response => response.json())
+                .then(data => {
+                    // Update metrics
+                    document.getElementById('total-policies').textContent = data.metrics.total_policies;
+                    document.getElementById('compliant-policies').textContent = data.metrics.compliant_policies;
+                    document.getElementById('non-compliant-policies').textContent = data.metrics.non_compliant_policies;
+                    document.getElementById('active-exemptions').textContent = data.metrics.active_exemptions;
+
+                    // Update policy rules table
+                    const policyRulesTable = document.getElementById('policy-rules-table').getElementsByTagName('tbody')[0];
+                    data.policy_rules.forEach(rule => {
+                        const row = policyRulesTable.insertRow();
+                        row.insertCell(0).textContent = rule.policy_id;
+                        row.insertCell(1).textContent = rule.description;
+                        const statusCell = row.insertCell(2);
+                        statusCell.textContent = rule.status;
+                        statusCell.className = rule.status === 'Compliant' ? 'status-compliant' : 'status-non-compliant';
+                        row.insertCell(3).textContent = rule.last_updated;
+                    });
+
+                    // Update recent decisions table
+                    const recentDecisionsTable = document.getElementById('recent-decisions-table').getElementsByTagName('tbody')[0];
+                    data.recent_decisions.forEach(decision => {
+                        const row = recentDecisionsTable.insertRow();
+                        row.insertCell(0).textContent = decision.decision_id;
+                        row.insertCell(1).textContent = decision.policy_id;
+                        row.insertCell(2).textContent = decision.decision;
+                        row.insertCell(3).textContent = decision.date;
+                    });
+
+                    // Update active exemptions table
+                    const activeExemptionsTable = document.getElementById('active-exemptions-table').getElementsByTagName('tbody')[0];
+                    data.active_exemptions.forEach(exemption => {
+                        const row = activeExemptionsTable.insertRow();
+                        row.insertCell(0).textContent = exemption.exemption_id;
+                        row.insertCell(1).textContent = exemption.policy_id;
+                        row.insertCell(2).textContent = exemption.reason;
+                        row.insertCell(3).textContent = exemption.expiry_date;
+                    });
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attestation Refresher Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .status-card {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .status-card h2 {
+            margin-top: 0;
+            color: #444;
+        }
+        .status-card p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .status-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .status-table th, .status-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .status-table th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+        .status-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .status-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        .error {
+            color: #d9534f;
+        }
+        .success {
+            color: #5cb85c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Attestation Refresher Status</h1>
+
+        <div class="status-card">
+            <h2>Current Status</h2>
+            <p><strong>Last Run Time:</strong> <span id="last-run-time">2023-11-15 14:30:45</span></p>
+            <p><strong>Status:</strong> <span id="status" class="success">Running</span></p>
+            <p><strong>Attestations Refreshed:</strong> <span id="attestations-refreshed">42</span></p>
+            <p><strong>Errors Encountered:</strong> <span id="errors-encountered" class="error">0</span></p>
+        </div>
+
+        <div class="status-card">
+            <h2>Recent Activity</h2>
+            <table class="status-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-activity">
+                    <tr>
+                        <td>2023-11-15 14:30:45</td>
+                        <td>Refresh Attestations</td>
+                        <td class="success">Success</td>
+                        <td>Refreshed 42 attestations</td>
+                    </tr>
+                    <tr>
+                        <td>2023-11-15 13:30:45</td>
+                        <td>Refresh Attestations</td>
+                        <td class="success">Success</td>
+                        <td>Refreshed 45 attestations</td>
+                    </tr>
+                    <tr>
+                        <td>2023-11-15 12:30:45</td>
+                        <td>Refresh Attestations</td>
+                        <td class="success">Success</td>
+                        <td>Refreshed 40 attestations</td>
+                    </tr>
+                    <tr>
+                        <td>2023-11-15 11:30:45</td>
+                        <td>Refresh Attestations</td>
+                        <td class="error">Failed</td>
+                        <td>Error: Database connection timeout</td>
+                    </tr>
+                    <tr>
+                        <td>2023-11-15 10:30:45</td>
+                        <td>Refresh Attestations</td>
+                        <td class="success">Success</td>
+                        <td>Refreshed 50 attestations</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // This script would be replaced with actual API calls in a real implementation
+        // For now, it just displays the placeholder data
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate fetching data from an API
+            // In a real implementation, you would use fetch() or similar to get data from your backend
+            console.log('Fetching data from API...');
+
+            // Simulate a delay for the API call
+            setTimeout(function() {
+                console.log('Data fetched successfully');
+                // Update the UI with the fetched data
+                // In a real implementation, you would parse the JSON response and update the DOM accordingly
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

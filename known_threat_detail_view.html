@@ -1,0 +1,39 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List
+import uvicorn
+
+app = FastAPI()
+
+# Mock database
+threat_db = {
+    "T1001": {
+        "id": "T1001",
+        "name": "Data Obfuscation",
+        "description": "Techniques used to hide data from security controls.",
+        "associated_mcps": ["MCP-001", "MCP-042"],
+        "external_links": ["https://attack.mitre.org/techniques/T1001/"]
+    }
+}
+
+class ThreatDetail(BaseModel):
+    id: str
+    name: str
+    description: str
+    associated_mcps: List[str]
+    external_links: List[str]
+
+@app.get("/threats/{threat_id}", response_model=ThreatDetail)
+async def get_threat(threat_id: str):
+    if threat_id not in threat_db:
+        raise HTTPException(status_code=404, detail="Threat not found")
+    return threat_db[threat_id]
+
+if __name__ == "__main__":
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    response = client.get("/threats/T1001")
+    assert response.status_code == 200
+    assert response.json()["name"] == "Data Obfuscation"
+    print("Test passed: API returned valid data.")
+    uvicorn.run(app, host="0.0.0.0", port=8000)

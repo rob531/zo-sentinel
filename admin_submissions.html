@@ -3,580 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZO-SENTINEL // Admin Submissions</title>
+    <title>Admin Submissions Dashboard</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background: #0d0f14;
-            color: #e0e0e0;
-            font-family: 'Courier New', monospace;
-            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
             padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
         }
-        .header {
-            border-bottom: 2px solid #00e5ff;
-            padding-bottom: 15px;
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
             margin-bottom: 30px;
+            font-size: 2.2em;
         }
-        .header h1 {
-            color: #00e5ff;
-            font-size: 24px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        .header .subtitle {
-            color: #888;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-        .auth-section {
-            background: #1a1d24;
-            border: 1px solid #333;
-            padding: 20px;
-            margin-bottom: 20px;
-            max-width: 400px;
-        }
-        .auth-section label {
-            display: block;
-            margin-bottom: 8px;
-            color: #00e5ff;
-            font-size: 12px;
-            text-transform: uppercase;
-        }
-        .auth-section input {
-            width: 100%;
-            padding: 10px;
-            background: #0d0f14;
-            border: 1px solid #00e5ff;
-            color: #e0e0e0;
-            font-family: inherit;
-            font-size: 14px;
-        }
-        .auth-section button {
-            margin-top: 10px;
-            padding: 10px 20px;
-            background: #00e5ff;
-            border: none;
-            color: #0d0f14;
-            font-family: inherit;
-            font-weight: bold;
-            cursor: pointer;
-            text-transform: uppercase;
-        }
-        .auth-section button:hover { background: #00b8cc; }
-        .hidden { display: none; }
-        .stats-bar {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .stat-card {
-            background: #1a1d24;
-            border: 1px solid #333;
-            padding: 15px;
-            min-width: 150px;
-        }
-        .stat-card .label {
-            color: #888;
-            font-size: 10px;
-            text-transform: uppercase;
-        }
-        .stat-card .value {
-            color: #00e5ff;
-            font-size: 28px;
-            font-weight: bold;
-            margin-top: 5px;
-        }
-        .filter-bar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .filter-bar input, .filter-bar select {
-            padding: 8px 12px;
-            background: #1a1d24;
-            border: 1px solid #333;
-            color: #e0e0e0;
-            font-family: inherit;
-            font-size: 12px;
-        }
-        .filter-bar button {
-            padding: 8px 16px;
-            background: #00e5ff;
-            border: none;
-            color: #0d0f14;
-            font-family: inherit;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .filter-bar button.secondary {
-            background: #333;
-            color: #e0e0e0;
-        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
-        th {
-            background: #1a1d24;
-            color: #00e5ff;
-            padding: 12px;
+
+        th, td {
+            padding: 12px 15px;
             text-align: left;
-            font-size: 11px;
-            text-transform: uppercase;
-            border-bottom: 2px solid #00e5ff;
+            border-bottom: 1px solid #e0e0e0;
         }
+
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
         td {
-            padding: 12px;
-            border-bottom: 1px solid #222;
-            font-size: 13px;
+            color: #555;
+            font-size: 0.95em;
         }
-        tr:hover { background: #1a1d24; }
-        .verdict-badge {
-            padding: 4px 8px;
-            font-size: 10px;
-            text-transform: uppercase;
-            font-weight: bold;
-        }
-        .verdict-PENDING { background: #555; color: #fff; }
-        .verdict-APPROVED { background: #00a030; color: #fff; }
-        .verdict-CONDITIONAL { background: #ffaa00; color: #000; }
-        .verdict-REJECTED { background: #cc0000; color: #fff; }
-        .action-btn {
-            padding: 6px 12px;
-            border: none;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 11px;
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8em;
             font-weight: bold;
             text-transform: uppercase;
-            margin-right: 5px;
+            color: white;
         }
-        .action-btn.approve { background: #00a030; color: #fff; }
-        .action-btn.conditional { background: #ffaa00; color: #000; }
-        .action-btn.reject { background: #cc0000; color: #fff; }
-        .action-btn:hover { opacity: 0.8; }
-        .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.85);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .modal {
-            background: #1a1d24;
-            border: 2px solid #00e5ff;
-            padding: 25px;
-            max-width: 500px;
-            width: 90%;
-        }
-        .modal h2 {
-            color: #00e5ff;
-            font-size: 16px;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-        }
-        .modal label {
-            display: block;
-            color: #888;
-            font-size: 11px;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-        .modal textarea, .modal input {
-            width: 100%;
-            padding: 10px;
-            background: #0d0f14;
-            border: 1px solid #333;
-            color: #e0e0e0;
-            font-family: inherit;
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-        .modal textarea { min-height: 100px; resize: vertical; }
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-        .modal button {
-            padding: 10px 20px;
-            border: none;
-            cursor: pointer;
-            font-family: inherit;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .modal button.submit { background: #00e5ff; color: #0d0f14; }
-        .modal button.cancel { background: #333; color: #e0e0e0; }
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            font-size: 13px;
-            z-index: 2000;
-            border: 2px solid;
-        }
-        .toast.success { background: #00a030; border-color: #00a030; color: #fff; }
-        .toast.error { background: #cc0000; border-color: #cc0000; color: #fff; }
-        .loading {
+
+        .status-pending { background-color: #f39c12; } /* Orange */
+        .status-approved { background-color: #27ae60; } /* Green */
+        .status-rejected { background-color: #e74c3c; } /* Red */
+        .status-review { background-color: #3498db; } /* Blue */
+        .status-draft { background-color: #95a5a6; } /* Grey */
+
+        .message {
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
             text-align: center;
-            padding: 40px;
-            color: #888;
+            font-weight: bold;
         }
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #888;
-            border: 1px dashed #333;
+
+        .message.loading {
+            background-color: #e8f4f8;
+            color: #2980b9;
         }
-        .empty-state svg { margin-bottom: 15px; opacity: 0.5; }
-        .refresh-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: #888;
-            font-size: 11px;
-        }
-        .refresh-indicator .dot {
-            width: 8px;
-            height: 8px;
-            background: #00e5ff;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+
+        .message.error {
+            background-color: #fdeded;
+            color: #c0392b;
+            border: 1px solid #e74c3c;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>ZO-SENTINEL // Admin Submissions</h1>
-        <div class="subtitle">Triage pending MCP submissions for trust assessment</div>
+    <div class="container">
+        <h1>MCP Submissions Dashboard</h1>
+
+        <div id="message-area" class="message loading" style="display: none;"></div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>MCP Name</th>
+                    <th>Requested By</th>
+                    <th>Status</th>
+                    <th>Submitted At</th>
+                </tr>
+            </thead>
+            <tbody id="submissions-table-body">
+                <!-- Data will be loaded here by JavaScript -->
+            </tbody>
+        </table>
     </div>
-
-    <div id="authSection" class="auth-section">
-        <label>X-API-Key Authentication</label>
-        <input type="password" id="apiKey" placeholder="Enter API key...">
-        <button onclick="authenticate()">Authenticate</button>
-    </div>
-
-    <div id="mainContent" class="hidden">
-        <div class="stats-bar">
-            <div class="stat-card">
-                <div class="label">Total Pending</div>
-                <div class="value" id="statPending">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Reviewed Today</div>
-                <div class="value" id="statReviewed">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Approved</div>
-                <div class="value" id="statApproved">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Rejected</div>
-                <div class="value" id="statRejected">-</div>
-            </div>
-        </div>
-
-        <div class="filter-bar">
-            <input type="text" id="searchFilter" placeholder="Search by name or submitter...">
-            <select id="verdictFilter">
-                <option value="">All Verdicts</option>
-                <option value="PENDING" selected>PENDING</option>
-                <option value="APPROVED">APPROVED</option>
-                <option value="CONDITIONAL">CONDITIONAL</option>
-                <option value="REJECTED">REJECTED</option>
-            </select>
-            <button onclick="loadSubmissions()">Filter</button>
-            <button class="secondary" onclick="resetFilters()">Reset</button>
-            <span class="refresh-indicator">
-                <span class="dot"></span>
-                <span>Auto-refresh: 30s</span>
-            </span>
-        </div>
-
-        <div id="tableContainer">
-            <div class="loading">Loading submissions...</div>
-        </div>
-    </div>
-
-    <div id="decisionModal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Submit Decision</h2>
-            <div style="margin-bottom: 10px;">
-                <strong style="color: #00e5ff;" id="modalServerName">-</strong>
-            </div>
-            <label>Decision</label>
-            <select id="decisionType" style="width:100%;padding:10px;background:#0d0f14;border:1px solid #333;color:#e0e0e0;font-family:inherit;margin-bottom:15px;">
-                <option value="APPROVED">APPROVE</option>
-                <option value="CONDITIONAL">CONDITIONAL</option>
-                <option value="REJECTED">REJECTE</option>
-            </select>
-            <label>Reason / Notes</label>
-            <textarea id="decisionReason" placeholder="Enter justification for this decision..."></textarea>
-            <div class="modal-actions">
-                <button class="cancel" onclick="closeModal()">Cancel</button>
-                <button class="submit" onclick="submitDecision()">Submit</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="toast" class="toast hidden"></div>
 
     <script>
-        const REGISTRY_API = "/svc8781";
-        const WRITE_SERVICE = "/bus";
-        let apiKey = "";
-        let currentSubmission = null;
-        let autoRefreshTimer = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            const submissionsTableBody = document.getElementById('submissions-table-body');
+            const messageArea = document.getElementById('message-area');
 
-        function showToast(message, type) {
-            const toast = document.getElementById("toast");
-            toast.textContent = message;
-            toast.className = "toast " + type;
-            toast.classList.remove("hidden");
-            setTimeout(() => toast.classList.add("hidden"), 4000);
-        }
+            // --- MOCK API DATA (for development/testing without a backend) ---
+            // To use a real backend, set USE_MOCK_API = false and ensure your
+            // backend serves data at /api/admin/submissions.
+            const USE_MOCK_API = true;
 
-        function authenticate() {
-            const key = document.getElementById("apiKey").value.trim();
-            if (!key) {
-                showToast("API key required", "error");
-                return;
-            }
-            apiKey = key;
-            document.getElementById("authSection").classList.add("hidden");
-            document.getElementById("mainContent").classList.remove("hidden");
-            loadSubmissions();
-            startAutoRefresh();
-        }
-
-        async function loadSubmissions() {
-            const container = document.getElementById("tableContainer");
-            container.innerHTML = '<div class="loading">Fetching submissions...</div>';
-
-            const search = document.getElementById("searchFilter").value.trim();
-            const verdict = document.getElementById("verdictFilter").value;
-
-            try {
-                const url = new URL(REGISTRY_API + "/v1/submissions");
-                if (verdict) url.searchParams.set("verdict", verdict);
-                if (search) url.searchParams.set("search", search);
-
-                const res = await fetch(url.toString(), {
-                    headers: { "X-API-Key": apiKey }
-                }).catch(e => { throw new Error("Registry API unreachable: " + e.message); });
-
-                if (res.status === 401) {
-                    showToast("Authentication failed", "error");
-                    return;
+            const mockSubmissions = [
+                {
+                    mcp_name: "Mars Colony Project Alpha",
+                    requested_by: "Dr. Elara Vance",
+                    status: "approved",
+                    submitted_at: "2023-10-26T10:00:00Z"
+                },
+                {
+                    mcp_name: "Europa Research Outpost",
+                    requested_by: "Cmdr. Kaelen Rix",
+                    status: "pending",
+                    submitted_at: "2023-11-15T14:30:00Z"
+                },
+                {
+                    mcp_name: "Titan Atmospheric Survey",
+                    requested_by: "Prof. Lena Petrova",
+                    status: "review",
+                    submitted_at: "2023-12-01T08:15:00Z"
+                },
+                {
+                    mcp_name: "Lunar Mining Initiative",
+                    requested_by: "CEO Marcus Thorne",
+                    status: "rejected",
+                    submitted_at: "2024-01-05T11:45:00Z"
+                },
+                {
+                    mcp_name: "Venus Terraforming Proposal",
+                    requested_by: "Dr. Anya Sharma",
+                    status: "draft",
+                    submitted_at: "2024-01-20T16:00:00Z"
+                },
+                {
+                    mcp_name: "Ganymede Habitation Module",
+                    requested_by: "Dr. Elara Vance",
+                    status: "approved",
+                    submitted_at: "2024-02-10T09:00:00Z"
                 }
+            ];
 
-                if (res.status === 403) {
-                    showToast("Insufficient permissions", "error");
-                    return;
-                }
+            async function fetchSubmissions() {
+                messageArea.style.display = 'block';
+                messageArea.className = 'message loading';
+                messageArea.textContent = 'Loading submissions...';
+                submissionsTableBody.innerHTML = ''; // Clear previous data
 
-                let data = [];
-                if (res.ok) {
-                    data = await res.json();
-                } else {
-                    data = await fetchFallbackSubmissions(search, verdict);
-                }
+                try {
+                    let data;
+                    if (USE_MOCK_API) {
+                        // Simulate network delay for mock data
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        data = mockSubmissions;
+                    } else {
+                        const response = await fetch('/api/admin/submissions');
 
-                renderStats(data);
-                renderTable(data);
-            } catch (e) {
-                container.innerHTML = '<div class="empty-state">Failed to load: ' + e.message + '</div>';
-            }
-        }
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        data = await response.json();
+                    }
 
-        async function fetchFallbackSubmissions(search, verdict) {
-            try {
-                const sql = buildFallbackSQL(search, verdict);
-                const res = await fetch(WRITE_SERVICE + "/query", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sql: sql })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    return data.rows || [];
-                }
-            } catch (e) {
-                console.error("Fallback query failed:", e);
-            }
-            return [];
-        }
+                    if (data.length === 0) {
+                        messageArea.className = 'message';
+                        messageArea.textContent = 'No submissions found.';
+                        return;
+                    }
 
-        function buildFallbackSQL(search, verdict) {
-            let sql = "SELECT server_id, name AS mcp_name, url, description, verdict, trust_score, requested_by, submitted_at, submission_source FROM mcp_submissions WHERE 1=1";
-            if (verdict) {
-                sql += " AND verdict = '" + verdict + "'";
-            }
-            if (search) {
-                sql += " AND (name ILIKE '%" + search + "%' OR requested_by ILIKE '%" + search + "%')";
-            }
-            sql += " ORDER BY submitted_at DESC LIMIT 100";
-            return sql;
-        }
+                    messageArea.style.display = 'none'; // Hide message on success
 
-        function renderStats(data) {
-            const pending = data.filter(r => r.verdict === "PENDING").length;
-            const approved = data.filter(r => r.verdict === "APPROVED").length;
-            const rejected = data.filter(r => r.verdict === "REJECTED").length;
-            const today = new Date().toISOString().split("T")[0];
-            const reviewedToday = data.filter(r => r.decided_at && r.decided_at.startsWith(today)).length;
+                    data.forEach(submission => {
+                        const row = submissionsTableBody.insertRow();
 
-            document.getElementById("statPending").textContent = pending;
-            document.getElementById("statApproved").textContent = approved;
-            document.getElementById("statRejected").textContent = rejected;
-            document.getElementById("statReviewed").textContent = reviewedToday;
-        }
+                        // MCP Name
+                        const mcpNameCell = row.insertCell();
+                        mcpNameCell.textContent = submission.mcp_name;
 
-        function renderTable(data) {
-            const container = document.getElementById("tableContainer");
-            if (!data || data.length === 0) {
-                container.innerHTML = '<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg><div>No submissions match the current filter</div></div>';
-                return;
-            }
+                        // Requested By
+                        const requestedByCell = row.insertCell();
+                        requestedByCell.textContent = submission.requested_by;
 
-            let html = '<table><thead><tr>';
-            html += '<th>Server ID</th><th>MCP Name</th><th>Requested By</th><th>Submitted</th>';
-            html += '<th>Verdict</th><th>Score</th><th>Actions</th></tr></thead><tbody>';
+                        // Status
+                        const statusCell = row.insertCell();
+                        const statusBadge = document.createElement('span');
+                        statusBadge.classList.add('status-badge', `status-${submission.status.toLowerCase()}`);
+                        statusBadge.textContent = submission.status;
+                        statusCell.appendChild(statusBadge);
 
-            data.forEach(row => {
-                const submittedDate = row.submitted_at ? new Date(row.submitted_at).toLocaleDateString() : "-";
-                const verdictClass = "verdict-" + (row.verdict || "PENDING");
-                const pendingActions = row.verdict === "PENDING" ? [
-                    '<button class="action-btn approve" onclick="openModal(\'' + row.server_id + '\', \'' + escapeHtml(row.name || row.mcp_name || "") + '\', \'APPROVED\')">APPROVE</button>',
-                    '<button class="action-btn conditional" onclick="openModal(\'' + row.server_id + '\', \'' + escapeHtml(row.name || row.mcp_name || "") + '\', \'CONDITIONAL\')">COND</button>',
-                    '<button class="action-btn reject" onclick="openModal(\'' + row.server_id + '\', \'' + escapeHtml(row.name || row.mcp_name || "") + '\', \'REJECTED\')">REJECT</button>'
-                ].join("") : '<span style="color:#888;">-</span>';
-
-                html += '<tr>';
-                html += '<td><code style="font-size:11px;">' + escapeHtml(row.server_id || "-") + '</code></td>';
-                html += '<td>' + escapeHtml(row.name || row.mcp_name || "-") + '</td>';
-                html += '<td>' + escapeHtml(row.requested_by || "-") + '</td>';
-                html += '<td>' + submittedDate + '</td>';
-                html += '<td><span class="verdict-badge ' + verdictClass + '">' + (row.verdict || "PENDING") + '</span></td>';
-                html += '<td>' + (row.trust_score != null ? row.trust_score + "/100" : "-") + '</td>';
-                html += '<td>' + pendingActions + '</td>';
-                html += '</tr>';
-            });
-
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        }
-
-        function escapeHtml(str) {
-            if (!str) return "";
-            const div = document.createElement("div");
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        function openModal(serverId, name, decision) {
-            currentSubmission = { server_id: serverId, name: name };
-            document.getElementById("modalServerName").textContent = name + " (" + serverId + ")";
-            document.getElementById("decisionType").value = decision;
-            document.getElementById("decisionReason").value = "";
-            document.getElementById("decisionModal").classList.remove("hidden");
-        }
-
-        function closeModal() {
-            currentSubmission = null;
-            document.getElementById("decisionModal").classList.add("hidden");
-        }
-
-        async function submitDecision() {
-            if (!currentSubmission) return;
-
-            const decision = document.getElementById("decisionType").value;
-            const reason = document.getElementById("decisionReason").value.trim();
-            const serverId = currentSubmission.server_id;
-
-            if (!reason) {
-                showToast("Reason is required", "error");
-                return;
-            }
-
-            const now = new Date().toISOString() + "Z";
-            const decisionId = generateDeterministicId(serverId + "_" + decision + "_" + now);
-
-            const sql = "INSERT INTO mcp_decisions (decision_id, server_id, decision, reason, decided_by, decided_at, sync_to_registry) VALUES ('" + decisionId + "', '" + serverId + "', '" + decision + "', '" + escapeSql(reason) + "', 'admin', '" + now + "', TRUE)";
-
-            try {
-                const res = await fetch(WRITE_SERVICE + "/query", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sql: sql })
-                }).catch(e => { throw new Error("Write service unreachable: " + e.message); });
-
-                if (res.ok) {
-                    const updateSql = "UPDATE mcp_submissions SET verdict = '" + decision + "', decided_at = '" + now + "' WHERE server_id = '" + serverId + "'";
-                    await fetch(WRITE_SERVICE + "/query", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ sql: updateSql })
+                        // Submitted At
+                        const submittedAtCell = row.insertCell();
+                        const date = new Date(submission.submitted_at);
+                        submittedAtCell.textContent = date.toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
                     });
 
-                    showToast("Decision submitted: " + decision, "success");
-                    closeModal();
-                    loadSubmissions();
-                } else {
-                    const err = await res.text();
-                    showToast("Write failed: " + err, "error");
+                } catch (error) {
+                    console.error('Error fetching submissions:', error);
+                    messageArea.className = 'message error';
+                    messageArea.textContent = `Failed to load submissions: ${error.message}. Please try again.`;
                 }
-            } catch (e) {
-                showToast("Error: " + e.message, "error");
             }
-        }
 
-        function generateDeterministicId(input) {
-            let hash = 0;
-            for (let i = 0; i < input.length; i++) {
-                const char = input.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            return Math.abs(hash).toString(16).padStart(12, "0");
-        }
-
-        function escapeSql(str) {
-            return str.replace(/'/g, "''");
-        }
-
-        function resetFilters() {
-            document.getElementById("searchFilter").value = "";
-            document.getElementById("verdictFilter").value = "PENDING";
-            loadSubmissions();
-        }
-
-        function startAutoRefresh() {
-            if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-            autoRefreshTimer = setInterval(loadSubmissions, 30000);
-        }
-
-        document.addEventListener("keydown", e => {
-            if (e.key === "Escape") closeModal();
+            // Initial fetch when the page loads
+            fetchSubmissions();
         });
     </script>
 </body>

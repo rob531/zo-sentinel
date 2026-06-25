@@ -6,7 +6,10 @@ from __future__ import annotations
 import importlib
 from contextlib import asynccontextmanager
 
+import pathlib
+
 from fastapi import Depends, FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
@@ -53,6 +56,19 @@ def admin_ping(principal: Principal = Depends(require_role("admin"))):
 
 
 app.include_router(auth.router)
+
+_STATIC = pathlib.Path(__file__).parent / "static"
+
+
+@app.get("/", response_class=HTMLResponse)
+def consent_gate():
+    """Clickwrap evaluation-only notice -- the assertion shown before site access."""
+    return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
+
+
+@app.get("/disclaimer", response_class=HTMLResponse)
+def disclaimer_page():
+    return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
 
 for _modname in _OPTIONAL_ROUTERS:
     try:

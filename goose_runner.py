@@ -434,7 +434,12 @@ _RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_full
 # single-file builder produced hollow stubs) is keyword-routed to the FastAPI recipe.
 # Reports/search/etc. stay on architect.yaml unless the directive sets `recipe` explicitly.
 _BACKEND_HINTS = ("oauth", "login_service", "rbac", "role_enforc", "require_role",
-                  "tenant", "api_key", "session", "jwt", "auth_", "_auth", "org_model")
+                  "tenant", "api_key", "session", "jwt", "auth_", "_auth", "org_model",
+                  # app-surface: route every app API module to the FastAPI recipe (which
+                  # ENFORCES reading mcp_llm_axis_scores via the DB session) -- without this
+                  # they fell through to the generic builder and shipped hollow stubs.
+                  "_api", "verdict", "scoring", "_consumer", "dashboard", "registry_search",
+                  "report", "compliance", "risk_register", "risk_trend", "policy", "decisions", "watchlist")
 _FRONTEND_HINTS = (".html", "_dashboard.", "frontend", "_ui.", "_view.", "react")
 
 

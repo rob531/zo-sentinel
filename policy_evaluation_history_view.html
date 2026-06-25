@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Policy Evaluation History</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .search-container {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+        .search-container input {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <h1>Policy Evaluation History</h1>
+    <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Search for Policy Rule or MCP...">
+    </div>
+    <table id="policyTable">
+        <thead>
+            <tr>
+                <th>Policy Rule</th>
+                <th>MCP</th>
+                <th>Evaluation Result</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody id="policyTableBody">
+            <!-- Data will be inserted here by JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchPolicyEvaluations();
+
+            document.getElementById('searchInput').addEventListener('input', function() {
+                filterTable();
+            });
+        });
+
+        function fetchPolicyEvaluations() {
+            // Mock API call to mcp_policy_evaluation_api.py
+            // In a real scenario, this would be a fetch call to the actual API endpoint
+            const mockData = [
+                {
+                    policy_rule: "Rule 1",
+                    mcp: "MCP A",
+                    evaluation_result: "Passed",
+                    timestamp: "2023-10-01 10:00:00"
+                },
+                {
+                    policy_rule: "Rule 2",
+                    mcp: "MCP B",
+                    evaluation_result: "Failed",
+                    timestamp: "2023-10-01 11:00:00"
+                },
+                {
+                    policy_rule: "Rule 3",
+                    mcp: "MCP C",
+                    evaluation_result: "Passed",
+                    timestamp: "2023-10-01 12:00:00"
+                }
+            ];
+
+            renderTable(mockData);
+        }
+
+        function renderTable(data) {
+            const tableBody = document.getElementById('policyTableBody');
+            tableBody.innerHTML = '';
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.policy_rule}</td>
+                    <td>${item.mcp}</td>
+                    <td>${item.evaluation_result}</td>
+                    <td>${item.timestamp}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function filterTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toUpperCase();
+            const table = document.getElementById('policyTable');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) {
+                const tdPolicyRule = tr[i].getElementsByTagName('td')[0];
+                const tdMCP = tr[i].getElementsByTagName('td')[1];
+                if (tdPolicyRule || tdMCP) {
+                    const txtValuePolicyRule = tdPolicyRule.textContent || tdPolicyRule.innerText;
+                    const txtValueMCP = tdMCP.textContent || tdMCP.innerText;
+                    if (txtValuePolicyRule.toUpperCase().indexOf(filter) > -1 || txtValueMCP.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = '';
+                    } else {
+                        tr[i].style.display = 'none';
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

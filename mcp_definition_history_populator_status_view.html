@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Definition History Populator Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .dashboard {
+            background-color: white;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .status-item {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            flex: 1;
+            margin-right: 10px;
+            text-align: center;
+        }
+        .status-item:last-child {
+            margin-right: 0;
+        }
+        .status-value {
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .metrics {
+            margin-bottom: 20px;
+        }
+        .metric {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .metric-label {
+            font-weight: bold;
+        }
+        .errors {
+            margin-top: 20px;
+        }
+        .error {
+            color: red;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #ffecec;
+            border-radius: 5px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .running {
+            background-color: #e6f7e6;
+            color: #339933;
+        }
+        .idle {
+            background-color: #f9f9f9;
+            color: #666;
+        }
+        .failed {
+            background-color: #ffecec;
+            color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>MCP Definition History Populator Status</h1>
+
+        <div id="loading" class="loading">
+            Loading status data...
+        </div>
+
+        <div id="status" class="status" style="display: none;">
+            <div id="current-status" class="status-item">
+                <div class="status-label">Current Status</div>
+                <div id="status-value" class="status-value">-</div>
+            </div>
+            <div id="last-run" class="status-item">
+                <div class="status-label">Last Run</div>
+                <div id="last-run-value" class="status-value">-</div>
+            </div>
+            <div id="definitions-processed" class="status-item">
+                <div class="status-label">Definitions Processed</div>
+                <div id="definitions-processed-value" class="status-value">-</div>
+            </div>
+        </div>
+
+        <div id="metrics" class="metrics" style="display: none;">
+            <div class="metric">
+                <span class="metric-label">Total Definitions in System:</span>
+                <span id="total-definitions">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Definitions Processed in Last Run:</span>
+                <span id="last-run-processed">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Average Processing Time:</span>
+                <span id="avg-processing-time">-</span>
+            </div>
+        </div>
+
+        <div id="errors" class="errors" style="display: none;">
+            <h3>Recent Errors</h3>
+            <div id="error-list">
+                <!-- Errors will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock API endpoint for testing
+        const mockApiEndpoint = '/api/mcp_definition_history_populator_status';
+
+        // Mock data for testing when API is not available
+        const mockData = {
+            status: 'running',
+            last_run: '2023-05-15T14:30:00Z',
+            definitions_processed: 1250,
+            total_definitions: 5000,
+            last_run_processed: 250,
+            avg_processing_time: '120ms',
+            errors: [
+                {
+                    timestamp: '2023-05-15T13:45:22Z',
+                    message: 'Connection timeout to database',
+                    details: 'Failed to connect to database server at db.example.com:5432'
+                },
+                {
+                    timestamp: '2023-05-15T10:12:05Z',
+                    message: 'Invalid definition format',
+                    details: 'Definition ID 12345 has invalid JSON structure'
+                }
+            ]
+        };
+
+        // Function to format timestamp
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        // Function to update the UI with status data
+        function updateStatus(data) {
+            // Hide loading indicator
+            document.getElementById('loading').style.display = 'none';
+
+            // Show status container
+            document.getElementById('status').style.display = 'flex';
+
+            // Update status value and styling
+            const statusValue = document.getElementById('status-value');
+            statusValue.textContent = data.status.toUpperCase();
+
+            const statusItem = document.getElementById('current-status');
+            statusItem.className = 'status-item';
+            statusItem.classList.add(data.status);
+
+            // Update last run time
+            document.getElementById('last-run-value').textContent = formatTimestamp(data.last_run);
+
+            // Update definitions processed
+            document.getElementById('definitions-processed-value').textContent = data.definitions_processed;
+
+            // Show metrics
+            document.getElementById('metrics').style.display = 'block';
+            document.getElementById('total-definitions').textContent = data.total_definitions;
+            document.getElementById('last-run-processed').textContent = data.last_run_processed;
+            document.getElementById('avg-processing-time').textContent = data.avg_processing_time;
+
+            // Show errors if any
+            if (data.errors && data.errors.length > 0) {
+                document.getElementById('errors').style.display = 'block';
+
+                const errorList = document.getElementById('error-list');
+                errorList.innerHTML = '';
+
+                data.errors.forEach(error => {
+                    const errorElement = document.createElement('div');
+                    errorElement.className = 'error';
+                    errorElement.innerHTML = `
+                        <strong>${formatTimestamp(error.timestamp)}</strong><br>
+                        <strong>Error:</strong> ${error.message}<br>
+                        <strong>Details:</strong> ${error.details}
+                    `;
+                    errorList.appendChild(errorElement);
+                });
+            }
+        }
+
+        // Function to fetch data from API
+        async function fetchStatusData() {
+            try {
+                // In a real implementation, this would be an actual API call
+                // const response = await fetch(mockApiEndpoint);
+                // const data = await response.json();
+
+                // For testing, use mock data
+                const data = mockData;
+
+                updateStatus(data);
+            } catch (error) {
+                console.error('Error fetching status data:', error);
+                document.getElementById('loading').textContent = 'Error loading status data. Please try again later.';
+            }
+        }
+
+        // Fetch data when page loads
+        document.addEventListener('DOMContentLoaded', fetchStatusData);
+
+        // For testing purposes, you can also call fetchStatusData() manually
+        // to simulate a refresh
+    </script>
+</body>
+</html>

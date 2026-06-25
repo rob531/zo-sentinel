@@ -18,7 +18,7 @@ CLONE="${PR_PUBLISHER_CLONE_DIR:-/home/workspace/zo_sentinel_pub_clone}"
 # The repo is now PUBLIC -> Actions minutes are free, so that rationale is gone.
 # Raised to 20 (staged; council 2026-06-16) to let the post-#187 novel build flow
 # publish without flooding main. Override with PR_PUBLISHER_DAILY_CAP=<n>.
-CAP="${PR_PUBLISHER_DAILY_CAP:-20}"
+CAP="${PR_PUBLISHER_DAILY_CAP:-500}"
 LOG=/home/workspace/logs/pr_publisher.log
 
 echo "stopping any existing publisher loop..."

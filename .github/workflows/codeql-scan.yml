@@ -1,0 +1,46 @@
+name: codeql-scan
+
+# CodeQL static-analysis scan for Python.
+# - On PRs: surfaces alerts as annotations (non-blocking initially).
+# - On push to main: full scan; triggers codeql-autofix on completion.
+# - Weekly schedule: catches drift in dependency-introduced code paths.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 03 * * 1'   # Monday 03:00 UTC
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write   # upload SARIF results
+
+jobs:
+  analyze:
+    name: CodeQL (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # security-and-quality = security-extended + quality rules
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:python
+          # Upload results so codeql-autofix can query the alerts API
+          upload: always

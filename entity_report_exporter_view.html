@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entity Report Viewer</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Container for the entire report */
+        .report-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 30px;
+        }
+
+        /* Header Styling */
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 15px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 1.6em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        /* Report Metadata */
+        .report-meta {
+            text-align: right;
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+        .report-meta span {
+            margin-left: 15px;
+        }
+
+        /* Summary Section */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease-in-out;
+        }
+        .summary-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .summary-card h3 {
+            margin-top: 0;
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .summary-card p {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        /* Table Styling */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            overflow: hidden; /* Ensures rounded corners apply to children */
+        }
+
+        .report-table th, .report-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .report-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+
+        .report-table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .report-table tbody tr:hover {
+            background-color: #e8f4f8;
+            cursor: pointer;
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+            text-transform: capitalize;
+        }
+
+        .status-active { background-color: #2ecc71; } /* Green */
+        .status-inactive { background-color: #e74c3c; } /* Red */
+        .status-warning { background-color: #f39c12; } /* Orange */
+        .status-critical { background-color: #c0392b; } /* Dark Red */
+        .status-unknown { background-color: #95a5a6; } /* Grey */
+
+        /* Loading and Error States */
+        .loading-indicator, .error-message {
+            text-align: center;
+            padding: 30px;
+            font-size: 1.2em;
+            color: #555;
+        }
+
+        .loading-indicator {
+            color: #3498db;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            background-color: #fdeded;
+            border: 1px solid #fbcaca;
+            border-radius: 5px;
+            margin: 20px auto;
+            max-width: 600px;
+        }
+
+        /* Utility classes */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .report-container {
+                margin: 10px;
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            h2 {
+                font-size: 1.4em;
+            }
+            .report-table th, .report-table td {
+                padding: 8px 10px;
+                font-size: 0.9em;
+            }
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .report-table thead {
+                display: none; /* Hide table headers on small screens */
+            }
+            .report-table, .report-table tbody, .report-table tr, .report-table td {
+                display: block;
+                width: 100%;
+            }
+            .report-table tr {
+                margin-bottom: 15px;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            }
+            .report-table td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
+            }
+            .report-table td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                width: calc(50% - 20px);
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: #555;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="report-container">
+        <h1 id="reportTitle">Loading Report...</h1>
+
+        <div class="report-meta">
+            <span>Generated: <span id="generatedAt">N/A</span></span>
+        </div>
+
+        <div id="loadingIndicator" class="loading-indicator">
+            <p>Fetching report data...</p>
+        </div>
+
+        <div id="errorMessage" class="error-message hidden">
+            <p>Error loading report data. Please try again later.</p>
+            <p id="errorDetails"></p>
+        </div>
+
+        <div id="reportContent" class="hidden">
+            <h2>Report Summary</h2>
+            <div id="summaryCards" class="summary-cards">
+                <!-- Summary cards will be injected here by JavaScript -->
+            </div>
+
+            <h2>Entity Details</h2>
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Last Check</th>
+                        <th>Alerts</th>
+                    </tr>
+                </thead>
+                <tbody id="entityTableBody">
+                    <!-- Entity rows will be injected here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const reportTitleElem = document.getElementById('reportTitle');
+            const generatedAtElem = document.getElementById('generatedAt');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorDetailsElem = document.getElementById('errorDetails');
+            const reportContent = document.getElementById('reportContent');
+            const summaryCardsContainer = document.getElementById('summaryCards');
+            const entityTableBody = document.getElementById('entityTableBody');
+
+            // Function to format ISO date string to a more readable format
+            const formatDateTime = (isoString) => {
+                if (!isoString) return 'N/A';
+                try {
+                    const date = new Date(isoString);
+                    return date.toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                } catch (e) {
+                    console.error("Error formatting date:", e);
+                    return isoString; // Return original if formatting fails
+                }
+            };
+
+            // Function to fetch report data (mocked for now)
+            const fetchReportData = async () => {
+                loadingIndicator.classList.remove('hidden');
+                errorMessage.classList.add('hidden');
+                reportContent.classList.add('hidden');
+
+                try {
+                    // Simulate API call delay
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+
+                    // --- MOCK DATA START ---
+                    // In a real scenario, this would be a fetch() call to your backend API:
+                    // const response = await fetch('/api/entity-reports');
+                    // if (!response.ok) {
+                    //     throw new Error(`HTTP error! status: ${response.status}`);
+                    // }
+                    // const data = await response.json();
+                    // --- MOCK DATA END ---
+
+                    const mockData = {
+                        "reportTitle": "Daily Entity Status Report",
+                        "generatedAt": new Date().toISOString(),
+                        "summary": {
+                            "totalEntities": 150,
+                            "activeEntities": 120,
+                            "inactiveEntities": 25,
+                            "warningEntities": 5,
+                            "criticalAlerts": 3
+                        },
+                        "entities": [
+                            {
+                                "id": "ENT001",
+                                "name": "Web Server Alpha",
+                                "type": "Server",
+                                "status": "Active",
+                                "last_check": "2023-10-27T10:29:00Z",
+                                "alerts": ["High CPU (85%)"]
+                            },
+                            {
+                                "id": "ENT002",
+                                "name": "Database Cluster Beta",
+                                "type": "Database",
+                                "status": "Active",
+                                "last_check": "2023-10-27T10:28:30Z",
+                                "alerts": []
+                            },
+                            {
+                                "id": "ENT003",
+                                "name": "Network Switch Gamma",
+                                "type": "Network Device",
+                                "status": "Inactive",
+                                "last_check": "2023-10-26T09:00:00Z",
+                                "alerts": ["Offline for 24h"]
+                            },
+                            {
+                                "id": "ENT004",
+                                "name": "Load Balancer Delta",
+                                "type": "Network Device",
+                                "status": "Active",
+                                "last_check": "2023-10-27T10:29:15Z",
+                                "alerts": []
+                            },
+                            {
+                                "id": "ENT005",
+                                "name": "Storage Array Epsilon",
+                                "type": "Storage",
+                                "status": "Warning",
+                                "last_check": "2023-10-27T10:25:00Z",
+                                "alerts": ["Disk usage 90%", "IOPS degradation"]
+                            },
+                            {
+                                "id": "ENT006",
+                                "name": "Monitoring Service Zeta",
+                                "type": "Service",
+                                "status": "Active",
+                                "last_check": "2023-10-27T10:29:50Z",
+                                "alerts": []
+                            },
+                            {
+                                "id": "ENT007",
+                                "name": "Backup Server Eta",
+                                "type": "Server",
+                                "status": "Inactive",
+                                "last_check": "2023-10-25T18:00:00Z",
+                                "alerts": ["Backup job failed"]
+                            }
+                        ]
+                    };
+
+                    renderReport(mockData);
+
+                } catch (error) {
+                    console.error('Failed to fetch report:', error);
+                    reportTitleElem.textContent = 'Error Loading Report';
+                    errorDetailsElem.textContent = `Details: ${error.message}`;
+                    errorMessage.classList.remove('hidden');
+                } finally {
+                    loadingIndicator.classList.add('hidden');
+                }
+            };
+
+            // Function to render the report data into the HTML
+            const renderReport = (data) => {
+                reportTitleElem.textContent = data.reportTitle || 'Entity Report';
+                generatedAtElem.textContent = formatDateTime(data.generatedAt);
+
+                // Render Summary Cards
+                summaryCardsContainer.innerHTML = ''; // Clear previous content
+                if (data.summary) {
+                    for (const key in data.summary) {
+                        if (Object.hasOwnProperty.call(data.summary, key)) {
+                            const value = data.summary[key];
+                            const card = document.createElement('div');
+                            card.classList.add('summary-card');
+                            card.innerHTML = `
+                                <h3>${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</h3>
+                                <p>${value}</p>
+                            `;
+                            summaryCardsContainer.appendChild(card);
+                        }
+                    }
+                }
+
+                // Render Entity Table
+                entityTableBody.innerHTML = ''; // Clear previous content
+                if (data.entities && data.entities.length > 0) {
+                    data.entities.forEach(entity => {
+                        const row = document.createElement('tr');
+                        const statusClass = `status-${entity.status ? entity.status.toLowerCase() : 'unknown'}`;
+                        const alertsText = entity.alerts && entity.alerts.length > 0 ? entity.alerts.join(', ') : 'None';
+
+                        row.innerHTML = `
+                            <td data-label="ID">${entity.id || 'N/A'}</td>
+                            <td data-label="Name">${entity.name || 'N/A'}</td>
+                            <td data-label="Type">${entity.type || 'N/A'}</td>
+                            <td data-label="Status"><span class="status-badge ${statusClass}">${entity.status || 'Unknown'}</span></td>
+                            <td data-label="Last Check">${formatDateTime(entity.last_check)}</td>
+                            <td data-label="Alerts">${alertsText}</td>
+                        `;
+                        entityTableBody.appendChild(row);
+                    });
+                } else {
+                    entityTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px;">No entity data available.</td></tr>`;
+                }
+
+                reportContent.classList.remove('hidden');
+            };
+
+            // Initial fetch of report data when the page loads
+            fetchReportData();
+        });
+    </script>
+
+</body>
+</html>

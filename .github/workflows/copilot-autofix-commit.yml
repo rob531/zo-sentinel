@@ -1,0 +1,48 @@
+name: copilot-autofix-commit
+
+# Automatically commits Copilot Autofix suggestions the moment they are
+# generated — zero human clicks. Works for both CodeQL and Bandit alerts
+# (both upload SARIF to the code scanning API, which Copilot Autofix covers).
+#
+# Trigger: code_scanning_alert.appeared_in_branch fires once per alert
+# per branch; we only act on PR branches so we never silently mutate main.
+
+on:
+  code_scanning_alert:
+    types: [appeared_in_branch]
+
+permissions:
+  contents: write        # commit the fix to the PR branch
+  security-events: read  # read alert + autofix via code scanning API
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only act on PR branches (not direct pushes to main)
+    if: contains(github.event.alert.most_recent_instance.ref, 'refs/pull/')
+    steps:
+      - name: Commit Copilot Autofix suggestion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ALERT: ${{ github.event.alert.number }}
+          REF: ${{ github.event.alert.most_recent_instance.ref }}
+          RULE: ${{ github.event.alert.rule.id }}
+        run: |
+          # Wait up to 90s for Copilot to generate the fix (it's async)
+          for i in $(seq 1 9); do
+            STATUS=$(gh api "repos/$REPO/code-scanning/alerts/$ALERT/autofix" \
+              --jq '.status' 2>/dev/null || echo "pending")
+            echo "attempt $i: alert=#$ALERT rule=$RULE status=$STATUS"
+            [ "$STATUS" = "success" ] && break
+            [ "$STATUS" = "error" ]   && { echo "no autofix available for this rule"; exit 0; }
+            sleep 10
+          done
+          [ "$STATUS" != "success" ] && { echo "autofix not ready after 90s — skipping"; exit 0; }
+
+          gh api --method POST "repos/$REPO/code-scanning/alerts/$ALERT/autofix/commits" \
+            -f message="fix(autofix): $RULE — alert #$ALERT" \
+            -f target_ref="$REF" \
+            && echo "fix committed to $REF" \
+            || echo "commit failed or already applied — ok"

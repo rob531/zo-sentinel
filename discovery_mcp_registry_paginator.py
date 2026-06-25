@@ -130,7 +130,7 @@ def check_single_instance():
             os.kill(existing_pid, 0)
             log(f"error: another instance already running as PID {existing_pid}")
             sys.exit(1)
-        except OSError:
+        except (OSError, SystemError):  # Windows os.kill(pid,0) raises SystemError, not OSError
             log(f"info: stale lockfile detected, PID {existing_pid} not running, reclaiming")
     write_pid_file(LOCK_FILE, own_pid)
 

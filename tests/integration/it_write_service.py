@@ -80,14 +80,31 @@ def _refresh_catalog():
     mesh_memory, not one of the app schema tables) becomes writable -- the real
     write_service supports CREATE-then-write, and the integration tier must too."""
     global _tables, _tcols
-    rows = _con.execute(
+    rows = _live_con().execute(
         f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{_CATALOG_NS}'"
     ).fetchall()
     _tables = {r[0] for r in rows}
     _tcols = {}
     for t in _tables:
-        cur = _con.execute(f'SELECT * FROM "{t}" LIMIT 0')
+        cur = _live_con().execute(f'SELECT * FROM "{t}" LIMIT 0')
         _tcols[t] = [_col_name(d) for d in cur.description]
+
+
+def _live_con():
+    """Live connection; reconnect if the single conn died (else the service 500s forever)."""
+    global _con
+    try:
+        cur = _con.cursor(); cur.execute("SELECT 1"); cur.close()
+    except Exception:
+        try:
+            _con.close()
+        except Exception:
+            pass
+        _con = _connect()
+        if BACKEND == "duckdb":
+            _create_schema(_con)
+        _refresh_catalog()
+    return _con
 
 
 @app.on_event("startup")
@@ -100,7 +117,7 @@ def _startup():
 
 def _next_id(table: str) -> int:
     try:
-        return int(_con.execute(f'SELECT COALESCE(MAX(id),0)+1 FROM "{table}"').fetchone()[0])
+        return int(_live_con().execute(f'SELECT COALESCE(MAX(id),0)+1 FROM "{table}"').fetchone()[0])
     except Exception:
         return 1
 
@@ -125,7 +142,7 @@ async def write(request: Request):
             vals = [json.dumps(r[c]) if isinstance(r[c], (dict, list)) else r[c] for c in use]
             colsql = ", ".join(f'"{c}"' for c in use)
             ph = ", ".join(PARAM for _ in use)
-            _con.execute(f'INSERT INTO "{table}" ({colsql}) VALUES ({ph})', vals)
+            _live_con().execute(f'INSERT INTO "{table}" ({colsql}) VALUES ({ph})', vals)
             n += 1
     except Exception as e:
         return JSONResponse({"ok": False, "queued": n, "error": str(e)}, status_code=500)
@@ -136,7 +153,7 @@ async def write(request: Request):
 async def query(request: Request):
     body = await request.json()
     try:
-        cur = _con.execute(body.get("sql", ""))
+        cur = _live_con().execute(body.get("sql", ""))
         cnames = [_col_name(d) for d in cur.description] if cur.description else []
         rows = [dict(zip(cnames, row)) for row in cur.fetchall()]
     except Exception as e:
@@ -148,7 +165,7 @@ async def query(request: Request):
 async def execute(request: Request):
     body = await request.json()
     try:
-        _con.execute(body.get("sql", ""))
+        _live_con().execute(body.get("sql", ""))
         _refresh_catalog()  # a CREATE/DROP changes which tables are writable
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)

@@ -3,200 +3,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - MCP Exemptions</title>
+    <title>Admin MCP Exemptions</title>
     <style>
-        /* Basic Admin Styling - Consistent with other admin views */
+        /* Basic CSS for readability */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f7f6;
-            color: #333;
+            margin: 20px;
+            background-color: #f8f9fa;
+            color: #343a40;
+            line-height: 1.6;
         }
-
+        h1 {
+            color: #0056b3;
+            margin-bottom: 25px;
+            text-align: center;
+            font-size: 2.2em;
+        }
         .container {
             max-width: 1200px;
-            margin: 20px auto;
-            padding: 30px;
+            margin: 0 auto;
+            padding: 20px;
             background-color: #ffffff;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
-
-        h1 {
-            color: #2c3e50;
-            margin-bottom: 25px;
-            font-size: 2em;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px;
-        }
-
-        .button-group {
-            margin-bottom: 25px;
-            display: flex;
-            gap: 10px;
-        }
-
-        button {
-            padding: 10px 18px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.95em;
-            transition: background-color 0.2s ease, transform 0.1s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        button.primary {
-            background-color: #3498db;
-            color: white;
-        }
-
-        button.primary:hover {
-            background-color: #2980b9;
-            transform: translateY(-1px);
-        }
-
-        button.edit {
-            background-color: #2ecc71;
-            color: white;
-        }
-
-        button.edit:hover {
-            background-color: #27ae60;
-            transform: translateY(-1px);
-        }
-
-        button.revoke {
-            background-color: #e74c3c;
-            color: white;
-        }
-
-        button.revoke:hover {
-            background-color: #c0392b;
-            transform: translateY(-1px);
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
-            background-color: #ffffff;
-            border-radius: 8px;
-            overflow: hidden; /* Ensures rounded corners apply to table borders */
-        }
-
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #ecf0f1;
-        }
-
-        th {
-            background-color: #f8f9fa;
-            color: #555;
-            font-weight: 600;
-            text-transform: uppercase;
             font-size: 0.9em;
         }
-
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9ecef;
+            color: #495057;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
         tr:hover {
-            background-color: #f5f5f5;
+            background-color: #e2e6ea;
+            cursor: pointer;
         }
-
-        td:last-child {
+        #loading-message, #error-message {
             text-align: center;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            font-weight: bold;
         }
-
-        .action-buttons {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
+        #loading-message {
+            background-color: #e0f7fa;
+            color: #007bff;
+            border: 1px solid #007bff;
+        }
+        #error-message {
+            background-color: #ffe0e0;
+            color: #dc3545;
+            border: 1px solid #dc3545;
+            display: none; /* Hidden by default */
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>MCP Exemptions Management</h1>
+        <h1>MCP Exemptions Dashboard</h1>
 
-        <div class="button-group">
-            <button class="primary" onclick="alert('Add New Exemption functionality not implemented yet.')">Add New Exemption</button>
-        </div>
+        <p id="loading-message">Loading exemptions...</p>
+        <p id="error-message"></p>
 
-        <table>
+        <table id="exemptions-table">
             <thead>
                 <tr>
-                    <th>MCP ID</th>
-                    <th>Exemption Reason</th>
-                    <th>Expiry Date</th>
-                    <th>Granted By</th>
-                    <th>Actions</th>
+                    <th>MCP Name</th>
+                    <th>Reason</th>
+                    <th>Expires At</th>
+                    <th>Created By</th>
                 </tr>
             </thead>
             <tbody>
-                <!-- Placeholder Data -->
-                <tr>
-                    <td>MCP-001-A</td>
-                    <td>Critical system maintenance</td>
-                    <td>2024-12-31</td>
-                    <td>Admin User 1</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="edit" onclick="alert('Edit Exemption MCP-001-A functionality not implemented yet.')">Edit</button>
-                            <button class="revoke" onclick="alert('Revoke Exemption MCP-001-A functionality not implemented yet.')">Revoke</button>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>MCP-002-B</td>
-                    <td>Security vulnerability patch</td>
-                    <td>2025-01-15</td>
-                    <td>Security Team Lead</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="edit" onclick="alert('Edit Exemption MCP-002-B functionality not implemented yet.')">Edit</button>
-                            <button class="revoke" onclick="alert('Revoke Exemption MCP-002-B functionality not implemented yet.')">Revoke</button>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>MCP-003-C</td>
-                    <td>New feature rollout dependency</td>
-                    <td>2024-11-01</td>
-                    <td>Project Manager X</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="edit" onclick="alert('Edit Exemption MCP-003-C functionality not implemented yet.')">Edit</button>
-                            <button class="revoke" onclick="alert('Revoke Exemption MCP-003-C functionality not implemented yet.')">Revoke</button>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>MCP-004-D</td>
-                    <td>Third-party integration delay</td>
-                    <td>2025-03-20</td>
-                    <td>Integration Specialist</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="edit" onclick="alert('Edit Exemption MCP-004-D functionality not implemented yet.')">Edit</button>
-                            <button class="revoke" onclick="alert('Revoke Exemption MCP-004-D functionality not implemented yet.')">Revoke</button>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>MCP-005-E</td>
-                    <td>Emergency hotfix deployment</td>
-                    <td>2024-10-05</td>
-                    <td>Operations Lead</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="edit" onclick="alert('Edit Exemption MCP-005-E functionality not implemented yet.')">Edit</button>
-                            <button class="revoke" onclick="alert('Revoke Exemption MCP-005-E functionality not implemented yet.')">Revoke</button>
-                        </div>
-                    </td>
-                </tr>
+                <!-- Exemption data will be loaded here by JavaScript -->
             </tbody>
         </table>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const exemptionsTableBody = document.querySelector('#exemptions-table tbody');
+            const loadingMessage = document.getElementById('loading-message');
+            const errorMessage = document.getElementById('error-message');
+
+            async function fetchExemptions() {
+                loadingMessage.style.display = 'block';
+                errorMessage.style.display = 'none';
+                exemptionsTableBody.innerHTML = ''; // Clear existing data
+
+                try {
+                    // --- MOCK API CALL FOR DEMONSTRATION ---
+                    // This simulates fetching data from the backend.
+                    // In a real deployment, you would replace this with the actual fetch call.
+                    const response = await new Promise(resolve => setTimeout(() => {
+                        resolve({
+                            ok: true,
+                            json: () => Promise.resolve([
+                                {
+                                    mcp_name: 'Sentinel-Alpha-1',
+                                    reason: 'Temporary maintenance bypass for critical update',
+                                    expires_at: '2024-12-31T23:59:59Z',
+                                    created_by: 'admin_user_1'
+                                },
+                                {
+                                    mcp_name: 'Guardian-Beta-7',
+                                    reason: 'Integration testing for new module deployment',
+                                    expires_at: '2025-01-15T10:00:00Z',
+                                    created_by: 'dev_team_lead'
+                                },
+                                {
+                                    mcp_name: 'Watchdog-Gamma-3',
+                                    reason: 'Pilot program exception for early adopters',
+                                    expires_at: '2024-10-01T00:00:00Z',
+                                    created_by: 'project_manager_A'
+                                },
+                                {
+                                    mcp_name: 'Vigil-Delta-2',
+                                    reason: 'Scheduled security patch deployment window',
+                                    expires_at: '2024-09-20T18:00:00Z',
+                                    created_by: 'security_ops'
+                                },
+                                {
+                                    mcp_name: 'Aegis-Epsilon-5',
+                                    reason: 'Emergency hotfix deployment',
+                                    expires_at: '2024-08-25T12:00:00Z',
+                                    created_by: 'incident_response'
+                                }
+                            ])
+                        });
+                    }, 1500)); // Simulate network delay of 1.5 seconds
+
+                    // --- ACTUAL API CALL (UNCOMMENT FOR PRODUCTION USE) ---
+                    // const response = await fetch('/api/admin/exemptions');
+                    // -----------------------------------------------------
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+
+                    const exemptions = await response.json();
+                    
+                    if (exemptions.length === 0) {
+                        exemptionsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; font-style: italic; color: #6c757d;">No active exemptions found.</td></tr>';
+                    } else {
+                        exemptions.forEach(exemption => {
+                            const row = exemptionsTableBody.insertRow();
+                            row.insertCell().textContent = exemption.mcp_name;
+                            row.insertCell().textContent = exemption.reason;
+                            
+                            // Format date for better readability
+                            const expiresAtDate = new Date(exemption.expires_at);
+                            row.insertCell().textContent = expiresAtDate.toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false // Use 24-hour format
+                            });
+                            row.insertCell().textContent = exemption.created_by;
+                        });
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch exemptions:', error);
+                    errorMessage.textContent = `Failed to load exemptions: ${error.message}. Please check the console for more details or try again later.`;
+                    errorMessage.style.display = 'block';
+                    exemptionsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">Error loading data.</td></tr>';
+                } finally {
+                    loadingMessage.style.display = 'none';
+                }
+            }
+
+            fetchExemptions();
+        });
+    </script>
 </body>
 </html>

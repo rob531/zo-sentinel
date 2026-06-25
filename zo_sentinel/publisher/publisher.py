@@ -56,7 +56,7 @@ SENTINEL_NAME = ".pr_publisher_enabled"
 DEFAULT_HOME = "/home/workspace/zo_sentinel"
 DEFAULT_BRANCH_PREFIX = "auto/build"
 DEFAULT_LABEL = "autonomous-build"
-DEFAULT_DAILY_CAP = 100                      # repo is PUBLIC -> GitHub Actions minutes are
+DEFAULT_DAILY_CAP = 500                      # repo is PUBLIC -> GitHub Actions minutes are
                                              # UNLIMITED (the old 8/day cap protected a
                                              # private-repo 2000-min/mo budget, now obsolete).
                                              # Kept finite as a runaway safety valve; the real

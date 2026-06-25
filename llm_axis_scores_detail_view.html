@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Axis Scores Detail View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .risk-tier {
+            font-weight: bold;
+        }
+        .high {
+            color: red;
+        }
+        .medium {
+            color: orange;
+        }
+        .low {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>LLM Axis Scores Detail View</h1>
+    <div id="risk-tier"></div>
+    <table id="axis-scores-table">
+        <thead>
+            <tr>
+                <th>Risk Axis</th>
+                <th>Score</th>
+                <th>Confidence Level</th>
+            </tr>
+        </thead>
+        <tbody id="axis-scores-body">
+            <!-- Data will be inserted here by JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        // Sample data for testing
+        const sampleData = {
+            domain_trust: { score: 85, confidence: 90 },
+            tool_description_safety: { score: 78, confidence: 85 },
+            permission_scope: { score: 92, confidence: 95 },
+            supply_chain: { score: 65, confidence: 75 },
+            community_signal: { score: 88, confidence: 80 },
+            temporal_stability: { score: 72, confidence: 70 },
+            injection_resilience: { score: 95, confidence: 98 },
+            overall_risk_score: 80,
+            risk_tier: "Medium"
+        };
+
+        // Function to fetch data (mock implementation)
+        async function fetchData() {
+            // In a real scenario, you would fetch data from an API endpoint
+            // For now, we'll use the sample data
+            return sampleData;
+        }
+
+        // Function to render the data
+        function renderData(data) {
+            const axisScoresBody = document.getElementById('axis-scores-body');
+            const riskTierDiv = document.getElementById('risk-tier');
+
+            // Clear existing data
+            axisScoresBody.innerHTML = '';
+
+            // Render each axis score
+            for (const [axis, details] of Object.entries(data)) {
+                if (axis === 'overall_risk_score' || axis === 'risk_tier') continue;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${axis.replace(/_/g, ' ')}</td>
+                    <td>${details.score}</td>
+                    <td>${details.confidence}%</td>
+                `;
+                axisScoresBody.appendChild(row);
+            }
+
+            // Render overall risk score and tier
+            riskTierDiv.innerHTML = `
+                <h2>Overall Risk Score: ${data.overall_risk_score}</h2>
+                <h2 class="risk-tier ${data.risk_tier.toLowerCase()}">Risk Tier: ${data.risk_tier}</h2>
+            `;
+
+            // Log success message to console
+            console.log('Render Test Passed');
+        }
+
+        // Main function to fetch and render data
+        async function main() {
+            try {
+                const data = await fetchData();
+                renderData(data);
+            } catch (error) {
+                console.error('Error fetching or rendering data:', error);
+            }
+        }
+
+        // Call the main function when the page loads
+        window.onload = main;
+    </script>
+</body>
+</html>

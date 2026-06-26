@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Threat Associations Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .dashboard-container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .controls label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .controls input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 300px;
+            font-size: 1em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9e9e9;
+            cursor: pointer;
+            position: relative;
+        }
+        th:hover {
+            background-color: #dcdcdc;
+        }
+        th.sort-asc::after {
+            content: ' ▲';
+            position: absolute;
+            right: 8px;
+            font-size: 0.8em;
+        }
+        th.sort-desc::after {
+            content: ' ▼';
+            position: absolute;
+            right: 8px;
+            font-size: 0.8em;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .severity-high { color: #d9534f; font-weight: bold; }
+        .severity-medium { color: #f0ad4e; }
+        .severity-low { color: #5cb85c; }
+        .loading-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+            color: #555;
+        }
+        .error-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+            color: #d9534f;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Threat Associations Dashboard</h1>
+
+        <div class="controls">
+            <label for="filterInput">Filter:</label>
+            <input type="text" id="filterInput" placeholder="Search all columns...">
+        </div>
+
+        <div id="loading" class="loading-message">Loading threat associations...</div>
+        <div id="error" class="error-message" style="display: none;"></div>
+
+        <table id="threatAssociationsTable">
+            <thead>
+                <tr>
+                    <th data-sort-by="mcp_name">MCP Name</th>
+                    <th data-sort-by="threat_id">Threat ID</th>
+                    <th data-sort-by="association_type">Association Type</th>
+                    <th data-sort-by="severity">Severity</th>
+                    <th data-sort-by="associated_at">Associated At</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be populated here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // In a real application, this would be the actual API endpoint URL
+        const API_ENDPOINT = '/api/mcp_threat_associations'; 
+
+        const tableBody = document.querySelector('#threatAssociationsTable tbody');
+        const filterInput = document.getElementById('filterInput');
+        const tableHeaders = document.querySelectorAll('#threatAssociationsTable th');
+        const loadingMessage = document.getElementById('loading');
+        const errorMessage = document.getElementById('error');
+
+        let currentData = [];
+        let sortColumn = null;
+        let sortDirection = 'asc'; // 'asc' or 'desc'
+
+        // Mock data for demonstration purposes.
+        // In a real scenario, this data would be fetched from the API_ENDPOINT.
+        const mockThreatAssociations = [
+            { mcp_name: 'ServerFarm-Prod-US-East', threat_id: 'THREAT-001', association_type: 'Detected', severity: 'High', associated_at: '2023-10-26T10:00:00Z' },
+            { mcp_name: 'WebCluster-Dev-EU-West', threat_id: 'THREAT-002', association_type: 'Mitigated', severity: 'Low', associated_at: '2023-10-25T14:30:00Z' },
+            { mcp_name: 'DBInstance-Staging-US-West', threat_id: 'THREAT-003', association_type: 'Detected', severity: 'Medium', associated_at: '2023-10-26T08:15:00Z' },
+            { mcp_name: 'EdgeRouter-HQ-NYC', threat_id: 'THREAT-001', association_type: 'Blocked', severity: 'High', associated_at: '2023-10-26T11:45:00Z' },
+            { mcp_name: 'IoTGateway-Factory-A', threat_id: 'THREAT-004', association_type: 'Detected', severity: 'Low', associated_at: '2023-10-24T16:00:00Z' },
+            { mcp_name: 'CloudFunction-Analytics', threat_id: 'THREAT-005', association_type: 'Investigating', severity: 'Medium', associated_at: '2023-10-26T09:00:00Z' },
+            { mcp_name: 'ServerFarm-Prod-US-East', threat_id: 'THREAT-006', association_type: 'Detected', severity: 'High', associated_at: '2023-10-26T12:00:00Z' },
+            { mcp_name: 'WebCluster-Dev-EU-West', threat_id: 'THREAT-007', association_type: 'Blocked', severity: 'Low', associated_at: '2023-10-25T18:00:00Z' },
+            { mcp_name: 'DBInstance-Staging-US-West', threat_id: 'THREAT-008', association_type: 'Mitigated', severity: 'Medium', associated_at: '2023-10-26T07:00:00Z' },
+            { mcp_name: 'EdgeRouter-HQ-NYC', threat_id: 'THREAT-009', association_type: 'Detected', severity: 'High', associated_at: '2023-10-26T13:00:00Z' },
+        ];
+
+        /**
+         * Fetches threat association data.
+         * For this standalone HTML, it uses mock data to simulate an API call.
+         */
+        async function fetchThreatAssociations() {
+            loadingMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            try {
+                // In a real application, you would use the following to fetch from a backend:
+                // const response = await fetch(API_ENDPOINT);
+                // if (!response.ok) {
+                //     throw new Error(`HTTP error! status: ${response.status}`);
+                // }
+                // const data = await response.json();
+                // currentData = data;
+
+                // For this standalone HTML, we simulate a network delay and use mock data
+                await new Promise(resolve => setTimeout(resolve, 500)); 
+                currentData = mockThreatAssociations;
+
+                renderTable(currentData);
+            } catch (error) {
+                console.error('Error fetching threat associations:', error);
+                errorMessage.textContent = `Failed to load data: ${error.message}. Please try again later.`;
+                errorMessage.style.display = 'block';
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No data available.</td></tr>';
+            } finally {
+                loadingMessage.style.display = 'none';
+            }
+        }
+
+        /**
+         * Renders the provided data into the table.
+         * @param {Array<Object>} data - The array of threat association objects to display.
+         */
+        function renderTable(data) {
+            tableBody.innerHTML = ''; // Clear existing rows
+            if (data.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No matching records found.</td></tr>';
+                return;
+            }
+
+            data.forEach(item => {
+                const row = tableBody.insertRow();
+                row.insertCell().textContent = item.mcp_name;
+                row.insertCell().textContent = item.threat_id;
+                row.insertCell().textContent = item.association_type;
+                const severityCell = row.insertCell();
+                severityCell.textContent = item.severity;
+                // Add class for severity-based styling
+                severityCell.classList.add(`severity-${item.severity.toLowerCase()}`);
+                // Format the date for better readability
+                row.insertCell().textContent = new Date(item.associated_at).toLocaleString(); 
+            });
+        }
+
+        /**
+         * Filters the current data based on the input field's value.
+         */
+        function filterData() {
+            const filterText = filterInput.value.toLowerCase();
+            const filtered = currentData.filter(item => {
+                // Check if any value in the item (row) contains the filter text
+                return Object.values(item).some(value =>
+                    String(value).toLowerCase().includes(filterText)
+                );
+            });
+            renderTable(filtered);
+        }
+
+        /**
+         * Sorts the current data by the specified column.
+         * @param {string} column - The key of the column to sort by.
+         */
+        function sortData(column) {
+            // If clicking the same column, toggle sort direction
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc'; // Default to ascending for a new column
+            }
+
+            // Remove previous sort indicators from all headers
+            tableHeaders.forEach(header => {
+                header.classList.remove('sort-asc', 'sort-desc');
+            });
+
+            // Add current sort indicator to the active header
+            const currentHeader = document.querySelector(`th[data-sort-by="${sortColumn}"]`);
+            if (currentHeader) {
+                currentHeader.classList.add(`sort-${sortDirection}`);
+            }
+
+            // Create a copy of the data to sort, to avoid modifying the original array directly
+            const sorted = [...currentData].sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                // Custom sorting logic for specific column types
+                if (column === 'associated_at') {
+                    valA = new Date(valA).getTime(); // Convert dates to timestamps for comparison
+                    valB = new Date(valB).getTime();
+                } else if (column === 'severity') {
+                    // Define a custom order for severity levels
+                    const severityOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                    valA = severityOrder[valA] || 0; // Default to 0 if severity not found
+                    valB = severityOrder[valB] || 0;
+                } else if (typeof valA === 'string') {
+                    valA = valA.toLowerCase(); // Case-insensitive string comparison
+                    valB = valB.toLowerCase();
+                }
+
+                if (valA < valB) {
+                    return sortDirection === 'asc' ? -1 : 1;
+                }
+                if (valA > valB) {
+                    return sortDirection === 'asc' ? 1 : -1;
+                }
+                return 0; // Values are equal
+            });
+            renderTable(sorted);
+        }
+
+        // Event Listeners
+        filterInput.addEventListener('keyup', filterData);
+
+        tableHeaders.forEach(header => {
+            header.addEventListener('click', () => {
+                const sortBy = header.getAttribute('data-sort-by');
+                if (sortBy) {
+                    sortData(sortBy);
+                }
+            });
+        });
+
+        // Initial data load when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', fetchThreatAssociations);
+    </script>
+</body>
+</html>

@@ -39,6 +39,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections import defaultdict
 
 # ---------------------------------------------------------------------------
@@ -69,11 +70,40 @@ def _repo() -> str:
     return repo
 
 
-def _gh(*args: str, check: bool = False) -> subprocess.CompletedProcess:
-    """Run a gh command, capturing output. Never raises unless check=True."""
-    return subprocess.run(
-        ["gh", *args], capture_output=True, text=True, check=check, timeout=120
-    )
+_TRANSIENT_GH = ("http 502", "http 503", "http 504", "timed out", "timeout",
+                 "couldn't respond", "rate limit", "secondary rate", "eof",
+                 "connection reset", "service unavailable", "try again", "bad gateway")
+
+
+def _gh(*args: str, check: bool = False, retries: int = 4) -> subprocess.CompletedProcess:
+    """Run a gh command, capturing output. Retries transient API failures
+    (HTTP 5xx / timeouts / rate limits) with exponential backoff so one flaky
+    GitHub GraphQL response can't fail the whole triage run. Raises only when
+    check=True (after retries are exhausted)."""
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            res = subprocess.run(
+                ["gh", *args], capture_output=True, text=True, timeout=120
+            )
+        except subprocess.TimeoutExpired:
+            if attempt < retries:
+                time.sleep(2 ** attempt)
+                continue
+            if check:
+                raise
+            return subprocess.CompletedProcess(["gh", *args], 124, "", "gh timed out")
+        last = res
+        if res.returncode == 0:
+            return res
+        err = (res.stderr or "").lower()
+        if attempt < retries and any(t in err for t in _TRANSIENT_GH):
+            time.sleep(2 ** attempt)  # 1, 2, 4, 8s
+            continue
+        break
+    if check and last is not None and last.returncode != 0:
+        raise subprocess.CalledProcessError(last.returncode, last.args, last.stdout, last.stderr)
+    return last
 
 
 # ---------------------------------------------------------------------------

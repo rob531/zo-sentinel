@@ -1,0 +1,4 @@
+{
+  "status": "operational",
+  "timestamp": "2023-10-27T10:00:00Z"
+}

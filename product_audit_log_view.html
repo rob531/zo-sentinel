@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Audit Log</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .filters label {
+            font-weight: bold;
+            margin-right: 5px;
+            align-self: center;
+        }
+        .filters input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            flex-grow: 1;
+            min-width: 150px;
+        }
+        .filters button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s ease;
+        }
+        .filters button:hover {
+            background-color: #0056b3;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: #fff;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+            word-wrap: break-word; /* Ensures long text wraps */
+        }
+        th {
+            background-color: #e9ecef;
+            font-weight: bold;
+            color: #495057;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        tr:hover {
+            background-color: #e2f0ff;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 1px solid #eee;
+        }
+        .pagination button {
+            padding: 8px 15px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s ease;
+        }
+        .pagination button:hover:not(:disabled) {
+            background-color: #5a6268;
+        }
+        .pagination button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .pagination span {
+            font-weight: bold;
+            color: #333;
+        }
+        .loading-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+            color: #555;
+        }
+        .error-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Product Audit Log</h1>
+
+        <div class="filters">
+            <label for="eventTypeFilter">Event Type:</label>
+            <input type="text" id="eventTypeFilter" placeholder="e.g., SERVER_CREATED">
+
+            <label for="actorFilter">Actor:</label>
+            <input type="text" id="actorFilter" placeholder="e.g., admin_user">
+
+            <button id="applyFiltersBtn">Apply Filters</button>
+        </div>
+
+        <div id="loading" class="loading-message">Loading audit logs...</div>
+        <div id="error" class="error-message" style="display: none;"></div>
+
+        <table id="auditLogTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Event Type</th>
+                    <th>Actor</th>
+                    <th>Target Server ID</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody id="auditLogTableBody">
+                <!-- Log entries will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+
+        <div class="pagination" style="display: none;">
+            <button id="prevPageBtn" disabled>Previous</button>
+            <span>Page <span id="currentPageSpan">1</span> of <span id="totalPagesSpan">1</span></span>
+            <button id="nextPageBtn" disabled>Next</button>
+        </div>
+    </div>
+
+    <script>
+        const auditLogTableBody = document.getElementById('auditLogTableBody');
+        const eventTypeFilterInput = document.getElementById('eventTypeFilter');
+        const actorFilterInput = document.getElementById('actorFilter');
+        const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const currentPageSpan = document.getElementById('currentPageSpan');
+        const totalPagesSpan = document.getElementById('totalPagesSpan');
+        const loadingMessage = document.getElementById('loading');
+        const errorMessage = document.getElementById('error');
+        const auditLogTable = document.getElementById('auditLogTable');
+        const paginationControls = document.getElementById('pagination');
+
+        let allAuditLogs = []; // Stores all fetched logs
+        let filteredAuditLogs = []; // Stores logs after applying filters
+        let currentPage = 1;
+        const logsPerPage = 10; // Number of logs to display per page
+
+        /**
+         * Fetches audit log entries from the API endpoint.
+         */
+        async function fetchAuditLogs() {
+            loadingMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            auditLogTable.style.display = 'none';
+            paginationControls.style.display = 'none';
+
+            try {
+                const response = await fetch('/audit_log');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                allAuditLogs = data;
+                applyFilters(); // Apply initial filters (which are empty) and render
+                auditLogTable.style.display = 'table';
+                paginationControls.style.display = 'flex';
+            } catch (error) {
+                console.error('Error fetching audit logs:', error);
+                errorMessage.textContent = `Failed to load audit logs: ${error.message}. Please try again later.`;
+                errorMessage.style.display = 'block';
+            } finally {
+                loadingMessage.style.display = 'none';
+            }
+        }
+
+        /**
+         * Applies filters based on user input and updates the filteredAuditLogs array.
+         */
+        function applyFilters() {
+            const eventTypeFilter = eventTypeFilterInput.value.toLowerCase();
+            const actorFilter = actorFilterInput.value.toLowerCase();
+
+            filteredAuditLogs = allAuditLogs.filter(log => {
+                const matchesEventType = log.event_type.toLowerCase().includes(eventTypeFilter);
+                const matchesActor = log.actor.toLowerCase().includes(actorFilter);
+                return matchesEventType && matchesActor;
+            });
+
+            currentPage = 1; // Reset to first page after applying new filters
+            renderTable();
+            renderPagination();
+        }
+
+        /**
+         * Renders the current page of audit logs into the table.
+         */
+        function renderTable() {
+            auditLogTableBody.innerHTML = ''; // Clear existing rows
+
+            const startIndex = (currentPage - 1) * logsPerPage;
+            const endIndex = startIndex + logsPerPage;
+            const logsToDisplay = filteredAuditLogs.slice(startIndex, endIndex);
+
+            if (logsToDisplay.length === 0) {
+                const noResultsRow = auditLogTableBody.insertRow();
+                const cell = noResultsRow.insertCell(0);
+                cell.colSpan = 5;
+                cell.textContent = 'No audit log entries found matching the criteria.';
+                cell.style.textAlign = 'center';
+                cell.style.padding = '20px';
+                return;
+            }
+
+            logsToDisplay.forEach(log => {
+                const row = auditLogTableBody.insertRow();
+                row.insertCell(0).textContent = new Date(log.timestamp).toLocaleString();
+                row.insertCell(1).textContent = log.event_type;
+                row.insertCell(2).textContent = log.actor;
+                row.insertCell(3).textContent = log.target_server_id || 'N/A';
+                row.insertCell(4).textContent = log.details;
+            });
+        }
+
+        /**
+         * Updates the pagination controls (page number, button states).
+         */
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredAuditLogs.length / logsPerPage);
+            currentPageSpan.textContent = currentPage;
+            totalPagesSpan.textContent = totalPages === 0 ? 1 : totalPages; // Handle case with no logs
+
+            prevPageBtn.disabled = currentPage === 1;
+            nextPageBtn.disabled = currentPage === totalPages || totalPages === 0;
+        }
+
+        /**
+         * Event handler for previous page button.
+         */
+        function goToPrevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+                renderPagination();
+            }
+        }
+
+        /**
+         * Event handler for next page button.
+         */
+        function goToNextPage() {
+            const totalPages = Math.ceil(filteredAuditLogs.length / logsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderTable();
+                renderPagination();
+            }
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', fetchAuditLogs);
+        applyFiltersBtn.addEventListener('click', applyFilters);
+        prevPageBtn.addEventListener('click', goToPrevPage);
+        nextPageBtn.addEventListener('click', goToNextPage);
+
+        // Optional: Allow pressing Enter in filter fields to apply filters
+        eventTypeFilterInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') applyFilters();
+        });
+        actorFilterInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') applyFilters();
+        });
+    </script>
+</body>
+</html>

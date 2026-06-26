@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Definition History Trend</title>
+    <!-- Chart.js CDN for charting capabilities -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        #filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background-color: #fdfdfd;
+            align-items: center;
+        }
+        #filters label {
+            font-weight: bold;
+            color: #555;
+        }
+        #filters input[type="date"],
+        #filters input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            flex-grow: 1;
+            min-width: 150px;
+        }
+        #filters button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: background-color 0.3s ease;
+        }
+        #filters button:hover {
+            background-color: #2980b9;
+        }
+        #chartContainer {
+            position: relative;
+            height: 400px; /* Fixed height for the chart */
+            width: 100%;
+        }
+        canvas {
+            background-color: #fff;
+            border-radius: 6px;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2em;
+            color: #555;
+            border-radius: 6px;
+            z-index: 10;
+            display: none; /* Hidden by default */
+        }
+        .loading-overlay.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <div id="dashboard-container">
+        <h1>MCP Definition History Trend</h1>
+
+        <div id="filters">
+            <label for="startDate">Start Date:</label>
+            <input type="date" id="startDate">
+
+            <label for="endDate">End Date:</label>
+            <input type="date" id="endDate">
+
+            <label for="mcpName">MCP Name (optional):</label>
+            <input type="text" id="mcpName" placeholder="e.g., MCP_A, MCP_B">
+
+            <button id="applyFilters">Apply Filters</button>
+        </div>
+
+        <div id="chartContainer">
+            <canvas id="mcpTrendChart"></canvas>
+            <div class="loading-overlay" id="loadingOverlay">Fetching data...</div>
+        </div>
+    </div>
+
+    <script>
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const mcpNameInput = document.getElementById('mcpName');
+        const applyFiltersBtn = document.getElementById('applyFilters');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const ctx = document.getElementById('mcpTrendChart').getContext('2d');
+
+        let mcpTrendChart; // To hold the Chart.js instance
+
+        /**
+         * Initializes the Chart.js instance with empty data.
+         */
+        function initializeChart() {
+            mcpTrendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Definition Changes',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Allow chart to fill container height
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'MCP Definition Changes Over Time',
+                            font: {
+                                size: 18
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time', // Use time scale for dates
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'MMM D, YYYY',
+                                displayFormats: {
+                                    day: 'MMM D'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Changes'
+                            },
+                            ticks: {
+                                precision: 0 // Ensure integer ticks for counts
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Updates the Chart.js instance with new data.
+         * @param {Array<Object>} data - An array of objects like {date: "YYYY-MM-DD", count: N}.
+         */
+        function updateChart(data) {
+            const labels = data.map(item => item.date);
+            const dataPoints = data.map(item => item.count);
+
+            mcpTrendChart.data.labels = labels;
+            mcpTrendChart.data.datasets[0].data = dataPoints;
+            mcpTrendChart.update();
+
+            if (data.length === 0) {
+                mcpTrendChart.options.plugins.title.text = 'No Data Available for Selected Filters';
+            } else {
+                mcpTrendChart.options.plugins.title.text = 'MCP Definition Changes Over Time';
+            }
+            mcpTrendChart.update();
+        }
+
+        /**
+         * Fetches data from the API endpoint based on current filter values.
+         * Simulates an API call with mock data for demonstration.
+         */
+        async function fetchData() {
+            loadingOverlay.classList.add('active'); // Show loading overlay
+
+            const startDate = startDateInput.value;
+            const endDate = endDateInput.value;
+            const mcpName = mcpNameInput.value.trim();
+
+            const queryParams = new URLSearchParams();
+            if (startDate) queryParams.append('startDate', startDate);
+            if (endDate) queryParams.append('endDate', endDate);
+            if (mcpName) queryParams.append('mcpName', mcpName);
+
+            // Construct the API URL. This is the target endpoint.
+            const apiUrl = `/api/mcp_definition_history/trends?${queryParams.toString()}`;
+
+            console.log('Attempting to fetch data from:', apiUrl);
+
+            try {
+                // --- MOCK API RESPONSE START ---
+                // In a real application, you would use:
+                // const response = await fetch(apiUrl);
+                // if (!response.ok) {
+                //     throw new Error(`HTTP error! status: ${response.status}`);
+                // }
+                // const result = await response.json();
+                // if (!result.success) {
+                //     throw new Error(result.message || 'API call failed');
+                // }
+                // const apiData = result.data;
+
+                // For demonstration, we'll simulate an API call with mock data
+                const apiData = await mockFetchData(startDate, endDate, mcpName);
+                // --- MOCK API RESPONSE END ---
+
+                updateChart(apiData);
+            } catch (error) {
+                console.error('Error fetching MCP trend data:', error);
+                // Optionally, display an error message on the dashboard
+                updateChart([]); // Clear chart on error
+                mcpTrendChart.options.plugins.title.text = 'Error Loading Data';
+                mcpTrendChart.update();
+            } finally {
+                loadingOverlay.classList.remove('active'); // Hide loading overlay
+            }
+        }
+
+        /**
+         * Generates mock data for demonstration purposes.
+         * Simulates the API response based on date range and MCP name.
+         * @param {string} startDateStr - Start date string (YYYY-MM-DD).
+         * @param {string} endDateStr - End date string (YYYY-MM-DD).
+         * @param {string} mcpName - MCP name filter.
+         * @returns {Promise<Array<Object>>} A promise resolving to an array of mock data.
+         */
+        async function mockFetchData(startDateStr, endDateStr, mcpName) {
+            return new Promise(resolve => {
+                setTimeout(() => { // Simulate network delay
+                    const data = [];
+                    const startDate = startDateStr ? new Date(startDateStr + 'T00:00:00') : new Date();
+                    const endDate = endDateStr ? new Date(endDateStr + 'T00:00:00') : new Date();
+
+                    if (!startDateStr) startDate.setDate(startDate.getDate() - 30); // Default to 30 days ago
+                    if (!endDateStr) endDate.setDate(endDate.getDate()); // Default to today
+
+                    let currentDate = new Date(startDate);
+                    while (currentDate <= endDate) {
+                        const dateString = currentDate.toISOString().split('T')[0];
+                        // Simulate some random changes, potentially influenced by MCP name
+                        let count = Math.floor(Math.random() * 20) + 5; // 5 to 24 changes
+                        if (mcpName.toLowerCase().includes('mcp_a')) {
+                            count += Math.floor(Math.random() * 10); // More changes for MCP_A
+                        } else if (mcpName.toLowerCase().includes('mcp_b')) {
+                            count = Math.floor(Math.random() * 10) + 2; // Fewer changes for MCP_B
+                        }
+                        data.push({ date: dateString, count: count });
+                        currentDate.setDate(currentDate.getDate() + 1);
+                    }
+                    resolve(data);
+                }, 800); // 800ms delay
+            });
+        }
+
+        /**
+         * Sets default date values for the filters.
+         */
+        function setInitialDates() {
+            const today = new Date();
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(today.getDate() - 30);
+
+            const formatDate = (date) => date.toISOString().split('T')[0];
+
+            endDateInput.value = formatDate(today);
+            startDateInput.value = formatDate(thirtyDaysAgo);
+        }
+
+        // Event Listeners and Initial Load
+        document.addEventListener('DOMContentLoaded', () => {
+            setInitialDates();
+            initializeChart();
+            fetchData(); // Initial data fetch on page load
+
+            applyFiltersBtn.addEventListener('click', fetchData);
+        });
+    </script>
+</body>
+</html>

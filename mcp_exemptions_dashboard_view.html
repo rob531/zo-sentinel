@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Exemptions Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .dashboard-container {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 1200px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .status-active {
+            color: green;
+        }
+        .status-expired {
+            color: red;
+        }
+        .status-pending {
+            color: orange;
+        }
+        .pagination {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .pagination button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .pagination button:hover {
+            background-color: #45a049;
+        }
+        .pagination button.active {
+            background-color: #2e7d32;
+        }
+        .pagination button.disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Exemptions Dashboard</h1>
+        <div id="exemptions-table-container">
+            <table id="exemptions-table">
+                <thead>
+                    <tr>
+                        <th>Exemption ID</th>
+                        <th>MCP Name</th>
+                        <th>Reason</th>
+                        <th>Expiration Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="exemptions-table-body">
+                    <!-- Placeholder data - will be replaced by API data -->
+                    <tr>
+                        <td>EXMPT-001</td>
+                        <td>MCP-001</td>
+                        <td>Critical system maintenance</td>
+                        <td>2023-12-31</td>
+                        <td class="status-active">Active</td>
+                    </tr>
+                    <tr>
+                        <td>EXMPT-002</td>
+                        <td>MCP-002</td>
+                        <td>Security patch deployment</td>
+                        <td>2023-11-15</td>
+                        <td class="status-expired">Expired</td>
+                    </tr>
+                    <tr>
+                        <td>EXMPT-003</td>
+                        <td>MCP-003</td>
+                        <td>Hardware upgrade</td>
+                        <td>2024-03-20</td>
+                        <td class="status-active">Active</td>
+                    </tr>
+                    <tr>
+                        <td>EXMPT-004</td>
+                        <td>MCP-004</td>
+                        <td>Emergency data recovery</td>
+                        <td>2023-10-01</td>
+                        <td class="status-expired">Expired</td>
+                    </tr>
+                    <tr>
+                        <td>EXMPT-005</td>
+                        <td>MCP-005</td>
+                        <td>Compliance audit</td>
+                        <td>2024-01-10</td>
+                        <td class="status-pending">Pending</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination">
+            <button class="disabled">Previous</button>
+            <button class="active">1</button>
+            <button>2</button>
+            <button>3</button>
+            <button>Next</button>
+        </div>
+    </div>
+
+    <script>
+        // This script will be used for future API integration
+        document.addEventListener('DOMContentLoaded', function() {
+            // Placeholder for future API call to load data
+            console.log('Dashboard loaded. Ready to load exemption data via API.');
+
+            // Example of how data might be loaded (commented out as no backend is available)
+            /*
+            fetch('/api/exemptions')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('exemptions-table-body');
+                    tableBody.innerHTML = '';
+
+                    data.forEach(exemption => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${exemption.id}</td>
+                            <td>${exemption.mcpName}</td>
+                            <td>${exemption.reason}</td>
+                            <td>${exemption.expirationDate}</td>
+                            <td class="status-${exemption.status.toLowerCase()}">${exemption.status}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(error => console.error('Error loading data:', error));
+            */
+        });
+    </script>
+</body>
+</html>

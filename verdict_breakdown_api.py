@@ -86,7 +86,7 @@ def _resolve_role(sub: str) -> str:
         req = urllib.request.Request(
             f"https://api.clerk.com/v1/users/{sub}",
             headers={"Authorization": f"Bearer {_CLERK_SK}"})
-        with urllib.request.urlopen(req, timeout=3) as r:
+        with urllib.request.urlopen(req, timeout=3) as r:  # nosec B310 - fixed https Clerk API host
             data = json.loads(r.read().decode())
         cand = ((data.get("public_metadata") or {}).get("role") or "").strip().lower()
         if cand in ("admin", "insider", "public"):
@@ -374,7 +374,7 @@ def submit_mcp(payload: SubmitMCP, db: Session = Depends(get_session),
     url = (payload.url or "").strip()
     if not (url.startswith("http://") or url.startswith("https://")):
         raise HTTPException(status_code=400, detail="A valid http(s) URL is required")
-    sid = hashlib.md5(url.encode()).hexdigest()
+    sid = hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()  # nosec B324 - non-security id hash
     if db.get(McpServerRegistry, sid):
         return {"status": "exists", "server_id": sid}
     db.add(McpServerRegistry(server_id=sid, name=(payload.name or url)[:512], url=url,

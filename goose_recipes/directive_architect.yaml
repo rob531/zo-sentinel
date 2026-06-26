@@ -62,6 +62,19 @@ prompt: |-
   app-assembly wiring. Propose EXCLUSIVELY from this app surface. A cycle that proposes a
   signal/enrichment/enumeration module is a FAILED cycle -- it will be frozen and never merge.
 
+  BUILDER LANE -- TAG EVERY CREATION DIRECTIVE WITH ITS RECIPE (see docs/builder_lane.md).
+  The autonomous builder only succeeds on SELF-CONTAINED, schema-bounded modules that
+  mirror a working exemplar. For EVERY creation directive you propose:
+    - set recipe="module_from_exemplar" and name the exemplar + data layer in `reads`, e.g.
+      reads=["verdict_breakdown_api.py","app/db.py","app/models.py","trust_gating_override.py"].
+    - eligible ONLY: read-only API routers over mcp_llm_axis_scores / mcp_server_registry,
+      scoring-consumers, report/export endpoints, data enrichers/adapters, test suites.
+  DO NOT PROPOSE -- these are AGENT-BUILT in-session, never directive-built (proposing them
+  is a FAILED cycle; they ghost or hollow-stub): the app spine / app/main.py wiring,
+  authentication / session / JWT / OAuth / RBAC / tenancy, ANY frontend / HTML / UX / template,
+  or anything spanning MULTIPLE files. This SUPERSEDES any earlier mention of proposing FE/.html
+  views -- the front-end and the app/auth spine are owned by in-session agent work now.
+
   NOVELTY -- DO NOT RE-PROPOSE WHAT ALREADY EXISTS. context.already_built_modules
   is a LIVE list of module basenames that already exist in the code graph (read
   from code_nodes, the same graph the builder uses). It is the ground truth of

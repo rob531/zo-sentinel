@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Tool Hashes Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Tool Hashes Dashboard</h1>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search by tool name or hash...">
+            <button class="button" onclick="searchHashes()">Search</button>
+            <button class="button" onclick="fetchHashes()">Refresh</button>
+            <button class="button" onclick="openAddForm()">Add New</button>
+        </div>
+
+        <table id="hashesTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tool Name</th>
+                    <th>Hash</th>
+                    <th>Algorithm</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="hashesTableBody">
+                <!-- Data will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal for Add/Edit Form -->
+    <div id="formModal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); z-index: 100;">
+        <h2 id="formTitle">Add New Tool Hash</h2>
+        <form id="hashForm">
+            <input type="hidden" id="hashId">
+            <div>
+                <label for="toolName">Tool Name:</label>
+                <input type="text" id="toolName" required>
+            </div>
+            <div>
+                <label for="hashValue">Hash:</label>
+                <input type="text" id="hashValue" required>
+            </div>
+            <div>
+                <label for="algorithm">Algorithm:</label>
+                <select id="algorithm" required>
+                    <option value="MD5">MD5</option>
+                    <option value="SHA-1">SHA-1</option>
+                    <option value="SHA-256">SHA-256</option>
+                    <option value="SHA-512">SHA-512</option>
+                </select>
+            </div>
+            <button type="button" class="button" onclick="saveHash()">Save</button>
+            <button type="button" class="button" onclick="closeForm()">Cancel</button>
+        </form>
+    </div>
+
+    <script>
+        // Fetch and display hashes on page load
+        document.addEventListener('DOMContentLoaded', fetchHashes);
+
+        function fetchHashes() {
+            fetch('mcp_tool_hashes_api.py')
+                .then(response => response.json())
+                .then(data => displayHashes(data))
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function displayHashes(hashes) {
+            const tableBody = document.getElementById('hashesTableBody');
+            tableBody.innerHTML = '';
+
+            hashes.forEach(hash => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${hash.id}</td>
+                    <td>${hash.tool_name}</td>
+                    <td>${hash.hash}</td>
+                    <td>${hash.algorithm}</td>
+                    <td>
+                        <button class="button" onclick="openEditForm(${hash.id})">Edit</button>
+                        <button class="button" style="background-color: #f44336;" onclick="deleteHash(${hash.id})">Delete</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function searchHashes() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#hashesTableBody tr');
+
+            rows.forEach(row => {
+                const toolName = row.cells[1].textContent.toLowerCase();
+                const hashValue = row.cells[2].textContent.toLowerCase();
+
+                if (toolName.includes(searchTerm) || hashValue.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        function openAddForm() {
+            document.getElementById('formTitle').textContent = 'Add New Tool Hash';
+            document.getElementById('hashId').value = '';
+            document.getElementById('toolName').value = '';
+            document.getElementById('hashValue').value = '';
+            document.getElementById('algorithm').value = 'MD5';
+            document.getElementById('formModal').style.display = 'block';
+        }
+
+        function openEditForm(id) {
+            fetch(`mcp_tool_hashes_api.py?id=${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('formTitle').textContent = 'Edit Tool Hash';
+                    document.getElementById('hashId').value = data.id;
+                    document.getElementById('toolName').value = data.tool_name;
+                    document.getElementById('hashValue').value = data.hash;
+                    document.getElementById('algorithm').value = data.algorithm;
+                    document.getElementById('formModal').style.display = 'block';
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function saveHash() {
+            const hashId = document.getElementById('hashId').value;
+            const toolName = document.getElementById('toolName').value;
+            const hashValue = document.getElementById('hashValue').value;
+            const algorithm = document.getElementById('algorithm').value;
+
+            const data = {
+                tool_name: toolName,
+                hash: hashValue,
+                algorithm: algorithm
+            };
+
+            if (hashId) {
+                // Update existing hash
+                fetch(`mcp_tool_hashes_api.py?id=${hashId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(() => {
+                    closeForm();
+                    fetchHashes();
+                })
+                .catch(error => console.error('Error updating data:', error));
+            } else {
+                // Add new hash
+                fetch('mcp_tool_hashes_api.py', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(() => {
+                    closeForm();
+                    fetchHashes();
+                })
+                .catch(error => console.error('Error adding data:', error));
+            }
+        }
+
+        function deleteHash(id) {
+            if (confirm('Are you sure you want to delete this hash?')) {
+                fetch(`mcp_tool_hashes_api.py?id=${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(() => fetchHashes())
+                .catch(error => console.error('Error deleting data:', error));
+            }
+        }
+
+        function closeForm() {
+            document.getElementById('formModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

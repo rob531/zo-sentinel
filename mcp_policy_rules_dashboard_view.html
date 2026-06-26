@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Policy Rules Dashboard</title>
+    <!-- Bootstrap 5 CSS CDN for responsiveness and styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <!-- Chart.js CDN for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .dashboard-header {
+            background-color: #ffffff;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.02);
+        }
+        .card {
+            border: none;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            margin-bottom: 1.5rem;
+        }
+        .card-header {
+            background-color: #f1f3f5;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+            color: #343a40;
+        }
+        .card-body {
+            padding: 1.5rem;
+        }
+        .summary-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #007bff; /* Primary color */
+        }
+        .summary-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        .table-responsive {
+            margin-top: 20px;
+        }
+        .table thead th {
+            background-color: #e9ecef;
+            font-weight: 600;
+            color: #495057;
+        }
+        .table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        .badge-high { background-color: #dc3545; color: white; } /* Red */
+        .badge-medium { background-color: #ffc107; color: #343a40; } /* Yellow */
+        .badge-low { background-color: #17a2b8; color: white; } /* Cyan */
+        .badge-active { background-color: #28a745; color: white; } /* Green */
+        .badge-inactive { background-color: #6c757d; color: white; } /* Gray */
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="dashboard-header">
+            <h1 class="mb-0">MCP Policy Rules Dashboard</h1>
+            <p class="text-muted">Overview of your Multi-Cloud Policy Rules and their status.</p>
+        </div>
+
+        <div class="row px-3">
+            <!-- Summary Cards -->
+            <div class="col-xl-3 col-md-6">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="totalRules" class="summary-value">0</div>
+                        <div class="summary-label">Total Rules</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="activeRules" class="summary-value text-success">0</div>
+                        <div class="summary-label">Active Rules</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="inactiveRules" class="summary-value text-secondary">0</div>
+                        <div class="summary-label">Inactive Rules</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="rulesWithViolations" class="summary-value text-danger">0</div>
+                        <div class="summary-label">Rules with Violations</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row px-3">
+            <!-- Charts Section -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">Severity Distribution</div>
+                    <div class="card-body">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">Rule Status Distribution</div>
+                    <div class="card-body">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row px-3">
+            <!-- Detailed Rules Table -->
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Detailed Policy Rules</div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Rule Name</th>
+                                        <th>Status</th>
+                                        <th>Severity</th>
+                                        <th>Violations</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rulesTableBody">
+                                    <!-- Rule data will be injected here by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS CDN (Popper.js and Bootstrap JS) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+
+    <script>
+        // Simulate API call with mock data
+        const fetchPolicyRulesData = async () => {
+            // In a real application, this would be an actual fetch call:
+            // const response = await fetch('/api/mcp_policy_rules_dashboard_api');
+            // const data = await response.json();
+            // return data;
+
+            // Mock data simulating API response
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    resolve({
+                        summary: {
+                            totalRules: 125,
+                            activeRules: 98,
+                            inactiveRules: 27,
+                            rulesWithViolations: 15,
+                        },
+                        rules: [
+                            { id: 'PR001', name: 'Network Access Control', status: 'Active', severity: 'High', violations: 5, lastUpdated: '2023-10-26' },
+                            { id: 'PR002', name: 'Data Encryption Policy', status: 'Active', severity: 'High', violations: 2, lastUpdated: '2023-10-25' },
+                            { id: 'PR003', name: 'Password Complexity', status: 'Active', severity: 'Medium', violations: 0, lastUpdated: '2023-10-24' },
+                            { id: 'PR004', name: 'Firewall Configuration', status: 'Inactive', severity: 'High', violations: 0, lastUpdated: '2023-10-23' },
+                            { id: 'PR005', name: 'User Access Review', status: 'Active', severity: 'Medium', violations: 1, lastUpdated: '2023-10-22' },
+                            { id: 'PR006', name: 'Logging and Monitoring', status: 'Active', severity: 'Low', violations: 0, lastUpdated: '2023-10-21' },
+                            { id: 'PR007', name: 'Software Update Policy', status: 'Active', severity: 'Medium', violations: 0, lastUpdated: '2023-10-20' },
+                            { id: 'PR008', name: 'Incident Response Plan', status: 'Inactive', severity: 'High', violations: 0, lastUpdated: '2023-10-19' },
+                            { id: 'PR009', name: 'Data Retention Policy', status: 'Active', severity: 'Low', violations: 0, lastUpdated: '2023-10-18' },
+                            { id: 'PR010', name: 'Endpoint Security', status: 'Active', severity: 'High', violations: 3, lastUpdated: '2023-10-17' },
+                            { id: 'PR011', name: 'Cloud Resource Tagging', status: 'Active', severity: 'Low', violations: 0, lastUpdated: '2023-10-16' },
+                            { id: 'PR012', name: 'VPC Flow Log Enablement', status: 'Inactive', severity: 'Medium', violations: 0, lastUpdated: '2023-10-15' },
+                            { id: 'PR013', name: 'IAM Role Least Privilege', status: 'Active', severity: 'High', violations: 1, lastUpdated: '2023-10-14' },
+                            { id: 'PR014', name: 'Storage Bucket Encryption', status: 'Active', severity: 'Medium', violations: 0, lastUpdated: '2023-10-13' },
+                            { id: 'PR015', name: 'Database Security Group', status: 'Active', severity: 'High', violations: 0, lastUpdated: '2023-10-12' },
+                        ],
+                        severityDistribution: {
+                            High: 40,
+                            Medium: 50,
+                            Low: 35
+                        },
+                        statusDistribution: {
+                            Active: 98,
+                            Inactive: 27
+                        }
+                    });
+                }, 500); // Simulate network delay
+            });
+        };
+
+        const renderDashboard = async () => {
+            const data = await fetchPolicyRulesData();
+
+            // 1. Render Summary Cards
+            document.getElementById('totalRules').textContent = data.summary.totalRules;
+            document.getElementById('activeRules').textContent = data.summary.activeRules;
+            document.getElementById('inactiveRules').textContent = data.summary.inactiveRules;
+            document.getElementById('rulesWithViolations').textContent = data.summary.rulesWithViolations;
+
+            // 2. Render Detailed Rules Table
+            const rulesTableBody = document.getElementById('rulesTableBody');
+            rulesTableBody.innerHTML = ''; // Clear existing rows
+            data.rules.forEach(rule => {
+                const row = rulesTableBody.insertRow();
+                row.innerHTML = `
+                    <td>${rule.id}</td>
+                    <td>${rule.name}</td>
+                    <td><span class="badge badge-${rule.status.toLowerCase()}">${rule.status}</span></td>
+                    <td><span class="badge badge-${rule.severity.toLowerCase()}">${rule.severity}</span></td>
+                    <td>${rule.violations}</td>
+                    <td>${rule.lastUpdated}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-1">View</button>
+                        <button class="btn btn-sm btn-outline-secondary">Edit</button>
+                    </td>
+                `;
+            });
+
+            // 3. Render Severity Distribution Chart
+            const severityCtx = document.getElementById('severityChart').getContext('2d');
+            new Chart(severityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data.severityDistribution),
+                    datasets: [{
+                        data: Object.values(data.severityDistribution),
+                        backgroundColor: [
+                            '#dc3545', // High (Red)
+                            '#ffc107', // Medium (Yellow)
+                            '#17a2b8'  // Low (Cyan)
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: false,
+                            text: 'Severity Distribution'
+                        }
+                    }
+                }
+            });
+
+            // 4. Render Status Distribution Chart
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            new Chart(statusCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(data.statusDistribution),
+                    datasets: [{
+                        data: Object.values(data.statusDistribution),
+                        backgroundColor: [
+                            '#28a745', // Active (Green)
+                            '#6c757d'  // Inactive (Gray)
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: false,
+                            text: 'Rule Status Distribution'
+                        }
+                    }
+                }
+            });
+        };
+
+        // Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', renderDashboard);
+    </script>
+</body>
+</html>

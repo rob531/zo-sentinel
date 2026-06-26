@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verdict Dashboard</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Dashboard Container */
+        #dashboard-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Header */
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 15px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-left: 5px solid #3498db;
+            padding-left: 10px;
+        }
+
+        /* Card Styling */
+        .card {
+            background-color: #fdfdfd;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #4a698c;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+
+        .card p {
+            margin: 0;
+            font-size: 1.1em;
+            color: #555;
+        }
+
+        .card .value {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #2980b9;
+            margin-top: 10px;
+        }
+
+        /* Overall Summary */
+        #overall-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        #overall-summary .card .value {
+            font-size: 2.8em;
+            color: #27ae60; /* Green for overall positive status */
+        }
+
+        /* Risk Tiers Section */
+        #risk-tiers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .risk-tier-card .value {
+            font-size: 2.5em;
+        }
+
+        /* Risk Tier Specific Colors */
+        .risk-tier-card.critical .value { color: #e74c3c; } /* Red */
+        .risk-tier-card.high .value { color: #e67e22; }    /* Orange */
+        .risk-tier-card.medium .value { color: #f1c40f; }  /* Yellow */
+        .risk-tier-card.low .value { color: #3498db; }     /* Blue */
+        .risk-tier-card.none .value { color: #2ecc71; }    /* Green */
+
+        /* Axis Scores Section */
+        #axis-scores-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .axis-score-card .value {
+            font-size: 2.5em;
+            display: flex;
+            align-items: center;
+        }
+
+        .axis-score-card .trend-icon {
+            margin-left: 10px;
+            font-size: 0.8em;
+            vertical-align: middle;
+        }
+
+        .axis-score-card .trend-up { color: #27ae60; }
+        .axis-score-card .trend-down { color: #e74c3c; }
+        .axis-score-card .trend-stable { color: #95a5a6; }
+
+        /* Last Updated */
+        #last-updated {
+            text-align: right;
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px dashed #e0e0e0;
+        }
+
+        /* Loading Indicator */
+        #loading-indicator {
+            display: none; /* Hidden by default */
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #555;
+        }
+
+        .spinner {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error Message */
+        #error-message {
+            display: none; /* Hidden by default */
+            background-color: #fdeded;
+            color: #c0392b;
+            border: 1px solid #e74c3c;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        /* Dashboard Content (initially hidden) */
+        #dashboard-content {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="dashboard-container">
+        <h1 id="dashboard-title">Verdict Dashboard</h1>
+
+        <div id="loading-indicator">
+            <div class="spinner"></div>
+            <p>Loading dashboard data...</p>
+        </div>
+
+        <div id="error-message">
+            <p>Failed to load dashboard data. Please try again later.</p>
+        </div>
+
+        <div id="dashboard-content">
+            <section>
+                <h2>Overall Summary</h2>
+                <div id="overall-summary">
+                    <div class="card">
+                        <h3>Total Verdicts</h3>
+                        <p class="value" id="total-verdicts">--</p>
+                    </div>
+                    <div class="card">
+                        <h3>Overall Status</h3>
+                        <p class="value" id="overall-status">--</p>
+                    </div>
+                    <!-- Add more summary cards as needed -->
+                </div>
+            </section>
+
+            <section>
+                <h2>Risk Tiers Distribution</h2>
+                <div id="risk-tiers-grid">
+                    <!-- Risk tier cards will be injected here by JavaScript -->
+                </div>
+            </section>
+
+            <section>
+                <h2>Axis Scores</h2>
+                <div id="axis-scores-grid">
+                    <!-- Axis score cards will be injected here by JavaScript -->
+                </div>
+            </section>
+
+            <div id="last-updated">
+                Last Updated: <span id="last-updated-time">--</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dashboardContent = document.getElementById('dashboard-content');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const errorMessage = document.getElementById('error-message');
+
+            const totalVerdictsElem = document.getElementById('total-verdicts');
+            const overallStatusElem = document.getElementById('overall-status');
+            const riskTiersGrid = document.getElementById('risk-tiers-grid');
+            const axisScoresGrid = document.getElementById('axis-scores-grid');
+            const lastUpdatedTimeElem = document.getElementById('last-updated-time');
+
+            // --- Helper Functions for UI State ---
+            const showLoading = () => {
+                loadingIndicator.style.display = 'block';
+                dashboardContent.style.display = 'none';
+                errorMessage.style.display = 'none';
+            };
+
+            const hideLoading = () => {
+                loadingIndicator.style.display = 'none';
+            };
+
+            const showError = (message = 'Failed to load data.') => {
+                errorMessage.querySelector('p').textContent = message;
+                errorMessage.style.display = 'block';
+                dashboardContent.style.display = 'none';
+            };
+
+            const showContent = () => {
+                dashboardContent.style.display = 'block';
+            };
+
+            // --- Simulated API Call ---
+            const fetchDashboardData = () => {
+                return new Promise((resolve, reject) => {
+                    // Simulate network delay
+                    setTimeout(() => {
+                        // Simulate a successful API response with placeholder data
+                        const placeholderData = {
+                            overallStatus: "Operational",
+                            totalVerdicts: 1250,
+                            riskTierSummary: [
+                                { tier: "Critical", count: 15, percentage: "1.2%" },
+                                { tier: "High", count: 80, percentage: "6.4%" },
+                                { tier: "Medium", count: 250, percentage: "20.0%" },
+                                { tier: "Low", count: 500, percentage: "40.0%" },
+                                { tier: "None", count: 405, percentage: "32.4%" }
+                            ],
+                            axisScores: [
+                                { axis: "Security", score: 85, trend: "up" },
+                                { axis: "Compliance", score: 92, trend: "stable" },
+                                { axis: "Performance", score: 78, trend: "down" },
+                                { axis: "Cost", score: 65, trend: "up" }
+                            ],
+                            lastUpdated: new Date().toLocaleString()
+                        };
+
+                        // You could simulate an error here:
+                        // reject(new Error("Network error or API unavailable"));
+
+                        resolve(placeholderData);
+                    }, 1500); // 1.5 second delay
+                });
+            };
+
+            // --- Render Dashboard Data ---
+            const renderDashboard = (data) => {
+                // Overall Summary
+                totalVerdictsElem.textContent = data.totalVerdicts.toLocaleString();
+                overallStatusElem.textContent = data.overallStatus;
+
+                // Risk Tiers
+                riskTiersGrid.innerHTML = ''; // Clear previous content
+                data.riskTierSummary.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = `card risk-tier-card ${item.tier.toLowerCase()}`;
+                    card.innerHTML = `
+                        <h3>${item.tier}</h3>
+                        <p class="value">${item.count}</p>
+                        <p>${item.percentage} of total</p>
+                    `;
+                    riskTiersGrid.appendChild(card);
+                });
+
+                // Axis Scores
+                axisScoresGrid.innerHTML = ''; // Clear previous content
+                data.axisScores.forEach(item => {
+                    const trendIconClass = item.trend === 'up' ? '▲ trend-up' :
+                                           item.trend === 'down' ? '▼ trend-down' :
+                                           '● trend-stable';
+                    const card = document.createElement('div');
+                    card.className = 'card axis-score-card';
+                    card.innerHTML = `
+                        <h3>${item.axis} Score</h3>
+                        <p class="value">${item.score} <span class="trend-icon ${item.trend}">${trendIconClass}</span></p>
+                    `;
+                    axisScoresGrid.appendChild(card);
+                });
+
+                // Last Updated
+                lastUpdatedTimeElem.textContent = data.lastUpdated;
+
+                showContent(); // Show the dashboard content
+            };
+
+            // --- Initialize Dashboard ---
+            const initDashboard = async () => {
+                showLoading();
+                try {
+                    const data = await fetchDashboardData();
+                    renderDashboard(data);
+                } catch (error) {
+                    console.error("Error fetching dashboard data:", error);
+                    showError(error.message || "Failed to load dashboard data.");
+                } finally {
+                    hideLoading();
+                }
+            };
+
+            // Run initialization
+            initDashboard();
+        });
+    </script>
+</body>
+</html>

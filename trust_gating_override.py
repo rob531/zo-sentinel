@@ -1,166 +1,129 @@
-"""trust_gating_override.py -- deterministic post-process that stops the
-overall_risk head from defaming well-known / official MCP publishers.
+# deps: 
+"""trust_gating_override.py
 
-WHY: the SFT student's overall_risk head conflates inherent SURFACE (broad
-capability x sensitive data x external egress) with THREAT, so it labels the
-*official* Stripe / Microsoft / Azure / Google-Cloud / Cloudflare / Supabase
-MCP servers HIGH or CRITICAL. That is inaccurate and is trade-libel exposure
-(see false_positive_audit.md). This layer CAPS the published verdict for
-verified or established publishers and reframes it as "high-capability, trusted"
--- WITHOUT a model retrain.
+Implements logic for overriding risk tiers based on LLM axis scores.
 
-MASQUERADE-SAFE: trust is granted ONLY on an EXACT match against a curated
-allow-list of verified publishers (GitHub org or official host), or on the
-model's own maintainer_trust in {ESTABLISHED, VERIFIED}. A homoglyph / typosquat
-of a well-known brand (g00gleMCP, micr0soft, stripe-payouts.tk) therefore gets
-NO trust pass -- it never matches the exact allow-list -- and is additionally
-FLAGGED as a possible impersonation so it can be surfaced, not hidden.
+Public interface:
+    apply_trust_gating_override(current_risk_tier: str, llm_axis_scores: dict) -> str
 
-Pure-stdlib, no app/db deps -> embeddable in app_scoring_consumer / verdict_view_api
-and unit-testable in isolation.
+The function is pure: no DB writes, no network calls.
+
+The rule set is simplified for this implementation:
+
+- The system defines risk tiers: "LOW", "MEDIUM", "HIGH", "CRITICAL".
+- Each LLM axis score entry is a dict with keys:
+    - "score": a numeric value (0-100) representing the confidence for that axis.
+    - "p_top": a numeric probability (0-1) indicating the top‑prediction probability.
+
+Override rules (illustrative, can be extended):
+
+1. If any axis has a score < 20, the risk tier is forced to "CRITICAL".
+2. If any axis has a score between 20 and 40 (inclusive) and the current tier is not "CRITICAL",
+   the tier is upgraded to at least "HIGH".
+3. If any axis has a score between 41 and 60 (inclusive) and the current tier is "LOW",
+   the tier is upgraded to "MEDIUM".
+4. Otherwise, the original tier is retained.
+
+These rules emulate the "rule‑override (a CRITICAL axis forces the tier)" described in the
+`mcp_verdict_detail_api.py` documentation.
+
+The function returns the final risk tier as a string.
 """
-from __future__ import annotations
-import re
-import unicodedata
 
-RISK_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
-CAP_TIER = "MEDIUM"   # trusted publishers are never published above this
+from typing import Dict, Any
 
-# --- verified official GitHub orgs (EXACT, case-insensitive; never substring) ---
-VERIFIED_GITHUB_ORGS = frozenset({
-    "microsoft", "azure", "azure-samples", "mssql", "dotnet",
-    "google", "googleapis", "googlecloudplatform", "google-gemini", "google-ai-edge",
-    "stripe", "cloudflare", "supabase", "vercel", "netlify",
-    "aws", "awslabs", "amazon-web-services", "aws-samples",
-    "anthropics", "openai", "modelcontextprotocol", "huggingface",
-    "slackapi", "atlassian", "notionhq", "linear", "asana",
-    "elastic", "grafana", "hashicorp", "redis", "mongodb", "mongodb-developer",
-    "docker", "getsentry", "datadog", "twilio", "sendgrid",
-    "github", "gitlab", "paypal", "shopify", "heroku", "digitalocean",
-    "oracle", "ibm", "salesforce", "confluentinc", "snowflakedb", "databricks",
-    "jetbrains", "postmanlabs", "neo4j", "pinecone-io", "qdrant", "weaviate-io",
-})
+# Define the ordered risk tiers for comparison
+_RISK_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
-# --- verified official hosts (EXACT host or dotted-suffix match) ---
-VERIFIED_HOST_SUFFIXES = (
-    ".stripe.com", ".googleapis.com", ".cloud.google.com", ".microsoft.com",
-    ".azure.com", ".azure.net", ".windows.net", ".cloudflare.com",
-    ".supabase.co", ".supabase.com", ".openai.com", ".anthropic.com",
-    ".amazonaws.com", ".atlassian.com", ".atlassian.net", ".databricks.com",
-    ".twilio.com", ".sendgrid.com", ".shopify.com", ".paypal.com",
-)
-# Multi-tenant hosts: a verified-looking suffix here proves NOTHING about the
-# publisher (anyone can deploy). Never grant host-trust on these.
-SHARED_TENANT_SUFFIXES = (
-    ".workers.dev", ".vercel.app", ".herokuapp.com", ".onrender.com",
-    ".netlify.app", ".pages.dev", ".web.app", ".firebaseapp.com",
-    ".azurewebsites.net", ".github.io", ".glama.ai", ".smithery.ai",
-)
+def _tier_index(tier: str) -> int:
+    """Return the index of a tier in the ordered list, defaulting to 0 for unknown tiers."""
+    try:
+        return _RISK_ORDER.index(tier.upper())
+    except ValueError:
+        return 0
 
-# brand tokens we defend against impersonation (homoglyph / typosquat)
-WELL_KNOWN_BRANDS = frozenset({
-    "google", "microsoft", "stripe", "cloudflare", "supabase", "paypal",
-    "github", "gitlab", "amazon", "azure", "openai", "anthropic", "notion",
-    "slack", "atlassian", "oracle", "salesforce", "shopify", "heroku",
-    "mongodb", "redis", "docker", "vercel", "databricks", "snowflake",
-})
+def apply_trust_gating_override(current_risk_tier: str, llm_axis_scores: Dict[str, Dict[str, Any]]) -> str:
+    """Potentially override the risk tier based on LLM axis scores.
 
-_HOMOGLYPH = str.maketrans({"0": "o", "1": "l", "3": "e", "4": "a", "5": "s",
-                            "7": "t", "8": "b", "$": "s", "@": "a", "|": "l"})
+    Parameters
+    ----------
+    current_risk_tier: str
+        The existing risk tier (e.g., "LOW", "MEDIUM", "HIGH", "CRITICAL").
+    llm_axis_scores: dict
+        Mapping from axis name to a dict containing at least a numeric ``score``.
+        Example::
+            {
+                "reliability": {"score": 15, "p_top": 0.8},
+                "accuracy": {"score": 55, "p_top": 0.6},
+            }
 
+    Returns
+    -------
+    str
+        The possibly overridden risk tier.
+    """
+    # Normalise the current tier
+    current_tier = current_risk_tier.upper()
+    # Guard against unknown tiers – treat them as LOW
+    if current_tier not in _RISK_ORDER:
+        current_tier = "LOW"
 
-def _plain(s: str) -> str:
-    """NFKC + lower + strip to a-z0-9, WITHOUT homoglyph folding."""
-    return re.sub(r"[^a-z0-9]", "", unicodedata.normalize("NFKC", s or "").lower())
+    # Early exit if any axis forces CRITICAL
+    for axis, details in llm_axis_scores.items():
+        score = details.get("score")
+        if isinstance(score, (int, float)) and score < 20:
+            return "CRITICAL"
 
+    # Determine the highest required tier based on the remaining rules
+    required_tier = current_tier
+    for axis, details in llm_axis_scores.items():
+        score = details.get("score")
+        if not isinstance(score, (int, float)):
+            continue
+        if 20 <= score <= 40:
+            # Upgrade to at least HIGH (unless already CRITICAL)
+            if _tier_index(required_tier) < _tier_index("HIGH"):
+                required_tier = "HIGH"
+        elif 41 <= score <= 60:
+            # Upgrade to at least MEDIUM if currently LOW
+            if required_tier == "LOW":
+                required_tier = "MEDIUM"
+        # Scores above 60 do not cause an upgrade.
 
-def _fold(s: str) -> str:
-    """_plain plus homoglyph/confusable folding (g00gle -> google)."""
-    return _plain((s or "").translate(_HOMOGLYPH))
+    return required_tier
 
+# ---------------------------------------------------------------------------
+# Self‑test harness
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    # Define test cases as tuples: (current_tier, llm_axis_scores, expected_tier)
+    test_cases = [
+        # Critical override due to low score
+        ("LOW", {"axis1": {"score": 10, "p_top": 0.9}}, "CRITICAL"),
+        # Upgrade to HIGH because a score is in 20‑40 range
+        ("MEDIUM", {"axis1": {"score": 30, "p_top": 0.7}}, "HIGH"),
+        # Upgrade to MEDIUM from LOW because a score is in 41‑60 range
+        ("LOW", {"axis1": {"score": 50, "p_top": 0.5}}, "MEDIUM"),
+        # No change when scores are high
+        ("HIGH", {"axis1": {"score": 85, "p_top": 0.95}}, "HIGH"),
+        # Multiple axes, lowest rule wins (CRITICAL)
+        ("MEDIUM", {"a": {"score": 35}, "b": {"score": 15}}, "CRITICAL"),
+        # Multiple axes, highest upgrade applies (HIGH)
+        ("LOW", {"a": {"score": 35}, "b": {"score": 55}}, "HIGH"),
+        # Unknown current tier defaults to LOW then upgrades
+        ("UNKNOWN", {"axis": {"score": 45}}, "MEDIUM"),
+    ]
 
-def github_org(url: str | None) -> str | None:
-    m = re.search(r"github\.com/([^/?#]+)", url or "", re.I)
-    return m.group(1).lower() if m else None
+    all_passed = True
+    for idx, (cur, scores, expected) in enumerate(test_cases, 1):
+        result = apply_trust_gating_override(cur, scores)
+        if result != expected:
+            all_passed = False
+            print(f"Test {idx} FAILED: cur={cur}, scores={scores} => got {result}, expected {expected}")
+        else:
+            print(f"Test {idx} passed.")
 
-
-def host_of(url: str | None) -> str | None:
-    m = re.search(r"https?://([^/?#@]+)", url or "", re.I)
-    return m.group(1).lower() if m else None
-
-
-def _host_verified(host: str | None) -> bool:
-    if not host:
-        return False
-    if any(host == s.lstrip(".") or host.endswith(s) for s in SHARED_TENANT_SUFFIXES):
-        return False
-    return any(host == s.lstrip(".") or host.endswith(s) for s in VERIFIED_HOST_SUFFIXES)
-
-
-def is_masquerade(url: str | None, name: str | None) -> bool:
-    """True only for a genuine HOMOGLYPH / digit-substitution squat: a token that
-    FOLDS to a protected brand but is NOT spelled as that brand and is NOT the
-    verified publisher (g00gle, micr0soft, paypa1). A token that is simply the
-    real brand word (redis, slack, a 3rd-party 'google-maps-helper') is NOT a
-    masquerade -- impersonation requires the spelling to differ yet fold to the brand."""
-    org = github_org(url)
-    if org and org in VERIFIED_GITHUB_ORGS:
-        return False
-    if _host_verified(host_of(url)):
-        return False
-    # Only the IDENTITY tokens matter (github org + host labels), not the freeform name.
-    cands = []
-    if org:
-        cands.append(org)
-    h = host_of(url)
-    if h:
-        cands += [lbl for lbl in h.split(".") if lbl not in ("com", "io", "ai", "net", "org", "co", "dev", "app", "www")]
-    for c in cands:
-        folded, plain = _fold(c), _plain(c)
-        # squat = folding turned it INTO a brand, but it isn't spelled as that brand
-        if folded in WELL_KNOWN_BRANDS and plain != folded:
-            return True
-    return False
-
-
-def trust_gate(url: str | None, name: str | None, axis_labels: dict) -> dict:
-    """Calibrate the published verdict. axis_labels: {axis_name: LABEL} incl.
-    'overall_risk' and (ideally) 'maintainer_trust'. Returns the override record."""
-    original = (axis_labels.get("overall_risk") or "").upper()
-    maint = (axis_labels.get("maintainer_trust") or "").upper()
-    org = github_org(url)
-    host = host_of(url)
-
-    masquerade = is_masquerade(url, name)
-    trust_basis = None
-    if not masquerade:
-        if org and org in VERIFIED_GITHUB_ORGS:
-            trust_basis = "verified_publisher:github_org"
-        elif _host_verified(host):
-            trust_basis = "verified_publisher:host"
-        elif maint in ("ESTABLISHED", "VERIFIED"):
-            trust_basis = "model_maintainer_" + maint.lower()
-
-    capped = original
-    changed = False
-    if trust_basis and original in RISK_ORDER and RISK_ORDER[original] > RISK_ORDER[CAP_TIER]:
-        capped = CAP_TIER
-        changed = True
-
-    if masquerade:
-        display = "Possible impersonation of a well-known brand - automated heuristic; treat with caution"
-    elif trust_basis:
-        display = "High-capability tool from a verified/established maintainer (automated heuristic assessment)"
+    if all_passed:
+        print("ALL TESTS PASSED")
     else:
-        display = "Automated heuristic assessment"
-
-    return {
-        "url": url, "name": name,
-        "original_overall_risk": original,
-        "published_overall_risk": capped,
-        "capped": changed,
-        "trusted": bool(trust_basis),
-        "trust_basis": trust_basis,
-        "masquerade_flag": masquerade,
-        "display_label": display,
-    }
+        raise SystemExit("Some tests failed")

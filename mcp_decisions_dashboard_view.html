@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Decisions Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .dashboard-container {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 1000px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .empty-message {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Decisions Dashboard</h1>
+        <div id="loading" class="loading">Loading data...</div>
+        <div id="empty-message" class="empty-message" style="display: none;">No decisions found.</div>
+        <table id="decisions-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Decision ID</th>
+                    <th>MCP Name</th>
+                    <th>Decision Status</th>
+                    <th>Decided By</th>
+                    <th>Decided At</th>
+                    <th>Expiry Date</th>
+                </tr>
+            </thead>
+            <tbody id="decisions-data">
+                <!-- Data will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/mcp_decisions')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const tableBody = document.getElementById('decisions-data');
+                    const emptyMessage = document.getElementById('empty-message');
+                    const loading = document.getElementById('loading');
+                    const table = document.getElementById('decisions-table');
+
+                    if (data.length === 0) {
+                        emptyMessage.style.display = 'block';
+                        table.style.display = 'none';
+                        loading.style.display = 'none';
+                        return;
+                    }
+
+                    data.forEach(decision => {
+                        const row = document.createElement('tr');
+
+                        const decisionIdCell = document.createElement('td');
+                        decisionIdCell.textContent = decision.decision_id;
+                        row.appendChild(decisionIdCell);
+
+                        const mcpNameCell = document.createElement('td');
+                        mcpNameCell.textContent = decision.mcp_name;
+                        row.appendChild(mcpNameCell);
+
+                        const decisionStatusCell = document.createElement('td');
+                        decisionStatusCell.textContent = decision.decision_status;
+                        row.appendChild(decisionStatusCell);
+
+                        const decidedByCell = document.createElement('td');
+                        decidedByCell.textContent = decision.decided_by;
+                        row.appendChild(decidedByCell);
+
+                        const decidedAtCell = document.createElement('td');
+                        decidedAtCell.textContent = new Date(decision.decided_at).toLocaleString();
+                        row.appendChild(decidedAtCell);
+
+                        const expiryDateCell = document.createElement('td');
+                        expiryDateCell.textContent = new Date(decision.expiry_date).toLocaleDateString();
+                        row.appendChild(expiryDateCell);
+
+                        tableBody.appendChild(row);
+                    });
+
+                    loading.style.display = 'none';
+                    table.style.display = 'table';
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    const loading = document.getElementById('loading');
+                    loading.textContent = 'Error loading data. Please try again later.';
+                });
+        });
+    </script>
+</body>
+</html>

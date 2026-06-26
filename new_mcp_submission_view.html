@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New MCP Submission</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"],
+        textarea {
+            width: calc(100% - 20px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        input[type="text"]:focus,
+        textarea:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        .error-message {
+            color: #dc3545;
+            font-size: 0.9em;
+            margin-top: 5px;
+            display: none; /* Hidden by default */
+        }
+        .is-invalid {
+            border-color: #dc3545 !important;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            width: 100%;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #statusMessage {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+            display: none; /* Hidden by default */
+        }
+        #statusMessage.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        #statusMessage.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Submit New MCP</h1>
+
+        <div id="statusMessage"></div>
+
+        <form id="mcpSubmissionForm">
+            <div class="form-group">
+                <label for="mcp_name">MCP Name:</label>
+                <input type="text" id="mcp_name" name="mcp_name" required aria-describedby="mcp_name_error">
+                <span id="mcp_name_error" class="error-message">MCP Name is required.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="mcp_version">MCP Version:</label>
+                <input type="text" id="mcp_version" name="mcp_version" required aria-describedby="mcp_version_error">
+                <span id="mcp_version_error" class="error-message">MCP Version is required.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="mcp_description">MCP Description:</label>
+                <textarea id="mcp_description" name="mcp_description" required aria-describedby="mcp_description_error"></textarea>
+                <span id="mcp_description_error" class="error-message">MCP Description is required.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="requested_by">Requested By:</label>
+                <input type="text" id="requested_by" name="requested_by" required aria-describedby="requested_by_error">
+                <span id="requested_by_error" class="error-message">Your name or identifier is required.</span>
+            </div>
+
+            <button type="submit">Submit MCP</button>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('mcpSubmissionForm');
+            const statusMessageDiv = document.getElementById('statusMessage');
+
+            const fields = [
+                { id: 'mcp_name', errorMessageId: 'mcp_name_error' },
+                { id: 'mcp_version', errorMessageId: 'mcp_version_error' },
+                { id: 'mcp_description', errorMessageId: 'mcp_description_error' },
+                { id: 'requested_by', errorMessageId: 'requested_by_error' }
+            ];
+
+            function showErrorMessage(element, message) {
+                element.textContent = message;
+                element.style.display = 'block';
+                element.previousElementSibling.classList.add('is-invalid');
+            }
+
+            function hideErrorMessage(element) {
+                element.style.display = 'none';
+                element.previousElementSibling.classList.remove('is-invalid');
+            }
+
+            function displayStatusMessage(message, type) {
+                statusMessageDiv.textContent = message;
+                statusMessageDiv.className = ''; // Clear existing classes
+                statusMessageDiv.classList.add(type);
+                statusMessageDiv.style.display = 'block';
+            }
+
+            function clearStatusMessage() {
+                statusMessageDiv.style.display = 'none';
+                statusMessageDiv.textContent = '';
+                statusMessageDiv.className = '';
+            }
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault(); // Prevent default form submission
+
+                clearStatusMessage(); // Clear previous status messages
+
+                let isValid = true;
+                const formData = {};
+
+                fields.forEach(field => {
+                    const inputElement = document.getElementById(field.id);
+                    const errorElement = document.getElementById(field.errorMessageId);
+                    const value = inputElement.value.trim();
+
+                    if (value === '') {
+                        showErrorMessage(errorElement, errorElement.textContent); // Use default message
+                        isValid = false;
+                    } else {
+                        hideErrorMessage(errorElement);
+                        formData[field.id] = value;
+                    }
+                });
+
+                if (!isValid) {
+                    displayStatusMessage('Please correct the errors in the form.', 'error');
+                    return; // Stop submission if validation fails
+                }
+
+                // If validation passes, proceed with API submission
+                try {
+                    const response = await fetch('/submit_mcp', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData),
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        displayStatusMessage(result.message || 'MCP submitted successfully!', 'success');
+                        form.reset(); // Clear the form on successful submission
+                        // Optionally, hide error messages after successful submission
+                        fields.forEach(field => {
+                            hideErrorMessage(document.getElementById(field.errorMessageId));
+                        });
+                    } else {
+                        displayStatusMessage(result.error || 'Failed to submit MCP. Please try again.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Submission error:', error);
+                    displayStatusMessage('An unexpected error occurred. Please check your network connection and try again.', 'error');
+                }
+            });
+
+            // Optional: Real-time validation feedback on input change/blur
+            fields.forEach(field => {
+                const inputElement = document.getElementById(field.id);
+                const errorElement = document.getElementById(field.errorMessageId);
+
+                inputElement.addEventListener('input', () => {
+                    if (inputElement.value.trim() !== '') {
+                        hideErrorMessage(errorElement);
+                    }
+                });
+
+                inputElement.addEventListener('blur', () => {
+                    if (inputElement.value.trim() === '') {
+                        showErrorMessage(errorElement, errorElement.textContent);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

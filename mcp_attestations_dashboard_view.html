@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Attestations Dashboard</title>
+    <style>
+        /* Minimal CSS for readability */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .controls label {
+            font-weight: bold;
+            color: #555;
+        }
+        .controls input[type="text"] {
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 300px;
+            font-size: 1rem;
+            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 0.95rem;
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            position: relative;
+            user-select: none; /* Prevent text selection on header click */
+        }
+        th:hover {
+            background-color: #0056b3;
+        }
+        th.sort-asc::after {
+            content: ' ▲';
+            position: absolute;
+            right: 8px;
+            font-size: 0.8em;
+        }
+        th.sort-desc::after {
+            content: ' ▼';
+            position: absolute;
+            right: 8px;
+            font-size: 0.8em;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f8f8;
+        }
+        tr:hover {
+            background-color: #eef;
+        }
+        .status-active { color: #28a745; font-weight: bold; } /* Green */
+        .status-expired { color: #dc3545; font-weight: bold; } /* Red */
+        .status-pending { color: #ffc107; font-weight: bold; } /* Yellow/Orange */
+        .status-revoked { color: #6c757d; font-weight: bold; } /* Gray */
+        .no-data {
+            text-align: center;
+            font-style: italic;
+            color: #777;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Attestations Dashboard</h1>
+
+        <div class="controls">
+            <label for="filterInput">Filter:</label>
+            <input type="text" id="filterInput" placeholder="Filter by MCP name, ID, or status...">
+        </div>
+
+        <table id="attestationsTable">
+            <thead>
+                <tr>
+                    <th data-sort-key="mcp_name">MCP Name</th>
+                    <th data-sort-key="attestation_id">Attestation ID</th>
+                    <th data-sort-key="status">Status</th>
+                    <th data-sort-key="issued_at">Issued At</th>
+                    <th data-sort-key="expires_at">Expires At</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Attestation data will be loaded here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let allAttestations = []; // Stores the original fetched data
+        let currentSortColumn = null;
+        let currentSortDirection = 'asc'; // 'asc' or 'desc'
+
+        // Sample data for demonstration (simulating API response from attestation_api.py)
+        const sampleAttestationData = [
+            { mcp_name: 'AlphaCorp', attestation_id: 'att-001', status: 'active', issued_at: '2023-01-15T10:00:00Z', expires_at: '2024-01-15T10:00:00Z' },
+            { mcp_name: 'BetaTech', attestation_id: 'att-002', status: 'expired', issued_at: '2022-03-20T11:30:00Z', expires_at: '2023-03-20T11:30:00Z' },
+            { mcp_name: 'GammaSolutions', attestation_id: 'att-003', status: 'pending', issued_at: '2023-11-01T09:00:00Z', expires_at: '2024-11-01T09:00:00Z' },
+            { mcp_name: 'DeltaSystems', attestation_id: 'att-004', status: 'active', issued_at: '2023-05-10T14:15:00Z', expires_at: '2024-05-10T14:15:00Z' },
+            { mcp_name: 'AlphaCorp', attestation_id: 'att-005', status: 'revoked', issued_at: '2023-02-01T08:00:00Z', expires_at: '2024-02-01T08:00:00Z' },
+            { mcp_name: 'BetaTech', attestation_id: 'att-006', status: 'active', issued_at: '2023-09-25T16:00:00Z', expires_at: '2024-09-25T16:00:00Z' },
+            { mcp_name: 'GammaSolutions', attestation_id: 'att-007', status: 'expired', issued_at: '2022-07-01T12:00:00Z', expires_at: '2023-07-01T12:00:00Z' },
+            { mcp_name: 'EpsilonInnovations', attestation_id: 'att-008', status: 'active', issued_at: '2023-10-05T13:00:00Z', expires_at: '2024-10-05T13:00:00Z' },
+            { mcp_name: 'ZetaTech', attestation_id: 'att-009', status: 'pending', issued_at: '2023-12-01T10:00:00Z', expires_at: '2024-12-01T10:00:00Z' },
+            { mcp_name: 'AlphaCorp', attestation_id: 'att-010', status: 'active', issued_at: '2023-06-10T09:00:00Z', expires_at: '2024-06-10T09:00:00Z' }
+        ];
+
+        /**
+         * Formats an ISO timestamp string into a more readable local date and time string.
+         * @param {string} isoString - The ISO 8601 timestamp string.
+         * @returns {string} The formatted date/time string or an empty string if input is invalid.
+         */
+        function formatTimestamp(isoString) {
+            if (!isoString) return '';
+            try {
+                const date = new Date(isoString);
+                // Options for toLocaleString for better readability
+                const options = {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    hour12: false // Use 24-hour format
+                };
+                return date.toLocaleString(undefined, options); // undefined uses user's locale
+            } catch (e) {
+                console.error("Error formatting timestamp:", isoString, e);
+                return isoString; // Fallback to original string if parsing fails
+            }
+        }
+
+        /**
+         * Renders the given attestations array into the table body.
+         * @param {Array<Object>} attestationsToDisplay - The array of attestation objects to display.
+         */
+        function displayAttestations(attestationsToDisplay) {
+            const tbody = document.querySelector('#attestationsTable tbody');
+            tbody.innerHTML = ''; // Clear existing rows
+
+            if (attestationsToDisplay.length === 0) {
+                const row = tbody.insertRow();
+                const cell = row.insertCell();
+                cell.colSpan = 5; // Span all columns
+                cell.textContent = 'No attestations found matching your criteria.';
+                cell.classList.add('no-data');
+                return;
+            }
+
+            attestationsToDisplay.forEach(attestation => {
+                const row = tbody.insertRow();
+                row.insertCell().textContent = attestation.mcp_name;
+                row.insertCell().textContent = attestation.attestation_id;
+                const statusCell = row.insertCell();
+                statusCell.textContent = attestation.status;
+                statusCell.className = `status-${attestation.status}`; // Apply status-specific styling
+                row.insertCell().textContent = formatTimestamp(attestation.issued_at);
+                row.insertCell().textContent = formatTimestamp(attestation.expires_at);
+            });
+        }
+
+        /**
+         * Simulates fetching attestation data from an API endpoint.
+         * In a real application, this would make an actual network request.
+         */
+        function fetchAttestations() {
+            // In a real application, this would be:
+            // fetch('/api/attestations') // Assuming attestation_api.py exposes this endpoint
+            //     .then(response => {
+            //         if (!response.ok) {
+            //             throw new Error(`HTTP error! status: ${response.status}`);
+            //         }
+            //         return response.json();
+            //     })
+            //     .then(data => {
+            //         allAttestations = data;
+            //         applyFiltersAndSort(); // Initial display after fetching
+            //     })
+            //     .catch(error => console.error('Error fetching attestations:', error));
+
+            // For this standalone HTML, we use a Promise to simulate network delay with sample data
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    resolve(sampleAttestationData);
+                }, 300); // Simulate a 300ms network delay
+            }).then(data => {
+                allAttestations = data;
+                applyFiltersAndSort(); // Initial display after fetching
+            });
+        }
+
+        /**
+         * Applies current filters and sorting to the `allAttestations` data
+         * and then calls `displayAttestations` to update the table.
+         */
+        function applyFiltersAndSort() {
+            let filteredAttestations = [...allAttestations];
+            const filterText = document.getElementById('filterInput').value.toLowerCase().trim();
+
+            if (filterText) {
+                filteredAttestations = filteredAttestations.filter(att =>
+                    att.mcp_name.toLowerCase().includes(filterText) ||
+                    att.status.toLowerCase().includes(filterText) ||
+                    att.attestation_id.toLowerCase().includes(filterText)
+                );
+            }
+
+            if (currentSortColumn) {
+                filteredAttestations.sort((a, b) => {
+                    const valA = a[currentSortColumn];
+                    const valB = b[currentSortColumn];
+
+                    // Handle date sorting for 'issued_at' and 'expires_at'
+                    if (currentSortColumn === 'issued_at' || currentSortColumn === 'expires_at') {
+                        const dateA = new Date(valA);
+                        const dateB = new Date(valB);
+                        if (dateA < dateB) return currentSortDirection === 'asc' ? -1 : 1;
+                        if (dateA > dateB) return currentSortDirection === 'asc' ? 1 : -1;
+                        return 0;
+                    }
+
+                    // Handle string/number sorting for other columns
+                    if (typeof valA === 'string' && typeof valB === 'string') {
+                        return currentSortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    }
+                    // Fallback for other types or mixed types
+                    if (valA < valB) return currentSortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return currentSortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            displayAttestations(filteredAttestations);
+        }
+
+        /**
+         * Handles sorting when a table header is clicked.
+         * @param {string} columnKey - The data-sort-key attribute of the clicked header.
+         */
+        function handleSort(columnKey) {
+            // Remove sort classes from all headers
+            document.querySelectorAll('#attestationsTable th').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+
+            if (currentSortColumn === columnKey) {
+                // If clicking the same column, toggle direction
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                // If clicking a new column, set it as current and start with ascending
+                currentSortColumn = columnKey;
+                currentSortDirection = 'asc';
+            }
+
+            // Add current sort class to the clicked header
+            const clickedHeader = document.querySelector(`th[data-sort-key="${columnKey}"]`);
+            if (clickedHeader) {
+                clickedHeader.classList.add(`sort-${currentSortDirection}`);
+            }
+
+            applyFiltersAndSort();
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAttestations(); // Load data when the page loads
+
+            // Add event listener for the filter input
+            document.getElementById('filterInput').addEventListener('input', applyFiltersAndSort);
+
+            // Add event listeners for sortable table headers
+            document.querySelectorAll('#attestationsTable th[data-sort-key]').forEach(header => {
+                header.addEventListener('click', () => handleSort(header.dataset.sortKey));
+            });
+        });
+    </script>
+</body>
+</html>

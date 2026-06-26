@@ -49,8 +49,30 @@ prompt: |-
   3. DATA ACCESS through an injected DB session dependency (SQLAlchemy/SQLModel
      style `Depends(get_session)`); write Postgres-PORTABLE SQL only (no DuckDB-only
      STRUCT/AUTOINCREMENT, no raw DuckDB calls). The app tier targets PostgreSQL via a
-     data-access layer; if a helper/session module is missing, define a minimal local
-     `get_session` stub clearly marked so it is swappable -- never hardcode a DB path.
+     data-access layer; the REAL data layer ALREADY EXISTS -- IMPORT it, never re-create or stub it.
+     `from app.db import get_session` (inject `db: Session = Depends(get_session)`) and
+     `from app.models import McpServerRegistry, McpLlmAxisScore, Org, User, ApiKey`
+     (call graph_neighbors on app/models.py FIRST to see every available class). Query those
+     ORM models. NEVER define a local get_session / Base / declarative_base(), an inline
+     placeholder model, or an in-memory/SQLite dict in the module -- that is the #1 cause of
+     hollow mock modules. If the spec needs a NEW table, ADD a real SQLAlchemy model to
+     app/models.py (portable columns) and import it -- never invent one inline.
+
+  REAL DATABASE SCHEMA (these tables are populated -- query THESE names, do not invent tables):
+     - McpLlmAxisScore -> table "mcp_llm_axis_scores" (~65k rows; the SFT risk scores):
+       server_id, axis_name in {overall_risk, auth_strength, capability_breadth,
+       data_sensitivity, network_egress, maintainer_trust, exploit_surface}, label,
+       label_index, probs(JSON), p_top, p_critical, p_danger, escalated, escalated_to,
+       decision_rule_version, model_version, adapter_sha256, scored_at.
+       UNIQUE(server_id, axis_name, model_version); a server's verdict = its 7 axis rows for
+       the current model_version.
+     - McpServerRegistry -> table "mcp_server_registry": server_id(PK), name, registry_source,
+       url, description, trust_score, verdict, verdict_reasoning, confidence, risk_tier,
+       scan_count, first_seen, last_seen, last_scanned, last_assessed, meta.
+     - Org / User / ApiKey -> auth + tenant tables; org_id scoping comes from the authed principal.
+     When surfacing a server's risk to users, apply repo-root
+     `trust_gating_override.trust_gate(url, name, {axis_name: label})` so official publishers
+     are not shown as false HIGH/CRITICAL.
   4. MULTI-TENANCY: every query that reads/writes product data is scoped by `org_id`
      taken from the authenticated principal -- never trust an org_id from the request body.
   5. AUTH modules: ISSUE and verify OUR OWN tokens (JWT via PyJWT, signed with an app
@@ -59,8 +81,9 @@ prompt: |-
   6. RBAC modules: a server-side `require_role(...)` FastAPI dependency that 403s on
      insufficient role, enforced on the protected endpoints (not a client-side check).
   7. A `__main__` self-test that imports the module and exercises the endpoints with
-     FastAPI's `TestClient` against an in-memory/SQLite session (so it runs in CI with no
-     live server/Postgres), asserts the happy path + one auth/permission failure, prints
+     FastAPI's `TestClient` with `get_session` overridden via `app.dependency_overrides[get_session]` to a SQLite
+     session (so it runs in CI with no live Postgres) -- keep the module's real
+     `from app.db ... / from app.models ...` imports, asserts the happy path + one auth/permission failure, prints
      "PASS" or "FAIL: <reason>". Use only stdlib + already-vendored deps (fastapi, pydantic,
      PyJWT, sqlalchemy/sqlmodel, passlib if present else hashlib).
 

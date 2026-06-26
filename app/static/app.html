@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCPLookup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--mut:#a99cc7;--cyan:#34e3ff;--gold:#ecdcae;
+        --LOW:#5cf0a0;--MEDIUM:#ffd84a;--HIGH:#ff9d54;--CRITICAL:#ff6f9a}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'JetBrains Mono','Courier New',monospace;font-size:14px;line-height:1.55;
+       background:radial-gradient(900px 460px at 80% -28%,rgba(86,52,150,.16),transparent 62%),var(--bg) fixed}
+  a{color:var(--cyan);text-decoration:none}
+  header{display:flex;align-items:center;gap:1.1rem;padding:.7rem 1.3rem;border-bottom:1px solid var(--line);background:#0b0814;position:sticky;top:0;z-index:5}
+  .logo{font-weight:800;font-size:1.1rem} .logo span{color:var(--cyan);text-shadow:0 0 12px rgba(52,227,255,.5)}
+  nav{display:flex;gap:.3rem} nav a{padding:.4rem .75rem;border-radius:7px;color:var(--mut);font-weight:600;cursor:pointer;font-size:.86rem}
+  nav a:hover{color:var(--txt);background:rgba(52,227,255,.06)} nav a.on{color:var(--cyan);background:rgba(52,227,255,.1)}
+  #userbtn{margin-left:auto;display:flex;align-items:center;gap:.6rem}
+  .wrap{max-width:1080px;margin:0 auto;padding:1.3rem}
+  h2{font-size:1.05rem;margin:.2rem 0 .9rem;letter-spacing:.3px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.9rem 1rem}
+  .stat .n{font-size:1.5rem;font-weight:800;color:var(--cyan)} .stat .l{color:var(--mut);font-size:.78rem}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;margin-top:1rem}
+  .distrow{display:flex;align-items:center;gap:.6rem;margin:.4rem 0}
+  .distrow .k{width:80px;font-size:.78rem;font-weight:700} .distrow .bar{flex:1;height:14px;background:#0d0a16;border-radius:99px;overflow:hidden}
+  .distrow .bar i{display:block;height:100%;border-radius:99px} .distrow .v{width:64px;text-align:right;color:var(--mut);font-size:.78rem}
+  .row{padding:.55rem .35rem;border-bottom:1px solid var(--line);cursor:pointer;display:flex;align-items:center;gap:.6rem}
+  .row:hover{background:rgba(52,227,255,.05)} .row:last-child{border-bottom:0}
+  .nm{flex:1;min-width:0} .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .nm span{color:var(--mut);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .badge{font-size:.7rem;font-weight:800;padding:.2rem .5rem;border-radius:6px;border:1px solid currentColor;white-space:nowrap}
+  .b-LOW{color:var(--LOW)} .b-MEDIUM{color:var(--MEDIUM)} .b-HIGH{color:var(--HIGH)} .b-CRITICAL{color:var(--CRITICAL)}
+  input,select{padding:.6rem .8rem;background:#0d0a16;border:1px solid var(--line);border-radius:8px;color:var(--txt);font-family:inherit;font-size:.9rem}
+  input:focus,select:focus{outline:none;border-color:var(--cyan)}
+  button{padding:.6rem 1rem;background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;border-radius:8px;color:#02141a;font-family:inherit;font-weight:800;cursor:pointer}
+  button.ghost{background:#15101f;color:var(--mut);border:1px solid var(--line)}
+  .controls{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem}
+  .ax{margin:.5rem 0} .ax .lab{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:.2rem}
+  .ax .lab small{color:var(--mut);text-transform:capitalize} .ax .lab b{color:var(--gold)}
+  .barx{height:7px;background:#0d0a16;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .barx i{display:block;height:100%;background:linear-gradient(90deg,#0e7c8c,var(--cyan))}
+  .muted{color:var(--mut)} .note{font-size:.74rem;color:var(--mut);margin-top:.9rem}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:1rem} @media(max-width:760px){.two{grid-template-columns:1fr}}
+  label{display:block;font-size:.8rem;color:var(--mut);margin:.6rem 0 .25rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" onclick="go('/app')" style="cursor:pointer">MCP<span>lookup</span></div>
+  <nav>
+    <a data-r="/app">Dashboard</a>
+    <a data-r="/app/explore">Explore</a>
+    <a data-r="/app/submit">Submit</a>
+    <a data-r="/app/reports">Reports</a>
+    <a data-r="/app/admin" id="navadmin" style="display:none">Admin</a>
+  </nav>
+  <span id="userbtn"><span class="muted" style="font-size:.8rem" id="who"></span><span id="ubtn"></span></span>
+</header>
+<div class="wrap"><div id="view"><p class="muted">// loading…</p></div></div>
+<script>
+const E=(s)=>document.getElementById(s);
+const esc=(s)=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RC={LOW:'var(--LOW)',MEDIUM:'var(--MEDIUM)',HIGH:'var(--HIGH)',CRITICAL:'var(--CRITICAL)'};
+const badge=(r)=>{r=(r||'').toUpperCase();return r?`<span class="badge b-${r}">${r}</span>`:'';};
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null;}catch(e){return null;}}
+async function j(u,o){o=o||{};const t=await tok();o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
+  const r=await fetch(u,o);
+  if(r.status===401){location.href='/';throw new Error('Sign in required');}
+  if(r.status===429){let d={};try{d=await r.json();}catch(e){}throw new Error((d&&d.detail)||'Daily lookup limit reached.');}
+  if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+async function refreshMe(){try{const m=await j('/api/me');
+  const em=(window.Clerk&&window.Clerk.user&&window.Clerk.user.primaryEmailAddress&&window.Clerk.user.primaryEmailAddress.emailAddress)||'';
+  E('who').textContent=m.unlimited?(em+' · '+m.role):(em+' · '+m.remaining+'/'+m.cap+' lookups');
+  if(m.role==='admin')E('navadmin').style.display='';}catch(e){}}
+const fmt=(n)=>(n||0).toLocaleString();
+
+function setNav(path){document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===path||(path.startsWith('/app/server')&&a.dataset.r==='/app/explore')));}
+function go(path,push=true){ if(push) history.pushState({},'',path); setNav(path); render(path); }
+document.querySelectorAll('nav a').forEach(a=>a.addEventListener('click',()=>go(a.dataset.r)));
+window.addEventListener('popstate',()=>{setNav(location.pathname);render(location.pathname);});
+
+function render(path){
+  if(path.startsWith('/app/server/')) return viewDetail(path.split('/app/server/')[1]);
+  if(path==='/app/explore') return viewExplore();
+  if(path==='/app/submit') return viewSubmit();
+  if(path==='/app/reports') return viewReports();
+  if(path==='/app/admin') return viewAdmin();
+  return viewDashboard();
+}
+
+async function viewAdmin(){
+  E('view').innerHTML='<p class="muted">// loading admin…</p>';
+  try{const d=await j('/api/admin/submissions?limit=100');
+    const rows=d.submissions.map(x=>`<div class="row" onclick="go('/app/server/${esc(x.server_id)}')">
+      <div class="nm"><b>${esc(x.name||x.server_id)}</b><span>${esc(x.url||'')}</span></div>
+      <span class="badge ${x.verdict==='unreviewed'?'b-MEDIUM':'b-LOW'}">${esc(x.verdict)}</span></div>`).join('')
+      ||'<p class="muted">// no user submissions yet</p>';
+    E('view').innerHTML=`<h2>Admin · submission review</h2>
+      <div class="cards">
+        <div class="stat"><div class="n">${fmt(d.count)}</div><div class="l">user submissions</div></div>
+        <div class="stat"><div class="n" style="color:var(--MEDIUM)">${fmt(d.pending)}</div><div class="l">awaiting scoring</div></div>
+      </div>
+      <div class="controls" style="margin-top:1rem"><button class="ghost" onclick="doRefresh(this)">↻ recompute dashboard stats</button></div>
+      <div class="panel"><h2>User-submitted MCPs</h2>${rows}</div>
+      <p class="note">Submissions enter as <b>unreviewed</b> and are scored on the next pass. Recompute refreshes the cached dashboard aggregates after a scoring run.</p>`;
+  }catch(e){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p class="muted">// error: '+esc(e.message)+'</p>';}}
+async function doRefresh(btn){btn.textContent='// recomputing… (≈40s)';btn.disabled=true;
+  try{await j('/api/dashboard/refresh',{method:'POST'});btn.textContent='✓ refreshed';}
+  catch(e){btn.textContent='// error: '+e.message;btn.disabled=false;}}
+
+async function viewDashboard(){
+  E('view').innerHTML='<p class="muted">// loading dashboard…</p>';
+  try{const s=await j('/api/dashboard/summary');
+    const total=Object.values(s.risk_distribution).reduce((a,b)=>a+b,0)||1;
+    const order=['CRITICAL','HIGH','MEDIUM','LOW'];
+    const dist=order.filter(k=>s.risk_distribution[k]).map(k=>{const v=s.risk_distribution[k];const p=Math.round(v/total*100);
+      return `<div class="distrow"><div class="k" style="color:${RC[k]}">${k}</div><div class="bar"><i style="width:${p}%;background:${RC[k]}"></i></div><div class="v">${fmt(v)} · ${p}%</div></div>`;}).join('');
+    const top=await j('/api/top?risk=CRITICAL&limit=12');
+    const tl=top.locked?'<p class="muted">🔒 Flagged-server lists are insider-only. Open any server from Explore to see its full breakdown (counts toward your daily lookups).</p>':(top.servers.map(x=>rowHtml(x)).join('')||'<p class="muted">none</p>');
+    const src=s.by_source.map(x=>`<div class="distrow"><div class="k" style="width:auto;flex:1;color:var(--mut);font-weight:600">${esc(x.source)}</div><div class="v">${fmt(x.count)}</div></div>`).join('');
+    E('view').innerHTML=`<h2>Overview</h2>
+      <div class="cards">
+        <div class="stat"><div class="n">${fmt(s.scored)}</div><div class="l">servers scored</div></div>
+        <div class="stat"><div class="n">${fmt(s.registry_total)}</div><div class="l">in registry</div></div>
+        <div class="stat"><div class="n" style="color:var(--CRITICAL)">${fmt(s.risk_distribution.CRITICAL||0)}</div><div class="l">critical</div></div>
+        <div class="stat"><div class="n" style="color:var(--HIGH)">${fmt(s.risk_distribution.HIGH||0)}</div><div class="l">high</div></div>
+      </div>
+      <div class="two">
+        <div class="panel"><h2>Risk distribution</h2>${dist}</div>
+        <div class="panel"><h2>By registry source</h2>${src}</div>
+      </div>
+      <div class="panel"><h2>Critical-risk servers</h2>${tl}</div>`;
+  }catch(e){E('view').innerHTML='<p class="muted">// error: '+esc(e.message)+'</p>';}
+}
+
+function rowHtml(x){const b=x.hidden?`<span class="badge" style="color:var(--mut);border-color:var(--line)" title="Open to reveal (uses a lookup)">🔒</span>`:badge(x.published_overall_risk);
+  return `<div class="row" onclick="go('/app/server/${esc(x.server_id)}')">
+  <div class="nm"><b>${esc(x.name||x.server_id)}</b><span>${esc(x.url||x.registry_source||'')}</span></div>${b}</div>`;}
+
+let exState={q:'',risk:'',offset:0};
+function viewExplore(){
+  E('view').innerHTML=`<h2>Explore the registry</h2>
+    <div class="controls">
+      <input id="q" placeholder="wildcard search: stripe, github.com/microsoft, *-mcp…" value="${esc(exState.q)}" style="flex:1;min-width:220px">
+      <select id="risk"><option value="">any risk</option>${['CRITICAL','HIGH','MEDIUM','LOW'].map(r=>`<option ${exState.risk===r?'selected':''}>${r}</option>`).join('')}</select>
+      <button onclick="doSearch(0)">Search</button>
+    </div>
+    <div class="panel"><div id="results"><p class="muted">// search, or browse below</p></div></div>
+    <div class="controls" style="margin-top:.7rem;justify-content:center"><button class="ghost" id="prev" onclick="page(-1)">‹ prev</button><button class="ghost" id="next" onclick="page(1)">next ›</button></div>`;
+  E('q').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch(0);});
+  doSearch(0);
+}
+async function doSearch(off){exState.q=E('q').value.trim();exState.risk=E('risk').value;exState.offset=Math.max(0,off);
+  E('results').innerHTML='<p class="muted">// searching…</p>';
+  try{const d=await j(`/api/servers?q=${encodeURIComponent(exState.q)}&risk=${exState.risk}&limit=25&offset=${exState.offset}`);
+    E('results').innerHTML=d.servers.length?d.servers.map(rowHtml).join(''):'<p class="muted">// no matches</p>';
+    E('prev').disabled=exState.offset===0; E('next').disabled=d.servers.length<25;
+    refreshMe();
+  }catch(e){E('results').innerHTML='<p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}}
+function page(d){doSearch(exState.offset+d*25);}
+
+async function viewDetail(id){
+  E('view').innerHTML='<p class="muted">// loading…</p>';
+  try{const r=await fetch('/api/verdict/'+encodeURIComponent(id));
+    if(r.status===404){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p class="muted">// no scores for this server</p>';return;}
+    const v=await r.json();
+    const order=['overall_risk','auth_strength','capability_breadth','data_sensitivity','network_egress','maintainer_trust','exploit_surface'];
+    const bars=order.filter(k=>v.axes&&v.axes[k]).map(k=>{const a=v.axes[k];const p=Math.round((a.p_top||0)*100);
+      return `<div class="ax"><div class="lab"><small>${esc(k.replace(/_/g,' '))}</small><b>${esc(a.label||'—')}</b></div><div class="barx"><i style="width:${p}%"></i></div></div>`;}).join('');
+    E('view').innerHTML=`<a onclick="history.back()">‹ back</a>
+      <div class="panel"><div style="display:flex;align-items:center;gap:.6rem"><b style="flex:1;min-width:0;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.name||v.server_id)}</b>${badge(v.published_overall_risk)}</div>
+      <div class="muted" style="font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.url||'')}</div>
+      ${v.trusted?`<p class="note" style="color:var(--LOW)">✓ ${esc(v.display_label||'verified / established maintainer')}</p>`:''}
+      ${bars}
+      <p class="note">model ${esc(v.model_version||'')} · raw ${esc(v.model_overall_risk||'—')} → published ${esc(v.published_overall_risk||'—')}</p></div>`;
+    refreshMe();
+  }catch(e){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}}
+
+function viewSubmit(){
+  E('view').innerHTML=`<h2>Submit an MCP server</h2>
+    <div class="panel" style="max-width:520px">
+      <label>Server URL *</label><input id="surl" placeholder="https://github.com/org/your-mcp" style="width:100%">
+      <label>Name (optional)</label><input id="sname" placeholder="My MCP" style="width:100%">
+      <div style="margin-top:1rem"><button onclick="doSubmit()">Submit for scoring</button></div>
+      <p class="note" id="smsg">Submitted servers enter the registry as <b>unreviewed</b> and get scored on the next pass.</p>
+    </div>`;
+}
+async function doSubmit(){const url=E('surl').value.trim();const name=E('sname').value.trim();
+  if(!/^https?:\/\//.test(url)){E('smsg').innerHTML='<span style="color:var(--HIGH)">// please enter a valid http(s) URL</span>';return;}
+  E('smsg').textContent='// submitting…';
+  try{const d=await j('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,name})});
+    E('smsg').innerHTML=d.status==='exists'?`<span style="color:var(--MEDIUM)">// already in the registry —</span> <a onclick="go('/app/server/${esc(d.server_id)}')">view</a>`
+      :`<span style="color:var(--LOW)">✓ submitted —</span> <a onclick="go('/app/server/${esc(d.server_id)}')">view</a> (scoring pending)`;
+  }catch(e){E('smsg').innerHTML='<span style="color:var(--HIGH)">// error: '+esc(e.message)+'</span>';}}
+
+async function viewReports(){
+  E('view').innerHTML='<p class="muted">// loading reports…</p>';
+  try{const s=await j('/api/dashboard/summary');
+    const total=Object.values(s.risk_distribution).reduce((a,b)=>a+b,0)||1;
+    const order=['CRITICAL','HIGH','MEDIUM','LOW'];
+    const dist=order.filter(k=>s.risk_distribution[k]).map(k=>{const v=s.risk_distribution[k];const p=Math.round(v/total*100);
+      return `<div class="distrow"><div class="k" style="color:${RC[k]}">${k}</div><div class="bar"><i style="width:${p}%;background:${RC[k]}"></i></div><div class="v">${fmt(v)} · ${p}%</div></div>`;}).join('');
+    const flagged=(s.risk_distribution.HIGH||0)+(s.risk_distribution.CRITICAL||0);
+    const src=s.by_source.map(x=>`<div class="distrow"><div class="k" style="width:auto;flex:1;color:var(--mut);font-weight:600">${esc(x.source)}</div><div class="v">${fmt(x.count)}</div></div>`).join('');
+    E('view').innerHTML=`<h2>Reports</h2>
+      <div class="cards">
+        <div class="stat"><div class="n">${fmt(s.scored)}</div><div class="l">scored servers</div></div>
+        <div class="stat"><div class="n" style="color:var(--HIGH)">${fmt(flagged)}</div><div class="l">flagged HIGH+</div></div>
+        <div class="stat"><div class="n">${Math.round(flagged/total*100)}%</div><div class="l">of scored</div></div>
+      </div>
+      <div class="two">
+        <div class="panel"><h2>Overall risk distribution</h2>${dist}</div>
+        <div class="panel"><h2>Coverage by source</h2>${src}</div>
+      </div>
+      <p class="note">Risk labels are automated heuristic estimations. Official publishers are trust-capped; figures reflect published (post-override) tiers.</p>`;
+  }catch(e){E('view').innerHTML='<p class="muted">// error: '+esc(e.message)+'</p>';}}
+
+// --- Clerk session + UserButton ---
+const CLERK_PK="__CLERK_PK__";
+function clerkHost(pk){ try{ return atob(pk.split('_')[2]).replace(/\$+$/,''); }catch(e){ return ''; } }
+function boot(){ setNav(location.pathname); render(location.pathname); refreshMe(); }
+if(CLERK_PK.indexOf("pk_")===0 && clerkHost(CLERK_PK)){
+  const s=document.createElement('script');s.async=true;s.crossOrigin='anonymous';
+  s.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  s.src='https://'+clerkHost(CLERK_PK)+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  s.addEventListener('load',async()=>{ try{
+    if(!window.Clerk){ await new Promise(r=>setTimeout(r,300)); }
+    await window.Clerk.load();
+    if(!window.Clerk.user){ location.href='/'; return; }
+    const em=window.Clerk.user.primaryEmailAddress; E('who').textContent=(em&&em.emailAddress)||'';
+    const pm=window.Clerk.user.publicMetadata||{}; if(pm.role==='admin'){ E('navadmin').style.display=''; }
+    if(window.Clerk.mountUserButton) window.Clerk.mountUserButton(E('ubtn'),{afterSignOutUrl:'/'});
+    boot();
+  }catch(e){ boot(); } });
+  document.head.appendChild(s);
+} else { boot(); }
+</script>
+</body></html>

@@ -59,11 +59,17 @@ app.include_router(auth.router)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
+import os as _os
+def _render(name: str) -> str:
+    html = (_STATIC / name).read_text(encoding="utf-8")
+    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+
+
 
 @app.get("/", response_class=HTMLResponse)
 def consent_gate():
     """Clickwrap evaluation-only notice -- the assertion shown before site access."""
-    return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
+    return _render("landing.html")
 
 
 @app.get("/disclaimer", response_class=HTMLResponse)
@@ -78,3 +84,33 @@ for _modname in _OPTIONAL_ROUTERS:
             app.include_router(_r)
     except Exception:
         pass  # loose/unbuilt feature module -- skip, never block boot
+
+
+@app.get("/app", response_class=HTMLResponse)
+def app_page():
+    return _render("app.html")
+
+
+@app.get("/app/{rest:path}", response_class=HTMLResponse)
+def app_spa(rest: str):
+    return _render("app.html")
+
+
+@app.middleware("http")
+async def _security_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    resp.headers["Content-Security-Policy-Report-Only"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://api.clerk.com; "
+        "frame-src https://*.clerk.accounts.dev https://*.clerk.com; "
+        "worker-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'"
+    )
+    return resp

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Submission Details</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .submission-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .submission-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .submission-meta span {
+            font-size: 14px;
+            color: #666;
+        }
+        .submission-meta span strong {
+            color: #333;
+        }
+        .submission-content {
+            margin-top: 20px;
+        }
+        .submission-field {
+            margin-bottom: 15px;
+        }
+        .submission-field label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .submission-field .value {
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 3px;
+            min-height: 20px;
+        }
+        .metadata-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        .metadata-section h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .metadata-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .metadata-table th, .metadata-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .metadata-table th {
+            background-color: #f2f2f2;
+        }
+        .metadata-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .back-button {
+            display: block;
+            width: 150px;
+            margin: 20px auto;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .back-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Submission Details</h1>
+        <div id="submission-header" class="submission-header">
+            <div>
+                <h2 id="mcp-name">Loading...</h2>
+            </div>
+            <div class="submission-meta">
+                <span><strong>Requested by:</strong> <span id="requested-by">Loading...</span></span>
+                <span><strong>Submission timestamp:</strong> <span id="submission-timestamp">Loading...</span></span>
+            </div>
+        </div>
+
+        <div class="submission-content">
+            <div class="submission-field">
+                <label for="description">Description</label>
+                <div id="description" class="value">Loading...</div>
+            </div>
+
+            <div class="submission-field">
+                <label for="status">Status</label>
+                <div id="status" class="value">Loading...</div>
+            </div>
+
+            <div class="submission-field">
+                <label for="priority">Priority</label>
+                <div id="priority" class="value">Loading...</div>
+            </div>
+
+            <div class="metadata-section">
+                <h2>Metadata</h2>
+                <table class="metadata-table" id="metadata-table">
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Metadata rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <button class="back-button" onclick="window.history.back()">Back to List</button>
+    </div>
+
+    <script>
+        // Mock data for testing
+        const mockSubmission = {
+            id: 1,
+            mcp_name: "Sample MCP Submission",
+            requested_by: "John Doe",
+            submission_timestamp: "2023-10-15T14:30:00Z",
+            description: "This is a sample MCP submission for testing purposes. It contains various fields and metadata to demonstrate the functionality of the dashboard.",
+            status: "Under Review",
+            priority: "Medium",
+            metadata: {
+                "project_id": "PROJ-12345",
+                "environment": "Production",
+                "impact_level": "High",
+                "related_tickets": ["TICKET-001", "TICKET-002"],
+                "estimated_duration": "2 weeks"
+            }
+        };
+
+        // Function to display submission data
+        function displaySubmissionData(submission) {
+            document.getElementById('mcp-name').textContent = submission.mcp_name;
+            document.getElementById('requested-by').textContent = submission.requested_by;
+            document.getElementById('submission-timestamp').textContent = new Date(submission.submission_timestamp).toLocaleString();
+            document.getElementById('description').textContent = submission.description;
+            document.getElementById('status').textContent = submission.status;
+            document.getElementById('priority').textContent = submission.priority;
+
+            const metadataTable = document.getElementById('metadata-table').getElementsByTagName('tbody')[0];
+            metadataTable.innerHTML = '';
+
+            for (const [key, value] of Object.entries(submission.metadata)) {
+                const row = metadataTable.insertRow();
+                const keyCell = row.insertCell(0);
+                const valueCell = row.insertCell(1);
+
+                keyCell.textContent = key;
+                valueCell.textContent = Array.isArray(value) ? value.join(', ') : value;
+            }
+        }
+
+        // Simulate API call and display data
+        document.addEventListener('DOMContentLoaded', function() {
+            // In a real scenario, you would fetch data from the API here
+            // For testing, we'll use the mock data
+            displaySubmissionData(mockSubmission);
+        });
+
+        // Self-test function
+        function runSelfTest() {
+            console.log("Running self-test...");
+
+            // Check if all required elements exist
+            const requiredElements = [
+                'mcp-name', 'requested-by', 'submission-timestamp',
+                'description', 'status', 'priority', 'metadata-table'
+            ];
+
+            const allElementsExist = requiredElements.every(id => document.getElementById(id) !== null);
+            if (!allElementsExist) {
+                console.error("Self-test failed: Some required elements are missing");
+                return false;
+            }
+
+            // Check if mock data is displayed correctly
+            const mcpName = document.getElementById('mcp-name').textContent;
+            const requestedBy = document.getElementById('requested-by').textContent;
+            const description = document.getElementById('description').textContent;
+
+            if (mcpName !== mockSubmission.mcp_name ||
+                requestedBy !== mockSubmission.requested_by ||
+                description !== mockSubmission.description) {
+                console.error("Self-test failed: Data not displayed correctly");
+                return false;
+            }
+
+            // Check if metadata table has rows
+            const metadataRows = document.querySelectorAll('#metadata-table tbody tr');
+            if (metadataRows.length === 0) {
+                console.error("Self-test failed: No metadata rows found");
+                return false;
+            }
+
+            console.log("Self-test passed: All checks successful");
+            return true;
+        }
+
+        // Run self-test when the page loads
+        if (typeof module === 'undefined' || !module.parent) {
+            // This is the main script, run self-test
+            const testPassed = runSelfTest();
+            if (!testPassed) {
+                alert("Self-test failed. Please check the console for details.");
+            } else {
+                console.log("Dashboard loaded successfully");
+            }
+        }
+    </script>
+</body>
+</html>

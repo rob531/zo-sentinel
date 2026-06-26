@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Policy Rules Auditor Dashboard</title>
+    <style>
+        /* Basic CSS for dashboard layout and readability */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        th, td {
+            border: 1px solid #e9ecef;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #eef4f7;
+            font-weight: 600;
+            color: #495057;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+        tr:nth-child(even) {
+            background-color: #f8fafd;
+        }
+        tr:hover {
+            background-color: #eef4f7;
+            transition: background-color 0.2s ease;
+        }
+        td code {
+            background-color: #e9ecef;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }
+        .status-active {
+            color: #28a745; /* Green */
+            font-weight: bold;
+        }
+        .status-inactive {
+            color: #dc3545; /* Red */
+            font-weight: bold;
+        }
+        .status-override {
+            color: #ffc107; /* Yellow/Orange */
+            font-weight: bold;
+        }
+        .audit-outcome-alert {
+            color: #007bff; /* Blue */
+        }
+        .audit-outcome-override {
+            color: #ffc107; /* Yellow/Orange */
+        }
+        .audit-outcome-disabled {
+            color: #6c757d; /* Gray */
+        }
+        .audit-outcome-tag {
+            color: #28a745; /* Green */
+        }
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #777;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Policy Rules Auditor Dashboard</h1>
+
+        <section id="active-rules">
+            <h2>Active Policy Rules</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rule Name</th>
+                        <th>Criteria</th>
+                        <th>Status</th>
+                        <th>Last Modified</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Placeholder Data for Active Rules -->
+                    <tr>
+                        <td>High Severity Incident Alert</td>
+                        <td><code>severity >= 4 AND status == "open" AND environment == "prod"</code></td>
+                        <td class="status-active">Active</td>
+                        <td>2023-10-20 08:00:00 UTC</td>
+                    </tr>
+                    <tr>
+                        <td>Compliance Check: Data Encryption</td>
+                        <td><code>resource_type == "database" AND encryption_status == "disabled"</code></td>
+                        <td class="status-active">Active</td>
+                        <td>2023-09-15 14:30:00 UTC</td>
+                    </tr>
+                    <tr>
+                        <td>Resource Tagging Enforcement</td>
+                        <td><code>resource_type == "ec2_instance" AND tags.project == null</code></td>
+                        <td class="status-active">Active</td>
+                        <td>2023-10-01 11:00:00 UTC</td>
+                    </tr>
+                    <tr>
+                        <td>Network ACL Configuration Audit</td>
+                        <td><code>resource_type == "network_acl" AND inbound_rules.port == "22" AND source_ip == "0.0.0.0/0"</code></td>
+                        <td class="status-active">Active</td>
+                        <td>2023-10-25 09:10:00 UTC</td>
+                    </tr>
+                    <tr>
+                        <td>S3 Bucket Public Access Prevention</td>
+                        <td><code>resource_type == "s3_bucket" AND public_access_block == "false"</code></td>
+                        <td class="status-active">Active</td>
+                        <td>2023-08-01 07:00:00 UTC</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="audit-trail">
+            <h2>Policy Rule Audit Trail</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Event</th>
+                        <th>Rule Applied/Affected</th>
+                        <th>Outcome</th>
+                        <th>Actor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Placeholder Data for Audit Trail -->
+                    <tr>
+                        <td>2023-10-27 11:15:00 UTC</td>
+                        <td>Rule Applied</td>
+                        <td>Resource Tagging Enforcement</td>
+                        <td class="audit-outcome-tag">Tag Added: project=default to instance-xyz</td>
+                        <td>System</td>
+                    </tr>
+                    <tr>
+                        <td>2023-10-27 10:00:00 UTC</td>
+                        <td>Rule Applied</td>
+                        <td>High Severity Incident Alert</td>
+                        <td class="audit-outcome-alert">Alert Generated: Incident #12345</td>
+                        <td>System</td>
+                    </tr>
+                    <tr>
+                        <td>2023-10-27 09:30:00 UTC</td>
+                        <td>Rule Override</td>
+                        <td>Compliance Check: Data Encryption</td>
+                        <td class="audit-outcome-override">Override Approved for database-prod-01 (justification: legacy system)</td>
+                        <td>Admin User (john.doe)</td>
+                    </tr>
+                    <tr>
+                        <td>2023-10-26 15:00:00 UTC</td>
+                        <td>Rule Deactivated</td>
+                        <td>Legacy Resource Cleanup</td>
+                        <td class="audit-outcome-disabled">Rule Disabled by user request</td>
+                        <td>Admin User (jane.smith)</td>
+                    </tr>
+                    <tr>
+                        <td>2023-10-26 10:00:00 UTC</td>
+                        <td>Rule Applied</td>
+                        <td>Network ACL Configuration Audit</td>
+                        <td class="audit-outcome-alert">Warning: Open SSH port detected on NACL-dev-01</td>
+                        <td>System</td>
+                    </tr>
+                    <tr>
+                        <td>2023-10-25 08:00:00 UTC</td>
+                        <td>Rule Created</td>
+                        <td>New Compliance Rule: GDPR Data Residency</td>
+                        <td>Rule Activated</td>
+                        <td>Admin User (john.doe)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <footer>
+            <p>&copy; 2023 Zo-Sentinel. All rights reserved. Data refreshed periodically.</p>
+        </footer>
+    </div>
+
+    <!-- Minimal inline JavaScript for potential future dynamic rendering -->
+    <script>
+        // This script block is a placeholder to illustrate where dynamic data loading
+        // and rendering logic would reside. For this task, placeholder data is
+        // hardcoded directly into the HTML tables to meet the "displaying placeholder data"
+        // and "self-contained HTML with minimal inline JavaScript" requirements.
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("MCP Policy Rules Auditor Dashboard loaded.");
+
+            // In a real application, functions like these would fetch data from an API:
+            /*
+            function fetchAndRenderActiveRules() {
+                fetch('/api/mcp/active_rules') // Example API endpoint
+                    .then(response => response.json())
+                    .then(data => {
+                        // Logic to clear existing placeholder rows and populate with 'data'
+                        console.log("Fetched active rules:", data);
+                    })
+                    .catch(error => console.error('Error fetching active rules:', error));
+            }
+
+            function fetchAndRenderAuditTrail() {
+                fetch('/api/mcp/audit_trail') // Example API endpoint
+                    .then(response => response.json())
+                    .then(data => {
+                        // Logic to clear existing placeholder rows and populate with 'data'
+                        console.log("Fetched audit trail:", data);
+                    })
+                    .catch(error => console.error('Error fetching audit trail:', error));
+            }
+
+            // Uncomment to simulate API calls on page load
+            // fetchAndRenderActiveRules();
+            // fetchAndRenderAuditTrail();
+            */
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+---
+# Codacy Analysis CLI configuration.
+#
+# Read by codacy/codacy-analysis-cli-action because CODACY_PROJECT_TOKEN is unset
+# (the workflow runs the CLI with default tools, no cloud override), so this file
+# governs which engines run.
+#
+# WHY: PMD is a Java linter. On this ~94% Python / ~3% JS repo it finds no
+# applicable ruleset and crashes the whole run with
+#   java.lang.IllegalArgumentException: No rules found. Maybe you mispelled a rule name? (null)
+# That exits the CLI with code 1 BEFORE `max-allowed-issues: 2147483647` can force
+# the intended exit 0, so the "Codacy Security Scan" check fails on every PR.
+# Disabling PMD lets the run complete and honour the non-blocking setting.
+# Python quality is covered by pylint (Codacy) + ruff; security by the repo's
+# Bandit + CodeQL workflows.
+engines:
+  pmd:
+    enabled: false
+  pmd-legacy:
+    enabled: false
+
+exclude_paths:
+  - '**/.venv/**'
+  - '**/.ruff_cache/**'
+  - '**/__pycache__/**'
+  - '**/node_modules/**'
+  - '**/*.min.js'

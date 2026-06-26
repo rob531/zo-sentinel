@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Scanner Status Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .dashboard {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .status-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .status-card h2 {
+            margin-top: 0;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .running {
+            background-color: #4CAF50;
+        }
+        .stale {
+            background-color: #F44336;
+        }
+        .submissions-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .submissions-card h2 {
+            margin-top: 0;
+        }
+        .submissions-count {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .last-submission {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>MCP Scanner Status Dashboard</h1>
+        <div class="status-card">
+            <h2>Scanner Status</h2>
+            <div id="scanner-status">
+                <span class="status-indicator" id="status-indicator"></span>
+                <span id="status-text">Loading...</span>
+                <div>Last Heartbeat: <span id="last-heartbeat">Loading...</span></div>
+            </div>
+        </div>
+        <div class="submissions-card">
+            <h2>MCP Submissions</h2>
+            <div class="submissions-count" id="submissions-count">Loading...</div>
+            <div class="last-submission">Last Submission: <span id="last-submission">Loading...</span></div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchScannerStatus() {
+            try {
+                const response = await fetch('/api/mcp_scanner_status');
+                const data = await response.json();
+
+                const statusIndicator = document.getElementById('status-indicator');
+                const statusText = document.getElementById('status-text');
+                const lastHeartbeat = document.getElementById('last-heartbeat');
+
+                if (data.status === 'running') {
+                    statusIndicator.className = 'status-indicator running';
+                    statusText.textContent = 'Running';
+                } else {
+                    statusIndicator.className = 'status-indicator stale';
+                    statusText.textContent = 'Stale';
+                }
+
+                lastHeartbeat.textContent = new Date(data.last_heartbeat).toLocaleString();
+            } catch (error) {
+                console.error('Error fetching scanner status:', error);
+            }
+        }
+
+        async function fetchSubmissionsSummary() {
+            try {
+                const response = await fetch('/api/mcp_submissions_summary');
+                const data = await response.json();
+
+                document.getElementById('submissions-count').textContent = data.row_count;
+                document.getElementById('last-submission').textContent = new Date(data.last_submission_timestamp).toLocaleString();
+            } catch (error) {
+                console.error('Error fetching submissions summary:', error);
+            }
+        }
+
+        function updateDashboard() {
+            fetchScannerStatus();
+            fetchSubmissionsSummary();
+        }
+
+        // Initial load
+        updateDashboard();
+
+        // Update every 30 seconds
+        setInterval(updateDashboard, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Distribution</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .chart-container {
+            width: 80%;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .error {
+            color: red;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP Risk Tier Distribution</h1>
+    <div class="chart-container">
+        <div class="loading" id="loading">Loading data...</div>
+        <div class="error" id="error" style="display: none;"></div>
+        <canvas id="riskTierChart"></canvas>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('View loaded successfully');
+
+            const ctx = document.getElementById('riskTierChart').getContext('2d');
+            const loadingElement = document.getElementById('loading');
+            const errorElement = document.getElementById('error');
+
+            // Placeholder data in case API is not available
+            const placeholderData = {
+                labels: ['Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'],
+                datasets: [{
+                    label: 'Number of MCPs',
+                    data: [12, 19, 3, 5],
+                    backgroundColor: [
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)'
+                    ],
+                    borderColor: [
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(255, 206, 86, 1)',
+                        'rgba(75, 192, 192, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            };
+
+            // Create chart with placeholder data
+            let riskTierChart = new Chart(ctx, {
+                type: 'bar',
+                data: placeholderData,
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Fetch data from API
+            fetch('/mcp_risk_tier_distribution_summary')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Update chart with real data
+                    riskTierChart.data.labels = data.labels;
+                    riskTierChart.data.datasets[0].data = data.values;
+                    riskTierChart.update();
+                    loadingElement.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    errorElement.textContent = 'Error loading data. Displaying placeholder data.';
+                    errorElement.style.display = 'block';
+                    loadingElement.style.display = 'none';
+                });
+        });
+    </script>
+</body>
+</html>

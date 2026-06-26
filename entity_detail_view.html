@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entity Detail View - MCP Server Alpha</title>
+    <meta name="description" content="Detailed view of an entity, including metadata, risk scores, policies, and audit history.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
+    <style>
+        /* Basic Reset & Variables */
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+            --text-color: #212529;
+            --light-text-color: #f8f9fa;
+            --border-color: #dee2e6;
+            --card-bg: #ffffff;
+            --shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            --border-radius: 0.375rem;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        }
+
+        body {
+            font-family: var(--font-family);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--light-bg);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Accessibility: Skip to content link */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: var(--primary-color);
+            color: var(--light-text-color);
+            padding: 8px;
+            z-index: 100;
+            transition: top 0.3s;
+        }
+        .skip-link:focus {
+            top: 0;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--dark-bg);
+            color: var(--light-text-color);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            flex-grow: 1;
+            min-width: 200px; /* Ensure title doesn't get too small */
+        }
+
+        header .entity-id {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-left: 1rem;
+        }
+
+        /* Main Content Layout */
+        main {
+            flex-grow: 1;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        /* Card Styling */
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 1.25rem;
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .card h3 {
+            font-size: 1.2rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Detail List */
+        .detail-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .detail-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px dotted var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-list li:last-child {
+            border-bottom: none;
+        }
+
+        .detail-list strong {
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .detail-list span {
+            font-size: 1rem;
+            word-break: break-word;
+        }
+
+        /* Tags */
+        .tags-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tag {
+            background-color: var(--info-color);
+            color: var(--light-text-color);
+            padding: 0.3rem 0.7rem;
+            border-radius: var(--border-radius);
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        /* Risk Scores */
+        .risk-score-overall {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            background-color: var(--light-bg);
+            border: 1px solid var(--border-color);
+        }
+
+        .risk-score-overall.high { color: var(--danger-color); }
+        .risk-score-overall.medium { color: var(--warning-color); }
+        .risk-score-overall.low { color: var(--success-color); }
+
+        .risk-factors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .risk-factor-item {
+            background-color: var(--light-bg);
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+        }
+
+        .risk-factor-item h4 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            color: var(--secondary-color);
+        }
+
+        .risk-factor-item .score {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .risk-factor-item .score.high { color: var(--danger-color); }
+        .risk-factor-item .score.medium { color: var(--warning-color); }
+        .risk-factor-item .score.low { color: var(--success-color); }
+
+        .risk-factor-item p {
+            font-size: 0.9rem;
+            color: var(--text-color);
+            margin-bottom: 0;
+        }
+
+        .recommendations-list {
+            list-style: disc;
+            padding-left: 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .recommendations-list li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Policies & Audit History Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid var(--border-color);
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        .data-table th {
+            background-color: var(--light-bg);
+            font-weight: bold;
+            color: var(--secondary-color);
+            white-space: nowrap;
+        }
+
+        .data-table tbody tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: #e9ecef;
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            font-size: 0.75em;
+            font-weight: 700;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: var(--border-radius);
+            color: var(--light-text-color);
+        }
+
+        .status-active { background-color: var(--success-color); }
+        .status-inactive { background-color: var(--secondary-color); }
+        .status-pending { background-color: var(--info-color); }
+        .status-critical { background-color: var(--danger-color); }
+        .status-warning { background-color: var(--warning-color); }
+
+        /* Footer */
+        footer {
+            background-color: var(--dark-bg);
+            color: var(--light-text-color);
+            text-align: center;
+            padding: 1rem 2rem;
+            margin-top: 2rem;
+            font-size: 0.85rem;
+        }
+
+        /* Responsive Design */
+        @media (min-width: 768px) {
+            .grid-container {
+                grid-template-columns: 2fr 1fr; /* Main content, sidebar-like for risk */
+            }
+            .grid-container > *:nth-child(2) { /* Risk Scores card */
+                grid-column: 2 / 3;
+                grid-row: 1 / 3; /* Span across two rows */
+            }
+            .grid-container > *:nth-child(1) { /* Metadata card */
+                grid-column: 1 / 2;
+                grid-row: 1 / 2;
+            }
+            .grid-container > *:nth-child(3) { /* Policies card */
+                grid-column: 1 / 2;
+                grid-row: 2 / 3;
+            }
+            .grid-container > *:nth-child(4) { /* Audit History card */
+                grid-column: 1 / 3; /* Full width */
+                grid-row: 3 / 4;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .grid-container {
+                grid-template-columns: 3fr 2fr; /* More space for main content */
+            }
+        }
+
+        @media (max-width: 767px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 1rem;
+            }
+            header h1 {
+                font-size: 1.5rem;
+                margin-bottom: 0.5rem;
+            }
+            header .entity-id {
+                margin-left: 0;
+                margin-top: 0.25rem;
+            }
+            main {
+                padding: 1rem;
+            }
+            .card {
+                padding: 1rem;
+            }
+            .card h2 {
+                font-size: 1.3rem;
+            }
+            .detail-list {
+                grid-template-columns: 1fr;
+            }
+            .data-table th, .data-table td {
+                padding: 0.5rem;
+            }
+            /* Make tables scrollable on small screens */
+            .table-responsive {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .table-responsive .data-table {
+                min-width: 600px; /* Ensure table content doesn't get too squished */
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <header>
+        <h1>Entity Detail: <span id="entity-name">Loading...</span></h1>
+        <span class="entity-id" id="entity-id">ID: Loading...</span>
+    </header>
+
+    <main id="main-content">
+        <div class="grid-container">
+            <!-- Metadata Section -->
+            <section id="metadata-section" class="card" aria-labelledby="metadata-heading">
+                <h2 id="metadata-heading">Metadata</h2>
+                <ul class="detail-list">
+                    <li><strong>Type:</strong> <span id="entity-type"></span></li>
+                    <li><strong>Status:</strong> <span id="entity-status"></span></li>
+                    <li><strong>Description:</strong> <span id="entity-description"></span></li>
+                    <li><strong>Owner:</strong> <span id="entity-owner"></span></li>
+                    <li><strong>Location:</strong> <span id="entity-location"></span></li>
+                    <li><strong>IP Address:</strong> <span id="entity-ip-address"></span></li>
+                    <li><strong>Created At:</strong> <span id="entity-created-at"></span></li>
+                    <li><strong>Last Updated:</strong> <span id="entity-updated-at"></span></li>
+                </ul>
+                <h3>Tags</h3>
+                <ul id="entity-tags" class="tags-list">
+                    <!-- Tags will be loaded here -->
+                </ul>
+            </section>
+
+            <!-- Risk Scores Section -->
+            <section id="risk-scores-section" class="card" aria-labelledby="risk-scores-heading">
+                <h2 id="risk-scores-heading">Risk Scores</h2>
+                <h3>Overall Risk Score</h3>
+                <div id="overall-risk-score" class="risk-score-overall">
+                    <!-- Overall score will be loaded here -->
+                </div>
+                <h3>Risk Factors</h3>
+                <div id="risk-factors-grid" class="risk-factors-grid">
+                    <!-- Risk factors will be loaded here -->
+                </div>
+                <h3>Recommendations</h3>
+                <ul id="recommendations-list" class="recommendations-list">
+                    <!-- Recommendations will be loaded here -->
+                </ul>
+            </section>
+
+            <!-- Associated Policies Section -->
+            <section id="policies-section" class="card" aria-labelledby="policies-heading">
+                <h2 id="policies-heading">Associated Policies</h2>
+                <div class="table-responsive">
+                    <table id="policies-table" class="data-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Policy ID</th>
+                                <th scope="col">Name</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Policies will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Audit History Section -->
+            <section id="audit-history-section" class="card" aria-labelledby="audit-history-heading">
+                <h2 id="audit-history-heading">Audit History</h2>
+                <div class="table-responsive">
+                    <table id="audit-history-table" class="data-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Timestamp</th>
+                                <th scope="col">User</th>
+                                <th scope="col">Action</th>
+                                <th scope="col">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Audit history will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2023 Zo-Sentinel. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Mock Data - Simulates API responses
+        const mockEntityData = {
+            entity: {
+                id: "ent-12345",
+                name: "MCP Server Alpha",
+                type: "MCP Server",
+                status: "Active",
+                description: "Primary production server for critical services, hosting customer-facing applications and databases. Requires high availability and strict security protocols.",
+                created_at: "2023-01-15T10:00:00Z",
+                updated_at: "2023-10-26T14:30:00Z",
+                owner: "IT Operations Team A",
+                location: "Data Center East - Rack 12",
+                ip_address: "192.168.1.100",
+                tags: ["production", "critical", "web-server", "database", "linux"]
+            },
+            mcp_verdict_detail: {
+                overall_risk_score: 85, // Out of 100
+                risk_factors: [
+                    { name: "Compliance", score: 70, description: "Medium compliance risk due to outdated OS patches and unreviewed access logs." },
+                    { name: "Security", score: 90, description: "High security posture, regular vulnerability scans and strong firewall rules in place." },
+                    { name: "Privacy", score: 80, description: "Good privacy controls for customer data, but some internal data exposure risks identified." },
+                    { name: "Availability", score: 95, description: "Excellent availability with redundant power and network, and automated failover." }
+                ],
+                recommendations: [
+                    "Update OS patches to the latest stable version immediately.",
+                    "Implement multi-factor authentication for all administrative access points.",
+                    "Review and rotate database credentials quarterly.",
+                    "Conduct a comprehensive privacy impact assessment for new data flows."
+                ]
+            },
+            policies: [
+                { id: "pol-001", name: "Data Retention Policy", type: "Compliance", status: "Active" },
+                { id: "pol-002", name: "Server Hardening Standard", type: "Security", status: "Active" },
+                { id: "pol-003", name: "Access Control Policy", type: "Security", status: "Active" },
+                { id: "pol-004", name: "Incident Response Plan", type: "Operations", status: "Active" },
+                { id: "pol-005", name: "Backup and Recovery Policy", type: "Operations", status: "Active" }
+            ],
+            audit_history: [
+                { timestamp: "2023-10-26T14:30:00Z", user: "admin@example.com", action: "Updated entity description", details: "Changed 'critical' to 'high-priority' in description." },
+                { timestamp: "2023-10-25T09:15:00Z", user: "system", action: "Risk score recalculated", details: "Compliance score decreased due to new vulnerability scan results." },
+                { timestamp: "2023-10-24T11:00:00Z", user: "auditor@example.com", action: "Reviewed associated policies", details: "Verified adherence to Server Hardening Standard (pol-002)." },
+                { timestamp: "2023-10-23T16:45:00Z", user: "devops@example.com", action: "Deployed new application version", details: "Deployed v2.1.0 of customer portal application." },
+                { timestamp: "2023-01-15T10:00:00Z", user: "admin@example.com", action: "Entity created", details: "Initial creation of MCP Server Alpha in production environment." }
+            ]
+        };
+
+        // Helper function to format dates
+        function formatDateTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+
+        // Helper function to get risk score class
+        function getRiskScoreClass(score) {
+            if (score >= 80) return 'low'; // Lower score = lower risk
+            if (score >= 50) return 'medium';
+            return 'high';
+        }
+
+        // Render Metadata
+        function renderMetadata(entity) {
+            document.getElementById('entity-name').textContent = entity.name;
+            document.getElementById('entity-id').textContent = `ID: ${entity.id}`;
+            document.getElementById('entity-type').textContent = entity.type;
+
+            const statusSpan = document.getElementById('entity-status');
+            statusSpan.textContent = entity.status;
+            statusSpan.className = `status-badge status-${entity.status.toLowerCase().replace(/\s/g, '-')}`;
+
+            document.getElementById('entity-description').textContent = entity.description;
+            document.getElementById('entity-owner').textContent = entity.owner;
+            document.getElementById('entity-location').textContent = entity.location;
+            document.getElementById('entity-ip-address').textContent = entity.ip_address;
+            document.getElementById('entity-created-at').textContent = formatDateTime(entity.created_at);
+            document.getElementById('entity-updated-at').textContent = formatDateTime(entity.updated_at);
+
+            const tagsList = document.getElementById('entity-tags');
+            tagsList.innerHTML = '';
+            entity.tags.forEach(tag => {
+                const li = document.createElement('li');
+                li.className = 'tag';
+                li.textContent = tag;
+                tagsList.appendChild(li);
+            });
+        }
+
+        // Render Risk Scores
+        function renderRiskScores(mcpVerdictDetail) {
+            const overallScoreDiv = document.getElementById('overall-risk-score');
+            overallScoreDiv.textContent = mcpVerdictDetail.overall_risk_score;
+            overallScoreDiv.className = `risk-score-overall ${getRiskScoreClass(mcpVerdictDetail.overall_risk_score)}`;
+
+            const riskFactorsGrid = document.getElementById('risk-factors-grid');
+            riskFactorsGrid.innerHTML = '';
+            mcpVerdictDetail.risk_factors.forEach(factor => {
+                const div = document.createElement('div');
+                div.className = 'risk-factor-item';
+                div.innerHTML = `
+                    <h4>${factor.name}</h4>
+                    <div class="score ${getRiskScoreClass(factor.score)}">${factor.score}</div>
+                    <p>${factor.description}</p>
+                `;
+                riskFactorsGrid.appendChild(div);
+            });
+
+            const recommendationsList = document.getElementById('recommendations-list');
+            recommendationsList.innerHTML = '';
+            mcpVerdictDetail.recommendations.forEach(rec => {
+                const li = document.createElement('li');
+                li.textContent = rec;
+                recommendationsList.appendChild(li);
+            });
+        }
+
+        // Render Associated Policies
+        function renderPolicies(policies) {
+            const policiesTableBody = document.querySelector('#policies-table tbody');
+            policiesTableBody.innerHTML = '';
+            policies.forEach(policy => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${policy.id}</td>
+                    <td>${policy.name}</td>
+                    <td>${policy.type}</td>
+                    <td><span class="status-badge status-${policy.status.toLowerCase()}">${policy.status}</span></td>
+                `;
+                policiesTableBody.appendChild(tr);
+            });
+        }
+
+        // Render Audit History
+        function renderAuditHistory(auditHistory) {
+            const auditHistoryTableBody = document.querySelector('#audit-history-table tbody');
+            auditHistoryTableBody.innerHTML = '';
+            auditHistory.forEach(entry => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${formatDateTime(entry.timestamp)}</td>
+                    <td>${entry.user}</td>
+                    <td>${entry.action}</td>
+                    <td>${entry.details}</td>
+                `;
+                auditHistoryTableBody.appendChild(tr);
+            });
+        }
+
+        // Main function to load and render data
+        function loadAndRenderEntityData() {
+            // Simulate API call delay
+            setTimeout(() => {
+                const data = mockEntityData;
+
+                renderMetadata(data.entity);
+                renderRiskScores(data.mcp_verdict_detail);
+                renderPolicies(data.policies);
+                renderAuditHistory(data.audit_history);
+
+                // Assert key data points are visible (for acceptance criteria)
+                console.assert(document.getElementById('entity-name').textContent === data.entity.name, "Entity name visible");
+                console.assert(document.getElementById('entity-id').textContent.includes(data.entity.id), "Entity ID visible");
+                console.assert(document.getElementById('entity-type').textContent === data.entity.type, "Entity type visible");
+                console.assert(document.getElementById('overall-risk-score').textContent.includes(data.mcp_verdict_detail.overall_risk_score), "Overall risk score visible");
+                console.assert(document.querySelector('#policies-table tbody tr') !== null, "At least one policy visible");
+                console.assert(document.querySelector('#audit-history-table tbody tr') !== null, "At least one audit entry visible");
+                console.log("All key data points asserted to be visible.");
+
+            }, 500); // 500ms delay to simulate network latency
+        }
+
+        // Run on page load
+        document.addEventListener('DOMContentLoaded', loadAndRenderEntityData);
+    </script>
+</body>
+</html>

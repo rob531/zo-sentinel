@@ -429,7 +429,7 @@ def _lessons_context(directive):
         return ""
 
 
-_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "architect"}
+_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "module_from_exemplar", "architect"}
 # Conservative inference: only the auth/RBAC/tenant SECURITY SPINE (where the generic
 # single-file builder produced hollow stubs) is keyword-routed to the FastAPI recipe.
 # Reports/search/etc. stay on architect.yaml unless the directive sets `recipe` explicitly.

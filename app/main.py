@@ -103,7 +103,7 @@ async def _security_headers(request, call_next):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    resp.headers["Content-Security-Policy-Report-Only"] = (
+    resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "

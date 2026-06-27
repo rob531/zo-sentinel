@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Policy Rules Overview</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #loadingMessage, #errorMessage {
+            text-align: center;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        #loadingMessage {
+            background-color: #e0f7fa;
+            color: #00796b;
+            border: 1px solid #00bcd4;
+        }
+        #errorMessage {
+            background-color: #ffebee;
+            color: #d32f2f;
+            border: 1px solid #ef5350;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Policy Rules Overview</h1>
+
+        <div id="loadingMessage">Loading policy rules...</div>
+        <div id="errorMessage" style="display: none;"></div>
+
+        <table id="policyRulesTable">
+            <thead>
+                <tr>
+                    <th>Rule Type</th>
+                    <th>Pattern</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Policy rules will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingMessage = document.getElementById('loadingMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            const policyRulesTableBody = document.querySelector('#policyRulesTable tbody');
+
+            const fetchPolicyRules = async () => {
+                loadingMessage.style.display = 'block';
+                errorMessage.style.display = 'none';
+                policyRulesTableBody.innerHTML = ''; // Clear previous data
+
+                try {
+                    const response = await fetch('/mcp/policy_rules/overview');
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.rules && data.rules.length > 0) {
+                        data.rules.forEach(rule => {
+                            const row = policyRulesTableBody.insertRow();
+                            row.insertCell().textContent = rule.rule_type || 'N/A';
+                            row.insertCell().textContent = rule.pattern || 'N/A';
+                            row.insertCell().textContent = rule.timestamp ? new Date(rule.timestamp * 1000).toLocaleString() : 'N/A';
+                        });
+                    } else {
+                        const row = policyRulesTableBody.insertRow();
+                        const cell = row.insertCell();
+                        cell.colSpan = 3;
+                        cell.textContent = 'No policy rules found.';
+                        cell.style.textAlign = 'center';
+                        cell.style.fontStyle = 'italic';
+                    }
+
+                } catch (error) {
+                    console.error('Error fetching policy rules:', error);
+                    errorMessage.textContent = `Failed to load policy rules: ${error.message}. Please try again later.`;
+                    errorMessage.style.display = 'block';
+                } finally {
+                    loadingMessage.style.display = 'none';
+                }
+            };
+
+            fetchPolicyRules();
+        });
+    </script>
+</body>
+</html>

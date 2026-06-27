@@ -1,11 +1,16 @@
 """Gate-2 axis-reality E2E: prove the verdict API returns REAL values for ALL 7
 named axes from the real schema for a known server, and FAILS CLOSED on a
-missing/null/synthetic axis. Runs against Postgres in CI (the real backend) via
-the app's own engine/session (DATABASE_URL).
+missing/null/synthetic axis. Runs against Postgres (the real backend) via the
+app's own engine/session (DATABASE_URL).
 
 This is the gate the council (CONTRA/FATHER) required before the prod flip:
 "green CI" previously did not prove the live read path returns real axis data.
+
+Runs only on Postgres (the nightly `axis-reality` job / the prod backend). The
+real schema's BigInteger identity PK needs a sequence, which sqlite lacks, so the
+per-PR sqlite `pytest` tier skips this rather than producing a false red.
 """
+import os
 import pathlib
 import sys
 
@@ -13,6 +18,11 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
+
+pytestmark = pytest.mark.skipif(
+    "postgres" not in os.environ.get("DATABASE_URL", ""),
+    reason="axis-reality gate runs on Postgres (nightly axis-reality job / prod backend)",
+)
 
 AXES = ("overall_risk", "auth_strength", "capability_breadth", "data_sensitivity",
         "network_egress", "maintainer_trust", "exploit_surface")
@@ -38,11 +48,9 @@ def client():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    # real schema on the configured backend (Postgres in CI)
     Base.metadata.create_all(appdb.engine)
 
     s = appdb.SessionLocal()
-    # idempotent re-seed for this known server
     s.query(models.McpLlmAxisScore).filter_by(server_id=SERVER).delete()
     s.query(models.McpServerRegistry).filter_by(server_id=SERVER).delete()
     s.commit()
@@ -69,7 +77,6 @@ def test_verdict_returns_all_7_real_axes(client):
     assert r.status_code == 200, r.text
     body = r.json()
     axes = body["axes"]
-    # fail-closed: exactly the 7 named axes, each a real non-null label read from the DB
     assert set(axes.keys()) == set(AXES), f"axis set drift: {sorted(axes)}"
     for ax in AXES:
         lbl = axes[ax]["label"]
@@ -79,5 +86,4 @@ def test_verdict_returns_all_7_real_axes(client):
 
 
 def test_absent_server_404_not_fabricated(client):
-    # a server with no scores must 404, never fabricate axes
     assert client.get("/api/verdict/__no_such_server__").status_code == 404

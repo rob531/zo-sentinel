@@ -135,9 +135,18 @@ def _start_heartbeat_thread():
 # ── Context Builders ─────────────────────────────────────
 
 def load_schema() -> str:
-    if SCHEMA_PATH.exists():
-        return SCHEMA_PATH.read_text()
-    return "# Schema not found"
+    base = SCHEMA_PATH.read_text() if SCHEMA_PATH.exists() else "# Schema not found"
+    # Ground every directive in the schema in place TODAY: derive it live from
+    # app/models.py (the ORM source of truth) and put it AHEAD of the static doc.
+    try:
+        import sys as _sys, pathlib as _pl
+        _root = str(_pl.Path(__file__).resolve().parent)
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from tools.schema_truth import schema_markdown
+        return schema_markdown() + "\n\n---\n\n" + base
+    except Exception:
+        return base
 
 def get_failed_modules() -> list[str]:
     """Return task names with failed/smoke_fail status from registry."""

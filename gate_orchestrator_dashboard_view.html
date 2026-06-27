@@ -1,0 +1,173 @@
+import http.server
+import socketserver
+import json
+import os
+from datetime import datetime, timezone
+import time
+import threading
+
+# Define the HTML content for the dashboard view
+HTML_CONTENT = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Orchestrator Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 30px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+        }
+        .status-section {
+            margin-bottom: 25px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fdfdfd;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        .status-label {
+            font-weight: bold;
+            color: #555;
+            flex-basis: 30%;
+        }
+        .status-value {
+            flex-basis: 70%;
+            text-align: right;
+            font-family: 'Roboto Mono', monospace; /* For values */
+        }
+        .status-value.HEALTHY {
+            color: #28a745; /* Green */
+            font-weight: bold;
+        }
+        .status-value.UNHEALTHY {
+            color: #dc3545; /* Red */
+            font-weight: bold;
+        }
+        .status-value.WARNING {
+            color: #ffc107; /* Yellow */
+            font-weight: bold;
+        }
+        .status-value.UNKNOWN {
+            color: #6c757d; /* Grey */
+            font-weight: bold;
+        }
+        .metadata-pre {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap; /* Ensure long lines wrap */
+            word-wrap: break-word; /* Break words if necessary */
+        }
+        .loading-message {
+            text-align: center;
+            font-style: italic;
+            color: #888;
+            margin-top: 20px;
+        }
+        .error-message {
+            text-align: center;
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .refresh-info {
+            text-align: center;
+            font-size: 0.85em;
+            color: #777;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gate Orchestrator Dashboard</h1>
+
+        <div id="loading" class="loading-message">Loading status...</div>
+        <div id="error" class="error-message" style="display: none;"></div>
+
+        <div id="status-display" style="display: none;">
+            <div class="status-section">
+                <div class="status-item">
+                    <span class="status-label">Health:</span>
+                    <span id="health" class="status-value UNKNOWN"></span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Last Heartbeat:</span>
+                    <span id="last-heartbeat" class="status-value"></span>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <h2>Metadata</h2>
+                <pre id="metadata" class="metadata-pre"></pre>
+            </div>
+        </div>
+        <div class="refresh-info">
+            Status automatically refreshes every <span id="refresh-interval">5</span> seconds.
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = '/gate_orchestrator/status';
+        const REFRESH_INTERVAL_MS = 5000; // 5 seconds
+
+        const healthElement = document.getElementById('health');
+        const lastHeartbeatElement = document.getElementById('last-heartbeat');
+        const metadataElement = document.getElementById('metadata');
+        const loadingElement = document.getElementById('loading');
+        const errorElement = document.getElementById('error');
+        const statusDisplayElement = document.getElementById('status-display');
+        const refreshIntervalElement = document.getElementById('refresh-interval');
+
+        refreshIntervalElement.textContent = REFRESH_INTERVAL_MS / 1000;
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            try {
+                const date = new Date(timestamp);
+                if (isNaN(date.getTime())) {
+                    return 'Invalid Date';
+                }
+                return date.toLocaleString(); // Uses user's locale
+            } catch (e) {
+                console.error("Error formatting timestamp:", e);
+                return 'Error formatting date';
+            }
+        }
+
+        function displayStatus(data) {
+            loadingElement.style.display = 'none';
+            errorElement

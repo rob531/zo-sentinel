@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZoSentinel Pipeline Health Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background-color: #fdfdfd;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #34495e;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        .status-ok { background-color: #2ecc71; } /* Green */
+        .status-warning { background-color: #f39c12; } /* Orange */
+        .status-error { background-color: #e74c3c; } /* Red */
+        .status-unknown { background-color: #bdc3c7; } /* Grey */
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #ecf0f1;
+            font-weight: bold;
+            color: #555;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .loading, .error {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: #7f8c8d;
+            text-align: right;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ZoSentinel Pipeline Health Dashboard</h1>
+
+        <div id="daemon-health-section" class="section">
+            <h2>Daemon Health</h2>
+            <div id="daemon-health-content">
+                <p class="loading">Loading daemon health...</p>
+            </div>
+        </div>
+
+        <div id="data-freshness-section" class="section">
+            <h2>Data Freshness</h2>
+            <div id="data-freshness-content">
+                <p class="loading">Loading data freshness...</p>
+            </div>
+        </div>
+
+        <div id="pipeline-summary-section" class="section">
+            <h2>Pipeline Stages Summary</h2>
+            <div id="pipeline-summary-content">
+                <p class="loading">Loading pipeline summary...</p>
+            </div>
+        </div>
+
+        <div class="timestamp" id="last-updated">
+            Last updated: Never
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const API_ENDPOINTS = {
+            daemonHealth: '/api/daemon_health_status',
+            dataFreshness: '/api/data_freshness',
+            pipelineSummary: '/api/pipeline_health_summary'
+        };
+
+        // --- Helper Functions ---
+        function getStatusClass(status) {
+            switch (status.toLowerCase()) {
+                case 'ok':
+                case 'healthy':
+                case 'running':
+                    return 'status-ok';
+                case 'warning':
+                case 'degraded':
+                case 'stale':
+                    return 'status-warning';
+                case 'error':
+                case 'failed':
+                case 'unhealthy':
+                    return 'status-error';
+                default:
+                    return 'status-unknown';
+            }
+        }
+
+        function formatTimestamp(isoString) {
+            if (!isoString) return 'N/A';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleString();
+            } catch (e) {
+                console.error("Error formatting timestamp:", isoString, e);
+                return isoString; // Return original if parsing fails
+            }
+        }
+
+        // --- Data Fetching and Rendering ---
+        async function fetchData() {
+            const results = {};
+            const promises = [
+                fetch(API_ENDPOINTS.daemonHealth).then(res => res.ok ? res.json() : Promise.reject(res)),
+                fetch(API_ENDPOINTS.dataFreshness).then(res => res.ok ? res.json() : Promise.reject(res)),
+                fetch(API_ENDPOINTS.pipelineSummary).then(res => res.ok ? res.json() : Promise.reject(res))
+            ];
+
+            try {
+                const [daemonHealthData, dataFreshnessData, pipelineSummaryData] = await Promise.all(promises);
+                results.daemonHealth = daemonHealthData;
+                results.dataFreshness = dataFreshnessData;
+                results.pipelineSummary = pipelineSummaryData;
+                return results;
+            } catch (error) {
+                console.error("Failed to fetch data:", error);
+                throw error; // Re-throw to be caught by the main render function
+            }
+        }
+
+        function renderDaemonHealth(data) {
+            const contentDiv = document.getElementById('daemon-health-content');
+            if (!data || !data.daemons || data.daemons.length === 0) {
+                contentDiv.innerHTML = '<p>No daemon health information available.</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Daemon</th><th>Status</th><th>Last Check</th><th>Details</th></tr></thead><tbody>';
+            data.daemons.forEach(daemon => {
+                const statusClass = getStatusClass(daemon.status);
+                html += `
+                    <tr>
+                        <td>${daemon.name}</td>
+                        <td><span class="status-indicator ${statusClass}"></span>${daemon.status}</td>
+                        <td>${formatTimestamp(daemon.last_check_time)}</td>
+                        <td>${daemon.details || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            contentDiv.innerHTML = html;
+        }
+
+        function renderDataFreshness(data) {
+            const contentDiv = document.getElementById('data-freshness-content');
+             if (!data || !data.sources || data.sources.length === 0) {
+                contentDiv.innerHTML = '<p>No data freshness information available.</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Data Source</th><th>Status</th><th>Last Updated</th><th>Age (minutes)</th></tr></thead><tbody>';
+            data.sources.forEach(source => {
+                const statusClass = getStatusClass(source.status);
+                html += `
+                    <tr>
+                        <td>${source.name}</td>
+                        <td><span class="status-indicator ${statusClass}"></span>${source.status}</td>
+                        <td>${formatTimestamp(source.last_updated_time)}</td>
+                        <td>${source.age_minutes !== undefined ? source.age_minutes : 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            contentDiv.innerHTML = html;
+        }
+
+        function renderPipelineSummary(data) {
+            const contentDiv = document.getElementById('pipeline-summary-content');
+            if (!data || !data.stages || data.stages.length === 0) {
+                contentDiv.innerHTML = '<p>No pipeline summary information available.</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Stage</th><th>Status</th><th>Last Run</th><th>Duration (seconds)</th><th>Details</th></tr></thead><tbody>';
+            data.stages.forEach(stage => {
+                const statusClass = getStatusClass(stage.status);
+                html += `
+                    <tr>
+                        <td>${stage.name}</td>
+                        <td><span class="status-indicator ${statusClass}"></span>${stage.status}</td>
+                        <td>${formatTimestamp(stage.last_run_time)}</td>
+                        <td>${stage.duration_seconds !== undefined ? stage.duration_seconds.toFixed(2) : 'N/A'}</td>
+                        <td>${stage.details || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            contentDiv.innerHTML = html;
+        }
+
+        async function updateDashboard() {
+            const lastUpdatedDiv = document.getElementById('last-updated');
+            try {
+                const data = await fetchData();
+                renderDaemonHealth(data.daemonHealth);
+                renderDataFreshness(data.dataFreshness);
+                renderPipelineSummary(data.pipelineSummary);
+                lastUpdatedDiv.textContent = `Last updated: ${new Date().toLocaleString()}`;
+            } catch (error) {
+                console.error("Dashboard update failed:", error);
+                document.getElementById('daemon-health-content').innerHTML = '<p class="error">Failed to load daemon health data.</p>';
+                document.getElementById('data-freshness-content').innerHTML = '<p class="error">Failed to load data freshness data.</p>';
+                document.getElementById('pipeline-summary-content').innerHTML = '<p class="error">Failed to load pipeline summary data.</p>';
+                lastUpdatedDiv.textContent = `Last updated: Error (${new Date().toLocaleString()})`;
+            }
+        }
+
+        // --- Initial Load and Auto-Refresh ---
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDashboard();
+            // Auto-refresh every 60 seconds (adjust as needed)
+            setInterval(updateDashboard, 60000);
+        });
+
+        /*
+        --- Example API Responses for Testing ---
+
+        /api/daemon_health_status:
+        {
+          "daemons": [
+            {
+              "name": "Ingestion Daemon",
+              "status": "OK",
+              "last_check_time": "2023-10-27T10:00:00Z",
+              "details": "All systems nominal."
+            },
+            {
+              "name": "Processing Daemon",
+              "status": "Warning",
+              "last_check_time": "2023-10-27T09:59:30Z",
+              "details": "High CPU usage detected."
+            },
+            {
+              "name": "Notification Daemon",
+              "status": "Error",
+              "last_check_time": "2023-10-27T09:55:15Z",
+              "details": "Failed to connect to mail server."
+            }
+          ]
+        }
+
+        /api/data_freshness:
+        {
+          "sources": [
+            {
+              "name": "Source A",
+              "status": "OK",
+              "last_updated_time": "2023-10-27T09:58:00Z",
+              "age_minutes": 2
+            },
+            {
+              "name": "Source B",
+              "status": "Stale",
+              "last_updated_time": "2023-10-27T08:30:00Z",
+              "age_minutes": 90
+            },
+            {
+              "name": "Source C",
+              "status": "OK",
+              "last_updated_time": "2023-10-27T09:59:10Z",
+              "age_minutes": 1
+            }
+          ]
+        }
+
+        /api/pipeline_health_summary:
+        {
+          "stages": [
+            {
+              "name": "Data Ingestion",
+              "status": "OK",
+              "last_run_time": "2023-10-27T09:50:00Z",
+              "duration_seconds": 120.5,
+              "details": "Completed successfully."
+            },
+            {
+              "name": "Data Transformation",
+              "status": "OK",
+              "last_run_time": "2023-10-27T09:55:00Z",
+              "duration_seconds": 300.15,
+              "details": "Processed 10,000 records."
+            },
+            {
+              "name": "Model Training",
+              "status": "Warning",
+              "last_run_time": "2023-10-27T09:50:00Z",
+              "duration_seconds": 1800.0,
+              "details": "Training time exceeded threshold."
+            },
+            {
+              "name": "Report Generation",
+              "status": "Failed",
+              "last_run_time": "2023-10-27T09:55:00Z",
+              "duration_seconds": 60.0,
+              "details": "Error writing to database."
+            }
+          ]
+        }
+        */
+    </script>
+</body>
+</html>

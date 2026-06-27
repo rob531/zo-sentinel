@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Search Results</title>
+    <!-- Basic CSS for responsiveness and layout -->
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #e9f5ff;
+            border-radius: 5px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .controls > div {
+            flex: 1;
+            min-width: 180px;
+            display: flex;
+            flex-direction: column;
+        }
+        .controls label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #0056b3;
+        }
+        .controls select, .controls input[type="text"] {
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .results-container {
+            margin-top: 20px;
+        }
+        .mcp-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .mcp-table th, .mcp-table td {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            text-align: left;
+        }
+        .mcp-table th {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            position: relative;
+            font-weight: 600;
+        }
+        .mcp-table th:hover {
+            background-color: #0056b3;
+        }
+        .mcp-table th.sort-asc::after {
+            content: ' ▲';
+            position: absolute;
+            right: 8px;
+            font-size: 0.8em;
+        }
+        .mcp-table th.sort-desc::after {
+            content: ' ▼';
+            position: absolute;
+            right: 8px;
+            font-size: 0.8em;
+        }
+        .mcp-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .mcp-table tr:hover {
+            background-color: #eef;
+        }
+        .mcp-table td ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .mcp-table td ul li {
+            margin-bottom: 3px;
+        }
+
+        .loading, .no-results {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+            color: #555;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .no-results {
+            color: #777;
+        }
+
+        /* Card View for smaller screens */
+        .mcp-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .mcp-card {
+            background-color: #fefefe;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s ease-in-out;
+        }
+        .mcp-card:hover {
+            transform: translateY(-5px);
+        }
+        .mcp-card h3 {
+            color: #007bff;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        .mcp-card p {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        .mcp-card strong {
+            color: #555;
+        }
+        .mcp-card .kri-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 5px;
+        }
+        .mcp-card .kri-list li {
+            background-color: #e9f5ff;
+            padding: 5px 10px;
+            border-radius: 3px;
+            margin-bottom: 3px;
+            font-size: 0.9em;
+            border-left: 3px solid #007bff;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .controls > div {
+                width: 100%;
+            }
+            .mcp-table-wrapper {
+                display: none; /* Hide table on small screens */
+            }
+            .mcp-cards {
+                display: grid; /* Show cards on small screens */
+            }
+        }
+        @media (min-width: 769px) {
+            .mcp-cards {
+                display: none; /* Hide cards on larger screens */
+            }
+            .mcp-table-wrapper {
+                display: block; /* Show table on larger screens */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Search Results</h1>
+
+        <div class="controls">
+            <div>
+                <label for="searchName">Search Name/Description:</label>
+                <input type="text" id="searchName" placeholder="Filter by name or description...">
+            </div>
+            <div>
+                <label for="filterVerdict">Verdict:</label>
+                <select id="filterVerdict">
+                    <option value="">All</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Under Review">Under Review</option>
+                </select>
+            </div>
+            <div>
+                <label for="sortField">Sort By:</label>
+                <select id="sortField">
+                    <option value="name">Name</option>
+                    <option value="verdict">Verdict</option>
+                    <option value="kriCount">KRI Count</option>
+                </select>
+            </div>
+            <div>
+                <label for="sortOrder">Order:</label>
+                <select id="sortOrder">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="results-container">
+            <div id="loadingIndicator" class="loading">Loading MCPs...</div>
+            <div id="searchResultsTable" class="mcp-table-wrapper">
+                <table class="mcp-table">
+                    <thead>
+                        <tr>
+                            <th data-sort="name">Name</th>
+                            <th>Description</th>
+                            <th data-sort="verdict">Current Verdict</th>
+                            <th data-sort="kriCount">Key Risk Indicators</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mcpTableBody">
+                        <!-- MCP data will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="searchResultsCards" class="mcp-cards">
+                <!-- MCP data will be loaded here as cards -->
+            </div>
+            <div id="noResults" class="no-results" style="display: none;">No MCPs found matching your criteria.</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const mcpTableBody = document.getElementById('mcpTableBody');
+            const searchResultsCards = document.getElementById('searchResultsCards');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const noResults = document.getElementById('noResults');
+
+            const searchNameInput = document.getElementById('searchName');
+            const filterVerdictSelect = document.getElementById('filterVerdict');
+            const sortFieldSelect = document.getElementById('sortField');
+            const sortOrderSelect = document.getElementById('sortOrder');
+            const tableHeaders = document.querySelectorAll('.mcp-table th[data-sort]');
+
+            let allMCPs = []; // Store all fetched MCPs
+            let currentSortField = 'name';
+            let currentSortOrder = 'asc';
+
+            // Mock API data - This would typically come from mcp_search_results_api.py
+            const mockMCPData = [
+                {
+                    id: 'mcp001',
+                    name: 'Project Alpha Security Review',
+                    description: 'Comprehensive security review for Project Alpha, focusing on data integrity and access control.',
+                    verdict: 'Approved',
+                    kris: ['High-risk data exposure (P1)', 'Weak authentication mechanism (P2)']
+                },
+                {
+                    id: 'mcp002',
+                    name: 'Database Migration Compliance Check',
+                    description: 'Ensuring compliance with GDPR and internal policies during database migration.',
+                    verdict: 'Pending',
+                    kris: ['Data residency violation (P1)', 'Lack of audit trail (P3)']
+                },
+                {
+                    id: 'mcp003',
+                    name: 'Cloud Infrastructure Hardening',
+                    description: 'Hardening of AWS cloud infrastructure to meet internal security baselines.',
+                    verdict: 'Under Review',
+                    kris: ['Unpatched vulnerabilities (P1)', 'Misconfigured security groups (P2)', 'Lack of MFA (P1)']
+                },
+                {
+                    id: 'mcp004',
+                    name: 'API Gateway Vulnerability Scan',
+                    description: 'Automated vulnerability scanning for all external-facing API gateways.',
+                    verdict: 'Approved',
+                    kris: ['Rate limiting not enforced (P3)']
+                },
+                {
+                    id: 'mcp005',
+                    name: 'Internal Network Segmentation Audit',
+                    description: 'Audit of internal network segmentation to prevent lateral movement.',
+                    verdict: 'Rejected',
+                    kris: ['Flat network design (P1)', 'Outdated firewall rules

@@ -1,0 +1,35 @@
+import http.server
+import socketserver
+import json
+import os
+import threading
+import time
+import sys
+
+# Try to import 'requests' for assertions. If not available, assertions will be skipped.
+try:
+    import requests
+except ImportError:
+    requests = None
+    print("Warning: 'requests' library not found. Assertions will be skipped. "
+          "Install with 'pip install requests' to enable full testing.")
+
+# --- Configuration ---
+PORT = 8000
+HTML_FILE_NAME = "mcp_definition_history_summary_view.html"
+API_ENDPOINT = "/api/mcp_definition_history_summary"
+
+# --- Simulated API Data (from mcp_definition_history_summary_api.py) ---
+MOCK_API_DATA = {
+    "total_definitions": 125,
+    "active_definitions": 98,
+    "inactive_definitions": 27,
+    "definitions_with_changes_last_7_days": 15,
+    "last_updated_timestamp": "2023-10-27T10:30:00Z",
+    "recent_changes": [
+        {
+            "id": "MCP-001",
+            "name": "Core Network Policy",
+            "version": "1.2",
+            "change_type": "Update",
+            "changed_by": "admin

@@ -803,8 +803,12 @@ def _selftest_gate(directive, directive_id):
     if "__main__" not in src:
         return True
     try:
+        import os as _os
+        # in-memory SQLite + no Clerk -> the self-test imports app.db/app.models and runs
+        # WITHOUT Postgres, DuckDB or Docker (lightweight, short-lived, one at a time).
+        _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": ""}
         proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
-                              text=True, timeout=150, cwd=str(PROJECT_DIR))
+                              text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
         return True

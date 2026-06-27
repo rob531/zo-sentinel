@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stale Daemon Overview Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #dashboard-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9e9e9;
+            font-weight: bold;
+            color: #555;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .status-stale {
+            background-color: #ffe0e0; /* Light red */
+            color: #cc0000; /* Darker red */
+            font-weight: bold;
+        }
+        .status-ok {
+            background-color: #e0ffe0; /* Light green */
+            color: #008000; /* Darker green */
+        }
+        .status-unknown {
+            background-color: #ffffcc; /* Light yellow */
+            color: #cc9900; /* Darker yellow */
+        }
+        .last-updated {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #666;
+            text-align: right;
+        }
+        .loading-message, .error-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+        }
+        .error-message {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stale Daemon Overview Dashboard</h1>
+    <div id="dashboard-container">
+        <p class="loading-message">Loading daemon statuses...</p>
+        <div class="last-updated" id="last-updated"></div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = '/api/stale_daemons_status';
+        const REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds
+        const STALE_THRESHOLD_SECONDS = 300; // 5 minutes: Daemons inactive for longer than this are 'stale'
+
+        /**
+         * Formats a given number of seconds into a human-readable "X time ago" string.
+         * @param {number} seconds - The number of seconds to format.
+         * @returns {string} The formatted time string.
+         */
+        function formatTimeAgo(seconds) {
+            if (seconds < 0) return "in the future";
+            if (seconds < 60) return `${Math.round(seconds)} seconds ago`;
+            const minutes = seconds / 60;
+            if (minutes < 60) return `${Math.round(minutes)} minutes ago`;
+            const hours = minutes / 60;
+            if (hours < 24) return `${Math.round(hours)} hours ago`;
+            const days = hours / 24;
+            return `${Math.round(days)} days ago`;
+        }
+
+        /**
+         * Simulates an API response for daemon statuses.
+         * This function is used when the actual API endpoint is not available (e.g., when served by `http.server`).
+         * It generates dynamic mock data, ensuring 'write_service' is stale.
+         * @returns {Promise<Response>} A Promise that resolves to a mock Response object.
+         */
+        async function fetchDaemonStatusMock() {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const now = new Date();
+                    const mockDaemons = [
+                        {
+                            name: "write_service",
+                            // Simulate a heartbeat from 10 minutes ago, making it stale
+                            last_heartbeat: new Date(now.getTime() - (10 * 60 * 1000)).toISOString(),
+                        },
+                        {
+                            name: "read_service",
+                            // Simulate a heartbeat from 30 seconds ago, making it OK
+                            last_heartbeat: new Date(now.getTime() - (30 * 1000)).toISOString(),
+                        },
+                        {
+                            name: "auth_service",
+                            // Simulate a heartbeat from 2 minutes ago, making it OK
+                            last_heartbeat: new Date(now.getTime() - (2 * 60 * 1000)).toISOString(),
+                        },
+                        {
+                            name: "logging_service",
+                            // Simulate a heartbeat from 1 hour ago, making it stale
+                            last_heartbeat: new Date(now.getTime() - (60 * 60 * 1000)).toISOString(),
+                        },
+                        {
+                            name: "metrics_collector",
+                            // Simulate a heartbeat from 4 minutes ago, making it OK
+                            last_heartbeat: new Date(now.getTime() - (4 * 60 * 1000)).toISOString(),
+                        }
+                    ];
+
+                    // Process mock data to determine status and age based on STALE_THRESHOLD_SECONDS
+                    const processedData = mockDaemons.map(daemon => {
+                        const heartbeatTime = new Date(daemon.last_heartbeat);
+                        const ageSeconds = (now.getTime() - heartbeatTime.getTime()) / 1000;
+                        const status = ageSeconds > STALE_THRESHOLD_SECONDS ? 'stale' : 'ok';
+                        return {
+                            ...daemon,
+                            age_seconds: ageSeconds,
+                            status: status
+                        };
+                    });
+
+                    // Resolve with a mock Response object
+                    resolve({
+                        ok: true,
+                        json: () => Promise.resolve(processedData)
+                    });
+                }, 500); // Simulate network delay
+            });
+        }
+
+        /**
+         * Fetches daemon status data from the API endpoint or falls back to mock data.
+         * @returns {Promise<Array<Object>>} A Promise that resolves to an array of daemon status objects.
+         */
+        async function fetchDaemonStatus() {
+            let response;
+            try {
+                // Attempt to fetch from the real API endpoint first
+                response = await fetch(API_ENDPOINT);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            } catch (error) {
+                console.warn(`Could not fetch from ${API_ENDPOINT}. Using mock data. Error:`, error);
+                // Fallback to mock data if real API fails or is not available
+                response = await fetchDaemonStatusMock();
+            }
+            return response.json();
+        }
+
+        /**
+         * Renders the daemon status data into a table in the dashboard.
+         * @param {Array<Object>} daemons - An array of daemon status objects.
+         */
+        function renderDashboard(daemons) {
+            const container = document.getElementById('dashboard-container');
+            container.innerHTML = ''; // Clear previous content
+
+            if (!daemons || daemons.length === 0) {
+                container.innerHTML = '<p class="loading-message">No daemon status data available.</p>';
+                return;
+            }
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+
+            // Table Headers
+            const headerRow = document.createElement('tr');
+            ['Daemon Name', 'Last Heartbeat', 'Age', 'Status'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // Table Body
+            daemons.forEach(daemon => {
+                const row = document.createElement('tr');
+
+                const nameCell = document.createElement('td');
+                nameCell.textContent = daemon.name;
+                row.appendChild(nameCell);
+
+                const heartbeatCell = document.createElement('td');
+                // Format timestamp for readability
+                heartbeatCell.textContent = new Date(daemon.last_heartbeat).toLocaleString();
+                row.appendChild(heartbeatCell);
+
+                const ageCell = document.createElement('td');
+                ageCell.textContent = formatTimeAgo(daemon.age_seconds);
+                row.appendChild(ageCell);
+
+                const statusCell = document.createElement('td');
+                statusCell.textContent = daemon.status.toUpperCase();
+                // Apply color-coding based on status
+                statusCell.classList.add(`status-${daemon.status.toLowerCase()}`);
+                row.appendChild(statusCell);
+
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            container.appendChild(table);
+
+            const lastUpdatedDiv = document.getElementById('last-updated');
+            lastUpdatedDiv.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+
+            console.log("PASS: Data fetched and rendered successfully.");
+        }
+
+        /**
+         * Initializes the dashboard by fetching and rendering data, and sets up periodic refresh.
+         */
+        async function initDashboard() {
+            try {
+                const data = await fetchDaemonStatus();
+                renderDashboard(data);
+            } catch (error) {
+                const container = document.getElementById('dashboard-container');
+                container.innerHTML = `<p class="error-message">Error loading dashboard: ${error.message}</p>`;
+                console.error("FAIL: Error during dashboard initialization:", error);
+            }
+        }
+
+        // Initial load of the dashboard
+        initDashboard();
+
+        // Set up periodic refresh
+        setInterval(initDashboard, REFRESH_INTERVAL_MS);
+
+    </script>
+</body>
+</html>

@@ -85,14 +85,18 @@ def _resolve_role(sub: str) -> str:
     try:
         req = urllib.request.Request(
             f"https://api.clerk.com/v1/users/{sub}",
-            headers={"Authorization": f"Bearer {_CLERK_SK}"})
+            headers={"Authorization": f"Bearer {_CLERK_SK}",
+                     # Cloudflare fronts api.clerk.com and 403s (err 1010) the default
+                     # Python-urllib UA, so set an explicit one or every role lookup fails.
+                     "User-Agent": "mcplookup/1.0"})
         with urllib.request.urlopen(req, timeout=3) as r:  # nosec B310 - fixed https Clerk API host
             data = json.loads(r.read().decode())
         cand = ((data.get("public_metadata") or {}).get("role") or "").strip().lower()
         if cand in ("admin", "insider", "public"):
             role = cand
-    except Exception:
-        pass
+    except Exception as exc:  # fail-closed to public, but surface the reason in logs
+        import sys
+        print(f"[role-resolve] Clerk API lookup failed for {sub}: {exc}", file=sys.stderr)
     _role_cache[sub] = (role, now + 300)
     return role
 

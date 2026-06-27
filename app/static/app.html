@@ -69,7 +69,7 @@ async function j(u,o){o=o||{};const t=await tok();o.headers=Object.assign({},o.h
   const r=await fetch(u,o);
   if(r.status===401){location.href='/';throw new Error('Sign in required');}
   if(r.status===429){let d={};try{d=await r.json();}catch(e){}throw new Error((d&&d.detail)||'Daily lookup limit reached.');}
-  if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+  if(!r.ok)throw new Error('HTTP '+r.status);if(r.status===204)return null;const _b=await r.text();return _b?JSON.parse(_b):null;}
 async function refreshMe(){try{const m=await j('/api/me');
   const em=(window.Clerk&&window.Clerk.user&&window.Clerk.user.primaryEmailAddress&&window.Clerk.user.primaryEmailAddress.emailAddress)||'';
   E('who').textContent=m.unlimited?(em+' · '+m.role):(em+' · '+m.remaining+'/'+m.cap+' lookups');
@@ -163,9 +163,9 @@ function page(d){doSearch(exState.offset+d*25);}
 
 async function viewDetail(id){
   E('view').innerHTML='<p class="muted">// loading…</p>';
-  try{const r=await fetch('/api/verdict/'+encodeURIComponent(id));
+  try{const _tk=await tok();const r=await fetch('/api/verdict/'+encodeURIComponent(id),_tk?{headers:{Authorization:'Bearer '+_tk}}:{});
     if(r.status===404){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p class="muted">// no scores for this server</p>';return;}
-    const v=await r.json();
+    const _vb=await r.text();const v=_vb?JSON.parse(_vb):{};
     const order=['overall_risk','auth_strength','capability_breadth','data_sensitivity','network_egress','maintainer_trust','exploit_surface'];
     const bars=order.filter(k=>v.axes&&v.axes[k]).map(k=>{const a=v.axes[k];const p=Math.round((a.p_top||0)*100);
       return `<div class="ax"><div class="lab"><small>${esc(k.replace(/_/g,' '))}</small><b>${esc(a.label||'—')}</b></div><div class="barx"><i style="width:${p}%"></i></div></div>`;}).join('');

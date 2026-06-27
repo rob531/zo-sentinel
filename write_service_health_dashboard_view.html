@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Write Service Health Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .dashboard-container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            max-width: 700px;
+            width: 100%;
+            margin-top: 50px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 15px;
+        }
+        .status-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-left: 6px solid #3498db;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            display: flex;
+            align-items: flex-start;
+        }
+        .status-item strong {
+            display: inline-block;
+            min-width: 160px;
+            font-weight: 600;
+            color: #2980b9;
+            font-size: 1.1em;
+            flex-shrink: 0;
+        }
+        .status-value {
+            font-weight: normal;
+            color: #555;
+            flex-grow: 1;
+            word-break: break-word;
+        }
+        .status-value.healthy {
+            color: #27ae60; /* Green */
+            font-weight: bold;
+        }
+        .status-value.unhealthy {
+            color: #e74c3c; /* Red */
+            font-weight: bold;
+        }
+        .status-value.warning {
+            color: #f39c12; /* Orange */
+            font-weight: bold;
+        }
+        pre {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .error-message {
+            color: #e74c3c;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 25px;
+            padding: 15px;
+            background-color: #fdeded;
+            border: 1px solid #e74c3c;
+            border-radius: 8px;
+        }
+        .loading-message {
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.1em;
+            color: #7f8c8d;
+        }
+        .last-updated {
+            text-align: right;
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Write Service Health Dashboard</h1>
+
+        <div id="loading-message" class="loading-message">
+            Loading service health data...
+        </div>
+
+        <div id="service-health-display" style="display: none;">
+            <div class="status-item">
+                <strong>Last Heartbeat:</strong> <span id="last-heartbeat" class="status-value">N/A</span>
+            </div>
+            <div class="status-item">
+                <strong>Status:</strong> <span id="status" class="status-value">N/A</span>
+            </div>
+            <div class="status-item">
+                <strong>Meta:</strong> <pre id="meta" class="status-value">N/A</pre>
+            </div>
+        </div>
+
+        <div id="error-display" class="error-message" style="display: none;">
+            Failed to fetch service health data. Retrying...
+        </div>
+
+        <div class="last-updated">
+            Last updated: <span id="last-updated-time">N/A</span>
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = '/api/write_service_health';
+        const POLLING_INTERVAL_MS = 5000; // 5 seconds
+
+        // Get references to HTML elements
+        const lastHeartbeatElem = document.getElementById('last-heartbeat');
+        const statusElem = document.getElementById('status');
+        const metaElem = document.getElementById('meta');
+        const loadingMessageElem = document.getElementById('loading-message');
+        const serviceHealthDisplayElem = document.getElementById('service-health-display');
+        const errorDisplayElem = document.getElementById('error-display');
+        const lastUpdatedTimeElem = document.getElementById('last-updated-time');
+
+        /**
+         * Formats an ISO 8601 timestamp string into a human-readable local date and time.
+         * @param {string} timestamp - The timestamp string (e.g., "2023-10-27T10:30:00Z").
+         * @returns {string} Formatted date string or 'N/A' if invalid.
+         */
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            try {
+                const date = new Date(timestamp);
+                // Check if the date is valid
+                if (isNaN(date.getTime())) {
+                    throw new Error("Invalid Date");
+                }
+                return date.toLocaleString(); // Formats date and time based on user's locale
+            } catch (e) {
+                console.warn("Error formatting timestamp:", timestamp, e);
+                return timestamp; // Return original string if parsing fails
+            }
+        }
+
+        /**
+         * Updates the HTML display with the fetched service health data.
+         * @param {object} data - The service health data object.
+         * @param {string} data.last_heartbeat - The last heartbeat timestamp.
+         * @param {string} data.status - The service status (e.g., 'healthy', 'unhealthy', 'warning').
+         * @param {object|string} data.meta - Additional metadata.
+         */
+        function updateDisplay(data) {
+            loadingMessageElem.style.display = 'none';
+            serviceHealthDisplayElem.style.display = 'block';
+            errorDisplayElem.style.display = 'none';
+
+            lastHeartbeatElem.textContent = formatTimestamp(data.last_heartbeat);
+
+            const currentStatus = (data.status || 'N/A').toLowerCase();
+            statusElem.textContent = data.status || 'N/A';
+            // Reset classes and apply status-specific styling
+            statusElem.className = 'status-value';
+            if (currentStatus === 'healthy') {
+                statusElem.classList.add('healthy');
+            } else if (currentStatus === 'unhealthy') {
+                statusElem.classList.add('unhealthy');
+            } else if (currentStatus === 'warning') {
+                statusElem.classList.add('warning');
+            }
+
+            if (data.meta) {
+                try {
+                    // Attempt to pretty-print JSON if it's an object
+                    metaElem.textContent = JSON.stringify(data.meta, null, 2);
+                } catch (e) {
+                    // If not a valid JSON object, display as a string
+                    metaElem.textContent = String(data.meta);
+                }
+            } else {
+                metaElem.textContent = 'N/A';
+            }
+
+            lastUpdatedTimeElem.textContent = new Date().toLocaleString();
+        }
+
+        /**
+         * Fetches service health data from the API endpoint.
+         */
+        async function fetchServiceHealth() {
+            try {
+                const response = await fetch(API_ENDPOINT);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                }
+                const data = await response.json();
+                updateDisplay(data);
+            } catch (error) {
+                console.error('Error fetching service health:', error);
+                loadingMessageElem.style.display = 'none';
+                serviceHealthDisplayElem.style.display = 'none';
+                errorDisplayElem.style.display = 'block';
+                lastUpdatedTimeElem.textContent = new Date().toLocaleString() + " (Error)";
+            }
+        }
+
+        // Initial fetch when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchServiceHealth();
+            // Set up polling to fetch data every 5 seconds
+            setInterval(fetchServiceHealth, POLLING_INTERVAL_MS);
+        });
+    </script>
+</body>
+</html>

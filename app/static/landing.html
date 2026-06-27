@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCPLookup — automated MCP risk intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#08060e;--bg2:#0e0a18;--panel:#13101f;--line:#2a2340;--txt:#efeaf8;--mut:#a99cc7;--cyan:#34e3ff;--acc:#34e3ff;--gold:#ecdcae}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'JetBrains Mono','Courier New',monospace;font-size:14px;line-height:1.6;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;
+       background:radial-gradient(800px 440px at 50% -20%,rgba(86,52,150,.18),transparent 60%),var(--bg) fixed}
+  .card{max-width:580px;width:92%;background:#110d1d;
+        border:1px solid var(--line);border-radius:16px;padding:2rem;box-shadow:0 0 50px rgba(52,227,255,.06)}
+  h1{margin:.1rem 0 .15rem;font-size:1.8rem;letter-spacing:.5px} h1 span{color:var(--cyan);text-shadow:0 0 16px rgba(0,229,255,.55)}
+  .sub{color:var(--mut);margin-top:0;font-size:.9rem}
+  .notice{background:#0d0a16;border:1px solid var(--line);border-radius:10px;padding:.95rem 1.05rem;font-size:.82rem;
+          color:#cabfe0;max-height:200px;overflow:auto;margin:1.1rem 0}
+  .notice b{color:var(--gold)}
+  label{display:flex;gap:.55rem;align-items:flex-start;font-size:.86rem;cursor:pointer}
+  input[type=checkbox]{margin-top:.2rem;accent-color:var(--cyan)}
+  button{margin-top:1.1rem;width:100%;padding:.85rem;background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;border-radius:10px;
+         color:#02141a;font-family:inherit;font-weight:800;font-size:1rem;cursor:pointer;letter-spacing:.4px}
+  button:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
+  #clerk{margin-top:1.2rem} .muted{color:var(--mut);font-size:.8rem} a{color:var(--acc)} .hide{display:none}
+  .toggle{margin-top:1rem;text-align:center;font-size:.82rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>MCP<span>lookup</span></h1>
+  <p class="sub">// automated risk intelligence for the Model Context Protocol — 65,000+ servers scored</p>
+
+  <div id="gate">
+    <div class="notice">
+      <b>Notice &amp; acknowledgement.</b> The risk labels here are <b>automated heuristic estimations</b> produced by a
+      machine-learning model from public metadata. They are <b>not statements of fact</b>, not a security audit, and not
+      professional or legal advice. Official/established publishers are trust-capped to reduce false positives. Treat the
+      output as one input to your own due diligence. By continuing you acknowledge these are automated estimates and accept
+      the service is provided “as is”, without warranty. <a href="/disclaimer">Full disclaimer</a>.
+    </div>
+    <label><input type="checkbox" id="ack"> I acknowledge these are automated heuristic estimations, not statements of fact or security advice.</label>
+    <button id="go" disabled onclick="proceed()">ACKNOWLEDGE &amp; CONTINUE</button>
+  </div>
+
+  <div id="clerk" class="hide">
+    <div id="waitlist"></div>
+    <div id="signin" class="hide"></div>
+    <p class="toggle" id="toggle"></p>
+    <p class="muted" id="fallback"></p>
+  </div>
+</div>
+<script>
+const E=(s)=>document.getElementById(s);
+E('ack').addEventListener('change',e=>{E('go').disabled=!e.target.checked;});
+const CLERK_PK="__CLERK_PK__";
+function proceed(){
+  document.cookie="consent_ack=1;path=/;max-age=2592000;samesite=lax";
+  E('gate').classList.add('hide'); E('clerk').classList.remove('hide');
+  if(CLERK_PK.indexOf("pk_")===0){ loadClerk(); }
+  else { E('fallback').innerHTML='// waitlist activates once the Clerk key is configured &nbsp;·&nbsp; <a href="/app">enter the lookup →</a>'; }
+}
+function clerkHost(pk){ try{ return atob(pk.split('_')[2]).replace(/\$+$/,''); }catch(e){ return ''; } }
+// one view at a time: waitlist (default, for new signups) <-> sign-in (existing access)
+window._showWaitlist=function(){ E('signin').classList.add('hide'); E('waitlist').classList.remove('hide');
+  E('toggle').innerHTML='Already have access? <a href="#" onclick="return _showLogin()">Log in here →</a>'; return false; };
+window._showLogin=function(){ E('waitlist').classList.add('hide'); E('signin').classList.remove('hide');
+  E('toggle').innerHTML='Need access? <a href="#" onclick="return _showWaitlist()">Join the waitlist →</a>'; return false; };
+function loadClerk(){
+  const host=clerkHost(CLERK_PK);
+  if(!host){ E('fallback').textContent='// invalid publishable key'; return; }
+  const s=document.createElement('script');s.async=true;s.crossOrigin='anonymous';
+  s.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  s.src='https://'+host+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  s.addEventListener('load',async()=>{ try{
+    if(!window.Clerk){ await new Promise(r=>setTimeout(r,300)); }
+    await window.Clerk.load();
+    if(window.Clerk.user){ location.href='/app'; return; }
+    var hasWait = !!window.Clerk.mountWaitlist;
+    if(hasWait){ window.Clerk.mountWaitlist(E('waitlist')); }
+    window.Clerk.mountSignIn(E('signin'),{afterSignInUrl:'/app'});
+    // Default to the waitlist for new visitors; offer a login toggle. If the
+    // instance has no waitlist, just show sign-in (no empty waitlist box).
+    if(hasWait){ _showWaitlist(); } else { _showLogin(); E('toggle').innerHTML=''; }
+  }catch(e){ E('fallback').textContent='// auth failed to load: '+e.message; } });
+  s.addEventListener('error',()=>{ E('fallback').textContent='// could not reach Clerk ('+host+')'; });
+  document.head.appendChild(s);
+}
+if(/(^|;\s*)consent_ack=1/.test(document.cookie) && CLERK_PK.indexOf("pk_")===0){ proceed(); }
+</script>
+</body></html>

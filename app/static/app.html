@@ -168,7 +168,7 @@ async function viewDetail(id){
     const _vb=await r.text();const v=_vb?JSON.parse(_vb):{};
     const order=['overall_risk','auth_strength','capability_breadth','data_sensitivity','network_egress','maintainer_trust','exploit_surface'];
     const bars=order.filter(k=>v.axes&&v.axes[k]).map(k=>{const a=v.axes[k];const p=Math.round((a.p_top||0)*100);
-      return `<div class="ax"><div class="lab"><small>${esc(k.replace(/_/g,' '))}</small><b>${esc(a.label||'—')}</b></div><div class="barx"><i style="width:${p}%"></i></div></div>`;}).join('');
+      return `<div class="ax"><div class="lab"><small>${esc(k==='overall_risk'?'model risk (raw)':k.replace(/_/g,' '))}</small><b>${esc(a.label||'—')}</b></div><div class="barx"><i style="width:${p}%"></i></div></div>`;}).join('');
     E('view').innerHTML=`<a onclick="history.back()">‹ back</a>
       <div class="panel"><div style="display:flex;align-items:center;gap:.6rem"><b style="flex:1;min-width:0;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.name||v.server_id)}</b>${badge(v.published_overall_risk)}</div>
       <div class="muted" style="font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.url||'')}</div>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daemon Health Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .dashboard {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 800px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .status-ok {
+            color: #4CAF50;
+        }
+        .status-stale {
+            color: #FF9800;
+        }
+        .status-running {
+            color: #4CAF50;
+        }
+        .status-error {
+            color: #F44336;
+        }
+        .last-updated {
+            font-size: 0.9em;
+            color: #666;
+            text-align: right;
+            margin-top: 10px;
+        }
+        .refresh-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            float: right;
+        }
+        .refresh-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>Daemon Health Dashboard</h1>
+        <button class="refresh-button" onclick="fetchDaemonHealth()">Refresh</button>
+        <div class="last-updated" id="lastUpdated">Last updated: Never</div>
+        <table id="daemonTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Last Heartbeat</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="daemonTableBody">
+                <!-- Daemon data will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Expected API response structure for testing purposes:
+        /*
+        [
+            {
+                "name": "daemon1",
+                "last_heartbeat": "2023-05-01T12:00:00Z",
+                "status": "ok"
+            },
+            {
+                "name": "daemon2",
+                "last_heartbeat": "2023-05-01T11:55:00Z",
+                "status": "stale"
+            },
+            {
+                "name": "daemon3",
+                "last_heartbeat": "2023-05-01T12:05:00Z",
+                "status": "running"
+            }
+        ]
+        */
+
+        // Function to fetch daemon health data from the API
+        async function fetchDaemonHealth() {
+            try {
+                const response = await fetch('/api/daemon_health_status');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                updateDaemonTable(data);
+                document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+            } catch (error) {
+                console.error('Error fetching daemon health data:', error);
+                document.getElementById('daemonTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="3">Error loading daemon health data. Please try again later.</td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Function to update the daemon table with new data
+        function updateDaemonTable(daemons) {
+            const tableBody = document.getElementById('daemonTableBody');
+            tableBody.innerHTML = '';
+
+            daemons.forEach(daemon => {
+                const row = document.createElement('tr');
+
+                const nameCell = document.createElement('td');
+                nameCell.textContent = daemon.name;
+                row.appendChild(nameCell);
+
+                const heartbeatCell = document.createElement('td');
+                heartbeatCell.textContent = new Date(daemon.last_heartbeat).toLocaleString();
+                row.appendChild(heartbeatCell);
+
+                const statusCell = document.createElement('td');
+                statusCell.textContent = daemon.status;
+                statusCell.className = `status-${daemon.status}`;
+                row.appendChild(statusCell);
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Fetch data when the page loads
+        document.addEventListener('DOMContentLoaded', fetchDaemonHealth);
+
+        // Optional: Auto-refresh every 30 seconds
+        setInterval(fetchDaemonHealth, 30000);
+    </script>
+</body>
+</html>

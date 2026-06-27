@@ -20,6 +20,7 @@ from .settings import settings
 
 # Factory-built single-file routers to mount when present + importable.
 _OPTIONAL_ROUTERS = [
+    "server_compare_api",
     "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",
     "entity_report_exporter", "org_api_key_manager", "verdict_watchlist_service",
 ]

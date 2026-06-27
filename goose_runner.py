@@ -782,6 +782,43 @@ def _record_build_provenance(directive, success, smoke_result, attempt,
 ZO_STATE_GIT_COMMIT = os.environ.get("ZO_STATE_GIT_COMMIT", "") not in ("", "0", "false", "False")
 
 
+def _selftest_gate(directive, directive_id):
+    """Run the module's __main__ self-test and require PASS before completing. Degrades to
+    True (Tier-0 only) when there is no self-test or it fails purely on an environment/import
+    error (so we never false-fail on missing deps), but a self-test that RUNS and does not
+    print PASS is a real failure that BLOCKS completion. Closes the hole where the ladder-shim
+    fallback stamped .done on a parse-only gate (e.g. server_compare_api hallucinating a
+    'published_overall_risk' axis would now be caught instead of shipped)."""
+    import subprocess, sys as _sys
+    try:
+        out = declared_output(directive)
+    except Exception:
+        return True
+    if out is None or not out.exists():
+        return True
+    try:
+        src = out.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return True
+    if "__main__" not in src:
+        return True
+    try:
+        proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
+                              text=True, timeout=150, cwd=str(PROJECT_DIR))
+    except Exception as e:
+        log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
+        return True
+    combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    if proc.returncode == 0 and "PASS" in (proc.stdout or ""):
+        log(f"[selftest] {directive_id}: self-test PASS")
+        return True
+    if proc.returncode != 0 and ("ModuleNotFoundError" in combined or "ImportError" in combined):
+        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking)")
+        return True
+    log(f"[selftest] {directive_id}: self-test FAILED -- blocking completion :: " + combined.strip()[-400:])
+    return False
+
+
 def _syntax_gate(directive, directive_id):
     """Tier-0 syntax gate on the declared output, recorded to the Default-FAIL
     manifest. Returns True when the file parses, or when there is no single
@@ -1056,7 +1093,8 @@ def run():
                         _task = f"{_task}\n\n{_lctx}"
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
                     if (result.get("success") and output_confirmed(directive)
-                            and _syntax_gate(directive, directive_id)):
+                            and _syntax_gate(directive, directive_id)
+                            and _selftest_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""),
                                   routed_model=_routed_model)
                         produced = True
@@ -1070,7 +1108,8 @@ def run():
                 if not produced:
                     fallback_result = call_minimax_fallback(directive)
                     if (fallback_result.get("success") and output_confirmed(directive)
-                            and _syntax_gate(directive, directive_id)):
+                            and _syntax_gate(directive, directive_id)
+                            and _selftest_gate(directive, directive_id)):
                         _complete(directive, directive_id,
                                   fallback_result.get("result", ""), fallback_used=True,
                                   routed_model=_routed_model)

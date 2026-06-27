@@ -1,0 +1,190 @@
+import http.server
+import socketserver
+import threading
+import time
+import requests
+import os
+import json
+
+# Define the HTML content for mcp_all_risk_tiers_view.html
+HTML_CONTENT = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP All Risk Tiers Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #0056b3; text-align: center; margin-bottom: 30px; }
+        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .controls { margin-bottom: 20px; display: flex; justify-content: flex-end; align-items: center; }
+        .controls label { margin-right: 10px; font-weight: bold; color: #555; }
+        .controls input[type="text"] { padding: 10px 12px; border: 1px solid #ccc; border-radius: 5px; width: 300px; font-size: 1rem; transition: border-color 0.2s; }
+        .controls input[type="text"]:focus { border-color: #007bff; outline: none; box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #e0e0e0; padding: 12px 15px; text-align: left; }
+        th { background-color: #007bff; color: white; cursor: pointer; user-select: none; font-weight: normal; position: relative; }
+        th:hover { background-color: #0056b3; }
+        th.sort-asc::after { content: " \\25B2"; margin-left: 5px; font-size: 0.8em; } /* Up arrow */
+        th.sort-desc::after { content: " \\25BC"; margin-left: 5px; font-size: 0.8em; } /* Down arrow */
+        tr:nth-child(even) { background-color: #f6f6f6; }
+        tr:hover { background-color: #e9f5ff; }
+        .loading-indicator { text-align: center; padding: 20px; font-style: italic; color: #666; font-size: 1.1em; }
+        .error-message { text-align: center; padding: 20px; color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; margin-top: 20px; font-weight: bold; }
+        .no-data-message { text-align: center; padding: 20px; color: #6c757d; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP All Risk Tiers Dashboard</h1>
+
+        <div class="controls">
+            <label for="search">Filter:</label>
+            <input type="text" id="search" placeholder="Search by MCP name or Server ID...">
+        </div>
+
+        <div id="loading" class="loading-indicator">Loading risk data...</div>
+        <div id="error" class="error-message" style="display: none;"></div>
+
+        <table id="riskTable">
+            <thead>
+                <tr>
+                    <th data-sort-by="mcp_name">MCP Name</th>
+                    <th data-sort-by="server_id">Server ID</th>
+                    <th data-sort-by="risk_tier">Risk Tier</th>
+                    <th data-sort-by="overall_risk">Overall Risk</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be populated here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const riskTableBody = document.querySelector('#riskTable tbody');
+            const searchInput = document.getElementById('search');
+            const tableHeaders = document.querySelectorAll('#riskTable th');
+            const loadingIndicator = document.getElementById('loading');
+            const errorMessage = document.getElementById('error');
+
+            let allMcpData = []; // Store original fetched data
+            let currentSortColumn = null;
+            let currentSortDirection = 'asc'; // 'asc' or 'desc'
+
+            // Function to fetch data from the API
+            async function fetchMcpRiskData() {
+                loadingIndicator.style.display = 'block';
+                errorMessage.style.display = 'none';
+                try {
+                    const response = await fetch('/mcps/risk_tiers');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    allMcpData = data; // Store the fetched data
+                    applyFiltersAndSorting(); // Initial render with any default sorting/filtering
+                } catch (error) {
+                    console.error('Error fetching MCP risk data:', error);
+                    errorMessage.textContent = `Failed to load data: ${error.message}. Please try again later.`;
+                    errorMessage.style.display = 'block';
+                } finally {
+                    loadingIndicator.style.display = 'none';
+                }
+            }
+
+            // Function to render the table with given data
+            function renderTable(data) {
+                riskTableBody.innerHTML = ''; // Clear existing rows
+
+                if (data.length === 0) {
+                    riskTableBody.innerHTML = '<tr><td colspan="4" class="no-data-message">No MCP risk data available matching your criteria.</td></tr>';
+                    return;
+                }
+
+                data.forEach(mcp => {
+                    const row = riskTableBody.insertRow();
+                    row.insertCell().textContent = mcp.mcp_name;
+                    row.insertCell().textContent = mcp.server_id;
+                    row.insertCell().textContent = mcp.risk_tier;
+                    row.insertCell().textContent = mcp.overall_risk.toFixed(2); // Format to 2 decimal places
+                });
+            }
+
+            // Function to sort data
+            function sortData(data, column, direction) {
+                if (!column) return data; // No column to sort by
+
+                return [...data].sort((a, b) => { // Create a shallow copy to avoid modifying original array directly
+                    const valA = a[column];
+                    const valB = b[column];
+
+                    if (typeof valA === 'string') {
+                        return direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    } else {
+                        // Handle numbers, booleans, etc.
+                        return direction === 'asc' ? valA - valB : valB - valA;
+                    }
+                });
+            }
+
+            // Function to filter data
+            function filterData(data, searchTerm) {
+                if (!searchTerm) return data;
+                const lowerCaseSearchTerm = searchTerm.toLowerCase();
+                return data.filter(mcp =>
+                    mcp.mcp_name.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    mcp.server_id.toLowerCase().includes(lowerCaseSearchTerm)
+                );
+            }
+
+            // Apply current filters and sorting, then render
+            function applyFiltersAndSorting() {
+                let processedData = [...allMcpData]; // Start with a copy of all data
+                processedData = filterData(processedData, searchInput.value);
+                processedData = sortData(processedData, currentSortColumn, currentSortDirection);
+                renderTable(processedData);
+            }
+
+            // Event listener for search input
+            searchInput.addEventListener('input', applyFiltersAndSorting);
+
+            // Event listeners for table headers (sorting)
+            tableHeaders.forEach(header => {
+                header.addEventListener('click', () => {
+                    const column = header.dataset.sortBy;
+
+                    // Reset sort classes on all headers
+                    tableHeaders.forEach(h => {
+                        h.classList.remove('sort-asc', 'sort-desc');
+                    });
+
+                    if (currentSortColumn === column) {
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSortColumn = column;
+                        currentSortDirection = 'asc'; // Default to ascending for a new column
+                    }
+
+                    header.classList.add(`sort-${currentSortDirection}`);
+                    applyFiltersAndSorting();
+                });
+            });
+
+            // Initial data fetch
+            fetchMcpRiskData();
+        });
+    </script>
+</body>
+</html>
+"""
+
+# Mock API data for the self-test
+MOCK_API_DATA = [
+    {"mcp_name": "Sentinel-Alpha", "server_id": "srv-001", "risk_tier": "High", "overall_risk": 0.85},
+    {"mcp_name": "Guardian-Beta", "server_id": "srv-002", "risk_tier": "Medium", "overall_risk": 0.52},
+    {"mcp_name": "Watchdog-Gamma", "server_id": "srv-003", "risk_tier": "Low", "overall_risk": 0.21},
+    {"mcp_name": "Protector-Delta", "server_id": "srv-004", "risk_tier": "Critical", "overall_risk": 0.98},
+    {"mcp_name": "Monitor-Epsilon", "server_id": "srv-005", "risk_

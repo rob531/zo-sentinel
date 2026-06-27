@@ -119,3 +119,32 @@ jobs:
       - name: Service log (on failure)
         if: failure()
         run: cat /tmp/it_ws_pg.log || true
+
+  app-e2e-parity:
+    # Cutover gate: the DuckDB and Postgres app-E2E snapshots must be byte-identical
+    # (modulo the `backend` field). This is the missing assert that made the two
+    # uploaded snapshots actually mean something -- previously parity was eyeballed.
+    needs: [full-pipeline, app-e2e-postgres]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Download DuckDB snapshot
+        uses: actions/download-artifact@v5
+        with:
+          name: app-e2e-snapshot-duckdb
+          path: snap-duckdb
+      - name: Download Postgres snapshot
+        uses: actions/download-artifact@v5
+        with:
+          name: app-e2e-snapshot-postgres
+          path: snap-postgres
+      - name: Assert cutover parity (duckdb == postgres)
+        run: |
+          DUCK="$(ls snap-duckdb/app_e2e_snapshot_*.json | head -n1)"
+          PG="$(ls snap-postgres/app_e2e_snapshot_*.json | head -n1)"
+          echo "duckdb=$DUCK  postgres=$PG"
+          python tests/integration/diff_app_e2e_snapshots.py "$DUCK" "$PG"

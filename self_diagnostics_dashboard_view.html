@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Self-Diagnostics Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .dashboard-container {
+            max-width: 960px;
+            margin: 30px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 30px;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        .status-card {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            transition: transform 0.2s ease-in-out;
+        }
+        .status-card:hover {
+            transform: translateY(-3px);
+        }
+        .status-card h3 {
+            margin-top: 0;
+            color: #555;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+        .status-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3498db; /* Default blue */
+            display: block;
+            padding: 10px 0;
+        }
+        /* Status specific colors */
+        .status-value.operational { color: #27ae60; } /* Green */
+        .status-value.degraded { color: #f39c12; } /* Orange */
+        .status-value.critical { color: #e74c3c; } /* Red */
+        .status-value.unknown, .status-value.error { color: #7f8c8d; } /* Grey */
+
+        .issues-section {
+            margin-top: 40px;
+            border-top: 1px solid #eee;
+            padding-top: 30px;
+        }
+        .issues-section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            text-align: center;
+        }
+        #issues-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #issues-list li {
+            background-color: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 18px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+            transition: box-shadow 0.2s ease-in-out;
+        }
+        #issues-list li:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        /* Issue severity borders */
+        #issues-list li.severity-warning { border-left: 6px solid #f39c12; }
+        #issues-list li.severity-error { border-left: 6px solid #e74c3c; }
+        #issues-list li.severity-info { border-left: 6px solid #3498db; }
+        #issues-list li.severity-success { border-left: 6px solid #27ae60; }
+
+        .issue-icon {
+            font-size: 1.8em;
+            margin-right: 20px;
+            width: 30px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .issue-icon.warning { color: #f39c12; }
+        .issue-icon.error { color: #e74c3c; }
+        .issue-icon.info { color: #3498db; }
+        .issue-icon.success { color: #27ae60; }
+
+        .issue-details {
+            flex-grow: 1;
+        }
+        .issue-details strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #444;
+            font-size: 1.1em;
+        }
+        .issue-details span {
+            font-size: 0.9em;
+            color: #777;
+        }
+
+        .last-updated {
+            text-align: right;
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #777;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .no-issues {
+            text-align: center;
+            color: #777;
+            padding: 25px;
+            border: 1px dashed #ccc;
+            border-radius: 6px;
+            background-color: #fcfcfc;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Self-Diagnostics Dashboard</h1>
+
+        <div class="status-grid">
+            <div class="status-card">
+                <h3>Overall Status</h3>
+                <div id="overall-status" class="status-value unknown">Loading...</div>
+            </div>
+            <div class="status-card">
+                <h3>Heartbeat Status</h3>
+                <div id="heartbeat-status" class="status-value unknown">Loading...</div>
+            </div>
+            <div class="status-card">
+                <h3>Last Run Time</h3>
+                <div id="last-run-time" class="status-value unknown">Loading...</div>
+            </div>
+        </div>
+
+        <div class="issues-section">
+            <h2>Reported Issues</h2>
+            <ul id="issues-list">
+                <li class="no-issues" id="loading-issues">Loading issues...</li>
+                <!-- Issues will be dynamically loaded here -->
+            </ul>
+        </div>
+
+        <div class="last-updated">
+            Last Updated: <span id="last-updated-timestamp">N/A</span>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const API_ENDPOINT = '/self_diagnostics/status';
+
+            const overallStatusElem = document.getElementById('overall-status');
+            const heartbeatStatusElem = document.getElementById('heartbeat-status');
+            const lastRunTimeElem = document.getElementById('last-run-time');
+            const issuesListElem = document.getElementById('issues-list');
+            const lastUpdatedTimestampElem = document.getElementById('last-updated-timestamp');
+
+            // Helper to format timestamps
+            const formatTimestamp = (isoString) => {
+                if (!isoString) return 'N/A';
+                try {
+                    const date = new Date(isoString);
+                    // Options for a more readable format
+                    const options = {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        hour12: true
+                    };
+                    return date.toLocaleString(undefined, options);
+                } catch (e) {
+                    console.error("Error formatting timestamp:", e);
+                    return 'Invalid Date';
+                }
+            };
+
+            // Helper to update status elements with appropriate classes
+            const updateStatusElement = (element, statusText, className) => {
+                element.textContent = statusText;
+                // Remove all existing status classes before adding the new one
+                element.className = 'status-value'; // Reset to base class
+                if (className) {
+                    element.classList.add(className);
+                }
+            };
+
+            const fetchDiagnosticsStatus = async () => {
+                // Set initial loading states
+                updateStatusElement(overallStatusElem, 'Loading...', 'unknown');
+                updateStatusElement(heartbeatStatusElem, 'Loading...', 'unknown');
+                updateStatusElement(lastRunTimeElem, 'Loading...', 'unknown');
+                issuesListElem.innerHTML = '<li class="no-issues" id="loading-issues">Loading issues...</li>';
+                lastUpdatedTimestampElem.textContent = 'Fetching...';
+
+                try {
+                    const response = await fetch(API_ENDPOINT);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    console.log('Fetched data:', data); // For debugging
+
+                    // Update Overall Status
+                    const overallStatus = (data.status || 'unknown').toLowerCase();
+                    let overallStatusText = overallStatus.charAt(0).toUpperCase() + overallStatus.slice(1);
+                    updateStatusElement(overallStatusElem, overallStatusText, overallStatus);
+
+                    // Update Heartbeat Status
+                    const heartbeatActive = data.heartbeat_active;
+                    const heartbeatStatusText = heartbeatActive ? 'Active' : 'Inactive';
+                    const heartbeatClass = heartbeatActive ? 'operational' : 'critical';
+                    updateStatusElement(heartbeatStatusElem, heartbeatStatusText, heartbeatClass);
+
+                    // Update Last Run Time
+                    const lastRunTime = data.last_run_time;
+                    updateStatusElement(lastRunTimeElem, formatTimestamp(lastRunTime), 'operational'); // Assuming last run time is generally good
+
+                    // Update Issues
+                    issuesListElem.innerHTML = ''; // Clear loading message
+                    if (data.issues && data.issues.length > 0) {
+                        data.issues.forEach(issue => {
+                            const li = document.createElement('li');
+                            const severity = (issue.severity || 'info').toLowerCase();
+                            li.className = `severity-${severity}`;
+
+                            let icon = '';
+                            switch (severity) {
+                                case 'warning': icon = '⚠️'; break;
+                                case 'error': icon = '❌'; break;
+                                case 'info': icon = 'ℹ️'; break;
+                                case 'success': icon = '✅'; break;
+                                default: icon = '💬';
+                            }
+
+                            li.innerHTML = `
+                                <div class="issue-icon ${severity}">${icon}</div>
+                                <div class="issue-details">
+                                    <strong>${issue.message || 'No message provided'}</strong>
+                                    <span>Severity: ${issue.severity || 'N/A'} | Reported: ${formatTimestamp(issue.timestamp)}</span>
+                                </div>
+                            `;
+                            issuesListElem.appendChild(li);
+                        });
+                    } else {
+                        issuesListElem.innerHTML = '<li class="no-issues">No issues reported.</li>';
+                    }
+
+                    // Update Last Updated Timestamp of the dashboard itself
+                    lastUpdatedTimestampElem.textContent = formatTimestamp(new Date().toISOString());
+
+                } catch (error) {
+                    console.error('Failed to fetch diagnostics status:', error);
+                    updateStatusElement(overallStatusElem, 'Error', 'error');
+                    updateStatusElement(heartbeatStatusElem, 'Unknown', 'error');
+                    updateStatusElement(lastRunTimeElem, 'Error', 'error');
+                    issuesListElem.innerHTML = '<li class="no-issues">Failed to load issues. Please check the console for errors.</li>';
+                    lastUpdatedTimestampElem.textContent = `Error (${formatTimestamp(new Date().toISOString())})`;
+                }
+            };
+
+            // Initial fetch when the page loads
+            fetchDiagnosticsStatus();
+
+            // Optional: Refresh data periodically (e.g., every 30 seconds)
+            // setInterval(fetchDiagnosticsStatus, 30000);
+        });
+    </script>
+</body>
+</html>

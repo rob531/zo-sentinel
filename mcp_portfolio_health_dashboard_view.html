@@ -1,0 +1,246 @@
+To complete this task, we'll create two main components:
+
+1.  **`mcp_portfolio_health_dashboard_view.html`**: A self-contained HTML file with embedded CSS and JavaScript to display the dashboard. It will fetch data from a simulated API endpoint.
+2.  **`run_dashboard_test.py`**: A Python script that performs three actions:
+    *   Generates the `mcp_portfolio_health_dashboard_view.html` file.
+    *   Starts a local HTTP server to serve the HTML file and simulate the `/mcp_portfolio_health` API endpoint.
+    *   Makes a request to the local server, parses the HTML, and asserts the presence of key elements, printing "PASS" if successful.
+
+---
+
+### 1. `mcp_portfolio_health_dashboard_view.html`
+
+This file will contain the dashboard's structure, styling, and logic.
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Portfolio Health Dashboard</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Dashboard Container */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Headings */
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 600;
+        }
+        h2 {
+            color: #34495e;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+
+        /* Summary Cards Section */
+        .summary-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+        .card {
+            flex: 1 1 calc(25% - 20px); /* Approx 4 cards per row, accounting for gap */
+            min-width: 220px; /* Minimum width for cards before wrapping */
+            background-color: #ecf0f1;
+            padding: 25px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-7px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+        .card h2 {
+            font-size: 1.2em;
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #555;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .card p {
+            font-size: 2.8em;
+            font-weight: bold;
+            color: #2980b9; /* A vibrant blue */
+            margin: 10px 0 0;
+        }
+
+        /* Risk Breakdown Section */
+        .risk-breakdown-section {
+            margin-top: 40px;
+            background-color: #ecf0f1;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .chart-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px 0;
+        }
+        .risk-bar-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 1.1em;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+        .risk-bar-label {
+            width: 120px; /* Fixed width for labels */
+            font-weight: bold;
+            color: #555;
+            flex-shrink: 0; /* Prevent label from shrinking */
+        }
+        .risk-bar-wrapper {
+            flex-grow: 1; /* Allows the bar to take available space */
+            min-width: 150px; /* Ensure bar has a minimum width */
+            display: flex;
+            align-items: center;
+        }
+        .risk-bar {
+            height: 35px;
+            background-color: #3498db; /* Default blue */
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 12px;
+            color: white;
+            font-weight: bold;
+            box-shadow: inset 0 1px 4px rgba(0,0,0,0.2);
+            min-width: 20px; /* Ensure even 0% bars are visible as a line */
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+        /* Specific colors for risk tiers */
+        .risk-bar.Critical { background-color: #e74c3c; } /* Red */
+        .risk-bar.High { background-color: #f39c12; }    /* Orange */
+        .risk-bar.Medium { background-color: #2ecc71; }   /* Green */
+        .risk-bar.Low { background-color: #3498db; }      /* Blue */
+
+        /* Responsive Adjustments */
+        @media (max-width: 992px) {
+            .card {
+                flex: 1 1 calc(33% - 20px); /* 3 cards per row */
+            }
+            h1 {
+                font-size: 2em;
+            }
+        }
+        @media (max-width: 768px) {
+            .card {
+                flex: 1 1 calc(50% - 20px); /* 2 cards per row */
+            }
+            .dashboard-container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            .card p {
+                font-size: 2.2em;
+            }
+            .risk-bar-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            .risk-bar-label {
+                width: auto;
+                margin-bottom: 5px;
+            }
+            .risk-bar-wrapper {
+                width: 100%; /* Take full width */
+                min-width: unset;
+            }
+            .risk-bar {
+                width: 100% !important; /* Override JS width for full width bars */
+                justify-content: center;
+                padding-right: 0;
+            }
+        }
+        @media (max-width: 480px) {
+            .card {
+                flex: 1 1 100%; /* 1 card per row */
+            }
+            body {
+                padding: 10px;
+            }
+            .dashboard-container {
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.5em;
+            }
+            .card p {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Portfolio Health Dashboard</h1>
+
+        <div class="summary-cards">
+            <div class="card">
+                <h2>Total Active MCPs</h2>
+                <p id="total-active-mcps">Loading...</p>
+            </div>
+            <div class="card">
+                <h2>Average Risk Score</h2>
+                <p id="average-risk-score">Loading...</p>
+            </div>
+            <div class="card">
+                <h2>Pending Submissions</h2>
+                <p id="pending-submissions">Loading...</p>
+            </div>
+            <div class="card">
+                <h2>Exemptions</h2>
+                <p id="exemptions">Loading...</p>
+            </div>
+        </div>
+
+        <div class="risk-breakdown-section">
+            <h2>MCPs by Risk Tier</h2>
+            <div id="risk-breakdown-chart" class="chart-container">
+                <p>Loading risk breakdown...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = '/mcp_portfolio_health';
+
+        /**
+         * Fetches data from the API endpoint and updates the dashboard.
+         * Displays fallback data if the API call fails.
+         */
+        async function fetchData() {

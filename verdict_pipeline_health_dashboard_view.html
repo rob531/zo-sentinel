@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Verdict Pipeline Health Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .dashboard-container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+        .daemon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        .daemon-card {
+            background-color: #fdfdfd;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            border-left: 5px solid #ccc; /* Default border */
+        }
+        .daemon-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+        .daemon-card.status-healthy {
+            border-left-color: #28a745; /* Green */
+        }
+        .daemon-card.status-stale {
+            border-left-color: #ffc107; /* Orange */
+        }
+        .daemon-card.status-failed {
+            border-left-color: #dc3545; /* Red */
+        }
+        .daemon-name {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 15px;
+        }
+        .daemon-status {
+            font-size: 1.1em;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            display: inline-block;
+        }
+        .status-healthy .status-indicator { background-color: #28a745; }
+        .status-stale .status-indicator { background-color: #ffc107; }
+        .status-failed .status-indicator { background-color: #dc3545; }
+
+        .status-text.healthy { color: #28a745; }
+        .status-text.stale { color: #ffc107; }
+        .status-text.failed { color: #dc3545; }
+
+        .last-heartbeat, .staleness {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 8px;
+        }
+        .last-updated {
+            text-align: right;
+            font-size: 0.85em;
+            color: #95a5a6;
+            margin-top: 20px;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 50px auto;
+            display: none; /* Hidden by default */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            color: #dc3545;
+            text-align: center;
+            margin-top: 20px;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Verdict Pipeline Health Dashboard</h1>
+
+        <div class="loading-spinner" id="loadingSpinner"></div>
+        <div class="error-message" id="errorMessage">
+            Failed to load daemon health data. Please try again later.
+        </div>
+
+        <div class="daemon-grid" id="daemonGrid">
+            <!-- Daemon cards will be injected here by JavaScript -->
+        </div>
+
+        <div class="last-updated" id="lastUpdated">
+            Last updated: Never
+        </div>
+    </div>
+
+    <script>
+        const DAEMONS_TO_MONITOR = [
+            "mcp_scanner",
+            "signal_analyser",
+            "trust_synthesiser",
+            "attestation_engine",
+            "threat_intel_ingestor",
+            "risk_ranker",
+            "verdict_publisher", // Added one more for variety
+            "data_aggregator"
+        ];
+
+        const API_ENDPOINT = '/api/daemon_health_status'; // Placeholder for your actual API endpoint
+
+        // Function to simulate API response
+        async function fetchDaemonHealthDataMock() {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const data = DAEMONS_TO_MONITOR.map(name => {
+                        const randomStatus = Math.random();
+                        let status;
+                        let staleness_seconds;
+
+                        if (randomStatus < 0.6) { // 60% healthy
+                            status = 'healthy';
+                            staleness_seconds = Math.floor(Math.random() * 60); // 0-59 seconds
+                        } else if (randomStatus < 0.9) { // 30% stale
+                            status = 'stale';
+                            staleness_seconds = Math.floor(Math.random() * (3600 - 600) + 600); // 10 min - 1 hour
+                        } else { // 10% failed
+                            status = 'failed';
+                            staleness_seconds = Math.floor(Math.random() * (86400 - 3600) + 3600); // 1 hour - 24 hours
+                        }
+
+                        const lastHeartbeat = new Date(Date.now() - staleness_seconds * 1000).toISOString();
+
+                        return {
+                            name: name,
+                            status: status,
+                            last_heartbeat: lastHeartbeat,
+                            staleness_seconds: staleness_seconds
+                        };
+                    });
+                    resolve(data);
+                }, 1000); // Simulate network delay
+            });
+        }
+
+        // Function to fetch actual daemon health data from a backend API
+        async function fetchDaemonHealthData() {
+            try {
+                const response = await fetch(API_ENDPOINT);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error("Error fetching daemon health:", error);
+                throw error; // Re-throw to be caught by the caller
+            }
+        }
+
+        function formatTimeAgo(seconds) {
+            if (seconds < 60) return `${seconds} seconds ago`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+            const days = Math.floor(hours / 24);
+            return `${days} day${days === 1 ? '' : 's'} ago`;
+        }
+
+        function renderDashboard(daemonHealths) {
+            const daemonGrid = document.getElementById('daemonGrid');
+            daemonGrid.innerHTML = ''; // Clear previous content
+
+            daemonHealths.forEach(daemon => {
+                const card = document.createElement('div');
+                card.classList.add('daemon-card', `status-${daemon.status}`);
+
+                const lastHeartbeatDate = new Date(daemon.last_heartbeat);
+                const formattedHeartbeat = lastHeartbeatDate.toLocaleString();
+                const stalenessText = daemon.staleness_seconds !== undefined ? formatTimeAgo(daemon.staleness_seconds) : 'N/A';
+
+                card.innerHTML = `
+                    <div class="daemon-name">${daemon.name}</div>
+                    <div class="daemon-status">
+                        <span class="status-indicator"></span>
+                        Status: <span class="status-text ${daemon.status}">${daemon.status.toUpperCase()}</span>
+                    </div>
+                    <div class="last-heartbeat">Last Heartbeat: ${formattedHeartbeat}</div>
+                    <div class="staleness">Staleness: ${stalenessText}</div>
+                `;
+                daemonGrid.appendChild(card);
+            });
+
+            document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+        }
+
+        async function updateDashboard() {
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const errorMessage = document.getElementById('errorMessage');
+            const daemonGrid = document.getElementById('daemonGrid');
+
+            loadingSpinner.style.display = 'block';
+            errorMessage.style.display = 'none';
+            daemonGrid.style.display = 'none'; // Hide grid while loading
+
+            try {
+                // Use the mock function for demonstration.
+                // For a real application, replace with: const healthData = await fetchDaemonHealthData();
+                const healthData = await fetchDaemonHealthDataMock();
+                renderDashboard(healthData);
+                daemonGrid.style.display = 'grid'; // Show grid after loading
+            } catch (error) {
+                console.error("Failed to update dashboard:", error);
+                errorMessage.style.display = 'block';
+                daemonGrid.innerHTML = '<p style="text-align: center; color: #7f8c8d;">No data available.</p>';
+                daemonGrid.style.display = 'grid'; // Still show grid, but with error message
+            } finally {
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDashboard();
+            // Refresh every 30 seconds
+            setInterval(updateDashboard, 30000);
+        });
+    </script>
+</body>
+</html>
+PASS

@@ -39,7 +39,7 @@ jobs:
       DSN: "postgresql://zo:zo@localhost:5432/zo_app"
       JWT: "ci-deploy-compat-secret-at-least-32-bytes-long"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build app image (the real Dockerfile)
         run: docker build -t zo-sentinel-app:ci .

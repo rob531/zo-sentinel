@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP LLM Axis Scores Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        .server-id-display {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            color: #555;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            overflow: hidden; /* Ensures rounded corners apply to children */
+        }
+        th, td {
+            padding: 15px 20px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+        tr:nth-child(even) {
+            background-color: #f9fbfb;
+        }
+        tr:hover {
+            background-color: #e8f4f8;
+        }
+        .score-bar-container {
+            width: 100px;
+            height: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        .score-bar {
+            height: 100%;
+            background-color: #2ecc71; /* Green for good scores */
+            width: 0%; /* Will be set by JS */
+            transition: width 0.5s ease-out;
+        }
+        .score-bar.low { background-color: #e74c3c; } /* Red */
+        .score-bar.medium { background-color: #f39c12; } /* Orange */
+        .score-bar.high { background-color: #2ecc71; } /* Green */
+
+        .message {
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .message.loading {
+            background-color: #eaf6ff;
+            color: #2196f3;
+        }
+        .message.error {
+            background-color: #ffebee;
+            color: #f44336;
+        }
+        .message.no-data {
+            background-color: #fffde7;
+            color: #ffc107;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead tr {
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+            tr {
+                border: 1px solid #ecf0f1;
+                margin-bottom: 10px;
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            td {
+                border: none;
+                border-bottom: 1px solid #eee;
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td:last-child {
+                border-bottom: 0;
+            }
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0;
+                width: 45%;
+                padding-left: 15px;
+                font-weight: bold;
+                text-align: left;
+                color: #555;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP LLM Axis Scores Dashboard</h1>
+        <div id="server-id-display" class="server-id-display"></div>
+        
+        <div id="status-message" class="message loading">Loading scores...</div>
+
+        <div id="scores-container" style="display: none;">
+            <h2>Risk Axis Scores</h2>
+            <table id="scores-table">
+                <thead>
+                    <tr>
+                        <th>Risk Axis</th>
+                        <th>Score</th>
+                        <th>Confidence</th>
+                        <th>Label</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Scores will be injected here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const mcpServerId = urlParams.get('mcp_server_id');
+
+            const serverIdDisplay = document.getElementById('server-id-display');
+            const statusMessage = document.getElementById('status-message');
+            const scoresContainer = document.getElementById('scores-container');
+            const scoresTableBody = document.querySelector('#scores-table tbody');
+
+            if (!mcpServerId) {
+                serverIdDisplay.innerHTML = '<strong>Error:</strong> `mcp_server_id` is missing from the URL query parameters.';
+                statusMessage.className = 'message error';
+                statusMessage.textContent = 'Please provide an `mcp_server_id` in the URL (e.g., `?mcp_server_id=your_server_id`).';
+                return;
+            }
+
+            serverIdDisplay.innerHTML = `Scores for MCP Server ID: <strong>${mcpServerId}</strong>`;
+            statusMessage.className = 'message loading';
+            statusMessage.textContent = 'Fetching LLM axis scores...';
+            scoresContainer.style.display = 'none';
+
+            // Construct the API URL
+            // For local testing, you might want to mock this or ensure a backend is running.
+            // Example mock server using Python FastAPI:
+            // @app.get("/api/v1/mcp_llm_axis_scores/{mcp_server_id}")
+            // async def get_mcp_llm_axis_scores(mcp_server_id: str):
+            //     # Return mock data for demonstration
+            //     return {
+            //         "domain_trust": {"score": 0.85, "confidence": "High", "label": "Good"},
+            //         "tool_description_safety": {"score": 0.92, "confidence": "High", "label": "Safe"},
+            //         "permission_scope": {"score": 0.78, "confidence": "Medium", "label": "Moderate"},
+            //         "supply_chain": {"score": 0.65, "confidence": "Low", "label": "Concern"},
+            //         "community_signal": {"score": 0.95, "confidence": "High", "label": "Positive"},
+            //         "temporal_stability": {"score": 0.88, "confidence": "High", "label": "Stable"},
+            //         "injection_resilience": {"score": 0.70, "confidence": "Medium", "label": "Vulnerable"}
+            //     }
+            const apiUrl = `/api/v1/mcp_llm_axis_scores/${mcpServerId}`;
+
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        // Attempt to read error message from response body if available
+                        return response.json().catch(() => {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }).then(errorData => {
+                            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    statusMessage.style.display = 'none'; // Hide loading message
+                    scoresContainer.style.display = 'block'; // Show scores container
+
+                    if (Object.keys(data).length === 0) {
+                        statusMessage.style.display = 'block';
+                        statusMessage.className = 'message no-data';
+                        statusMessage.textContent = 'No LLM axis scores found for this server ID.';
+                        scoresContainer.style.display = 'none';
+                        return;
+                    }
+
+                    // Define the order of axes for display
+                    const axisOrder = [
+                        'domain_trust',
+                        'tool_description_safety',
+                        'permission_scope',
+                        'supply_chain',
+                        'community_signal',
+                        'temporal_stability',
+                        'injection_resilience'
+                    ];
+
+                    scoresTableBody.innerHTML = ''; // Clear any existing rows
+
+                    axisOrder.forEach(axisName => {
+                        const axisData = data[axisName];
+                        if (axisData) {
+                            const row = scoresTableBody.insertRow();
+                            
+                            // Risk Axis Name
+                            const cellAxis = row.insertCell();
+                            cellAxis.textContent = formatAxisName(axisName);
+                            cellAxis.setAttribute('data-label', 'Risk Axis');
+
+                            // Score
+                            const cellScore = row.insertCell();
+                            const scoreValue = (axisData.score * 100).toFixed(1); // Convert to percentage
+                            const scoreBarContainer = document.createElement('div');
+                            scoreBarContainer.className = 'score-bar-container';
+                            const scoreBar = document.createElement('div');
+                            scoreBar.className = 'score-bar';
+                            scoreBar.style.width = `${scoreValue}%`;
+
+                            // Apply color based on score (example thresholds)
+                            if (axisData.score < 0.4) {
+                                scoreBar.classList.add('low');
+                            } else if (axisData.score < 0.7) {
+                                scoreBar.classList.add('medium');
+                            } else {
+                                scoreBar.classList.add('high');
+                            }
+
+                            scoreBarContainer.appendChild(scoreBar);
+                            cellScore.innerHTML = `${scoreValue}%`;
+                            cellScore.appendChild(scoreBarContainer);
+                            cellScore.setAttribute('data-label', 'Score');
+
+                            // Confidence
+                            const cellConfidence = row.insertCell();
+                            cellConfidence.textContent = axisData.confidence || 'N/A';
+                            cellConfidence.setAttribute('data-label', 'Confidence');
+
+                            // Label
+                            const cellLabel = row.insertCell();
+                            cellLabel.textContent = axisData.label || 'N/A';
+                            cellLabel.setAttribute('data-label', 'Label');
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching LLM axis scores:', error);
+                    statusMessage.style.display = 'block';
+                    statusMessage.className = 'message error';
+                    statusMessage.textContent = `Failed to load scores: ${error.message}. Please ensure the backend API is running and accessible.`;
+                    scoresContainer.style.display = 'none';
+                });
+        });
+
+        function formatAxisName(name) {
+            // Converts 'domain_trust' to 'Domain Trust'
+            return name.split('_')
+                       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                       .join(' ');
+        }
+    </script>
+</body>
+</html>

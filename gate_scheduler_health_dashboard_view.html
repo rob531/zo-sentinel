@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Scheduler Health Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .dashboard-container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            max-width: 600px;
+            margin: 40px auto;
+            text-align: center;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-size: 2em;
+        }
+
+        .status-section {
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+
+        .status-label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            color: white;
+            min-width: 80px;
+            text-align: center;
+            margin-left: 10px;
+            transition: background-color 0.3s ease; /* Smooth transition for status changes */
+        }
+
+        .status-ok {
+            background-color: #28a745; /* Green */
+        }
+
+        .status-stale {
+            background-color: #ffc107; /* Yellow/Orange */
+            color: #333; /* Darker text for contrast */
+        }
+
+        .status-error {
+            background-color: #dc3545; /* Red */
+        }
+
+        .heartbeat-time {
+            font-size: 1em;
+            color: #666;
+            margin-top: 15px;
+        }
+
+        .message {
+            margin-top: 25px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition for messages */
+        }
+
+        .message.loading {
+            background-color: #e0f7fa;
+            color: #007bff;
+        }
+
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Gate Scheduler Health Dashboard</h1>
+
+        <div class="status-section">
+            <span class="status-label">Status:</span>
+            <span id="gateSchedulerStatus" class="status-indicator">Loading...</span>
+        </div>
+
+        <div class="heartbeat-time">
+            <span class="status-label">Last Heartbeat:</span>
+            <span id="lastHeartbeatTime">Loading...</span>
+        </div>
+
+        <div id="messageArea" class="message loading">Loading gate scheduler status...</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusElement = document.getElementById('gateSchedulerStatus');
+            const heartbeatElement = document.getElementById('lastHeartbeatTime');
+            const messageArea = document.getElementById('messageArea');
+
+            const API_ENDPOINT = '/api/gate_scheduler/status';
+
+            /**
+             * Fetches the health status of the gate_scheduler daemon from the API.
+             * Updates the dashboard display with the status and last heartbeat time,
+             * or an error message if the fetch fails.
+             */
+            async function fetchGateSchedulerStatus() {
+                // Set initial loading states
+                statusElement.textContent = 'Loading...';
+                statusElement.className = 'status-indicator'; // Reset classes, keep base styling
+                heartbeatElement.textContent = 'Loading...';
+                messageArea.className = 'message loading';
+                messageArea.textContent = 'Loading gate scheduler status...';
+
+                try {
+                    const response = await fetch(API_ENDPOINT);
+
+                    if (!response.ok) {
+                        // If the HTTP response status is not 2xx (e.g., 404, 500)
+                        throw new Error(`HTTP error! Status: ${response.status} - ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+
+                    // Assuming data structure: { status: "ok" | "stale", last_heartbeat: "ISO_STRING" }
+                    const { status, last_heartbeat } = data;
+
+                    // Update status display
+                    statusElement.textContent = status ? status.toUpperCase() : 'UNKNOWN';
+                    statusElement.classList.remove('status-ok', 'status-stale', 'status-error'); // Clear previous status classes
+                    if (status === 'ok') {
+                        statusElement.classList.add('status-ok');
+                    } else if (status === 'stale') {
+                        statusElement.classList.add('status-stale');
+                    } else {
+                        // Handle unexpected status values as an error state
+                        statusElement.classList.add('status-error');
+                    }
+
+                    // Update heartbeat time display
+                    if (last_heartbeat) {
+                        const date = new Date(last_heartbeat);
+                        // Check if the date is valid before formatting
+                        if (!isNaN(date.getTime())) {
+                            heartbeatElement.textContent = date.toLocaleString(); // Format to local date and time
+                        } else {
+                            heartbeatElement.textContent = 'Invalid Date Format';
+                        }
+                    } else {
+                        heartbeatElement.textContent = 'N/A';
+                    }
+
+                    // Clear any loading/error messages
+                    messageArea.textContent = '';
+                    messageArea.className = 'message'; // Reset to base message class
+
+                } catch (error) {
+                    console.error('Failed to fetch gate scheduler status:', error);
+                    // Update elements to reflect an error state
+                    statusElement.textContent = 'ERROR';
+                    statusElement.classList.remove('status-ok', 'status-stale');
+                    statusElement.classList.add('status-error');
+                    heartbeatElement.textContent = 'Unavailable';
+                    messageArea.className = 'message error';
+                    messageArea.textContent = `Error: Could not fetch status. ${error.message}. Please check the server and network connection.`;
+                }
+            }
+
+            // Initial fetch when the page loads
+            fetchGateSchedulerStatus();
+
+            // Optional: Auto-refresh every 30 seconds for a dynamic dashboard
+            // Uncomment the line below if continuous updates are desired.
+            // setInterval(fetchGateSchedulerStatus, 30000);
+        });
+    </script>
+</body>
+</html>

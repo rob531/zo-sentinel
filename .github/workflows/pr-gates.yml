@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload smoke junit
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-smoke-junit
           path: artifacts/ci_smoke_junit.xml
@@ -137,7 +137,7 @@ jobs:
 
       - name: Upload frontend junit
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-frontend-junit
           path: artifacts/ci_frontend_junit.xml

@@ -56,7 +56,7 @@ jobs:
         run: python -m pytest tests/integration/test_app_e2e.py -v
       - name: Upload app E2E snapshot (pre/post-cutover baseline)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-e2e-snapshot-duckdb
           path: artifacts/app_e2e_snapshot_*.json
@@ -111,7 +111,7 @@ jobs:
         run: python -m pytest tests/integration/test_app_e2e.py -v
       - name: Upload app E2E snapshot (postgres)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-e2e-snapshot-postgres
           path: artifacts/app_e2e_snapshot_*.json

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Empty Tables Status Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #e8f0f2;
+            font-weight: 600;
+            color: #34495e;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .status-empty {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .loading, .error {
+            text-align: center;
+            margin-top: 20px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .error {
+            color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sentinel Database Empty Tables Status</h1>
+        <table id="emptyTablesTable">
+            <thead>
+                <tr>
+                    <th>Table Name</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="2" class="loading">Loading data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tableBody = document.querySelector('#emptyTablesTable tbody');
+
+            // Mock API endpoint
+            const apiUrl = '/api/empty_tables_status';
+
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    tableBody.innerHTML = ''; // Clear loading message
+
+                    if (data.empty_tables && data.empty_tables.length > 0) {
+                        data.empty_tables.forEach(tableName => {
+                            const row = tableBody.insertRow();
+                            const nameCell = row.insertCell();
+                            const statusCell = row.insertCell();
+
+                            nameCell.textContent = tableName;
+                            statusCell.textContent = 'Empty';
+                            statusCell.classList.add('status-empty');
+                        });
+                    } else {
+                        const row = tableBody.insertRow();
+                        const cell = row.insertCell();
+                        cell.colSpan = 2;
+                        cell.textContent = 'No empty tables found.';
+                        cell.style.textAlign = 'center';
+                        cell.style.fontStyle = 'italic';
+                        cell.style.color = '#95a5a6';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching empty tables status:', error);
+                    tableBody.innerHTML = ''; // Clear loading message
+                    const row = tableBody.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 2;
+                    cell.textContent = `Error loading data: ${error.message}`;
+                    cell.classList.add('error');
+                });
+        });
+    </script>
+</body>
+</html>

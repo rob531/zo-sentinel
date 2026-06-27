@@ -1,0 +1,137 @@
+<!-- mcp_submissions_pipeline_health_dashboard_view.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Submissions Pipeline Health Dashboard</title>
+    <!-- Chart.js CDN for interactive charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Optional: Chart.js adapter for date-fns for advanced time-series charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.umd.min.js"></script>
+    <style>
+        /* CSS for the dashboard layout and styling */
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --text-color: #343a40;
+            --border-color: #e9ecef;
+            --shadow-color: rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px var(--shadow-color);
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            color: var(--text-color);
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .metrics-grid, .charts-grid {
+            display: grid;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metrics-grid {
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        }
+
+        .charts-grid {
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        }
+
+        .metric-card, .chart-card {
+            background-color: var(--card-background);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow-color);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .metric-card h3 {
+            margin-top: 0;
+            color: var(--secondary-color);
+            font-size: 1.2em;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2.8em;
+            font-weight: bold;
+            color: var(--primary-color);
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .chart-card {
+            min-height: 350px; /* Ensure charts have enough space */
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                margin: 10px;
+                padding: 15px;
+            }
+            h1 {
+                font-size: 2em;
+            }
+            .metrics-grid, .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .metric-value {
+                font-size: 2.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Submissions Pipeline Health Dashboard</h1>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3>Total Submissions (Last 24h)</h3>
+                <p id="totalSubmissions" class="metric-value">Loading...</p>
+            </div>
+            <div class="metric-card">
+                <h3>Avg. Processing Time (Last 24h)</h3>
+                <p id="avgProcessingTime" class="metric-value">Loading...</p>
+            </div>
+            <div class="metric-card">
+                <h3>Errors (Last 24h)</h3>
+                <p id="totalErrors" class="metric-value">Loading

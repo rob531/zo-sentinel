@@ -3,732 +3,349 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Admin - Policy Rules</title>
+    <title>Admin Policies Management</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        :root {
-            --bg: #0d0f14;
-            --bg-card: #141720;
-            --bg-input: #1a1e28;
-            --accent: #00e5ff;
-            --accent-dim: #007a85;
-            --text: #e0e0e0;
-            --text-dim: #8892a0;
-            --danger: #ff4757;
-            --success: #2ed573;
-            --warning: #ffa502;
-            --border: #2a2f3a;
-        }
-        
         body {
-            font-family: 'Courier New', monospace;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
         }
-        
-        .header {
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .logo {
-            font-size: 1.25rem;
-            font-weight: bold;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-        }
-        
-        .nav-links a {
-            color: var(--text-dim);
-            text-decoration: none;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: color 0.2s;
-        }
-        
-        .nav-links a:hover, .nav-links a.active {
-            color: var(--accent);
-        }
-        
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 2rem;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        
-        .page-title {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 1rem;
+        h1 {
+            text-align: center;
+            color: #333;
         }
-        
-        .actions-bar {
+        .policy-list {
+            margin-bottom: 20px;
+        }
+        .policy-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
         }
-        
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border: 1px solid var(--accent);
-            background: transparent;
-            color: var(--accent);
-            font-family: inherit;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.2s;
+        .policy-item:last-child {
+            border-bottom: none;
         }
-        
-        .btn:hover {
-            background: var(--accent);
-            color: var(--bg);
+        .policy-details {
+            flex: 1;
         }
-        
-        .btn-danger {
-            border-color: var(--danger);
-            color: var(--danger);
-        }
-        
-        .btn-danger:hover {
-            background: var(--danger);
-            color: var(--bg);
-        }
-        
-        .btn-small {
-            padding: 0.5rem 1rem;
-            font-size: 0.75rem;
-        }
-        
-        .search-box {
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            padding: 0.75rem 1rem;
-            color: var(--text);
-            font-family: inherit;
-            font-size: 0.875rem;
-            width: 300px;
-        }
-        
-        .search-box::placeholder {
-            color: var(--text-dim);
-        }
-        
-        .search-box:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        
-        .table-container {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            overflow-x: auto;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th {
-            background: var(--bg-input);
-            padding: 1rem;
-            text-align: left;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-dim);
-            border-bottom: 1px solid var(--border);
-        }
-        
-        td {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.875rem;
-        }
-        
-        tr:last-child td { border-bottom: none; }
-        
-        tr:hover td { background: var(--bg-input); }
-        
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border: 1px solid;
-        }
-        
-        .badge-allow { border-color: var(--success); color: var(--success); }
-        .badge-deny { border-color: var(--danger); color: var(--danger); }
-        .badge-warn { border-color: var(--warning); color: var(--warning); }
-        .badge-monitor { border-color: var(--accent-dim); color: var(--accent-dim); }
-        
-        .severity-critical { color: var(--danger); }
-        .severity-high { color: #ff6b6b; }
-        .severity-medium { color: var(--warning); }
-        .severity-low { color: var(--success); }
-        
-        .pattern-cell {
-            max-width: 300px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-family: monospace;
-            color: var(--accent);
-        }
-        
-        .actions-cell {
+        .policy-actions {
             display: flex;
-            gap: 0.5rem;
+            gap: 10px;
         }
-        
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
+        .policy-form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
         }
-        
-        .modal-overlay.active { display: flex; }
-        
-        .modal {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            padding: 2rem;
-            width: 500px;
-            max-width: 90vw;
-        }
-        
-        .modal-title {
-            font-size: 1.25rem;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border);
-        }
-        
         .form-group {
-            margin-bottom: 1.25rem;
+            margin-bottom: 15px;
         }
-        
-        .form-label {
+        .form-group label {
             display: block;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-dim);
-            margin-bottom: 0.5rem;
+            margin-bottom: 5px;
         }
-        
-        .form-input, .form-select, .form-textarea {
+        .form-group input, .form-group select, .form-group textarea {
             width: 100%;
-            padding: 0.75rem;
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            color: var(--text);
-            font-family: inherit;
-            font-size: 0.875rem;
+            padding: 8px;
+            box-sizing: border-box;
         }
-        
-        .form-input:focus, .form-select:focus, .form-textarea:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        
-        .form-textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-        
-        .form-hint {
-            font-size: 0.75rem;
-            color: var(--text-dim);
-            margin-top: 0.25rem;
-        }
-        
-        .modal-actions {
+        .form-actions {
             display: flex;
-            gap: 1rem;
             justify-content: flex-end;
-            margin-top: 1.5rem;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border);
+            gap: 10px;
         }
-        
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-dim);
+        button {
+            padding: 8px 15px;
+            cursor: pointer;
         }
-        
-        .empty-state-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
+        .btn-add {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
         }
-        
-        .toast {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            font-size: 0.875rem;
-            z-index: 2000;
-            display: none;
+        .btn-edit {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
         }
-        
-        .toast.success { border-color: var(--success); color: var(--success); }
-        .toast.error { border-color: var(--danger); color: var(--danger); }
-        .toast.active { display: block; }
-        
-        .loading {
-            opacity: 0.5;
-            pointer-events: none;
+        .btn-delete {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
         }
-        
-        .delete-confirm {
-            display: none;
-            background: var(--bg-input);
-            border: 1px solid var(--danger);
-            padding: 1rem;
-            margin-top: 1rem;
+        .btn-cancel {
+            background-color: #e7e7e7;
+            color: #333;
+            border: none;
+            border-radius: 4px;
         }
-        
-        .delete-confirm.active { display: block; }
-        
-        .delete-confirm p {
-            color: var(--text-dim);
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
+        .btn-save {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
         }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="logo">Sentinel Admin</div>
-        <nav class="nav-links">
-            <a href="admin_submissions.html">Submissions</a>
-            <a href="admin_policies.html" class="active">Policies</a>
-            <a href="admin_exemptions.html">Exemptions</a>
-            <a href="admin_attestations.html">Attestations</a>
-        </nav>
-    </header>
-    
-    <main class="container">
-        <h1 class="page-title">Policy Rules Management</h1>
-        
-        <div class="actions-bar">
-            <input type="text" class="search-box" id="searchInput" placeholder="Search rules...">
-            <button class="btn" onclick="openCreateModal()">+ Create Rule</button>
-        </div>
-        
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Pattern</th>
-                        <th>Action</th>
-                        <th>Severity</th>
-                        <th>Enabled</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="rulesTableBody">
-                    <tr><td colspan="7" class="empty-state">Loading rules...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </main>
-    
-    <div class="modal-overlay" id="createModal">
-        <div class="modal">
-            <h2 class="modal-title">Create Policy Rule</h2>
-            <form id="createForm" onsubmit="handleCreate(event)">
+    <div class="container">
+        <h1>Admin Policies Management</h1>
+
+        <div class="policy-form" id="addPolicyForm">
+            <h2>Add New Policy</h2>
+            <form id="policyForm">
+                <input type="hidden" id="policyId" value="">
                 <div class="form-group">
-                    <label class="form-label">Rule Name *</label>
-                    <input type="text" class="form-input" id="ruleName" required placeholder="e.g., Block Malicious URL Pattern">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Rule Type *</label>
-                    <select class="form-select" id="ruleType" required>
-                        <option value="url_pattern">URL Pattern</option>
-                        <option value="tool_name">Tool Name</option>
-                        <option value="description_keyword">Description Keyword</option>
-                        <option value="permission_scope">Permission Scope</option>
-                    </select>
-                    <!--
-                        rule_type enum documentation:
-                        - url_pattern: matches URL regex patterns.
-                        - tool_name: matches tool name strings.
-                        - description_keyword: matches keywords in tool description.
-                        - permission_scope: matches permission scope identifiers.
-                    -->
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Pattern *</label>
-                    <textarea class="form-textarea" id="rulePattern" required placeholder="Regex pattern to match (XSS sanitized)"></textarea>
-                    <p class="form-hint">Special characters are escaped. Supports regex patterns.</p>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Action *</label>
-                    <select class="form-select" id="ruleAction" required>
-                        <option value="deny">Deny</option>
-                        <option value="warn">Warn</option>
-                        <option value="monitor">Monitor</option>
+                    <label for="ruleType">Rule Type</label>
+                    <select id="ruleType" required>
+                        <option value="">Select Rule Type</option>
                         <option value="allow">Allow</option>
+                        <option value="deny">Deny</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Severity *</label>
-                    <select class="form-select" id="ruleSeverity" required>
-                        <option value="critical">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
+                    <label for="pattern">Pattern</label>
+                    <input type="text" id="pattern" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-textarea" id="ruleDescription" placeholder="Optional description for this rule"></textarea>
+                    <label for="action">Action</label>
+                    <input type="text" id="action" required>
                 </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-danger" onclick="closeCreateModal()">Cancel</button>
-                    <button type="submit" class="btn">Create Rule</button>
+                <div class="form-group">
+                    <label for="priority">Priority</label>
+                    <input type="number" id="priority" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="cancelForm()">Cancel</button>
+                    <button type="submit" class="btn-save">Save</button>
                 </div>
             </form>
         </div>
-    </div>
-    
-    <div class="modal-overlay" id="editModal">
-        <div class="modal">
-            <h2 class="modal-title">Edit Policy Rule</h2>
-            <form id="editForm" onsubmit="handleUpdate(event)">
-                <input type="hidden" id="editRuleId">
-                <div class="form-group">
-                    <label class="form-label">Rule Name *</label>
-                    <input type="text" class="form-input" id="editRuleName" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Rule Type *</label>
-                    <select class="form-select" id="editRuleType" required>
-                        <option value="url_pattern">URL Pattern</option>
-                        <option value="tool_name">Tool Name</option>
-                        <option value="description_keyword">Description Keyword</option>
-                        <option value="permission_scope">Permission Scope</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Pattern *</label>
-                    <textarea class="form-textarea" id="editRulePattern" required></textarea>
-                    <p class="form-hint">Special characters are escaped. Supports regex patterns.</p>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Action *</label>
-                    <select class="form-select" id="editRuleAction" required>
-                        <option value="deny">Deny</option>
-                        <option value="warn">Warn</option>
-                        <option value="monitor">Monitor</option>
-                        <option value="allow">Allow</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Severity *</label>
-                    <select class="form-select" id="editRuleSeverity" required>
-                        <option value="critical">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-textarea" id="editRuleDescription"></textarea>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Enabled</label>
-                    <select class="form-select" id="editRuleEnabled">
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
-                    </select>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-danger" onclick="closeEditModal()">Cancel</button>
-                    <button type="submit" class="btn">Update Rule</button>
-                </div>
-            </form>
+
+        <div class="policy-list" id="policyList">
+            <!-- Policies will be loaded here -->
         </div>
     </div>
-    
-    <div class="modal-overlay" id="deleteModal">
-        <div class="modal">
-            <h2 class="modal-title">Delete Policy Rule</h2>
-            <div class="delete-confirm active" id="deleteConfirmText">
-                <p>Are you sure you want to delete this rule? This action cannot be undone.</p>
-            </div>
-            <input type="hidden" id="deleteRuleId">
-            <div class="modal-actions">
-                <button type="button" class="btn btn-danger" onclick="closeDeleteModal()">Cancel</button>
-                <button type="button" class="btn btn-danger" onclick="confirmDelete()">Delete Rule</button>
-            </div>
-        </div>
-    </div>
-    
-    <div class="toast" id="toast"></div>
-    
+
     <script>
-        const WRITE_SERVICE_URL = '/bus';
-        let rules = [];
-        let searchTerm = '';
-        
-        function sanitizeInput(input) {
-            if (typeof input !== 'string') return '';
-            return input
-                .replace(/[<>]/g, '')
-                .replace(/&/g, '&amp;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#x27;');
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        async function wsQuery(sql) {
-            const response = await fetch(`${WRITE_SERVICE_URL}/query`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sql }),
-                signal: AbortSignal.timeout(10000)
-            }).catch(err => { throw new Error('WriteService unreachable: ' + err.message); });
-            if (!response.ok) throw new Error(`Query failed: ${response.status}`);
-            return response.json();
-        }
-        
-        async function wsExecute(sql) {
-            const response = await fetch(`${WRITE_SERVICE_URL}/execute`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sql }),
-                signal: AbortSignal.timeout(10000)
-            }).catch(err => { throw new Error('WriteService unreachable: ' + err.message); });
-            if (!response.ok) throw new Error(`Execute failed: ${response.status}`);
-            return response.json();
-        }
-        
-        async function loadRules() {
-            try {
-                const result = await wsQuery("SELECT rule_id, name, rule_type, pattern, action, severity, description, enabled, created_at FROM mcp_policy_rules ORDER BY created_at DESC");
-                rules = result.rows || [];
-                renderRules();
-            } catch (err) {
-                showToast('Failed to load rules: ' + err.message, 'error');
-                document.getElementById('rulesTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Error loading rules</td></tr>';
+        // Mock data for testing
+        const mockPolicies = [
+            {
+                id: 1,
+                rule_type: "allow",
+                pattern: "*.example.com",
+                action: "allow",
+                priority: 1,
+                description: "Allow all subdomains of example.com"
+            },
+            {
+                id: 2,
+                rule_type: "deny",
+                pattern: "*.malicious.com",
+                action: "deny",
+                priority: 2,
+                description: "Deny all subdomains of malicious.com"
             }
-        }
-        
-        function renderRules() {
-            const tbody = document.getElementById('rulesTableBody');
-            const filtered = rules.filter(r => {
-                if (!searchTerm) return true;
-                const term = searchTerm.toLowerCase();
-                return (r.name && r.name.toLowerCase().includes(term)) ||
-                       (r.rule_type && r.rule_type.toLowerCase().includes(term)) ||
-                       (r.pattern && r.pattern.toLowerCase().includes(term));
-            });
-            
-            if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="empty-state-icon">[ ]</div>No rules found</td></tr>`;
-                return;
-            }
-            
-            tbody.innerHTML = filtered.map(rule => {
-                const actionBadge = getActionBadge(rule.action);
-                const severityClass = getSeverityClass(rule.severity);
-                return `
-                    <tr>
-                        <td>${escapeHtml(rule.name || '')}</td>
-                        <td>${escapeHtml(rule.rule_type || '')}</td>
-                        <td class="pattern-cell" title="${escapeHtml(rule.pattern || '')}">${escapeHtml(rule.pattern || '')}</td>
-                        <td><span class="badge ${actionBadge}">${escapeHtml(rule.action || '')}</span></td>
-                        <td class="${severityClass}">${(rule.severity || '').toUpperCase()}</td>
-                        <td>${rule.enabled ? 'Yes' : 'No'}</td>
-                        <td>
-                            <div class="actions-cell">
-                                <button class="btn btn-small" onclick="openEditModal('${escapeHtml(rule.rule_id || '')}')">Edit</button>
-                                <button class="btn btn-small btn-danger" onclick="openDeleteModal('${escapeHtml(rule.rule_id || '')}')">Delete</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-        
-        function getActionBadge(action) {
-            const map = { allow: 'badge-allow', deny: 'badge-deny', warn: 'badge-warn', monitor: 'badge-monitor' };
-            return map[action] || '';
-        }
-        
-        function getSeverityClass(severity) {
-            const map = { critical: 'severity-critical', high: 'severity-high', medium: 'severity-medium', low: 'severity-low' };
-            return map[severity] || '';
-        }
-        
-        function openCreateModal() {
-            document.getElementById('createForm').reset();
-            document.getElementById('createModal').classList.add('active');
-        }
-        
-        function closeCreateModal() {
-            document.getElementById('createModal').classList.remove('active');
-        }
-        
-        async function handleCreate(event) {
-            event.preventDefault();
-            const name = sanitizeInput(document.getElementById('ruleName').value.trim());
-            const rule_type = sanitizeInput(document.getElementById('ruleType').value);
-            const pattern = sanitizeInput(document.getElementById('rulePattern').value.trim());
-            const action = sanitizeInput(document.getElementById('ruleAction').value);
-            const severity = sanitizeInput(document.getElementById('ruleSeverity').value);
-            const description = sanitizeInput(document.getElementById('ruleDescription').value.trim());
-            
-            if (!name || !pattern) {
-                showToast('Name and pattern are required', 'error');
-                return;
-            }
-            
-            try {
-                const ruleId = 'pol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                const now = new Date().toISOString().replace('T', ' ').substr(0, 19);
-                
-                const sql = `INSERT INTO mcp_policy_rules (rule_id, name, rule_type, pattern, action, severity, description, enabled, created_at) VALUES ('${ruleId}', '${name}', '${rule_type}', '${pattern}', '${action}', '${severity}', '${description}', true, '${now}')`;
-                await wsExecute(sql);
-                
-                closeCreateModal();
-                showToast('Rule created successfully', 'success');
-                loadRules();
-            } catch (err) {
-                showToast('Failed to create rule: ' + err.message, 'error');
-            }
-        }
-        
-        function openEditModal(ruleId) {
-            const rule = rules.find(r => r.rule_id === ruleId);
-            if (!rule) return;
-            
-            document.getElementById('editRuleId').value = rule.rule_id;
-            document.getElementById('editRuleName').value = rule.name || '';
-            document.getElementById('editRuleType').value = rule.rule_type || '';
-            document.getElementById('editRulePattern').value = rule.pattern || '';
-            document.getElementById('editRuleAction').value = rule.action || '';
-            document.getElementById('editRuleSeverity').value = rule.severity || '';
-            document.getElementById('editRuleDescription').value = rule.description || '';
-            document.getElementById('editRuleEnabled').value = rule.enabled ? 'true' : 'false';
-            
-            document.getElementById('editModal').classList.add('active');
-        }
-        
-        function closeEditModal() {
-            document.getElementById('editModal').classList.remove('active');
-        }
-        
-        async function handleUpdate(event) {
-            event.preventDefault();
-            const ruleId = document.getElementById('editRuleId').value;
-            const name = sanitizeInput(document.getElementById('editRuleName').value.trim());
-            const rule_type = sanitizeInput(document.getElementById('editRuleType').value);
-            const pattern = sanitizeInput(document.getElementById('editRulePattern').value.trim());
-            const action = sanitizeInput(document.getElementById('editRuleAction').value);
-            const severity = sanitizeInput(document.getElementById('editRuleSeverity').value);
-            const description = sanitizeInput(document.getElementById('editRuleDescription').value.trim());
-            const enabled = document.getElementById('editRuleEnabled').value === 'true';
-            
-            if (!name || !pattern) {
-                showToast('Name and pattern are required', 'error');
-                return;
-            }
-            
-            try {
-                const sql = `UPDATE mcp_policy_rules SET name='${name}', rule_type='${rule_type}', pattern='${pattern}', action='${action}', severity='${severity}', description='${description}', enabled=${enabled} WHERE rule_id='${ruleId}'`;
-                await wsExecute(sql);
-                
-                closeEditModal();
-                showToast('Rule updated successfully', 'success');
-                loadRules();
-            } catch (err) {
-                showToast('Failed to update rule: ' + err.message, 'error');
-            }
-        }
-        
-        function openDeleteModal(ruleId) {
-            document.getElementById('deleteRuleId').value = ruleId;
-            document.getElementById('deleteModal').classList.add('active');
-        }
-        
-        function closeDeleteModal() {
-            document.getElementById('deleteModal').classList.remove('active');
-        }
-        
-        async function confirmDelete() {
-            const ruleId = document.getElementById('deleteRuleId').value;
-            try {
-                const sql = `DELETE FROM mcp_policy_rules WHERE rule_id='${ruleId}'`;
-                await wsExecute(sql);
-                
-                closeDeleteModal();
-                showToast('Rule deleted successfully', 'success');
-                loadRules();
-            } catch (err) {
-                showToast('Failed to delete rule: ' + err.message, 'error');
-            }
-        }
-        
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'toast ' + type + ' active';
-            setTimeout(() => { toast.classList.remove('active'); }, 3000);
-        }
-        
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            searchTerm = e.target.value;
-            renderRules();
+        ];
+
+        // Load policies on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPolicies();
         });
-        
-        document.addEventListener('DOMContentLoaded', loadRules);
+
+        // Load policies from the backend (mocked)
+        function loadPolicies() {
+            // In a real application, this would be a fetch call to the backend API
+            // fetch('/api/admin/policies')
+            //     .then(response => response.json())
+            //     .then(data => displayPolicies(data))
+            //     .catch(error => console.error('Error:', error));
+
+            // Mock data for testing
+            displayPolicies(mockPolicies);
+        }
+
+        // Display policies in the list
+        function displayPolicies(policies) {
+            const policyList = document.getElementById('policyList');
+            policyList.innerHTML = '';
+
+            policies.forEach(policy => {
+                const policyItem = document.createElement('div');
+                policyItem.className = 'policy-item';
+                policyItem.innerHTML = `
+                    <div class="policy-details">
+                        <h3>${policy.pattern}</h3>
+                        <p><strong>Rule Type:</strong> ${policy.rule_type}</p>
+                        <p><strong>Action:</strong> ${policy.action}</p>
+                        <p><strong>Priority:</strong> ${policy.priority}</p>
+                        <p><strong>Description:</strong> ${policy.description}</p>
+                    </div>
+                    <div class="policy-actions">
+                        <button class="btn-edit" onclick="editPolicy(${policy.id})">Edit</button>
+                        <button class="btn-delete" onclick="deletePolicy(${policy.id})">Delete</button>
+                    </div>
+                `;
+                policyList.appendChild(policyItem);
+            });
+        }
+
+        // Handle form submission
+        document.getElementById('policyForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const policyId = document.getElementById('policyId').value;
+            const ruleType = document.getElementById('ruleType').value;
+            const pattern = document.getElementById('pattern').value;
+            const action = document.getElementById('action').value;
+            const priority = document.getElementById('priority').value;
+            const description = document.getElementById('description').value;
+
+            const policyData = {
+                rule_type: ruleType,
+                pattern: pattern,
+                action: action,
+                priority: priority,
+                description: description
+            };
+
+            if (policyId) {
+                // Update existing policy (mocked)
+                updatePolicy(policyId, policyData);
+            } else {
+                // Add new policy (mocked)
+                addPolicy(policyData);
+            }
+
+            // Reset form
+            document.getElementById('policyForm').reset();
+            document.getElementById('policyId').value = '';
+        });
+
+        // Add a new policy (mocked)
+        function addPolicy(policyData) {
+            // In a real application, this would be a fetch call to the backend API
+            // fetch('/api/admin/policies', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify(policyData),
+            // })
+            // .then(response => response.json())
+            // .then(data => {
+            //     loadPolicies();
+            // })
+            // .catch(error => console.error('Error:', error));
+
+            // Mock data for testing
+            const newPolicy = {
+                id: mockPolicies.length + 1,
+                ...policyData
+            };
+            mockPolicies.push(newPolicy);
+            loadPolicies();
+        }
+
+        // Edit an existing policy
+        function editPolicy(policyId) {
+            // In a real application, this would be a fetch call to the backend API
+            // fetch(`/api/admin/policies/${policyId}`)
+            //     .then(response => response.json())
+            //     .then(data => {
+            //         document.getElementById('policyId').value = data.id;
+            //         document.getElementById('ruleType').value = data.rule_type;
+            //         document.getElementById('pattern').value = data.pattern;
+            //         document.getElementById('action').value = data.action;
+            //         document.getElementById('priority').value = data.priority;
+            //         document.getElementById('description').value = data.description;
+            //     })
+            //     .catch(error => console.error('Error:', error));
+
+            // Mock data for testing
+            const policy = mockPolicies.find(p => p.id === policyId);
+            if (policy) {
+                document.getElementById('policyId').value = policy.id;
+                document.getElementById('ruleType').value = policy.rule_type;
+                document.getElementById('pattern').value = policy.pattern;
+                document.getElementById('action').value = policy.action;
+                document.getElementById('priority').value = policy.priority;
+                document.getElementById('description').value = policy.description;
+            }
+        }
+
+        // Update an existing policy (mocked)
+        function updatePolicy(policyId, policyData) {
+            // In a real application, this would be a fetch call to the backend API
+            // fetch(`/api/admin/policies/${policyId}`, {
+            //     method: 'PUT',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify(policyData),
+            // })
+            // .then(response => response.json())
+            // .then(data => {
+            //     loadPolicies();
+            // })
+            // .catch(error => console.error('Error:', error));
+
+            // Mock data for testing
+            const index = mockPolicies.findIndex(p => p.id === policyId);
+            if (index !== -1) {
+                mockPolicies[index] = {
+                    id: policyId,
+                    ...policyData
+                };
+                loadPolicies();
+            }
+        }
+
+        // Delete a policy (mocked)
+        function deletePolicy(policyId) {
+            if (confirm('Are you sure you want to delete this policy?')) {
+                // In a real application, this would be a fetch call to the backend API
+                // fetch(`/api/admin/policies/${policyId}`, {
+                //     method: 'DELETE',
+                // })
+                // .then(response => response.json())
+                // .then(data => {
+                //     loadPolicies();
+                // })
+                // .catch(error => console.error('Error:', error));
+
+                // Mock data for testing
+                const index = mockPolicies.findIndex(p => p.id === policyId);
+                if (index !== -1) {
+                    mockPolicies.splice(index, 1);
+                    loadPolicies();
+                }
+            }
+        }
+
+        // Cancel form and reset
+        function cancelForm() {
+            document.getElementById('policyForm').reset();
+            document.getElementById('policyId').value = '';
+        }
     </script>
 </body>
 </html>

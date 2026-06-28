@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Audit Log Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.1/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+        }
+        .filter-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .table-responsive {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Product Audit Log Dashboard</h1>
+
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="userFilter" class="form-label">Filter by User ID</label>
+                    <input type="text" class="form-control" id="userFilter" placeholder="Enter user ID">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="actionFilter" class="form-label">Filter by Action</label>
+                    <select class="form-select" id="actionFilter">
+                        <option value="">All Actions</option>
+                        <option value="CREATE">CREATE</option>
+                        <option value="UPDATE">UPDATE</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="VIEW">VIEW</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="serverFilter" class="form-label">Filter by Server ID</label>
+                    <input type="text" class="form-control" id="serverFilter" placeholder="Enter server ID">
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="dateRange" class="form-label">Date Range</label>
+                    <div class="input-group">
+                        <input type="datetime-local" class="form-control" id="startDate">
+                        <span class="input-group-text">to</span>
+                        <input type="datetime-local" class="form-control" id="endDate">
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3 d-flex align-items-end">
+                    <button id="applyFilters" class="btn btn-primary">Apply Filters</button>
+                    <button id="clearFilters" class="btn btn-outline-secondary ms-2">Clear Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table id="auditLogTable" class="table table-striped table-bordered" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User ID</th>
+                        <th>Action</th>
+                        <th>Target Server ID</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        // Mock data for demonstration
+        const mockAuditLogs = [
+            {
+                "timestamp": "2023-05-01T10:15:30Z",
+                "user_id": "user123",
+                "action": "CREATE",
+                "target_server_id": "server456",
+                "details": "Created new product: Widget A"
+            },
+            {
+                "timestamp": "2023-05-01T11:20:45Z",
+                "user_id": "user456",
+                "action": "UPDATE",
+                "target_server_id": "server789",
+                "details": "Updated product price: Widget B"
+            },
+            {
+                "timestamp": "2023-05-02T09:30:15Z",
+                "user_id": "user123",
+                "action": "VIEW",
+                "target_server_id": "server456",
+                "details": "Viewed product details: Widget A"
+            },
+            {
+                "timestamp": "2023-05-02T14:45:00Z",
+                "user_id": "user789",
+                "action": "DELETE",
+                "target_server_id": "server123",
+                "details": "Deleted product: Widget C"
+            },
+            {
+                "timestamp": "2023-05-03T08:10:22Z",
+                "user_id": "user456",
+                "action": "CREATE",
+                "target_server_id": "server789",
+                "details": "Created new product: Widget D"
+            },
+            {
+                "timestamp": "2023-05-03T15:30:10Z",
+                "user_id": "user123",
+                "action": "UPDATE",
+                "target_server_id": "server456",
+                "details": "Updated product description: Widget A"
+            }
+        ];
+
+        // Function to fetch audit logs (mock implementation)
+        async function fetchAuditLogs(filters = {}) {
+            // In a real implementation, this would be an API call
+            // For this example, we'll filter the mock data
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    let filteredData = [...mockAuditLogs];
+
+                    if (filters.user_id) {
+                        filteredData = filteredData.filter(log =>
+                            log.user_id.toLowerCase().includes(filters.user_id.toLowerCase())
+                        );
+                    }
+
+                    if (filters.action) {
+                        filteredData = filteredData.filter(log =>
+                            log.action === filters.action
+                        );
+                    }
+
+                    if (filters.target_server_id) {
+                        filteredData = filteredData.filter(log =>
+                            log.target_server_id.toLowerCase().includes(filters.target_server_id.toLowerCase())
+                        );
+                    }
+
+                    if (filters.start_date && filters.end_date) {
+                        const start = new Date(filters.start_date).getTime();
+                        const end = new Date(filters.end_date).getTime();
+
+                        filteredData = filteredData.filter(log => {
+                            const logDate = new Date(log.timestamp).getTime();
+                            return logDate >= start && logDate <= end;
+                        });
+                    }
+
+                    resolve(filteredData);
+                }, 300); // Simulate network delay
+            });
+        }
+
+        // Initialize the table
+        let auditLogTable;
+
+        async function initializeTable() {
+            const data = await fetchAuditLogs();
+            auditLogTable = $('#auditLogTable').DataTable({
+                data: data,
+                columns: [
+                    {
+                        data: 'timestamp',
+                        render: function(data) {
+                            return new Date(data).toLocaleString();
+                        }
+                    },
+                    { data: 'user_id' },
+                    { data: 'action' },
+                    { data: 'target_server_id' },
+                    { data: 'details' }
+                ],
+                order: [[0, 'desc']],
+                pageLength: 10,
+                lengthMenu: [5, 10, 20, 50],
+                responsive: true
+            });
+        }
+
+        // Apply filters
+        $('#applyFilters').click(async function() {
+            const filters = {
+                user_id: $('#userFilter').val(),
+                action: $('#actionFilter').val(),
+                target_server_id: $('#serverFilter').val(),
+                start_date: $('#startDate').val(),
+                end_date: $('#endDate').val()
+            };
+
+            const data = await fetchAuditLogs(filters);
+            auditLogTable.clear().rows.add(data).draw();
+        });
+
+        // Clear filters
+        $('#clearFilters').click(function() {
+            $('#userFilter').val('');
+            $('#actionFilter').val('');
+            $('#serverFilter').val('');
+            $('#startDate').val('');
+            $('#endDate').val('');
+            $('#applyFilters').click();
+        });
+
+        // Initialize the dashboard
+        $(document).ready(function() {
+            initializeTable();
+        });
+    </script>
+</body>
+</html>

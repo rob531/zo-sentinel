@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Current Risk Tier Dashboard</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* Dashboard Container */
+        .dashboard-container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 700px; /* Max width for larger screens */
+            box-sizing: border-box;
+        }
+
+        /* Header Styling */
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        /* Search Area Styling */
+        .search-area {
+            display: flex;
+            gap: 10px; /* Space between input and button */
+            margin-bottom: 30px;
+            flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+        }
+
+        .search-area input[type="text"] {
+            flex-grow: 1; /* Input takes available space */
+            padding: 12px 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box;
+            min-width: 200px; /* Ensure input is not too small */
+        }
+
+        .search-area button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+
+        .search-area button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Results Area Styling */
+        .results-area {
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+
+        .results-area p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .results-area strong {
+            color: #2c3e50;
+            display: inline-block;
+            min-width: 120px; /* Align labels for better readability */
+        }
+
+        /* Risk Tier Specific Styling */
+        .risk-tier-high { color: #dc3545; font-weight: bold; } /* Red */
+        .risk-tier-medium { color: #ffc107; font-weight: bold; } /* Yellow/Orange */
+        .risk-tier-low { color: #28a745; font-weight: bold; } /* Green */
+        .risk-tier-critical { color: #6f42c1; font-weight: bold; } /* Purple */
+        .risk-tier-unknown { color: #6c757d; font-weight: bold; } /* Grey */
+
+        /* Error Message Styling */
+        #errorMessage {
+            color: #dc3545;
+            margin-top: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 600px) {
+            body {
+                padding: 15px;
+            }
+            .dashboard-container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.6em;
+            }
+            .search-area {
+                flex-direction: column; /* Stack input and button vertically */
+            }
+            .search-area input[type="text"],
+            .search-area button {
+                width: 100%; /* Full width for input and button */
+            }
+            .results-area strong {
+                min-width: unset; /* Remove fixed width on small screens */
+                display: block; /* Stack label and value */
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Server Risk Tier Dashboard</h1>
+
+        <div class="search-area">
+            <input type="text" id="mcpIdInput" placeholder="Enter MCP Server ID (e.g., MCP-001)" aria-label="MCP Server ID">
+            <button id="searchButton">Search</button>
+        </div>
+
+        <div id="errorMessage" style="display: none;"></div>
+
+        <div class="results-area">
+            <p><strong>MCP Server ID:</strong> <span id="displayMcpId">N/A</span></p>
+            <p><strong>Current Risk Tier:</strong> <span id="displayRiskTier" class="risk-tier-unknown">N/A</span></p>
+            <p><strong>Explanation:</strong> <span id="displayExplanation">N/A</span></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const mcpIdInput = document.getElementById('mcpIdInput');
+            const searchButton = document.getElementById('searchButton');
+            const displayMcpId = document.getElementById('displayMcpId');
+            const displayRiskTier = document.getElementById('displayRiskTier');
+            const displayExplanation = document.getElementById('displayExplanation');
+            const errorMessage = document.getElementById('errorMessage');
+
+            // Mock API data for demonstration purposes
+            const mockApiData = {
+                "MCP-001": { tier: "High", explanation: "Critical vulnerabilities detected, immediate action required. Potential for data breach." },
+                "MCP-002": { tier: "Medium", explanation: "Some security concerns, regular monitoring advised. Minor misconfigurations found." },
+                "MCP-003": { tier: "Low", explanation: "No significant risks identified, good security posture. System is up-to-date." },
+                "MCP-004": { tier: "Critical", explanation: "System compromised, emergency response initiated. Active exploitation detected." },
+                "MCP-005": { tier: "Low", explanation: "Baseline security checks passed. No immediate threats." },
+                "MCP-006": { tier: "Medium", explanation: "Outdated software components identified. Patching recommended." },
+                "MCP-007": { tier: "High", explanation: "Unauthorized access attempts detected. Investigate immediately." },
+                "MCP-008": { tier: "Critical", explanation: "Malware infection confirmed. Isolation and remediation in progress." },
+                "MCP-009": { tier: "Low", explanation: "All security policies are compliant. System health is optimal." },
+                "MCP-010": { tier: "Medium", explanation: "Non-critical security updates pending. Schedule maintenance soon." }
+            };
+
+            /**
+             * Simulates an AJAX call to the /mcp_current_risk_tier endpoint.
+             * In a real application, this would be a standard `fetch` call to a backend API.
+             *
+             * @param {string} mcpId The MCP Server ID to query.
+             * @returns {Promise<object>} A promise that resolves to a mock Response object.
+             */
+            async function fetchMcpRiskTier(mcpId) {
+                // Simulate network delay for a more realistic user experience
+                await new Promise(resolve => setTimeout(resolve, 700));
+
+                const data = mockApiData[mcpId];
+
+                if (data) {
+                    return {
+                        status: 200,
+                        json: () => Promise.resolve({
+                            mcp_id: mcpId,
+                            risk_tier: data.tier,
+                            explanation: data.explanation
+                        })
+                    };
+                } else {
+                    return {
+                        status: 404,
+                        json: () => Promise.resolve({
+                            error: "MCP Server ID not found. Please try another ID."
+                        })
+                    };
+                }
+            }
+
+            /**
+             * Handles the search action when the button is clicked or Enter is pressed.
+             */
+            async function handleSearch() {
+                const mcpId = mcpIdInput.value.trim();
+                clearResults();
+                errorMessage.style.display = 'none'; // Hide any previous error messages
+
+                if (!mcpId) {
+                    displayError("Please enter an MCP Server ID to search.");
+                    return;
+                }
+
+                try {
+                    // Simulate the AJAX call to the mock endpoint
+                    // In a real application, this would be:
+                    // const response = await fetch(`/mcp_current_risk_tier?mcp_id=${mcpId}`);
+                    const response = await fetchMcpRiskTier(mcpId); // Using our mock fetch function
+
+                    if (response.status === 200) {
+                        const data = await response.json();
+                        displayResults(data.mcp_id, data.risk_tier, data.explanation);
+                    } else if (response.status === 404) {
+                        const errorData = await response.json();
+                        displayError(errorData.error || "MCP Server ID not found.");
+                    } else {
+                        displayError("An unexpected error occurred. Please try again.");
+                    }
+                } catch (error) {
+                    console.error("Fetch error:", error);
+                    displayError("Failed to connect to the risk tier service. Check your network.");
+                }
+            }
+
+            /**
+             * Updates the dashboard with the fetched risk tier data.
+             * @param {string} mcpId The MCP Server ID.
+             * @param {string} tier The risk tier (e.g., "High", "Medium", "Low").
+             * @param {string} explanation A brief explanation of the tier.
+             */
+            function displayResults(mcpId, tier, explanation) {
+                displayMcpId.textContent = mcpId;
+                displayExplanation.textContent = explanation;
+
+                // Clear previous tier classes and set default
+                displayRiskTier.className = '';
+                displayRiskTier.classList.add('risk-tier-unknown');
+
+                // Apply specific class based on tier for styling
+                let tierClass = 'risk-tier-unknown';
+                switch (tier.toLowerCase()) {
+                    case 'high':
+                        tierClass = 'risk-tier-high';
+                        break;
+                    case 'medium':
+                        tierClass = 'risk-tier-medium';
+                        break;
+                    case 'low':
+                        tierClass = 'risk-tier-low';
+                        break;
+                    case 'critical':
+                        tierClass = 'risk-tier-critical';
+                        break;
+                    default:
+                        tierClass = 'risk-tier-unknown'; // Fallback for unknown tiers
+                        break;
+                }
+                displayRiskTier.textContent = tier;
+                displayRiskTier.classList.add(tierClass);
+            }
+
+            /**
+             * Clears the displayed results to their initial "N/A" state.
+             */
+            function clearResults() {
+                displayMcpId.textContent = 'N/A';
+                displayRiskTier.textContent = 'N/A';
+                displayRiskTier.className = 'risk-tier-unknown'; // Reset class
+                displayExplanation.textContent = 'N/A';
+            }
+
+            /**
+             * Displays an error message to the user.
+             * @param {string} message The error message to display.
+             */
+            function displayError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                clearResults(); // Clear any previous results when an error occurs
+            }
+
+            // Event Listeners
+            searchButton.addEventListener('click', handleSearch);
+            mcpIdInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    handleSearch();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

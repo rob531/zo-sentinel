@@ -192,6 +192,12 @@ def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
             goose_model = _escalate_alias(
                 base if base in _ESCALATION_LADDER else static_model, attempt, complexity)
         # else: matrix has data but no better option -> keep base (retry the winner)
+    # The validated module_from_exemplar lane REQUIRES a capable, tool-capable rung: MiniMax
+    # (the matrix/static default) either over-seeds NOT NULL columns or writes inline-mock
+    # models, so it never clears the self-test gate. Make the capable coder window the FINAL
+    # word over the matrix + escalation picks for this lane (free rungs 17-20).
+    if str(directive.get("recipe", "")).strip() == "module_from_exemplar":
+        goose_model = "zo-ladder-nvidia"
     goose_model = goose_model or DEFAULT_ALIAS          # never route to an empty model
     return {
         "GOOSE_MODEL": goose_model,

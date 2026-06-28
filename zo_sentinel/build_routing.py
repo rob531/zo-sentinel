@@ -197,7 +197,12 @@ def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
     # models, so it never clears the self-test gate. Make the capable coder window the FINAL
     # word over the matrix + escalation picks for this lane (free rungs 17-20).
     if str(directive.get("recipe", "")).strip() == "module_from_exemplar":
-        goose_model = "zo-ladder-nvidia"
+        # Rotate the capable tool-capable coder window by attempt so a quality failure
+        # FAILS OVER to a different capable model instead of re-hitting the same rung
+        # (escalation.ask has no quality gate -- it short-circuits on the first non-empty
+        # response -- so cross-model failover on a bad build must happen here).
+        _CAPABLE = ["zo-ladder-nvidia", "zo-ladder-mistral", "zo-ladder-cerebras", "zo-ladder-groq"]
+        goose_model = _CAPABLE[int(attempt) % len(_CAPABLE)]
     goose_model = goose_model or DEFAULT_ALIAS          # never route to an empty model
     return {
         "GOOSE_MODEL": goose_model,

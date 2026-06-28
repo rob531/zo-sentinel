@@ -15,3 +15,11 @@ def test_non_exemplar_directive_unchanged():
     assert env["GOOSE_MODEL"] == "zo-ladder-medium", env
     env2 = build_env_for({"complexity": "low", "output_file": "y.py"})
     assert env2["GOOSE_MODEL"] == "zo-ladder-low", env2
+
+def test_exemplar_lane_rotates_capable_rungs_by_attempt():
+    # a quality failure (attempt>0) fails over to a different capable model
+    window = ["zo-ladder-nvidia", "zo-ladder-mistral", "zo-ladder-cerebras", "zo-ladder-groq"]
+    for attempt, expected in enumerate(window):
+        env = build_env_for({"recipe": "module_from_exemplar", "complexity": "medium",
+                             "output_file": "x_api.py"}, attempt=attempt)
+        assert env["GOOSE_MODEL"] == expected, (attempt, env)

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Deployment Readiness Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #e9f5f3;
+            border-radius: 6px;
+            border: 1px solid #d1e7dd;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 180px;
+        }
+        .filter-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #4a6572;
+            font-size: 0.9em;
+        }
+        .filters input[type="text"],
+        .filters select {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.95em;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .filters select {
+            background-color: #fff;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #34495e;
+            color: #ecf0f1;
+            cursor: pointer;
+            position: relative;
+            user-select: none;
+        }
+        th:hover {
+            background-color: #2c3e50;
+        }
+        th .sort-indicator {
+            margin-left: 8px;
+            font-size: 0.8em;
+            color: #bdc3c7;
+        }
+        th.asc .sort-indicator::after { content: ' ▲'; }
+        th.desc .sort-indicator::after { content: ' ▼'; }
+        th.no-sort .sort-indicator::after { content: ''; }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .status-ready {
+            color: #28a745; /* Green */
+            font-weight: bold;
+        }
+        .status-not-ready {
+            color: #dc3545; /* Red */
+            font-weight: bold;
+        }
+        .status-ready-with-warnings {
+            color: #ffc107; /* Yellow */
+            font-weight: bold;
+        }
+        .status-unknown {
+            color: #6c757d; /* Grey */
+        }
+        .loading-message, .error-message, .no-data-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+            color: #555;
+        }
+        .error-message {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Deployment Readiness Dashboard</h1>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="mcpNameFilter">MCP Name:</label>
+                <input type="text" id="mcpNameFilter" placeholder="Filter by MCP name...">
+            </div>
+            <div class="filter-group">
+                <label for="statusFilter">Readiness Status:</label>
+                <select id="statusFilter">
+                    <option value="">All</option>
+                    <option value="Ready">Ready</option>
+                    <option value="Not Ready">Not Ready</option>
+                    <option value="Ready with Warnings">Ready with Warnings</option>
+                    <!-- Add more statuses as needed -->
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="ownerTeamFilter">Owner Team:</label>
+                <select id="ownerTeamFilter">
+                    <option value="">All</option>
+                    <!-- Options will be populated dynamically -->
+                </select>
+            </div>
+        </div>
+
+        <div id="dashboardContent">
+            <div class="loading-message">Loading MCP readiness data...</div>
+            <div class="error-message" style="display: none;"></div>
+            <div class="no-data-message" style="display: none;">No MCPs found matching your criteria.</div>
+
+            <table id="mcpTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th data-sort-by="mcp_name">MCP Name <span class="sort-indicator"></span></th>
+                        <th data-sort-by="readiness_status">Status <span class="sort-indicator"></span></th>
+                        <th data-sort-by="last_checked">Last Checked <span class="sort-indicator"></span></th>
+                        <th data-sort-by="critical_checks_passed">Critical Checks <span class="sort-indicator"></span></th>
+                        <th data-sort-by="owner_team">Owner Team <span class="sort-indicator"></span></th>
+                        <th data-sort-by="deployment_version">Version <span class="sort-indicator"></span></th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let allMcpData = [];
+        let currentFilteredAndSortedData = [];
+        let currentSortColumn = 'mcp_name';
+        let currentSortDirection = 'asc'; // 'asc' or 'desc'
+
+        const mcpTableBody = document.querySelector('#mcpTable tbody');
+        const mcpNameFilter = document.getElementById('mcpNameFilter');
+        const statusFilter = document.getElementById('statusFilter');
+        const ownerTeamFilter = document.getElementById('ownerTeamFilter');
+        const loadingMessage = document.querySelector('.loading-message');
+        const errorMessage = document.querySelector('.error-message');
+        const noDataMessage = document.querySelector('.no-data-message');
+        const mcpTable = document.getElementById('mcpTable');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchMCPData();
+            setupEventListeners();
+        });
+
+        async function fetchMCPData() {
+            loadingMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            mcpTable.style.display = 'none';
+            noDataMessage.style.display = 'none';
+
+            try {
+                // In a real scenario, ensure your backend (e.g., mcp_deployment_readiness_api.py)
+                // is running and accessible at this endpoint.
+                // For local testing, you might need to run a simple server (e.g., Python's http.server
+                // or Flask app) in the same directory or configure CORS if on different origins.
+                const response = await fetch('/api/v1/mcp_deployment_readiness');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                allMcpData = await response.json();
+                populateOwnerTeamFilter(allMcpData);
+                applyFiltersAndSort();
+            } catch (error) {
+                console.error('Error fetching MCP data:', error);
+                errorMessage.textContent = `Failed to load data: ${error.message}. Please ensure the API is running.`;
+                errorMessage.style.display = 'block';
+                loadingMessage.style.display = 'none';
+            }
+        }
+
+        function populateOwnerTeamFilter(data) {
+            const teams = new Set(data.map(mcp => mcp.owner_team).filter(Boolean));
+            ownerTeamFilter.innerHTML = '<option value="">All</option>'; // Reset
+            teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team;
+                option.textContent = team;
+                ownerTeamFilter.appendChild(option);
+            });
+        }
+
+        function setupEventListeners() {
+            mcpNameFilter.addEventListener('input', applyFiltersAndSort);
+            statusFilter.addEventListener('change', applyFiltersAndSort);
+            ownerTeamFilter.addEventListener('change', applyFiltersAndSort);
+
+            document.querySelectorAll('#mcpTable th[data-sort-by]').forEach(header => {
+                header.addEventListener('click', () => {
+                    const column = header.getAttribute('data-sort-by');
+                    if (currentSortColumn === column) {
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSortColumn = column;
+                        currentSortDirection = 'asc';
+                    }
+                    applyFiltersAndSort();
+                });
+            });
+        }
+
+        function applyFiltersAndSort() {
+            let filteredData = [...allMcpData];
+
+            // Apply MCP Name filter
+            const mcpName = mcpNameFilter.value.toLowerCase();
+            if (mcpName) {
+                filteredData = filteredData.filter(mcp =>
+                    mcp.mcp_name.toLowerCase().includes(mcpName)
+                );
+            }
+
+            // Apply Status filter
+            const status = statusFilter.value;
+            if (status) {
+                filteredData = filteredData.filter(mcp =>
+                    mcp.readiness_status === status
+                );
+            }
+
+            // Apply Owner Team filter
+            const ownerTeam = ownerTeamFilter.value;
+            if (ownerTeam) {
+                filteredData = filteredData.filter(mcp =>
+                    mcp.owner_team === ownerTeam
+                );
+            }
+
+            // Apply Sorting
+            filteredData.sort((a, b) => {
+                const aValue = a[currentSortColumn];
+                const bValue = b[currentSortColumn];
+
+                if (typeof aValue === 'string' && typeof bValue === 'string') {
+                    return currentSortDirection === 'asc'
+                        ? aValue.localeCompare(bValue)
+                        : bValue.localeCompare(aValue);
+                } else {
+                    // Handle numbers, dates, etc.
+                    if (aValue < bValue) return currentSortDirection === 'asc' ? -1 : 1;
+                    if (aValue > bValue) return currentSortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                }
+            });
+
+            currentFilteredAndSortedData = filteredData;
+            renderTable(currentFilteredAndSortedData);
+        }
+
+        function renderTable(data) {
+            mcpTableBody.innerHTML = ''; // Clear existing rows
+            loadingMessage.style.display = 'none';
+            errorMessage.style.display = 'none';
+
+            if (data.length === 0) {
+                noDataMessage.style.display = 'block';
+                mcpTable.style.display = 'none';
+                return;
+            }
+
+            noDataMessage.style.display = 'none';
+            mcpTable.style.display = 'table';
+
+            data.forEach(mcp => {
+                const row = mcpTableBody.insertRow();
+                const statusClass = getStatusClass(mcp.readiness_status);
+
+                row.insertCell().textContent = mcp.mcp_name;
+                row.insertCell().innerHTML = `<span class="${statusClass}">${mcp.readiness_status}</span>`;
+                row.insertCell().textContent = formatDateTime(mcp.last_checked);
+                row.insertCell().textContent = `${mcp.critical_checks_passed}/${mcp.total_checks}`;
+                row.insertCell().textContent = mcp.owner_team || 'N/A';
+                row.insertCell().textContent = mcp.deployment_version || 'N/A';
+                row.insertCell().textContent = mcp.notes || '';
+            });
+
+            updateSortIndicators();
+        }
+
+        function getStatusClass(status) {
+            switch (status) {
+                case 'Ready': return 'status-ready';
+                case 'Not Ready': return 'status-not-ready';
+                case 'Ready with Warnings': return 'status-ready-with-warnings';
+                default: return 'status-unknown';
+            }
+        }
+
+        function formatDateTime(isoString) {
+            if (!isoString) return 'N/A';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleString(); // Adjust format as needed
+            } catch (e) {
+                return isoString; // Return original if invalid
+            }
+        }
+
+        function updateSortIndicators() {
+            document.querySelectorAll('#mcpTable th[data-sort-by]').forEach(header => {
+                header.classList.remove('asc', 'desc');
+                if (header.getAttribute('data-sort-by') === currentSortColumn) {
+                    header.classList.add(currentSortDirection);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

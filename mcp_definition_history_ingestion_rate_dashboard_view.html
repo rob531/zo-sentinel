@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Definition History Ingestion Rate Dashboard</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #ingestionRateChart {
+            width: 100%;
+            height: 100%;
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #ecf0f1;
+            border-radius: 6px;
+        }
+        .stat-box {
+            text-align: center;
+        }
+        .stat-box h3 {
+            margin: 0 0 10px 0;
+            color: #7f8c8d;
+            font-size: 1.1em;
+        }
+        .stat-box p {
+            margin: 0;
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2980b9;
+        }
+        .loading {
+            text-align: center;
+            font-size: 1.2em;
+            color: #95a5a6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Definition History Ingestion Rate</h1>
+
+        <div class="summary-stats">
+            <div class="stat-box">
+                <h3>Current Ingestion Rate (Last Hour)</h3>
+                <p id="currentRate">Loading...</p>
+            </div>
+            <div class="stat-box">
+                <h3>Total Entries (Today)</h3>
+                <p id="totalEntries">Loading...</p>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="ingestionRateChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Mock API endpoint (replace with your actual API endpoint)
+        const MOCK_API_ENDPOINT = '/api/mcp_definition_history/summary';
+
+        // Function to fetch data from the API
+        async function fetchData() {
+            try {
+                // In a real scenario, you would fetch from MOCK_API_ENDPOINT
+                // For this example, we'll use mock data.
+                // const response = await fetch(MOCK_API_ENDPOINT);
+                // if (!response.ok) {
+                //     throw new Error(`HTTP error! status: ${response.status}`);
+                // }
+                // const data = await response.json();
+
+                // Mock data structure:
+                // {
+                //   "current_rate_per_hour": 150,
+                //   "total_entries_today": 3500,
+                //   "hourly_rates": [
+                //     {"hour": "08:00", "count": 120},
+                //     {"hour": "09:00", "count": 150},
+                //     {"hour": "10:00", "count": 180},
+                //     {"hour": "11:00", "count": 160},
+                //     {"hour": "12:00", "count": 175},
+                //     {"hour": "13:00", "count": 190},
+                //     {"hour": "14:00", "count": 210},
+                //     {"hour": "15:00", "count": 200}
+                //   ]
+                // }
+                const mockData = {
+                    current_rate_per_hour: 175,
+                    total_entries_today: 3500,
+                    hourly_rates: [
+                        { hour: "08:00", count: 120 },
+                        { hour: "09:00", count: 150 },
+                        { hour: "10:00", count: 180 },
+                        { hour: "11:00", count: 160 },
+                        { hour: "12:00", count: 175 },
+                        { hour: "13:00", count: 190 },
+                        { hour: "14:00", count: 210 },
+                        { hour: "15:00", count: 200 },
+                        { hour: "16:00", count: 220 },
+                        { hour: "17:00", count: 230 },
+                        { hour: "18:00", count: 215 },
+                        { hour: "19:00", count: 190 }
+                    ]
+                };
+                return mockData;
+
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                document.getElementById('currentRate').innerText = 'Error';
+                document.getElementById('totalEntries').innerText = 'Error';
+                // Optionally display an error message on the dashboard
+                return null;
+            }
+        }
+
+        // Function to render the chart
+        function renderChart(hourlyData) {
+            const ctx = document.getElementById('ingestionRateChart').getContext('2d');
+
+            const labels = hourlyData.map(item => item.hour);
+            const dataPoints = hourlyData.map(item => item.count);
+
+            new Chart(ctx, {
+                type: 'line', // or 'bar'
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Ingestion Rate (Entries per Hour)',
+                        data: dataPoints,
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1 // For a slightly curved line
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Entries'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time (Hour)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'MCP Definition History Ingestion Rate Over Time'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    hover: {
+                        mode: 'nearest',
+                        intersect: true
+                    }
+                }
+            });
+        }
+
+        // Initialize the dashboard
+        async function initializeDashboard() {
+            const data = await fetchData();
+
+            if (data) {
+                document.getElementById('currentRate').innerText = data.current_rate_per_hour;
+                document.getElementById('totalEntries').innerText = data.total_entries_today;
+
+                // Ensure canvas element exists before rendering
+                const canvas = document.getElementById('ingestionRateChart');
+                if (canvas) {
+                    renderChart(data.hourly_rates);
+                } else {
+                    console.error("Canvas element not found for chart rendering.");
+                }
+            } else {
+                console.log("Data not loaded, chart not rendered.");
+            }
+            console.log('Ingestion rate dashboard loaded successfully');
+        }
+
+        // Load Chart.js library dynamically (or include it via CDN in <head>)
+        function loadChartJs() {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js'; // Use a specific version
+            script.onload = initializeDashboard;
+            script.onerror = () => {
+                console.error("Failed to load Chart.js library.");
+                document.getElementById('currentRate').innerText = 'Chart Error';
+                document.getElementById('totalEntries').innerText = 'Chart Error';
+            };
+            document.head.appendChild(script);
+        }
+
+        // Start the process
+        loadChartJs();
+
+    </script>
+</body>
+</html>

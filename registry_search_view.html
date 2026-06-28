@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Registry Search Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+        .search-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-controls input[type="text"] {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+            min-width: 200px;
+        }
+        .search-controls button {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+        }
+        .search-controls button:hover {
+            background-color: #0056b3;
+        }
+        .search-controls label {
+            font-weight: bold;
+            color: #555;
+        }
+        .filter-sort-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border: 1px solid #eee;
+        }
+        .filter-sort-controls div {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-sort-controls input[type="text"],
+        .filter-sort-controls select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+            background-color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            overflow: hidden; /* Ensures rounded corners apply to table content */
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #eef4f8;
+            color: #333;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+        }
+        th:hover {
+            background-color: #e0eaf1;
+        }
+        th .sort-indicator {
+            margin-left: 5px;
+            font-size: 0.8em;
+            color: #777;
+        }
+        th.sorted-asc .sort-indicator::after { content: ' ▲'; }
+        th.sorted-desc .sort-indicator::after { content: ' ▼'; }
+        tbody tr:nth-child(even) {
+            background-color: #fcfdff;
+        }
+        tbody tr:hover {
+            background-color: #f0f8ff;
+        }
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .pagination-controls button {
+            padding: 10px 18px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: background-color 0.2s ease;
+        }
+        .pagination-controls button:hover:not(:disabled) {
+            background-color: #5a6268;
+        }
+        .pagination-controls button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .pagination-controls span {
+            font-weight: bold;
+            color: #555;
+            padding: 0 5px;
+        }
+        .pagination-controls select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+        .no-results {
+            text-align: center;
+            padding: 30px;
+            font-size: 1.1em;
+            color: #777;
+            background-color: #fdfdfd;
+            border-radius: 5px;
+            border: 1px solid #eee;
+        }
+        .loading-indicator {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+            color: #007bff;
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Registry Search</h1>
+
+        <div class="search-controls">
+            <label for="searchQuery">Search MCP:</label>
+            <input type="text" id="searchQuery" placeholder="e.g., 'Alpha', 'Beta', 'Gamma' or keywords">
+            <button id="searchButton">Search</button>
+        </div>
+
+        <div class="filter-sort-controls">
+            <div>
+                <label for="clientFilter">Filter current results:</label>
+                <input type="text" id="clientFilter" placeholder="Filter visible rows...">
+            </div>
+            <div>
+                <label for="itemsPerPage">Items per page:</label>
+                <select id="itemsPerPage">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="loading-indicator" id="loadingIndicator">Loading results...</div>
+
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th data-sort-by="name">MCP Name <span class="sort-indicator"></span></th>
+                    <th data-sort-by="version">Version <span class="sort-indicator"></span></th>
+                    <th data-sort-by="status">Status <span class="sort-indicator"></span></th>
+                    <th data-sort-by="description">Description <span class="sort-indicator"></span></th>
+                    <th data-sort-by="owner">Owner <span class="sort-indicator"></span></th>
+                </tr>
+            </thead>
+            <tbody id="resultsTableBody">
+                <!-- Results will be rendered here -->
+            </tbody>
+        </table>
+
+        <div id="noResultsMessage" class="no-results" style="display: none;">
+            No results found for your query. Try a different search!
+        </div>
+
+        <div class="pagination-controls">
+            <button id="prevPageButton" disabled>Previous</button>
+            <span id="currentPageSpan">Page 1 of 1</span>
+            <button id="nextPageButton" disabled>Next</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchQueryInput = document.getElementById('searchQuery');
+            const searchButton = document.getElementById('searchButton');
+            const clientFilterInput = document.getElementById('clientFilter');
+            const itemsPerPageSelect = document.getElementById('itemsPerPage');
+            const resultsTableBody = document.getElementById('resultsTableBody');
+            const resultsTableHead = document.querySelector('#resultsTable thead');
+            const prevPageButton = document.getElementById('prevPageButton');
+            const nextPageButton = document.getElementById('nextPageButton');
+            const currentPageSpan = document.getElementById('currentPageSpan');
+            const noResultsMessage = document.getElementById('noResultsMessage');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+
+            let allFetchedResults = []; // Stores all results for the current search query (before client-side filtering/pagination)
+            let currentPage = 1;
+            let itemsPerPage = parseInt(itemsPerPageSelect.value);
+            let currentSortColumn = 'name';
+            let currentSortDirection = 'asc'; // 'asc' or 'desc'
+
+            // --- Mock API Endpoint ---
+            // This function simulates the /registry/search API endpoint.
+            // In a real application, you would replace this with an actual fetch call.
+            const mockRegistryData = [
+                { id: 1, name: 'Alpha Core', version: '1.0.0', status: 'Active', description: 'Core module for system Alpha.', owner: 'Team A' },
+                { id: 2, name: 'Beta Gateway', version: '2.1.0', status: 'Active', description: 'Gateway service for Beta network.', owner: 'Team B' },
+                { id: 3, name: 'Gamma Processor', version: '1.5.2', status: 'Maintenance', description: 'High-performance data processor.', owner: 'Team C' },
+                { id: 4, name: 'Delta Monitor', version: '3.0.0', status: 'Active', description: 'Real-time system monitoring tool.', owner: 'Team A' },
+                { id: 5, name: 'Epsilon Service', version: '0.9.0', status: 'Development', description: 'New microservice for Epsilon platform.', owner: 'Team D' },
+                { id: 6, name: 'Zeta Connect', version: '1.2.3', status: 'Active', description: 'Secure connection handler.', owner: 'Team B' },
+                { id: 7, name: 'Eta Integrator', version: '2.0.0', status: 'Active', description: 'Integrates various external APIs.', owner: 'Team C' },
+                { id: 8, name: 'Theta Logger', version: '1.1.0', status: 'Active', description: 'Centralized logging utility.', owner: 'Team A' },
+                { id: 9, name: 'Iota Analytics', version: '1.0.0', status: 'Active', description: 'Data analytics and reporting module.', owner: 'Team D' },
+                { id: 10, name: 'Kappa Dispatch', version: '1.8.0', status: 'Maintenance', description: 'Task dispatching and scheduling.', owner: 'Team B' },
+                { id: 11, name: 'Lambda Engine', version: '2.5.0', status: 'Active', description: 'Powerful processing engine.', owner: 'Team C' },
+                { id: 12, name: 'Mu Orchestrator', version: '1.0.0', status: 'Development', description: 'Workflow orchestration service.', owner: 'Team D' },
+                { id: 13, name: 'Nu Converter', version: '1.0.0', status: 'Active', description: 'Data format conversion tool.', owner: 'Team A' },
+                { id: 14, name: 'Xi Reporter', version: '1.0.0', status: 'Active', description: 'Customizable report generation.', owner: 'Team B' },
+                { id: 15, name: 'Omicron Security', version: '1.0.0', status: 'Active', description: 'Enhanced security module.', owner: 'Team C' },
+                { id: 16, name: 'Pi Validator', version: '1.0.0', status: 'Active', description: 'Input data validation service.', owner: 'Team D' },
+                { id: 17, name: 'Rho Cache', version: '1.0.0', status: 'Active', description: 'High-speed data caching.', owner: 'Team A' },
+                { id: 18, name: 'Sigma Streamer', version: '1.0.0', status: 'Active', description: 'Real-time data streaming.', owner: 'Team B' },
+                { id: 19, name: 'Tau Transformer', version: '1.0.0', status: 'Active', description: 'Data transformation pipeline.', owner: 'Team C' },
+                { id: 20, name: 'Upsilon Updater', version: '1.0.0', status: 'Active', description: 'Automated software updater.', owner: 'Team D' },
+                { id: 21, name: 'Phi Framework', version: '1.0.0', status: 'Active', description: 'Modular application framework.', owner: 'Team A' },
+                { id: 22, name: 'Chi Connector', version: '1.0.0', status: 'Active', description: 'Universal data connector.', owner: 'Team B' },
+                { id: 23, name: 'Psi Scheduler', version: '1.0.0', status: 'Active', description: 'Advanced task scheduler.', owner: 'Team C' },
+                { id: 24, name: 'Omega Dashboard', version: '1.0.0', status: 'Active', description: 'Comprehensive system dashboard.', owner: 'Team D' },
+                { id: 25, name: 'Alpha Legacy', version: '0.5.0', status: 'Deprecated', description: 'Older version of Alpha Core.', owner: 'Team A' },
+                { id: 26, name: 'Beta Pro', version: '2.2.0', status: 'Active', description: 'Professional edition of Beta Gateway.', owner: 'Team B' },
+                { id: 27, name: 'Gamma Lite', version: '1.0.0', status: 'Active', description: 'Lightweight Gamma Processor.', owner: 'Team C' },
+                { id: 28, name: 'Delta Plus', version: '3.1.0', status: 'Active', description: 'Enhanced Delta Monitor.', owner: 'Team A' },
+                { id: 29, name: 'Epsilon Dev', version: '0.9.5', status: 'Development', description: 'Development branch of Epsilon Service.', owner: 'Team D' },
+                { id: 30, name: 'Zeta Secure', version: '1.3.0', status: 'Active', description: 'Highly secure Zeta Connect.', owner: 'Team B' },
+            ];
+
+            const mockFetchRegistrySearch = (query, page, limit) => {
+                return new Promise(resolve => {
+                    setTimeout(() => { // Simulate network delay
+                        const lowerCaseQuery = query ? query.toLowerCase() : '';
+                        const filteredData = mockRegistryData.filter(item =>
+                            item.name.toLowerCase().includes(lowerCaseQuery) ||
+                            item.description.toLowerCase().includes(lowerCaseQuery) ||
+                            item.owner.toLowerCase().includes(lowerCaseQuery) ||
+                            item.status.toLowerCase().includes(lowerCaseQuery) ||
+                            item.version.toLowerCase().includes(lowerCaseQuery)
+                        );
+
+                        // In a real API, pagination would happen server-side.
+                        // Here, we simulate it on the filtered data.
+                        const startIndex = (page - 1) * limit;
+                        const endIndex = startIndex + limit;
+                        const paginatedData = filteredData.slice(startIndex, endIndex);
+
+                        resolve({
+                            items: paginatedData,
+                            total: filteredData.length
+                        });
+                    }, 500); // 500ms delay
+                });
+            };
+            // --- End Mock API Endpoint ---
+
+            async function fetchResults(query, page, limit) {
+                loadingIndicator.style.display = 'block';
+                noResultsMessage.style.display = 'none';
+                resultsTableBody.innerHTML = ''; // Clear previous results
+
+                try {
+                    // In a real application, replace this with:
+                    // const response = await fetch(`/registry/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`);
+                    // const data = await response.json();
+
+                    const data = await mockFetchRegistrySearch(query, page, limit); // Using mock for demonstration
+
+                    allFetchedResults = data.items; // Store the paginated results from the mock API
+                    // NOTE: If the real API returns *all* matching results and expects client-side pagination,
+                    // `allFetchedResults` would store `data.items` and `total` would be `data.total`.
+                    // For this mock, `allFetchedResults` is already paginated by the mock.
+                    // To fully simulate client-side pagination on *all* results, the mock would need to return *all* filtered results,
+                    // and `allFetchedResults` would be `data.allMatchingItems`.
+                    // For simplicity and to match the prompt's "fetch results from API endpoint" and "paginated table",
+                    // the mock returns already paginated data, and `allFetchedResults` holds the current page's data.
+                    // The `total` from the mock is used for overall pagination calculation.
+
+                    renderTable(allFetchedResults);
+                    renderPagination(data.total); // Use total from mock API for pagination
+                } catch (error) {
+                    console.error('Error fetching registry data:', error);
+                    resultsTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: red;">Failed to load data. Please try again.</td></tr>`;
+                    renderPagination(0);
+                } finally {
+                    loadingIndicator.style.display = 'none';
+                }
+            }
+
+            function applyClientSideFiltersAndSort() {
+                let filteredAndSorted = [...allFetchedResults]; // Start with the current page's data from API
+
+                // 1. Client-side Filtering (on current page's data)
+                const filterText = clientFilterInput.value.toLowerCase();
+                if (filterText) {
+                    filteredAndSorted = filteredAndSorted.filter(item =>
+                        Object.values(item).some(value =>
+                            String(value).toLowerCase().includes(filterText)
+                        )
+                    );
+                }
+
+                // 2. Client-side Sorting
+                if (currentSortColumn) {
+                    filteredAndSorted.sort((a, b) => {
+                        const valA = String(a[currentSortColumn]).toLowerCase();
+                        const valB = String(b[currentSortColumn]).toLowerCase();
+
+                        if (valA < valB) return currentSortDirection === 'asc' ? -1 : 1;
+                        if (valA > valB) return currentSortDirection === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+                }
+
+                renderTable(filteredAndSorted);
+                // Note: Client-side filtering/sorting here only affects the *currently displayed page*.
+                // For full client-side filtering/sorting across *all* search results, `allFetchedResults` would need to hold *all* results from the API,
+                // and then pagination would be applied *after* client-side filtering/sorting.
+                // Given the prompt's "fetch results from a /registry/search API endpoint" and "paginated table",
+                // the primary pagination and search filtering is assumed to be API-driven.
+                // The client-side filter here acts as a "filter within current page".
+            }
+
+            function renderTable(data) {
+                resultsTableBody.innerHTML = '';
+                if (data.length === 0) {
+                    noResultsMessage.style.display = 'block';
+                    resultsTable.style.display = 'none';
+                } else {
+                    noResultsMessage.style.display = 'none';
+                    resultsTable.style.display = 'table';
+                    data.forEach(item => {
+                        const row = resultsTableBody.insertRow();
+                        row.insertCell().textContent = item.name;
+                        row.insertCell().textContent = item.version;
+                        row.insertCell().textContent = item.status;
+                        row.insertCell().textContent = item.description;
+                        row.insertCell().textContent = item.owner;
+                    });
+                }
+            }
+
+            function renderPagination(totalItems) {
+                const totalPages = Math.ceil(totalItems / itemsPerPage);
+                currentPageSpan.textContent = `Page ${currentPage} of ${totalPages || 1}`;
+
+                prevPageButton.disabled = currentPage === 1;
+                nextPageButton.disabled = currentPage === totalPages || totalPages === 0;
+
+                if (totalItems === 0) {
+                    paginationControls.style.display = 'none';
+                } else {
+                    paginationControls.style.display = 'flex';
+                }
+            }
+
+            // --- Event Listeners ---
+
+            searchButton.addEventListener('click', () => {
+                currentPage = 1; // Reset to first page on new search
+                fetchResults(searchQueryInput.value, currentPage, itemsPerPage);
+            });
+
+            searchQueryInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    searchButton.click();
+                }
+            });
+
+            clientFilterInput.addEventListener('input', () => {
+                applyClientSideFiltersAndSort();
+            });
+
+            itemsPerPageSelect.addEventListener('change', () => {
+                itemsPerPage = parseInt(itemsPerPageSelect.value);
+                currentPage = 1; // Reset to first page when items per page changes
+                fetchResults(searchQueryInput.value, currentPage, itemsPerPage);
+            });
+
+            prevPageButton.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    fetchResults(searchQueryInput.value, currentPage, itemsPerPage);
+                }
+            });
+
+            nextPageButton.addEventListener('click', () => {
+                const totalItems = parseInt(currentPageSpan.textContent.split(' ')[3]); // Extract total pages from span
+                const totalPages = Math.ceil(totalItems / itemsPerPage);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    fetchResults(searchQueryInput.value, currentPage, itemsPerPage);
+                }
+            });
+
+            resultsTableHead.addEventListener('click', (e) => {
+                const target = e.target.closest('th');
+                if (target && target.dataset.sortBy) {
+                    const sortBy = target.dataset.sortBy;
+                    if (currentSortColumn === sortBy) {
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSortColumn = sortBy;
+                        currentSortDirection = 'asc';
+                    }
+
+                    // Update sort indicators in UI
+                    resultsTableHead.querySelectorAll('th').forEach(th => {
+                        th.classList.remove('sorted-asc', 'sorted-desc');
+                    });
+                    target.classList.add(`sorted-${currentSortDirection}`);
+
+                    applyClientSideFiltersAndSort();
+                }
+            });
+
+            // Initial load with dummy data
+            searchButton.click(); // Simulate initial search to populate the table
+        });
+    </script>
+</body>
+</html>

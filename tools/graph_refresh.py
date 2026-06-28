@@ -105,6 +105,15 @@ def refresh(force=False):
         print("[graph_refresh] load_graph_to_bus TIMEOUT", file=sys.stderr); return 1
     if r2.returncode != 0:
         print(f"[graph_refresh] load_graph_to_bus rc={r2.returncode}", file=sys.stderr); return 1
+    # Also refresh the GraphifyKL schema layer (the DB-column KL the code graph lacks)
+    # so the pre-build schema PRM gate fallback tracks the deployed app.models. Best-effort
+    # -- a schema_kl hiccup must never fail the code-graph refresh.
+    try:
+        subprocess.run([PY, os.path.join(ROOT, "schema_kl.py"), "--write"],
+                       cwd=ROOT, timeout=120)
+        print("[graph_refresh] schema_kl.json refreshed")
+    except Exception as e:
+        print(f"[graph_refresh] schema_kl refresh skipped: {e}", file=sys.stderr)
     print(f"[graph_refresh] OK -- graph now at {head[:8]}")
     return 0
 

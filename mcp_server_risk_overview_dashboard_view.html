@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Risk Overview Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+
+        #search-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 40px;
+            gap: 15px;
+            padding: 20px;
+            background-color: #e9f5f9;
+            border-radius: 6px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        #server-id-input {
+            padding: 12px 18px;
+            border: 1px solid #a7d9ed;
+            border-radius: 5px;
+            font-size: 1em;
+            width: 300px;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease;
+        }
+
+        #server-id-input:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        }
+
+        #load-data-btn {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        #load-data-btn:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        #load-data-btn:active {
+            transform: translateY(0);
+        }
+
+        #dashboard-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+        }
+
+        @media (min-width: 768px) {
+            #dashboard-content {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            }
+        }
+
+        .dashboard-section {
+            background-color: #fdfdfd;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .dashboard-section:hover {
+            transform: translateY(-3px);
+        }
+
+        .dashboard-section h2 {
+            color: #34495e;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.6em;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .dashboard-section h3 {
+            color: #555;
+            font-size: 1.2em;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+
+        .verdict-status {
+            font-size: 1.8em;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+
+        .verdict-status.SAFE { background-color: #d4edda; color: #155724; }
+        .verdict-status.WARNING { background-color: #fff3cd; color: #856404; }
+        .verdict-status.CRITICAL { background-color: #f8d7da; color: #721c24; }
+        .verdict-status.UNKNOWN { background-color: #e2e3e5; color: #383d41; }
+
+        .verdict-reason {
+            font-style: italic;
+            color: #666;
+            text-align: center;
+        }
+
+        .axis-score-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+
+        .axis-score-item strong {
+            color: #007bff;
+            font-size: 1.1em;
+        }
+
+        .axis-score-item span {
+            float: right;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .threat-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #fefefe;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+
+        .threat-item strong {
+            color: #dc3545;
+            font-size: 1.1em;
+        }
+
+        .threat-item .severity {
+            float: right;
+            font-weight: bold;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        .threat-item .severity.Critical { background-color: #dc3545; color: white; }
+        .threat-item .severity.High { background-color: #ffc107; color: #333; }
+        .threat-item .severity.Medium { background-color: #17a2b8; color: white; }
+        .threat-item .severity.Low { background-color: #28a745; color: white; }
+
+        .no-data {
+            text-align: center;
+            color: #777;
+            font-style: italic;
+            padding: 20px;
+        }
+
+        .loading-spinner {
+            display: none; /* Hidden by default */
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Server Risk Overview Dashboard</h1>
+
+        <div id="search-container">
+            <label for="server-id-input">Server ID:</label>
+            <input type="text" id="server-id-input" placeholder="e.g., server-12345" value="server-12345">
+            <button id="load-data-btn">Load Data</button>
+        </div>
+
+        <div id="loading-spinner" class="loading-spinner"></div>
+
+        <div id="dashboard-content">
+            <section id="overall-verdict-section" class="dashboard-section">
+                <h2>Overall Verdict</h2>
+                <div id="overall-verdict">
+                    <p class="no-data">Enter a Server ID and click 'Load Data' to see the verdict.</p>
+                </div>
+            </section>
+
+            <section id="llm-axis-scores-section" class="dashboard-section">
+                <h2>LLM Axis Scores</h2>
+                <div id="llm-axis-scores">
+                    <p class="no-data">LLM axis scores will appear here.</p>
+                </div>
+            </section>
+
+            <section id="threat-associations-section" class="dashboard-section">
+                <h2>Threat Associations</h2>
+                <div id="threat-associations">
+                    <p class="no-data">Threat associations will appear here.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        const serverIdInput = document.getElementById('server-id-input');
+        const loadDataBtn = document.getElementById('load-data-btn');
+        const overallVerdictDiv = document.getElementById('overall-verdict');
+        const llmAxisScoresDiv = document.getElementById('llm-axis-scores');
+        const threatAssociationsDiv = document.getElementById('threat-associations');
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        // Base URL for APIs (assuming they are served from a common /api/ path)
+        const API_BASE_URL = '/api'; 
+
+        async function fetchData(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    // If the API is optional (like threat associations), a 404 might be acceptable
+                    // For others, it's an error.
+                    if (response.status === 404 && url.includes('mcp_threat_associations_dashboard_integrator.py')) {
+                        console.warn(`API not found (404): ${url}. This might be expected if the integrator is not available.`);
+                        return null; // Return null to indicate no data, but not a critical error
+                    }
+                    throw new Error(`HTTP error! Status: ${response.status} for ${url}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching data from ${url}:`, error);
+                return null; // Return null on any fetch error
+            }
+        }
+
+        function renderOverallVerdict(data) {
+            overallVerdictDiv.innerHTML = '';
+            if (data && data.verdict) {
+                const verdictClass = data.verdict.toUpperCase(); // Ensure consistent casing for CSS
+                overallVerdictDiv.innerHTML = `
+                    <div class="verdict-status ${verdictClass}">${data.verdict}</div>
+                    <p class="verdict-reason">${data.reason || 'No specific reason provided.'}</p>
+                `;
+            } else {
+                overallVerdictDiv.innerHTML = '<p class="no-data">No overall verdict data available.</p>';
+            }
+        }
+
+        function renderLLMAxisScores(data) {
+            llmAxisScoresDiv.innerHTML = '';
+            if (data && data.scores && data.scores.length > 0) {
+                data.scores.forEach(score => {
+                    llmAxisScoresDiv.innerHTML += `
+                        <div class="axis-score-item">
+                            <strong>${score.axis}</strong> <span>${(score.score * 100).toFixed(0)}%</span>
+                            <p>${score.explanation || 'No explanation provided.'}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                llmAxisScoresDiv.innerHTML = '<p class="no-data">No LLM axis scores available.</p>';
+            }
+        }
+
+        function renderThreatAssociations(data) {
+            threatAssociationsDiv.innerHTML = '';
+            if (data && data.threats && data.threats.length > 0) {
+                data.threats.forEach(threat => {
+                    const severityClass = threat.severity ? threat.severity.replace(/\s/g, '') : 'UNKNOWN';
+                    threatAssociationsDiv.innerHTML += `
+                        <div class="threat-item">
+                            <strong>${threat.name}</strong> <span class="severity ${severityClass}">${threat.severity || 'N/A'}</span>
+                            <p>${threat.description || 'No description provided.'}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                threatAssociationsDiv.innerHTML = '<p class="no-data">No threat associations found.</p>';
+            }
+        }
+
+        async function loadDashboardData() {
+            const serverId = serverIdInput.value.trim();
+            if (!serverId) {
+                alert('Please enter a Server ID.');
+                return;
+            }
+
+            // Clear previous data and show loading spinner
+            overallVerdictDiv.innerHTML = '<p class="no-data">Loading verdict...</p>';
+            llmAxisScoresDiv.innerHTML = '<p class="no-data">Loading LLM axis scores...</p>';
+            threatAssociationsDiv.innerHTML = '<p class="no-data">Loading threat associations...</p>';
+            loadingSpinner.style.display = 'block';
+            
+            const verdictPromise = fetchData(`${API_BASE_URL}/mcp_server_verdict_api.py?server_id=${serverId}`);
+            const axisScoresPromise = fetchData(`${API_BASE_URL}/mcp_llm_axis_scores_api.py?server_id=${serverId}`);
+            const threatAssociationsPromise = fetchData(`${API_BASE_URL}/mcp_threat_associations_dashboard_integrator.py?server_id=${serverId}`);
+
+            const [verdictData, axisScoresData, threatAssociationsData] = await Promise.all([
+                verdictPromise,
+                axisScoresPromise,
+                threatAssociationsPromise
+            ]);
+
+            loadingSpinner.style.display = 'none'; // Hide spinner
+
+            renderOverallVerdict(verdictData);
+            renderLLMAxisScores(axisScoresData);
+            renderThreatAssociations(threatAssociationsData);
+        }
+
+        // Event listener for the button
+        loadDataBtn.addEventListener('click', loadDashboardData);
+
+        // Optional: Load data on initial page load if a default server ID is present
+        document.addEventListener('DOMContentLoaded', () => {
+            if (serverIdInput.value) {
+                loadDashboardData();
+            }
+        });
+    </script>
+</body>
+</html>

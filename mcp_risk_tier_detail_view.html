@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Detail - ZoSentinel</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 30px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 25px;
+        }
+        h1 {
+            font-size: 2.2em;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #3498db;
+        }
+        h2 {
+            font-size: 1.8em;
+        }
+        h3 {
+            font-size: 1.4em;
+            color: #34495e;
+        }
+        .mcp-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .mcp-header span {
+            font-weight: bold;
+            color: #3498db;
+            font-size: 1.2em;
+        }
+        .risk-tier-display {
+            font-size: 1.6em;
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+        /* Risk Tier Specific Colors */
+        .risk-tier-display.High { background-color: #e74c3c; } /* Red */
+        .risk-tier-display.Medium { background-color: #f39c12; } /* Orange */
+        .risk-tier-display.Low { background-color: #2ecc71; } /* Green */
+        .risk-tier-display.Informational { background-color: #3498db; } /* Blue */
+        .risk-tier-display.Unknown, .risk-tier-display.N/A { background-color: #95a5a6; } /* Grey */
+
+        .signal-scores ul {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .signal-scores li {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .signal-scores li strong {
+            color: #2c3e50;
+        }
+        .signal-scores li span {
+            background-color: #3498db;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .verdict-details p {
+            margin-bottom: 10px;
+        }
+        .verdict-details strong {
+            color: #2c3e50;
+        }
+        .evidence-list ul {
+            list-style: disc;
+            margin-left: 20px;
+            padding: 0;
+        }
+        .evidence-list li {
+            margin-bottom: 5px;
+            color: #555;
+        }
+        .loading-spinner, .error-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+            color: #555;
+        }
+        .error-message {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Risk Tier Detail</h1>
+
+        <div class="mcp-header">
+            <h2>MCP ID: <span id="mcp-id-display">Loading...</span></h2>
+        </div>
+
+        <div id="loading-spinner" class="loading-spinner">
+            <p>Loading risk tier and verdict data...</p>
+        </div>
+
+        <div id="error-message" class="error-message hidden">
+            <!-- Error messages will be displayed here -->
+        </div>
+
+        <div id="dashboard-content" class="hidden">
+            <section>
+                <h2>Overall Risk Assessment</h2>
+                <div id="overall-risk-tier" class="risk-tier-display Unknown">
+                    <!-- Overall Risk Tier will be displayed here -->
+                </div>
+                <p><strong>Risk Score:</strong> <span id="risk-score">N/A</span></p>
+                <p><strong>Last Updated:</strong> <span id="last-updated">N/A</span></p>
+            </section>
+
+            <section class="signal-scores">
+                <h2>Signal Scores</h2>
+                <ul id="signal-scores-list">
+                    <!-- Signal scores will be dynamically loaded here -->
+                </ul>
+            </section>
+
+            <section class="verdict-details">
+                <h2>Verdict Details</h2>
+                <p><strong>Verdict:</strong> <span id="verdict-text">N/A</span></p>
+                <p><strong>Severity:</strong> <span id="verdict-severity">N/A</span></p>
+                <p><strong>Verdict Timestamp:</strong> <span id="verdict-timestamp">N/A</span></p>
+
+                <h3>Explanation</h3>
+                <p id="verdict-explanation">N/A</p>
+
+                <h3>Evidence</h3>
+                <div id="evidence-list" class="evidence-list">
+                    <ul>
+                        <!-- Evidence items will be dynamically loaded here -->
+                    </ul>
+                </div>
+
+                <h3>Recommended Action</h3>
+                <p id="recommended-action">N/A</p>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const mcpId = urlParams.get('mcp_id');
+
+            const mcpIdDisplay = document.getElementById('mcp-id-display');
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const errorMessage = document.getElementById('error-message');
+            const dashboardContent = document.getElementById('dashboard-content');
+
+            const overallRiskTierElem = document.getElementById('overall-risk-tier');
+            const riskScoreElem = document.getElementById('risk-score');
+            const lastUpdatedElem = document.getElementById('last-updated');
+            const signalScoresList = document.getElementById('signal-scores-list');
+            const verdictTextElem = document.getElementById('verdict-text');
+            const verdictSeverityElem = document.getElementById('verdict-severity');
+            const verdictTimestampElem = document.getElementById('verdict-timestamp');
+            const verdictExplanationElem = document.getElementById('verdict-explanation');
+            const evidenceListUl = document.querySelector('#evidence-list ul');
+            const recommendedActionElem = document.getElementById('recommended-action');
+
+            // Function to capitalize and replace underscores for display
+            const formatSignalName = (name) => {
+                return name.replace(/_/g, ' ')
+                           .split(' ')
+                           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                           .join(' ');
+            };
+
+            if (!mcpId) {
+                mcpIdDisplay.textContent = 'Error: MCP ID not provided.';
+                errorMessage.textContent = 'Please provide an MCP ID using the "mcp_id" URL parameter (e.g., ?mcp_id=XYZ).';
+                errorMessage.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+                return;
+            }
+
+            mcpIdDisplay.textContent = mcpId;
+
+            const riskTierApiUrl = `/api/v1/mcp/${mcpId}/risk_tier`;
+            const verdictApiUrl = `/api/v1/mcp/${mcpId}/verdict`;
+
+            try {
+                const [riskTierResponse, verdictResponse] = await Promise.all([
+                    fetch(riskTierApiUrl),
+                    fetch(verdictApiUrl)
+                ]);
+
+                if (!riskTierResponse.ok) {
+                    throw new Error(`HTTP error! status: ${riskTierResponse.status} from risk_tier API (${riskTierApiUrl})`);
+                }
+                if (!verdictResponse.ok) {
+                    throw new Error(`HTTP error! status: ${verdictResponse.status} from verdict API (${verdictApiUrl})`);
+                }
+
+                const riskTierData = await riskTierResponse.json();
+                const verdictData = await verdictResponse.json();
+
+                // Render Risk Tier Data
+                const overallTier = riskTierData.overall_risk_tier || 'N/A';
+                overallRiskTierElem.textContent = `Overall Risk Tier: ${overallTier}`;
+                // Clean the tier name for CSS class (e.g., "High" -> "High", "N/A" -> "N/A")
+                overallRiskTierElem.className = `risk-tier-display ${overallTier.replace(/\s/g, '')}`; 
+                riskScoreElem.textContent = riskTierData.risk_score !== undefined ? riskTierData.risk_score : 'N/A';
+                lastUpdatedElem.textContent = riskTierData.last_updated ? new Date(riskTierData.last_updated).toLocaleString() : 'N/A';
+
+                // Render Signal Scores
+                if (riskTierData.signal_scores && Object.keys(riskTierData.signal_scores).length > 0) {
+                    signalScoresList.innerHTML = ''; // Clear previous content
+                    for (const signal in riskTierData.signal_scores) {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<strong>${formatSignalName(signal)}:</strong> <span>${riskTierData.signal_scores[signal]}</span>`;
+                        signalScoresList.appendChild(li);
+                    }
+                } else {
+                    signalScoresList.innerHTML = '<li>No signal scores available.</li>';
+                }
+
+                // Render Verdict Data
+                verdictTextElem.textContent = verdictData.verdict || 'N/A';
+                verdictSeverityElem.textContent = verdictData.severity || 'N/A';
+                verdictTimestampElem.textContent = verdictData.timestamp ? new Date(verdictData.timestamp).toLocaleString() : 'N/A';
+                verdictExplanationElem.textContent = verdictData.explanation || 'No explanation provided.';
+
+                if (verdictData.evidence && verdictData.evidence.length > 0) {
+                    evidenceListUl.innerHTML = ''; // Clear previous content
+                    verdictData.evidence.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = item;
+                        evidenceListUl.appendChild(li);
+                    });
+                } else {
+                    evidenceListUl.innerHTML = '<li>No specific evidence provided.</li>';
+                }
+
+                recommendedActionElem.textContent = verdictData.recommended_action || 'No recommended action provided.';
+
+                dashboardContent.classList.remove('hidden'); // Show the dashboard
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                errorMessage.textContent = `Failed to load data: ${error.message}`;
+                errorMessage.classList.remove('hidden');
+            } finally {
+                loadingSpinner.classList.add('hidden'); // Hide loading spinner
+            }
+        });
+    </script>
+</body>
+</html>

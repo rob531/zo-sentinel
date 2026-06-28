@@ -16,7 +16,7 @@ depends_on = None
 def upgrade():
     op.create_table(
         "mcp_score_disputes",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("server_id", sa.String(length=128), nullable=False, index=True),
         sa.Column("submitted_by", sa.String(length=128), nullable=False, index=True),
         sa.Column("proposed_overall_risk", sa.String(length=16), nullable=False),

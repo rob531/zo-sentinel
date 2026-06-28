@@ -83,7 +83,15 @@ prompt: |-
      {overall_risk, auth_strength, capability_breadth, data_sensitivity, network_egress,
      maintainer_trust, exploit_surface}, label, label_index, probs(JSON), p_top, p_critical,
      p_danger, escalated, escalated_to, decision_rule_version, model_version, adapter_sha256,
-     scored_at. UNIQUE(server_id, axis_name, model_version); a server's verdict = its 7 axis
+     scored_at.
+     >> REQUIRED constructor kwargs for McpLlmAxisScore = EXACTLY (id, server_id, axis_name,
+        label, model_version). ALL OTHER columns (label_index, probs, p_top, p_critical,
+        p_danger, escalated, escalated_to, decision_rule_version, adapter_sha256, scored_at)
+        have DB defaults -- OMIT them when constructing test/seed rows. Passing them as None
+        OVERRIDES the default with NULL and violates NOT NULL -> the INSERT fails. Seed EXACTLY
+        like the exemplar: McpLlmAxisScore(id=N, server_id=SID, axis_name=AX, label=LB,
+        model_version='v3.0_40974559') and pass NO other kwargs. <<
+     UNIQUE(server_id, axis_name, model_version); a server's verdict = its 7 axis
      rows for the current model_version.
    - McpServerRegistry -> "mcp_server_registry": server_id(PK), name, registry_source, url,
      description, trust_score, verdict, verdict_reasoning, confidence, risk_tier, scan_count,
@@ -96,7 +104,9 @@ prompt: |-
   ===================== SELF-TEST GATE (mandatory) =====================
   Include a `__main__` self-test mirroring the exemplar's: build the app/router, override
   `app.dependency_overrides[get_session]` (and any auth dep) to an in-memory SQLite session with
-  `poolclass=StaticPool`, seed a couple of rows, exercise the happy path + one failure/edge case,
+  `poolclass=StaticPool`, seed a couple of rows USING ONLY each model's REQUIRED constructor kwargs
+  (pass NO defaulted/nullable columns as None -- that breaks the INSERT; copy the exemplar's seed lines
+  verbatim), exercise the happy path + one failure/edge case,
   print "PASS" or "FAIL: <reason>". Keep the module's real `from app.db ... / from app.models ...`
   imports intact. Use only stdlib + already-vendored deps (fastapi, pydantic, PyJWT, sqlalchemy,
   passlib-or-hashlib). SQLite gotchas: BigInteger PK won't autoincrement -> set explicit ids;

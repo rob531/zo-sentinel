@@ -511,6 +511,14 @@ def propose_directive(
         "source": "directive_architect",
         "proposed_at": datetime.now(timezone.utc).isoformat(),
     }
+    # ANTI-HOLLOW ENFORCEMENT (2026-06-28): bind CREATION directives to the validated
+    # module_from_exemplar lane deterministically. The directive_architect recipe asks
+    # the model to set recipe=module_from_exemplar, but the weak MiniMax architect ignores
+    # the prose (the 2026-06-27 ghost builds routed to the weaker FastAPI lane). A creation
+    # directive declares an output_file and is not an edit/breaker task; module_from_exemplar
+    # defaults its exemplar_file to verdict_breakdown_api.py, so no exemplar arg is needed.
+    if output_file and not _is_edit_task(task) and not d.get("recipe"):
+        d["recipe"] = "module_from_exemplar"
     if phase is not None:
         d["phase"] = phase
     if priority is not None:

@@ -23,6 +23,7 @@ _OPTIONAL_ROUTERS = [
     "server_compare_api",
     "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",
     "entity_report_exporter", "org_api_key_manager", "verdict_watchlist_service",
+    "score_dispute_api",
 ]
 
 

@@ -85,3 +85,21 @@ class McpLlmAxisScore(Base):
     model_version: Mapped[str] = mapped_column(String(64), index=True)
     adapter_sha256: Mapped[Optional[str]] = mapped_column(String(80))
     scored_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
+
+
+class McpScoreDispute(Base):
+    """User-submitted dispute / proposed re-score for an MCP server. Admin-gated;
+    short-term this is a feedback record (approve/reject only) -- a later job may
+    consume approved disputes into score overrides."""
+    __tablename__ = "mcp_score_disputes"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(String(128), index=True)
+    submitted_by: Mapped[str] = mapped_column(String(128), index=True)
+    proposed_overall_risk: Mapped[str] = mapped_column(String(16))
+    proposed_axes: Mapped[Optional[dict]] = mapped_column(JSON)
+    reason_category: Mapped[str] = mapped_column(String(48))
+    explanation: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    admin_note: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

@@ -28,8 +28,6 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
         sa.Column("resolved_at", sa.DateTime(), nullable=True),
     )
-    op.create_index("ix_mcp_score_disputes_server_id", "mcp_score_disputes", ["server_id"])
-    op.create_index("ix_mcp_score_disputes_submitted_by", "mcp_score_disputes", ["submitted_by"])
 
 
 def downgrade():

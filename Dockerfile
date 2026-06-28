@@ -5,7 +5,7 @@ WORKDIR /srv
 COPY app/requirements.txt /srv/app/requirements.txt
 RUN pip install --no-cache-dir -r /srv/app/requirements.txt
 COPY app /srv/app
-COPY verdict_breakdown_api.py server_compare_api.py trust_gating_override.py /srv/
+COPY verdict_breakdown_api.py server_compare_api.py trust_gating_override.py score_dispute_api.py /srv/
 COPY migrations /srv/migrations
 COPY alembic.ini /srv/alembic.ini
 EXPOSE 8000

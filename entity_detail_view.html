@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entity Detail Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 1.6em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background-color: #fdfdfd;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .metadata-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .metadata-item strong {
+            color: #555;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        .metadata-item span {
+            font-size: 1.1em;
+            color: #212529;
+        }
+        .risk-score-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .risk-score-item:last-child {
+            border-bottom: none;
+        }
+        .risk-score-item span:first-child {
+            font-weight: bold;
+            color: #555;
+        }
+        .risk-score-item span:last-child {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .risk-score-item.overall span:last-child {
+            color: #e74c3c; /* High risk */
+        }
+        .risk-score-item.medium span:last-child {
+            color: #f39c12; /* Medium risk */
+        }
+        .risk-score-item.low span:last-child {
+            color: #27ae60; /* Low risk */
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background-color: #fff;
+        }
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9ecef;
+            color: #495057;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        tr:hover {
+            background-color: #f1f3f5;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-badge.passed { background-color: #d4edda; color: #155724; }
+        .status-badge.failed { background-color: #f8d7da; color: #721c24; }
+        .status-badge.pending { background-color: #fff3cd; color: #856404; }
+        .status-badge.high { background-color: #f8d7da; color: #721c24; }
+        .status-badge.medium { background-color: #fff3cd; color: #856404; }
+        .status-badge.low { background-color: #d4edda; color: #155724; }
+        .status-badge.critical { background-color: #dc3545; color: #fff; }
+
+        .loading, .error {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #6c757d;
+        }
+        .loading::before {
+            content: '⏳';
+            display: block;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .error::before {
+            content: '❌';
+            display: block;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .hidden {
+            display: none;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="entity-name-header">Entity Detail Dashboard</h1>
+
+        <div id="loading-spinner" class="loading">Loading entity details...</div>
+        <div id="error-message" class="error hidden"></div>
+
+        <div id="dashboard-content" class="hidden">
+            <p><strong>Entity ID:</strong> <span id="entity-id-display"></span></p>
+
+            <div class="section">
+                <h2>Metadata</h2>
+                <div id="metadata-section" class="metadata-grid">
+                    <!-- Metadata items will be injected here -->
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Risk Scores</h2>
+                <div id="risk-scores-section">
+                    <div class="risk-score-item overall">
+                        <span>Overall Risk Score:</span>
+                        <span id="overall-risk-score">N/A</span>
+                    </div>
+                    <div class="risk-score-item">
+                        <span>Vulnerability Risk:</span>
+                        <span id="vulnerability-risk">N/A</span>
+                    </div>
+                    <div class="risk-score-item">
+                        <span>Configuration Risk:</span>
+                        <span id="configuration-risk">N/A</span>
+                    </div>
+                    <div class="risk-score-item">
+                        <span>Behavioral Risk:</span>
+                        <span id="behavioral-risk">N/A</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Attestations</h2>
+                <table id="attestations-table">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Attestation rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="section">
+                <h2>Related Threat Intelligence</h2>
+                <table id="threat-intelligence-table">
+                    <thead>
+                        <tr>
+                            <th>Threat</th>
+                            <th>Severity</th>
+                            <th>Source</th>
+                            <th>Description</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Threat intelligence rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const errorMessage = document.getElementById('error-message');
+            const dashboardContent = document.getElementById('dashboard-content');
+            const entityNameHeader = document.getElementById('entity-name-header');
+            const entityIdDisplay = document.getElementById('entity-id-display');
+            const metadataSection = document.getElementById('metadata-section');
+            const overallRiskScore = document.getElementById('overall-risk-score');
+            const vulnerabilityRisk = document.getElementById('vulnerability-risk');
+            const configurationRisk = document.getElementById('configuration-risk');
+            const behavioralRisk = document.getElementById('behavioral-risk');
+            const attestationsTableBody = document.querySelector('#attestations-table tbody');
+            const threatIntelligenceTableBody = document.querySelector('#threat-intelligence-table tbody');
+
+            // Function to parse entity ID from URL
+            function getEntityIdFromUrl() {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('id');
+            }
+
+            // Mock API endpoint for demonstration
+            async function fetchEntityDetails(entityId) {
+                console.log(`Simulating API call for entity ID: ${entityId}`);
+                // Simulate network delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // Mock data based on entityId
+                const mockData = {
+                    'mcp-server-123': {
+                        metadata: {
+                            name: 'MCP Server Alpha',
+                            type: 'Virtual Machine',
+                            status: 'Running',
+                            ip_address: '192.168.1.100',
+                            os: 'Ubuntu Server 20.04 LTS',
+                            location: 'Data Center A, Rack 12',
+                            owner: 'IT Operations',
+                            last_seen: '2023-10-27T10:30:00Z',
+                            environment: 'Production'
+                        },
+                        risk_scores: {
+                            overall: 75,
+                            vulnerability: 80,
+                            configuration: 65,
+                            behavioral: 70
+                        },
+                        attestations: [
+                            { description: 'PCI DSS Compliance Check', status: 'Passed', date: '2023-09-15', source: 'Internal Audit' },
+                            { description: 'SOC 2 Type II Review', status: 'Passed', date: '2023-08-01', source: 'External Auditor' },
+                            { description: 'Security Patch Level', status: 'Failed', date: '2023-10-20', source: 'Vulnerability Scan' },
+                            { description: 'Configuration Hardening', status: 'Passed', date: '2023-07-10', source: 'Configuration Management' }
+                        ],
+                        threat_intelligence: [
+                            { threat: 'Log4Shell Vulnerability', severity: 'High', source: 'CISA', description: 'CVE-2021-44228 detected in installed software.', link: 'https://www.cisa.gov/uscert/apache-log4j-vulnerability-guidance' },
+                            { threat: 'Brute Force Attempt', severity: 'Medium', source: 'SIEM', description: 'Multiple failed login attempts from external IP.', link: '#' },
+                            { threat: 'Outdated Software', severity: 'Low', source: 'Nessus', description: 'Apache HTTP Server version is outdated.', link: '#' }
+                        ]
+                    },
+                    'mcp-server-456': {
+                        metadata: {
+                            name: 'MCP Server Beta',
+                            type: 'Physical Server',
+                            status: 'Maintenance',
+                            ip_address: '10.0.0.50',
+                            os: 'Windows Server 2019',
+                            location: 'Data Center B, Rack 5',
+                            owner: 'Network Team',
+                            last_seen: '2023-10-26T14:00:00Z',
+                            environment: 'Development'
+                        },
+                        risk_scores: {
+                            overall: 40,
+                            vulnerability: 30,
+                            configuration: 50,
+                            behavioral: 45
+                        },
+                        attestations: [
+                            { description: 'Security Patch Level', status: 'Passed', date: '2023-10-25', source: 'WSUS' },
+                            { description: 'Configuration Hardening', status: 'Pending', date: '2023-11-01', source: 'Internal Review' }
+                        ],
+                        threat_intelligence: [
+                            { threat: 'RDP Brute Force', severity: 'Medium', source: 'Firewall Logs', description: 'Repeated RDP login failures from unknown IPs.', link: '#' }
+                        ]
+                    },
+                    'default-entity': { // Fallback for unknown IDs
+                        metadata: {
+                            name: 'Unknown Entity',
+                            type: 'N/A',
+                            status: 'Unknown',
+                            ip_address: 'N/A',
+                            os: 'N/A',
+                            location: 'N/A',
+                            owner: 'N/A',
+                            last_seen: 'N/A',
+                            environment: 'N/A'
+                        },
+                        risk_scores: {
+                            overall: 0,
+                            vulnerability: 0,
+                            configuration: 0,
+                            behavioral: 0
+                        },
+                        attestations: [],
+                        threat_intelligence: []
+                    }
+                };
+
+                if (mockData[entityId]) {
+                    return { success: true, data: mockData[entityId] };
+                } else if (entityId) {
+                    // If ID is provided but not in mock data, return default with the provided ID
+                    const defaultData = JSON.parse(JSON.stringify(mockData['default-entity'])); // Deep copy
+                    defaultData.metadata.name = `Entity ID: ${entityId} (No Specific Data)`;
+                    return { success: true, data: defaultData };
+                } else {
+                    // No ID provided
+                    return { success: false, message: 'Entity ID not found in mock data.' };
+                }
+            }
+
+            // Function to render the dashboard with fetched data
+            function renderDashboard(data, entityId) {
+                entityNameHeader.textContent = data.metadata.name || `Entity Detail Dashboard (${entityId})`;
+                entityIdDisplay.textContent = entityId || 'N/A';
+
+                // Metadata
+                metadataSection.innerHTML = ''; // Clear previous content
+                for (const key in data.metadata) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.classList.add('metadata-item');
+                    itemDiv.innerHTML = `<strong>${key.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:</strong> <span>${data.metadata[key]}</span>`;
+                    metadataSection.appendChild(itemDiv);
+                }
+
+                // Risk Scores
+                overallRiskScore.textContent = data.risk_scores.overall;
+                overallRiskScore.parentElement.classList.remove('low', 'medium', 'high');
+                if (data.risk_scores.overall >= 70) overallRiskScore.parentElement.classList.add('high');
+                else if (data.risk_scores.overall >= 40) overallRiskScore.parentElement.classList.add('medium');
+                else overallRiskScore.parentElement.classList.add('low');
+
+                vulnerabilityRisk.textContent = data.risk_scores.vulnerability;
+                configurationRisk.textContent = data.risk_scores.configuration;
+                behavioralRisk.textContent = data.risk_scores.behavioral;
+
+                // Attestations
+                attestationsTableBody.innerHTML = ''; // Clear previous content
+                if (data.attestations && data.attestations.length > 0) {
+                    data.attestations.forEach(attestation => {
+                        const row = attestationsTableBody.insertRow();
+                        row.insertCell().textContent = attestation.description;
+                        const statusCell = row.insertCell();
+                        const statusBadge = document.createElement('span');
+                        statusBadge.classList.add('status-badge', attestation.status.toLowerCase());
+                        statusBadge.textContent = attestation.status;
+                        statusCell.appendChild(statusBadge);
+                        row.insertCell().textContent = attestation.date;
+                        row.insertCell().textContent = attestation.source;
+                    });
+                } else {
+                    const row = attestationsTableBody.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 4;
+                    cell.textContent = 'No attestations found.';
+                    cell.style.textAlign = 'center';
+                    cell.style.fontStyle = 'italic';
+                }
+
+
+                // Threat Intelligence
+                threatIntelligenceTableBody.innerHTML = ''; // Clear previous content
+                if (data.threat_intelligence && data.threat_intelligence.length > 0) {
+                    data.threat_intelligence.forEach(threat => {
+                        const row = threatIntelligenceTableBody.insertRow();
+                        row.insertCell().textContent = threat.threat;
+                        const severityCell = row.insertCell();
+                        const severityBadge = document.createElement('span');
+                        severityBadge.classList.add('status-badge', threat.severity.toLowerCase());
+                        severityBadge.textContent = threat.severity;
+                        severityCell.appendChild(severityBadge);
+                        row.insertCell().textContent = threat.source;
+                        row.insertCell().textContent = threat.description;
+                        const linkCell = row.insertCell();
+                        if (threat.link && threat.link !== '#') {
+                            const link = document.createElement('a');
+                            link.href = threat.link;
+                            link.textContent = 'View Details';
+                            link.target = '_blank';
+                            linkCell.appendChild(link);
+                        } else {
+                            linkCell.textContent = 'N/A';
+                        }
+                    });
+                } else {
+                    const row = threatIntelligenceTableBody.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 5;
+                    cell.textContent = 'No related threat intelligence found.';
+                    cell.style.textAlign = 'center';
+                    cell.style.fontStyle = 'italic';
+                }
+
+                loadingSpinner.classList.add('hidden');
+                dashboardContent.classList.remove('hidden');
+            }
+
+            // Function to display error message
+            function displayError(message) {
+                loadingSpinner.classList.add('hidden');
+                errorMessage.textContent = message;
+                errorMessage.classList.remove('hidden');
+            }
+
+            // Main execution
+            const entityId = getEntityIdFromUrl();
+
+            if (!entityId) {
+                displayError('Error: No entity ID provided in the URL. Please use a URL like `entity_detail_view.html?id=mcp-server-123`');
+                entityNameHeader.textContent = 'Entity Detail Dashboard (No ID)';
+                entityIdDisplay.textContent = 'N/A';
+                return;
+            }
+
+            fetchEntityDetails(entityId)
+                .then(response => {
+                    if (response.success) {
+                        renderDashboard(response.data, entityId);
+                    } else {
+                        displayError(`Failed to load entity details: ${response.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching entity details:', error);
+                    displayError('An unexpected error occurred while fetching entity details.');
+                });
+        });
+    </script>
+</body>
+</html>

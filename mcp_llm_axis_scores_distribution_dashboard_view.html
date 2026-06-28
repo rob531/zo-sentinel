@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP LLM Axis Scores Distribution</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .chart-card h3 {
+            margin-top: 0;
+            color: #0056b3;
+            text-align: center;
+        }
+        .chart-container {
+            width: 100%;
+            max-width: 400px; /* Adjust as needed */
+            height: 250px; /* Adjust as needed */
+            margin-top: 15px;
+        }
+        .loading, .error {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+        }
+        .error {
+            color: #dc3545;
+        }
+    </style>
+    <!-- Include Chart.js if available -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>MCP LLM Axis Scores Distribution</h1>
+
+    <div id="dashboard-container" class="dashboard-container">
+        <!-- Charts will be rendered here -->
+        <div class="loading">Loading data...</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dashboardContainer = document.getElementById('dashboard-container');
+
+            // Mock API endpoint
+            const mockApiUrl = '/api/mcp_llm_axis_scores/distribution';
+
+            fetch(mockApiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    dashboardContainer.innerHTML = ''; // Clear loading message
+
+                    if (data.error) {
+                        dashboardContainer.innerHTML = `<div class="error">Error fetching data: ${data.error}</div>`;
+                        return;
+                    }
+
+                    if (!data.distributions || Object.keys(data.distributions).length === 0) {
+                        dashboardContainer.innerHTML = '<div class="loading">No data available for distributions.</div>';
+                        return;
+                    }
+
+                    // Render charts for each axis
+                    Object.keys(data.distributions).forEach(axisName => {
+                        const axisData = data.distributions[axisName];
+                        renderChart(axisName, axisData);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching or processing data:', error);
+                    dashboardContainer.innerHTML = `<div class="error">Failed to load dashboard. ${error.message}</div>`;
+                });
+
+            function renderChart(axisName, axisData) {
+                const chartCard = document.createElement('div');
+                chartCard.classList.add('chart-card');
+
+                const chartTitle = document.createElement('h3');
+                chartTitle.textContent = axisName;
+                chartCard.appendChild(chartTitle);
+
+                const chartCanvasContainer = document.createElement('div');
+                chartCanvasContainer.classList.add('chart-container');
+                const canvas = document.createElement('canvas');
+                chartCanvasContainer.appendChild(canvas);
+                chartCard.appendChild(chartCanvasContainer);
+
+                dashboardContainer.appendChild(chartCard);
+
+                // Prepare data for Chart.js
+                const labels = axisData.map(bin => bin.range);
+                const counts = axisData.map(bin => bin.count);
+
+                // Create the chart
+                new Chart(canvas, {
+                    type: 'bar', // Or 'line' for a different visualization
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Score Frequency',
+                            data: counts,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Frequency'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'p_top Score Range'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false // Hide legend if only one dataset
+                            },
+                            title: {
+                                display: false // Title is already in the card
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

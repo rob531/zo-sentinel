@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Definition History Status Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+        .status-section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background-color: #fdfdfd;
+        }
+        .status-section h2 {
+            color: #34495e;
+            margin-top: 0;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        .status-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .status-value {
+            color: #333;
+            text-align: right;
+        }
+        .indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            vertical-align: middle;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        .indicator.green {
+            background-color: #28a745; /* Green */
+        }
+        .indicator.red {
+            background-color: #dc3545; /* Red */
+        }
+        .indicator.yellow {
+            background-color: #ffc107; /* Yellow for warning/unknown */
+        }
+        .overall-status {
+            text-align: center;
+            margin-top: 30px;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 1.2em;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .overall-status.green {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .overall-status.red {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .overall-status.yellow {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .last-updated-time {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #777;
+        }
+        .loading-spinner {
+            display: none; /* Hidden by default */
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 15px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Definition History Status Dashboard</h1>
+
+        <div class="loading-spinner" id="loadingSpinner"></div>
+
+        <div class="overall-status" id="overallStatus">
+            <span class="indicator" id="overallIndicator"></span>
+            <span id="overallStatusText">Loading status...</span>
+        </div>
+
+        <div class="status-section">
+            <h2>MCP Definition History Table Status</h2>
+            <div class="status-item">
+                <span class="status-label">Current Entries:</span>
+                <span class="status-value" id="tableEntries">N/A</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last Update Timestamp:</span>
+                <span class="status-value" id="tableLastUpdate">N/A</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Table Population Status:</span>
+                <span class="status-value">
+                    <span class="indicator" id="tablePopulationIndicator"></span>
+                    <span id="tablePopulationStatusText">N/A</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="status-section">
+            <h2>MCP Definition History Populator Daemon Status</h2>
+            <div class="status-item">
+                <span class="status-label">Daemon Status:</span>
+                <span class="status-value">
+                    <span class="indicator" id="daemonStatusIndicator"></span>
+                    <span id="daemonStatusText">N/A</span>
+                </span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last Heartbeat:</span>
+                <span class="status-value" id="daemonLastHeartbeat">N/A</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Processed Records (Last Minute):</span>
+                <span class="status-value" id="daemonProcessedRecords">N/A</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last Error Message:</span>
+                <span class="status-value" id="daemonLastError">None</span>
+            </div>
+        </div>
+
+        <div class="last-updated-time">
+            Last dashboard refresh: <span id="dashboardLastRefresh">N/A</span>
+        </div>
+    </div>
+
+    <script>
+        const TABLE_UPDATE_THRESHOLD_MINUTES = 10; // How recent should the table update be to be considered "active"
+        const REFRESH_INTERVAL_SECONDS = 30; // How often to refresh the dashboard data
+
+        // --- Mock API Endpoints (Replace with actual API calls in a real environment) ---
+        // In a real scenario, these would be actual backend API endpoints, e.g.:
+        // const TABLE_STATUS_API_URL = '/api/write_service/mcp_definition_history_status';
+        // const POPULATOR_STATUS_API_URL = '/api/service_health/mcp_definition_history_populator_daemon';
+
+        // Mock data generation functions for demonstration purposes
+        function generateMockTableStatus() {
+            const now = new Date();
+            const lastUpdateRecent = Math.random() < 0.8; // 80% chance of recent update
+            const lastUpdateDate = new Date(now.getTime() - (lastUpdateRecent ? Math.random() * 5 * 60 * 1000 : Math.random() * 60 * 60 * 1000)); // within 5 mins or within 60 mins
+            const count = Math.floor(Math.random() * 1000000) + 500000; // 500k to 1.5M entries
+            return {
+                count: count,
+                last_updated_at: lastUpdateDate.toISOString()
+            };
+        }
+
+        function generateMockPopulatorStatus() {
+            const now = new Date();
+            const statuses = ['running', 'stopped', 'error', 'paused'];
+            const status = statuses[Math.floor(Math.random() * statuses.length)];
+            const lastHeartbeatRecent = Math.random() < 0.9; // 90% chance of recent heartbeat
+            const lastHeartbeatDate = new Date(now.getTime() - (lastHeartbeatRecent ? Math.random() * 2 * 60 * 1000 : Math.random() * 30 * 60 * 1000)); // within 2 mins or within 30 mins
+
+            let error = null;
+            if (status === 'error' && Math.random() < 0.7) { // 70% chance of an error message if status is error
+                const errors = [
+                    "Database connection lost.",
+                    "Failed to process batch: invalid data format.",
+                    "Out of memory error during large data ingestion.",
+                    "API rate limit exceeded for source system."
+                ];
+                error = errors[Math.floor(Math.random() * errors.length)];
+            }
+
+            return {
+                status: status,
+                last_heartbeat: lastHeartbeatDate.toISOString(),
+                processed_records_last_minute: status === 'running' ? Math.floor(Math.random() * 1000) + 100 : 0,
+                last_error: error
+            };
+        }
+
+        // Simulate API calls using Promises and setTimeout
+        async function fetchTableStatus() {
+            // In a real application, this would be:
+            // const response = await fetch(TABLE_STATUS_API_URL);
+            // if (!response.ok) throw new Error('Failed to fetch table status');
+            // return response.json();
+            return new Promise(resolve => setTimeout(() => resolve(generateMockTableStatus()), Math.random() * 500 + 200));
+        }
+
+        async function fetchPopulatorStatus() {
+            // In a real application, this would be:
+            // const response = await fetch(POPULATOR_STATUS_API_URL);
+            // if (!response.ok) throw new Error('Failed to fetch populator status');
+            // return response.json();
+            return new Promise(resolve => setTimeout(() => resolve(generateMockPopulatorStatus

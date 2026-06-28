@@ -92,7 +92,7 @@ class McpScoreDispute(Base):
     short-term this is a feedback record (approve/reject only) -- a later job may
     consume approved disputes into score overrides."""
     __tablename__ = "mcp_score_disputes"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     server_id: Mapped[str] = mapped_column(String(128), index=True)
     submitted_by: Mapped[str] = mapped_column(String(128), index=True)
     proposed_overall_risk: Mapped[str] = mapped_column(String(16))

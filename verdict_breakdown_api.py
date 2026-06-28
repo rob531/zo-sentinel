@@ -295,7 +295,11 @@ def search_servers(q: str = "", risk: str = "", source: str = "",
         stmt = stmt.where(and_(*conds))
     stmt = stmt.order_by(McpServerRegistry.name).offset(offset).limit(limit)
     rows = db.execute(stmt).scalars().all()
-    return {"servers": [_hit(db, r, reveal) for r in rows], "count": len(rows),
+    hits = [_hit(db, r, reveal) for r in rows]
+    if risk.strip() and reveal:   # keep results consistent with badges (published tier)
+        want = risk.strip().upper()
+        hits = [h for h in hits if (h.get("published_overall_risk") or "").upper() == want]
+    return {"servers": hits, "count": len(hits),
             "offset": offset, "limit": limit, "reveal": reveal}
 
 
@@ -313,6 +317,28 @@ def _compute_summary(db: Session) -> dict:
             "risk_distribution": dist, "by_source": by_source}
 
 
+import threading as _threading
+_SUMMARY_LOCK = _threading.Lock()
+
+def _bg_refresh_summary() -> None:
+    if not _SUMMARY_LOCK.acquire(blocking=False):
+        return
+    try:
+        from app.db import SessionLocal
+        s = SessionLocal()
+        try:
+            summary = _compute_summary(s)
+            s.execute(text(
+                "INSERT INTO app_stats(key, value, updated_at) VALUES ('dashboard_summary', CAST(:v AS jsonb), now()) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()"),
+                {"v": json.dumps(summary)})
+            s.commit()
+        finally:
+            s.close()
+    finally:
+        _SUMMARY_LOCK.release()
+
+
 @router.get("/dashboard/summary")
 def dashboard_summary(db: Session = Depends(get_session),
                       principal: Principal = Depends(get_principal)) -> dict:
@@ -325,7 +351,15 @@ def dashboard_summary(db: Session = Depends(get_session),
             return row[0] if isinstance(row[0], dict) else json.loads(row[0])
     except Exception:
         pass
-    return _compute_summary(db)
+    # cold cache: never block on the ~40s aggregate -- warm in background, return cheap counts now
+    import threading as _th
+    _th.Thread(target=_bg_refresh_summary, daemon=True).start()
+    try:
+        scored = db.execute(select(func.count()).where(McpLlmAxisScore.axis_name == "overall_risk")).scalar() or 0
+        registry_total = db.execute(select(func.count()).select_from(McpServerRegistry)).scalar() or 0
+    except Exception:
+        scored = registry_total = 0
+    return {"scored": scored, "registry_total": registry_total, "risk_distribution": {}, "by_source": [], "warming": True}
 
 
 @router.post("/dashboard/refresh")
@@ -349,13 +383,22 @@ def top_servers(risk: str = "CRITICAL", limit: int = 24,
     list itself would reveal which servers are flagged -- so only insiders/admins see it."""
     if not _reveal(principal):
         return {"servers": [], "risk": risk.strip().upper(), "locked": True}
+    want = risk.strip().upper()
     limit = max(1, min(limit, 100))
+    # Filter on PUBLISHED (post-trust-gate) tier so the list agrees with the badges.
     sub = select(McpLlmAxisScore.server_id).where(
         McpLlmAxisScore.axis_name == "overall_risk",
-        McpLlmAxisScore.label == risk.strip().upper()).limit(limit)
-    rows = db.execute(select(McpServerRegistry).where(
-        McpServerRegistry.server_id.in_(sub)).limit(limit)).scalars().all()
-    return {"servers": [_hit(db, r, True) for r in rows], "risk": risk.strip().upper(), "locked": False}
+        McpLlmAxisScore.label == want).limit(limit * 8)
+    cands = db.execute(select(McpServerRegistry).where(
+        McpServerRegistry.server_id.in_(sub)).limit(limit * 8)).scalars().all()
+    out = []
+    for r in cands:
+        h = _hit(db, r, True)
+        if (h.get("published_overall_risk") or "").upper() == want:
+            out.append(h)
+            if len(out) >= limit:
+                break
+    return {"servers": out, "risk": want, "locked": False}
 
 
 @router.get("/admin/submissions")

@@ -38,7 +38,7 @@
       machine-learning model from public metadata. They are <b>not statements of fact</b>, not a security audit, and not
       professional or legal advice. Official/established publishers are trust-capped to reduce false positives. Treat the
       output as one input to your own due diligence. By continuing you acknowledge these are automated estimates and accept
-      the service is provided “as is”, without warranty. <a href="/disclaimer">Full disclaimer</a>.
+      the service is provided "as is", without warranty. <a href="/disclaimer">Full disclaimer</a>.
     </div>
     <label><input type="checkbox" id="ack"> I acknowledge these are automated heuristic estimations, not statements of fact or security advice.</label>
     <button id="go" disabled onclick="proceed()">ACKNOWLEDGE &amp; CONTINUE</button>
@@ -59,14 +59,9 @@ function proceed(){
   document.cookie="consent_ack=1;path=/;max-age=2592000;samesite=lax";
   E('gate').classList.add('hide'); E('clerk').classList.remove('hide');
   if(CLERK_PK.indexOf("pk_")===0){ loadClerk(); }
-  else { E('fallback').innerHTML='// waitlist activates once the Clerk key is configured &nbsp;·&nbsp; <a href="/app">enter the lookup →</a>'; }
+  else { E('fallback').innerHTML='// waitlist activates once the Clerk key is configured &nbsp;·&nbsp; <a href="/app">enter the lookup &rarr;</a>'; }
 }
 function clerkHost(pk){ try{ return atob(pk.split('_')[2]).replace(/\$+$/,''); }catch(e){ return ''; } }
-// one view at a time: waitlist (default, for new signups) <-> sign-in (existing access)
-window._showWaitlist=function(){ E('signin').classList.add('hide'); E('waitlist').classList.remove('hide');
-  E('toggle').innerHTML='Already have access? <a href="#" onclick="return _showLogin()">Log in here →</a>'; return false; };
-window._showLogin=function(){ E('waitlist').classList.add('hide'); E('signin').classList.remove('hide');
-  E('toggle').innerHTML='Need access? <a href="#" onclick="return _showWaitlist()">Join the waitlist →</a>'; return false; };
 function loadClerk(){
   const host=clerkHost(CLERK_PK);
   if(!host){ E('fallback').textContent='// invalid publishable key'; return; }
@@ -77,12 +72,24 @@ function loadClerk(){
     if(!window.Clerk){ await new Promise(r=>setTimeout(r,300)); }
     await window.Clerk.load();
     if(window.Clerk.user){ location.href='/app'; return; }
-    var hasWait = !!window.Clerk.mountWaitlist;
-    if(hasWait){ window.Clerk.mountWaitlist(E('waitlist')); }
-    window.Clerk.mountSignIn(E('signin'),{afterSignInUrl:'/app'});
-    // Default to the waitlist for new visitors; offer a login toggle. If the
-    // instance has no waitlist, just show sign-in (no empty waitlist box).
-    if(hasWait){ _showWaitlist(); } else { _showLogin(); E('toggle').innerHTML=''; }
+    const hasWait = !!window.Clerk.mountWaitlist;
+    // LAZY MOUNT — only ONE Clerk component is ever mounted/visible at a time, so the
+    // waitlist and sign-in can never render stacked on top of each other. The other is
+    // mounted on first toggle.
+    let sMounted=false, wMounted=false;
+    window._showLogin=function(){
+      E('waitlist').classList.add('hide'); E('signin').classList.remove('hide');
+      if(!sMounted){ window.Clerk.mountSignIn(E('signin'),{afterSignInUrl:'/app'}); sMounted=true; }
+      E('toggle').innerHTML = hasWait ? 'Need access? <a href="#" onclick="return _showWaitlist()">Join the waitlist &rarr;</a>' : '';
+      return false;
+    };
+    window._showWaitlist=function(){
+      E('signin').classList.add('hide'); E('waitlist').classList.remove('hide');
+      if(!wMounted){ window.Clerk.mountWaitlist(E('waitlist')); wMounted=true; }
+      E('toggle').innerHTML='Already have access? <a href="#" onclick="return _showLogin()">Log in here &rarr;</a>';
+      return false;
+    };
+    if(hasWait){ _showWaitlist(); } else { _showLogin(); }
   }catch(e){ E('fallback').textContent='// auth failed to load: '+e.message; } });
   s.addEventListener('error',()=>{ E('fallback').textContent='// could not reach Clerk ('+host+')'; });
   document.head.appendChild(s);

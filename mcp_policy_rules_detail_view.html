@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Policy Rule Detail</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --warning-color: #ffc107;
+            --light-bg: #f8f9fa;
+            --dark-text: #343a40;
+            --border-color: #dee2e6;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        }
+
+        body {
+            font-family: var(--font-family);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+
+        h2 {
+            color: var(--secondary-color);
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (min-width: 600px) {
+            .detail-grid {
+                grid-template-columns: 1fr 2fr;
+            }
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: var(--secondary-color);
+            padding-right: 10px;
+        }
+
+        .detail-value {
+            word-break: break-word;
+            background-color: #f0f4f7;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .detail-value.pattern {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            background-color: #e9ecef;
+            color: #0056b3;
+            font-size: 0.95em;
+        }
+
+        .message {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .message.loading {
+            background-color: var(--info-color);
+            color: #fff;
+        }
+
+        .message.error {
+            background-color: var(--danger-color);
+            color: #fff;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 10px 15px;
+            background-color: var(--primary-color);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .back-link:hover {
+            background-color: #0056b3;
+        }
+
+        /* Accessibility improvements */
+        [aria-live="polite"] {
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+            height: 1px;
+            overflow: hidden;
+            position: absolute;
+            white-space: nowrap;
+            width: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Policy Rule Details</h1>
+
+        <div id="loading-message" class="message loading hidden" aria-live="polite">Loading rule details...</div>
+        <div id="error-message" class="message error hidden" aria-live="assertive"></div>
+
+        <div id="rule-details-container" class="hidden">
+            <h2>Rule Information</h2>
+            <div class="detail-grid">
+                <div class="detail-label">Rule ID:</div>
+                <div id="rule-id" class="detail-value"></div>
+
+                <div class="detail-label">Rule Type:</div>
+                <div id="rule-type" class="detail-value"></div>
+
+                <div class="detail-label">Pattern:</div>
+                <div id="pattern" class="detail-value pattern"></div>
+
+                <div class="detail-label">Created At:</div>
+                <div id="created-at" class="detail-value"></div>
+            </div>
+
+            <h2>Description</h2>
+            <div id="description" class="detail-value" style="grid-column: 1 / -1;"></div>
+        </div>
+
+        <a href="#" onclick="history.back(); return false;" class="back-link">Back to Rules</a>
+    </div>
+
+    <script>
+        // Helper function to get URL parameters
+        function getUrlParameter(name) {
+            name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+            var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+            var results = regex.exec(location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
+
+        // DOM elements
+        const loadingMessage = document.getElementById('loading-message');
+        const errorMessage = document.getElementById('error-message');
+        const ruleDetailsContainer = document.getElementById('rule-details-container');
+
+        const ruleIdElement = document.getElementById('rule-id');
+        const ruleTypeElement = document.getElementById('rule-type');
+        const patternElement = document.getElementById('pattern');
+        const createdAtElement = document.getElementById('created-at');
+        const descriptionElement = document.getElementById('description');
+
+        // Function to display messages
+        function displayMessage(element, message, type = 'info') {
+            loadingMessage.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            ruleDetailsContainer.classList.add('hidden');
+
+            element.textContent = message;
+            element.classList.remove('hidden');
+            element.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+        }
+
+        // Function to render rule details
+        function renderRuleDetails(rule) {
+            loadingMessage.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            ruleDetailsContainer.classList.remove('hidden');
+
+            ruleIdElement.textContent = rule.rule_id || 'N/A';
+            ruleTypeElement.textContent = rule.rule_type || 'N/A';
+            patternElement.textContent = rule.pattern || 'N/A';
+            createdAtElement.textContent = rule.created_at ? new Date(rule.created_at).toLocaleString() : 'N/A';
+            descriptionElement.textContent = rule.description || 'No description provided.';
+        }
+
+        // Function to fetch rule details
+        async function fetchRuleDetails(ruleId) {
+            displayMessage(loadingMessage, `Loading rule details for ID: ${ruleId}...`, 'info');
+
+            try {
+                const response = await fetch(`/api/mcp/policy_rules/${ruleId}`);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                    throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorData.message || response.statusText}`);
+                }
+                const rule = await response.json();
+                renderRuleDetails(rule);
+            } catch (error) {
+                console.error('Error fetching rule details:', error);
+                displayMessage(errorMessage, `Failed to load rule details: ${error.message}. Please try again.`, 'error');
+            }
+        }
+
+        // Initialization function
+        function init() {
+            const ruleId = getUrlParameter('rule_id');
+            if (ruleId) {
+                fetchRuleDetails(ruleId);
+            } else {
+                displayMessage(errorMessage, 'No Rule ID provided in the URL. Please provide a rule_id parameter (e.g., ?rule_id=123).', 'error');
+            }
+        }
+
+        // --- Self-test / Acceptance Block ---
+        function runSelfTest() {
+            console.log("Running self-test...");
+
+            const mockRule = {
+                rule_id: 'test-rule-123',
+                rule_type: 'URL_BLOCK',
+                pattern: '.*\\.malicious-domain\\.com/.*',
+                created_at: '2023-10-26T10:30:00Z',
+                description: 'This is a mock rule to block access to known malicious domains identified by threat intelligence feeds. It uses a regex pattern to match URLs.'
+            };
+
+            // Mock the fetch API for testing
+            const originalFetch = window.fetch;
+            window.fetch = async (url) => {
+                console.log(`Mock fetch called for: ${url}`);
+                if (url.includes(mockRule.rule_id)) {
+                    return {
+                        ok: true,
+                        status: 200,
+                        json: async () => mockRule
+                    };
+                }
+                return {
+                    ok: false,
+                    status: 404,
+                    json: async () => ({ message: 'Rule not found (mocked)' })
+                };
+            };
+
+            // Simulate URL parameter for the test
+            const originalLocationSearch = window.location.search;
+            Object.defineProperty(window, 'location', {
+                value: {
+                    search: `?rule_id=${mockRule.rule_id}&test=true`,
+                    href: window.location.href // Keep other properties
+                },
+                writable: true
+            });
+
+            // Run the init function which will now use the mocked fetch
+            init();
+
+            // Assertions after a short delay to allow async operations to complete
+            setTimeout(() => {
+                let passed = true;
+                const assert = (condition, message) => {
+                    if (!condition) {
+                        console.error(`FAIL: ${message}`);
+                        passed = false;
+                    } else {
+                        console.log(`PASS: ${message}`);
+                    }
+                };
+
+                assert(!loadingMessage.classList.contains('hidden'), "Loading message should be hidden after data load."); // This is a bit tricky, it should be hidden *before* assertions.
+                assert(ruleDetailsContainer.classList.contains('hidden') === false, "Rule details container should be visible.");
+
+                assert(ruleIdElement.textContent === mockRule.rule_id, `Rule ID: Expected "${mockRule.rule_id}", Got "${ruleIdElement.textContent}"`);
+                assert(ruleTypeElement.textContent === mockRule.rule_type, `Rule Type: Expected "${mockRule.rule_type}", Got "${ruleTypeElement.textContent}"`);
+                assert(patternElement.textContent === mockRule.pattern, `Pattern: Expected "${mockRule.pattern}", Got "${patternElement.textContent}"`);
+                assert(createdAtElement.textContent === new Date(mockRule.created_at).toLocaleString(), `Created At: Expected "${new Date(mockRule.created_at).toLocaleString()}", Got "${createdAtElement.textContent}"`);
+                assert(descriptionElement.textContent === mockRule.description, `Description: Expected "${mockRule.description}", Got "${descriptionElement.textContent}"`);
+
+                if (passed) {
+                    console.log("Self-test: PASS");
+                } else {
+                    console.error("Self-test: FAIL");
+                }
+
+                // Restore original fetch and location
+                window.fetch = originalFetch;
+                Object.defineProperty(window, 'location', {
+                    value: {
+                        search: originalLocationSearch,
+                        href: window.location.href
+                    },
+                    writable: true
+                });
+
+                // Clear the test data from the UI after test completion
+                ruleIdElement.textContent = '';
+                ruleTypeElement.textContent = '';
+                patternElement.textContent = '';
+                createdAtElement.textContent = '';
+                descriptionElement.textContent = '';
+                ruleDetailsContainer.classList.add('hidden');
+                loadingMessage.classList.add('hidden');
+                errorMessage.classList.add('hidden');
+
+            }, 100); // Give a small delay for promises to resolve and DOM to update
+        }
+
+        // Run init on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', () => {
+            if (getUrlParameter('test') === 'true') {
+                runSelfTest();
+            } else {
+                init();
+            }
+        });
+    </script>
+</body>
+</html>

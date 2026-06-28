@@ -1,0 +1,91 @@
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from jinja2 import Environment, FileSystemLoader
+from starlette.responses import HTMLResponse
+
+# Mock data and API
+class MockDB:
+    def __init__(self):
+        self.risk_tiers = {
+            "high": {"description": "High risk activities", "count": 15},
+            "medium": {"description": "Medium risk activities", "count": 30},
+            "low": {"description": "Low risk activities", "count": 50},
+        }
+
+    def get_risk_tiers_overview(self):
+        return self.risk_tiers
+
+mock_db = MockDB()
+
+def mcp_risk_tier_overview_api():
+    return mock_db.get_risk_tiers_overview()
+
+# Jinja2 Environment Setup
+env = Environment(loader=FileSystemLoader('.'))
+template = env.from_string("""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCP Risk Tier Overview</title>
+</head>
+<body>
+    <h1>MCP Risk Tier Overview</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Risk Tier</th>
+                <th>Description</th>
+                <th>Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for tier, data in risk_tiers.items() %}
+            <tr>
+                <td>{{ tier }}</td>
+                <td>{{ data.description }}</td>
+                <td>{{ data.count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
+""")
+
+# FastAPI App
+app = FastAPI()
+
+@app.get("/mcp-risk-tiers")
+async def mcp_risk_tier_overview_view():
+    risk_tiers_data = mcp_risk_tier_overview_api()
+    content = template.render(risk_tiers=risk_tiers_data)
+    return HTMLResponse(content)
+
+# Test Client and __main__ block
+@pytest.fixture
+def test_client():
+    return TestClient(app)
+
+def test_mcp_risk_tier_overview_view(test_client):
+    response = test_client.get("/mcp-risk-tiers")
+    assert response.status_code == 200
+    assert "MCP Risk Tier Overview" in response.text
+    assert "high" in response.text
+    assert "High risk activities" in response.text
+    assert "15" in response.text
+    assert "medium" in response.text
+    assert "Medium risk activities" in response.text
+    assert "30" in response.text
+    assert "low" in response.text
+    assert "Low risk activities" in response.text
+    assert "50" in response.text
+    print("PASS")
+
+if __name__ == "__main__":
+    # This block is for running the tests directly if needed,
+    # but pytest is the intended way to run the test function.
+    # For demonstration, we'll just call the test function.
+    # In a real scenario, you'd run `pytest your_file_name.py`
+    client = TestClient(app)
+    test_mcp_risk_tier_overview_view(client)

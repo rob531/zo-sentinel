@@ -290,10 +290,13 @@ def search_servers(q: str = "", risk: str = "", source: str = "",
             McpLlmAxisScore.axis_name == "overall_risk",
             McpLlmAxisScore.label == risk.strip().upper())
         conds.append(McpServerRegistry.server_id.in_(sub))
+    if not q.strip():   # default browse: hide blank/1-char junk-named rows from the first impression
+        conds.append(McpServerRegistry.name.isnot(None))
+        conds.append(func.length(func.trim(McpServerRegistry.name)) >= 2)
     stmt = select(McpServerRegistry)
     if conds:
         stmt = stmt.where(and_(*conds))
-    stmt = stmt.order_by(McpServerRegistry.name).offset(offset).limit(limit)
+    stmt = stmt.order_by(func.lower(McpServerRegistry.name)).offset(offset).limit(limit)
     rows = db.execute(stmt).scalars().all()
     hits = [_hit(db, r, reveal) for r in rows]
     if risk.strip() and reveal:   # keep results consistent with badges (published tier)

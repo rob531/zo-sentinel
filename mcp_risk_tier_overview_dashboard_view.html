@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Overview Dashboard</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Header Styling */
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            padding: 20px 0;
+            margin-bottom: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* Main Dashboard Container */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Summary Section for Risk Tier Cards */
+        .summary-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        /* Risk Tier Card Styling */
+        .risk-tier-card {
+            background-color: #fdfdfd;
+            border: 1px solid #e0e0e0;
+            border-left: 5px solid; /* Dynamic color will be added by JS/CSS classes */
+            border-radius: 6px;
+            padding: 20px;
+            width: calc(33.333% - 20px); /* Three cards per row on large screens */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-width: 280px; /* Minimum width to prevent cards from becoming too narrow */
+        }
+
+        .risk-tier-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+
+        .risk-tier-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+
+        .risk-tier-card .count {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #3498db; /* Default count color */
+            margin-bottom: 5px;
+        }
+
+        .risk-tier-card .percentage {
+            font-size: 1.1em;
+            color: #7f8c8d;
+            margin-bottom: 15px;
+        }
+
+        .risk-tier-card .description {
+            font-size: 0.9em;
+            color: #555;
+            flex-grow: 1; /* Allows description to take up available space */
+        }
+
+        /* Specific Tier Colors for border-left */
+        .tier-TRUSTED_GENERAL { border-left-color: #28a745; } /* Green */
+        .tier-TRUSTED_ISOLATED { border-left-color: #17a2b8; } /* Cyan */
+        .tier-MODERATE_RISK { border-left-color: #ffc107; } /* Yellow */
+        .tier-HIGH_RISK_ISOLATED { border-left-color: #fd7e14; } /* Orange */
+        .tier-CRITICAL_RISK { border-left-color: #dc3545; } /* Red */
+        .tier-UNKNOWN_TIER { border-left-color: #6c757d; } /* Grey */
+
+
+        /* Loading and Error Messages */
+        .message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+            color: #555;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        /* Total MCPs Summary */
+        .total-mcp-summary {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: #e9f5ff;
+            border-radius: 6px;
+            border: 1px solid #cce7ff;
+        }
+        .total-mcp-summary h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.8em;
+        }
+        .total-mcp-summary .total-count {
+            font-size: 3em;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 992px) {
+            .risk-tier-card {
+                width: calc(50% - 20px); /* Two cards per row */
+            }
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+                padding: 15px 0;
+            }
+            .dashboard-container {
+                margin: 10px;
+                padding: 15px;
+            }
+            .risk-tier-card {
+                width: 100%; /* One card per row */
+            }
+            .risk-tier-card h3 {
+                font-size: 1.1em;
+            }
+            .risk-tier-card .count {
+                font-size: 1.8em;
+            }
+            .risk-tier-card .percentage {
+                font-size: 0.9em;
+            }
+            .risk-tier-card .description {
+                font-size: 0.8em;
+            }
+            .total-mcp-summary h2 {
+                font-size: 1.5em;
+            }
+            .total-mcp-summary .total-count {
+                font-size: 2.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP Risk Tier Overview Dashboard</h1>
+
+    <div class="dashboard-container">
+        <div id="loading-message" class="message">Loading risk tier data...</div>
+        <div id="error-message" class="message error" style="display: none;"></div>
+
+        <div id="total-mcp-summary" class="total-mcp-summary" style="display: none;">
+            <h2>Total Monitored MCPs</h2>
+            <div class="total-count" id="total-mcp-count">0</div>
+        </div>
+
+        <div id="risk-tier-summary" class="summary-section">
+            <!-- Risk tier cards will be rendered here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const riskTierSummaryDiv = document.getElementById('risk-tier-summary');
+            const loadingMessageDiv = document.getElementById('loading-message');
+            const errorMessageDiv = document.getElementById('error-message');
+            const totalMcpSummaryDiv = document.getElementById('total-mcp-summary');
+            const totalMcpCountDiv = document.getElementById('total-mcp-count');
+
+            // --- Mock API Data ---
+            // In a real application, this data would be fetched from a backend API
+            // (e.g., `mcp_risk_tier_overview_api.py`) using `fetch('/api/mcp_risk_tier_overview')`.
+            const mockApiData = [
+                {
+                    "tier": "TRUSTED_GENERAL",
+                    "count": 120,
+                    "description": "MCPs with a strong security posture and low risk, operating in general environments."
+                },
+                {
+                    "tier": "TRUSTED_ISOLATED",
+                    "count": 45,
+                    "description": "Trusted MCPs operating in isolated or segmented environments, requiring specific access controls."
+                },
+                {
+                    "tier": "MODERATE_RISK",
+                    "count": 30,
+                    "description": "MCPs with some identified vulnerabilities or moderate risk factors, requiring attention and potential mitigation."
+                },
+                {
+                    "tier": "HIGH_RISK_ISOLATED",
+                    "count": 15,
+                    "description": "High-risk MCPs operating in isolated environments, requiring close monitoring and immediate mitigation strategies."
+                },
+                {
+                    "tier": "CRITICAL_RISK",
+                    "count": 5,
+                    "description": "MCPs with severe vulnerabilities or critical risk factors, requiring immediate attention and remediation to prevent compromise."
+                },
+                {
+                    "tier": "UNKNOWN_TIER",
+                    "count": 2,
+                    "description": "MCPs whose risk tier could not be determined due to insufficient data or configuration issues."
+                }
+            ];
+
+            /**
+             * Simulates fetching data from a backend API.
+             * Displays loading state, then renders data or an error.
+             */
+            function fetchData() {
+                loadingMessageDiv.style.display = 'block';
+                errorMessageDiv.style.display = 'none';
+                riskTierSummaryDiv.innerHTML = ''; // Clear previous content
+                totalMcpSummaryDiv.style.display = 'none'; // Hide total summary during load
+
+                // Simulate network delay for API call
+                setTimeout(() => {
+                    try {
+                        // In a real scenario, you would handle HTTP response status and parse JSON
+                        // const response = await fetch('/api/mcp_risk_tier_overview');
+                        // if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        // const data = await response.json();
+                        const data = mockApiData; // Using mock data for self-contained file
+                        renderDashboard(data);
+                    } catch (error) {
+                        displayError("Failed to load data. Please try again later.");
+                        console.error("Error fetching or parsing data:", error);
+                    } finally {
+                        loadingMessageDiv.style.display = 'none';
+                    }
+                }, 1000); // Simulate 1 second API call
+            }
+
+            /**
+             * Renders the dashboard content based on the fetched risk tier data.
+             * @param {Array<Object>} data - An array of risk tier objects.
+             */
+            function renderDashboard(data) {
+                if (!data || data.length === 0) {
+                    riskTierSummaryDiv.innerHTML = '<div class="message">No risk tier data available.</div>';
+                    return;
+                }
+
+                let totalMCPs = 0;
+                data.forEach(tier => {
+                    totalMCPs += tier.count;
+                });
+
+                totalMcpCountDiv.textContent = totalMCPs;
+                totalMcpSummaryDiv.style.display = 'block';
+
+                data.forEach(tier => {
+                    const card = document.createElement('div');
+                    card.classList.add('risk-tier-card');
+                    // Add a class for specific tier styling (e.g., border color)
+                    // Sanitizes tier name to be a valid CSS class name
+                    card.classList.add(`tier-${tier.tier.replace(/[^a-zA-Z0-9_]/g, '')}`);
+
+                    const percentage = totalMCPs > 0 ? ((tier.count / totalMCPs) * 100).toFixed(1) : 0;
+
+                    card.innerHTML = `
+                        <h3>${formatTierName(tier.tier)}</h3>
+                        <div class="count">${tier.count}</div>
+                        <div class="percentage">${percentage}% of Total</div>
+                        <p class="description">${tier.description}</p>
+                    `;
+                    riskTierSummaryDiv.appendChild(card);
+                });
+            }
+
+            /**
+             * Displays an error message to the user.
+             * @param {string} message - The error message to display.
+             */
+            function displayError(message) {
+                errorMessageDiv.textContent = message;
+                errorMessageDiv.style.display = 'block';
+                loadingMessageDiv.style.display = 'none';
+                totalMcpSummaryDiv.style.display = 'none';
+                riskTierSummaryDiv.innerHTML = ''; // Clear any partial content
+            }
+
+            /**
+             * Formats a raw tier name (e.g., "TRUSTED_GENERAL") into a more readable string (e.g., "Trusted General").
+             * @param {string} tierName - The raw tier name.
+             * @returns {string} The formatted tier name.
+             */
+            function formatTierName(tierName) {
+                return tierName
+                    .replace(/_/g, ' ') // Replace underscores with spaces
+                    .toLowerCase()      // Convert to lowercase
+                    .split(' ')         // Split into words
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter of each word
+                    .join(' ');         // Join back with spaces
+            }
+
+            // Initial data fetch when the page loads
+            fetchData();
+        });
+    </script>
+</body>
+</html>

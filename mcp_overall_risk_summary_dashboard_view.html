@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Overall Risk Summary</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #0056b3;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+        .summary-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fdfdfd;
+        }
+        .summary-section h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .chart-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .chart {
+            flex: 1;
+            min-width: 300px;
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .chart h4 {
+            margin-top: 0;
+            text-align: center;
+            color: #28a745;
+        }
+        .bar {
+            background-color: #28a745;
+            height: 20px;
+            margin-bottom: 5px;
+            border-radius: 3px;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            font-size: 12px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .risk-axis-count {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .risk-axis-count:last-child {
+            border-bottom: none;
+        }
+        .risk-axis-count span:first-child {
+            font-weight: bold;
+        }
+        .risk-axis-count span:last-child {
+            background-color: #ffc107;
+            color: #333;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Overall Risk Summary Dashboard</h1>
+
+        <div class="summary-section">
+            <h2>Overall Summary</h2>
+            <p><strong>Total Servers:</strong> <span id="total-servers">Loading...</span></p>
+        </div>
+
+        <div class="summary-section">
+            <h2>Servers by Risk Tier</h2>
+            <div id="risk-tier-chart-container" class="chart-container">
+                <div id="risk-tier-bar-chart" class="chart">
+                    <h4>Risk Tier Distribution</h4>
+                    <div id="risk-tier-bars">
+                        Loading chart...
+                    </div>
+                </div>
+                <div id="risk-tier-pie-chart" class="chart" style="display: none;">
+                    <h4>Risk Tier Distribution (Pie Chart - Placeholder)</h4>
+                    <p>Pie chart visualization would go here. For simplicity, using a bar chart.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-section">
+            <h2>Escalated Servers per Risk Axis</h2>
+            <div id="escalated-servers-table-container" class="table-container">
+                <div id="escalated-servers-list">
+                    Loading escalated server data...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/risk_summary')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Dashboard loaded and data displayed');
+                    displaySummary(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching or displaying risk summary:', error);
+                    document.getElementById('total-servers').textContent = 'Error loading data';
+                    document.getElementById('risk-tier-bars').innerHTML = '<p style="color: red;">Error loading chart data.</p>';
+                    document.getElementById('escalated-servers-list').innerHTML = '<p style="color: red;">Error loading escalated server data.</p>';
+                });
+        });
+
+        function displaySummary(data) {
+            // Display Total Servers
+            const totalServersElement = document.getElementById('total-servers');
+            totalServersElement.textContent = data.total_servers || 'N/A';
+
+            // Display Servers by Risk Tier (Bar Chart)
+            const riskTierBarsContainer = document.getElementById('risk-tier-bars');
+            riskTierBarsContainer.innerHTML = ''; // Clear loading message
+
+            if (data.servers_by_risk_tier && Object.keys(data.servers_by_risk_tier).length > 0) {
+                const tiers = Object.keys(data.servers_by_risk_tier).sort((a, b) => {
+                    const order = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 };
+                    return (order[a] || 0) - (order[b] || 0);
+                });
+                const maxCount = Math.max(...Object.values(data.servers_by_risk_tier));
+
+                tiers.forEach(tier => {
+                    const count = data.servers_by_risk_tier[tier];
+                    const barElement = document.createElement('div');
+                    barElement.classList.add('bar');
+                    barElement.style.width = `${(count / (maxCount || 1)) * 95}%`; // Scale width
+                    barElement.textContent = `${tier}: ${count}`;
+                    riskTierBarsContainer.appendChild(barElement);
+                });
+            } else {
+                riskTierBarsContainer.innerHTML = '<p>No risk tier data available.</p>';
+            }
+
+            // Display Escalated Servers per Risk Axis
+            const escalatedServersListContainer = document.getElementById('escalated-servers-list');
+            escalatedServersListContainer.innerHTML = ''; // Clear loading message
+
+            if (data.escalated_servers_per_axis && Object.keys(data.escalated_servers_per_axis).length > 0) {
+                const table = document.createElement('table');
+                const thead = document.createElement('thead');
+                const tbody = document.createElement('tbody');
+
+                const headerRow = document.createElement('tr');
+                const axisHeader = document.createElement('th');
+                axisHeader.textContent = 'Risk Axis';
+                const countHeader = document.createElement('th');
+                countHeader.textContent = 'Escalated Count';
+                headerRow.appendChild(axisHeader);
+                headerRow.appendChild(countHeader);
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                Object.entries(data.escalated_servers_per_axis).forEach(([axis, count]) => {
+                    const row = document.createElement('tr');
+                    const axisCell = document.createElement('td');
+                    axisCell.textContent = axis;
+                    const countCell = document.createElement('td');
+                    countCell.textContent = count;
+                    row.appendChild(axisCell);
+                    row.appendChild(countCell);
+                    tbody.appendChild(row);
+                });
+                table.appendChild(tbody);
+                escalatedServersListContainer.appendChild(table);
+            } else {
+                escalatedServersListContainer.innerHTML = '<p>No escalated server data available.</p>';
+            }
+        }
+    </script>
+</body>
+</html>

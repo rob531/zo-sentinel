@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import pathlib
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
@@ -115,3 +115,26 @@ async def _security_headers(request, call_next):
         "worker-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'"
     )
     return resp
+
+
+# --- Vanity-domain redirects -------------------------------------------------
+# Defensive/marketing domains all 301 to the canonical site. Suffix-matched so this
+# only fires for these hosts -- mcplookup.app, www, *.fly.dev and health checks are
+# never affected. Certs for these hosts are on the Fly app; DNS A/AAAA -> Fly.
+_VANITY_SUFFIXES = (
+    "mcprisky.io", "mcprisky.app", "mcpcheck.app", "mcpcheck.cloud",
+    "mcpcheck.space", "mcpcheck.one", "mcpcheck.bot", "mcpcheck.wiki",
+    "mcpchecker.app", "mcpchecker.cloud", "mcpchecker.wiki",
+)
+_CANONICAL_HOST = "mcplookup.app"
+
+
+@app.middleware("http")
+async def _vanity_redirect(request, call_next):
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    if host and host != _CANONICAL_HOST and host.endswith(_VANITY_SUFFIXES):
+        target = f"https://{_CANONICAL_HOST}{request.url.path}"
+        if request.url.query:
+            target += "?" + request.url.query
+        return RedirectResponse(target, status_code=301)
+    return await call_next(request)

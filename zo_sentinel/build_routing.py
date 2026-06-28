@@ -158,6 +158,17 @@ def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
     # delegate_to_builder fallback + build_artifact provenance.
     # Static route (prior behaviour): medium -> MiniMax-M3 rung, else rung-0 MiniMax.
     static_model = "zo-ladder-medium" if complexity == "medium" else DEFAULT_ALIAS
+    # CAPABLE-RUNG ROUTING (2026-06-28): the validated module_from_exemplar lane needs a
+    # tool-capable, schema-competent rung. MiniMax (the default builder pin) reliably
+    # hallucinates the real columns even with the schema injected, while the genuinely
+    # capable rungs were never reached -- the Zo-routed strong models 402 (Payment Required)
+    # and the goose primary never fails over off MiniMax (escalation stops at the first
+    # non-empty response; it has no quality gate). Pin exemplar-lane builds to the LIVE,
+    # tool-capable coder window (NVIDIA NIM -> Cerebras -> Mistral Codestral -> Groq, rungs
+    # 17-20, all FREE) so a capable model actually writes the module, grounded by the
+    # recipe-injected real schema + exemplar.
+    if str(directive.get("recipe", "")).strip() == "module_from_exemplar":
+        static_model = "zo-ladder-nvidia"
     # Matrix-driven (evidence > static): route to the model that ACTUALLY builds this
     # directive_type x complexity best, per failure_matrix. Falls back to static when
     # the matrix is thin/absent. (rows are fetched + cached by the daemon -- this

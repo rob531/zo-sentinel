@@ -561,13 +561,13 @@ def call_minimax_fallback(directive):
     log(f"Routing directive {directive_id} through ladder shim")
     try:
         resp = requests.post(SHIM_URL, json={
-            "model": "zo-ladder-v1",
+            "model": "zo-ladder-nvidia",  # capable tool/coder window (was zo-ladder-v1=MiniMax rung0)
             "messages": [
                 {"role": "system", "content": "You are an autonomous builder for zo-sentinel. Output only the completed code/results."},
                 {"role": "user", "content": f"Complete this task: {content}"},
             ],
             "temperature": 0.2,
-            "max_tokens": 8192,
+            "max_tokens": 16384,
         }, timeout=600)
         if resp.status_code == 200:
             txt = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")

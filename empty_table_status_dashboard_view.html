@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Status Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .status-empty {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .status-populated {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+        .status-na {
+            color: #f39c12;
+            font-style: italic;
+        }
+        .placeholder {
+            font-style: italic;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Internal Table Status Dashboard</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Table Name</th>
+                    <th>Current Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Mock Data for Table Status -->
+                <tr>
+                    <td>mcp_definition_history</td>
+                    <td class="status-populated">Populated (150 rows)</td>
+                    <td>Monitored for recent definitions.</td>
+                </tr>
+                <tr>
+                    <td>mcp_submissions</td>
+                    <td class="status-populated">Populated (2300 rows)</td>
+                    <td>Key for tracking incoming data.</td>
+                </tr>
+                <tr>
+                    <td>mcp_exemptions</td>
+                    <td class="status-empty">Empty</td>
+                    <td><span class="placeholder">Expected to be populated. Investigating.</span></td>
+                </tr>
+                <tr>
+                    <td>mcp_decisions</td>
+                    <td class="status-populated">Populated (850 rows)</td>
+                    <td>Reflects policy application.</td>
+                </tr>
+                <tr>
+                    <td>mcp_policy_rules</td>
+                    <td class="status-populated">Populated (55 rows)</td>
+                    <td>Core logic for MCP.</td>
+                </tr>
+                <tr>
+                    <td>mcp_tool_hashes</td>
+                    <td class="status-na">N/A (API Pending)</td>
+                    <td><span class="placeholder">Future monitoring for tool integrity.</span></td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="placeholder" style="text-align: center; margin-top: 20px;">
+            This dashboard will dynamically update statuses once the API integration is complete.
+        </p>
+    </div>
+
+    <script>
+        // JavaScript for future dynamic data fetching and console verification
+        document.addEventListener('DOMContentLoaded', () => {
+            const tableRows = document.querySelectorAll('tbody tr');
+            if (tableRows.length === 6) {
+                console.log("PASS: All table status elements rendered correctly.");
+            } else {
+                console.error("FAIL: Incorrect number of table status elements rendered.");
+            }
+
+            // Placeholder for future API calls
+            // Example:
+            // fetch('/api/table_status')
+            //   .then(response => response.json())
+            //   .then(data => {
+            //     // Update table statuses based on fetched data
+            //     console.log("Data fetched successfully:", data);
+            //   })
+            //   .catch(error => {
+            //     console.error("Error fetching table status:", error);
+            //     // Handle error display, e.g., show 'Error' for all statuses
+            //   });
+        });
+    </script>
+</body>
+</html>

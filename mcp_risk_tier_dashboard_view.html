@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Distribution</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            position: relative;
+            height: 60vh;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .no-data {
+            text-align: center;
+            font-size: 1.2em;
+            color: #7f8c8d;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Risk Tier Distribution</h1>
+        <div class="chart-container">
+            <canvas id="riskTierChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Mock data simulating data fetched from mcp_server_registry
+        // In a real application, this data would be fetched via an API call
+        const mockServerRegistryData = [
+            { server_id: 'srv-001', hostname: 'web01.example.com', risk_tier: 'High' },
+            { server_id: 'srv-002', hostname: 'db01.example.com', risk_tier: 'Medium' },
+            { server_id: 'srv-003', hostname: 'app01.example.com', risk_tier: 'Low' },
+            { server_id: 'srv-004', hostname: 'web02.example.com', risk_tier: 'High' },
+            { server_id: 'srv-005', hostname: 'cache01.example.com', risk_tier: 'Medium' },
+            { server_id: 'srv-006', hostname: 'db02.example.com', risk_tier: 'High' },
+            { server_id: 'srv-007', hostname: 'app02.example.com', risk_tier: 'Low' },
+            { server_id: 'srv-008', hostname: 'monitoring.example.com', risk_tier: 'Medium' },
+            { server_id: 'srv-009', hostname: 'backup.example.com', risk_tier: 'Low' },
+            { server_id: 'srv-010', hostname: 'api.example.com', risk_tier: 'High' },
+            { server_id: 'srv-011', hostname: 'worker01.example.com', risk_tier: 'Medium' },
+            { server_id: 'srv-012', hostname: 'worker02.example.com', risk_tier: 'Low' },
+            { server_id: 'srv-013', hostname: 'loadbalancer.example.com', risk_tier: 'High' },
+            { server_id: 'srv-014', hostname: 'dns.example.com', risk_tier: 'Medium' },
+            { server_id: 'srv-015', hostname: 'storage.example.com', risk_tier: 'Low' },
+        ];
+
+        function analyzeRiskTiers(data) {
+            const riskCounts = {
+                'Low': 0,
+                'Medium': 0,
+                'High': 0,
+                'Unknown': 0 // For any servers without a defined tier
+            };
+
+            data.forEach(server => {
+                const tier = server.risk_tier || 'Unknown';
+                if (riskCounts.hasOwnProperty(tier)) {
+                    riskCounts[tier]++;
+                } else {
+                    riskCounts['Unknown']++;
+                }
+            });
+
+            // Ensure a consistent order for the chart
+            const orderedTiers = ['Low', 'Medium', 'High', 'Unknown'];
+            const labels = [];
+            const counts = [];
+
+            orderedTiers.forEach(tier => {
+                if (riskCounts[tier] > 0 || data.length === 0) { // Include tiers with 0 count if there's data, or if no data at all
+                    labels.push(tier);
+                    counts.push(riskCounts[tier]);
+                }
+            });
+
+            return { labels, counts };
+        }
+
+        function renderChart(labels, counts) {
+            const ctx = document.getElementById('riskTierChart').getContext('2d');
+            const chartData = {
+                labels: labels,
+                datasets: [{
+                    label: 'Number of Servers',
+                    data: counts,
+                    backgroundColor: [
+                        'rgba(75, 192, 192, 0.6)', // Low - Greenish
+                        'rgba(255, 159, 64, 0.6)', // Medium - Orangish
+                        'rgba(255, 99, 132, 0.6)', // High - Reddish
+                        'rgba(201, 203, 207, 0.6)'  // Unknown - Grayish
+                    ],
+                    borderColor: [
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(255, 159, 64, 1)',
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(201, 203, 207, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            };
+
+            const config = {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false // Hide legend as labels are on the axis
+                        },
+                        title: {
+                            display: true,
+                            text: 'Distribution of MCP Server Risk Tiers',
+                            font: {
+                                size: 18
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Servers'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Risk Tier'
+                            }
+                        }
+                    }
+                }
+            };
+
+            new Chart(ctx, config);
+        }
+
+        // --- Main Execution ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const { labels, counts } = analyzeRiskTiers(mockServerRegistryData);
+            const chartCanvas = document.getElementById('riskTierChart');
+
+            if (mockServerRegistryData.length === 0) {
+                chartCanvas.style.display = 'none';
+                const container = chartCanvas.parentElement;
+                container.innerHTML += '<div class="no-data">No server data available to display.</div>';
+            } else {
+                renderChart(labels, counts);
+            }
+        });
+    </script>
+</body>
+</html>

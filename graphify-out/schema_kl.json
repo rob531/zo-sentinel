@@ -1,0 +1,332 @@
+{
+  "models": {
+    "ApiKey": {
+      "column_meta": {
+        "created_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "key_hash": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "label": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "org_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "created_at",
+        "id",
+        "key_hash",
+        "label",
+        "org_id"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "key_hash",
+        "org_id"
+      ],
+      "table": "api_keys"
+    },
+    "McpLlmAxisScore": {
+      "column_meta": {
+        "adapter_sha256": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "axis_name": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "decision_rule_version": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "escalated": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "escalated_to": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "label": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "label_index": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "model_version": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "p_critical": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "p_danger": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "p_top": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "probs": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "scored_at": {
+          "has_default": true,
+          "nullable": true,
+          "primary_key": false
+        },
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "adapter_sha256",
+        "axis_name",
+        "decision_rule_version",
+        "escalated",
+        "escalated_to",
+        "id",
+        "label",
+        "label_index",
+        "model_version",
+        "p_critical",
+        "p_danger",
+        "p_top",
+        "probs",
+        "scored_at",
+        "server_id"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "axis_name",
+        "model_version",
+        "server_id"
+      ],
+      "table": "mcp_llm_axis_scores"
+    },
+    "McpServerRegistry": {
+      "column_meta": {
+        "confidence": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "description": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "first_seen": {
+          "has_default": true,
+          "nullable": true,
+          "primary_key": false
+        },
+        "last_assessed": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "last_scanned": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "last_seen": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "meta": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "name": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "registry_source": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "risk_tier": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "scan_count": {
+          "has_default": true,
+          "nullable": true,
+          "primary_key": false
+        },
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "trust_score": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "url": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "verdict": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "verdict_reasoning": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "confidence",
+        "description",
+        "first_seen",
+        "last_assessed",
+        "last_scanned",
+        "last_seen",
+        "meta",
+        "name",
+        "registry_source",
+        "risk_tier",
+        "scan_count",
+        "server_id",
+        "trust_score",
+        "url",
+        "verdict",
+        "verdict_reasoning"
+      ],
+      "relationships": [],
+      "required_construct": [],
+      "table": "mcp_server_registry"
+    },
+    "Org": {
+      "column_meta": {
+        "created_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "name": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "created_at",
+        "id",
+        "name"
+      ],
+      "relationships": [],
+      "required_construct": [],
+      "table": "orgs"
+    },
+    "User": {
+      "column_meta": {
+        "created_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "email": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "org_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "password_hash": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "role": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "created_at",
+        "email",
+        "id",
+        "org_id",
+        "password_hash",
+        "role"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "email",
+        "org_id",
+        "password_hash"
+      ],
+      "table": "users"
+    }
+  },
+  "source": "app.models",
+  "version": 1
+}

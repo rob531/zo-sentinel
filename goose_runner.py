@@ -782,6 +782,42 @@ def _record_build_provenance(directive, success, smoke_result, attempt,
 ZO_STATE_GIT_COMMIT = os.environ.get("ZO_STATE_GIT_COMMIT", "") not in ("", "0", "false", "False")
 
 
+def _schema_prm_gate(directive, directive_id):
+    """GraphifyKL pre-build PRM: deterministically reject a build whose declared output
+    hallucinates the schema (unknown model columns/attrs, or inline mock models) vs the
+    real app.models. On a violation record a lesson so the NEXT attempt is corrected
+    (closed-loop feedback), then block completion. Best-effort: any internal error -> pass
+    (never block a good build on a tooling hiccup)."""
+    try:
+        out = declared_output(directive)
+        if out is None or not out.exists():
+            return True
+        import schema_kl
+        try:
+            kl = schema_kl.build_schema_kl()
+        except Exception:
+            try:
+                kl = schema_kl.load_schema_kl(str(PROJECT_DIR / "graphify-out" / "schema_kl.json"))
+            except Exception:
+                return True
+        violations = schema_kl.lint_source(out.read_text(encoding="utf-8"), kl)
+        if not violations:
+            return True
+        obs = ("schema PRM rejected this build -- the module uses a schema not in app.models. "
+               "Fix EXACTLY these before rebuilding: " + " | ".join(violations[:8]))
+        log(f"[schema-prm] {directive_id}: BLOCKED -- {len(violations)} schema violation(s):")
+        for _v in violations[:8]:
+            log(f"    - {_v}")
+        try:
+            record_lesson(LESSONS_DIR, out.name, directive_id, "schema_prm", obs, severity=3)
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        log(f"[schema-prm] {directive_id}: gate error (passing): {e}")
+        return True
+
+
 def _selftest_gate(directive, directive_id):
     """Run the module's __main__ self-test and require PASS before completing. Degrades to
     True (Tier-0 only) when there is no self-test or it fails purely on an environment/import
@@ -1098,6 +1134,7 @@ def run():
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)
+                            and _schema_prm_gate(directive, directive_id)
                             and _selftest_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""),
                                   routed_model=_routed_model)
@@ -1113,6 +1150,7 @@ def run():
                     fallback_result = call_minimax_fallback(directive)
                     if (fallback_result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)
+                            and _schema_prm_gate(directive, directive_id)
                             and _selftest_gate(directive, directive_id)):
                         _complete(directive, directive_id,
                                   fallback_result.get("result", ""), fallback_used=True,

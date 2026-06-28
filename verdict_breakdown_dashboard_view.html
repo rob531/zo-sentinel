@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Verdict Breakdown Dashboard</title>
+    <!-- Chart.js CDN for easy chart rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        header {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.2em;
+        }
+
+        #dashboard-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            padding: 25px;
+            max-width: 1200px;
+            margin: 25px auto;
+        }
+
+        .chart-card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 350px; /* Ensure cards have a consistent minimum height */
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .chart-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .chart-card h2 {
+            color: #34495e;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+            text-align: center;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto !important; /* Important to override Chart.js default inline styles */
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            #dashboard-container {
+                grid-template-columns: 1fr; /* Stack charts on smaller screens */
+                padding: 15px;
+                gap: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .chart-card {
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            header {
+                padding: 15px 0;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .chart-card h2 {
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>MCP Verdict Breakdown Dashboard</h1>
+    </header>
+
+    <main id="dashboard-container">
+        <div class="chart-card">
+            <h2>Verdict Distribution by Type</h2>
+            <canvas id="verdictTypeChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h2>Verdict Distribution by Signal Confidence</h2>
+            <canvas id="signalConfidenceChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h2>Verdict Distribution by MCP Age</h2>
+            <canvas id="mcpAgeChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h2>Verdict Distribution by Submission Source</h2>
+            <canvas id="submissionSourceChart"></canvas>
+        </div>
+    </main>
+
+    <script>
+        // Mock API endpoint for demonstration purposes
+        async function mockFetchVerdictBreakdownData() {
+            console.log("Mocking API call to /verdict_breakdown...");
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const mockData = {
+                        total_verdicts: 1250,
+                        verdicts_by_type: {
+                            APPROVED: 700,
+                            REJECTED: 300,
+                            PENDING: 150,
+                            REVIEW: 100
+                        },
+                        verdicts_by_signal_confidence: {
+                            HIGH: 500,
+                            MEDIUM: 400,
+                            LOW: 250,
+                            UNKNOWN: 100
+                        },
+                        verdicts_by_mcp_age_bucket: {
+                            '0-1 Day': 600,
+                            '1-7 Days': 400,
+                            '7-30 Days': 200,
+                            '>30 Days': 50
+                        },
+                        verdicts_by_submission_source: {
+                            AUTOMATED: 800,
+                            MANUAL_WEB: 300,
+                            MANUAL_API: 100,
+                            BATCH: 50
+                        }
+                    };
+                    console.log("Mock data received:", mockData);
+                    resolve(mockData);
+                }, 1000); // Simulate network delay
+            });
+        }
+
+        // Helper function to generate consistent colors
+        const chartColors = {
+            primary: ['#4CAF50', '#FF6384', '#FFCE56', '#36A2EB', '#9966FF', '#FF9F40', '#FFCD56', '#4BC0C0'],
+            bar: '#36A2EB',
+            barHover: '#2A8CDD'
+        };
+
+        /**
+         * Creates and renders a Chart.js chart.
+         * @param {string} canvasId The ID of the canvas element.
+         * @param {string} type The type of chart (e.g., 'pie', 'bar').
+         * @param {string[]} labels Array of labels for the chart.
+         * @param {number[]} data Array of data values for the chart.
+         * @param {string} title The title of the chart.
+         * @param {string|string[]} backgroundColor Background color(s) for the chart elements.
+         * @param {string|string[]} borderColor Border color(s) for the chart elements.
+         */
+        function createChart(canvasId, type, labels, data, title, backgroundColor, borderColor) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            new Chart(ctx, {
+                type: type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: title,
+                        data: data,
+                        backgroundColor: backgroundColor,
+                        borderColor: borderColor || (Array.isArray(backgroundColor) ? backgroundColor.map(c => c.replace('0.2', '1')) : backgroundColor), // Use solid color for border if not specified
+                        borderWidth: type === 'pie' ? 1 : 0, // Border for pie slices
+                        hoverOffset: type === 'pie' ? 4 : 0, // Hover effect for pie
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Allow canvas to resize freely
+                    plugins: {
+                        legend: {
+                            position: type === 'pie' ? 'right' : 'top',
+                            labels: {
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += new Intl.NumberFormat('en-US').format(context.parsed);
+                                        if (type === 'pie') {
+                                            const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+                                            const percentage = ((context.parsed / total) * 100).toFixed(1) + '%';
+                                            label += ` (${percentage})`;
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: type === 'bar' ? {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Verdicts'
+                            },
+                            ticks: {
+                                precision: 0 // Ensure integer ticks
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Category'
+                            }
+                        }
+                    } : {} // No scales for pie charts
+                }
+            });
+        }
+
+        // Function to render all charts
+        function renderCharts(data) {
+            // Verdict Distribution by Type (Pie Chart)
+            createChart(
+                'verdictTypeChart',
+                'pie',
+                Object.keys(data.verdicts_by_type),
+                Object.values(data.verdicts_by_type),
+                'Verdict Types',
+                chartColors.primary.slice(0, Object.keys(data.verdicts_by_type).length)
+            );
+
+            // Verdict Distribution by Signal Confidence (Bar Chart)
+            createChart(
+                'signalConfidenceChart',
+                'bar',
+                Object.keys(data.verdicts_by_signal_confidence),
+                Object.values(data.verdicts_by_signal_confidence),
+                'Signal Confidence',
+                chartColors.bar,
+                chartColors.barHover
+            );
+
+            // Verdict Distribution by MCP Age (Bar Chart)
+            createChart(
+                'mcpAgeChart',
+                'bar',
+                Object.keys(data.verdicts_by_mcp_age_bucket),
+                Object.values(data.verdicts_by_mcp_age_bucket),
+                'MCP Age',
+                chartColors.bar,
+                chartColors.barHover
+            );
+
+            // Verdict Distribution by Submission Source (Bar Chart)
+            createChart(
+                'submissionSourceChart',
+                'bar',
+                Object.keys(data.verdicts_by_submission_source),
+                Object.values(data.verdicts_by_submission_source),
+                'Submission Source',
+                chartColors.bar,
+                chartColors.barHover
+            );
+        }
+
+        // Initialize dashboard on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const data = await mockFetchVerdictBreakdownData();
+                renderCharts(data);
+            } catch (error) {
+                console.error('Failed to load verdict breakdown data:', error);
+                // Display an error message on the dashboard if needed
+                const dashboardContainer = document.getElementById('dashboard-container');
+                dashboardContainer.innerHTML = '<p style="color: red; text-align: center;">Error loading dashboard data. Please try again later.</p>';
+            }
+        });
+    </script>
+</body>
+</html>

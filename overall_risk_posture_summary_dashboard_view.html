@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overall Risk Posture Summary</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .summary-cards {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .card {
+            background-color: #ecf0f1;
+            padding: 25px;
+            border-radius: 8px;
+            text-align: center;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 10px;
+        }
+        .card-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #e74c3c; /* Default to a concerning color */
+        }
+        .card-value.low { color: #2ecc71; }
+        .card-value.medium { color: #f39c12; }
+        .card-value.high { color: #e74c3c; }
+        .card-value.critical { color: #c0392b; }
+
+        .charts-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+        }
+        .chart-container {
+            background-color: #fdfefe;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
+            flex: 1;
+            min-width: 300px;
+            text-align: center;
+        }
+        .chart-container h3 {
+            margin-top: 0;
+            color: #34495e;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+
+        /* Placeholder styles for charts */
+        .chart-placeholder {
+            width: 100%;
+            height: 300px;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-style: italic;
+            color: #777;
+        }
+
+        .filters {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: #f0f3f2;
+            border-radius: 5px;
+        }
+        .filters label {
+            margin-right: 10px;
+            font-weight: 500;
+        }
+        .filters select, .filters input {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 15px;
+        }
+        .filters button {
+            padding: 8px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .filters button:hover {
+            background-color: #2980b9;
+        }
+
+        .mcp-table-container {
+            margin-top: 40px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #34495e;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #e0e0e0;
+        }
+        .risk-low { color: #2ecc71; }
+        .risk-medium { color: #f39c12; }
+        .risk-high { color: #e74c3c; }
+        .risk-critical { color: #c0392b; }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .summary-cards, .charts-section {
+                flex-direction: column;
+                align-items: center;
+            }
+            .card, .chart-container {
+                width: 90%;
+                margin-bottom: 20px;
+            }
+            .filters {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            .filters select, .filters input, .filters button {
+                width: 80%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Overall Risk Posture Summary</h1>
+
+        <div class="filters">
+            <label for="mcp-filter">Filter by MCP:</label>
+            <select id="mcp-filter">
+                <option value="all">All MCPs</option>
+                <!-- MCP options will be populated dynamically -->
+            </select>
+            <label for="risk-tier-filter">Filter by Risk Tier:</label>
+            <select id="risk-tier-filter">
+                <option value="all">All Tiers</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+            </select>
+            <button id="apply-filters-btn">Apply Filters</button>
+        </div>
+
+        <div class="summary-cards">
+            <div class="card">
+                <div class="card-title">Total MCPs</div>
+                <div class="card-value" id="total-mcps">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Overall Risk Level</div>
+                <div class="card-value" id="overall-risk-level">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">MCPs with High/Critical Risk</div>
+                <div class="card-value" id="high-critical-mcps">--</div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <div class="chart-container">
+                <h3>Risk Distribution by Tier</h3>
+                <div id="risk-distribution-chart" class="chart-placeholder">
+                    Risk Distribution Chart Placeholder
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Risk Trend Over Time</h3>
+                <div id="risk-trend-chart" class="chart-placeholder">
+                    Risk Trend Chart Placeholder
+                </div>
+            </div>
+        </div>
+
+        <div class="mcp-table-container">
+            <h2>MCP Risk Details</h2>
+            <table id="mcp-risk-table">
+                <thead>
+                    <tr>
+                        <th>MCP Name</th>
+                        <th>Current Risk Level</th>
+                        <th>Risk Score</th>
+                        <th>Last Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Table rows will be populated dynamically -->
+                    <tr>
+                        <td colspan="5" style="text-align: center;">Loading data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Mock API endpoint URL
+        const API_URL = '/mock_overall_risk_posture_summary_api'; // This will be mocked in a test environment
+
+        // Function to fetch data from the API
+        async function fetchData() {
+            try {
+                // In a real scenario, this would be a fetch call:
+                // const response = await fetch(API_URL);
+                // if (!response.ok) {
+                //     throw new Error(`HTTP error! status: ${response.status}`);
+                // }
+                // const data = await response.json();
+
+                // Mocked data for demonstration
+                const data = {
+                    "total_mcps": 50,
+                    "overall_risk_level": "medium",
+                    "high_critical_mcps": 12,
+                    "risk_distribution": {
+                        "low": 15,
+                        "medium": 20,
+                        "high": 10,
+                        "critical": 5
+                    },
+                    "risk_trend": [
+                        {"date": "2023-10-01", "average_risk_score": 45},
+                        {"date": "2023-10-02", "average_risk_score": 48},
+                        {"date": "2023-10-03", "average_risk_score": 52},
+                        {"date": "2023-10-04", "average_risk_score": 55},
+                        {"date": "2023-10-05", "average_risk_score": 53},
+                        {"date": "2023-10-06", "average_risk_score": 58},
+                        {"date": "2023-10-07", "average_risk_score": 60}
+                    ],
+                    "mcp_details": [
+                        {"mcp_name": "MCP-Alpha", "risk_level": "high", "risk_score": 75, "last_updated": "2023-10-07T10:00:00Z"},
+                        {"mcp_name": "MCP-Beta", "risk_level": "medium", "risk_score": 55, "last_updated": "2023-10-07T09:30:00Z"},
+                        {"mcp_name": "MCP-Gamma", "risk_level": "low", "risk_score": 30, "last_updated": "2023-10-07T11:00:00Z"},
+                        {"mcp_name": "MCP-Delta", "risk_level": "critical", "risk_score": 90, "last_updated": "2023-10-06T15:00:00Z"},
+                        {"mcp_name": "MCP-Epsilon", "risk_level": "high", "risk_score": 80, "last_updated": "2023-10-07T08:00:00Z"},
+                        {"mcp_name": "MCP-Zeta", "risk_level": "medium", "risk_score": 60, "last_updated": "2023-10-07T10:15:00Z"},
+                        {"mcp_name": "MCP-Eta", "risk_level": "low", "risk_score": 25, "last_updated": "2023-10-07T12:00:00Z"},
+                        {"mcp_name": "MCP-Theta", "risk_level": "high", "risk_score": 70, "last_updated": "2023-10-06T18:00:00Z"},
+                        {"mcp_name": "MCP-Iota", "risk_level": "medium", "risk_score": 50, "last_updated": "2023-10-07T09:00:00Z"},
+                        {"mcp_name": "MCP-Kappa", "risk_level": "critical", "risk_score": 95, "last_updated": "2023-10-07T07:00:00Z"}
+                    ]
+                };
+                return data;
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                // Display error message to the user
+                document.querySelector('.container').innerHTML = '<h1 style="color: red;">Error loading dashboard data. Please try again later.</h1>';
+                return null;
+            }
+        }
+
+        // Function to render summary cards
+        function renderSummaryCards(data) {
+            document.getElementById('total-mcps').textContent = data.total_mcps;
+            document.getElementById('total-mcps').className = `card-value ${data.overall_risk_level}`; // Apply color based on risk level
+            document.getElementById('overall-risk-level').textContent = data.overall_risk_level.charAt(0).toUpperCase() + data.overall_risk_level.slice(1);
+            document.getElementById('overall-risk-level').className = `card-value ${data.overall_risk_level}`;
+            document.getElementById('high-critical-mcps').textContent = data.high_critical_mcps;
+            document.getElementById('high-critical-mcps').className = `card-value ${data.overall_risk_level === 'critical' || data.overall_risk_level === 'high' ? data.overall_risk_level : 'medium'}`; // Adjust class if overall is not high/critical
+        }
+
+        // Function to render risk distribution chart (using placeholder for now)
+        function renderRiskDistributionChart(data) {
+            const chartDiv = document.getElementById('risk-distribution-chart');
+            chartDiv.innerHTML = ''; // Clear placeholder
+            chartDiv.className = 'chart-container'; // Reset class
+
+            const distribution = data.risk_distribution;
+            const total = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+
+            const chartContent = `
+                <div style="display: flex; justify-content: center; align-items: flex-end; height: 250px; gap: 10px;">
+                    ${Object.entries(distribution).map(([tier, count]) => {
+                        const percentage = total > 0 ? (count / total * 100).toFixed(1) : 0;
+                        let color;
+                        switch(tier) {
+                            case 'low': color = '#2ecc71'; break;
+                            case 'medium': color = '#f39c12'; break;
+                            case 'high': color = '#e74c3c'; break;
+                            case 'critical': color = '#c0392b'; break;
+                            default: color = '#bdc3c7';
+                        }
+                        return `
+                            <div style="text-align: center; width: 60px;">
+                                <div style="height: ${percentage}%; background-color: ${color}; border-radius: 3px 3px 0 0; transition: height 0.5s ease;"></div>
+                                <div style="margin-top: 5px; font-weight: bold;">${tier.charAt(0).toUpperCase() + tier.slice(1)}</div>
+                                <div style="font-size: 0.9em;">${count} (${percentage}%)</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+            chartDiv.innerHTML = chartContent;
+        }
+
+        // Function to render risk trend chart (using placeholder for now)
+        function renderRiskTrendChart(data) {
+            const chartDiv = document.getElementById('risk-trend-chart');
+            chartDiv.innerHTML = ''; // Clear placeholder
+            chartDiv.className = 'chart-container'; // Reset class
+
+            const trendData = data.risk_trend;
+            if (trendData.length === 0) {
+                chartDiv.innerHTML = '<p>No trend data available.</p>';
+                return;
+            }
+
+            const maxScore = Math.max(...trendData.map(d => d.average_risk_score));
+            const chartHeight = 250;
+            const chartWidth = chartDiv.offsetWidth - 40; // Adjust for padding
+            const barWidth = chartWidth / trendData.length * 0.7;
+            const gapWidth = chartWidth / trendData.length * 0.3;
+
+            let chartContent = `<div style="display: flex; align-items: flex-end; height: ${chartHeight}px; justify-content: center; padding-top: 20px;">`;
+
+            trendData.forEach(item => {
+                const scorePercentage = maxScore > 0 ? (item.average_risk_score / maxScore * 100) : 0;
+                const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                let barColor = '#3498db'; // Default color
+                if (item.average_risk_score > 75) barColor = '#e74c3c';
+                else if (item.average_risk_score > 50) barColor = '#f39c12';
+                else if (item.average_risk_score > 25) barColor = '#2ecc71';
+
+                chartContent += `
+                    <div style="text-align: center; margin-right: ${gapWidth}px; width: ${barWidth}px;">
+                        <div style="height: ${scorePercentage}%; background-color: ${barColor}; border-radius: 3px 3px 0 0; transition: height 0.5s ease;" title="Score: ${item.average_risk_score}"></div>
+                        <div style="font-size: 0.8em; margin-top: 5px;">${date}</div>
+                    </div>
+                `;
+            });
+            chartContent += `</div>`;
+            chartDiv.innerHTML = chartContent;
+        }
+
+        // Function to render MCP details table
+        function renderMcpTable(data, filters = {}) {
+            const tableBody = document.querySelector('#mcp-risk-table tbody');
+            tableBody.innerHTML = ''; // Clear previous rows
+
+            let filteredData = data.mcp_details;
+
+            // Apply MCP filter
+            if (filters.mcp !== 'all') {
+                filteredData = filteredData.filter(mcp => mcp.mcp_name === filters.mcp);
+            }
+
+            // Apply Risk Tier filter
+            if (filters.riskTier !== 'all') {
+                filteredData = filteredData.filter(mcp => mcp.risk_level === filters.riskTier);
+            }
+
+            if (filteredData.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No MCPs found matching the selected filters.</td></tr>';
+                return;
+            }
+
+            filteredData.forEach(mcp => {
+                const row = document.createElement('tr');
+                const riskClass = `risk-${mcp.risk_level}`;
+                const formattedDate = new Date(mcp.last_updated).toLocaleString();
+
+                row.innerHTML = `
+                    <td>${mcp.mcp_name}</td>
+                    <td class="${riskClass}">${mcp.risk_level.charAt(0).toUpperCase() + mcp.risk_level.slice(1)}</td>
+                    <td>${mcp.risk_score}</td>
+                    <td>${formattedDate}</td>
+                    <td><button onclick="viewMcpDetails('${mcp.mcp_name}')">View Details</button></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Function to populate MCP filter dropdown
+        function populateMcpFilter(mcpNames) {
+            const select = document.getElementById('mcp-filter');
+            mcpNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+        }
+
+        // Placeholder function for drill-down action
+        function viewMcpDetails(mcpName) {
+            alert(`Drill-down action for ${mcpName} would go here. (e.g., navigate to a detailed view or open a modal)`);
+            // In a real application, you might:
+            // - Navigate to a new page: window.location.href = `/mcp/${mcpName}/details`;
+            // - Open a modal with more info.
+        }
+
+        // Main function to load and render the dashboard
+        async function loadDashboard() {
+            const data = await fetchData();
+            if (!data) return; // Stop if data fetching failed
+
+            renderSummaryCards(data);
+            renderRiskDistributionChart(data);
+            renderRiskTrendChart(data);
+            renderMcpTable(data); // Initial render with no filters
+            populateMcpFilter(data.mcp_details.map(mcp => mcp.mcp_name));
+
+            // Add event listener for filter button
+            document.getElementById('apply-filters-btn').addEventListener('click', () => {
+                const mcpFilter = document.getElementById('mcp-filter').value;
+                const riskTierFilter = document.getElementById('risk-tier-filter').value;
+                renderMcpTable(data, { mcp: mcpFilter, riskTier: riskTierFilter });
+            });
+        }
+
+        // Load the dashboard when the page is ready
+        document.addEventListener('DOMContentLoaded', loadDashboard);
+    </script>
+</body>
+</html>

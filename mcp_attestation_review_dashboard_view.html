@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Attestation Review Dashboard</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* Container for overall layout */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Filter Section Styling */
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #ecf0f1;
+            border-radius: 6px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filters label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #34495e;
+            font-size: 0.9em;
+        }
+
+        .filters input[type="text"],
+        .filters input[type="date"],
+        .filters select {
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+            width: 100%;
+            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+            transition: border-color 0.2s ease-in-out;
+        }
+
+        .filters input:focus,
+        .filters select:focus {
+            border-color: #3498db;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .filter-actions {
+            grid-column: 1 / -1; /* Span across all columns */
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .filters button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+        }
+
+        .filters button.apply-btn {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        .filters button.apply-btn:hover {
+            background-color: #27ae60;
+            transform: translateY(-1px);
+        }
+
+        .filters button.clear-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .filters button.clear-btn:hover {
+            background-color: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        /* Table Styling */
+        .attestation-table-container {
+            overflow-x: auto; /* Enable horizontal scrolling on small screens */
+            margin-top: 20px;
+        }
+
+        .attestation-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-radius: 6px;
+        }
+
+        .attestation-table th,
+        .attestation-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .attestation-table th {
+            background-color: #34495e;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            position: sticky; /* Keep headers visible during scroll */
+            top: 0;
+        }
+
+        .attestation-table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .attestation-table tbody tr:hover {
+            background-color: #f1f1f1;
+            cursor: pointer;
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+            text-align: center;
+            min-width: 70px;
+        }
+
+        .status-badge.pending { background-color: #f39c12; } /* Orange */
+        .status-badge.approved { background-color: #2ecc71; } /* Green */
+        .status-badge.rejected { background-color: #e74c3c; } /* Red */
+        .status-badge.in-review { background-color: #3498db; } /* Blue */
+        .status-badge.draft { background-color: #95a5a6; } /* Grey */
+
+
+        /* Loading and Error Messages */
+        .message {
+            text-align: center;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
+        .loading-message {
+            background-color: #d9edf7;
+            color: #31708f;
+            border: 1px solid #bce8f1;
+        }
+
+        .error-message {
+            background-color: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+
+        .no-results-message {
+            background-color: #fcf8e3;
+            color: #8a6d3b;
+            border: 1px solid #faebcc;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 15px;
+            }
+
+            .filters {
+                grid-template-columns: 1fr; /* Stack filters vertically */
+                padding: 15px;
+            }
+
+            .filter-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filters button {
+                width: 100%;
+            }
+
+            .attestation-table th,
+            .attestation-table td {
+                padding: 10px;
+                font-size: 0.9em;
+            }
+
+            /* Make table cells behave like blocks for better stacking on small screens */
+            .attestation-table thead {
+                display: none; /* Hide table headers on small screens */
+            }
+
+            .attestation-table, .attestation-table tbody, .attestation-table tr, .attestation-table td {
+                display: block;
+                width: 100%;
+            }
+
+            .attestation-table tr {
+                margin-bottom: 15px;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            }
+
+            .attestation-table td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
+                border: none;
+                border-bottom: 1px dotted #eee;
+            }
+
+            .attestation-table td:last-child {
+                border-bottom: none;
+            }
+
+            .attestation-table td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                width: calc(50% - 20px);
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: #555;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>MCP Attestation Review Dashboard</h1>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="mcpIdFilter">MCP ID:</label>
+                <input type="text" id="mcpIdFilter" placeholder="e.g., mcp-001">
+            </div>
+
+            <div class="filter-group">
+                <label for="statusFilter">Status:</label>
+                <select id="statusFilter">
+                    <option value="">All</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="In Review">In Review</option>
+                    <option value="Draft">Draft</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="attestationDateFilter">Attestation Date (on or after):</label>
+                <input type="date" id="attestationDateFilter">
+            </div>
+
+            <div class="filter-actions">
+                <button class="apply-btn" id="applyFiltersBtn">Apply Filters</button>
+                <button class="clear-btn" id="clearFiltersBtn">Clear Filters</button>
+            </div>
+        </div>
+
+        <div id="messageContainer"></div>
+
+        <div class="attestation-table-container">
+            <table class="attestation-table">
+                <thead>
+                    <tr>
+                        <th>MCP ID</th>
+                        <th>Status</th>
+                        <th>Attestation Date</th>
+                        <th>Reviewer</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="attestationTableBody">
+                    <!-- Attestation rows will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Mock API endpoint URL (for demonstration, this will be intercepted by our client-side mock)
+        const API_ENDPOINT = '/api/mcp_attestations_dashboard';
+
+        // Store original data fetched from the API
+        let allAttestations = [];
+
+        // DOM Elements
+        const mcpIdFilter = document.getElementById('mcpIdFilter');
+        const statusFilter = document.getElementById('statusFilter');
+        const attestationDateFilter = document.getElementById('attestationDateFilter');
+        const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+        const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+        const attestationTableBody = document.getElementById('attestationTableBody');
+        const messageContainer = document.getElementById('messageContainer');
+
+        /**
+         * Displays a message in the message container.
+         * @param {string} text - The message text.
+         * @param {string} type - The type of message (e.g., 'loading', 'error', 'no-results').
+         */
+        function displayMessage(text, type) {
+            messageContainer.innerHTML = `<div class="message ${type}-message">${text}</div>`;
+            messageContainer.style.display = 'block';
+        }
+
+        /**
+         * Clears any displayed messages.
+         */
+        function clearMessage() {
+            messageContainer.innerHTML = '';
+            messageContainer.style.display = 'none';
+        }
+
+        /**
+         * Mocks fetching attestation data from an API.
+         * In a real application, this would be a `fetch` call to a backend endpoint.
+         * For this task, it simulates the API response with a delay.
+         * @returns {Promise<Array>} A promise that resolves with an array of attestation objects.
+         */
+        async function fetchAttestationsFromApi() {
+            displayMessage('Loading attestations...', 'loading');
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const mockData = [
+                        { id: 'mcp-001', status: 'Pending', attestationDate: '2023-10-26', reviewer: 'N/A', notes: 'Initial submission, awaiting security review.' },
+                        { id: 'mcp-002', status: 'Approved', attestationDate: '2023-10-20', reviewer: 'Alice', notes: 'All checks passed, compliance verified.' },
+                        { id: 'mcp-003', status: 'Rejected', attestationDate: '2023-10-22', reviewer: 'Bob', notes: 'Missing critical evidence, resubmit with full documentation.' },
+                        { id: 'mcp-004', status: 'Pending', attestationDate: '2023-10-27', reviewer: 'N/A', notes: 'New submission, in queue for review.' },
+                        { id: 'mcp-005', status: 'Approved', attestationDate: '2023-10-25', reviewer: 'Alice', notes: 'Minor issues resolved, approved after re-evaluation.' },
+                        { id: 'mcp-001', status: 'Approved', attestationDate: '2023-10-28', reviewer: 'Charlie', notes: 'Re-attested after changes, now compliant.' },
+                        { id: 'mcp-006', status: 'In Review', attestationDate: '2023-10-29', reviewer: 'David', notes: 'Currently undergoing detailed security assessment.' },
+                        { id: 'mcp-007', status: 'Approved', attestationDate: '2023-10-21', reviewer: 'Bob', notes: 'Security review complete, no vulnerabilities found.' },
+                        { id: 'mcp-008', status: 'Rejected', attestationDate: '2023-10-23', reviewer: 'Alice', notes: 'Policy violation detected, requires immediate remediation.' },
+                        { id: 'mcp-009', status: 'Draft', attestationDate: '2023-11-01', reviewer: 'N/A', notes: 'Attestation form saved, not yet submitted.' },
+                        { id: 'mcp-010', status: 'Pending', attestationDate: '2023-11-02', reviewer: 'N/A', notes: 'Awaiting initial triage.' },
+                        { id: 'mcp-002', status: 'In Review', attestationDate: '2023-11-03', reviewer: 'Charlie', notes: 'Annual re-attestation in progress.' },
+                    ];
+                    clearMessage();
+                    resolve(mockData);
+                }, 1000); // Simulate network delay
+            });
+        }
+
+        /**
+         * Renders the given attestation data into the HTML table.
+         * @param {Array} attestations - An array of attestation objects to display.
+         */
+        function renderAttestations(attestations) {
+            attestationTableBody.innerHTML = ''; // Clear existing rows
+
+            if (attestations.length === 0) {
+                displayMessage('No attestations found matching your criteria.', 'no-results');
+                return;
+            } else {
+                clearMessage();
+            }
+
+            attestations.forEach(attestation => {
+                const row = attestationTableBody.insertRow();
+                row.innerHTML = `
+                    <td data-label="MCP ID">${attestation.id}</td>
+                    <td data-label="Status"><span class="status-badge ${attestation.status.toLowerCase().replace(/\s/g, '-')}">${attestation.status}</span></td>
+                    <td data-label="Attestation Date">${attestation.attestationDate}</td>
+                    <td data-label="Reviewer">${attestation.reviewer}</td>
+                    <td data-label="Notes">${attestation.notes}</td>
+                `;
+            });
+        }
+
+        /**
+         * Applies filters to the original attestation data and re-renders the table.
+         */
+        function applyFilters() {
+            const mcpId = mcpIdFilter.value.toLowerCase().trim();
+            const status = statusFilter.value;
+            const attestationDate = attestationDateFilter.value; // YYYY-MM-DD format
+
+            let filteredData = allAttestations;
+
+            if (mcpId) {
+                filteredData = filteredData.filter(att => att.id.toLowerCase().includes(mcpId));
+            }
+
+            if (status) {
+                filteredData = filteredData.filter(att => att.status === status);
+            }
+
+            if (attestationDate) {
+                // Filter for dates on or after the selected date
+                filteredData = filteredData.filter(att => {
+                    return new Date(att.attestationDate) >= new Date(attestationDate);
+                });
+            }
+
+            renderAttestations(filteredData);
+        }
+
+        /**
+         * Clears all filter inputs and re-renders the original data.
+         */
+        function clearFilters() {
+            mcpIdFilter.value = '';
+            statusFilter.value = '';
+            attestationDateFilter.value = '';
+            renderAttestations(allAttestations);
+            clearMessage();
+        }
+
+        /**
+         * Initializes the dashboard: fetches data and sets up event listeners.
+         */
+        async function initializeDashboard() {
+            try {
+                allAttestations = await fetchAttestationsFromApi();
+                renderAttestations(allAttestations);
+            } catch (error) {
+                console.error('Failed to fetch attestations:', error);
+                displayMessage('Failed to load attestations. Please try again later.', 'error');
+            }
+
+            // Event Listeners
+            applyFiltersBtn.addEventListener('click', applyFilters);
+            clearFiltersBtn.addEventListener('click', clearFilters);
+
+            // Optional: Apply filters on 'Enter' key press in text inputs
+            mcpIdFilter.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') applyFilters();
+            });
+            attestationDateFilter.addEventListener('change', applyFilters); // Apply filter immediately on date change
+            statusFilter.addEventListener('change', applyFilters); // Apply filter immediately on status change
+        }
+
+        // Run initialization when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+    </script>
+</body>
+</html>

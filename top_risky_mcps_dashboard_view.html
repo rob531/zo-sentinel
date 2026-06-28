@@ -1,0 +1,282 @@
+import http.server
+import socketserver
+import os
+import sys
+
+# Define the port for the server
+PORT = 8000
+# Define the target HTML file name
+TARGET_FILE = "top_risky_mcps_dashboard_view.html"
+
+# HTML content for the dashboard view
+HTML_CONTENT = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top Risky MCPs Dashboard</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #eef2f7;
+            color: #333;
+            line-height: 1.6;
+        }}
+        .header {{
+            background-color: #0056b3;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }}
+        h1 {{
+            margin: 0;
+            font-size: 2.2em;
+        }}
+        .dashboard-container {{
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            max-width: 1100px;
+            margin: 30px auto;
+            animation: fadeIn 0.8s ease-out;
+        }}
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(20px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+            font-size: 0.95em;
+        }}
+        th, td {{
+            border: 1px solid #e0e0e0;
+            padding: 14px 18px;
+            text-align: left;
+        }}
+        th {{
+            background-color: #007bff;
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }}
+        tr:nth-child(even) {{
+            background-color: #f8fafd;
+        }}
+        tr:hover {{
+            background-color: #e6f7ff;
+            transition: background-color 0.2s ease;
+        }}
+        .risk-level-high {{
+            color: #dc3545; /* Red */
+            font-weight: bold;
+        }}
+        .risk-level-medium {{
+            color: #ffc107; /* Amber */
+            font-weight: bold;
+        }}
+        .risk-level-low {{
+            color: #28a745; /* Green */
+            font-weight: bold;
+        }}
+        .loading-message, .error-message {{
+            text-align: center;
+            padding: 40px;
+            font-size: 1.1em;
+            color: #666;
+            font-style: italic;
+        }}
+        .error-message {{
+            color: #dc3545;
+            font-weight: bold;
+        }}
+        .footer {{
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+            color: #777;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 id="dashboard-title">Top Risky MCPs Dashboard</h1>
+    </div>
+    <div class="dashboard-container">
+        <div id="mcps-list" class="loading-message">
+            <p>Loading Top Risky MCPs...</p>
+            <img src="https://i.imgur.com/lJ41j27.gif" alt="Loading..." style="width: 50px; height: 50px;">
+        </div>
+    </div>
+    <div class="footer">
+        &copy; 2023 Zo-Sentinel. All rights reserved.
+    </div>
+
+    <script>
+        // Simulate data from top_risky_mcps_api.py
+        async function fetchTopRiskyMCPs() {{
+            // In a real application, this would be a fetch call to your backend API:
+            // const response = await fetch('/api/top_risky_mcps');
+            // if (!response.ok) {{
+            //     throw new Error(`HTTP error! status: ${{response.status}}`);
+            // }}
+            // const data = await response.json();
+            // return data;
+
+            // Mock data for demonstration purposes
+            return new Promise(resolve => {{
+                setTimeout(() => {{
+                    resolve([
+                        {{ id: 'MCP001', name: 'Global Dynamics Inc.', risk_score: 95, risk_level: 'High', last_assessment: '2023-10-26', critical_vulnerabilities: 12, compliance_status: 'Non-Compliant' }},
+                        {{ id: 'MCP002', name: 'SecureNet Solutions', risk_score: 88, risk_level: 'High', last_assessment: '2023-10-25', critical_vulnerabilities: 9, compliance_status: 'Non-Compliant' }},
+                        {{ id: 'MCP003', name: 'Innovate Systems Ltd.', risk_score: 72, risk_level: 'Medium', last_assessment: '2023-10-27', critical_vulnerabilities: 5, compliance_status: 'Partial Compliance' }},
+                        {{ id: 'MCP004', name: 'DataGuard Corp.', risk_score: 65, risk_level: 'Medium', last_assessment: '2023-10-24', critical_vulnerabilities: 3, compliance_status: 'Partial Compliance' }},
+                        {{ id: 'MCP005', name: 'TechSphere Innovations', risk_score: 40, risk_level: 'Low', last_assessment: '2023-10-28', critical_vulnerabilities: 1, compliance_status: 'Compliant' }},
+                        {{ id: 'MCP006', name: 'CyberSecure Partners', risk_score: 91, risk_level: 'High', last_assessment: '2023-10-29', critical_vulnerabilities: 10, compliance_status: 'Non-Compliant' }},
+                        {{ id: 'MCP007', name: 'FutureTech Enterprises', risk_score: 78, risk_level: 'Medium', last_assessment: '2023-10-23', critical_vulnerabilities: 6, compliance_status: 'Partial Compliance' }},
+                        {{ id: 'MCP008', name: 'Quantum Solutions', risk_score: 55, risk_level: 'Low', last_assessment: '2023-10-30', critical_vulnerabilities: 2, compliance_status: 'Compliant' }}
+                    ]);
+                }}, 1500); // Simulate network delay
+            });
+        }}
+
+        function renderMCPs(mcps) {{
+            const mcpsListDiv = document.getElementById('mcps-list');
+            if (!mcps || mcps.length === 0) {{
+                mcpsListDiv.innerHTML = '<p class="error-message">No risky MCPs found at this time.</p>';
+                return;
+            }}
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>MCP ID</th>
+                            <th>Name</th>
+                            <th>Risk Score</th>
+                            <th>Risk Level</th>
+                            <th>Last Assessment</th>
+                            <th>Critical Vulnerabilities</th>
+                            <th>Compliance Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            mcps.forEach(mcp => {{
+                const riskLevelClass = `risk-level-${{mcp.risk_level.toLowerCase()}}`;
+                html += `
+                    <tr>
+                        <td>${{mcp.id}}</td>
+                        <td>${{mcp.name}}</td>
+                        <td>${{mcp.risk_score}}</td>
+                        <td class="${{riskLevelClass}}">${{mcp.risk_level}}</td>
+                        <td>${{mcp.last_assessment}}</td>
+                        <td>${{mcp.critical_vulnerabilities}}</td>
+                        <td>${{mcp.compliance_status}}</td>
+                    </tr>
+                `;
+            }});
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+            mcpsListDiv.innerHTML = html;
+        }}
+
+        async function initDashboard() {{
+            const mcpsListDiv = document.getElementById('mcps-list');
+            try {{
+                const mcps = await fetchTopRiskyMCPs();
+                renderMCPs(mcps);
+            }} catch (error) {{
+                console.error('Failed to load MCPs:', error);
+                mcpsListDiv.innerHTML = '<p class="error-message">Failed to load dashboard data. Please try again later.</p>';
+            }}
+        }}
+
+        // Initialize the dashboard when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
+"""
+
+class MyHandler(http.server.SimpleHTTPRequestHandler):
+    """
+    A custom HTTP request handler that serves the target HTML file
+    when the root path is requested.
+    """
+    def do_GET(self):
+        if self.path == '/':
+            self.path = '/' + TARGET_FILE
+        return http.server.SimpleHTTPRequestHandler.do_GET(self)
+
+def serve_dashboard():
+    """
+    Creates the HTML file, performs assertions, and starts a simple HTTP server.
+    """
+    # 1. Create the HTML file
+    try:
+        with open(TARGET_FILE, "w") as f:
+            f.write(HTML_CONTENT)
+        print(f"Successfully created {TARGET_FILE}")
+    except IOError as e:
+        print(f"Error creating {TARGET_FILE}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # 2. Assert key elements are present in the created HTML file
+    try:
+        assert os.path.exists(TARGET_FILE), f"Assertion Failed: {TARGET_FILE} was not created."
+        with open(TARGET_FILE, "r") as f:
+            content = f.read()
+            assert "<title>Top Risky MCPs Dashboard</title>" in content, "Assertion Failed: Title not found in HTML."
+            assert '<h1 id="dashboard-title">Top Risky MCPs Dashboard</h1>' in content, "Assertion Failed: Dashboard title H1 not found."
+            assert '<div id="mcps-list"' in content, "Assertion Failed: MCPs list container not found in HTML."
+            assert 'function fetchTopRiskyMCPs()' in content, "Assertion Failed: JavaScript fetch function not found."
+            assert 'function renderMCPs(mcps)' in content, "Assertion Failed: JavaScript render function not found."
+        print("Assertions passed: Key elements are present in the HTML file.")
+    except AssertionError as e:
+        print(f"Assertion Error: {e}", file=sys.stderr)
+        # Clean up the file even if assertions fail
+        if os.path.exists(TARGET_FILE):
+            os.remove(TARGET_FILE)
+        sys.exit(1)
+    except Exception as e:
+        print(f"An unexpected error occurred during assertion: {e}", file=sys.stderr)
+        if os.path.exists(TARGET_FILE):
+            os.remove(TARGET_FILE)
+        sys.exit(1)
+
+    # 3. Start the HTTP server
+    Handler = MyHandler
+    # Set the current directory to serve files from
+    os.chdir(os.path.dirname(os.path.abspath(__file__))) 
+    
+    try:
+        with socketserver.TCPServer(("", PORT), Handler) as httpd:
+            print(f"\nServing '{TARGET_FILE}' at http://localhost:{PORT}")
+            print("Press Ctrl+C to stop the server.")
+            httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nServer stopped by user.")
+    except Exception as e:
+        print(f"An error occurred while starting the server: {e}", file=sys.stderr)
+    finally:
+        # 4. Clean up the created HTML file
+        if os.path.exists(TARGET_FILE):
+            os.remove(TARGET_FILE)
+            print(f"Cleaned up {TARGET_FILE}")
+
+if __name__ == "__main__":
+    serve_dashboard()

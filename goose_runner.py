@@ -465,6 +465,44 @@ def _lessons_context(directive):
         return ""
 
 
+_DATA_ACCESS_CTX = None
+
+
+def _data_access_context(directive):
+    """Proactive DATA-ACCESS grounding folded into EVERY build task (beside
+    _graph_context / _lessons_context). MCP scores, signals, verdicts and the server
+    registry live in the DATABASE (Postgres / DuckDB behind write_service), NOT in
+    files -- read via the write_service /query endpoint, never a CSV. Pre-empts the
+    data-source hallucination on attempt 1 (schema-PRM only catches it reactively).
+    Table list derived from the live schema KL so it stays real. Cached per process;
+    never raises."""
+    global _DATA_ACCESS_CTX
+    if _DATA_ACCESS_CTX is not None:
+        return _DATA_ACCESS_CTX
+    tbl_hint = ""
+    try:
+        import schema_kl
+        try:
+            kl = schema_kl.build_schema_kl()
+        except Exception:
+            kl = schema_kl.load_schema_kl(str(PROJECT_DIR / "graphify-out" / "schema_kl.json"))
+        tables = sorted({info.get("table") for info in kl.get("models", {}).values() if info.get("table")})
+        if tables:
+            tbl_hint = " Real tables include: " + ", ".join(tables[:12]) + "."
+    except Exception:
+        tbl_hint = ""
+    _DATA_ACCESS_CTX = (
+        "DATA ACCESS (read carefully): the MCP scores, signals, verdicts and the server "
+        "registry live in the DATABASE (Postgres / DuckDB), reached ONLY through the "
+        "write_service on http://127.0.0.1:8772 -- read with a SELECT via the /query "
+        "endpoint, e.g. requests.post('http://127.0.0.1:8772/query', json={'sql': "
+        "'SELECT ... FROM mcp_signal_scores ...'}) (many modules wrap this as ws_query(sql)). "
+        "These tables are NOT files: never read or invent a CSV/JSON for them "
+        "(e.g. data/mcp_signal_scores.csv is WRONG and will be rejected). CSV is only ever "
+        "an EXPORT format." + tbl_hint)
+    return _DATA_ACCESS_CTX
+
+
 _RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "module_from_exemplar", "architect"}
 # Conservative inference: only the auth/RBAC/tenant SECURITY SPINE (where the generic
 # single-file builder produced hollow stubs) is keyword-routed to the FastAPI recipe.
@@ -1278,6 +1316,9 @@ def run():
                     _lctx = _lessons_context(directive)   # closed-loop READER: prior failures on this target
                     if _lctx:
                         _task = f"{_task}\n\n{_lctx}"
+                    _dctx = _data_access_context(directive)   # proactive DB-access grounding (pre-empt CSV hallucination)
+                    if _dctx:
+                        _task = f"{_task}\n\n{_dctx}"
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)

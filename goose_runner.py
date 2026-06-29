@@ -479,27 +479,14 @@ def _data_access_context(directive):
     global _DATA_ACCESS_CTX
     if _DATA_ACCESS_CTX is not None:
         return _DATA_ACCESS_CTX
-    tbl_hint = ""
-    try:
-        import schema_kl
-        try:
-            kl = schema_kl.build_schema_kl()
-        except Exception:
-            kl = schema_kl.load_schema_kl(str(PROJECT_DIR / "graphify-out" / "schema_kl.json"))
-        tables = sorted({info.get("table") for info in kl.get("models", {}).values() if info.get("table")})
-        if tables:
-            tbl_hint = " Real tables include: " + ", ".join(tables[:12]) + "."
-    except Exception:
-        tbl_hint = ""
     _DATA_ACCESS_CTX = (
-        "DATA ACCESS (read carefully): the MCP scores, signals, verdicts and the server "
-        "registry live in the DATABASE (Postgres / DuckDB), reached ONLY through the "
-        "write_service on http://127.0.0.1:8772 -- read with a SELECT via the /query "
-        "endpoint, e.g. requests.post('http://127.0.0.1:8772/query', json={'sql': "
-        "'SELECT ... FROM mcp_signal_scores ...'}) (many modules wrap this as ws_query(sql)). "
-        "These tables are NOT files: never read or invent a CSV/JSON for them "
-        "(e.g. data/mcp_signal_scores.csv is WRONG and will be rejected). CSV is only ever "
-        "an EXPORT format." + tbl_hint)
+        "DATA ACCESS: data lives in databases, never files (no CSV/JSON inputs; CSV is "
+        "export-only). TWO PLANES -- (1) APP tables (mcp_server_registry, mcp_llm_axis_scores, "
+        "mcp_score_disputes, orgs, users) are authoritative in the app Postgres: read via the "
+        "app.db SQLAlchemy session (DATABASE_URL), NOT the write_service (:8772 has only a stale "
+        "partial copy). (2) MESH/pipeline tables (mcp_signal_scores, mesh_memory) live in the "
+        "ZoComputer store: read via write_service POST http://127.0.0.1:8772/query. "
+        "Keep output lean: minimal comments, no narration.")
     return _DATA_ACCESS_CTX
 
 

@@ -122,7 +122,8 @@ def lint_source(src: str, kl: dict) -> list[str]:
     attrset = {m: set(info.get("columns", [])) | set(info.get("relationships", [])) | _SQLA_CLASS_ALLOW
                for m, info in models.items()}
     # Real table names (for the data-source guard below).
-    tables = {info.get("table") for info in models.values() if info.get("table")}
+    tables = {info.get("table") for info in models.values() if info.get("table")} | {
+        "mcp_signal_scores", "mesh_memory", "mcp_discovery_candidates", "mcp_submissions"}
     try:
         tree = ast.parse(src)
     except SyntaxError as e:

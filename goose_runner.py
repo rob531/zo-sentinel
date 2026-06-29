@@ -347,7 +347,17 @@ def is_goose_eligible(directive):
     # NEVER touches generation (so it cannot cause the +0 / funnel-fork jams);
     # worst case it skips a rebuild (visible idle) and is reversible by unsetting
     # the flag. Edit-class directives are unaffected (declared_output -> None).
-    if os.environ.get("ZO_DEDUP_REBUILD"):
+    # Toggle via env ZO_DEDUP_REBUILD, OR a sentinel file (operable without a
+    # daemon env change / go.sh edit): directives/.dedup_rebuild_on containing "1".
+    # Read fresh each call so it can be flipped on/off live, no restart.
+    _dedup_on = bool(os.environ.get("ZO_DEDUP_REBUILD"))
+    if not _dedup_on:
+        try:
+            _sf = DIRECTIVES_PATH / ".dedup_rebuild_on"
+            _dedup_on = _sf.is_file() and _sf.read_text(encoding="utf-8").strip() not in ("", "0", "off", "false")
+        except Exception:
+            _dedup_on = False
+    if _dedup_on:
         try:
             _out = declared_output(directive)
             if (_out is not None and _out.is_file()

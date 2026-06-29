@@ -1,101 +1,101 @@
-# org_api_key_manager.py
-"""
-Pure utility module exposing the :class:`OrgAPIKeyManager`.
+import hashlib
+import os
+import random
+import string
+from typing import Optional, Tuple
 
-The manager reads ``org_id``, ``api_key`` and ``permissions`` from a
-metadata dictionary, validates the ``org_id`` as a UUIDv4 and stores the
-values.  No persistence, networking or external dependencies are used.
-"""
+class APIKeyManager:
+    def __init__(self, keys_file: str = 'api_keys.txt'):
+        self.keys_file = keys_file
+        self._ensure_keys_file()
+        self.rate_limits = {}  # key_id: (timestamp, count)
 
-import uuid
-from typing import Any, Dict, List
+    def _ensure_keys_file(self):
+        if not os.path.exists(self.keys_file):
+            with open(self.keys_file, 'w') as f:
+                os.chmod(self.keys_file, 0o600)
 
+    def _generate_key(self, length: int = 32) -> str:
+        chars = string.ascii_letters + string.digits
+        return ''.join(random.choice(chars) for _ in range(length))
 
-class OrgAPIKeyManager:
-    """
-    Simple container for organization API‑key information.
+    def _hash_key(self, key: str) -> str:
+        return hashlib.sha256(key.encode()).hexdigest()
 
-    Parameters
-    ----------
-    metadata: dict
-        Must contain the keys ``org_id``, ``api_key`` and ``permissions``.
-        ``org_id`` must be a UUID version 4 string.
-    """
+    def issue_key(self, org_id: str, label: str) -> Tuple[str, str]:
+        key = self._generate_key()
+        key_hash = self._hash_key(key)
 
-    def __init__(self, metadata: Dict[str, Any]) -> None:
-        # ---- basic key existence checks ------------------------------------
-        required_keys = {"org_id", "api_key", "permissions"}
-        missing = required_keys - metadata.keys()
-        if missing:
-            raise ValueError(f"Missing required metadata fields: {', '.join(missing)}")
+        with open(self.keys_file, 'a') as f:
+            f.write(f"{key_hash},{org_id},{label}\n")
 
-        # ---- org_id validation (UUIDv4) ------------------------------------
-        org_id_raw = metadata["org_id"]
-        if not isinstance(org_id_raw, str):
-            raise ValueError("org_id must be a string")
+        return key_hash, key
+
+    def revoke_key(self, key_id: str) -> bool:
         try:
-            parsed_uuid = uuid.UUID(org_id_raw, version=4)
-        except (ValueError, AttributeError) as exc:
-            raise ValueError(f"org_id '{org_id_raw}' is not a valid UUIDv4") from exc
+            with open(self.keys_file, 'r') as f:
+                lines = f.readlines()
 
-        # The uuid.UUID constructor accepts any UUID; we must ensure it is version 4.
-        if parsed_uuid.version != 4:
-            raise ValueError(f"org_id '{org_id_raw}' is not a UUID version 4")
+            with open(self.keys_file, 'w') as f:
+                for line in lines:
+                    if not line.startswith(key_id):
+                        f.write(line)
 
-        # ---- api_key validation ---------------------------------------------
-        api_key = metadata["api_key"]
-        if not isinstance(api_key, str) or not api_key:
-            raise ValueError("api_key must be a non‑empty string")
+            if self.rate_limits.get(key_id):
+                del self.rate_limits[key_id]
 
-        # ---- permissions validation ------------------------------------------
-        permissions = metadata["permissions"]
-        if not isinstance(permissions, list):
-            raise ValueError("permissions must be a list")
-        if not all(isinstance(p, str) for p in permissions):
-            raise ValueError("each permission must be a string")
+            return True
+        except FileNotFoundError:
+            return False
 
-        # ---- store validated values -------------------------------------------
-        self.org_id: str = str(parsed_uuid)          # canonical string form
-        self.api_key: str = api_key
-        self.permissions: List[str] = permissions
+    def verify_key(self, key: str) -> Optional[str]:
+        key_hash = self._hash_key(key)
 
-    # -------------------------------------------------------------------------
-    # Helper / representation methods (optional but handy for debugging)
-    # -------------------------------------------------------------------------
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(org_id={self.org_id!r}, "
-            f"api_key={self.api_key!r}, permissions={self.permissions!r})"
-        )
+        try:
+            with open(self.keys_file, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) == 3 and parts[0] == key_hash:
+                        return parts[1]  # org_id
+        except FileNotFoundError:
+            pass
 
-    # -------------------------------------------------------------------------
-    # Example utility method – not required by the task but useful
-    # -------------------------------------------------------------------------
-    def has_permission(self, permission: str) -> bool:
-        """Return ``True`` if *permission* is listed in the manager's permissions."""
-        return permission in self.permissions
+        return None
 
+    def rate_limit_check(self, key_id: str, limit: int = 100, window: int = 60) -> bool:
+        now = int(time.time())
 
-# -------------------------------------------------------------------------
-# Self‑test executed when the module is run directly
-# -------------------------------------------------------------------------
+        if key_id not in self.rate_limits:
+            self.rate_limits[key_id] = (now, 1)
+            return True
+
+        timestamp, count = self.rate_limits[key_id]
+
+        if now - timestamp > window:
+            self.rate_limits[key_id] = (now, 1)
+            return True
+
+        if count < limit:
+            self.rate_limits[key_id] = (timestamp, count + 1)
+            return True
+
+        return False
+
 if __name__ == "__main__":
-    # Test data – a valid UUIDv4 string
-    test_metadata = {
-        "org_id": "550e8400-e29b-41d4-a716-446655440000",
-        "api_key": "test_key",
-        "permissions": ["read", "write"],
-    }
+    manager = APIKeyManager()
 
-    # Create the manager; any exception will abort the script
-    manager = OrgAPIKeyManager(test_metadata)
+    # Issue a key
+    org_id = "test_org"
+    label = "test_label"
+    key_id, key = manager.issue_key(org_id, label)
 
-    # Assertions for the self‑test
-    assert isinstance(manager.org_id, str), "org_id should be a string"
-    # Validate that the stored org_id is a proper UUIDv4
-    parsed = uuid.UUID(manager.org_id)
-    assert parsed.version == 4, "org_id is not a UUIDv4"
-    assert manager.api_key == "test_key", "api_key mismatch"
-    assert manager.permissions == ["read", "write"], "permissions mismatch"
+    # Verify the key resolves the org
+    assert manager.verify_key(key) == org_id
+
+    # Revoke the key
+    manager.revoke_key(key_id)
+
+    # Assert verify returns None
+    assert manager.verify_key(key) is None
 
     print("PASS")

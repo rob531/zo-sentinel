@@ -121,6 +121,8 @@ def lint_source(src: str, kl: dict) -> list[str]:
     colset = {m: set(info.get("columns", [])) for m, info in models.items()}
     attrset = {m: set(info.get("columns", [])) | set(info.get("relationships", [])) | _SQLA_CLASS_ALLOW
                for m, info in models.items()}
+    # Real table names (for the data-source guard below).
+    tables = {info.get("table") for info in models.values() if info.get("table")}
     try:
         tree = ast.parse(src)
     except SyntaxError as e:
@@ -153,6 +155,20 @@ def lint_source(src: str, kl: dict) -> list[str]:
                     violations.append(
                         f"{mname}.{attr}: unknown attribute (not a column of {mname}; "
                         f"valid columns: {sorted(colset[mname])})")
+        # data-source hallucination: reading a KNOWN DB TABLE from a CSV/file instead
+        # of the database. HIGH-PRECISION: only when a string literal's basename stem
+        # is exactly a real table name, so legit exports (registry_export.csv, etc.)
+        # do not trip. Scores/registry live in the DB -- read via write_service /query.
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            _low = node.value.lower()
+            if _low.endswith(".csv"):
+                _stem = _low.rsplit("/", 1)[-1].rsplit("\\", 1)[-1][:-4]
+                if _stem in tables:
+                    violations.append(
+                        f"data-source hallucination: '{node.value}' -- '{_stem}' is a "
+                        f"DATABASE table, not a CSV. Read it from the DB via the write_service "
+                        f"/query endpoint (POST http://127.0.0.1:8772/query, e.g. "
+                        f"ws_query(\"SELECT ... FROM {_stem} ...\")), never a local CSV file.")
 
     seen, out = set(), []
     for v in violations:

@@ -341,6 +341,32 @@ def is_goose_eligible(directive):
     # survives `git clean` on respawn, so a quarantine no longer evaporates.
     if failed_quarantined(directive_id_val, sentinels, DURABLE_QUARANTINE_DIR):
         return False
+    # Subtractive, flag-gated dedup (ZO_DEDUP_REBUILD): a "create" directive whose
+    # declared output ALREADY exists on disk with NO open lesson is a redundant
+    # rebuild of a target we already have -- skip it to cut architect churn. This
+    # NEVER touches generation (so it cannot cause the +0 / funnel-fork jams);
+    # worst case it skips a rebuild (visible idle) and is reversible by unsetting
+    # the flag. Edit-class directives are unaffected (declared_output -> None).
+    # Toggle via env ZO_DEDUP_REBUILD, OR a sentinel file (operable without a
+    # daemon env change / go.sh edit): directives/.dedup_rebuild_on containing "1".
+    # Read fresh each call so it can be flipped on/off live, no restart.
+    _dedup_on = bool(os.environ.get("ZO_DEDUP_REBUILD"))
+    if not _dedup_on:
+        try:
+            _sf = DIRECTIVES_PATH / ".dedup_rebuild_on"
+            _dedup_on = _sf.is_file() and _sf.read_text(encoding="utf-8").strip() not in ("", "0", "off", "false")
+        except Exception:
+            _dedup_on = False
+    if _dedup_on:
+        try:
+            _out = declared_output(directive)
+            if (_out is not None and _out.is_file()
+                    and not open_lessons_for(LESSONS_DIR, _out.name)):
+                log(f"[dedup] {directive_id_val}: output {_out.name} already exists "
+                    f"(no open lesson) -- skipping redundant rebuild")
+                return False
+        except Exception:
+            pass
     return True
 
 # =============================================================================

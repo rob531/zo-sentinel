@@ -1,180 +1,246 @@
-import os
-import pytest
-from fastapi import FastAPI, APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+# -*- coding: utf-8 -*-
+"""
+FastAPI router that provides a detailed risk‑verdict for a given server.
 
-# --- Database Setup ---
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///:memory:")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+Endpoint
+--------
+GET /servers/{server_id}/verdict
 
-class Server(Base):
-    __tablename__ = "servers"
-    id = Column(Integer, primary_key=True, index=True)
-    hostname = Column(String, unique=True, index=True)
+The response contains:
+* a per‑axis probability breakdown (p_top) for the seven risk axes,
+* an overall risk score,
+* a risk tier (LOW, MEDIUM, HIGH, CRITICAL),
+* a ``criteria_version`` string that reflects the SSL‑Labs weighted‑axes
+  and any trust‑gating overrides that were applied,
+* the raw axis scores for reference.
 
-class LLMAxisScore(Base):
-    __tablename__ = "mcp_llm_axis_scores"
-    id = Column(Integer, primary_key=True, index=True)
-    server_id = Column(Integer, ForeignKey("servers.id"), nullable=False)
-    axis_name = Column(String, nullable=False)
-    score = Column(Integer, nullable=False)
-    evidence = Column(Text, nullable=False)
+The implementation replaces the placeholder ``verdict_breakdown_api`` stub
+as required by the “Appendix E” directive.
+"""
 
-    server = relationship("Server")
+from __future__ import annotations
 
-Base.metadata.create_all(bind=engine)
+from typing import Dict, List
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from fastapi import APIRouter, HTTPException, status
 
-# --- Pydantic Models ---
-class LLMAxisScoreResponse(BaseModel):
-    axis_name: str
-    score: int
-    evidence: str
+from pydantic import BaseModel, Field
 
-class VerdictViewResponse(BaseModel):
-    server_id: int
-    hostname: str
-    overall_risk: LLMAxisScoreResponse
-    risk_axes: List[LLMAxisScoreResponse]
+# --------------------------------------------------------------------------- #
+# Imports from the existing code‑base.
+# --------------------------------------------------------------------------- #
+# The consumer that provides the raw LLM‑generated axis scores.
+# It returns a mapping of axis name → raw score (float in [0, 1]).
+# Example: {"overall_risk": 0.73, "auth_strength": 0.45, ...}
+from app_scoring_consumer import fetch_mcp_llm_axis_scores
 
-# --- FastAPI Router ---
+# Helper that may adjust the final tier based on maintainer trust.
+# Signature: (current_tier: str, maintainer_trust: str) -> str
+from trust_gating import trust_gating_override
+
+# --------------------------------------------------------------------------- #
+# Pydantic models for the response payload.
+# --------------------------------------------------------------------------- #
+class AxisDetail(BaseModel):
+    """Per‑axis breakdown."""
+    axis: str = Field(..., description="Risk axis identifier")
+    label: str = Field(..., description="Human‑readable label")
+    score: float = Field(..., ge=0.0, le=1.0, description="Raw score from the LLM")
+    p_top: float = Field(..., ge=0.0, le=1.0,
+                         description="Probability that this axis is the top‑risk contributor")
+
+
+class VerdictResponse(BaseModel):
+    """Full verdict payload returned by the endpoint."""
+    server_id: str = Field(..., description="Identifier of the server")
+    criteria_version: str = Field(...,
+                                 description="Version string describing the scoring criteria")
+    overall_risk: float = Field(..., ge=0.0, le=1.0,
+                               description="Weighted overall risk score")
+    risk_tier: str = Field(..., description="Risk tier after all overrides")
+    axis_breakdown: List[AxisDetail] = Field(...,
+                                            description="Breakdown for each risk axis")
+    # Echo of the raw scores – useful for debugging / downstream consumers.
+    raw_axis_scores: Dict[str, float] = Field(...,
+                                              description="Raw axis scores from the LLM")
+
+
+# --------------------------------------------------------------------------- #
+# Helper utilities.
+# --------------------------------------------------------------------------- #
+_RISK_TIER_MAP = [
+    (0.0, 0.20, "LOW"),
+    (0.20, 0.40, "MEDIUM"),
+    (0.40, 0.70, "HIGH"),
+    (0.70, 1.01, "CRITICAL"),
+]
+
+def _risk_tier_from_score(score: float) -> str:
+    """Map a 0‑1 risk score to a tier string."""
+    for low, high, tier in _RISK_TIER_MAP:
+        if low <= score < high:
+            return tier
+    # Fallback – should never happen because the map covers [0,1].
+    return "UNKNOWN"
+
+
+def _determine_top_axis(scores: Dict[str, float]) -> str:
+    """Return the axis name with the highest raw score."""
+    if not scores:
+        return ""
+    # ``max`` returns the first key with the highest value in case of ties.
+    return max(scores, key=scores.get)
+
+
+# --------------------------------------------------------------------------- #
+# FastAPI router definition.
+# --------------------------------------------------------------------------- #
 router = APIRouter()
 
-@router.get("/servers/{server_id}/verdict-view", response_model=VerdictViewResponse)
-def get_verdict_view(server_id: int, db: Session = Depends(get_db)):
-    server = db.query(Server).filter(Server.id == server_id).first()
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
 
-    scores = db.query(LLMAxisScore).filter(LLMAxisScore.server_id == server_id).all()
-    if not scores:
-        raise HTTPException(status_code=404, detail="Verdict scores not found for this server")
+@router.get(
+    "/servers/{server_id}/verdict",
+    response_model=VerdictResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get a detailed risk verdict for a server",
+    description=(
+        "Returns a per‑axis probability breakdown, an overall risk score, a risk tier, "
+        "and the criteria version string. The verdict incorporates a trust‑gating "
+        "override when the maintainer trust axis is ``ESTABLISHED`` or ``OFFICIAL``."
+    ),
+)
+async def get_server_verdict(server_id: str) -> VerdictResponse:
+    """
+    Retrieve the risk verdict for ``server_id``.
 
-    risk_axes_data = []
-    overall_risk_score = None
+    The function pulls the latest LLM‑generated axis scores via
+    ``fetch_mcp_llm_axis_scores`` and then builds a weighted overall risk
+    score.  The overall tier is possibly overridden by ``trust_gating_override``
+    when the ``maintainer_trust`` axis indicates a high‑trust organisation.
+    """
+    # ------------------------------------------------------------------- #
+    # 1️⃣  Pull raw axis scores from the scoring consumer.
+    # ------------------------------------------------------------------- #
+    try:
+        raw_scores: Dict[str, float] = fetch_mcp_llm_axis_scores(server_id)
+    except Exception as exc:  # pragma: no cover – defensive guard
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to retrieve axis scores: {exc}",
+        ) from exc
 
-    for score_item in scores:
-        response_item = LLMAxisScoreResponse(
-            axis_name=score_item.axis_name,
-            score=score_item.score,
-            evidence=score_item.evidence
-        )
-        if score_item.axis_name == "overall_risk":
-            overall_risk_score = response_item
-        else:
-            risk_axes_data.append(response_item)
-
-    if not overall_risk_score:
-        raise HTTPException(status_code=404, detail="Overall risk score not found")
-
-    return VerdictViewResponse(
-        server_id=server.id,
-        hostname=server.hostname,
-        overall_risk=overall_risk_score,
-        risk_axes=risk_axes_data
-    )
-
-# --- Self-Test ---
-from fastapi.testclient import TestClient
-
-app = FastAPI()
-app.include_router(router)
-
-@pytest.fixture(scope="module")
-def test_client():
-    # Use a separate in-memory DB for testing
-    test_engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=test_engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-
-    def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    client = TestClient(app)
-
-    # Seed the in-memory database
-    db = next(override_get_db())
-    server1 = Server(id=1, hostname="test-server-1")
-    db.add(server1)
-    db.commit()
-    db.refresh(server1)
-
-    risk_axes_data = [
-        {"axis_name": "network_exposure", "score": 8, "evidence": "Open SSH port detected."},
-        {"axis_name": "vulnerability_management", "score": 5, "evidence": "Some outdated packages found."},
-        {"axis_name": "access_control", "score": 7, "evidence": "Weak password policies."},
-        {"axis_name": "data_sensitivity", "score": 3, "evidence": "No sensitive data identified."},
-        {"axis_name": "compliance", "score": 6, "evidence": "Minor configuration deviations."},
-        {"axis_name": "threat_intelligence", "score": 4, "evidence": "No active threats linked."},
-        {"axis_name": "overall_risk", "score": 6, "evidence": "Moderate risk level."}
+    # Expected axes – any missing entry is treated as 0.0 (neutral).
+    required_axes = [
+        "overall_risk",
+        "auth_strength",
+        "capability_breadth",
+        "data_sensitivity",
+        "network_egress",
+        "maintainer_trust",
+        "exploit_surface",
     ]
+    scores = {axis: float(raw_scores.get(axis, 0.0)) for axis in required_axes}
 
-    for data in risk_axes_data:
-        llm_score = LLMAxisScore(
-            server_id=server1.id,
-            axis_name=data["axis_name"],
-            score=data["score"],
-            evidence=data["evidence"]
-        )
-        db.add(llm_score)
-    db.commit()
+    # ------------------------------------------------------------------- #
+    # 2️⃣  Compute the overall risk score.
+    # ------------------------------------------------------------------- #
+    # The specification calls for a “real per‑axis breakdown + overall”.
+    # We use a simple un‑weighted mean of the six *risk* axes (excluding
+    # ``maintainer_trust`` which is a trust axis, not a risk axis) and then
+    # blend it with the explicit ``overall_risk`` value supplied by the LLM.
+    risk_axes = [
+        "auth_strength",
+        "capability_breadth",
+        "data_sensitivity",
+        "network_egress",
+        "exploit_surface",
+    ]
+    mean_risk = sum(scores[ax] for ax in risk_axes) / len(risk_axes)
+    # Weighted combination: 70 % LLM‑provided overall, 30 % mean of individual risks.
+    overall_risk = 0.7 * scores["overall_risk"] + 0.3 * mean_risk
+    overall_risk = round(min(max(overall_risk, 0.0), 1.0), 4)   # clamp & round
 
-    yield client
-    Base.metadata.drop_all(bind=test_engine)
+    # ------------------------------------------------------------------- #
+    # 3️⃣  Determine the base risk tier.
+    # ------------------------------------------------------------------- #
+    base_tier = _risk_tier_from_score(overall_risk)
 
+    # ------------------------------------------------------------------- #
+    # 4️⃣  Apply the CRITICAL‑axis override logic.
+    # ------------------------------------------------------------------- #
+    # If any risk axis reaches the maximum score (1.0) we immediately promote
+    # the tier to ``CRITICAL`` irrespective of the computed tier.
+    if any(scores[ax] >= 1.0 for ax in risk_axes):
+        base_tier = "CRITICAL"
 
-def test_get_verdict_view(test_client: TestClient):
-    response = test_client.get("/servers/1/verdict-view")
-    assert response.status_code == 200
-    data = response.json()
-
-    assert data["server_id"] == 1
-    assert data["hostname"] == "test-server-1"
-    assert data["overall_risk"]["axis_name"] == "overall_risk"
-    assert data["overall_risk"]["score"] == 6
-    assert data["overall_risk"]["evidence"] == "Moderate risk level."
-
-    assert len(data["risk_axes"]) == 6
-    # Check if all risk axes are present and have correct data
-    expected_axes = {
-        "network_exposure", "vulnerability_management", "access_control",
-        "data_sensitivity", "compliance", "threat_intelligence"
+    # ------------------------------------------------------------------- #
+    # 5️⃣  Apply trust‑gating overrides (maintainer_trust).
+    # ------------------------------------------------------------------- #
+    # ``maintainer_trust`` is a categorical string in the raw scores; the LLM
+    # encodes it as a float where:
+    #   0.0 → UNKNOWN,
+    #   0.5 → ESTABLISHED,
+    #   1.0 → OFFICIAL.
+    # For clarity we map the float back to the textual representation.
+    trust_map = {
+        0.0: "UNKNOWN",
+        0.5: "ESTABLISHED",
+        1.0: "OFFICIAL",
     }
-    returned_axes = {axis["axis_name"] for axis in data["risk_axes"]}
-    assert returned_axes == expected_axes
+    trust_val = scores["maintainer_trust"]
+    maintainer_trust_str = trust_map.get(trust_val, "UNKNOWN")
 
-    # Check specific axis details
-    for axis in data["risk_axes"]:
-        if axis["axis_name"] == "network_exposure":
-            assert axis["score"] == 8
-            assert axis["evidence"] == "Open SSH port detected."
-        elif axis["axis_name"] == "vulnerability_management":
-            assert axis["score"] == 5
-            assert axis["evidence"] == "Some outdated packages found."
-        # Add checks for other axes if needed
+    # The override is only invoked for high‑trust organisations.
+    if maintainer_trust_str in {"ESTABLISHED", "OFFICIAL"}:
+        final_tier = trust_gating_override(base_tier, maintainer_trust_str)
+    else:
+        final_tier = base_tier
 
-    print("PASS")
+    # ------------------------------------------------------------------- #
+    # 6️⃣  Build the per‑axis breakdown (including p_top probabilities).
+    # ------------------------------------------------------------------- #
+    # ``p_top`` is the probability that the given axis is the top‑risk contributor.
+    # We compute it as the normalized score of the axis relative to the sum of
+    # all risk‑axis scores (excluding maintainer_trust).  If the sum is zero we
+    # fall back to an equal distribution.
+    risk_sum = sum(scores[ax] for ax in risk_axes)
+    axis_breakdown: List[AxisDetail] = []
+    for ax in required_axes:
+        label = ax.replace("_", " ").title()
+        score = scores[ax]
 
-if __name__ == "__main__":
-    # This block is for running the FastAPI app directly, not for the test
-    # To run the test, use `pytest your_file_name.py`
-    import uvicorn
-    print("Running FastAPI application. To run tests, use 'pytest'.")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        if ax in risk_axes and risk_sum > 0:
+            p_top = round(score / risk_sum, 4)
+        else:
+            # For non‑risk axes (overall_risk, maintainer_trust) we set p_top to 0.
+            p_top = 0.0
+
+        axis_breakdown.append(
+            AxisDetail(
+                axis=ax,
+                label=label,
+                score=round(score, 4),
+                p_top=p_top,
+            )
+        )
+
+    # ------------------------------------------------------------------- #
+    # 7️⃣  Assemble the criteria version string.
+    # ------------------------------------------------------------------- #
+    # The version string follows the pattern described in the task:
+    #   “SSL‑Labs weighted‑axes/override <trust‑override‑applied?>”
+    criteria_version = "SSL-Labs weighted-axes"
+    if maintainer_trust_str in {"ESTABLISHED", "OFFICIAL"}:
+        criteria_version += f"/trust-override-{maintainer_trust_str.lower()}"
+
+    # ------------------------------------------------------------------- #
+    # 8️⃣  Return the response model.
+    # ------------------------------------------------------------------- #
+    return VerdictResponse(
+        server_id=server_id,
+        criteria_version=criteria_version,
+        overall_risk=overall_risk,
+        risk_tier=final_tier,
+        axis_breakdown=axis_breakdown,
+        raw_axis_scores=raw_scores,
+    )

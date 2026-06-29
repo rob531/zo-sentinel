@@ -1,4 +1,4 @@
-﻿title: "Zo Sentinel Webapp Frontend (React/dashboard)"
+title: "Zo Sentinel Webapp Frontend (React/dashboard)"
 description: "Execute-recipe for the 3-tier app's PRESENTATION modules: builds ONE self-contained, interactive dashboard file that consumes the app REST API (verdict tiers, per-axis breakdown, org-scoped lists), verifies it, then registers the build. Single-file (inline CSS+JS, no CDN/build step) to fit the one-artifact-per-directive pipeline; the richer React+shadcn build target needs a JS build leg (see docs/sentinel_3tier_target_spec.md sec 4)."
 version: "0.1"
 

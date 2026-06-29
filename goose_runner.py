@@ -792,6 +792,12 @@ def _schema_prm_gate(directive, directive_id):
         out = declared_output(directive)
         if out is None or not out.exists():
             return True
+        # Schema PRM lints PYTHON modules against app.models. A non-.py output
+        # (.html front-end view, .sql, ...) has no Python schema surface, and the
+        # AST linter reports its non-Python syntax as a bogus "violation" that
+        # ghosts the build (e.g. a dispute admin_disputes.html). Only gate .py.
+        if out.suffix.lower() != ".py":
+            return True
         import schema_kl
         try:
             kl = schema_kl.build_schema_kl()

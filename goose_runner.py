@@ -424,7 +424,17 @@ def _lessons_context(directive):
                    else (directive.get("directive_id") or directive.get("id") or ""))
         if not subject:
             return ""
-        return format_lessons_context(open_lessons_for(LESSONS_DIR, subject), subject)
+        # PRIMARY: functional / schema lessons -- these BLOCK and must be fixed first.
+        primary = format_lessons_context(open_lessons_for(LESSONS_DIR, subject), subject)
+        # SECONDARY: a non-blocking security advisory, appended LAST so functionality
+        # and schema-binding lead the model's attention (security is the 2nd goal).
+        sec = open_lessons_for(LESSONS_DIR, f"{subject}::security")
+        sec_txt = ""
+        if sec:
+            _obs = str(sec[0].get("observation", ""))[:300]
+            sec_txt = ("\n\nSECONDARY (security advisory, NON-BLOCKING -- do not sacrifice "
+                       "the working feature or schema-binding to satisfy this): " + _obs)
+        return (primary + sec_txt).strip()
     except Exception:
         return ""
 
@@ -920,6 +930,73 @@ def _syntax_gate(directive, directive_id):
         return True
 
 
+_BANDIT_READY = None  # tri-state cache: None=unchecked, True=available, False=unavailable
+
+
+def _ensure_bandit():
+    """One-time best-effort: make `python -m bandit` available (lazy pip install,
+    cached so the build hot path pays the check once). Never raises."""
+    global _BANDIT_READY
+    if _BANDIT_READY is not None:
+        return _BANDIT_READY
+    import importlib.util
+    if importlib.util.find_spec("bandit") is not None:
+        _BANDIT_READY = True
+        return True
+    try:
+        import subprocess, sys as _sys
+        subprocess.run([_sys.executable, "-m", "pip", "install", "--quiet",
+                        "--disable-pip-version-check", "bandit"],
+                       capture_output=True, text=True, timeout=180)
+        _BANDIT_READY = importlib.util.find_spec("bandit") is not None
+    except Exception:
+        _BANDIT_READY = False
+    if not _BANDIT_READY:
+        log("[security] bandit unavailable -- advisories disabled (functional builds unaffected)")
+    return _BANDIT_READY
+
+
+def _security_advisory(directive, directive_id):
+    """SECONDARY (non-blocking) signal. AFTER a build has passed the hard gates and
+    SHIPPED, run Bandit on the declared .py output and, on MEDIUM+ findings, record a
+    LOW-severity security lesson under a SEPARATE subject ('<target>::security') so it
+    teaches the NEXT build WITHOUT clobbering the functional/schema lesson and WITHOUT
+    ever blocking a working, schema-bound build. Security is the 2nd objective:
+    functionality + schema-binding + novelty come first. Best-effort; never raises."""
+    try:
+        out = declared_output(directive)
+        if out is None or out.suffix.lower() != ".py" or not out.is_file():
+            return
+        if not _ensure_bandit():
+            return
+        import subprocess, sys as _sys, json as _json
+        proc = subprocess.run(
+            [_sys.executable, "-m", "bandit", "-q", "-f", "json", "-ll", str(out)],
+            capture_output=True, text=True, timeout=90, cwd=str(PROJECT_DIR))
+        try:
+            data = _json.loads(proc.stdout or "{}")
+        except Exception:
+            return
+        results = data.get("results", [])
+        sec_subject = f"{out.name}::security"
+        if not results:
+            try:
+                resolve_lessons(LESSONS_DIR, sec_subject)  # clean now -> close prior advisory
+            except Exception:
+                pass
+            return
+        tops = []
+        for r in results[:4]:
+            tops.append(f"{r.get('test_id','')} {r.get('issue_severity','')}: "
+                        f"{str(r.get('issue_text',''))[:110]} (line {r.get('line_number','?')})")
+        obs = ("Bandit flagged " + str(len(results)) + " MEDIUM+ security issue(s); when it does "
+               "NOT compromise the working feature, prefer the safe form: " + " | ".join(tops))
+        record_lesson(LESSONS_DIR, sec_subject, directive_id, "security_advisory", obs, severity=1)
+        log(f"[security] {directive_id}: {len(results)} Bandit MEDIUM+ finding(s) -> advisory lesson (non-blocking)")
+    except Exception as e:
+        log(f"[security] {directive_id}: advisory skipped ({type(e).__name__}: {e})")
+
+
 def _complete(directive, directive_id, result_text, fallback_used=False,
               routed_model=""):
     """A directive's declared output IS on disk AND passed the Tier-0 gate ->
@@ -931,6 +1008,14 @@ def _complete(directive, directive_id, result_text, fallback_used=False,
     try:
         _rout = declared_output(directive)
         resolve_lessons(LESSONS_DIR, _rout.name if _rout is not None else directive_id)
+    except Exception:
+        pass
+
+    # SECONDARY objective (non-blocking): record a Bandit security advisory for the
+    # NEXT build of this target. The feature already passed schema + self-test and
+    # SHIPPED -- security teaches the next build, it never blocks functional work.
+    try:
+        _security_advisory(directive, directive_id)
     except Exception:
         pass
     # Provenance BEFORE clear_ghost so rescue_count reflects the retries it took.

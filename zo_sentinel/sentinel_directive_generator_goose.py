@@ -398,7 +398,14 @@ def _ensure_goose_env() -> None:
         # architect a STRONGER rung via the shim WITHOUT OAuth (Gemini OAuth is dead on this
         # headless host). Recommended: zo-ladder-cerebras = Cerebras gpt-oss-120b (free,
         # tool-calling, the bake-off winner) with free-rung failover. Reversible: unset -> MiniMax.
-        os.environ["GOOSE_MODEL"] = os.environ.get("ZO_ARCHITECT_MODEL", "MiniMax-Text-01").strip() or "MiniMax-Text-01"
+        # Default to a CAPABLE tool-calling rung. The MiniMax rung-0 aliases
+        # (MiniMax-Text-01 / zo-ladder-v1) are the documented +0/tool-loop bottleneck;
+        # treat them (and unset) as "weak" and upgrade to Cerebras gpt-oss-120b (free,
+        # tool-calling, free-rung failover). Override with any OTHER ZO_ARCHITECT_MODEL.
+        _am = (os.environ.get("ZO_ARCHITECT_MODEL", "") or "").strip()
+        if _am.lower() in ("", "minimax-text-01", "zo-ladder-v1"):
+            _am = "zo-ladder-cerebras"
+        os.environ["GOOSE_MODEL"] = _am
         os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:8796/v1")
         os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")  # set => goose skips keyring
 

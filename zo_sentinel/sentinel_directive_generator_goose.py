@@ -55,7 +55,7 @@ LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
 GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 240))   # was 480; a converging cycle is fast, a tool-call LOOP just burns -- fail it sooner
-ARCHITECT_MAX_TURNS = int(os.environ.get("DGG_MAX_TURNS", 12))   # CLI --max-turns: hard cap inside goose core loop; canary-proven to bound stdio-MCP bridge-tool loops where recipe settings.max_turns + PreToolUse hook did NOT. 0 = off.
+ARCHITECT_MAX_TURNS = int(os.environ.get("DGG_MAX_TURNS", 24))   # CLI --max-turns: hard cap inside goose core loop; canary-proven to bound stdio-MCP bridge-tool loops where recipe settings.max_turns + PreToolUse hook did NOT. 0 = off.
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
 # Architect-scoped goose BINARY -- lets the architect run a DIFFERENT goose
 # version from the builder (goose_runner.py, which keeps bare `goose` on PATH).

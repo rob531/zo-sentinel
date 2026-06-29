@@ -1,4 +1,4 @@
-﻿title: "Zo Sentinel Webapp Backend (FastAPI)"
+title: "Zo Sentinel Webapp Backend (FastAPI)"
 description: "Execute-recipe for the 3-tier app's BACKEND modules: builds ONE complete, production-grade single-file FastAPI module (routes + Pydantic + auth/RBAC + org scoping), verifies it compiles, then registers the build. Sibling of architect.yaml, specialised so auth/RBAC/OAuth/tenant modules stop coming through as hollow stubs."
 version: "0.1"
 

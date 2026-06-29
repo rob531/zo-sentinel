@@ -871,7 +871,37 @@ def _syntax_gate(directive, directive_id):
     if run_gates is None:
         return True
     out = declared_output(directive)
-    if out is None or out.suffix != ".py" or not out.is_file():
+    if out is None or not out.is_file():
+        return True
+    # Front-end outputs (.html) get a LENIENT structural gate, not py_compile:
+    # parse with the stdlib HTML parser and require non-empty markup (the FE
+    # analogue of the Tier-0 syntax gate / mirrors the CI front-end lane FE0).
+    # Good HTML completes; empty/garbage HTML re-ghosts. Never false-fails: any
+    # parser hiccup -> allow (output_confirmed already proved the file landed).
+    if out.suffix.lower() in (".html", ".htm"):
+        try:
+            from html.parser import HTMLParser
+            class _HG(HTMLParser):
+                def __init__(self):
+                    super().__init__(convert_charrefs=True)
+                    self.tags = 0
+                    self.body = False
+                def handle_starttag(self, tag, attrs):
+                    self.tags += 1
+                def handle_data(self, data):
+                    if data.strip():
+                        self.body = True
+            hg = _HG()
+            hg.feed(out.read_text(encoding="utf-8", errors="replace"))
+            ok = hg.tags > 0 and hg.body
+            if not ok:
+                log(f"[eval-gate] {directive_id}: HTML gate FAIL on {out.name} "
+                    f"(empty / no renderable markup) -- not completing")
+            return ok
+        except Exception as e:
+            log(f"[eval-gate] {directive_id}: HTML gate error ({e}) -- allowing")
+            return True
+    if out.suffix != ".py":
         return True
     try:
         report = run_gates(out, [0])           # syntax only -- cheap, no false-fails

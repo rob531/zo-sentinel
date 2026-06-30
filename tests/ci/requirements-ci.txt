@@ -10,7 +10,7 @@ requests>=2.34.2,<3.0
 # ui_server's routes in-process (tests/ci/frontend_runner.py).
 httpx>=0.28.1,<1.0
 # PyJWT: app-foundation oauth_login_service issues/verifies JWT sessions.
-PyJWT>=2.8,<3.0
+PyJWT>=2.13.0,<3.0
 psycopg[binary]>=3.1,<4.0
 SQLAlchemy>=2.0.51,<2.1
 alembic>=1.13,<2.0

@@ -489,6 +489,12 @@ def _data_access_context(directive):
         "is a HOLLOW build and is REJECTED by the no-hollow gate (mirror verdict_breakdown_api.py). "
         "Do not read app tables off :8772 (stale partial copy). (2) MESH/pipeline tables (mcp_signal_scores, mesh_memory) live in the "
         "ZoComputer store: read via write_service POST http://127.0.0.1:8772/query. "
+        "SELF-TEST vs DATA LAYER: if a directive's acceptance mentions an 'in-memory store', "
+        "that applies ONLY to the __main__ self-test -- override the dep via "
+        "app.dependency_overrides[get_session] to a throwaway SQLite session for the test. "
+        "The MODULE's OWN data access MUST remain from app.db import get_session + "
+        "from app.models import <Model>; a module whose data layer is itself an in-memory/"
+        "sqlite store (rather than just the test override) is HOLLOW and REJECTED. "
         "Keep output lean: minimal comments, no narration.")
     return _DATA_ACCESS_CTX
 

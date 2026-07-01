@@ -127,7 +127,13 @@ _VANITY_SUFFIXES = (
     "mcpcheck.space", "mcpcheck.one", "mcpcheck.bot", "mcpcheck.wiki",
     "mcpchecker.app", "mcpchecker.cloud", "mcpchecker.wiki",
 )
-_CANONICAL_HOST = "mcplookup.app"
+import os as _os_pivot  # env-driven canonical so a pivot is a secret change, not a code edit
+# Pivot primary domain:  flyctl secrets set CANONICAL_HOST=<domain> -a mcplookup  (docs/DOMAIN_PIVOT_RUNBOOK.md)
+# Default unchanged (mcplookup.app) until the secret is set.
+_CANONICAL_HOST = (_os_pivot.environ.get("CANONICAL_HOST") or "mcplookup.app").strip().lower()
+# All hosted domains = the vanity list + the historic primary; canonical served, the rest 301 to it.
+_ALL_HOSTED_DOMAINS = _VANITY_SUFFIXES + ("mcplookup.app",)
+_VANITY_SUFFIXES = tuple(d for d in _ALL_HOSTED_DOMAINS if d != _CANONICAL_HOST)
 
 
 @app.middleware("http")

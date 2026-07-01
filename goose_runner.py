@@ -483,8 +483,11 @@ def _data_access_context(directive):
         "DATA ACCESS: data lives in databases, never files (no CSV/JSON inputs; CSV is "
         "export-only). TWO PLANES -- (1) APP tables (mcp_server_registry, mcp_llm_axis_scores, "
         "mcp_score_disputes, orgs, users) are authoritative in the app Postgres: read via the "
-        "app.db SQLAlchemy session (DATABASE_URL), NOT the write_service (:8772 has only a stale "
-        "partial copy). (2) MESH/pipeline tables (mcp_signal_scores, mesh_memory) live in the "
+        "app.db SQLAlchemy session -- import it VERBATIM: from app.db import get_session and "
+        "from app.models import <Model>, use Depends(get_session). Do NOT define your own "
+        "session/engine/models or an in-memory DB: a FastAPI module with no from app.db import "
+        "is a HOLLOW build and is REJECTED by the no-hollow gate (mirror verdict_breakdown_api.py). "
+        "Do not read app tables off :8772 (stale partial copy). (2) MESH/pipeline tables (mcp_signal_scores, mesh_memory) live in the "
         "ZoComputer store: read via write_service POST http://127.0.0.1:8772/query. "
         "Keep output lean: minimal comments, no narration.")
     return _DATA_ACCESS_CTX

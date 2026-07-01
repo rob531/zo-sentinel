@@ -35,6 +35,7 @@ COMPLEXITY_TO_ALIAS = {
     "unknown": "zo-ladder-low",
 }
 DEFAULT_ALIAS = "zo-ladder-low"          # rung 0 (MiniMax) -- prior behaviour
+_CAPABLE_RECIPES = {"module_from_exemplar", "webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack"}
 
 # Phase 5 escalation ladder (cost-ordered). A FAILED directive re-asserts UP this
 # list on its next attempt -- one alias per attempt (preserve #73; the bump is
@@ -167,7 +168,7 @@ def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
     # tool-capable coder window (NVIDIA NIM -> Cerebras -> Mistral Codestral -> Groq, rungs
     # 17-20, all FREE) so a capable model actually writes the module, grounded by the
     # recipe-injected real schema + exemplar.
-    if str(directive.get("recipe", "")).strip() == "module_from_exemplar":
+    if str(directive.get("recipe", "")).strip() in _CAPABLE_RECIPES:
         static_model = "zo-ladder-nvidia"
     # Matrix-driven (evidence > static): route to the model that ACTUALLY builds this
     # directive_type x complexity best, per failure_matrix. Falls back to static when
@@ -196,7 +197,7 @@ def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
     # (the matrix/static default) either over-seeds NOT NULL columns or writes inline-mock
     # models, so it never clears the self-test gate. Make the capable coder window the FINAL
     # word over the matrix + escalation picks for this lane (free rungs 17-20).
-    if str(directive.get("recipe", "")).strip() == "module_from_exemplar":
+    if str(directive.get("recipe", "")).strip() in _CAPABLE_RECIPES:
         # Rotate the capable tool-capable coder window by attempt so a quality failure
         # FAILS OVER to a different capable model instead of re-hitting the same rung
         # (escalation.ask has no quality gate -- it short-circuits on the first non-empty

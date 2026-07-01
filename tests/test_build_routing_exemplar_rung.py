@@ -23,3 +23,13 @@ def test_exemplar_lane_rotates_capable_rungs_by_attempt():
         env = build_env_for({"recipe": "module_from_exemplar", "complexity": "medium",
                              "output_file": "x_api.py"}, attempt=attempt)
         assert env["GOOSE_MODEL"] == expected, (attempt, env)
+
+
+def test_webapp_recipes_route_to_capable_rung():
+    # /app webapp-recipe builds must also reach the capable coder rung -- MiniMax-M3
+    # (the medium pin) ignores the anti-hollow grounding and ships sqlite/declarative_base
+    # stubs the no-hollow gate rejects.
+    for recipe in ("webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack"):
+        env = build_env_for({"recipe": recipe, "complexity": "medium",
+                             "output_file": "mcp_x_api.py"})
+        assert env["GOOSE_MODEL"] == "zo-ladder-nvidia", (recipe, env)

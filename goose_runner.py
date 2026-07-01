@@ -1294,6 +1294,8 @@ def run():
                 # Capture the routed alias here so build_provenance records the rung
                 # the build ACTUALLY used (not the daemon's ambient GOOSE_MODEL).
                 _attempt = ghost_attempts(DIRECTIVES_PATH, directive_id)
+                # route by the recipe we will actually run (inferred recipe was not stamped -> app builds fell to MiniMax)
+                directive["recipe"] = _select_recipe(directive) or directive.get("recipe", "")
                 _routed_env = build_env_for(directive, attempt=_attempt,
                                             matrix_rows=failure_matrix_cached())
                 _routed_model = _routed_env.get("GOOSE_MODEL", "")

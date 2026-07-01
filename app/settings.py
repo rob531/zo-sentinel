@@ -8,7 +8,7 @@ import os
 
 
 class Settings:
-    APP_NAME = "Zo-Sentinel"
+    APP_NAME = "MCPRisky"
     ENV = os.environ.get("APP_ENV", "dev")
 
     # Auth / JWT -- APP_JWT_SECRET MUST be set in any non-dev deploy.

@@ -91,10 +91,10 @@ def upsert_servers(servers):
         rows = []
         for s in batch:
             rows.append({
-                'server_id': s.get('server_id') or s.get('name', '').lower().replace(' ', '-'),
-                'name': s.get('name', ''),
+                'server_id': s.get('server_id') or (s.get('name') or '').lower().replace(' ', '-'),
+                'name': s.get('name') or '',
                 'url': s.get('url') or s.get('homepage') or s.get('repository') or '',
-                'description': s.get('description', '')[:500],
+                'description': (s.get('description') or '')[:500],
                 'trust_score': 5,
                 'verdict': 'unreviewed',
                 'registry_source': 'candidate_promoter',

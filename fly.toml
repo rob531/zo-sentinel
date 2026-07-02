@@ -3,6 +3,12 @@
 app = "mcplookup" # Replace with your actual reserved Fly app name
 primary_region = "ewr" # Or your preferred region
 
+[deploy]
+  # migrate-in-image on every release: alembic runs with the app's own
+  # DATABASE_URL, so new tables are owned by the app role (no GRANT drift --
+  # the score-disputes lesson).
+  release_command = "alembic upgrade head"
+
 [build]
   dockerfile = "Dockerfile"
 

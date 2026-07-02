@@ -27,6 +27,12 @@ import requests
 
 SENTINEL_DIR    = Path("/home/workspace/zo_sentinel")
 PRODUCT_SPEC    = SENTINEL_DIR / "PRODUCT_SPEC.md"
+# Machine-appended anchor extension (zo_sentinel/anchor_refill.py). Folded into
+# the spec text below so the gaps-map extractor and the architect consume
+# auto-mined candidates through the SAME pipe as human-authored ones. Deleting
+# the file reverts every auto candidate; PRODUCT_SPEC.md itself stays
+# human-owned.
+AUTO_ANCHOR     = SENTINEL_DIR / "PRODUCT_SPEC_AUTO_ANCHOR.md"
 WRITE_SERVICE   = "http://127.0.0.1:8772"
 
 log = logging.getLogger("directive_knowledge_sources")
@@ -59,10 +65,18 @@ def load_product_spec() -> str:
             "until a human creates /home/workspace/zo_sentinel/PRODUCT_SPEC.md."
         )
     try:
-        return PRODUCT_SPEC.read_text()
+        spec = PRODUCT_SPEC.read_text()
     except Exception as e:
         log.warning("failed to read product spec: %s", e)
         return f"[PRODUCT_SPEC.md unreadable: {e}]"
+    # Fold in the machine-appended auto-anchor (best-effort; absence or read
+    # failure leaves the human spec exactly as before).
+    try:
+        if AUTO_ANCHOR.is_file():
+            spec = spec + "\n" + AUTO_ANCHOR.read_text()
+    except Exception as e:
+        log.warning("auto-anchor unreadable (ignored): %s", e)
+    return spec
 
 
 # ── 2. Live wiring map ─────────────────────────────────────────────────────────

@@ -475,6 +475,23 @@ def run_goose_cycle() -> dict:
         log.info("builder active (build_artifact within %dm); deferring generation", IDLE_MIN)
         return {"status": "skipped", "reason": "builder_busy"}
 
+    # Self-refilling anchor (gated, fail-open, lazy): when the live gaps map is
+    # nearly exhausted, deterministically mine the Graphify KL docs
+    # (docs/DESIGN_*.md, roadmap) for new candidates BEFORE building this
+    # cycle's context, so the architect never faces an empty anchor -- the
+    # anchor-exhaustion class where it burns its turn budget inventing
+    # near-duplicate proposals (observed 2026-07-02 14:05 UTC). No-op unless
+    # directives/.anchor_refill_on is "1" (or ZO_ANCHOR_REFILL=1); a full
+    # anchor is never touched; faults never block generation.
+    try:
+        from zo_sentinel import anchor_refill as _refill
+        if _refill.enabled(SENTINEL_DIR / "directives"):
+            _rstats = _refill.run_refill(SENTINEL_DIR)
+            if _rstats.get("appended"):
+                log.info("anchor refill: %s", _rstats)
+    except Exception as _re:
+        log.warning("anchor refill unavailable/failed (fail-open): %s", _re)
+
     ctx = build_context()
     ctx_json = json.dumps(ctx, default=str)[:60000]   # MiniMax prompt cap headroom
 

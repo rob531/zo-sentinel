@@ -302,3 +302,102 @@ the webapp_backend_fastapi recipe; view `.html` -> the webapp_frontend_react rec
 
 **App assembly (make the service serve the full surface):**
 - directive candidate: `app_router_registry.py` -- one include_app_routers(app) helper that mounts every app router (auth, rbac, verdict_view_api, dashboard_summary_api, org_entity_search_api, entity_report_exporter, ...) so app/main.py exposes the full API surface in a single call.
+
+## Appendix F - v1.1 "Perspectives" (directive candidates, NOT YET BUILT)
+
+*Added 2026-07-02 (chairman + council 2026-06-27 ruling: Perspectives is the first post-launch
+differentiator). Perspectives = deterministic, admin-built faceted hierarchies / saved filters over
+the scored corpus (65,532 servers x 7 axes). Reproducible, governable, ZERO per-query LLM cost, and
+the natural attach point for trust-diff notifications ("alert me when anything in MY view changes
+tier"). The facet universe is derived ONLY from real columns: mcp_server_registry.risk_tier /
+verdict / registry_source / trust_score, and mcp_llm_axis_scores (axis_name, label) for the 7 axes
+(overall_risk, auth_strength, capability_breadth, data_sensitivity, network_egress,
+maintainer_trust, exploit_surface). NO invented facets (hosting-model / data-residency are OUT until
+real columns exist). Routing: backend `.py` -> webapp_backend_fastapi recipe; view `.html` ->
+webapp_frontend_react recipe. All persistence via write_service or the app DB session -- never
+import duckdb, never invent CSV files.*
+
+**Facet foundation:**
+- directive candidate: `facet_enum_service.py` -- the deterministic facet universe: DISTINCT
+  risk_tier, verdict, registry_source (+ trust_score quartile bands) from mcp_server_registry and
+  DISTINCT (axis_name, label) pairs from mcp_llm_axis_scores (latest model_version only), each with
+  row counts, read via the app_scoring_consumer seam (Postgres-portable SQL); returns
+  {facet_key: [{value, count}]} where facet_key in {risk_tier, verdict, registry_source,
+  trust_band, axis:<axis_name>}. Pure read, in-memory TTL cache. ACCEPTANCE: __main__ on sample
+  rows asserts the dict shape, that axis facets are keyed axis:<name>, and per-facet counts sum to
+  the sample row count; prints PASS.
+- directive candidate: `perspective_model.py` -- saved-perspective persistence: rows
+  {id, org_id, name, description, facet_filters (JSON), created_by, created_at, updated_at} in a
+  `perspectives` table via write_service /write; create_perspective/get/list_for_org/update/delete,
+  plus validate_facet_filters(filters, enums) that REJECTS unknown facet keys or values (enums =
+  the facet_enum_service dict, passed in -- no network in the self-test). ACCEPTANCE: __main__
+  creates a perspective, validates a good filter, asserts an unknown facet key AND an unknown value
+  are both rejected; prints PASS.
+
+**Query + admin surface:**
+- directive candidate: `perspective_query_api.py` -- FastAPI GET /perspectives/{id}/servers:
+  compile the saved facet_filters into ONE parameterized SQL query over mcp_server_registry joined
+  to latest-model mcp_llm_axis_scores (via the app_scoring_consumer seam), org-scoped (org_scope
+  pattern), paginated, and return {servers, total, facet_counts} where facet_counts gives the
+  drill-down counts for each remaining facet. Fully deterministic -- zero LLM. ACCEPTANCE:
+  __main__ compiles a sample filter {risk_tier:[HIGH], axis:auth_strength:[WEAK]} and asserts the
+  generated SQL contains both predicates and parameter binding (no string interpolation of
+  values), and the response shape has servers/total/facet_counts; prints PASS.
+- directive candidate: `perspective_admin_api.py` -- FastAPI CRUD router /perspectives:
+  create/update/delete restricted to admin (rbac_enforcer.require_role('admin') pattern), get/list
+  open to org members; every mutation writes a product_audit_log-style row via write_service.
+  ACCEPTANCE: __main__ asserts a member create is rejected (403 path) and an admin create + list
+  round-trips the saved facet_filters; prints PASS.
+- directive candidate: `perspective_diff_service.py` -- the trust-diff attach point:
+  snapshot_perspective(id) persists the perspective's current membership {server_id, risk_tier}
+  via write_service into `perspective_snapshots`; diff_perspective(id) compares live membership vs
+  the last snapshot -> {entered, left, tier_changed:[{server_id, old, new}]} and queues an in-app
+  notification row per change for the org's watchers (verdict_watchlist_service pattern; NO
+  external connectors). ACCEPTANCE: __main__ snapshots a sample membership, simulates one tier
+  change + one departure, asserts diff returns exactly those two and a notification row is queued
+  for each; prints PASS.
+
+**Presentation tier:**
+- directive candidate: `perspective_tree_view.html` -- self-contained facet-tree navigator:
+  left-rail facet tree with live counts (fetches facet_enum_service via its API mount), saved
+  perspectives picker, results table with risk tier + per-axis chips (fetches
+  /perspectives/{id}/servers), drill-down updates counts; no CDN, no localStorage, a11y labels;
+  links each row to entity_detail_view.html.
+
+## Appendix G - v2 "Ask MCPLookup" RAG search (directive candidates, NOT YET BUILT)
+
+*Added 2026-07-02 -- chairman decision 2026-07-02: OPENED ALONGSIDE Appendix F (overriding the
+6/27 "hold RAG until Perspectives holds" default; the one-bounded-anchor rule is superseded for
+this pair, but each candidate below stays individually bounded). RAG here = free-text search over
+the SCORED corpus with mandatory provenance -- retrieval is deterministic/lexical in v1 (stdlib
+tokenization; NO embedding service, NO new external dependency); LLM synthesis is OPTIONAL, routed
+via ladder_shim:8796 and STRICTLY flag-gated (ASK_LLM=1, default OFF => zero per-query LLM cost by
+default). Answers may cite ONLY retrieved rows; below-threshold retrieval returns INSUFFICIENT
+rather than a guess. Sources are ONLY mcp_server_registry + mcp_llm_axis_scores via write_service
+/query -- never invent CSVs.*
+
+- directive candidate: `ask_corpus_indexer.py` -- corpus builder: for each scored server compose a
+  normalized snippet (name + description head + verdict + risk_tier + the 7 axis labels) and a
+  stdlib-tokenized term list; upsert rows {server_id, snippet, terms (JSON), indexed_at} into
+  `ask_corpus_index` via write_service /write; bounded batches with a resumable watermark row so
+  re-runs are idempotent (no duplicate rows). ACCEPTANCE: __main__ on sample registry+axis rows
+  asserts the snippet contains the verdict and an axis label, and a second run produces no new
+  rows for unchanged input; prints PASS.
+- directive candidate: `ask_retrieval_service.py` -- deterministic lexical retrieval:
+  score ask_corpus_index rows against a query by term overlap + field weighting (name > verdict >
+  axis labels > description), stdlib only, bounded LIMIT read via write_service /query; returns
+  top-k [{server_id, score, provenance:{matched_fields, matched_terms}}]. ACCEPTANCE: __main__ on
+  a 3-doc in-memory corpus asserts the query "weak auth github server" ranks the seeded
+  auth_strength=WEAK github-source doc first and its provenance names the matched fields; prints
+  PASS.
+- directive candidate: `ask_answer_api.py` -- FastAPI POST /ask {query}: run ask_retrieval_service,
+  synthesize the answer FROM RETRIEVED ROWS ONLY -- v1 synthesis is deterministic templating
+  (per-server line: name, tier, the axis labels that matched); optional LLM polish ONLY when env
+  ASK_LLM=1 via ladder_shim:8796 (default OFF, no call); response always carries
+  citations:[{server_id, matched_fields}] and returns status INSUFFICIENT (not an answer) when the
+  top retrieval score is below threshold or the corpus is empty. ACCEPTANCE: __main__ asserts (1)
+  with ASK_LLM unset no network call is attempted, (2) every server named in the answer text
+  appears in citations, (3) an empty corpus yields INSUFFICIENT; prints PASS.
+- directive candidate: `ask_search_view.html` -- self-contained search page: query box, answer
+  panel, citation chips linking entity_detail_view.html, visible INSUFFICIENT state, provenance
+  ("why this result") expander per citation; no CDN, no localStorage, a11y.

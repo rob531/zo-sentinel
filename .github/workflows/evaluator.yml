@@ -81,6 +81,7 @@ jobs:
             tests/test_policy_chain_integration.py \
             tests/test_directive_simplifier.py \
             tests/test_perspectives_ask.py \
+            tests/test_vast_jobs.py \
             -q \
             --junitxml=artifacts/junit.xml
 

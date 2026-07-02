@@ -1306,17 +1306,23 @@ def run():
                                             matrix_rows=failure_matrix_cached())
                 _routed_model = _routed_env.get("GOOSE_MODEL", "")
                 produced = False
+                # Compose the fully-grounded task ONCE, for BOTH engines. The
+                # engine-fallback fix (2026-07-02): the deterministic engine used
+                # to get only the raw content while goose got graph + lessons +
+                # data-access grounding -- so "both engines failed" ghosts were
+                # often the second engine failing for lack of the context the
+                # first already had.
+                _task = directive.get("content", "")
+                _gctx = _graph_context(directive)   # Phase 3: fold graph structure into the task
+                if _gctx:
+                    _task = f"{_task}\n\n{_gctx}"
+                _lctx = _lessons_context(directive)   # closed-loop READER: prior failures on this target
+                if _lctx:
+                    _task = f"{_task}\n\n{_lctx}"
+                _dctx = _data_access_context(directive)   # proactive DB-access grounding (pre-empt CSV hallucination)
+                if _dctx:
+                    _task = f"{_task}\n\n{_dctx}"
                 if goose_installed:
-                    _task = directive.get("content", "")
-                    _gctx = _graph_context(directive)   # Phase 3: fold graph structure into the task
-                    if _gctx:
-                        _task = f"{_task}\n\n{_gctx}"
-                    _lctx = _lessons_context(directive)   # closed-loop READER: prior failures on this target
-                    if _lctx:
-                        _task = f"{_task}\n\n{_lctx}"
-                    _dctx = _data_access_context(directive)   # proactive DB-access grounding (pre-empt CSV hallucination)
-                    if _dctx:
-                        _task = f"{_task}\n\n{_dctx}"
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)
@@ -1333,7 +1339,27 @@ def run():
                         log(f"Goose failed for {directive_id}: {result.get('error')}")
 
                 if not produced:
-                    fallback_result = call_minimax_fallback(directive)
+                    # Engine fallback, first-class (gated, fail-open): the
+                    # grounded deterministic engine with per-attempt capable-rung
+                    # escalation and ONE bounded repair round. Falls back to the
+                    # legacy bare-prompt call_minimax_fallback when the gate is
+                    # off or the module errors -- behavior is IDENTICAL to before
+                    # unless directives/.engine_build_on is "1". Completion
+                    # authority stays with the gate chain below either way.
+                    fallback_result = None
+                    try:
+                        from zo_sentinel import engine_build as _engine
+                        if _engine.enabled(DIRECTIVES_PATH):
+                            fallback_result = _engine.build_with_engine(
+                                directive, _task, attempt=_attempt, log=log)
+                            if fallback_result.get("model"):
+                                _routed_model = f"engine:{fallback_result['model']}"
+                    except Exception as _ee:
+                        log(f"[engine] unavailable ({type(_ee).__name__}: {_ee}) "
+                            f"-- fail-open to legacy fallback")
+                        fallback_result = None
+                    if fallback_result is None:
+                        fallback_result = call_minimax_fallback(directive)
                     if (fallback_result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)
                             and _schema_prm_gate(directive, directive_id)

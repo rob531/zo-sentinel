@@ -35,6 +35,8 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.promoters.proposed_to_pending_promoter",
     # skip=>retire queue janitor (stdlib + pure build_completion/build_lessons).
     "zo_sentinel.queue_janitor",
+    # grounded deterministic builder engine (requests + pure helpers).
+    "zo_sentinel.engine_build",
     # SFT training-job ingestion (host-free, stdlib-only by design).
     "zo_sentinel.sft.schema",
     "zo_sentinel.sft.ingest",

@@ -43,6 +43,8 @@ jobs:
             # requests is needed by zo_sentinel.probes.duckdb_schema_uptime_probe
             # (loaded at import time by its test module). Stays cheap to install.
             pip install pytest requests
+          # app-tier deps so the Perspectives/Ask module self-tests run here
+          pip install -r tests/ci/requirements-ci.txt
           fi
 
       - name: Run pytest (Goose-T2 cheap evaluator)
@@ -78,6 +80,7 @@ jobs:
             tests/test_policy.py \
             tests/test_policy_chain_integration.py \
             tests/test_directive_simplifier.py \
+            tests/test_perspectives_ask.py \
             -q \
             --junitxml=artifacts/junit.xml
 

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perspectives — MCPRisky</title>
+<style>
+  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;
+        --hi:#ff5b6a;--med:#ffb84d;--low:#39d98a}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
+  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
+  main{display:grid;grid-template-columns:290px 1fr;gap:0;min-height:calc(100vh - 51px)}
+  nav{border-right:1px solid var(--line);padding:14px;overflow:auto}
+  section{padding:14px 20px;overflow:auto}
+  .facet h3{margin:12px 0 6px;font-size:12px;text-transform:uppercase;color:var(--dim)}
+  .facet button{display:flex;justify-content:space-between;width:100%;background:none;border:0;
+    color:var(--txt);padding:4px 6px;border-radius:6px;cursor:pointer;font:inherit;text-align:left}
+  .facet button:hover,.facet button:focus{background:var(--panel);outline:1px solid var(--line)}
+  .facet button.on{background:var(--panel);outline:1px solid var(--acc)}
+  .facet .n{color:var(--dim)}
+  select,inputbutton{font:inherit}
+  #saved{width:100%;background:var(--panel);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:8px;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+  th{color:var(--dim);font-weight:600}
+  .tier{padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700}
+  .tier.HIGH,.tier.CRITICAL{background:rgba(255,91,106,.15);color:var(--hi)}
+  .tier.MEDIUM{background:rgba(255,184,77,.15);color:var(--med)}
+  .tier.LOW,.tier.MINIMAL{background:rgba(57,217,138,.15);color:var(--low)}
+  .chip{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 8px;
+    margin:1px;font-size:11px;color:var(--dim)}
+  #status{color:var(--dim);margin:8px 0}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .bar button{background:var(--acc);border:0;color:#fff;border-radius:8px;padding:7px 12px;cursor:pointer}
+  .bar button.ghost{background:var(--panel);border:1px solid var(--line)}
+  a.row-link{color:var(--acc);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Perspectives</h1>
+  <span style="color:var(--dim)">deterministic faceted views over the scored registry</span>
+  <span style="flex:1"></span>
+  <a href="/ask">Ask →</a> <a href="/app">App →</a>
+</header>
+<main>
+  <nav aria-label="Facet tree">
+    <label for="saved" style="color:var(--dim);font-size:12px">Saved perspectives</label>
+    <select id="saved" aria-label="Saved perspectives"><option value="">— ad-hoc exploration —</option></select>
+    <div id="tree" role="tree"></div>
+  </nav>
+  <section>
+    <div class="bar">
+      <strong id="title">Ad-hoc view</strong>
+      <span id="status" role="status" aria-live="polite">loading…</span>
+      <span style="flex:1"></span>
+      <button id="diffBtn" class="ghost" title="Changes since last snapshot">Trust-diff</button>
+      <button id="clearBtn" class="ghost">Clear filters</button>
+    </div>
+    <div id="active"></div>
+    <table aria-label="Servers in view">
+      <thead><tr><th>Server</th><th>Source</th><th>Tier</th><th>Verdict</th><th>Trust</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="bar" style="margin-top:10px">
+      <button id="prev" class="ghost">‹ Prev</button>
+      <span id="page" style="color:var(--dim)">1</span>
+      <button id="next" class="ghost">Next ›</button>
+    </div>
+    <pre id="diffOut" style="color:var(--dim);white-space:pre-wrap"></pre>
+  </section>
+</main>
+<script>
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
+async function api(u,o){o=o||{};const t=await tok();o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
+  const r=await fetch(u,o); if(!r.ok) throw new Error(r.status+' '+await r.text()); return r.json();}
+
+let FACETS={}, FILTERS={}, PAGE=1, PID='';
+const $=id=>document.getElementById(id);
+
+function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+
+function renderTree(counts){
+  const tree=$('tree'); tree.innerHTML='';
+  for(const key of Object.keys(FACETS).sort()){
+    const grp=document.createElement('div'); grp.className='facet';
+    grp.innerHTML='<h3>'+esc(key)+'</h3>';
+    const live=(counts&&counts[key])?Object.fromEntries(counts[key].map(d=>[d.value,d.count])):null;
+    for(const opt of FACETS[key]){
+      const on=(FILTERS[key]||[]).includes(opt.value);
+      const n=live?(live[opt.value]||0):opt.count;
+      const b=document.createElement('button');
+      b.setAttribute('role','treeitem'); b.setAttribute('aria-pressed',on);
+      b.className=on?'on':'';
+      b.innerHTML='<span>'+esc(opt.value)+'</span><span class="n">'+n+'</span>';
+      b.onclick=()=>{const cur=new Set(FILTERS[key]||[]); on?cur.delete(opt.value):cur.add(opt.value);
+        if(cur.size)FILTERS[key]=[...cur]; else delete FILTERS[key];
+        PID=''; $('saved').value=''; PAGE=1; refresh();};
+      grp.appendChild(b);
+    }
+    tree.appendChild(grp);
+  }
+}
+
+function renderRows(servers){
+  $('rows').innerHTML = servers.map(s=>'<tr>'+
+    '<td><a class="row-link" href="/app/server/'+encodeURIComponent(s.server_id)+'">'+esc(s.name||s.server_id)+'</a></td>'+
+    '<td>'+esc(s.registry_source||'')+'</td>'+
+    '<td><span class="tier '+esc(s.risk_tier||'')+'">'+esc(s.risk_tier||'?')+'</span></td>'+
+    '<td>'+esc(s.verdict||'')+'</td>'+
+    '<td>'+(s.trust_score==null?'':esc(Math.round(s.trust_score)))+'</td></tr>').join('')
+    || '<tr><td colspan="5" style="color:var(--dim)">No servers match this view.</td></tr>';
+  $('active').innerHTML = Object.entries(FILTERS).map(([k,vs])=>
+    vs.map(v=>'<span class="chip">'+esc(k)+' = '+esc(v)+'</span>').join('')).join('');
+}
+
+async function refresh(){
+  $('status').textContent='loading…'; $('diffOut').textContent='';
+  try{
+    if(PID){
+      const d=await api('/api/perspectives/'+encodeURIComponent(PID)+'/servers?page='+PAGE);
+      FILTERS=d.perspective.facet_filters||{}; $('title').textContent=d.perspective.name;
+      renderTree(d.facet_counts); renderRows(d.servers);
+      $('status').textContent=d.total+' servers'; $('page').textContent=PAGE;
+    }else{
+      // ad-hoc: reuse the query API through a transient perspective is admin-only,
+      // so ad-hoc mode filters client-side against /api/facets counts only.
+      $('title').textContent='Ad-hoc view';
+      renderTree(null); renderRows([]);
+      $('status').textContent=Object.keys(FILTERS).length?
+        'select a saved perspective to run this as a server query':'pick a saved perspective or explore facet counts';
+    }
+  }catch(e){$('status').textContent='error: '+e.message}
+}
+
+async function boot(){
+  try{
+    const f=await api('/api/facets'); FACETS=f.facets||{};
+    const ps=await api('/api/perspectives');
+    for(const p of ps.perspectives){const o=document.createElement('option');
+      o.value=p.id;o.textContent=p.name;$('saved').appendChild(o);}
+    $('saved').onchange=e=>{PID=e.target.value;PAGE=1;refresh();};
+    $('clearBtn').onclick=()=>{FILTERS={};PID='';$('saved').value='';refresh();};
+    $('prev').onclick=()=>{if(PAGE>1){PAGE--;refresh();}};
+    $('next').onclick=()=>{PAGE++;refresh();};
+    $('diffBtn').onclick=async()=>{ if(!PID){$('diffOut').textContent='pick a saved perspective first';return;}
+      try{const d=await api('/api/perspectives/'+encodeURIComponent(PID)+'/diff');
+        $('diffOut').textContent=d.baseline?'No snapshot yet — an admin can POST /snapshot to set the baseline.':
+          'entered: '+d.entered.join(', ')+'\nleft: '+d.left.join(', ')+
+          '\ntier_changed: '+d.tier_changed.map(c=>c.server_id+' '+c.old+'→'+c.new).join(', ');
+      }catch(e){$('diffOut').textContent='diff error: '+e.message} };
+    refresh();
+  }catch(e){$('status').textContent='sign in required — '+e.message}
+}
+
+// Clerk bootstrap (same pattern as app.html; PK injected server-side)
+const CLERK_PK="__CLERK_PK__";
+function clerkHost(pk){try{return atob(pk.split('_')[2]).replace(/\$+$/,'');}catch(e){return '';}}
+if(CLERK_PK.indexOf("pk_")===0&&clerkHost(CLERK_PK)){
+  const s=document.createElement('script');
+  s.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  s.src='https://'+clerkHost(CLERK_PK)+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  s.onload=async()=>{await window.Clerk.load();boot();};
+  document.head.appendChild(s);
+}else{boot();}
+</script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    background-color: #fff;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #4CAF50;
+    color: white;
+}
+
+tr:hover {
+    background-color: #f5f5f5;
+}
+
+.risk-tier {
+    font-weight: bold;
+}
+
+.risk-tier-low {
+    color: #4CAF50;
+}
+
+.risk-tier-medium {
+    color: #FFC107;
+}
+
+.risk-tier-high {
+    color: #F44336;
+}
+
+.overall-risk {
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.overall-risk-low {
+    color: #4CAF50;
+}
+
+.overall-risk-medium {
+    color: #FFC107;
+}
+
+.overall-risk-high {
+    color: #F44336;
+}
+
+@media (max-width: 768px) {
+    table {
+        font-size: 14px;
+    }
+
+    th, td {
+        padding: 8px;
+    }
+}

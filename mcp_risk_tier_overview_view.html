@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Overview</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .chart-container {
+            width: 80%;
+            margin: 20px 0;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            width: 80%;
+            margin: 20px 0;
+        }
+        .stat-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            width: 200px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Risk Tier Overview</h1>
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Servers</h3>
+                <p id="total-servers">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Average Risk Score</h3>
+                <p id="average-risk-score">0</p>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="risk-tier-chart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        async function fetchRiskTierData() {
+            const response = await fetch('/api/mcp_risk_tier_overview');
+            const data = await response.json();
+            return data;
+        }
+
+        function renderChart(tierCounts) {
+            const ctx = document.getElementById('risk-tier-chart').getContext('2d');
+            const labels = Object.keys(tierCounts);
+            const data = Object.values(tierCounts);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Number of Servers',
+                        data: data,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateStats(totalServers, averageRiskScore) {
+            document.getElementById('total-servers').textContent = totalServers;
+            document.getElementById('average-risk-score').textContent = averageRiskScore.toFixed(2);
+        }
+
+        async function init() {
+            const data = await fetchRiskTierData();
+            renderChart(data.tier_counts);
+            updateStats(data.total_servers, data.average_risk_score);
+        }
+
+        init();
+    </script>
+</body>
+</html>

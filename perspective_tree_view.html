@@ -125,13 +125,17 @@ async function refresh(){
       FILTERS=d.perspective.facet_filters||{}; $('title').textContent=d.perspective.name;
       renderTree(d.facet_counts); renderRows(d.servers);
       $('status').textContent=d.total+' servers'; $('page').textContent=PAGE;
+    }else if(Object.keys(FILTERS).length){
+      // ad-hoc exploration: any authenticated user can query live filters.
+      const d=await api('/api/perspectives/adhoc/servers?page='+PAGE+
+        '&filters='+encodeURIComponent(JSON.stringify(FILTERS)));
+      $('title').textContent='Ad-hoc view';
+      renderTree(d.facet_counts); renderRows(d.servers);
+      $('status').textContent=d.total+' servers'; $('page').textContent=PAGE;
     }else{
-      // ad-hoc: reuse the query API through a transient perspective is admin-only,
-      // so ad-hoc mode filters client-side against /api/facets counts only.
       $('title').textContent='Ad-hoc view';
       renderTree(null); renderRows([]);
-      $('status').textContent=Object.keys(FILTERS).length?
-        'select a saved perspective to run this as a server query':'pick a saved perspective or explore facet counts';
+      $('status').textContent='click facets to explore, or pick a saved perspective';
     }
   }catch(e){$('status').textContent='error: '+e.message}
 }

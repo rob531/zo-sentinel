@@ -19,7 +19,7 @@ import time
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -34,7 +34,11 @@ AXES = ("overall_risk", "auth_strength", "capability_breadth", "data_sensitivity
 TRUST_BANDS = ("0-25%", "25-50%", "50-75%", "75-100%")
 
 _CACHE: dict = {"at": 0.0, "facets": None}
-CACHE_TTL_SECS = 60
+# 5 min: the corpus changes on scoring-run cadence (hours), not per request.
+# Cold compute over 65k registry + 458k score rows was the ~25s first paint
+# found in the 2026-07-02 treewalk; the SQL-side banding below plus this TTL
+# keeps every subsequent hit instant.
+CACHE_TTL_SECS = 300
 
 
 def latest_global_model_version(db: Session) -> Optional[str]:
@@ -77,12 +81,18 @@ def compute_facets(db: Session) -> Dict[str, List[dict]]:
     ).one()
     band_counts = {b: 0 for b in TRUST_BANDS}
     if lo is not None and hi is not None and hi > lo:
-        for (score,) in db.execute(
-                select(McpServerRegistry.trust_score)
-                .where(McpServerRegistry.trust_score.is_not(None))):
-            b = trust_band_for(score, float(lo), float(hi))
-            if b:
-                band_counts[b] += 1
+        # SQL-side banding (portable CASE; sqlite + Postgres). The prior
+        # implementation pulled every trust_score into Python -- 65k rows per
+        # cold call in prod (treewalk perf finding).
+        lo_f, width = float(lo), (float(hi) - float(lo)) / 4.0
+        ts = McpServerRegistry.trust_score
+        band = case((ts < lo_f + width, TRUST_BANDS[0]),
+                    (ts < lo_f + 2 * width, TRUST_BANDS[1]),
+                    (ts < lo_f + 3 * width, TRUST_BANDS[2]),
+                    else_=TRUST_BANDS[3])
+        for b, c in db.execute(select(band, func.count())
+                               .where(ts.is_not(None)).group_by(band)):
+            band_counts[str(b)] = int(c)
     facets["trust_band"] = [{"value": b, "count": band_counts[b]} for b in TRUST_BANDS]
 
     mv = latest_global_model_version(db)
@@ -102,14 +112,21 @@ def compute_facets(db: Session) -> Dict[str, List[dict]]:
     return facets
 
 
-@router.get("/facets")
-def get_facets(db: Session = Depends(get_session),
-               principal: Principal = Depends(get_principal)) -> dict:
+def cached_facets(db: Session) -> Dict[str, List[dict]]:
+    """The TTL-cached facet universe -- shared by the /facets route AND every
+    consumer that validates filters (admin CRUD, ad-hoc queries), so hot paths
+    never recompute the aggregate."""
     now = time.time()
     if _CACHE["facets"] is None or now - _CACHE["at"] > CACHE_TTL_SECS:
         _CACHE["facets"] = compute_facets(db)
         _CACHE["at"] = now
-    return {"facets": _CACHE["facets"], "cached_at": _CACHE["at"]}
+    return _CACHE["facets"]
+
+
+@router.get("/facets")
+def get_facets(db: Session = Depends(get_session),
+               principal: Principal = Depends(get_principal)) -> dict:
+    return {"facets": cached_facets(db), "cached_at": _CACHE["at"]}
 
 
 if __name__ == "__main__":

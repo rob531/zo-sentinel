@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perspective Tree View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+        .left-rail {
+            width: 300px;
+            border-right: 1px solid #ccc;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .facet-tree {
+            list-style-type: none;
+            padding: 0;
+        }
+        .facet-tree li {
+            margin: 5px 0;
+        }
+        .facet-tree .facet {
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .facet-tree .facet:hover {
+            text-decoration: underline;
+        }
+        .facet-tree .count {
+            margin-left: 10px;
+            color: #666;
+        }
+        .facet-tree .sub-facet {
+            margin-left: 20px;
+        }
+        .saved-perspectives {
+            margin-top: 20px;
+        }
+        .saved-perspectives h3 {
+            margin-top: 0;
+        }
+        .saved-perspectives ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .saved-perspectives li {
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        .saved-perspectives li:hover {
+            text-decoration: underline;
+        }
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .results-table th, .results-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .results-table th {
+            background-color: #f2f2f2;
+        }
+        .results-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .results-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        .risk-tier {
+            display: inline-block;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .risk-tier-low {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .risk-tier-medium {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .risk-tier-high {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .axis-chip {
+            display: inline-block;
+            padding: 2px 5px;
+            border-radius: 3px;
+            background-color: #e9ecef;
+            color: #495057;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="left-rail">
+        <h2>Facets</h2>
+        <ul class="facet-tree" id="facet-tree">
+            <!-- Facet tree will be populated by JavaScript -->
+        </ul>
+        <div class="saved-perspectives">
+            <h3>Saved Perspectives</h3>
+            <ul id="saved-perspectives">
+                <!-- Saved perspectives will be populated by JavaScript -->
+            </ul>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1>Results</h1>
+        <table class="results-table" id="results-table">
+            <thead>
+                <tr>
+                    <th>Server</th>
+                    <th>Risk Tier</th>
+                    <th>Axes</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Results will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Fetch facet enum API
+            fetch('/api/facet-enum')
+                .then(response => response.json())
+                .then(data => {
+                    const facetTree = document.getElementById('facet-tree');
+                    data.forEach(facet => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<span class="facet" data-facet="${facet.name}">${facet.name}</span><span class="count">(${facet.count})</span>`;
+                        if (facet.subFacets) {
+                            const ul = document.createElement('ul');
+                            facet.subFacets.forEach(subFacet => {
+                                const subLi = document.createElement('li');
+                                subLi.className = 'sub-facet';
+                                subLi.innerHTML = `<span class="facet" data-facet="${subFacet.name}">${subFacet.name}</span><span class="count">(${subFacet.count})</span>`;
+                                ul.appendChild(subLi);
+                            });
+                            li.appendChild(ul);
+                        }
+                        facetTree.appendChild(li);
+                    });
+
+                    // Add event listeners to facets
+                    document.querySelectorAll('.facet').forEach(facet => {
+                        facet.addEventListener('click', function() {
+                            const facetName = this.getAttribute('data-facet');
+                            fetchResults(facetName);
+                        });
+                    });
+                });
+
+            // Fetch saved perspectives
+            fetch('/api/saved-perspectives')
+                .then(response => response.json())
+                .then(data => {
+                    const savedPerspectives = document.getElementById('saved-perspectives');
+                    data.forEach(perspective => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<span class="perspective" data-id="${perspective.id}">${perspective.name}</span>`;
+                        savedPerspectives.appendChild(li);
+                    });
+
+                    // Add event listeners to saved perspectives
+                    document.querySelectorAll('.perspective').forEach(perspective => {
+                        perspective.addEventListener('click', function() {
+                            const perspectiveId = this.getAttribute('data-id');
+                            fetchResults(null, perspectiveId);
+                        });
+                    });
+                });
+
+            // Function to fetch results based on facet or perspective
+            function fetchResults(facetName, perspectiveId) {
+                let url = '/api/results';
+                if (facetName) {
+                    url += `?facet=${encodeURIComponent(facetName)}`;
+                } else if (perspectiveId) {
+                    url += `?perspective=${encodeURIComponent(perspectiveId)}`;
+                }
+
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        const resultsTable = document.getElementById('results-table').getElementsByTagName('tbody')[0];
+                        resultsTable.innerHTML = '';
+                        data.forEach(server => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td><a href="entity_detail_view.html?id=${server.id}">${server.name}</a></td>
+                                <td><span class="risk-tier risk-tier-${server.riskTier.toLowerCase()}">${server.riskTier}</span></td>
+                                <td>${server.axes.map(axis => `<span class="axis-chip">${axis}</span>`).join('')}</td>
+                            `;
+                            resultsTable.appendChild(tr);
+                        });
+                    });
+            }
+        });
+    </script>
+</body>
+</html>

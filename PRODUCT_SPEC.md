@@ -401,3 +401,62 @@ rather than a guess. Sources are ONLY mcp_server_registry + mcp_llm_axis_scores 
 - directive candidate: `ask_search_view.html` -- self-contained search page: query box, answer
   panel, citation chips linking entity_detail_view.html, visible INSUFFICIENT state, provenance
   ("why this result") expander per citation; no CDN, no localStorage, a11y.
+
+## Appendix H - Council Roadmap 2026-07-02 (FATHER ruling; phased directive candidates)
+
+*Council of 3 + FATHER convened 2026-07-02 on the post-v1.1/v2 roadmap. RULING: "Verification
+catches up to shipping in week 1, distribution ships on fresh data in weeks 2-6." ALL SIX of
+CONTRA's integrity gates adopted: (1) last_scored_at + STALE badge on every surface, (2) scheduled
+perspective-snapshot cadence, (3) corpus auto-reindex on >5% registry drift, (4) >=5 curated
+perspectives before promotion, (5) golden-sample verdict-drift CI gate, (6) freshness metadata on
+all public surfaces. THE LINE: no signature, public API key, or agent-facing endpoint ships
+against data older than its declared freshness SLA. Items below are the FACTORY lanes (bounded,
+schema-grounded, exemplar-referencing); agent-owned work (rescore runs, CI wiring, auth-spine
+design, announce) is NOT listed as candidates. Rejected outright: red-team/model A/B this cycle;
+webhooks with external credentials (credential-segmentation decision stays parked until the
+Phase-3 design decision).*
+
+**PHASE 1 lanes (integrity; build first):**
+- directive candidate: `freshness_metadata_api.py` -- FastAPI GET /api/freshness: per-server
+  {last_scored_at, age_days, stale (age > SLA_DAYS=7)} from mcp_llm_axis_scores.scored_at joined
+  to mcp_server_registry.last_assessed, plus a corpus-level summary {oldest, newest, stale_count};
+  read via the app DB session (verdict_breakdown_api exemplar). ACCEPTANCE: __main__ on sample
+  rows asserts a 10-day-old score reports stale=true and the summary stale_count matches; prints
+  PASS.
+- directive candidate: `perspective_snapshot_daemon.py` -- the gate-2 cadence job: every
+  SNAPSHOT_INTERVAL_HOURS (default 24) call perspective_diff_service.snapshot_perspective for
+  every saved perspective, then diff_perspective to queue PerspectiveEvent rows; single-instance
+  guard; heartbeat log line per cycle. Runs as a container daemon (daemon_wrapper pattern).
+  ACCEPTANCE: __main__ with a fake session asserts one cycle snapshots every perspective exactly
+  once and is idempotent within the interval; prints PASS.
+- directive candidate: `ask_corpus_drift_guard.py` -- the gate-3 trigger: compare
+  count(ask_corpus_index) vs count(mcp_server_registry) and max(indexed_at) vs
+  max(last_assessed); when drift > DRIFT_PCT (default 5) or scores are newer than the index,
+  invoke ask_corpus_indexer.reindex and record a mesh-style audit row. ACCEPTANCE: __main__ on
+  sample rows asserts drift 6% triggers and 4% does not; prints PASS.
+
+**PHASE 2 lanes (differentiators on fresh data; blocked by gates 1-3,5-6):**
+- directive candidate: `axis_evidence_api.py` -- explainable verdicts: GET
+  /api/servers/{id}/evidence returns, per axis, {label, p_top, probs (the full distribution),
+  model_version, scored_at, rule_overrides applied (trust_gating_override reason when present)}
+  -- the "verify this, don't trust us" surface (verdict_breakdown_api exemplar; NO invented
+  evidence text, only real stored fields). ACCEPTANCE: __main__ asserts the override reason
+  surfaces for a trusted-capped sample and probs sum to ~1.0; prints PASS.
+- directive candidate: `ask_query_expansion_v2.py` -- retrieval upgrade: extend
+  ask_retrieval_service's fixed synonym map with axis-value expansions derived FROM THE LIVE
+  ENUMS (facet_enum_service), bigram matching for server names, and recency tiebreak on
+  indexed_at; pure functions, same provenance contract. ACCEPTANCE: __main__ asserts a
+  two-word name query outranks single-term matches and provenance still lists matched fields;
+  prints PASS.
+
+**PHASE 3 lanes (distribution capstones; blocked by the Phase-3 auth design decision + all gates):**
+- directive candidate: `perspective_email_digest.py` -- A-narrow: render unseen
+  PerspectiveEvent rows per perspective into a daily digest (subject, plaintext + simple HTML
+  body) and mark seen; delivery seam is an injected send callable (NO external credentials in
+  this module -- the parked decision stays parked). ACCEPTANCE: __main__ renders a digest for 3
+  sample events, asserts all three server_ids appear and events flip to seen; prints PASS.
+- directive candidate: `scorecard_badge_api.py` -- GET /badge/{server_id}.svg: self-contained
+  SVG shield (tier-colored) with the published tier + last_scored_at age; refuses (410 + grey
+  "STALE" shield) when older than the freshness SLA -- the LINE enforced in code. ACCEPTANCE:
+  __main__ asserts fresh sample renders tier color, stale sample renders the grey STALE shield;
+  prints PASS.

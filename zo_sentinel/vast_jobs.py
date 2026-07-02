@@ -217,10 +217,13 @@ class RealVastClient:
 
     def scp_from(self, instance: dict, remote_glob: str, local_dir: Path) -> bool:
         local_dir.mkdir(parents=True, exist_ok=True)
-        cmd = (f"scp -o StrictHostKeyChecking=no -P {instance['ssh_port']} "
-               f"root@{instance['ssh_host']}:{shlex.quote(remote_glob)} "
-               f"{shlex.quote(str(local_dir))}/")
-        return subprocess.run(cmd, shell=True, timeout=600).returncode == 0
+        # List argv, no shell (bandit B602): the remote glob expands on the
+        # REMOTE side inside scp's own remote invocation, quoted defensively.
+        argv = ["scp", "-o", "StrictHostKeyChecking=no",
+                "-P", str(instance["ssh_port"]),
+                f"root@{instance['ssh_host']}:{shlex.quote(remote_glob)}",
+                str(local_dir) + "/"]
+        return subprocess.run(argv, timeout=600, check=False).returncode == 0  # noqa: S603
 
 
 def resolve_api_key() -> str:

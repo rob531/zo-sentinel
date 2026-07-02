@@ -302,6 +302,32 @@ def _terminal_sentinels(directives_root: Path, directive_id: str) -> Tuple[Path,
     )
 
 
+def _durably_quarantined(directive_id: str) -> bool:
+    """True if the DURABLE quarantine store (outside the git tree, survives
+    `git clean` on daemon respawn) holds a <directive_id>.failed.json sentinel.
+
+    goose_runner.is_goose_eligible has honored this store since the durable-
+    quarantine fix, but the promoter's terminal checks did NOT -- so a durably-
+    quarantined directive squatting in pending/ looked "possibly in-flight"
+    (collision -> skip forever) and a RE-PROPOSAL of a durably-quarantined id
+    passed the already-resolved check and re-entered pending/ as a fresh
+    squatter. Both halves of the 2026-07-02 queue-saturation deadlock. This
+    makes the promoter agree with goose on what "terminal" means.
+
+    Env-repointable (ZO_DURABLE_QUARANTINE_DIR) for tests/CI, read fresh each
+    call; stdlib-only; never raises.
+    """
+    if not directive_id:
+        return False
+    try:
+        qdir = Path(os.environ.get(
+            "ZO_DURABLE_QUARANTINE_DIR",
+            "/home/workspace/zo_sentinel_state/quarantine"))
+        return (qdir / f"{directive_id}.failed.json").exists()
+    except Exception:
+        return False
+
+
 def _rename_duplicate(src: Path) -> None:
     """Move src aside to <name>.duplicate so an already-resolved re-proposal
     stops being scanned every cycle.
@@ -347,7 +373,7 @@ def _pending_is_terminal(pending_file: Path, directives_root: Path) -> bool:
     if not did:
         return False
     done, failed = _terminal_sentinels(directives_root, did)
-    return done.exists() or failed.exists()
+    return done.exists() or failed.exists() or _durably_quarantined(did)
 
 
 def _do_promote(
@@ -400,7 +426,10 @@ def _do_promote(
                 directives_root, directive_id
             )
             done_exists = done_sentinel.exists()
-            failed_exists = failed_sentinel.exists()
+            # Durable-aware: a durable quarantine is a .failed the same as the
+            # in-repo sentinel -- re-promoting it would re-run work the builder
+            # already gave up on (and re-create the pending squatter).
+            failed_exists = failed_sentinel.exists() or _durably_quarantined(directive_id)
             if done_exists or failed_exists:
                 log.info(
                     "skip already-resolved %s (directive_id=%s done=%s failed=%s)",
@@ -472,6 +501,30 @@ def _rename_rejected(src: Path) -> None:
         log.error("failed to rename rejected %s: %s", src.name, e)
 
 
+def _maybe_run_janitor(directives_root: Path) -> None:
+    """Flag-gated skip=>retire pass (zo_sentinel.queue_janitor) at the top of
+    each promotion cycle: retires dedup-redundant and durably-quarantined
+    squatters from pending/ and proposed/ so collisions clear, proposed/ drains
+    below the architect's depth cap, and novel directive emission never starves
+    again (the 2026-07-02 queue-saturation deadlock).
+
+    Default OFF: enable via env ZO_QUEUE_JANITOR=1 or the sentinel file
+    <directives_root>/.queue_janitor_on containing "1" (restart-free, same
+    pattern as the #1060 dedup flag). LAZY import + fail-open so this module
+    stays stdlib-importable (hermetic CI gate) and a janitor fault can never
+    break promotion.
+    """
+    try:
+        from zo_sentinel import queue_janitor  # lazy: hermetic-import safe
+        if not queue_janitor.enabled(directives_root):
+            return
+        stats = queue_janitor.run_pass(directives_root)
+        if stats.get("retired") or stats.get("errors"):
+            log.info("janitor: %s", stats)
+    except Exception as e:
+        log.warning("janitor unavailable/failed (fail-open): %s", e)
+
+
 def run_once(
     proposed_dir: Path,
     pending_dir: Path,
@@ -495,6 +548,12 @@ def run_once(
 
     if directives_root is None:
         directives_root = pending_dir.parent
+
+    # Queue hygiene BEFORE scanning proposals, so a slot a squatter vacates
+    # this cycle is promotable this same cycle. No-op unless enabled; skipped
+    # in dry_run (a dry-run must not mutate the queues).
+    if not dry_run:
+        _maybe_run_janitor(directives_root)
 
     promoted_or_attempted = 0
     for src in _iter_proposals(proposed_dir):

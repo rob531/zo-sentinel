@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .critical {
+            background-color: #ffcccc;
+        }
+        .high {
+            background-color: #ffebcc;
+        }
+        .medium {
+            background-color: #ffffcc;
+        }
+        .low {
+            background-color: #ccffcc;
+        }
+        .overridden {
+            font-weight: bold;
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP Risk Tier Dashboard</h1>
+    <table id="riskTierTable">
+        <thead>
+            <tr>
+                <th>Server ID</th>
+                <th>Organization</th>
+                <th>User</th>
+                <th>Risk Tier</th>
+                <th>Critical</th>
+                <th>High</th>
+                <th>Medium</th>
+                <th>Low</th>
+                <th>Overall Risk</th>
+                <th>Override</th>
+            </tr>
+        </thead>
+        <tbody id="riskTierTableBody">
+        </tbody>
+    </table>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchRiskTierData();
+        });
+
+        async function fetchRiskTierData() {
+            try {
+                const response = await fetch('/api/risk_tier_data');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                populateTable(data);
+            } catch (error) {
+                console.error('Error fetching risk tier data:', error);
+            }
+        }
+
+        function populateTable(data) {
+            const tableBody = document.getElementById('riskTierTableBody');
+            tableBody.innerHTML = '';
+
+            data.forEach(server => {
+                const row = document.createElement('tr');
+                const riskTier = determineRiskTier(server);
+                const overridden = server.override ? 'overridden' : '';
+
+                row.innerHTML = `
+                    <td>${server.server_id}</td>
+                    <td>${server.org_name}</td>
+                    <td>${server.user_name}</td>
+                    <td class="${riskTier.toLowerCase()} ${overridden}">${riskTier}</td>
+                    <td class="${getRiskClass(server.critical)}">${server.critical}</td>
+                    <td class="${getRiskClass(server.high)}">${server.high}</td>
+                    <td class="${getRiskClass(server.medium)}">${server.medium}</td>
+                    <td class="${getRiskClass(server.low)}">${server.low}</td>
+                    <td class="${getRiskClass(server.overall_risk)}">${server.overall_risk}</td>
+                    <td>${server.override ? 'Yes' : 'No'}</td>
+                `;
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        function determineRiskTier(server) {
+            if (server.override) {
+                return 'CRITICAL';
+            }
+
+            if (server.critical > 0) {
+                return 'CRITICAL';
+            } else if (server.high > 0) {
+                return 'HIGH';
+            } else if (server.medium > 0) {
+                return 'MEDIUM';
+            } else if (server.low > 0) {
+                return 'LOW';
+            } else {
+                return 'NONE';
+            }
+        }
+
+        function getRiskClass(score) {
+            if (score > 0) {
+                return 'critical';
+            } else {
+                return '';
+            }
+        }
+
+        if (typeof module !== 'undefined' && module.exports) {
+            module.exports = {
+                determineRiskTier,
+                getRiskClass
+            };
+        }
+
+        if (typeof require !== 'undefined' && require.main === module) {
+            const assert = require('assert');
+
+            const testData = [
+                {
+                    server_id: 'server1',
+                    org_name: 'org1',
+                    user_name: 'user1',
+                    critical: 1,
+                    high: 0,
+                    medium: 0,
+                    low: 0,
+                    overall_risk: 1,
+                    override: false
+                },
+                {
+                    server_id: 'server2',
+                    org_name: 'org2',
+                    user_name: 'user2',
+                    critical: 0,
+                    high: 1,
+                    medium: 0,
+                    low: 0,
+                    overall_risk: 1,
+                    override: false
+                },
+                {
+                    server_id: 'server3',
+                    org_name: 'org3',
+                    user_name: 'user3',
+                    critical: 0,
+                    high: 0,
+                    medium: 1,
+                    low: 0,
+                    overall_risk: 1,
+                    override: false
+                },
+                {
+                    server_id: 'server4',
+                    org_name: 'org4',
+                    user_name: 'user4',
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    low: 1,
+                    overall_risk: 1,
+                    override: false
+                },
+                {
+                    server_id: 'server5',
+                    org_name: 'org5',
+                    user_name: 'user5',
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    low: 0,
+                    overall_risk: 0,
+                    override: false
+                },
+                {
+                    server_id: 'server6',
+                    org_name: 'org6',
+                    user_name: 'user6',
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    low: 0,
+                    overall_risk: 0,
+                    override: true
+                }
+            ];
+
+            assert.strictEqual(determineRiskTier(testData[0]), 'CRITICAL');
+            assert.strictEqual(determineRiskTier(testData[1]), 'HIGH');
+            assert.strictEqual(determineRiskTier(testData[2]), 'MEDIUM');
+            assert.strictEqual(determineRiskTier(testData[3]), 'LOW');
+            assert.strictEqual(determineRiskTier(testData[4]), 'NONE');
+            assert.strictEqual(determineRiskTier(testData[5]), 'CRITICAL');
+
+            assert.strictEqual(getRiskClass(1), 'critical');
+            assert.strictEqual(getRiskClass(0), '');
+
+            console.log('PASS');
+        }
+    </script>
+</body>
+</html>

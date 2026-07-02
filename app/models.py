@@ -156,3 +156,38 @@ class AskCorpusDoc(Base):
     terms: Mapped[Optional[dict]] = mapped_column(JSON)
     content_hash: Mapped[Optional[str]] = mapped_column(String(32))
     indexed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class VulnAdvisory(Base):
+    """A vulnerability advisory ingested from a public feed (OSV / GHSA / NVD).
+    Provenance is FIRST-CLASS (THE LINE 2026-07-02: no vuln claim without a
+    verifiable source): source_url + fetched_at + feed are non-null contracts."""
+    __tablename__ = "vuln_advisories"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)   # e.g. CVE-2025-49596 / GHSA-...
+    feed: Mapped[str] = mapped_column(String(16))                   # osv | ghsa | nvd
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    severity: Mapped[Optional[str]] = mapped_column(String(16))     # CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN
+    ecosystem: Mapped[Optional[str]] = mapped_column(String(32), index=True)  # npm/PyPI/GitHub
+    package: Mapped[Optional[str]] = mapped_column(String(256), index=True)
+    affected_ranges: Mapped[Optional[dict]] = mapped_column(JSON)   # normalized version ranges
+    aliases: Mapped[Optional[dict]] = mapped_column(JSON)           # cross-feed ids
+    source_url: Mapped[str] = mapped_column(Text)                   # THE provenance anchor
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    identities: Mapped[Optional[dict]] = mapped_column(JSON)  # precomputed canonical keys for deterministic linkage
+    content_hash: Mapped[Optional[str]] = mapped_column(String(32))
+
+
+class VulnLink(Base):
+    """A DETERMINISTIC linkage between an advisory and a registry server
+    (exact package/repo identity match -- never fuzzy). Carries match_confidence
+    + match_basis so every downstream claim can prove HOW it was linked."""
+    __tablename__ = "vuln_links"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    advisory_id: Mapped[str] = mapped_column(String(64), index=True)
+    server_id: Mapped[str] = mapped_column(String(128), index=True)
+    match_basis: Mapped[str] = mapped_column(String(32))           # repo_exact | package_exact
+    match_value: Mapped[str] = mapped_column(String(256))          # the identity that matched
+    match_confidence: Mapped[float] = mapped_column(Float)         # 1.0 exact only in v1
+    linked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    __table_args__ = (UniqueConstraint("advisory_id", "server_id", name="uq_advisory_server"),)

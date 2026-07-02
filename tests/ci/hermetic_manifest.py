@@ -37,6 +37,8 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.queue_janitor",
     # grounded deterministic builder engine (requests + pure helpers).
     "zo_sentinel.engine_build",
+    # self-refilling anchor (stdlib-only KL candidate miner).
+    "zo_sentinel.anchor_refill",
     # SFT training-job ingestion (host-free, stdlib-only by design).
     "zo_sentinel.sft.schema",
     "zo_sentinel.sft.ingest",

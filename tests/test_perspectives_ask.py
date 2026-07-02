@@ -27,6 +27,7 @@ MODULES = [
     "ask_corpus_indexer.py",
     "ask_retrieval_service.py",
     "ask_answer_api.py",
+    "dashboard_summary_api.py",
 ]
 
 

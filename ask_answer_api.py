@@ -20,7 +20,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from sqlalchemy import select
+
 from app.db import get_session
+from app.models import McpServerRegistry
 from ask_retrieval_service import MIN_SCORE, retrieve
 from verdict_breakdown_api import Principal, charge_lookup, get_principal
 
@@ -37,6 +40,8 @@ class AskRequest(BaseModel):
 
 class Citation(BaseModel):
     server_id: str
+    name: Optional[str] = None       # human-readable (treewalk: raw ids were opaque)
+    risk_tier: Optional[str] = None
     score: float
     matched_fields: List[str]
     matched_terms: List[str]
@@ -93,10 +98,18 @@ def ask(db: Session, query: str, k: int = MAX_CITED) -> AskResponse:
     if not hits or hits[0]["score"] < MIN_SCORE:
         return AskResponse(status="insufficient", query=query,
                            answer=None, citations=[])
+    # Resolve human-readable names/tiers for the citations (one bounded query).
+    meta = {sid: (nm, rt) for sid, nm, rt in db.execute(
+        select(McpServerRegistry.server_id, McpServerRegistry.name,
+               McpServerRegistry.risk_tier)
+        .where(McpServerRegistry.server_id.in_([h["server_id"] for h in hits])))}
     answer, polished = _maybe_polish(compose_answer(query, hits))
     return AskResponse(
         status="ok", query=query, answer=answer, llm_polished=polished,
-        citations=[Citation(server_id=h["server_id"], score=h["score"],
+        citations=[Citation(server_id=h["server_id"],
+                            name=(meta.get(h["server_id"], (None, None))[0]),
+                            risk_tier=(meta.get(h["server_id"], (None, None))[1]),
+                            score=h["score"],
                             matched_fields=h["provenance"]["matched_fields"],
                             matched_terms=h["provenance"]["matched_terms"])
                    for h in hits])

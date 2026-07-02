@@ -27,6 +27,9 @@ _OPTIONAL_ROUTERS = [
     # v1.1 Perspectives + v2 Ask slice (FATHER roadmap; direct-built 2026-07-02)
     "facet_enum_service", "perspective_admin_api", "perspective_query_api",
     "perspective_diff_service", "ask_corpus_indexer", "ask_answer_api",
+    # real /api/dashboard/summary (the hollow factory one never mounted --
+    # the SPA dashboard sat on 'loading' forever; treewalk fix 2026-07-02)
+    "dashboard_summary_api",
 ]
 
 

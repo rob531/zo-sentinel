@@ -24,6 +24,16 @@ FIELD_WEIGHTS = {"name": 4.0, "verdict": 3.0, "axes": 2.0, "desc": 1.0}
 DEFAULT_K = 10
 CANDIDATE_LIMIT = 5000
 MIN_SCORE = 2.0   # below this the caller must answer INSUFFICIENT, not guess
+# Fully-assessed servers (a real published tier in the snippet) outrank
+# unassessed rows at equal term relevance -- treewalk finding 2026-07-02: the
+# first prod query surfaced mostly tier=unassessed rows.
+ASSESSED_BOOST = 1.5
+_ASSESSED_MARKERS = ("tier=CRITICAL", "tier=HIGH", "tier=MEDIUM",
+                     "tier=LOW", "tier=MINIMAL")
+
+
+def _is_assessed(snippet: str) -> bool:
+    return any(m in (snippet or "") for m in _ASSESSED_MARKERS)
 
 # Fixed query-side expansions into the corpus vocabulary (auditable).
 SYNONYMS = {
@@ -72,6 +82,8 @@ def retrieve(db: Session, query: str, k: int = DEFAULT_K) -> List[dict]:
     for doc in db.execute(select(AskCorpusDoc).limit(CANDIDATE_LIMIT)).scalars():
         s, prov = score_doc(q_terms, doc.terms or {})
         if s > 0:
+            if _is_assessed(doc.snippet or ""):
+                s += ASSESSED_BOOST
             hits.append({"server_id": doc.server_id, "score": round(s, 2),
                          "snippet": doc.snippet, "provenance": prov})
     hits.sort(key=lambda h: (-h["score"], h["server_id"]))

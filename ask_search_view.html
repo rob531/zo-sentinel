@@ -70,7 +70,8 @@ async function ask(q){
     $('answer').textContent=d.answer; $('answer').style.display='block';
     $('cites').innerHTML=d.citations.map((c,i)=>
       '<div class="cite" id="c'+i+'">'+
-        '<a href="/app/server/'+encodeURIComponent(c.server_id)+'">'+esc(c.server_id)+'</a> '+
+        '<a href="/app/server/'+encodeURIComponent(c.server_id)+'">'+esc(c.name||c.server_id)+'</a> '+
+        (c.risk_tier?'<span style="color:var(--warn);font-size:12px;font-weight:700"> '+esc(c.risk_tier)+'</span> ':'')+
         '<span style="color:var(--dim)">score '+esc(c.score)+'</span> '+
         '<button onclick="document.getElementById(\'c'+i+'\').classList.toggle(\'open\')" '+
         'aria-label="Why this result">why this result ▾</button>'+

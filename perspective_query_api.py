@@ -16,11 +16,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import Session
 
+import json
+
 from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
-from facet_enum_service import (REGISTRY_FACETS, TRUST_BANDS,
+from facet_enum_service import (REGISTRY_FACETS, TRUST_BANDS, cached_facets,
                                 latest_global_model_version, trust_band_for)
-from perspective_model import get_perspective
+from perspective_model import get_perspective, validate_facet_filters
 from verdict_breakdown_api import Principal, get_principal
 
 router = APIRouter(prefix="/api", tags=["perspectives"])
@@ -91,6 +93,30 @@ def query_perspective_servers(db: Session, filters: dict, page: int = 1,
         "last_assessed": r.last_assessed.isoformat() if r.last_assessed else None,
     } for r in page_rows]
     return servers, total, facet_counts
+
+
+@router.get("/perspectives/adhoc/servers")
+def adhoc_servers(filters: str = Query("{}", description="facet_filters JSON"),
+                  page: int = Query(1, ge=1),
+                  page_size: int = Query(25, ge=1, le=MAX_PAGE_SIZE),
+                  db: Session = Depends(get_session),
+                  principal: Principal = Depends(get_principal)) -> dict:
+    """Ad-hoc exploration for ANY authenticated user: same compile path as a
+    saved perspective, but the filters come from the request (validated
+    against the live enums). Treewalk finding 2026-07-02: without this,
+    clicking facets did nothing unless an admin had pre-saved a view."""
+    try:
+        f = json.loads(filters)
+    except Exception:
+        raise HTTPException(status_code=400, detail="filters must be valid JSON")
+    if f:
+        ok, why = validate_facet_filters(f, cached_facets(db))
+        if not ok:
+            raise HTTPException(status_code=400, detail=why)
+    servers, total, facet_counts = query_perspective_servers(
+        db, f, page=page, page_size=page_size)
+    return {"filters": f, "servers": servers, "total": total, "page": page,
+            "page_size": page_size, "facet_counts": facet_counts}
 
 
 @router.get("/perspectives/{perspective_id}/servers")

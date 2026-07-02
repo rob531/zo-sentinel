@@ -1,114 +1,82 @@
+"""dashboard_summary_api.py -- GET /api/dashboard/summary (REAL implementation).
+
+Replaces the hollow factory artifact (imported nonexistent app.database /
+app.services -- it could never mount, which is why the SPA dashboard sat on
+'// loading dashboard...' forever in prod; found in the 2026-07-02 treewalk).
+Serves exactly the shape app/static/app.html consumes:
+  {scored, registry_total, risk_distribution:{TIER:count}, by_source:[{source,count}]}
+Published (post-trust-override) tiers straight from mcp_server_registry --
+same ground truth the Reports page shows. Imports the REAL app data layer.
+"""
+from __future__ import annotations
+
+import time
+from typing import Dict, List
+
 from fastapi import APIRouter, Depends
-from typing import List, Dict, Optional
-from datetime import datetime
-from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import tenant_org_model
-from app.services import write_service
-from app.consumers import app_scoring_consumer
 
-router = APIRouter()
+from app.db import get_session
+from app.models import McpServerRegistry
+from verdict_breakdown_api import Principal, get_principal
 
-class ServerSummary(BaseModel):
-    server_id: str
-    verdict: str
-    scored_at: datetime
+router = APIRouter(prefix="/api", tags=["dashboard"])
 
-class DashboardSummary(BaseModel):
-    tier_distribution: Dict[str, int]
-    scored_count: int
-    total_count: int
-    recent_scored: List[ServerSummary]
+_CACHE: dict = {"at": 0.0, "data": None}
+CACHE_TTL_SECS = 120
 
-@router.get("/dashboard/summary", response_model=DashboardSummary)
-async def get_dashboard_summary(
-    db: Session = Depends(get_db),
-    org_scope: str = Depends(tenant_org_model.org_scope)
-):
-    # Get all servers in the org scope
-    servers_query = f"""
-    SELECT id FROM mcp_server_registry
-    WHERE org_id IN ({org_scope})
-    """
-    servers = await write_service.query(db, servers_query)
 
-    # Get scored servers with their verdicts and timestamps
-    scored_servers_query = f"""
-    SELECT
-        s.id as server_id,
-        a.verdict,
-        a.scored_at
-    FROM mcp_llm_axis_scores a
-    JOIN mcp_server_registry s ON a.server_id = s.id
-    WHERE s.org_id IN ({org_scope})
-    ORDER BY a.scored_at DESC
-    LIMIT 10
-    """
-    scored_servers = await write_service.query(db, scored_servers_query)
+def compute_summary(db: Session) -> Dict:
+    registry_total = db.execute(
+        select(func.count()).select_from(McpServerRegistry)).scalar() or 0
+    scored = db.execute(
+        select(func.count()).select_from(McpServerRegistry)
+        .where(McpServerRegistry.risk_tier.is_not(None))).scalar() or 0
+    dist_rows = db.execute(
+        select(McpServerRegistry.risk_tier, func.count())
+        .where(McpServerRegistry.risk_tier.is_not(None))
+        .group_by(McpServerRegistry.risk_tier)).all()
+    risk_distribution = {str(t).upper(): int(c) for t, c in dist_rows if t}
+    src_rows = db.execute(
+        select(McpServerRegistry.registry_source, func.count())
+        .where(McpServerRegistry.registry_source.is_not(None))
+        .group_by(McpServerRegistry.registry_source)
+        .order_by(func.count().desc())).all()
+    by_source: List[dict] = [{"source": str(s), "count": int(c)}
+                             for s, c in src_rows[:10]]
+    return {"scored": scored, "registry_total": registry_total,
+            "risk_distribution": risk_distribution, "by_source": by_source}
 
-    # Get tier distribution
-    tier_query = f"""
-    SELECT verdict, COUNT(*) as count
-    FROM mcp_llm_axis_scores a
-    JOIN mcp_server_registry s ON a.server_id = s.id
-    WHERE s.org_id IN ({org_scope})
-    GROUP BY verdict
-    """
-    tiers = await write_service.query(db, tier_query)
-    tier_distribution = {row['verdict']: row['count'] for row in tiers}
 
-    # Prepare response
-    response = DashboardSummary(
-        tier_distribution=tier_distribution,
-        scored_count=len(scored_servers),
-        total_count=len(servers),
-        recent_scored=[
-            ServerSummary(
-                server_id=row['server_id'],
-                verdict=row['verdict'],
-                scored_at=row['scored_at']
-            ) for row in scored_servers
-        ]
-    )
+@router.get("/dashboard/summary")
+def dashboard_summary(db: Session = Depends(get_session),
+                      principal: Principal = Depends(get_principal)) -> dict:
+    now = time.time()
+    if _CACHE["data"] is None or now - _CACHE["at"] > CACHE_TTL_SECS:
+        _CACHE["data"] = compute_summary(db)
+        _CACHE["at"] = now
+    return _CACHE["data"]
 
-    return response
 
 if __name__ == "__main__":
-    # Sample test data
-    sample_tiers = [
-        {"verdict": "tier1", "count": 5},
-        {"verdict": "tier2", "count": 3},
-        {"verdict": "tier3", "count": 2}
-    ]
-    sample_servers = [
-        {"server_id": "s1", "verdict": "tier1", "scored_at": datetime(2023, 1, 1)},
-        {"server_id": "s2", "verdict": "tier2", "scored_at": datetime(2023, 1, 2)},
-        {"server_id": "s3", "verdict": "tier3", "scored_at": datetime(2023, 1, 3)}
-    ]
-
-    # Create sample response
-    sample_response = DashboardSummary(
-        tier_distribution={row['verdict']: row['count'] for row in sample_tiers},
-        scored_count=len(sample_servers),
-        total_count=10,
-        recent_scored=[
-            ServerSummary(
-                server_id=row['server_id'],
-                verdict=row['verdict'],
-                scored_at=row['scored_at']
-            ) for row in sample_servers
-        ]
-    )
-
-    # Test tier distribution sum
-    assert sum(sample_response.tier_distribution.values()) == sample_response.scored_count
-
-    # Test recent scored is sorted
-    recent_scored = sample_response.recent_scored
-    assert all(
-        recent_scored[i].scored_at >= recent_scored[i+1].scored_at
-        for i in range(len(recent_scored)-1)
-    )
-
+    import os
+    os.environ.setdefault("DATABASE_URL", "sqlite://")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.db import Base
+    from app.models import McpServerRegistry as R
+    eng = create_engine("sqlite://")
+    Base.metadata.create_all(eng)
+    s = sessionmaker(bind=eng)()
+    s.add_all([
+        R(server_id="a", risk_tier="HIGH", registry_source="github"),
+        R(server_id="b", risk_tier="LOW", registry_source="npm"),
+        R(server_id="c", registry_source="github"),          # unscored
+    ])
+    s.commit()
+    d = compute_summary(s)
+    assert d["registry_total"] == 3 and d["scored"] == 2
+    assert d["risk_distribution"] == {"HIGH": 1, "LOW": 1}
+    assert {"source": "github", "count": 2} in d["by_source"]
     print("PASS")

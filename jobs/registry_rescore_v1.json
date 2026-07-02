@@ -1,0 +1,38 @@
+{
+  "name": "registry_rescore_v1",
+  "description": "Phase-1 (council roadmap 2026-07-02) full registry rescore: re-score all ~80,539 servers with the production student adapter, emit scores jsonl + a backfill file stamping registry.risk_tier and last_scored_at. First MANAGED vast job -- reuses the proven ~$0.75 4090 scoring pipeline, now with ledger + gate + audit.",
+  "launch": {
+    "offer_id": null,
+    "image": "pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime",
+    "disk": 40,
+    "onstart_cmd": "cd /workspace && git clone https://github.com/rob531/zomesh-sentinel-sft.git sft && bash sft/scripts/vast_onstart.sh 2>&1 | tee /workspace/onstart.log",
+    "_note": "offer_id chosen at dispatch time: vastai search offers 'gpu_name=RTX_4090 dph<=0.60' -- the runner refuses to launch without it (deliberate human/agent selection step)."
+  },
+  "cost_cap_usd": 3.00,
+  "max_dph": 0.60,
+  "deadline_min": 300,
+  "auto_destroy": false,
+  "forensics": [
+    "/workspace/onstart.log",
+    "/workspace/*.log",
+    "/workspace/pip_freeze.txt",
+    "/workspace/nvidia_smi.txt"
+  ],
+  "artifacts": [
+    "/workspace/out/registry_scores_v1.jsonl",
+    "/workspace/out/rescore_manifest.json"
+  ],
+  "checks": [
+    { "name": "pipeline_rc", "type": "rc_zero" },
+    { "name": "scores_present", "type": "file_min_bytes",
+      "path": "registry_scores_v1.jsonl", "min_bytes": 1000000 },
+    { "name": "scores_row_floor", "type": "jsonl_min_rows",
+      "path": "registry_scores_v1.jsonl", "min_rows": 60000 },
+    { "name": "manifest_parses", "type": "file_exists",
+      "path": "rescore_manifest.json" },
+    { "name": "adapter_is_production_best", "type": "json_field",
+      "path": "rescore_manifest.json", "field": "bar_passes", "op": "eq", "value": true },
+    { "name": "axes_complete", "type": "json_field",
+      "path": "rescore_manifest.json", "field": "axes_per_server", "op": "gte", "value": 7 }
+  ]
+}

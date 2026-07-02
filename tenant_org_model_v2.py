@@ -1,84 +1,70 @@
+from fastapi import Depends
+from sqlalchemy import and_, select
+from sqlalchemy.orm import Session
+from app.db import get_session
+from app.models import Org, User, OrgMember
 import requests
-import json
 
-class TenantOrgModelV2:
-    def __init__(self, write_service_url="http://localhost:8772/write"):
-        self.write_service_url = write_service_url
+def org_scope(sql, org_id):
+    if org_id:
+        return sql.where(OrgMember.org_id == org_id)
+    return sql
 
-    def org_scope(self, sql, org_id):
-        """Scope SQL queries with org_id filter."""
-        if "WHERE" in sql.upper():
-            return f"{sql} AND org_id = {org_id}"
-        else:
-            return f"{sql} WHERE org_id = {org_id}"
+def create_org(name: str, session: Session = Depends(get_session)) -> int:
+    org = Org(name=name)
+    session.add(org)
+    session.commit()
+    session.refresh(org)
+    return org.id
 
-    def create_org(self, name):
-        """Create an organization and return its ID."""
-        payload = {
-            "table": "organizations",
-            "data": {"name": name}
-        }
-        response = requests.post(self.write_service_url, json=payload)
-        if response.status_code == 200:
-            return response.json()["id"]
-        else:
-            raise Exception(f"Failed to create organization: {response.text}")
+def add_member(org_id: int, user_id: int, role: str, session: Session = Depends(get_session)):
+    member = OrgMember(org_id=org_id, user_id=user_id, role=role)
+    session.add(member)
+    session.commit()
 
-    def add_member(self, org_id, user_id, role):
-        """Add a member to an organization."""
-        payload = {
-            "table": "org_members",
-            "data": {"org_id": org_id, "user_id": user_id, "role": role}
-        }
-        response = requests.post(self.write_service_url, json=payload)
-        if response.status_code != 200:
-            raise Exception(f"Failed to add member: {response.text}")
+def list_members(org_id: int, session: Session = Depends(get_session)):
+    stmt = select(OrgMember).where(OrgMember.org_id == org_id)
+    result = session.execute(stmt)
+    return result.scalars().all()
 
-    def list_members(self, org_id):
-        """List members of an organization."""
-        payload = {
-            "table": "org_members",
-            "filter": {"org_id": org_id}
-        }
-        response = requests.post(self.write_service_url, json=payload)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            raise Exception(f"Failed to list members: {response.text}")
-
-    def remove_member(self, org_id, user_id):
-        """Remove a member from an organization."""
-        payload = {
-            "table": "org_members",
-            "filter": {"org_id": org_id, "user_id": user_id}
-        }
-        response = requests.post(self.write_service_url, json=payload)
-        if response.status_code != 200:
-            raise Exception(f"Failed to remove member: {response.text}")
+def remove_member(org_id: int, user_id: int, session: Session = Depends(get_session)):
+    stmt = select(OrgMember).where(and_(OrgMember.org_id == org_id, OrgMember.user_id == user_id))
+    result = session.execute(stmt)
+    member = result.scalar_one_or_none()
+    if member:
+        session.delete(member)
+        session.commit()
 
 if __name__ == "__main__":
-    # Acceptance test
-    model = TenantOrgModelV2()
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.models import Base
 
-    # Create an organization
-    org_id = model.create_org("Test Org")
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    # Add a member
-    model.add_member(org_id, 1, "admin")
+    def override_get_session():
+        try:
+            db = SessionLocal()
+            yield db
+        finally:
+            db.close()
 
-    # Test org_scope
-    sql = "SELECT * FROM users"
-    scoped_sql = model.org_scope(sql, org_id)
-    assert scoped_sql == "SELECT * FROM users WHERE org_id = 1"
+    from app.dependency_overrides import app
+    app.dependency_overrides[get_session] = override_get_session
 
-    # List members
-    members = model.list_members(org_id)
+    org_id = create_org("Test Org")
+    add_member(org_id, 1, "admin")
+
+    stmt = select(OrgMember).where(OrgMember.org_id == org_id)
+    scoped_stmt = org_scope(stmt, org_id)
+    db = next(override_get_session())
+    result = db.execute(scoped_stmt)
+    members = result.scalars().all()
+
     assert len(members) == 1
-    assert members[0]["user_id"] == 1
-
-    # Remove member
-    model.remove_member(org_id, 1)
-    members = model.list_members(org_id)
-    assert len(members) == 0
+    assert members[0].user_id == 1
+    assert members[0].role == "admin"
 
     print("PASS")

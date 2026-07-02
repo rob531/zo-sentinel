@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask — MCPRisky</title>
+<style>
+  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;--warn:#ffb84d}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
+    font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
+  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
+  main{max-width:840px;margin:0 auto;padding:28px 20px}
+  form{display:flex;gap:8px}
+  input[type=search]{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:12px 14px;font:inherit}
+  button{background:var(--acc);border:0;color:#fff;border-radius:10px;padding:12px 18px;
+    font:inherit;cursor:pointer}
+  #answer{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px;margin-top:18px;white-space:pre-wrap;display:none}
+  #insufficient{display:none;border:1px solid var(--warn);color:var(--warn);
+    border-radius:12px;padding:14px;margin-top:18px}
+  .cite{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}
+  .cite a{color:var(--acc);text-decoration:none;font-weight:600}
+  .cite .why{color:var(--dim);font-size:13px;margin-top:4px;display:none}
+  .cite.open .why{display:block}
+  .cite button{background:none;border:0;color:var(--dim);cursor:pointer;padding:0;font-size:12px}
+  #status{color:var(--dim);margin-top:10px}
+  .hint{color:var(--dim);font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ask MCPLookup</h1>
+  <span style="color:var(--dim)">grounded search over the scored registry — every answer cites its rows</span>
+  <span style="flex:1"></span>
+  <a href="/perspectives">Perspectives →</a> <a href="/app">App →</a>
+</header>
+<main>
+  <form id="f" role="search">
+    <input id="q" type="search" placeholder="e.g. weak auth github servers touching sensitive data"
+           aria-label="Ask a question about MCP servers" autofocus>
+    <button type="submit">Ask</button>
+  </form>
+  <div class="hint">Deterministic retrieval with provenance. If confidence is low you get
+    INSUFFICIENT — never a guess.</div>
+  <div id="status" role="status" aria-live="polite"></div>
+  <div id="answer"></div>
+  <div id="insufficient">INSUFFICIENT — the corpus doesn't support a confident answer to that.
+    Try registry vocabulary: tiers (HIGH/LOW), axes (auth, egress, exploit), sources (github/npm).</div>
+  <div id="cites"></div>
+</main>
+<script>
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
+const $=id=>document.getElementById(id);
+function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+
+async function ask(q){
+  $('status').textContent='searching…';
+  $('answer').style.display='none'; $('insufficient').style.display='none'; $('cites').innerHTML='';
+  try{
+    const t=await tok();
+    const r=await fetch('/api/ask',{method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},t?{Authorization:'Bearer '+t}:{}),
+      body:JSON.stringify({query:q})});
+    if(!r.ok){$('status').textContent='error '+r.status+': '+await r.text();return}
+    const d=await r.json();
+    $('status').textContent='';
+    if(d.status!=='ok'){$('insufficient').style.display='block';return}
+    $('answer').textContent=d.answer; $('answer').style.display='block';
+    $('cites').innerHTML=d.citations.map((c,i)=>
+      '<div class="cite" id="c'+i+'">'+
+        '<a href="/app/server/'+encodeURIComponent(c.server_id)+'">'+esc(c.server_id)+'</a> '+
+        '<span style="color:var(--dim)">score '+esc(c.score)+'</span> '+
+        '<button onclick="document.getElementById(\'c'+i+'\').classList.toggle(\'open\')" '+
+        'aria-label="Why this result">why this result ▾</button>'+
+        '<div class="why">matched fields: '+esc(c.matched_fields.join(', '))+
+        '<br>matched terms: '+esc(c.matched_terms.join(', '))+'</div></div>').join('');
+  }catch(e){$('status').textContent='error: '+e.message}
+}
+$('f').addEventListener('submit',e=>{e.preventDefault();const q=$('q').value.trim();if(q)ask(q);});
+
+const CLERK_PK="__CLERK_PK__";
+function clerkHost(pk){try{return atob(pk.split('_')[2]).replace(/\$+$/,'');}catch(e){return '';}}
+if(CLERK_PK.indexOf("pk_")===0&&clerkHost(CLERK_PK)){
+  const s=document.createElement('script');
+  s.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  s.src='https://'+clerkHost(CLERK_PK)+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  s.onload=async()=>{await window.Clerk.load();};
+  document.head.appendChild(s);
+}
+</script>
+</body>
+</html>

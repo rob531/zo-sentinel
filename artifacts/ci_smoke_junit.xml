@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="ci_smoke_ladder" tests="40" failures="0" skipped="0">
+  <testsuite name="tier0_syntax" tests="1" failures="0" skipped="0">
+    <testcase classname="tier0_syntax" name="syntax_sweep::1199_files" time="0.000"></testcase>
+  </testsuite>
+  <testsuite name="tier1_import" tests="31" failures="0" skipped="0">
+    <testcase classname="tier1_import" name="import::signal_weights" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::verdict_taxonomy" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.schemas.loader" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.probes.duckdb_schema_uptime_probe" time="0.016"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.evaluators.gh_actions_fetcher" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.promoters.proposed_to_pending_promoter" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.queue_janitor" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.engine_build" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.anchor_refill" time="0.014"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.policy" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.sft.schema" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.sft.ingest" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.sft.batch_runner" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::gate_quality_state" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.ingestor.model" time="0.016"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.ingestor.contracts" time="0.014"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.ingestor.store" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.ingestor.ingestor" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.ingestor.governor" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.publisher.gitops" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.publisher.publisher" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::zo_sentinel.build_routing" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::tenant_org_model" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::rbac_enforcer" time="0.921"></testcase>
+    <testcase classname="tier1_import" name="import::verdict_breakdown_api" time="0.141"></testcase>
+    <testcase classname="tier1_import" name="import::org_entity_search_api" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::overview_dashboard_api" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::entity_report_exporter" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::verdict_watchlist_service" time="0.016"></testcase>
+    <testcase classname="tier1_import" name="import::org_api_key_manager" time="0.000"></testcase>
+    <testcase classname="tier1_import" name="import::product_audit_log" time="0.000"></testcase>
+  </testsuite>
+  <testsuite name="tier2_schema" tests="4" failures="0" skipped="0">
+    <testcase classname="tier2_schema" name="schema::duckdb_snapshot_loads" time="0.000"></testcase>
+    <testcase classname="tier2_schema" name="schema::mesh_memory_canonical_columns" time="0.000"></testcase>
+    <testcase classname="tier2_schema" name="schema::hash_deterministic" time="0.000"></testcase>
+    <testcase classname="tier2_schema" name="schema::duckdb_materialize" time="0.046"></testcase>
+  </testsuite>
+  <testsuite name="tier3_service" tests="4" failures="0" skipped="0">
+    <testcase classname="tier3_service" name="service::health" time="0.031"></testcase>
+    <testcase classname="tier3_service" name="service::write_query_roundtrip" time="0.047"></testcase>
+    <testcase classname="tier3_service" name="service::execute" time="0.000"></testcase>
+    <testcase classname="tier3_service" name="service::gate_framework_env_binding" time="0.031"></testcase>
+  </testsuite>
+</testsuites>

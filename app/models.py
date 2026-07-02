@@ -103,3 +103,56 @@ class McpScoreDispute(Base):
     admin_note: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class Perspective(Base):
+    """Admin-built saved facet filter over the scored registry -- the v1.1
+    "Perspectives" unit (deterministic, governable discovery + the trust-diff
+    attach point). facet_filters example:
+    {"risk_tier": ["HIGH"], "axis:auth_strength": ["WEAK"]}."""
+    __tablename__ = "perspectives"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    facet_filters: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class PerspectiveSnapshot(Base):
+    """Point-in-time membership {server_id: risk_tier} of a perspective --
+    the reference set trust-diff compares against."""
+    __tablename__ = "perspective_snapshots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    perspective_id: Mapped[str] = mapped_column(String(64), index=True)
+    taken_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    membership: Mapped[Optional[dict]] = mapped_column(JSON)
+
+
+class PerspectiveEvent(Base):
+    """In-app trust-diff notification: one row per membership/tier change
+    (entered | left | tier_changed). External connectors stay parked; webhooks
+    later consume THESE rows."""
+    __tablename__ = "perspective_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    perspective_id: Mapped[str] = mapped_column(String(64), index=True)
+    server_id: Mapped[str] = mapped_column(String(128), index=True)
+    change_type: Mapped[str] = mapped_column(String(16))
+    old_tier: Mapped[Optional[str]] = mapped_column(String(32))
+    new_tier: Mapped[Optional[str]] = mapped_column(String(32))
+    seen: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AskCorpusDoc(Base):
+    """Ask-MCPLookup lexical corpus: one snippet + field-scoped term index per
+    scored server. Rebuilt idempotently by ask_corpus_indexer (content_hash
+    short-circuits unchanged rows)."""
+    __tablename__ = "ask_corpus_index"
+    server_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snippet: Mapped[Optional[str]] = mapped_column(Text)
+    terms: Mapped[Optional[dict]] = mapped_column(JSON)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(32))
+    indexed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

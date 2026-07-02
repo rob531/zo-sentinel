@@ -24,6 +24,9 @@ _OPTIONAL_ROUTERS = [
     "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",
     "entity_report_exporter", "org_api_key_manager", "verdict_watchlist_service",
     "score_dispute_api",
+    # v1.1 Perspectives + v2 Ask slice (FATHER roadmap; direct-built 2026-07-02)
+    "facet_enum_service", "perspective_admin_api", "perspective_query_api",
+    "perspective_diff_service", "ask_corpus_indexer", "ask_answer_api",
 ]
 
 
@@ -86,6 +89,35 @@ for _modname in _OPTIONAL_ROUTERS:
             app.include_router(_r)
     except Exception:
         pass  # loose/unbuilt feature module -- skip, never block boot
+
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _render_root(name: str) -> str:
+    """Serve a repo-root view file (the factory/spec-canonical filenames) with
+    the same Clerk-PK injection app/static pages get."""
+    html = (_REPO_ROOT / name).read_text(encoding="utf-8")
+    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+
+
+@app.get("/perspectives", response_class=HTMLResponse)
+def perspectives_page():
+    """v1.1 Perspectives: deterministic faceted views + trust-diff."""
+    return _render_root("perspective_tree_view.html")
+
+
+@app.get("/ask", response_class=HTMLResponse)
+def ask_page():
+    """v2 slice: grounded Ask with mandatory citations."""
+    return _render_root("ask_search_view.html")
+
+
+@app.get("/roadmap", response_class=HTMLResponse)
+def roadmap_page():
+    """FATHER launch condition: the public roadmap, so v1 reads as a
+    foundation, not 'just a lookup'."""
+    return _render_root("roadmap_announcement.html")
 
 
 @app.get("/app", response_class=HTMLResponse)

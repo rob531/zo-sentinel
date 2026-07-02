@@ -30,6 +30,8 @@ _OPTIONAL_ROUTERS = [
     # real /api/dashboard/summary (the hollow factory one never mounted --
     # the SPA dashboard sat on 'loading' forever; treewalk fix 2026-07-02)
     "dashboard_summary_api",
+    # vuln-intel spine + Scan-my-config killer feature (FATHER urgency ruling 2026-07-02)
+    "vuln_osv_ingestor", "vuln_registry_linker", "vuln_exposure_api", "config_scan_api",
 ]
 
 
@@ -108,6 +110,12 @@ def _render_root(name: str) -> str:
 def perspectives_page():
     """v1.1 Perspectives: deterministic faceted views + trust-diff."""
     return _render_root("perspective_tree_view.html")
+
+
+@app.get("/scan", response_class=HTMLResponse)
+def scan_page():
+    """Killer feature: paste an mcp.json, get a provenance-cited risk report."""
+    return _render_root("scan_view.html")
 
 
 @app.get("/ask", response_class=HTMLResponse)

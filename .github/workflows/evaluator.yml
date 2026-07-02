@@ -82,6 +82,7 @@ jobs:
             tests/test_directive_simplifier.py \
             tests/test_perspectives_ask.py \
             tests/test_vast_jobs.py \
+            tests/test_vuln_and_scan.py \
             -q \
             --junitxml=artifacts/junit.xml
 

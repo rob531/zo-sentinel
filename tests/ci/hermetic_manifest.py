@@ -43,6 +43,8 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.policy",
     # managed GPU-job lifecycle (stdlib; vast SDK injected, never imported here).
     "zo_sentinel.vast_jobs",
+    # vuln-intel identity helpers (stdlib, pure).
+    "vuln_identity",
     # SFT training-job ingestion (host-free, stdlib-only by design).
     "zo_sentinel.sft.schema",
     "zo_sentinel.sft.ingest",

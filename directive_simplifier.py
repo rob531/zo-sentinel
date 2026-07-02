@@ -35,12 +35,27 @@ def _now() -> str:
 
 
 def _load_original_directive(task_name):
-    """Find the original directive JSON for a quarantined task (pending/done/proposed)."""
+    """Find the original directive JSON for a quarantined task
+    (pending/done/proposed, then retired/).
+
+    retired/ is searched LAST and recursively: the queue_janitor retires
+    quarantined squatters out of pending/ to directives/retired/<utc>/<class>/
+    (the skip=>retire fix), so a quarantined parent's directive JSON may live
+    there by the time the simplifier decomposes it. Newest retirement batch
+    wins (reverse-sorted timestamp dirs)."""
     for sub in ("pending", "done", "proposed"):
         d = DIRECTIVES / sub
         if not d.is_dir():
             continue
         for p in d.glob("*.json"):
+            if task_name in p.name:
+                try:
+                    return json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+    retired = DIRECTIVES / "retired"
+    if retired.is_dir():
+        for p in sorted(retired.rglob("*.json"), reverse=True):
             if task_name in p.name:
                 try:
                     return json.loads(p.read_text(encoding="utf-8"))

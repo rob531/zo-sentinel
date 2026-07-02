@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Daemon Health Dashboard</title>
+    <style>
+        body { font-family: sans-serif; }
+        table { border-collapse: collapse; width: 80%; margin: 20px auto; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .status-running { color: green; }
+        .status-stale { color: orange; }
+        .status-healthy { color: blue; }
+        .status-unknown { color: gray; }
+    </style>
+</head>
+<body>
+    <h1>Overall Daemon Health Dashboard</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Daemon Name</th>
+                <th>Status</th>
+                <th>Last Heartbeat</th>
+                <th>Age</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for daemon in daemon_health %}
+            <tr>
+                <td>{{ daemon.daemon_name }}</td>
+                <td class="status-{{ daemon.status.lower() }}">{{ daemon.status }}</td>
+                <td>{{ daemon.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if daemon.last_heartbeat else 'N/A' }}</td>
+                <td>{{ daemon.age }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

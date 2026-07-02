@@ -350,13 +350,22 @@ def is_goose_eligible(directive):
     # Toggle via env ZO_DEDUP_REBUILD, OR a sentinel file (operable without a
     # daemon env change / go.sh edit): directives/.dedup_rebuild_on containing "1".
     # Read fresh each call so it can be flipped on/off live, no restart.
-    _dedup_on = bool(os.environ.get("ZO_DEDUP_REBUILD"))
-    if not _dedup_on:
-        try:
-            _sf = DIRECTIVES_PATH / ".dedup_rebuild_on"
-            _dedup_on = _sf.is_file() and _sf.read_text(encoding="utf-8").strip() not in ("", "0", "off", "false")
-        except Exception:
-            _dedup_on = False
+    # Resolved through the declarative policy layer (zo_sentinel.policy: env >
+    # durable override > legacy sentinel > policy_defaults.toml), read fresh
+    # each call. Fail-open FALLBACK: the original inline env+sentinel logic,
+    # so a policy fault degrades to prior behavior -- never to a crash.
+    try:
+        from zo_sentinel import policy as _policy
+        _dedup_on = _policy.flag("queue.dedup_rebuild",
+                                 directives_root=DIRECTIVES_PATH)
+    except Exception:
+        _dedup_on = bool(os.environ.get("ZO_DEDUP_REBUILD"))
+        if not _dedup_on:
+            try:
+                _sf = DIRECTIVES_PATH / ".dedup_rebuild_on"
+                _dedup_on = _sf.is_file() and _sf.read_text(encoding="utf-8").strip() not in ("", "0", "off", "false")
+            except Exception:
+                _dedup_on = False
     if _dedup_on:
         try:
             _out = declared_output(directive)

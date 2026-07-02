@@ -1,0 +1,27 @@
+# zo-sentinel declarative operational policy -- TRACKED defaults.
+#
+# This file is the reviewed, versioned statement of intended production
+# posture. Changing it goes through a PR like any other code. Live emergency
+# flips go through `python3 -m zo_sentinel.policy set <key> <value>` (writes
+# the durable override file, which outranks this file); env vars outrank
+# everything (the big hammer). Precedence chain + key docs: zo_sentinel/policy.py.
+#
+# Posture as of 2026-07-02: all four loop-closures are shipped, tested and
+# live-verified (PRs #1060 dedup, #1127 janitor, #1133 engine, #1134 refill),
+# so the declared default is ON. Turning one off is a one-line PR or a CLI set.
+
+[queue]
+dedup_rebuild = true      # skip redundant rebuilds (goose_runner)
+janitor = true            # skip=>retire in the promoter cycle
+janitor_limit = 200       # max retirements per pass
+
+[builder]
+engine_build = true       # grounded deterministic engine fallback
+engine_rungs = "zo-ladder-nvidia,zo-ladder-high"   # free rungs only
+engine_max_repairs = 1    # bounded repair rounds
+
+[architect]
+anchor_refill = true      # self-refilling anchor (KL candidate mining)
+refill_threshold = 5      # refill when missing candidates < this
+refill_max_new = 5        # max candidates appended per refill
+max_proposed_depth = 40   # proposed/ cap gating generation (live-tunable)

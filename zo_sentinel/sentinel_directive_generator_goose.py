@@ -465,8 +465,16 @@ def run_goose_cycle() -> dict:
         return {"status": "skipped", "reason": "recipe_missing"}
 
     depth = _count_proposed()
-    if depth >= MAX_PROPOSED:
-        log.info("proposed/ depth %d >= cap %d; skipping cycle", depth, MAX_PROPOSED)
+    # Cap resolved through the declarative policy layer per cycle (live-
+    # tunable, no restart): env DGG_MAX_PROPOSED_DEPTH > durable override >
+    # policy_defaults.toml. Fail-open to the import-time constant.
+    try:
+        from zo_sentinel import policy as _policy
+        _cap = int(_policy.value("architect.max_proposed_depth"))
+    except Exception:
+        _cap = MAX_PROPOSED
+    if depth >= _cap:
+        log.info("proposed/ depth %d >= cap %d; skipping cycle", depth, _cap)
         return {"status": "skipped", "reason": "depth_cap", "depth": depth}
 
     # Batch-when-idle: only generate when the build side is quiet, so the graph

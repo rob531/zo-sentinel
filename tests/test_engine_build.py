@@ -128,13 +128,18 @@ def test_rung_escalation_by_attempt(monkeypatch):
     assert engine_build.rung_for_attempt(2) == "c"
 
 
-def test_gate_default_off_sentinel_and_env(tmp_path, monkeypatch):
+def test_gate_declarative_posture_sentinel_and_env(tmp_path, monkeypatch):
+    """Gate default is DECLARED in policy_defaults.toml (engine_build = true);
+    legacy sentinel and env keep working with their original semantics."""
     monkeypatch.delenv(engine_build.ENV_FLAG, raising=False)
-    assert engine_build.enabled(tmp_path) is False
+    monkeypatch.setenv("ZO_POLICY_OVERRIDE_PATH", str(tmp_path / "ov.json"))
+    assert engine_build.enabled(tmp_path) is True      # declared posture
     sf = tmp_path / engine_build.SENTINEL_NAME
+    sf.write_text("0", encoding="utf-8")               # legacy explicit OFF
+    assert engine_build.enabled(tmp_path) is False
     sf.write_text("1", encoding="utf-8")
     assert engine_build.enabled(tmp_path) is True
-    sf.write_text("0", encoding="utf-8")
+    monkeypatch.setenv(engine_build.ENV_FLAG, "0")     # env big-hammer
     assert engine_build.enabled(tmp_path) is False
     monkeypatch.setenv(engine_build.ENV_FLAG, "1")
     assert engine_build.enabled(tmp_path) is True

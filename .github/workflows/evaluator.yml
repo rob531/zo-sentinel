@@ -72,6 +72,12 @@ jobs:
             tests/test_ladder_routing.py \
             tests/test_pr_publisher.py \
             tests/test_build_routing.py \
+            tests/test_queue_janitor.py \
+            tests/test_engine_build.py \
+            tests/test_anchor_refill.py \
+            tests/test_policy.py \
+            tests/test_policy_chain_integration.py \
+            tests/test_directive_simplifier.py \
             -q \
             --junitxml=artifacts/junit.xml
 

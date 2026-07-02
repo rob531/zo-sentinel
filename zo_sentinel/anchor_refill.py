@@ -76,7 +76,16 @@ _EXCLUDE_PREFIXES = ("test_", "conftest")
 
 
 def enabled(directives_root) -> bool:
-    """Read-fresh gate: env ZO_ANCHOR_REFILL or directives/.anchor_refill_on."""
+    """Gate resolved through the declarative policy layer (zo_sentinel.policy:
+    env > durable override > legacy sentinel > policy_defaults.toml), read
+    fresh each call. Fail-open FALLBACK: the original inline env+sentinel
+    logic, so a policy-layer fault degrades to prior behavior."""
+    try:
+        from zo_sentinel import policy
+        return policy.flag("architect.anchor_refill",
+                           directives_root=directives_root)
+    except Exception:
+        pass
     val = os.environ.get(ENV_FLAG, "")
     if val.strip().lower() not in ("", "0", "off", "false"):
         return True
@@ -187,8 +196,8 @@ def mine_candidates(source_paths: List[Path], exclude: Set[str],
     return found
 
 
-def run_refill(sentinel_dir, threshold: int = DEFAULT_THRESHOLD,
-               max_new: int = DEFAULT_MAX_NEW,
+def run_refill(sentinel_dir, threshold: Optional[int] = None,
+               max_new: Optional[int] = None,
                sources: Optional[List[Path]] = None,
                quarantine_dir: Optional[Path] = None,
                now: Optional[str] = None) -> dict:
@@ -199,6 +208,17 @@ def run_refill(sentinel_dir, threshold: int = DEFAULT_THRESHOLD,
     """
     stats = {"missing": None, "mined": 0, "appended": 0, "reason": "",
              "files": []}
+    if threshold is None or max_new is None:
+        try:
+            from zo_sentinel import policy
+            if threshold is None:
+                threshold = int(policy.value("architect.refill_threshold"))
+            if max_new is None:
+                max_new = int(policy.value("architect.refill_max_new"))
+        except Exception:
+            pass
+    threshold = DEFAULT_THRESHOLD if threshold is None else threshold
+    max_new = DEFAULT_MAX_NEW if max_new is None else max_new
     try:
         root = Path(sentinel_dir)
         spec_path = root / "PRODUCT_SPEC.md"

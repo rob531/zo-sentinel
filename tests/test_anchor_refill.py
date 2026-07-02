@@ -118,17 +118,20 @@ def test_missing_spec_fails_open(tmp_path):
     assert stats["appended"] == 0
 
 
-def test_gate_default_off_sentinel_and_env(tmp_path, monkeypatch):
+def test_gate_declarative_posture_sentinel_and_env(tmp_path, monkeypatch):
+    """Gate default is DECLARED in policy_defaults.toml (anchor_refill = true);
+    legacy sentinel and env keep their original semantics."""
     monkeypatch.delenv(anchor_refill.ENV_FLAG, raising=False)
+    monkeypatch.setenv("ZO_POLICY_OVERRIDE_PATH", str(tmp_path / "ov.json"))
     d = tmp_path / "directives"
     d.mkdir()
-    assert anchor_refill.enabled(d) is False
+    assert anchor_refill.enabled(d) is True            # declared posture
+    (d / anchor_refill.SENTINEL_NAME).write_text("0", encoding="utf-8")
+    assert anchor_refill.enabled(d) is False           # legacy explicit OFF
     (d / anchor_refill.SENTINEL_NAME).write_text("1", encoding="utf-8")
     assert anchor_refill.enabled(d) is True
-    (d / anchor_refill.SENTINEL_NAME).write_text("0", encoding="utf-8")
+    monkeypatch.setenv(anchor_refill.ENV_FLAG, "0")    # env big-hammer
     assert anchor_refill.enabled(d) is False
-    monkeypatch.setenv(anchor_refill.ENV_FLAG, "1")
-    assert anchor_refill.enabled(d) is True
 
 
 if __name__ == "__main__":

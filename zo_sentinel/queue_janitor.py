@@ -78,8 +78,15 @@ def _durable_quarantine_dir() -> Path:
 
 
 def enabled(directives_root) -> bool:
-    """Flag-gated, read fresh each call (flip live, no restart): env
-    ZO_QUEUE_JANITOR, or sentinel file <directives_root>/.queue_janitor_on."""
+    """Gate resolved through the declarative policy layer (zo_sentinel.policy:
+    env > durable override > legacy sentinel > policy_defaults.toml), read
+    fresh each call so flips are live. Fail-open FALLBACK: the original inline
+    env+sentinel logic, so a policy-layer fault degrades to prior behavior."""
+    try:
+        from zo_sentinel import policy
+        return policy.flag("queue.janitor", directives_root=directives_root)
+    except Exception:
+        pass
     val = os.environ.get(ENV_FLAG, "")
     if val.strip().lower() not in ("", "0", "off", "false"):
         return True
@@ -134,7 +141,8 @@ def _classify(directive: dict, quarantine_dirs, home: str,
 
 
 def run_pass(directives_root, home: Optional[str] = None,
-             lessons_dir=None, quarantine_dirs=None, limit: int = 200) -> dict:
+             lessons_dir=None, quarantine_dirs=None,
+             limit: Optional[int] = None) -> dict:
     """One retire pass over pending/ and proposed/. Returns stats. Never raises.
 
     limit bounds total moves per pass (backlog drains across cycles rather than
@@ -142,6 +150,13 @@ def run_pass(directives_root, home: Optional[str] = None,
     worst observed backlog in a couple of minutes).
     """
     stats = {"scanned": 0, "retired": 0, "kept": 0, "errors": 0, "by_class": {}}
+    if limit is None:
+        try:
+            from zo_sentinel import policy
+            limit = int(policy.value("queue.janitor_limit",
+                                     directives_root=directives_root))
+        except Exception:
+            limit = 200
     try:
         root = Path(directives_root)
         home = home or str(root.parent)

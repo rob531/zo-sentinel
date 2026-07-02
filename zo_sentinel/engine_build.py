@@ -71,7 +71,16 @@ SELFTEST_TIMEOUT = int(os.environ.get("ZO_ENGINE_SELFTEST_TIMEOUT", "90"))
 
 
 def enabled(directives_root) -> bool:
-    """Read-fresh gate: env ZO_ENGINE_BUILD or directives/.engine_build_on."""
+    """Gate resolved through the declarative policy layer (zo_sentinel.policy:
+    env > durable override > legacy sentinel > policy_defaults.toml), read
+    fresh each call. Fail-open FALLBACK: the original inline env+sentinel
+    logic, so a policy-layer fault degrades to prior behavior."""
+    try:
+        from zo_sentinel import policy
+        return policy.flag("builder.engine_build",
+                           directives_root=directives_root)
+    except Exception:
+        pass
     val = os.environ.get(ENV_FLAG, "")
     if val.strip().lower() not in ("", "0", "off", "false"):
         return True
@@ -85,12 +94,28 @@ def enabled(directives_root) -> bool:
 
 
 def _rungs() -> tuple:
+    # env keeps highest precedence (policy resolves it too, but the inline
+    # read stays as the fail-open fallback path).
     raw = os.environ.get("ZO_ENGINE_RUNGS", "")
+    if not raw.strip():
+        try:
+            from zo_sentinel import policy
+            raw = str(policy.value("builder.engine_rungs"))
+        except Exception:
+            raw = ""
     if raw.strip():
         parts = tuple(p.strip() for p in raw.split(",") if p.strip())
         if parts:
             return parts
     return DEFAULT_RUNGS
+
+
+def _max_repairs() -> int:
+    try:
+        from zo_sentinel import policy
+        return int(policy.value("builder.engine_max_repairs"))
+    except Exception:
+        return MAX_REPAIRS
 
 
 def rung_for_attempt(attempt: int) -> str:
@@ -225,9 +250,10 @@ def build_with_engine(directive: dict, task_text: str, attempt: int = 0,
         log(f"[engine] {model} wrote {len(code)} bytes -> {out.name}")
         ok, detail = _local_check(out)
         repairs = 0
-        while not ok and repairs < MAX_REPAIRS:
+        max_repairs = _max_repairs()
+        while not ok and repairs < max_repairs:
             repairs += 1
-            log(f"[engine] repair {repairs}/{MAX_REPAIRS} for {out.name}: "
+            log(f"[engine] repair {repairs}/{max_repairs} for {out.name}: "
                 f"{detail[:160]}")
             fix_prompt = (
                 f"The file `{out.name}` you produced FAILED verification.\n"

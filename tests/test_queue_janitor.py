@@ -174,17 +174,23 @@ def test_missing_dirs_are_noop(tmp_path):
 # enabled() gating
 # ---------------------------------------------------------------------------
 
-def test_disabled_by_default(tmp_path, monkeypatch):
+def test_posture_comes_from_declarative_policy(tmp_path, monkeypatch):
+    """Since the policy layer, the gate's default is DECLARED in
+    zo_sentinel/policy_defaults.toml (janitor = true), not hardcoded off."""
     monkeypatch.delenv(queue_janitor.ENV_FLAG, raising=False)
+    monkeypatch.setenv("ZO_POLICY_OVERRIDE_PATH", str(tmp_path / "ov.json"))
+    assert queue_janitor.enabled(tmp_path) is True     # declared posture
+    monkeypatch.setenv(queue_janitor.ENV_FLAG, "0")    # env big-hammer off
     assert queue_janitor.enabled(tmp_path) is False
 
 
 def test_enabled_via_sentinel_and_env(tmp_path, monkeypatch):
     monkeypatch.delenv(queue_janitor.ENV_FLAG, raising=False)
+    monkeypatch.setenv("ZO_POLICY_OVERRIDE_PATH", str(tmp_path / "ov.json"))
     sf = tmp_path / queue_janitor.SENTINEL_NAME
     sf.write_text("1", encoding="utf-8")
     assert queue_janitor.enabled(tmp_path) is True
-    sf.write_text("0", encoding="utf-8")   # live off-switch
+    sf.write_text("0", encoding="utf-8")   # live off-switch (legacy, honored)
     assert queue_janitor.enabled(tmp_path) is False
     monkeypatch.setenv(queue_janitor.ENV_FLAG, "1")
     assert queue_janitor.enabled(tmp_path) is True
@@ -197,6 +203,9 @@ def test_enabled_via_sentinel_and_env(tmp_path, monkeypatch):
 def test_promoter_archives_reproposal_of_durably_quarantined_id(tmp_path, monkeypatch):
     home, directives, quarantine = _mk_home(tmp_path)
     monkeypatch.setenv("ZO_DURABLE_QUARANTINE_DIR", str(quarantine))
+    # Janitor OFF here: this test targets the promoter's OWN durable-terminal
+    # archival path (the janitor would otherwise retire the file first).
+    monkeypatch.setenv(queue_janitor.ENV_FLAG, "0")
     (quarantine / "build_gave_up.failed.json").write_text("{}", encoding="utf-8")
     src = _write(directives / "proposed", "gen_10_build_gave_up.json",
                  _directive("build_gave_up"))
@@ -214,6 +223,8 @@ def test_promoter_archives_reproposal_of_durably_quarantined_id(tmp_path, monkey
 def test_promoter_treats_durably_quarantined_squatter_as_terminal(tmp_path, monkeypatch):
     home, directives, quarantine = _mk_home(tmp_path)
     monkeypatch.setenv("ZO_DURABLE_QUARANTINE_DIR", str(quarantine))
+    # Janitor OFF: exercises the promoter's own terminal-squatter branch.
+    monkeypatch.setenv(queue_janitor.ENV_FLAG, "0")
     # Squatter in pending, quarantined ONLY in the durable store.
     _write(directives / "pending", "gen_11_build_squat.json", _directive("build_squat"))
     (quarantine / "build_squat.failed.json").write_text("{}", encoding="utf-8")
@@ -231,12 +242,14 @@ def test_promoter_treats_durably_quarantined_squatter_as_terminal(tmp_path, monk
     assert out["promoted"] == 0
 
 
-def test_promoter_janitor_off_by_default_then_unclogs_when_enabled(tmp_path, monkeypatch):
+def test_promoter_janitor_off_then_unclogs_when_enabled(tmp_path, monkeypatch):
     """End-to-end unclog: redundant squatter in pending + novel proposal.
-    Gate off -> squatter stays. Gate on -> squatter retired, novel promoted."""
+    Gate off (env big-hammer) -> squatter stays. Gate on -> squatter retired,
+    novel promoted."""
     home, directives, quarantine = _mk_home(tmp_path)
     monkeypatch.setenv("ZO_DURABLE_QUARANTINE_DIR", str(quarantine))
-    monkeypatch.delenv(queue_janitor.ENV_FLAG, raising=False)
+    monkeypatch.setenv("ZO_POLICY_OVERRIDE_PATH", str(tmp_path / "ov.json"))
+    monkeypatch.setenv(queue_janitor.ENV_FLAG, "0")
     _build_output(home, "old_mod.py")
     squatter = _write(directives / "pending", "gen_12_build_old_mod.json",
                       _directive("build_old_mod", "old_mod.py"))
@@ -246,11 +259,11 @@ def test_promoter_janitor_off_by_default_then_unclogs_when_enabled(tmp_path, mon
     out = promoter.run_once(directives / "proposed", directives / "pending",
                             min_age_secs=0, max_per_cycle=10,
                             directives_root=directives)
-    assert squatter.exists()  # default OFF: zero behavior change
+    assert squatter.exists()  # gate OFF: zero janitor behavior
     assert out["promoted"] == 1                              # novel promoted...
     assert (directives / "pending" / novel.name).exists()    # ...into pending
 
-    (directives / queue_janitor.SENTINEL_NAME).write_text("1", encoding="utf-8")
+    monkeypatch.delenv(queue_janitor.ENV_FLAG, raising=False)  # declared posture = ON
     promoter.run_once(directives / "proposed", directives / "pending",
                       min_age_secs=0, max_per_cycle=10,
                       directives_root=directives)

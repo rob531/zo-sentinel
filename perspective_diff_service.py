@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models import Perspective, PerspectiveEvent, PerspectiveSnapshot
-from perspective_query_api import query_perspective_servers
+from perspective_query_api import query_membership
 from verdict_breakdown_api import Principal, get_principal, require_admin
 
 router = APIRouter(prefix="/api", tags=["perspectives"])
@@ -30,11 +30,11 @@ def _now() -> datetime:
 
 
 def current_membership(db: Session, perspective: Perspective) -> Dict[str, str]:
-    """Live {server_id: risk_tier} for a perspective (unpaginated, bounded by
-    the corpus)."""
-    servers, _total, _fc = query_perspective_servers(
-        db, perspective.facet_filters or {}, page=1, page_size=10 ** 9)
-    return {s["server_id"]: (s["risk_tier"] or "") for s in servers}
+    """Live {server_id: risk_tier} for a perspective. v1.2: tuple-only SQL via
+    query_membership -- the v1.1 path hydrated the FULL ORM result with
+    page_size=1e9 AND computed facet counts, which made every trust-diff click
+    a 10-20s stall (treewalk 2026-07-03)."""
+    return query_membership(db, perspective.facet_filters or {})
 
 
 def snapshot_perspective(db: Session, perspective_id: str) -> PerspectiveSnapshot:
@@ -115,8 +115,13 @@ def take_snapshot(perspective_id: str, db: Session = Depends(get_session),
 @router.get("/perspectives/{perspective_id}/diff")
 def get_diff(perspective_id: str, db: Session = Depends(get_session),
              principal: Principal = Depends(get_principal)) -> dict:
+    """Read-only: a GET must NEVER write (council 2026-07-03 -- the v1.1 route
+    queued PerspectiveEvent rows on every click: write amplification from
+    public reads + unbounded table growth). Event queueing stays available to
+    explicit callers (the living-perspectives cron calls diff_perspective
+    directly with queue_events=True)."""
     try:
-        return diff_perspective(db, perspective_id)
+        return diff_perspective(db, perspective_id, queue_events=False)
     except ValueError:
         raise HTTPException(status_code=404, detail="Perspective not found")
 

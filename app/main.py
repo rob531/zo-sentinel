@@ -131,6 +131,14 @@ def roadmap_page():
     return _render_root("roadmap_announcement.html")
 
 
+@app.get("/explore")
+def explore_redirect():
+    """Deep-link fix (treewalk 2026-07-03 gap #7): /explore as a raw URL 404'd;
+    only the client-routed /app/explore worked. Permanent redirect keeps old
+    links and address-bar guesses working."""
+    return RedirectResponse("/app/explore", status_code=308)
+
+
 @app.get("/app", response_class=HTMLResponse)
 def app_page():
     return _render("app.html")

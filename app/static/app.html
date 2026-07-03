@@ -177,7 +177,25 @@ async function viewDetail(id){
       <div class="muted" style="font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.url||'')}</div>
       ${v.trusted?`<p class="note" style="color:var(--LOW)">✓ ${esc(v.display_label||'verified / established maintainer')}</p>`:''}
       ${bars}
-      <p class="note">model ${esc(v.model_version||'')} · raw ${esc(v.model_overall_risk||'—')} → published ${esc(v.published_overall_risk||'—')}</p></div>`;
+      <p class="note">model ${esc(v.model_version||'')} · raw ${esc(v.model_overall_risk||'—')} → published ${esc(v.published_overall_risk||'—')}</p>
+      <p class="note"><a onclick="toggleDispute()" style="cursor:pointer">⚑ Dispute this score</a></p>
+      <div id="dpanel" style="display:none;border-top:1px solid var(--line);margin-top:.6rem;padding-top:.8rem">
+        <label>Proposed overall risk</label>
+        <select id="drisk">${['LOW','MEDIUM','HIGH','CRITICAL'].map(r=>`<option>${r}</option>`).join('')}</select>
+        <label>Reason</label>
+        <select id="dreason">
+          <option value="official_or_established_maintainer">Official / established maintainer</option>
+          <option value="false_positive_overrated">False positive — risk overrated</option>
+          <option value="underrated_actual_risk">Underrated — actual risk is higher</option>
+          <option value="outdated_assessment">Outdated assessment</option>
+          <option value="incorrect_capability_or_axis">Incorrect capability / axis label</option>
+          <option value="other">Other</option>
+        </select>
+        <label>Explanation (min 10 chars)</label>
+        <input id="dexp" placeholder="What's wrong, and what evidence supports the change?" style="width:100%">
+        <div style="margin-top:.8rem"><button onclick="doDispute('${esc(v.server_id||id)}')">Submit dispute</button></div>
+        <p class="note" id="dmsg">Disputes are recorded and reviewed by an admin; they don't change the published score until accepted.</p>
+      </div></div>`;
     refreshMe();
   }catch(e){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}}
 
@@ -197,6 +215,15 @@ async function doSubmit(){const url=E('surl').value.trim();const name=E('sname')
     E('smsg').innerHTML=d.status==='exists'?`<span style="color:var(--MEDIUM)">// already in the registry —</span> <a onclick="go('/app/server/${esc(d.server_id)}')">view</a>`
       :`<span style="color:var(--LOW)">✓ submitted —</span> <a onclick="go('/app/server/${esc(d.server_id)}')">view</a> (scoring pending)`;
   }catch(e){E('smsg').innerHTML='<span style="color:var(--HIGH)">// error: '+esc(e.message)+'</span>';}}
+
+function toggleDispute(){const d=E('dpanel');d.style.display=d.style.display==='none'?'':'none';}
+async function doDispute(sid){const exp=E('dexp').value.trim();
+  if(exp.length<10){E('dmsg').innerHTML='<span style="color:var(--HIGH)">// please give at least 10 characters of explanation</span>';return;}
+  E('dmsg').textContent='// submitting…';
+  try{const d=await j('/api/disputes',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({server_id:sid,proposed_overall_risk:E('drisk').value,reason_category:E('dreason').value,explanation:exp})});
+    E('dmsg').innerHTML='<span style="color:var(--LOW)">✓ dispute #'+esc(d.id)+' recorded — under admin review</span>';
+  }catch(e){E('dmsg').innerHTML='<span style="color:var(--HIGH)">// error: '+esc(e.message)+'</span>';}}
 
 async function viewReports(){
   E('view').innerHTML='<p class="muted">// loading reports…</p>';

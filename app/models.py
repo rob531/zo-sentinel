@@ -191,3 +191,24 @@ class VulnLink(Base):
     match_confidence: Mapped[float] = mapped_column(Float)         # 1.0 exact only in v1
     linked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     __table_args__ = (UniqueConstraint("advisory_id", "server_id", name="uq_advisory_server"),)
+
+
+class ThreatIntelRef(Base):
+    """An OTX pulse reference to one of OUR indicators (a linked CVE or a
+    hosting domain). CONTEXT layer over exact vuln links -- never a linkage
+    source (THE LINE). Provenance first-class: pulse id/name/created +
+    source_url + fetched_at. is_aggregator separates bulk CVE-roundup pulses
+    from curated reports."""
+    __tablename__ = "threat_intel_refs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    indicator_type: Mapped[str] = mapped_column(String(16), index=True)    # cve | domain
+    indicator_value: Mapped[str] = mapped_column(String(256), index=True)
+    pulse_id: Mapped[str] = mapped_column(String(64))
+    pulse_name: Mapped[Optional[str]] = mapped_column(String(512))
+    pulse_created: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    is_aggregator: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(16))                        # otx
+    source_url: Mapped[str] = mapped_column(Text)                          # THE provenance anchor
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    __table_args__ = (UniqueConstraint("indicator_type", "indicator_value",
+                                       "pulse_id", name="uq_indicator_pulse"),)

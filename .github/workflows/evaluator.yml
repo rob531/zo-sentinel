@@ -83,6 +83,7 @@ jobs:
             tests/test_perspectives_ask.py \
             tests/test_vast_jobs.py \
             tests/test_vuln_and_scan.py \
+            tests/test_vuln_enrich_otx.py \
             -q \
             --junitxml=artifacts/junit.xml
 

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Trend Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .chart-container {
+            position: relative;
+            height: 500px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Risk Tier Trend Analysis</h1>
+        <div class="chart-container">
+            <canvas id="riskTierTrendChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchTrendData();
+        });
+
+        async function fetchTrendData() {
+            try {
+                const response = await fetch('http://127.0.0.1:8772/mcp_risk_tier_trend_analysis_api');
+                const data = await response.json();
+                renderChart(data);
+            } catch (error) {
+                console.error('Error fetching trend data:', error);
+            }
+        }
+
+        function renderChart(data) {
+            const ctx = document.getElementById('riskTierTrendChart').getContext('2d');
+            const labels = data.map(item => item.date);
+            const tiers = [...new Set(data.flatMap(item => Object.keys(item.tiers)))];
+
+            const datasets = tiers.map(tier => {
+                return {
+                    label: tier,
+                    data: data.map(item => item.tiers[tier].count),
+                    borderColor: getRandomColor(),
+                    backgroundColor: 'rgba(0, 0, 0, 0)',
+                    tension: 0.1,
+                    fill: false
+                };
+            });
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+    </script>
+</body>
+</html>

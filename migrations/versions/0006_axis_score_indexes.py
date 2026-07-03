@@ -32,7 +32,20 @@ _INDEXES = (
 
 
 def upgrade():
+    # Postgres checks table OWNERSHIP before the IF NOT EXISTS short-circuit
+    # (RangeVarCallbackOwnsRelation runs at table lookup), so the app-role
+    # migration user fails on CREATE INDEX IF NOT EXISTS even when the index
+    # already exists (2026-07-03 release_command failure). Guard with an
+    # explicit pg_indexes existence check; sqlite (CI/dev) keeps the plain
+    # IF NOT EXISTS path and owns everything anyway.
+    conn = op.get_bind()
     for name, spec in _INDEXES:
+        if conn.dialect.name == "postgresql":
+            exists = conn.exec_driver_sql(
+                "SELECT 1 FROM pg_indexes WHERE indexname = %s", (name,)
+            ).first()
+            if exists:
+                continue
         op.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {spec}")
 
 

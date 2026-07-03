@@ -230,11 +230,11 @@ async function refresh(pushUrl=true){
 async function runDiff(){
   const out=$('diffOut'), btn=$('diffBtn');
   out.classList.remove('err');
-  if(!PID){out.style.display='';out.textContent='Pick a saved perspective first — trust-diff compares a saved view against its last snapshot.';return}
+  if(!PID){out.style.display='block';out.textContent='Pick a saved perspective first — trust-diff compares a saved view against its last snapshot.';return}
   btn.disabled=true; const old=btn.textContent; btn.textContent='diffing…';
   try{
     const d=await api('/api/perspectives/'+encodeURIComponent(PID)+'/diff');
-    out.style.display='';
+    out.style.display='block';
     if(d.baseline){
       out.textContent='No snapshot yet — an admin can POST /api/perspectives/'+PID+'/snapshot to set the baseline.';
     }else if(!d.entered.length&&!d.left.length&&!d.tier_changed.length){
@@ -245,7 +245,7 @@ async function runDiff(){
         'left ('+d.left.length+'): '+d.left.slice(0,50).join(', ')+(d.left.length>50?' …':'')+'\n'+
         'tier changed ('+d.tier_changed.length+'): '+d.tier_changed.slice(0,50).map(c=>c.server_id+' '+c.old+'→'+c.new).join(', ')+(d.tier_changed.length>50?' …':'');
     }
-  }catch(e){out.style.display='';out.classList.add('err');out.textContent='Trust-diff failed: '+e.message}
+  }catch(e){out.style.display='block';out.classList.add('err');out.textContent='Trust-diff failed: '+e.message}
   finally{btn.disabled=false;btn.textContent=old}
 }
 

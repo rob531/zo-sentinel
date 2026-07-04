@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Comparison Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .filter-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Risk Tier Comparison Analysis</h1>
+
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="groupSelect" class="form-label">Select Group:</label>
+                    <select id="groupSelect" class="form-select">
+                        <option value="all">All Groups</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="tierSelect" class="form-label">Select Tier:</label>
+                    <select id="tierSelect" class="form-select">
+                        <option value="all">All Tiers</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button id="applyFilters" class="btn btn-primary w-100">Apply Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Risk Tier Distribution by Group</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="tierDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Group Comparison by Tier</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="groupComparisonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Detailed Comparison Table</h5>
+                    </div>
+                    <div class="card-body">
+                        <table id="comparisonTable" class="table table-striped table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Group</th>
+                                    <th>Tier</th>
+                                    <th>Count</th>
+                                    <th>Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sample data - in a real implementation, this would come from the API
+            const comparisonData = {
+                "groups": {
+                    "Registry A": {
+                        "tiers": {
+                            "Low": 120,
+                            "Medium": 85,
+                            "High": 45,
+                            "Critical": 10
+                        }
+                    },
+                    "Registry B": {
+                        "tiers": {
+                            "Low": 90,
+                            "Medium": 110,
+                            "High": 60,
+                            "Critical": 15
+                        }
+                    },
+                    "Registry C": {
+                        "tiers": {
+                            "Low": 75,
+                            "Medium": 95,
+                            "High": 70,
+                            "Critical": 20
+                        }
+                    }
+                }
+            };
+
+            // Populate group and tier select options
+            const groupSelect = document.getElementById('groupSelect');
+            const tierSelect = document.getElementById('tierSelect');
+
+            // Add group options
+            Object.keys(comparisonData.groups).forEach(group => {
+                const option = document.createElement('option');
+                option.value = group;
+                option.textContent = group;
+                groupSelect.appendChild(option);
+            });
+
+            // Add tier options
+            const tiers = new Set();
+            Object.values(comparisonData.groups).forEach(groupData => {
+                Object.keys(groupData.tiers).forEach(tier => {
+                    tiers.add(tier);
+                });
+            });
+
+            Array.from(tiers).forEach(tier => {
+                const option = document.createElement('option');
+                option.value = tier;
+                option.textContent = tier;
+                tierSelect.appendChild(option);
+            });
+
+            // Function to filter data based on selected options
+            function filterData() {
+                const selectedGroup = groupSelect.value;
+                const selectedTier = tierSelect.value;
+
+                let filteredData = comparisonData;
+
+                if (selectedGroup !== 'all') {
+                    filteredData = {
+                        groups: {
+                            [selectedGroup]: comparisonData.groups[selectedGroup]
+                        }
+                    };
+                }
+
+                if (selectedTier !== 'all') {
+                    const newGroups = {};
+                    Object.keys(filteredData.groups).forEach(group => {
+                        newGroups[group] = {
+                            tiers: {
+                                [selectedTier]: filteredData.groups[group].tiers[selectedTier]
+                            }
+                        };
+                    });
+                    filteredData.groups = newGroups;
+                }
+
+                return filteredData;
+            }
+
+            // Function to update charts and table
+            function updateVisualizations() {
+                const filteredData = filterData();
+
+                // Update charts
+                updateTierDistributionChart(filteredData);
+                updateGroupComparisonChart(filteredData);
+
+                // Update table
+                updateComparisonTable(filteredData);
+            }
+
+            // Function to update tier distribution chart
+            function updateTierDistributionChart(data) {
+                const ctx = document.getElementById('tierDistributionChart').getContext('2d');
+
+                // Clear previous chart
+                if (window.tierDistributionChart) {
+                    window.tierDistributionChart.destroy();
+                }
+
+                const groups = Object.keys(data.groups);
+                const tiers = Object.keys(data.groups[groups[0]].tiers);
+
+                const datasets = tiers.map(tier => {
+                    const counts = groups.map(group => data.groups[group].tiers[tier] || 0);
+                    return {
+                        label: tier,
+                        data: counts,
+                        backgroundColor: getRandomColor(),
+                        borderColor: getRandomColor(),
+                        borderWidth: 1
+                    };
+                });
+
+                window.tierDistributionChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: groups,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Function to update group comparison chart
+            function updateGroupComparisonChart(data) {
+                const ctx = document.getElementById('groupComparisonChart').getContext('2d');
+
+                // Clear previous chart
+                if (window.groupComparisonChart) {
+                    window.groupComparisonChart.destroy();
+                }
+
+                const groups = Object.keys(data.groups);
+                const tiers = Object.keys(data.groups[groups[0]].tiers);
+
+                const datasets = groups.map(group => {
+                    const counts = tiers.map(tier => data.groups[group].tiers[tier] || 0);
+                    return {
+                        label: group,
+                        data: counts,
+                        backgroundColor: getRandomColor(),
+                        borderColor: getRandomColor(),
+                        borderWidth: 1
+                    };
+                });
+
+                window.groupComparisonChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: tiers,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Function to update comparison table
+            function updateComparisonTable(data) {
+                const tableBody = document.getElementById('comparisonTable').getElementsByTagName('tbody')[0];
+                tableBody.innerHTML = '';
+
+                Object.keys(data.groups).forEach(group => {
+                    Object.keys(data.groups[group].tiers).forEach(tier => {
+                        const count = data.groups[group].tiers[tier];
+                        const total = Object.values(data.groups[group].tiers).reduce((a, b) => a + b, 0);
+                        const percentage = ((count / total) * 100).toFixed(2);
+
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${group}</td>
+                            <td>${tier}</td>
+                            <td>${count}</td>
+                            <td>${percentage}%</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                });
+            }
+
+            // Helper function to generate random colors
+            function getRandomColor() {
+                const letters = '0123456789ABCDEF';
+                let color = '#';
+                for (let i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+
+            // Event listener for apply filters button
+            document.getElementById('applyFilters').addEventListener('click', updateVisualizations);
+
+            // Initial update
+            updateVisualizations();
+        });
+    </script>
+</body>
+</html>

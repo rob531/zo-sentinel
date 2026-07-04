@@ -32,6 +32,9 @@ _OPTIONAL_ROUTERS = [
     "dashboard_summary_api",
     # vuln-intel spine + Scan-my-config killer feature (FATHER urgency ruling 2026-07-02)
     "vuln_osv_ingestor", "vuln_registry_linker", "vuln_exposure_api", "config_scan_api",
+    # linker recall fix (repo->package identity) + OTX threat-intel context layer
+    # (kill-switched OFF; council to rule on the provenance bar before arming)
+    "vuln_pkg_enricher", "otx_threat_refs",
 ]
 
 

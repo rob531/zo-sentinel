@@ -84,6 +84,8 @@ jobs:
             tests/test_vast_jobs.py \
             tests/test_vuln_and_scan.py \
             tests/test_vuln_enrich_otx.py \
+            tests/test_glama_counts.py \
+            tests/test_tier_backfill_trust_cap.py \
             -q \
             --junitxml=artifacts/junit.xml
 

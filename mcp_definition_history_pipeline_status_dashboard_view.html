@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Definition History Pipeline Status Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .dashboard {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .status-container {
+            display: flex;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        .status-box {
+            background-color: #e9ecef;
+            padding: 15px;
+            margin: 5px;
+            border-radius: 5px;
+            width: 150px;
+            text-align: center;
+        }
+        .status-box h3 {
+            margin-top: 0;
+        }
+        .progress {
+            height: 10px;
+            background-color: #d9d9d9;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 5px;
+            background-color: #4CAF50;
+        }
+        .criteria-version {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        .override-tier {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #ffebee;
+            border-radius: 5px;
+            color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>MCP Definition History Pipeline Status</h1>
+        <div id="status-container" class="status-container">
+            <!-- Status boxes will be populated by JavaScript -->
+        </div>
+        <div id="criteria-version" class="criteria-version">
+            <strong>Criteria Version:</strong> <span id="version-number"></span>
+        </div>
+        <div id="override-tier" class="override-tier">
+            <strong>Override Tier:</strong> <span id="override-tier-value"></span>
+        </div>
+    </div>
+
+    <script>
+        // Fetch data from the API endpoint
+        fetch('/dashboard/definition-history-pipeline-status')
+            .then(response => response.json())
+            .then(data => {
+                const statusContainer = document.getElementById('status-container');
+                const versionElement = document.getElementById('version-number');
+                const overrideTierElement = document.getElementById('override-tier-value');
+
+                // Display criteria version
+                versionElement.textContent = data.criteria_version;
+
+                // Display override tier
+                overrideTierElement.textContent = data.override_tier;
+
+                // Create status boxes for each step
+                for (const [step, stats] of Object.entries(data.status)) {
+                    const statusBox = document.createElement('div');
+                    statusBox.className = 'status-box';
+
+                    const title = document.createElement('h3');
+                    title.textContent = step;
+                    statusBox.appendChild(title);
+
+                    const count = document.createElement('p');
+                    count.textContent = `Count: ${stats.count}`;
+                    statusBox.appendChild(count);
+
+                    const progress = document.createElement('div');
+                    progress.className = 'progress';
+
+                    const progressBar = document.createElement('div');
+                    progressBar.className = 'progress-bar';
+                    progressBar.style.width = `${stats.percentage}%`;
+                    progress.appendChild(progressBar);
+
+                    statusBox.appendChild(progress);
+
+                    statusContainer.appendChild(statusBox);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+            });
+    </script>
+</body>
+</html>

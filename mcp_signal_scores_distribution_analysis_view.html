@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Scores Distribution Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        .signal-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .signal-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 300px;
+        }
+        .signal-name {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .stats {
+            margin-bottom: 15px;
+        }
+        .distribution {
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Signal Scores Distribution Analysis</h1>
+    <div class="signal-container" id="signals">
+        <!-- Signal cards will be inserted here by JavaScript -->
+    </div>
+
+    <script>
+        // Fetch data from the API endpoint
+        fetch('/mcp/signal-scores-distribution')
+            .then(response => response.json())
+            .then(data => {
+                const signalsContainer = document.getElementById('signals');
+
+                // Create a card for each signal
+                Object.entries(data).forEach(([signal, stats]) => {
+                    const card = document.createElement('div');
+                    card.className = 'signal-card';
+
+                    const name = document.createElement('div');
+                    name.className = 'signal-name';
+                    name.textContent = signal;
+                    card.appendChild(name);
+
+                    const statsDiv = document.createElement('div');
+                    statsDiv.className = 'stats';
+                    statsDiv.innerHTML = `
+                        <p><strong>Mean:</strong> ${stats.mean.toFixed(2)}</p>
+                        <p><strong>Median:</strong> ${stats.median.toFixed(2)}</p>
+                        <p><strong>Std Dev:</strong> ${stats.std_dev.toFixed(2)}</p>
+                    `;
+                    card.appendChild(statsDiv);
+
+                    const distribution = document.createElement('div');
+                    distribution.className = 'distribution';
+                    distribution.textContent = `Distribution: ${stats.distribution}`;
+                    card.appendChild(distribution);
+
+                    signalsContainer.appendChild(card);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+            });
+    </script>
+</body>
+</html>

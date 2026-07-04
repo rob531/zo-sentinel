@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Axis Scores Distribution Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        .axis-container {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .axis-chart {
+            flex: 1 1 300px;
+            margin-right: 20px;
+            margin-bottom: 20px;
+        }
+        .last-updated {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>LLM Axis Scores Distribution Dashboard</h1>
+    <div class="axis-container" id="axisCharts"></div>
+    <div class="last-updated" id="lastUpdated"></div>
+
+    <script>
+        async function fetchData() {
+            const response = await fetch('/mcp/llm-axis-scores-distribution');
+            return await response.json();
+        }
+
+        function createChart(axis, scores) {
+            const ctx = document.createElement('canvas');
+            ctx.id = `chart-${axis}`;
+            ctx.className = 'chart-container';
+
+            const container = document.createElement('div');
+            container.className = 'axis-chart';
+            container.appendChild(ctx);
+
+            const title = document.createElement('h3');
+            title.textContent = axis;
+            container.insertBefore(title, ctx);
+
+            document.getElementById('axisCharts').appendChild(container);
+
+            const labels = Object.keys(scores).sort((a, b) => a - b);
+            const data = labels.map(label => scores[label]);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Score Count',
+                        data: data,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        async function renderDashboard() {
+            const data = await fetchData();
+            const axes = data.axes;
+
+            Object.keys(axes).forEach(axis => {
+                createChart(axis, axes[axis].scores);
+            });
+
+            document.getElementById('lastUpdated').textContent =
+                `Last updated: ${new Date(data.last_updated).toLocaleString()}`;
+        }
+
+        renderDashboard();
+    </script>
+</body>
+</html>

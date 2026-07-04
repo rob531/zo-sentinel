@@ -1,14 +1,14 @@
 """threat-intel references (OTX pulse context layer over exact vuln links)
 
-Revision ID: 0006_threat_intel_refs
-Revises: 0005_vuln_intel
+Revision ID: 0007_threat_intel_refs
+Revises: 0006_axis_score_indexes
 Create Date: 2026-07-03
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0006_threat_intel_refs"
-down_revision = "0005_vuln_intel"
+revision = "0007_threat_intel_refs"
+down_revision = "0006_axis_score_indexes"
 branch_labels = None
 depends_on = None
 

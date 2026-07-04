@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Comparison Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .highlight {
+            background-color: #e6f7ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Risk Tier Comparison Analysis</h1>
+        <p>This view shows the distribution of risk tiers across all MCP servers in the registry.</p>
+
+        <table id="riskTierTable">
+            <thead>
+                <tr>
+                    <th>Risk Tier</th>
+                    <th>Count</th>
+                    <th>Percentage</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be populated by JavaScript -->
+            </tbody>
+        </table>
+
+        <h2>Top 5 Risk Tiers</h2>
+        <table id="topTiersTable">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Risk Tier</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // This would typically be populated by an API call to /risk-tier-comparison
+        // For demonstration, we'll use mock data
+        const riskTierData = {
+            "Tier 1": 120,
+            "Tier 2": 85,
+            "Tier 3": 60,
+            "Tier 4": 45,
+            "Tier 5": 30,
+            "Tier 6": 15
+        };
+
+        const total = Object.values(riskTierData).reduce((a, b) => a + b, 0);
+
+        // Populate main table
+        const tableBody = document.querySelector('#riskTierTable tbody');
+        for (const [tier, count] of Object.entries(riskTierData)) {
+            const percentage = ((count / total) * 100).toFixed(2);
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${tier}</td>
+                <td>${count}</td>
+                <td>${percentage}%</td>
+            `;
+            tableBody.appendChild(row);
+        }
+
+        // Populate top tiers table
+        const sortedTiers = Object.entries(riskTierData)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+        const topTableBody = document.querySelector('#topTiersTable tbody');
+        sortedTiers.forEach(([tier, count], index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${index + 1}</td>
+                <td>${tier}</td>
+                <td>${count}</td>
+            `;
+            if (index < 3) {
+                row.classList.add('highlight');
+            }
+            topTableBody.appendChild(row);
+        });
+    </script>
+</body>
+</html>

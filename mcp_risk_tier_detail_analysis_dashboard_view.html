@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Detail Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .dashboard-container {
+            margin: 20px;
+        }
+        .server-card {
+            margin-bottom: 20px;
+        }
+        .risk-score {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .tier-badge {
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        .last-assessed {
+            font-style: italic;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container dashboard-container">
+        <h1 class="my-4">Risk Tier Detail Analysis Dashboard</h1>
+
+        <div id="server-details" class="row">
+            <!-- Server details will be populated here by JavaScript -->
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // This would typically be populated by an API call to /risk-tier-detail-analysis
+        // For demonstration, we'll use mock data
+        const serverData = {
+            "server": {
+                "tier": "High",
+                "risk_score": 85,
+                "last_assessed": "2023-11-15T14:30:00Z",
+                "first_seen": "2023-01-10T09:15:00Z",
+                "last_seen": "2023-11-14T22:45:00Z",
+                "scan_count": 42
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const serverDetailsContainer = document.getElementById('server-details');
+
+            // Create server card
+            const serverCard = document.createElement('div');
+            serverCard.className = 'col-md-6 server-card';
+
+            // Create card body
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card';
+
+            // Create card header
+            const cardHeader = document.createElement('div');
+            cardHeader.className = 'card-header d-flex justify-content-between';
+            cardHeader.innerHTML = `
+                <h5 class="mb-0">Server Risk Analysis</h5>
+                <span class="badge bg-${getTierColor(serverData.server.tier)} tier-badge">${serverData.server.tier}</span>
+            `;
+
+            // Create card body content
+            const cardBodyContent = document.createElement('div');
+            cardBodyContent.className = 'card-body';
+            cardBodyContent.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <span>Risk Score:</span>
+                    <span class="risk-score">${serverData.server.risk_score}</span>
+                </div>
+                <div class="mt-2">
+                    <span class="last-assessed">Last assessed: ${formatDate(serverData.server.last_assessed)}</span>
+                </div>
+                <div class="mt-2">
+                    <span>First seen: ${formatDate(serverData.server.first_seen)}</span>
+                </div>
+                <div class="mt-2">
+                    <span>Last seen: ${formatDate(serverData.server.last_seen)}</span>
+                </div>
+                <div class="mt-2">
+                    <span>Scan count: ${serverData.server.scan_count}</span>
+                </div>
+            `;
+
+            // Assemble card
+            cardBody.appendChild(cardHeader);
+            cardBody.appendChild(cardBodyContent);
+            serverCard.appendChild(cardBody);
+            serverDetailsContainer.appendChild(serverCard);
+        });
+
+        function getTierColor(tier) {
+            switch(tier.toLowerCase()) {
+                case 'high':
+                    return 'danger';
+                case 'medium':
+                    return 'warning';
+                case 'low':
+                    return 'success';
+                default:
+                    return 'secondary';
+            }
+        }
+
+        function formatDate(isoDate) {
+            const date = new Date(isoDate);
+            return date.toLocaleString();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Definition History Pipeline Status Analysis</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .success { background-color: #28a745; color: white; }
+        .warning { background-color: #ffc107; color: black; }
+        .danger { background-color: #dc3545; color: white; }
+        .info { background-color: #17a2b8; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Risk Tier Definition History Pipeline Status Analysis</h1>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Pipeline Status Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <h6>Total Pipelines: <span id="total-pipelines">0</span></h6>
+                            </div>
+                            <div class="col-6">
+                                <h6>Completed: <span id="completed-pipelines">0</span></h6>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-6">
+                                <h6>In Progress: <span id="in-progress-pipelines">0</span></h6>
+                            </div>
+                            <div class="col-6">
+                                <h6>Failed: <span id="failed-pipelines">0</span></h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Status Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Recent Pipeline Runs</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Pipeline ID</th>
+                                    <th>Status</th>
+                                    <th>Start Time</th>
+                                    <th>End Time</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-pipelines">
+                                <!-- Data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Pipeline Performance Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Average Duration</h6>
+                                        <p class="card-text" id="avg-duration">0s</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Success Rate</h6>
+                                        <p class="card-text" id="success-rate">0%</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Failure Rate</h6>
+                                        <p class="card-text" id="failure-rate">0%</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/risk-tier-definition-history-pipeline-status-analysis')
+                .then(response => response.json())
+                .then(data => {
+                    // Update summary statistics
+                    document.getElementById('total-pipelines').textContent = data.summary.total;
+                    document.getElementById('completed-pipelines').textContent = data.summary.completed;
+                    document.getElementById('in-progress-pipelines').textContent = data.summary.in_progress;
+                    document.getElementById('failed-pipelines').textContent = data.summary.failed;
+
+                    // Update performance metrics
+                    document.getElementById('avg-duration').textContent = formatDuration(data.metrics.avg_duration);
+                    document.getElementById('success-rate').textContent = (data.metrics.success_rate * 100).toFixed(2) + '%';
+                    document.getElementById('failure-rate').textContent = (data.metrics.failure_rate * 100).toFixed(2) + '%';
+
+                    // Populate recent pipelines table
+                    const recentPipelinesTable = document.getElementById('recent-pipelines');
+                    data.recent_pipelines.forEach(pipeline => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${pipeline.pipeline_id}</td>
+                            <td><span class="status-badge ${getStatusClass(pipeline.status)}">${pipeline.status}</span></td>
+                            <td>${new Date(pipeline.start_time).toLocaleString()}</td>
+                            <td>${pipeline.end_time ? new Date(pipeline.end_time).toLocaleString() : 'N/A'}</td>
+                            <td>${pipeline.duration ? formatDuration(pipeline.duration) : 'N/A'}</td>
+                        `;
+                        recentPipelinesTable.appendChild(row);
+                    });
+
+                    // Create status distribution chart
+                    const ctx = document.getElementById('statusChart').getContext('2d');
+                    const statusChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(data.status_distribution),
+                            datasets: [{
+                                data: Object.values(data.status_distribution),
+                                backgroundColor: [
+                                    '#28a745', // completed
+                                    '#ffc107', // in_progress
+                                    '#dc3545', // failed
+                                    '#17a2b8'  // other
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'right'
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const label = context.label;
+                                            const value = context.raw;
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const percentage = (value / total * 100).toFixed(2);
+                                            return `${label}: ${value} (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('Error fetching data:', error));
+
+            function getStatusClass(status) {
+                switch(status.toLowerCase()) {
+                    case 'completed': return 'success';
+                    case 'in_progress': return 'warning';
+                    case 'failed': return 'danger';
+                    default: return 'info';
+                }
+            }
+
+            function formatDuration(seconds) {
+                if (!seconds) return '0s';
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${hours}h ${minutes}m ${secs}s`;
+            }
+        });
+    </script>
+</body>
+</html>

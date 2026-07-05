@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Definition History Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .dashboard-container {
+            margin: 20px;
+        }
+        .history-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .history-item-body {
+            padding-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Risk Tier Definition History</h1>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Server: {{ server_name }}</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if history_items %}
+                            {% for item in history_items %}
+                                <div class="history-item">
+                                    <div class="history-item-header">
+                                        <h6>Risk Tier: {{ item.risk_tier }}</h6>
+                                        <span>Effective: {{ item.effective_from }} to {{ item.effective_to }}</span>
+                                    </div>
+                                    <div class="history-item-body">
+                                        <p><strong>Definition:</strong> {{ item.definition }}</p>
+                                        <p><strong>Criteria Version:</strong> {{ item.criteria_version }}</p>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p>No history items found for this server.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

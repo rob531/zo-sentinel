@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threat intel — MCPRisky</title>
+<meta name="description" content="Known vulnerabilities and threat-intel references for an MCP server — every claim with a verifiable source. Curated reports separated from bulk aggregator pulses. INSUFFICIENT when the surface is disabled, never a guess.">
+<style>
+  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;
+        --hi:#ff5b6a;--med:#ffb84d;--low:#39d98a}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
+    font:15px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
+  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:26px 20px}
+  h2{margin:0 0 4px}.sub{color:var(--dim);margin:0 0 16px}
+  input{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:10px 12px;font:inherit;width:340px}
+  button{background:var(--acc);border:0;color:#fff;border-radius:10px;padding:10px 18px;font:inherit;cursor:pointer}
+  .bar{display:flex;gap:10px;align-items:center;margin-bottom:18px}
+  #status{color:var(--dim)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px}
+  .card h3{margin:0 0 8px;font-size:14px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+  .vuln{border-left:3px solid var(--hi);background:rgba(255,91,106,.06);border-radius:6px;
+    padding:8px 10px;margin-top:8px;font-size:13px}
+  .vuln a,.ref a{color:var(--acc);text-decoration:none;font-weight:700}
+  .prov{color:var(--dim);font-size:11px;margin-top:3px}
+  .ref{border-left:3px solid var(--acc);background:rgba(91,140,255,.06);border-radius:6px;
+    padding:8px 10px;margin-top:8px;font-size:13px}
+  .ref.agg{border-left-color:var(--dim);opacity:.75}
+  .pill{padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800;margin-left:6px}
+  .pill.curated{background:rgba(91,140,255,.15);color:var(--acc)}
+  .pill.agg{background:rgba(154,167,199,.15);color:var(--dim)}
+  .insufficient{color:var(--dim);font-style:italic}
+  .clean{color:var(--low)}
+</style>
+</head>
+<body>
+<header>
+  <h1>MCPRisky</h1><span style="color:var(--dim)">Threat intel</span>
+  <span style="flex:1"></span>
+  <a href="/scan">Scan →</a> <a href="/perspectives">Perspectives →</a> <a href="/app">App →</a>
+</header>
+<main>
+  <h2>Server threat intel</h2>
+  <p class="sub">Known advisories (exact linkage, with match basis) and OTX threat-intel
+     references (context only — curated reports separated from bulk aggregator roundups).
+     Every claim carries a verifiable source. When this surface is disabled you see
+     <b>INSUFFICIENT</b>, never a guess.</p>
+  <div class="bar">
+    <input id="sid" placeholder="server_id" spellcheck="false">
+    <button id="go">Look up</button>
+    <span id="status" role="status" aria-live="polite"></span>
+  </div>
+  <div id="out"></div>
+</main>
+<script>
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
+const $=id=>document.getElementById(id);
+function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+
+function vulnCard(v){
+  if(v.status==='disabled') return '<div class="card"><h3>Known advisories</h3>'+
+    '<div class="insufficient">INSUFFICIENT — vulnerability surface not enabled for public queries.</div></div>';
+  const rows=(v.vulns||[]).map(x=>'<div class="vuln"><a href="'+esc(x.source_url)+'" target="_blank" rel="noopener">'+esc(x.id)+'</a> '+
+    '<b style="color:var(--hi)">'+esc(x.severity)+'</b> — '+esc((x.summary||'').slice(0,140))+
+    '<div class="prov">source: '+esc(x.source_url)+' · fetched '+esc((x.fetched_at||'').slice(0,10))+
+    ' · match '+esc(x.match_basis)+' ('+esc(x.match_confidence)+')</div></div>').join('');
+  return '<div class="card"><h3>Known advisories ('+((v.vulns||[]).length)+')</h3>'+
+    (rows||'<div class="prov clean">No known advisories linked.</div>')+'</div>';
+}
+function refRow(r){
+  return '<div class="ref'+(r.is_aggregator?' agg':'')+'"><a href="'+esc(r.source_url)+'" target="_blank" rel="noopener">'+
+    esc(r.pulse_name||r.pulse_id)+'</a>'+
+    '<span class="pill '+(r.is_aggregator?'agg':'curated')+'">'+(r.is_aggregator?'aggregator':'curated')+'</span>'+
+    '<div class="prov">'+esc(r.indicator_type)+' '+esc(r.indicator_value)+
+    ' · pulse '+esc(r.pulse_id)+(r.pulse_created?' · created '+esc(r.pulse_created.slice(0,10)):'')+
+    ' · source: '+esc(r.source_url)+'</div></div>';
+}
+function refCard(t){
+  if(t.status==='disabled') return '<div class="card"><h3>Threat-intel references</h3>'+
+    '<div class="insufficient">INSUFFICIENT — threat-intel surface not enabled for public queries.</div></div>';
+  const cur=(t.refs||[]).filter(r=>!r.is_aggregator), agg=(t.refs||[]).filter(r=>r.is_aggregator);
+  return '<div class="card"><h3>Threat-intel references — curated ('+cur.length+')</h3>'+
+    (cur.map(refRow).join('')||'<div class="prov clean">No curated references.</div>')+'</div>'+
+    '<div class="card"><h3>Aggregator pulses ('+agg.length+')</h3>'+
+    (agg.map(refRow).join('')||'<div class="prov clean">No aggregator pulses.</div>')+'</div>';
+}
+async function load(){
+  const sid=$('sid').value.trim(); if(!sid){$('status').textContent='enter a server_id';return;}
+  $('status').textContent='loading…'; $('out').innerHTML='';
+  try{
+    const t=await tok(); const h=t?{Authorization:'Bearer '+t}:{};
+    const [rv,rt]=await Promise.all([
+      fetch('/api/servers/'+encodeURIComponent(sid)+'/vulns',{headers:h}),
+      fetch('/api/servers/'+encodeURIComponent(sid)+'/threat_refs',{headers:h})]);
+    if(!rv.ok||!rt.ok){$('status').textContent='error '+(rv.ok?rt.status:rv.status);return;}
+    $('status').textContent='';
+    $('out').innerHTML=vulnCard(await rv.json())+refCard(await rt.json());
+    history.replaceState(null,'','?server_id='+encodeURIComponent(sid));
+  }catch(e){$('status').textContent='error: '+e.message;}
+}
+$('go').onclick=load;
+$('sid').addEventListener('keydown',e=>{if(e.key==='Enter')load();});
+const q=new URLSearchParams(location.search).get('server_id');
+if(q){$('sid').value=q;load();}
+
+const CLERK_PK="__CLERK_PK__";
+function clerkHost(pk){try{return atob(pk.split('_')[2]).replace(/\$+$/,'');}catch(e){return '';}}
+if(CLERK_PK.indexOf("pk_")===0&&clerkHost(CLERK_PK)){
+  const sc=document.createElement('script');
+  sc.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  sc.src='https://'+clerkHost(CLERK_PK)+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  sc.onload=async()=>{await window.Clerk.load();};
+  document.head.appendChild(sc);
+}
+</script>
+</body>
+</html>

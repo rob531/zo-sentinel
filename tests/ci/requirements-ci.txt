@@ -11,7 +11,7 @@ requests>=2.34.2,<3.0
 httpx>=0.28.1,<1.0
 # PyJWT: app-foundation oauth_login_service issues/verifies JWT sessions.
 PyJWT>=2.8,<3.0
-psycopg[binary]>=3.1,<4.0
+psycopg[binary]>=3.3.4,<4.0
 SQLAlchemy>=2.0.51,<2.1
 alembic>=1.13,<2.0
 passlib>=1.7,<2.0

@@ -35,6 +35,9 @@ _OPTIONAL_ROUTERS = [
     # linker recall fix (repo->package identity) + OTX threat-intel context layer
     # (kill-switched OFF; council to rule on the provenance bar before arming)
     "vuln_pkg_enricher", "otx_threat_refs",
+    # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
+    # scorecard_badge_api stays unmounted until STALE-gating consumes this)
+    "freshness_metadata_api",
 ]
 
 

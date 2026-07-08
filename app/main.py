@@ -35,6 +35,8 @@ _OPTIONAL_ROUTERS = [
     # linker recall fix (repo->package identity) + OTX threat-intel context layer
     # (kill-switched OFF; council to rule on the provenance bar before arming)
     "vuln_pkg_enricher", "otx_threat_refs",
+    # P2 vuln/OTX/CVE surfacing (DESIGN_NEXT_BUILD_TARGETS_2026_07; agent-built)
+    "vuln_facet_extension", "vuln_coverage_sla_api",
     # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
     # scorecard_badge_api stays unmounted until STALE-gating consumes this)
     "freshness_metadata_api",
@@ -128,6 +130,13 @@ def scan_page():
 def ask_page():
     """v2 slice: grounded Ask with mandatory citations."""
     return _render_root("ask_search_view.html")
+
+
+@app.get("/threat-intel", response_class=HTMLResponse)
+def threat_intel_page():
+    """P2 vuln/OTX/CVE surfacing: per-server advisories + threat-intel refs
+    (curated vs aggregator), INSUFFICIENT when the kill-switch is off."""
+    return _render_root("server_threat_intel_view.html")
 
 
 @app.get("/roadmap", response_class=HTMLResponse)

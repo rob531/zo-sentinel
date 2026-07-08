@@ -40,6 +40,9 @@ _OPTIONAL_ROUTERS = [
     # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
     # scorecard_badge_api stays unmounted until STALE-gating consumes this)
     "freshness_metadata_api",
+    # cadence write path (CofC ruling 2026-07-08: NOT daemons; replaces
+    # perspective_snapshot_daemon + ask_corpus_drift_guard candidates)
+    "cadence_admin_api",
 ]
 
 

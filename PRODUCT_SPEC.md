@@ -423,13 +423,13 @@ Phase-3 design decision).*
   read via the app DB session (verdict_breakdown_api exemplar). ACCEPTANCE: __main__ on sample
   rows asserts a 10-day-old score reports stale=true and the summary stale_count matches; prints
   PASS.
-- directive candidate: `perspective_snapshot_daemon.py` -- the gate-2 cadence job: every
+- SUPERSEDED (CofC 2026-07-08, docs/DECISION_CADENCE_WRITE_PATH_2026_07_08.md): built as cadence_admin_api.py bulk endpoint, NOT a daemon. Do not re-propose. Was: `perspective_snapshot_daemon.py` -- the gate-2 cadence job: every
   SNAPSHOT_INTERVAL_HOURS (default 24) call perspective_diff_service.snapshot_perspective for
   every saved perspective, then diff_perspective to queue PerspectiveEvent rows; single-instance
   guard; heartbeat log line per cycle. Runs as a container daemon (daemon_wrapper pattern).
   ACCEPTANCE: __main__ with a fake session asserts one cycle snapshots every perspective exactly
   once and is idempotent within the interval; prints PASS.
-- directive candidate: `ask_corpus_drift_guard.py` -- the gate-3 trigger: compare
+- SUPERSEDED (CofC 2026-07-08, same ruling): built as cadence_admin_api.py drift-check endpoint, NOT a daemon. Do not re-propose. Was: `ask_corpus_drift_guard.py` -- the gate-3 trigger: compare
   count(ask_corpus_index) vs count(mcp_server_registry) and max(indexed_at) vs
   max(last_assessed); when drift > DRIFT_PCT (default 5) or scores are newer than the index,
   invoke ask_corpus_indexer.reindex and record a mesh-style audit row. ACCEPTANCE: __main__ on

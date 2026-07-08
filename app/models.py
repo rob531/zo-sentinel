@@ -212,3 +212,16 @@ class ThreatIntelRef(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     __table_args__ = (UniqueConstraint("indicator_type", "indicator_value",
                                        "pulse_id", name="uq_indicator_pulse"),)
+
+
+class CadenceJobRun(Base):
+    """One row per run of a cadence job (CofC write-path ruling 2026-07-08:
+    docs/DECISION_CADENCE_WRITE_PATH_2026_07_08.md). status: running|ok|failed."""
+    __tablename__ = "cadence_job_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    rows_affected: Mapped[Optional[int]] = mapped_column(Integer)
+    detail: Mapped[Optional[dict]] = mapped_column(JSON)

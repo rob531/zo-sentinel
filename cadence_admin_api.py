@@ -29,7 +29,7 @@ from __future__ import annotations
 import hmac
 import os
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import (APIRouter, BackgroundTasks, Depends, Header,
@@ -211,11 +211,19 @@ def _run_snapshots(run_id: int) -> None:
         db.close()
 
 
+def _naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Prod PG hands back a mix of tz-aware and naive datetimes across tables;
+    normalize to naive UTC before comparing (live-500 fix, first prod cycle)."""
+    if dt is not None and dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 def _drift_stats(db: Session) -> dict:
     corpus = db.execute(select(func.count()).select_from(AskCorpusDoc)).scalar() or 0
     registry = db.execute(select(func.count()).select_from(McpServerRegistry)).scalar() or 0
-    max_indexed = db.execute(select(func.max(AskCorpusDoc.indexed_at))).scalar()
-    max_assessed = db.execute(select(func.max(McpServerRegistry.last_assessed))).scalar()
+    max_indexed = _naive_utc(db.execute(select(func.max(AskCorpusDoc.indexed_at))).scalar())
+    max_assessed = _naive_utc(db.execute(select(func.max(McpServerRegistry.last_assessed))).scalar())
     if registry <= 0:
         drift_pct = 0.0
     elif corpus == 0:

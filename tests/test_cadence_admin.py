@@ -121,6 +121,19 @@ def test_drift_stats_math():
     s.close()
 
 
+def test_naive_utc_normalization():
+    """Live-500 regression (prod first cycle): aware last_assessed vs naive
+    indexed_at must compare without TypeError."""
+    from datetime import timezone
+    import cadence_admin_api as mod
+    aware = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+    naive = datetime(2026, 7, 8, 11, 0)
+    a, n = mod._naive_utc(aware), mod._naive_utc(naive)
+    assert a.tzinfo is None and n.tzinfo is None
+    assert a > n  # comparable, no TypeError
+    assert mod._naive_utc(None) is None
+
+
 def test_cost_ceiling_env_parsing(monkeypatch):
     import cadence_admin_api as mod
     monkeypatch.setenv("CADENCE_REINDEX_MAX_ROWS", "notanint")

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Submissions Queue</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .filters {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .filter-select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .refresh-btn {
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .refresh-btn:hover {
+            background: #45a049;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .action-btn {
+            padding: 5px 10px;
+            margin: 2px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .approve-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .reject-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .review-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Submissions Queue</h1>
+        <div class="filters">
+            <select id="status-filter" class="filter-select">
+                <option value="all">All</option>
+                <option value="pending">Pending</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+            </select>
+            <button id="refresh-btn" class="refresh-btn">Refresh</button>
+        </div>
+        <div id="submissions-table-container">
+            <table id="submissions-table">
+                <thead>
+                    <tr>
+                        <th>MCP Name</th>
+                        <th>Registry Source</th>
+                        <th>Submitted By</th>
+                        <th>Submitted At</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="submissions-table-body">
+                    <!-- Table rows will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tableBody = document.getElementById('submissions-table-body');
+            const statusFilter = document.getElementById('status-filter');
+            const refreshBtn = document.getElementById('refresh-btn');
+            let submissionsData = [];
+            let autoRefreshInterval;
+
+            // Function to fetch submissions data
+            async function fetchSubmissions() {
+                try {
+                    const response = await fetch('/admin/submissions/json');
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    submissionsData = await response.json();
+                    renderTable();
+                } catch (error) {
+                    console.error('Error fetching submissions:', error);
+                    tableBody.innerHTML = `<tr><td colspan="6" class="empty-state">Error loading submissions. Please try again later.</td></tr>`;
+                }
+            }
+
+            // Function to render the table based on current filter
+            function renderTable() {
+                const filterValue = statusFilter.value;
+                let filteredData = submissionsData;
+
+                if (filterValue !== 'all') {
+                    filteredData = submissionsData.filter(submission =>
+                        submission.status.toLowerCase() === filterValue.toLowerCase()
+                    );
+                }
+
+                if (filteredData.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="6" class="empty-state">No submissions found matching the current filter.</td></tr>`;
+                    return;
+                }
+
+                tableBody.innerHTML = filteredData.map(submission => `
+                    <tr>
+                        <td>${submission.mcp_name}</td>
+                        <td>${submission.registry_source}</td>
+                        <td>${submission.submitted_by}</td>
+                        <td>${new Date(submission.submitted_at).toLocaleString()}</td>
+                        <td>${submission.status}</td>
+                        <td>
+                            <button class="action-btn review-btn" onclick="handleReview('${submission.id}')">Review</button>
+                            <button class="action-btn approve-btn" onclick="handleApprove('${submission.id}')">Approve</button>
+                            <button class="action-btn reject-btn" onclick="handleReject('${submission.id}')">Reject</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            // Event listeners
+            statusFilter.addEventListener('change', renderTable);
+            refreshBtn.addEventListener('click', fetchSubmissions);
+
+            // Action handlers
+            function handleReview(id) {
+                alert(`Reviewing submission ${id}`);
+                // In a real implementation, this would make an API call to update the status
+            }
+
+            function handleApprove(id) {
+                alert(`Approving submission ${id}`);
+                // In a real implementation, this would make an API call to update the status
+            }
+
+            function handleReject(id) {
+                alert(`Rejecting submission ${id}`);
+                // In a real implementation, this would make an API call to update the status
+            }
+
+            // Initial data fetch
+            fetchSubmissions();
+
+            // Set up auto-refresh every 60 seconds
+            autoRefreshInterval = setInterval(fetchSubmissions, 60000);
+
+            // Clean up interval when page is unloaded
+            window.addEventListener('beforeunload', function() {
+                clearInterval(autoRefreshInterval);
+            });
+        });
+    </script>
+</body>
+</html>

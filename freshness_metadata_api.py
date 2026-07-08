@@ -1,81 +1,115 @@
+"""freshness_metadata_api.py -- GET /api/servers/{id}/freshness (P1 gate).
+
+THE LINE sequencing (council roadmap 2026-07-02 + docs/DESIGN_NEXT_BUILD_
+TARGETS_2026_07.md): freshness surfaces land BEFORE any keyed/agent-facing/
+badge surface, and nothing signed/keyed ships against data older than its
+declared SLA. This module IS that surface -- the one every keyed/badge feature
+(e.g. scorecard_badge_api, merged #1311 but deliberately unmounted) gates on.
+
+Shape: {server_id, last_scored_at, model_version, sla_days, sla_status}
+  sla_status: FRESH | STALE | UNKNOWN  (never scored => honest UNKNOWN, no guess)
+Computed from mcp_llm_axis_scores.scored_at (the server's newest score row)
+vs the declared SLA (env FRESHNESS_SLA_DAYS, default 30).
+
+Exemplar: vuln_exposure_api.py (same per-server GET shape + honest-degrade
+semantics). Imports the REAL app data layer -- no stubs.
+"""
+from __future__ import annotations
+
+import os
+from datetime import datetime, timedelta
+from typing import Optional
+
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpLlmAxisScore
+from verdict_breakdown_api import Principal, get_principal
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["freshness"])
 
-class FreshnessMetadata(BaseModel):
-    server_id: str
-    last_updated: str
-    freshness_score: float
+DEFAULT_SLA_DAYS = 30
 
-@router.get("/freshness/metadata", response_model=List[FreshnessMetadata])
-def get_freshness_metadata(db: Session = Depends(get_session)):
-    servers = db.query(
-        MCPServerRegistry.server_id,
-        MCPServerRegistry.last_updated,
-        MCPServerRegistry.freshness_score
-    ).all()
+FRESH, STALE, UNKNOWN = "FRESH", "STALE", "UNKNOWN"
 
-    return [
-        {
-            "server_id": server.server_id,
-            "last_updated": server.last_updated.isoformat() if server.last_updated else None,
-            "freshness_score": server.freshness_score
-        }
-        for server in servers
-    ]
+
+def sla_days() -> int:
+    """The DECLARED freshness SLA. Env-tunable so ops can tighten it without
+    a deploy; defaults conservative (30d ~ the scoring-run cadence ceiling)."""
+    try:
+        return max(1, int(os.environ.get("FRESHNESS_SLA_DAYS", DEFAULT_SLA_DAYS)))
+    except (TypeError, ValueError):
+        return DEFAULT_SLA_DAYS
+
+
+def server_freshness(db: Session, server_id: str,
+                     now: Optional[datetime] = None) -> dict:
+    """Pure business fn. UNKNOWN when the server has never been scored --
+    downstream keyed surfaces MUST treat UNKNOWN as not-fresh (fail closed)."""
+    row = db.execute(
+        select(McpLlmAxisScore.scored_at, McpLlmAxisScore.model_version)
+        .where(McpLlmAxisScore.server_id == server_id,
+               McpLlmAxisScore.scored_at.is_not(None))
+        .order_by(McpLlmAxisScore.scored_at.desc())
+        .limit(1)).first()
+    days = sla_days()
+    if row is None:
+        return {"server_id": server_id, "last_scored_at": None,
+                "model_version": None, "sla_days": days, "sla_status": UNKNOWN}
+    scored_at, model_version = row
+    now = now or datetime.utcnow()
+    status = FRESH if now - scored_at <= timedelta(days=days) else STALE
+    return {"server_id": server_id, "last_scored_at": scored_at.isoformat(),
+            "model_version": model_version, "sla_days": days,
+            "sla_status": status}
+
+
+def is_fresh(db: Session, server_id: str) -> bool:
+    """The gate helper for keyed/badge consumers: True ONLY on FRESH.
+    STALE and UNKNOWN both fail closed (THE LINE)."""
+    return server_freshness(db, server_id)["sla_status"] == FRESH
+
+
+@router.get("/servers/{server_id}/freshness")
+def get_server_freshness(server_id: str, db: Session = Depends(get_session),
+                         principal: Principal = Depends(get_principal)) -> dict:
+    return server_freshness(db, server_id)
+
 
 if __name__ == "__main__":
-    from fastapi.testclient import TestClient
+    os.environ.setdefault("DATABASE_URL", "sqlite://")
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.models import Base
-
-    # Setup in-memory SQLite for testing
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    TestSession = sessionmaker(bind=engine)
-
-    # Override the dependency for testing
-    from app import app
-    app.dependency_overrides[get_session] = lambda: TestSession()
-
-    # Seed test data
-    with TestSession() as session:
-        session.add_all([
-            MCPServerRegistry(
-                server_id="server1",
-                last_updated="2023-01-01T00:00:00",
-                freshness_score=0.95
-            ),
-            MCPServerRegistry(
-                server_id="server2",
-                last_updated="2023-01-02T00:00:00",
-                freshness_score=0.85
-            )
-        ])
-        session.commit()
-
-    # Test the endpoint
-    client = TestClient(app)
-    response = client.get("/freshness/metadata")
-    assert response.status_code == 200
-    assert response.json() == [
-        {
-            "server_id": "server1",
-            "last_updated": "2023-01-01T00:00:00",
-            "freshness_score": 0.95
-        },
-        {
-            "server_id": "server2",
-            "last_updated": "2023-01-02T00:00:00",
-            "freshness_score": 0.85
-        }
-    ]
-
+    from app.db import Base
+    eng = create_engine("sqlite://")
+    Base.metadata.create_all(eng)
+    s = sessionmaker(bind=eng)()
+    now = datetime.utcnow()
+    s.add_all([
+        # fresh server: scored yesterday on v3
+        McpLlmAxisScore(id=1, server_id="fresh1", axis_name="overall_risk",
+                        model_version="v3.0", scored_at=now - timedelta(days=1)),
+        # ...with an OLDER row too (newest must win)
+        McpLlmAxisScore(id=2, server_id="fresh1", axis_name="auth_strength",
+                        model_version="v2.1", scored_at=now - timedelta(days=200)),
+        # stale server: newest row far past the SLA
+        McpLlmAxisScore(id=3, server_id="stale1", axis_name="overall_risk",
+                        model_version="v2.1", scored_at=now - timedelta(days=45)),
+    ])
+    s.commit()
+    f = server_freshness(s, "fresh1")
+    assert f["sla_status"] == "FRESH" and f["model_version"] == "v3.0", f
+    assert f["sla_days"] == 30 and f["last_scored_at"] is not None
+    assert server_freshness(s, "stale1")["sla_status"] == "STALE"
+    u = server_freshness(s, "never-scored")
+    assert u["sla_status"] == "UNKNOWN" and u["last_scored_at"] is None
+    # declared-SLA tunability: at 60d the 45d-old score is FRESH again
+    os.environ["FRESHNESS_SLA_DAYS"] = "60"
+    assert server_freshness(s, "stale1")["sla_status"] == "FRESH"
+    os.environ["FRESHNESS_SLA_DAYS"] = "30"
+    # the gate helper fails closed on both STALE and UNKNOWN
+    assert is_fresh(s, "fresh1") is True
+    assert is_fresh(s, "stale1") is False and is_fresh(s, "nope") is False
     print("PASS")

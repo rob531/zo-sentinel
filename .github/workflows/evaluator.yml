@@ -87,6 +87,7 @@ jobs:
             tests/test_glama_counts.py \
             tests/test_tier_backfill_trust_cap.py \
             tests/test_vuln_surfacing.py \
+            tests/test_freshness_metadata.py \
             -q \
             --junitxml=artifacts/junit.xml
 

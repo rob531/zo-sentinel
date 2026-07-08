@@ -37,6 +37,9 @@ _OPTIONAL_ROUTERS = [
     "vuln_pkg_enricher", "otx_threat_refs",
     # P2 vuln/OTX/CVE surfacing (DESIGN_NEXT_BUILD_TARGETS_2026_07; agent-built)
     "vuln_facet_extension", "vuln_coverage_sla_api",
+    # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
+    # scorecard_badge_api stays unmounted until STALE-gating consumes this)
+    "freshness_metadata_api",
 ]
 
 

@@ -133,12 +133,12 @@ jobs:
         with:
           python-version: "3.11"
       - name: Download DuckDB snapshot
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: app-e2e-snapshot-duckdb
           path: snap-duckdb
       - name: Download Postgres snapshot
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: app-e2e-snapshot-postgres
           path: snap-postgres

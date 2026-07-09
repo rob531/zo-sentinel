@@ -198,6 +198,12 @@ def compute_confidence(score: float, missing_signals: List[str]) -> float:
     return round(min(1.0, max(0.0, base_confidence)), 2)
 
 
+def _signal_value(signals: Dict[str, Optional[float]], name: str) -> Optional[float]:
+    """None-safe signal accessor: returns None when the signal is absent or unscored."""
+    value = signals.get(name)
+    return value if isinstance(value, (int, float)) else None
+
+
 def generate_reasoning(
     tool_name: str,
     score: float,
@@ -228,24 +234,28 @@ def generate_reasoning(
     positive_signals = []
     negative_signals = []
     
-    if signals.get('domain_trust', 0) >= 70:
+    _dt = _signal_value(signals, 'domain_trust')
+    if _dt is not None and _dt >= 70:
         positive_signals.append('strong domain trust')
-    elif signals.get('domain_trust', 0) < 30:
+    elif _dt is not None and _dt < 30:
         negative_signals.append('weak domain trust')
     
-    if signals.get('tool_description_safety', 0) >= 70:
+    _tds = _signal_value(signals, 'tool_description_safety')
+    if _tds is not None and _tds >= 70:
         positive_signals.append('clear safety documentation')
-    elif signals.get('tool_description_safety', 0) < 40:
+    elif _tds is not None and _tds < 40:
         negative_signals.append('unclear safety profile')
     
-    if signals.get('permission_scope', 0) >= 80:
+    _ps = _signal_value(signals, 'permission_scope')
+    if _ps is not None and _ps >= 80:
         positive_signals.append('minimal permissions')
-    elif signals.get('permission_scope', 0) < 50:
+    elif _ps is not None and _ps < 50:
         negative_signals.append('broad permission scope')
     
-    if signals.get('supply_chain', 0) >= 70:
+    _sc = _signal_value(signals, 'supply_chain')
+    if _sc is not None and _sc >= 70:
         positive_signals.append('verified supply chain')
-    elif signals.get('supply_chain', 0) < 40:
+    elif _sc is not None and _sc < 40:
         negative_signals.append('unverified supply chain')
     
     if positive_signals:

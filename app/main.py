@@ -32,6 +32,17 @@ _OPTIONAL_ROUTERS = [
     "dashboard_summary_api",
     # vuln-intel spine + Scan-my-config killer feature (FATHER urgency ruling 2026-07-02)
     "vuln_osv_ingestor", "vuln_registry_linker", "vuln_exposure_api", "config_scan_api",
+    # linker recall fix (repo->package identity) + OTX threat-intel context layer
+    # (kill-switched OFF; council to rule on the provenance bar before arming)
+    "vuln_pkg_enricher", "otx_threat_refs",
+    # P2 vuln/OTX/CVE surfacing (DESIGN_NEXT_BUILD_TARGETS_2026_07; agent-built)
+    "vuln_facet_extension", "vuln_coverage_sla_api",
+    # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
+    # scorecard_badge_api stays unmounted until STALE-gating consumes this)
+    "freshness_metadata_api",
+    # cadence write path (CofC ruling 2026-07-08: NOT daemons; replaces
+    # perspective_snapshot_daemon + ask_corpus_drift_guard candidates)
+    "cadence_admin_api",
 ]
 
 
@@ -124,11 +135,26 @@ def ask_page():
     return _render_root("ask_search_view.html")
 
 
+@app.get("/threat-intel", response_class=HTMLResponse)
+def threat_intel_page():
+    """P2 vuln/OTX/CVE surfacing: per-server advisories + threat-intel refs
+    (curated vs aggregator), INSUFFICIENT when the kill-switch is off."""
+    return _render_root("server_threat_intel_view.html")
+
+
 @app.get("/roadmap", response_class=HTMLResponse)
 def roadmap_page():
     """FATHER launch condition: the public roadmap, so v1 reads as a
     foundation, not 'just a lookup'."""
     return _render_root("roadmap_announcement.html")
+
+
+@app.get("/explore")
+def explore_redirect():
+    """Deep-link fix (treewalk 2026-07-03 gap #7): /explore as a raw URL 404'd;
+    only the client-routed /app/explore worked. Permanent redirect keeps old
+    links and address-bar guesses working."""
+    return RedirectResponse("/app/explore", status_code=308)
 
 
 @app.get("/app", response_class=HTMLResponse)

@@ -7,8 +7,13 @@ RUN pip install --no-cache-dir -r /srv/app/requirements.txt
 COPY app /srv/app
 COPY verdict_breakdown_api.py server_compare_api.py trust_gating_override.py score_dispute_api.py /srv/
 # v1.1 Perspectives + v2 Ask slice (feature routers + root-served views)
-COPY facet_enum_service.py perspective_model.py perspective_query_api.py perspective_admin_api.py perspective_diff_service.py ask_corpus_indexer.py ask_retrieval_service.py ask_answer_api.py dashboard_summary_api.py vuln_identity.py vuln_osv_ingestor.py vuln_registry_linker.py vuln_exposure_api.py config_scan_api.py /srv/
-COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html /srv/
+COPY facet_enum_service.py perspective_model.py perspective_query_api.py perspective_admin_api.py perspective_diff_service.py ask_corpus_indexer.py ask_retrieval_service.py ask_answer_api.py dashboard_summary_api.py vuln_identity.py vuln_osv_ingestor.py vuln_registry_linker.py vuln_exposure_api.py config_scan_api.py otx_threat_refs.py vuln_pkg_enricher.py \
+     freshness_metadata_api.py vuln_facet_extension.py vuln_coverage_sla_api.py \
+     cadence_admin_api.py /srv/
+# policy module (kill-switch chain) -- without this the vuln surfaces are
+# permanently fail-closed on Fly (found 2026-07-04: ZO_VULN_ENABLED had no lever)
+COPY zo_sentinel/__init__.py zo_sentinel/policy.py zo_sentinel/policy_defaults.toml /srv/zo_sentinel/
+COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html server_threat_intel_view.html /srv/
 COPY migrations /srv/migrations
 COPY alembic.ini /srv/alembic.ini
 EXPOSE 8000

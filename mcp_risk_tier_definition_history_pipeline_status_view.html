@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Definition History Pipeline Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .status {
+            text-align: center;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        .warning {
+            color: orange;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Risk Tier Definition History Pipeline Status</h1>
+        <p>This page displays the current status of the MCP Risk Tier Definition History Pipeline.</p>
+
+        <table id="statusTable">
+            <thead>
+                <tr>
+                    <th>Pipeline Name</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                    <th>Error Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Table content will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Function to fetch and display pipeline status
+        async function fetchPipelineStatus() {
+            try {
+                const response = await fetch('/mcp-risk-tier-definition-history-pipeline-status');
+                const data = await response.json();
+
+                const tableBody = document.querySelector('#statusTable tbody');
+                tableBody.innerHTML = '';
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = item.pipeline_name;
+                    row.appendChild(nameCell);
+
+                    const statusCell = document.createElement('td');
+                    statusCell.className = 'status';
+                    statusCell.textContent = item.status;
+
+                    // Add color based on status
+                    if (item.status === 'success') {
+                        statusCell.classList.add('success');
+                    } else if (item.status === 'error') {
+                        statusCell.classList.add('error');
+                    } else if (item.status === 'warning') {
+                        statusCell.classList.add('warning');
+                    }
+
+                    row.appendChild(statusCell);
+
+                    const updatedCell = document.createElement('td');
+                    updatedCell.textContent = new Date(item.last_updated).toLocaleString();
+                    row.appendChild(updatedCell);
+
+                    const errorCell = document.createElement('td');
+                    errorCell.textContent = item.error_count;
+                    row.appendChild(errorCell);
+
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error fetching pipeline status:', error);
+                alert('Failed to load pipeline status. Please try again later.');
+            }
+        }
+
+        // Fetch status when page loads
+        document.addEventListener('DOMContentLoaded', fetchPipelineStatus);
+
+        // Optional: Add refresh button
+        const refreshButton = document.createElement('button');
+        refreshButton.textContent = 'Refresh Status';
+        refreshButton.style.marginTop = '20px';
+        refreshButton.addEventListener('click', fetchPipelineStatus);
+        document.querySelector('.container').appendChild(refreshButton);
+    </script>
+</body>
+</html>

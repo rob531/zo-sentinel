@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Comparison</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .confidence {
+            font-weight: bold;
+            color: #2E86C1;
+        }
+    </style>
+</head>
+<body>
+    <h1>Risk Tier Comparison</h1>
+    <table id="riskTierTable">
+        <thead>
+            <tr>
+                <th>Risk Tier</th>
+                <th>Count</th>
+                <th>Confidence Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Data will be populated by JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        // Fetch data from the API endpoint
+        fetch('/risk-tier-comparison')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#riskTierTable tbody');
+
+                // Populate the table with data
+                for (const [tier, count] of Object.entries(data.tier_counts)) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${tier}</td>
+                        <td>${count}</td>
+                        <td class="confidence">${data.confidence_score.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+            });
+    </script>
+</body>
+</html>

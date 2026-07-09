@@ -343,11 +343,20 @@ def normalize_entry(entry):
 
     attributes = entry.get("attributes") or []
     spdx = entry.get("spdxLicense") or {}
-    tools = entry.get("tools") or []
+    # Glama's list AND detail endpoints return an EMPTY tools[] for any server
+    # it cannot introspect (BYO-backend, unpublished, private-prep). The old
+    # `len(tools or [])` published a FABRICATED "0 tools" that reads as fact --
+    # e.g. sap-mcp-server (~13 real tools) surfaced as tool_count:0 (confusion
+    # found 2026-07-04). THE LINE: never publish a fabricated value. Only record
+    # a count when Glama actually returned tools/env; otherwise it is UNKNOWN
+    # (None), flagged, so nothing downstream can mistake unknown for zero.
+    tools = entry.get("tools")
     env_schema = entry.get("environmentVariablesJsonSchema") or {}
-    env_props = {}
+    env_props = None
     if isinstance(env_schema, dict):
-        env_props = env_schema.get("properties") or {}
+        env_props = env_schema.get("properties")
+    tool_count = len(tools) if isinstance(tools, list) and tools else None
+    env_var_count = len(env_props) if isinstance(env_props, dict) and env_props else None
 
     # health / quality signals -> kept for later trust scoring
     metadata = {
@@ -361,8 +370,10 @@ def normalize_entry(entry):
         "spdx_license": (spdx.get("name") if isinstance(spdx, dict) else "") or "",
         "spdx_license_url": (spdx.get("url") if isinstance(spdx, dict) else "") or "",
         "has_license": bool(isinstance(spdx, dict) and spdx.get("name")),
-        "tool_count": len(tools) if isinstance(tools, list) else 0,
-        "env_var_count": len(env_props) if isinstance(env_props, dict) else 0,
+        "tool_count": tool_count,
+        "tool_count_verified": tool_count is not None,
+        "env_var_count": env_var_count,
+        "env_var_count_verified": env_var_count is not None,
     }
 
     now_ts = datetime.now(timezone.utc).isoformat()

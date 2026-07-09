@@ -5,5 +5,8 @@ tests/
 .github/
 *.md
 zo_sentinel/
+!zo_sentinel/__init__.py
+!zo_sentinel/policy.py
+!zo_sentinel/policy_defaults.toml
 docs/
 .venv/

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Risk Tier Definition History Pipeline Status Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .status-ok {
+            color: green;
+        }
+        .status-error {
+            color: red;
+        }
+        .status-warning {
+            color: orange;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MCP Risk Tier Definition History Pipeline Status Analysis</h1>
+        <p>This page displays the pipeline status of risk tier definition history for MCP servers.</p>
+
+        <div id="server-selector">
+            <label for="server-id">Select Server:</label>
+            <select id="server-id">
+                <option value="">-- Select a server --</option>
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+
+        <div id="status-table-container" style="display: none;">
+            <h2>Pipeline Status</h2>
+            <table id="status-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <script>
+            // Mock data for demonstration purposes
+            const mockData = {
+                "server1": {
+                    "2023-01-01": {
+                        "status": "ok",
+                        "details": {
+                            "processed_records": 100,
+                            "errors": 0,
+                            "warnings": 2
+                        }
+                    },
+                    "2023-01-02": {
+                        "status": "error",
+                        "details": {
+                            "processed_records": 50,
+                            "errors": 1,
+                            "warnings": 0
+                        }
+                    }
+                },
+                "server2": {
+                    "2023-01-01": {
+                        "status": "warning",
+                        "details": {
+                            "processed_records": 200,
+                            "errors": 0,
+                            "warnings": 5
+                        }
+                    }
+                }
+            };
+
+            // Populate server selector
+            const serverSelector = document.getElementById('server-id');
+            Object.keys(mockData).forEach(serverId => {
+                const option = document.createElement('option');
+                option.value = serverId;
+                option.textContent = serverId;
+                serverSelector.appendChild(option);
+            });
+
+            // Handle server selection
+            serverSelector.addEventListener('change', function() {
+                const serverId = this.value;
+                if (serverId) {
+                    displayStatusTable(serverId);
+                } else {
+                    document.getElementById('status-table-container').style.display = 'none';
+                }
+            });
+
+            // Display status table for selected server
+            function displayStatusTable(serverId) {
+                const statusTable = document.getElementById('status-table');
+                const tbody = statusTable.querySelector('tbody');
+
+                // Clear existing rows
+                tbody.innerHTML = '';
+
+                // Populate table with data
+                const serverData = mockData[serverId];
+                Object.keys(serverData).forEach(date => {
+                    const row = document.createElement('tr');
+                    const dateCell = document.createElement('td');
+                    dateCell.textContent = date;
+                    row.appendChild(dateCell);
+
+                    const statusData = serverData[date];
+                    const statusCell = document.createElement('td');
+                    statusCell.textContent = statusData.status;
+                    statusCell.className = `status-${statusData.status}`;
+                    row.appendChild(statusCell);
+
+                    const detailsCell = document.createElement('td');
+                    detailsCell.textContent = JSON.stringify(statusData.details);
+                    row.appendChild(detailsCell);
+
+                    tbody.appendChild(row);
+                });
+
+                // Show table
+                document.getElementById('status-table-container').style.display = 'block';
+            }
+        </script>
+    </div>
+</body>
+</html>

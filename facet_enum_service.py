@@ -109,6 +109,15 @@ def compute_facets(db: Session) -> Dict[str, List[dict]]:
         for k in list(facets):
             if k.startswith("axis:"):
                 facets[k].sort(key=lambda d: -d["count"])
+
+    # vuln facet extension (P2 2026-07): kill-switch aware, best-effort --
+    # mirrors app.main's optional-router mounting; an off switch or a missing
+    # module leaves the facet universe untouched.
+    try:
+        from vuln_facet_extension import extend_facets
+        extend_facets(db, facets)
+    except Exception:
+        pass
     return facets
 
 

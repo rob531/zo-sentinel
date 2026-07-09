@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Summary Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .tier-card {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .tier-1 { background-color: #f8f9fa; }
+        .tier-2 { background-color: #e9ecef; }
+        .tier-3 { background-color: #dee2e6; }
+        .tier-4 { background-color: #ced4da; }
+        .tier-5 { background-color: #adb5bd; }
+        .tier-6 { background-color: #999; color: white; }
+        .progress {
+            height: 20px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Risk Tier Summary Analysis</h1>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Entities</h5>
+                        <h2 id="total-entities" class="card-text">0</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Distribution</h5>
+                        <div id="tier-distribution" class="progress">
+                            <!-- Progress bars will be added here by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h3>Tier Details</h3>
+                <div id="tier-details" class="row">
+                    <!-- Tier cards will be added here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // This would typically be fetched from your FastAPI endpoint
+        const riskTierData = {
+            "tiers": {
+                "tier_1": {"count": 120, "percentage": 20.0},
+                "tier_2": {"count": 180, "percentage": 30.0},
+                "tier_3": {"count": 90, "percentage": 15.0},
+                "tier_4": {"count": 60, "percentage": 10.0},
+                "tier_5": {"count": 30, "percentage": 5.0},
+                "tier_6": {"count": 120, "percentage": 20.0}
+            },
+            "total": 600
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update total entities
+            document.getElementById('total-entities').textContent = riskTierData.total;
+
+            // Create distribution progress bars
+            const distributionContainer = document.getElementById('tier-distribution');
+            for (const [tier, data] of Object.entries(riskTierData.tiers)) {
+                const progress = document.createElement('div');
+                progress.className = `progress-bar bg-${tier.replace('_', '-')}`;
+                progress.style.width = `${data.percentage}%`;
+                progress.textContent = `${tier.replace('_', ' ').toUpperCase()}: ${data.percentage}%`;
+                distributionContainer.appendChild(progress);
+            }
+
+            // Create tier detail cards
+            const tierDetailsContainer = document.getElementById('tier-details');
+            for (const [tier, data] of Object.entries(riskTierData.tiers)) {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 mb-3';
+
+                const card = document.createElement('div');
+                card.className = `card tier-card tier-${tier.replace('_', '-')}`;
+
+                const cardBody = document.createElement('div');
+                cardBody.className = 'card-body';
+
+                const cardTitle = document.createElement('h5');
+                cardTitle.className = 'card-title';
+                cardTitle.textContent = tier.replace('_', ' ').toUpperCase();
+
+                const cardText = document.createElement('p');
+                cardText.className = 'card-text';
+                cardText.innerHTML = `
+                    <strong>Count:</strong> ${data.count}<br>
+                    <strong>Percentage:</strong> ${data.percentage}%<br>
+                    <strong>Description:</strong> ${getTierDescription(tier)}
+                `;
+
+                cardBody.appendChild(cardTitle);
+                cardBody.appendChild(cardText);
+                card.appendChild(cardBody);
+                col.appendChild(card);
+                tierDetailsContainer.appendChild(col);
+            }
+        });
+
+        function getTierDescription(tier) {
+            const descriptions = {
+                'tier_1': 'Low risk - Minimal concerns identified',
+                'tier_2': 'Low-Medium risk - Some concerns identified',
+                'tier_3': 'Medium risk - Notable concerns identified',
+                'tier_4': 'Medium-High risk - Significant concerns identified',
+                'tier_5': 'High risk - Major concerns identified',
+                'tier_6': 'Critical risk - Severe concerns identified'
+            };
+            return descriptions[tier] || 'Description not available';
+        }
+    </script>
+</body>
+</html>

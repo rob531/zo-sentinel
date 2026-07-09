@@ -3,7 +3,7 @@
 # stock GitHub runner with no ZoComputer host. Keep pins loose-but-bounded so
 # a surprise major release can't silently break the gate.
 duckdb>=1.5.4,<2.0
-fastapi>=0.138.0,<1.0
+fastapi>=0.138.2,<1.0
 uvicorn[standard]>=0.49.0,<1.0
 requests>=2.34.2,<3.0
 # httpx powers Starlette's TestClient, used by the front-end runner to drive
@@ -11,7 +11,7 @@ requests>=2.34.2,<3.0
 httpx>=0.28.1,<1.0
 # PyJWT: app-foundation oauth_login_service issues/verifies JWT sessions.
 PyJWT>=2.8,<3.0
-psycopg[binary]>=3.1,<4.0
+psycopg[binary]>=3.3.4,<4.0
 SQLAlchemy>=2.0.51,<2.1
 alembic>=1.13,<2.0
 passlib>=1.7,<2.0

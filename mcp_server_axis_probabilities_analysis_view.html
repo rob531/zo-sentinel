@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Axis Probabilities Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .axis-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .axis-card {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            width: 48%;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        .axis-label {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .probability {
+            margin: 5px 0;
+        }
+        .probability-top {
+            color: green;
+        }
+        .probability-critical {
+            color: orange;
+        }
+        .probability-danger {
+            color: red;
+        }
+        .overall-probability {
+            background-color: #e6f7ff;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .risk-tier {
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .confidence {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Server Axis Probabilities Analysis</h1>
+        <div id="axis-probabilities-container" class="axis-container">
+            <!-- Axis probabilities will be inserted here by JavaScript -->
+        </div>
+        <div id="overall-probability-container" class="overall-probability">
+            <!-- Overall probability will be inserted here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // This script would typically fetch data from the FastAPI endpoint and populate the view
+        // For demonstration purposes, we'll use mock data
+        const mockData = {
+            "axis_probabilities": {
+                "security": {
+                    "label": "Security",
+                    "p_top": 0.85,
+                    "p_critical": 0.10,
+                    "p_danger": 0.05
+                },
+                "performance": {
+                    "label": "Performance",
+                    "p_top": 0.70,
+                    "p_critical": 0.20,
+                    "p_danger": 0.10
+                },
+                "reliability": {
+                    "label": "Reliability",
+                    "p_top": 0.65,
+                    "p_critical": 0.25,
+                    "p_danger": 0.10
+                },
+                "scalability": {
+                    "label": "Scalability",
+                    "p_top": 0.90,
+                    "p_critical": 0.08,
+                    "p_danger": 0.02
+                }
+            },
+            "overall_probability": {
+                "risk_tier": "Low",
+                "confidence": 0.92
+            }
+        };
+
+        // Function to populate the axis probabilities
+        function populateAxisProbabilities(data) {
+            const container = document.getElementById('axis-probabilities-container');
+            for (const [axis, values] of Object.entries(data.axis_probabilities)) {
+                const card = document.createElement('div');
+                card.className = 'axis-card';
+
+                const label = document.createElement('div');
+                label.className = 'axis-label';
+                label.textContent = values.label;
+                card.appendChild(label);
+
+                const top = document.createElement('div');
+                top.className = 'probability probability-top';
+                top.textContent = `Top: ${(values.p_top * 100).toFixed(2)}%`;
+                card.appendChild(top);
+
+                const critical = document.createElement('div');
+                critical.className = 'probability probability-critical';
+                critical.textContent = `Critical: ${(values.p_critical * 100).toFixed(2)}%`;
+                card.appendChild(critical);
+
+                const danger = document.createElement('div');
+                danger.className = 'probability probability-danger';
+                danger.textContent = `Danger: ${(values.p_danger * 100).toFixed(2)}%`;
+                card.appendChild(danger);
+
+                container.appendChild(card);
+            }
+        }
+
+        // Function to populate the overall probability
+        function populateOverallProbability(data) {
+            const container = document.getElementById('overall-probability-container');
+
+            const riskTier = document.createElement('div');
+            riskTier.className = 'risk-tier';
+            riskTier.textContent = `Risk Tier: ${data.overall_probability.risk_tier}`;
+            container.appendChild(riskTier);
+
+            const confidence = document.createElement('div');
+            confidence.className = 'confidence';
+            confidence.textContent = `Confidence: ${(data.overall_probability.confidence * 100).toFixed(2)}%`;
+            container.appendChild(confidence);
+        }
+
+        // Populate the view with mock data
+        populateAxisProbabilities(mockData);
+        populateOverallProbability(mockData);
+    </script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+# ui-smoke.yml -- the 2026-07-03 admin treewalk as a PR-time Playwright smoke.
+#
+# Council ruling 2026-07-03: PR smoke proves FUNCTIONAL correctness against a
+# seeded sqlite app with auth dependency-overrides; each interaction gets only
+# a generous 10s hang-ceiling (synthetic data cannot prove prod performance).
+# Prod perf lives in the separate nightly job below (secret-gated scaffold).
+
+name: ui-smoke
+
+on:
+  pull_request:
+    paths:
+      - "**/*.html"
+      - "app/**"
+      - "perspective_*.py"
+      - "facet_enum_service.py"
+      - "ask_*.py"
+      - "config_scan_api.py"
+      - "tests/ci/smoke_*"
+      - ".github/workflows/ui-smoke.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"   # prod-perf-nightly only (see job-level ifs)
+
+permissions:
+  contents: read
+
+jobs:
+  treewalk-smoke:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: sqlite:////tmp/smoke.db
+      CLERK_PUBLISHABLE_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install -r app/requirements.txt
+          pip install playwright pytest
+          python -m playwright install --with-deps chromium
+
+      - name: Seed sqlite
+        run: python tests/ci/smoke_seed.py
+
+      - name: Boot app (auth-overridden entrypoint)
+        run: |
+          nohup python tests/ci/smoke_entry.py > /tmp/smoke_server.log 2>&1 &
+          echo $! > /tmp/smoke_server.pid
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8010/health > /dev/null; then
+              echo "app healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "app never became healthy"; cat /tmp/smoke_server.log; exit 1
+
+      - name: Run treewalk smoke
+        run: python tests/ci/smoke_treewalk.py
+
+      - name: Server log on failure
+        if: failure()
+        run: cat /tmp/smoke_server.log || true
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-failure-screenshots
+          path: /tmp/smoke_fail_*.png
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Nightly prod-perf scaffold. Skips gracefully (exit 0 + notice) when the
+  # SMOKE_CLERK_TOKEN secret is absent. TODO: replace the single curl with the
+  # full authenticated prod perf suite (treewalk timings against mcplookup.app)
+  # once a long-lived CI Clerk token exists.
+  # ---------------------------------------------------------------------------
+  prod-perf-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check secret
+        id: gate
+        env:
+          SECRET_SET: ${{ secrets.SMOKE_CLERK_TOKEN != '' }}
+        run: |
+          if [ "$SECRET_SET" != "true" ]; then
+            echo "::notice::SMOKE_CLERK_TOKEN not configured -- skipping prod perf run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prod dashboard latency probe (placeholder)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          SMOKE_CLERK_TOKEN: ${{ secrets.SMOKE_CLERK_TOKEN }}
+        run: |
+          # TODO(full prod perf suite): browser treewalk against prod with real
+          # timing budgets. Placeholder: dashboard summary must answer in <2s.
+          t=$(curl -s -o /dev/null -w '%{time_total}' \
+                -H "Authorization: Bearer $SMOKE_CLERK_TOKEN" \
+                https://mcplookup.app/api/dashboard/summary)
+          echo "prod /api/dashboard/summary time_total=${t}s"
+          awk -v t="$t" 'BEGIN { exit (t < 2.0 ? 0 : 1) }'

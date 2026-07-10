@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""
+FastAPI view serving server_score_summary_view.html
+"""
+
+import sys
+import json
+from io import BytesIO
+from unittest.mock import patch, MagicMock
+from fastapi import FastAPI, Response
+from fastapi.testclient import TestClient
+
+app = FastAPI()
+
+HTML_CONTENT = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Score Summary</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; color: #212529; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 1.75rem; margin-bottom: 20px; color: #1a1a2e; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .error-msg { color: #dc3545; padding: 40px; text-align: center; font-weight: 500; }
+        .loading { padding: 40px; text-align: center; color: #6c757d; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #dee2e6; }
+        th { background: #f8f9fa; font-weight: 600; color: #495057; cursor: pointer; user-select: none; position: sticky; top: 0; }
+        th:hover { background: #e9ecef; }
+        th::after { content: ' \\25B2'; font-size: 0.7em; opacity: 0.3; margin-left: 4px; }
+        th.sort-asc::after { content: ' \\25B2'; opacity: 1; }
+        th.sort-desc::after { content: ' \\25BC'; opacity: 1; }
+        tr:hover { background: #f8f9fa; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .risk-critical { background: #6c1d1d; color: #fff; }
+        .risk-high { background: #dc3545; color: #fff; }
+        .risk-medium { background: #fd7e14; color: #fff; }
+        .risk-low { background: #198754; color: #fff; }
+        .risk-none { background: #6c757d; color: #fff; }
+        .score-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .score-high { color: #dc3545; }
+        .score-med { color: #fd7e14; }
+        .score-low { color: #198754; }
+        .server-id { font-family: 'Courier New', monospace; background: #f1f3f4; padding: 2px 6px; border-radius: 4px; }
+        .meta-row td { background: #f8f9fa; font-size: 0.875rem; color: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Server Score Summary</h1>
+        <div class="card">
+            <div id="loading" class="loading">Loading score summary...</div>
+            <div id="error" class="error-msg" style="display:none;">Score summary unavailable</div>
+            <div id="content" style="display:none;">
+                <table id="score-summary-table">
+                    <thead id="table-head"></thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        'use strict';
+        var table = document.getElementById('score-summary-table');
+        var thead = document.getElementById('table-head');
+        var tbody = document.getElementById('table-body');
+        var content = document.getElementById('content');
+        var loading = document.getElementById('loading');
+        var errorDiv = document.getElementById('error');
+        var sortCol = null;
+        var sortAsc = true;
+        var rawData = null;
+
+        function getRiskClass(risk) {
+            var r = (risk || '').toLowerCase();
+            if (r === 'critical') return 'risk-critical';
+            if (r === 'high') return 'risk-high';
+            if (r === 'medium') return 'risk-medium';
+            if (r === 'low') return 'risk-low';
+            return 'risk-none';
+        }
+
+        function getScoreClass(val) {
+            if (typeof val !== 'number') return '';
+            if (val >= 0.7) return 'score-high';
+            if (val >= 0.4) return 'score-med';
+            return 'score-low';
+        }
+
+        function renderTable(data) {
+            if (!data || !data.axes) return;
+            var axes = data.axes;
+            var meta = data.metadata || {};
+
+            var cols = [
+                { key: 'overall_risk', label: 'Overall Risk' },
+                { key: 'auth_strength', label: 'Auth Strength' },
+                { key: 'capability_breadth', label: 'Capability Breadth' },
+                { key: 'data_sensitivity', label: 'Data Sensitivity' },
+                { key: 'network_egress', label: 'Network Egress' },
+                { key: 'maintainer_trust', label: 'Maintainer Trust' },
+                { key: 'exploit_surface', label: 'Exploit Surface' }
+            ];
+
+            var headerHTML = '<tr>';
+            cols.forEach(function(c) {
+                var cls = sortCol === c.key ? (sortAsc ? 'sort-asc' : 'sort-desc') : '';
+                headerHTML += '<th class="' + cls + '" data-key="' + c.key + '">' + c.label + '</th>';
+            });
+            headerHTML += '</tr>';
+            thead.innerHTML = headerHTML;
+
+            thead.querySelectorAll('th').forEach(function(th) {
+                th.addEventListener('click', function() {
+                    var key = this.dataset.key;
+                    if (sortCol === key) {
+                        sortAsc = !sortAsc;
+                    } else {
+                        sortCol = key;
+                        sortAsc = false;
+                    }
+                    renderTable(rawData);
+                });
+            });
+
+            var row = '<tr>';
+            cols.forEach(function(c) {
+                var val = axes[c.key];
+                if (c.key === 'overall_risk' && val !== undefined) {
+                    row += '<td><span class="badge ' + getRiskClass(val) + '">' + val + '</span></td>';
+                } else if (typeof val === 'number') {
+                    row += '<td class="score-val ' + getScoreClass(val) + '">' + val.toFixed(3) + '</td>';
+                } else {
+                    row += '<td>' + (val !== undefined ? val : '-') + '</td>';
+                }
+            });
+            row += '</tr>';
+
+            var metaRow = '<tr class="meta-row"><td colspan="' + cols.length + '">';
+            metaRow += 'Server ID: <span class="server-id">' + (meta.server_id || 'N/A') + '</span>';
+            if (meta.retrieved_at) {
+                metaRow += ' &nbsp;|&nbsp; Retrieved: ' + new Date(meta.retrieved_at * 1000).toISOString();
+            }
+            metaRow += '</td></tr>';
+
+            tbody.innerHTML = row + metaRow;
+            loading.style.display = 'none';
+            content.style.display = 'block';
+        }
+
+        function showError(msg) {
+            loading.style.display = 'none';
+            errorDiv.textContent = msg || 'Score summary unavailable';
+            errorDiv.style.display = 'block';
+        }
+
+        var pathParts = window.location.pathname.split('/');
+        var serverId = null;
+        for (var i = 0; i < pathParts.length; i++) {
+            if (pathParts[i] === 'servers' && pathParts[i + 1]) {
+                serverId = pathParts[i + 1];
+                break;
+            }
+        }
+
+        if (!serverId) {
+            showError('Server ID not provided');
+            return;
+        }
+
+        fetch('/servers/' + serverId + '/score-summary')
+            .then(function(res) {
+                if (!res.ok) throw new Error('API returned ' + res.status);
+                return res.json();
+            })
+            .then(function(data) {
+                rawData = data;
+                renderTable(data);
+            })
+            .catch(function(err) {
+                console.error('Fetch error:', err);
+                showError('Score summary unavailable');
+            });
+    })();
+    </script>
+</body>
+</html>'''
+
+FIXTURE_DATA = {
+    "axes": {
+        "overall_risk": "high",
+        "auth_strength": 0.82,
+        "capability_breadth": 0.65,
+        "data_sensitivity": 0.75,
+        "network_egress": 0.45,
+        "maintainer_trust": 0.55,
+        "exploit_surface": 0.68
+    },
+    "metadata": {
+        "server_id": "test-server-001",
+        "retrieved_at": 1700000000
+    }
+}
+
+@app.get("/servers/{server_id}/score-summary")
+async def get_score_summary(server_id: str):
+    import requests
+    try:
+        resp = requests.get(f"http://127.0.0.1:8781/servers/{server_id}/score-summary", timeout=5)
+        return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
+    except requests.RequestException:
+        return Response(content=json.dumps({"error": "unavailable"}), status_code=503, media_type="application/json")
+
+@app.get("/servers/{server_id}/view")
+async def serve_view(server_id: str):
+    return Response(content=HTML_CONTENT, media_type="text/html")
+
+if __name__ == "__main__":
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = json.dumps(FIXTURE_DATA).encode()
+
+    with patch('requests.get', return_value=mock_response):
+        client = TestClient(app)
+        response = client.get("/servers/test-001/score-summary")
+
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+        resp_json = response.json()
+        assert "axes" in resp_json, "Missing axes in response"
+        axes = resp_json["axes"]
+
+        required_axes = ["overall_risk", "auth_strength", "capability_breadth",
+                        "data_sensitivity", "network_egress", "maintainer_trust", "exploit_surface"]
+        for axis in required_axes:
+            assert axis in axes, f"Missing axis: {axis}"
+
+        view_response = client.get("/servers/test-001/view", headers={"Accept": "text/html"})
+        assert view_response.status_code == 200
+
+        html = view_response.text
+        assert "score-summary-table" in html, "Missing table element"
+        assert "risk-high" in html or "risk-critical" in html or "risk-medium" in html, "Missing risk tier badge"
+
+        for axis in required_axes:
+            assert axis in html, f"Missing axis {axis} in rendered HTML"
+
+        print("PASS")

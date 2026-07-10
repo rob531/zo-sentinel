@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""
+Fleet Risk Summary Dashboard View
+Serves HTML dashboard for GET /fleet/risk-summary
+"""
+
+from fastapi import FastAPI, Depends
+from fastapi.responses import HTMLResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from app.db import get_session
+from app.models import MCPServerRegistry, MCPLLMAxisScores
+
+app = FastAPI()
+
+HTML_CONTENT = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fleet Risk Summary</title>
+    <style>
+        :root {
+            --bg-primary: #0a0e14;
+            --bg-secondary: #1a1f2e;
+            --bg-card: #151a26;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --border-color: #2d333b;
+            --tier-trusted: #238636;
+            --tier-caution: #d29922;
+            --tier-elevated: #db6d28;
+            --tier-high-risk: #da3633;
+            --accent: #58a6ff;
+            --danger: #f85149;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.5; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; padding: 20px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color); }
+        .header h1 { font-size: 1.8rem; margin-bottom: 5px; }
+        .header p { color: var(--text-secondary); }
+        .dashboard { display: grid; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; }
+        .card h2 { font-size: 1.1rem; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+        .bar-chart { display: flex; flex-direction: column; gap: 12px; }
+        .bar-row { display: flex; align-items: center; gap: 12px; }
+        .bar-label { width: 160px; font-size: 0.85rem; text-align: right; flex-shrink: 0; }
+        .bar-container { flex: 1; height: 24px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; position: relative; }
+        .bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 8px; font-size: 0.75rem; font-weight: 600; min-width: 40px; }
+        .bar.trusted { background: var(--tier-trusted); }
+        .bar.caution { background: var(--tier-caution); color: #000; }
+        .bar.elevated { background: var(--tier-elevated); }
+        .bar.high-risk { background: var(--tier-high-risk); }
+        .bar-count { margin-left: 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { background: var(--bg-secondary); font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; }
+        tr:hover { background: rgba(255,255,255,0.03); }
+        .tier-badge { padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+        .tier-badge.trusted { background: rgba(35,134,54,0.3); color: #3fb950; }
+        .tier-badge.caution { background: rgba(210,153,34,0.3); color: #d29922; }
+        .tier-badge.elevated { background: rgba(219,109,40,0.3); color: #db6d28; }
+        .tier-badge.high-risk { background: rgba(218,54,51,0.3); color: #f85149; }
+        .critical-badge { background: var(--danger); color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+        .p-critical { color: var(--danger); font-weight: 600; font-size: 0.85rem; }
+        .trend-cell svg { display: block; }
+        .empty-state { text-align: center; padding: 40px; color: var(--text-secondary); }
+        .error-state { text-align: center; padding: 20px; color: var(--danger); }
+        .loading { text-align: center; padding: 20px; color: var(--text-secondary); }
+        .sparkline-container { width: 100px; height: 30px; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .status-dot.trusted { background: var(--tier-trusted); }
+        .status-dot.caution { background: var(--tier-caution); }
+        .status-dot.elevated { background: var(--tier-elevated); }
+        .status-dot.high-risk { background: var(--tier-high-risk); }
+        @media (max-width: 768px) { .bar-label { width: 120px; font-size: 0.75rem; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Fleet Risk Summary</h1>
+        <p>Real-time risk tier distribution and critical server alerts</p>
+    </div>
+    <div class="dashboard">
+        <div class="card">
+            <h2>Risk Tier Distribution</h2>
+            <div id="tier-chart" class="bar-chart">
+                <div class="loading">Loading risk tier data...</div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Top Critical Servers</h2>
+            <div id="critical-table-container">
+                <div class="loading">Loading critical servers...</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const RISK_TIER_CLASSES = { TRUSTED_GENERAL: 'trusted', CAUTION_LIMITED: 'caution', ELEVATED_AWARENESS: 'elevated', HIGH_RISK_ISOLATED: 'high-risk' };
+        const RISK_TIER_LABELS = { TRUSTED_GENERAL: 'Trusted General', CAUTION_LIMITED: 'Caution Limited', ELEVATED_AWARENESS: 'Elevated Awareness', HIGH_RISK_ISOLATED: 'High Risk Isolated' };
+
+        async function fetchRiskTierSummary() {
+            try {
+                const resp = await fetch('/api/fleet/risk-tier-summary');
+                if (!resp.ok) throw new Error('API error ' + resp.status);
+                return await resp.json();
+            } catch (e) { console.error('Risk tier fetch failed:', e); return { counts_by_tier: {} }; }
+        }
+
+        async function fetchTopCriticalServers() {
+            try {
+                const resp = await fetch('/api/servers/top-critical?axis=exploit_surface&p_threshold=0.5');
+                if (!resp.ok) throw new Error('API error ' + resp.status);
+                return await resp.json();
+            } catch (e) { console.error('Top critical fetch failed:', e); return { servers: [] }; }
+        }
+
+        async function fetchSparklineData(serverId) {
+            try {
+                const resp = await fetch('/api/scoring/trend/' + serverId);
+                if (!resp.ok) return [];
+                return await resp.json();
+            } catch { return []; }
+        }
+
+        function renderTierChart(data) {
+            const container = document.getElementById('tier-chart');
+            const tiers = data.counts_by_tier || {};
+            const total = Object.values(tiers).reduce((s, c) => s + c, 0) || 1;
+            if (Object.keys(tiers).length === 0) { container.innerHTML = '<div class="empty-state">No servers registered in fleet</div>'; return; }
+            container.innerHTML = Object.entries(tiers).map(([tier, count]) => {
+                const pct = Math.max((count / total) * 100, 2);
+                const cls = RISK_TIER_CLASSES[tier] || 'elevated';
+                return '<div class="bar-row"><span class="bar-label">' + (RISK_TIER_LABELS[tier] || tier) + '</span><div class="bar-container"><div class="bar ' + cls + '" style="width:' + pct + '%">' + count + '</div></div></div>';
+            }).join('');
+        }
+
+        function drawSparkline(container, data) {
+            if (!data || data.length < 2) { container.innerHTML = '<span style="color:var(--text-secondary);font-size:0.7rem">No trend</span>'; return; }
+            const scores = data.map(d => d.avg_score || 0);
+            const min = Math.min(...scores), max = Math.max(...scores), range = max - min || 1;
+            const w = 80, h = 24, pad = 2;
+            const pts = scores.map((s, i) => [(i / (scores.length - 1)) * (w - pad * 2) + pad, (1 - (s - min) / range) * (h - pad * 2) + pad]);
+            const path = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ');
+            const last = scores[scores.length - 1], first = scores[0];
+            const color = last > first ? '#3fb950' : last < first ? '#f85149' : '#8b949e';
+            container.innerHTML = '<svg width="100" height="30" viewBox="0 0 100 30"><polyline points="' + pts.map(p => p.join(',')).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2"/><circle cx="' + pts[pts.length-1][0] + '" cy="' + pts[pts.length-1][1] + '" r="3" fill="' + color + '"/></svg>';
+        }
+
+        async function renderCriticalTable(data) {
+            const container = document.getElementById('critical-table-container');
+            const servers = data.servers || [];
+            if (servers.length === 0) { container.innerHTML = '<div class="empty-state">No critical servers detected</div>'; return; }
+            const sparkPromises = servers.map(s => fetchSparklineData(s.server_id || s.server_name));
+            const sparkData = await Promise.all(sparkPromises);
+            const rows = servers.map((s, i) => {
+                const cls = RISK_TIER_CLASSES[s.risk_tier] || 'elevated';
+                const trendDiv = '<div class="sparkline-container" id="spark-' + i + '"></div>';
+                setTimeout(() => drawSparkline(document.getElementById('spark-' + i), sparkData[i]), 10);
+                return '<tr class="' + (s.risk_tier === 'HIGH_RISK_ISOLATED' ? 'high-risk-row' : '') + '"><td><span class="status-dot ' + cls + '"></span>' + s.server_name + '</td><td><span class="tier-badge ' + cls + '">' + (RISK_TIER_LABELS[s.risk_tier] || s.risk_tier) + '</span></td><td>' + s.critical_axis + '</td><td><span class="p-critical">' + (s.p_critical * 100).toFixed(0) + '%</span></td><td class="trend-cell">' + trendDiv + '</td></tr>';
+            }).join('');
+            container.innerHTML = '<table><thead><tr><th>Server</th><th>Risk Tier</th><th>Critical Axis</th><th>P(Critical)</th><th>Trend</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        }
+
+        async function init() {
+            const [tierData, criticalData] = await Promise.all([fetchRiskTierSummary(), fetchTopCriticalServers()]);
+            renderTierChart(tierData);
+            renderCriticalTable(criticalData);
+        }
+        init();
+    </script>
+</body>
+</html>"""
+
+
+@app.get("/fleet/risk-summary", response_class=HTMLResponse)
+async def fleet_risk_summary():
+    """Serve the fleet risk summary dashboard HTML view."""
+    return HTML_CONTENT
+
+
+@app.get("/api/fleet/risk-tier-summary")
+async def get_risk_tier_summary(db: AsyncSession = Depends(get_session)):
+    """Aggregate server counts by risk tier."""
+    stmt = select(
+        MCPServerRegistry.risk_tier,
+        func.count(MCPServerRegistry.id).label('count')
+    ).group_by(MCPServerRegistry.risk_tier)
+    result = await db.execute(stmt)
+    rows = result.all()
+    counts = {r.risk_tier: r.count for r in rows}
+    return {"counts_by_tier": counts}
+
+
+@app.get("/api/servers/top-critical")
+async def get_top_critical_servers(
+    axis: str = "exploit_surface",
+    p_threshold: float = 0.5,
+    db: AsyncSession = Depends(get_session)
+):
+    """Get servers with critical axis scores above threshold."""
+    stmt = select(
+        MCPServerRegistry.server_name,
+        MCPServerRegistry.risk_tier,
+        MCPLLMAxisScores.axis_name,
+        MCPLLMAxisScores.p_critical
+    ).join(
+        MCPLLMAxisScores,
+        MCPLLMAxisScores.server_id == MCPServerRegistry.id
+    ).where(
+        MCPLLMAxisScores.axis_name == axis,
+        MCPLLMAxisScores.p_critical >= p_threshold
+    ).order_by(MCPLLMAxisScores.p_critical.desc()).limit(50)
+    result = await db.execute(stmt)
+    rows = result.all()
+    servers = [{"server_name": r.server_name, "risk_tier": r.risk_tier, "critical_axis": r.axis_name, "p_critical": float(r.p_critical)} for r in rows]
+    return {"servers": servers}
+
+
+if __name__ == "__main__":
+    import sys
+    with open('fleet_risk_summary_dashboard_view.html', 'w') as f:
+        f.write(HTML_CONTENT)
+    content = open('fleet_risk_summary_dashboard_view.html').read()
+    assert '<table' in content, "Expected HTML <table> element not found"
+    assert "fetch('/api/fleet/risk-tier-summary')" in content, "Expected fetch() to /api/fleet/risk-tier-summary not found"
+    assert "fetch('/api/servers/top-critical" in content, "Expected fetch() to /api/servers/top-critical not found"
+    assert '<div' in content, "Expected HTML structure not found"
+    print("PASS")

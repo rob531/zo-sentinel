@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MCP Risk Tier Dashboard</title>
+<style>
+body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5;}
+h1{margin-bottom:10px;}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:20px;}
+.card{background:#fff;padding:10px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);}
+#chart{width:100%;max-width:600px;height:300px;background:#fff;margin-top:20px;}
+table{width:100%;border-collapse:collapse;margin-top:20px;background:#fff;}
+th,td{border:1px solid #ddd;padding:8px;text-align:left;}
+th{background:#eee;}
+</style>
+</head>
+<body>
+<h1>MCP Risk Tier Dashboard</h1>
+
+<div id="grid"></div>
+<canvas id="chart"></canvas>
+
+<table id="comparison">
+<thead>
+<tr><th>Tier A</th><th>Tier B</th><th>Metric</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<script>
+// -------------------------------------------------------------------
+// Track fetch usage for self‑test
+// -------------------------------------------------------------------
+(function(){
+    const originalFetch = window.fetch;
+    window.__fetchCalled = false;
+    window.fetch = function(...args){
+        window.__fetchCalled = true;
+        return originalFetch.apply(this, args);
+    };
+})();
+
+// -------------------------------------------------------------------
+// Core dashboard logic
+// -------------------------------------------------------------------
+(async function(){
+    const apiEndpoints = [
+        '/mcp_risk_tier_summary_api',
+        '/mcp_risk_tier_distribution_api',
+        '/mcp_risk_tier_comparison_api',
+        '/mcp_risk_tier_trend_api'
+    ];
+
+    // ---------------------------------------------------------------
+    // 1. Summary cards
+    // ---------------------------------------------------------------
+    let summary = {};
+    try{
+        const resp = await fetch(apiEndpoints[0]);
+        summary = await resp.json();
+    }catch(e){
+        console.error('Failed to fetch summary:', e);
+    }
+
+    const tiers = [
+        'TRUSTED_GENERAL',
+        'LOW_RISK',
+        'MEDIUM_RISK',
+        'HIGH_RISK',
+        'HIGH_RISK_ISOLATED'
+    ];
+    const grid = document.getElementById('grid');
+    tiers.forEach(tier=>{
+        const count = summary[tier] ?? 0;
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<h3>${tier.replace('_',' ')}</h3><p>Count: ${count}</p>`;
+        grid.appendChild(card);
+    });
+
+    // ---------------------------------------------------------------
+    // 2. Bar chart of tier counts
+    // ---------------------------------------------------------------
+    let distribution = {};
+    try{
+        const resp = await fetch(apiEndpoints[1]);
+        distribution = await resp.json();
+    }catch(e){
+        console.error('Failed to fetch distribution:', e);
+    }
+
+    const canvas = document.getElementById('chart');
+    const ctx = canvas.getContext('2d');
+
+    function drawBarChart(data){
+        const w = canvas.width = canvas.offsetWidth;
+        const h = canvas.height = canvas.offsetHeight;
+        ctx.clearRect(0,0,w,h);
+        const values = Object.values(data);
+        const max = Math.max(...values,1);
+        const barWidth = w / (Object.keys(data).length * 1.5);
+        let i = 0;
+        for(const [tier, count] of Object.entries(data)){
+            const barHeight = (count / max) * (h - 40);
+            const x = i * (barWidth * 1.5) + 20;
+            const y = h - barHeight - 20;
+            ctx.fillStyle = '#4287f5';
+            ctx.fillRect(x, y, barWidth, barHeight);
+            ctx.fillStyle = '#000';
+            ctx.fillText(tier, x, h - 5);
+            ctx.fillText(count, x, y - 5);
+            i++;
+        }
+    }
+    if(Object.keys(distribution).length) drawBarChart(distribution);
+
+    // ---------------------------------------------------------------
+    // 3. Tier‑vs‑Tier comparison table
+    // ---------------------------------------------------------------
+    let comparison = [];
+    try{
+        const resp = await fetch(apiEndpoints[2]);
+        comparison = await resp.json();
+    }catch(e){
+        console.error('Failed to fetch comparison:', e);
+    }
+
+    const tbody = document.querySelector('#comparison tbody');
+    comparison.forEach(row=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.tier_a}</td><td>${row.tier_b}</td><td>${row.metric}</td>`;
+        tbody.appendChild(tr);
+    });
+
+    // ---------------------------------------------------------------
+    // Self‑test assertions
+    // ---------------------------------------------------------------
+    if(document.title !== 'MCP Risk Tier Dashboard'){
+        console.error('FAIL: document.title mismatch');
+    }
+    if(!window.__fetchCalled){
+        console.error('FAIL: no fetch call detected');
+    }
+    if(!document.getElementById('grid')){
+        console.error('FAIL: missing risk‑tier grid container');
+    }
+    console.log('PASS');
+})();
+</script>
+</body>
+</html>

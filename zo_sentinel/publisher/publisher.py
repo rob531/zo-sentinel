@@ -62,11 +62,33 @@ DEFAULT_DAILY_CAP = 500                      # repo is PUBLIC -> GitHub Actions 
                                              # Kept finite as a runaway safety valve; the real
                                              # throttle is now PR_SPACING (abuse-rate-limit). Env: PR_PUBLISHER_DAILY_CAP.
 DEFAULT_PR_SPACING_SEC = 5.0
+DEFAULT_DUP_FILE_WINDOW_DAYS = 3             # same target file re-arriving under a NEW
+                                             # dedup_key within this window = duplicate
+                                             # directive churn -> skipped, not published.
+                                             # Env: PR_DUP_FILE_WINDOW_DAYS. 0 disables.
 
 
 def _slug(text: str, n: int = 40) -> str:
     s = re.sub(r"[^a-zA-Z0-9._-]+", "-", text).strip("-").lower()
     return (s[:n] or "artifact").strip("-")
+
+
+def _within_days(earlier_iso: Optional[str], later_iso: Optional[str], days: int) -> bool:
+    """True when later_iso falls within `days` of earlier_iso. Defensive: any
+    unparseable/missing timestamp -> False (publish normally; a rare dup slip
+    is cheaper than wrongly blocking a legitimate build)."""
+    if not earlier_iso or not later_iso or days <= 0:
+        return False
+    try:
+        a = datetime.fromisoformat(earlier_iso.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(later_iso.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    if a.tzinfo is None:
+        a = a.replace(tzinfo=timezone.utc)
+    if b.tzinfo is None:
+        b = b.replace(tzinfo=timezone.utc)
+    return abs((b - a).total_seconds()) <= days * 86400
 
 
 def _max_iso(a: Optional[str], b: Optional[str]) -> Optional[str]:
@@ -89,7 +111,8 @@ class Publisher:
                  pr_spacing_sec: float = DEFAULT_PR_SPACING_SEC,
                  clock: Optional[Callable[[], datetime]] = None,
                  sleep: Optional[Callable[[float], None]] = None,
-                 state_file: Optional[str] = None):
+                 state_file: Optional[str] = None,
+                 dup_file_window_days: Optional[int] = None):
         self.store = store
         # Local durable state file (watermark/dedup/budget). When set it is the
         # AUTHORITATIVE store for the publisher's own bookkeeping so a dropped
@@ -105,6 +128,14 @@ class Publisher:
         self.pr_spacing_sec = max(0.0, float(pr_spacing_sec))
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._sleep = sleep or time.sleep
+        if dup_file_window_days is None:
+            try:
+                dup_file_window_days = int(
+                    os.environ.get("PR_DUP_FILE_WINDOW_DAYS",
+                                   DEFAULT_DUP_FILE_WINDOW_DAYS))
+            except ValueError:
+                dup_file_window_days = DEFAULT_DUP_FILE_WINDOW_DAYS
+        self.dup_file_window_days = max(0, int(dup_file_window_days))
 
     # --- dormancy -----------------------------------------------------------
     def is_enabled(self) -> bool:
@@ -152,6 +183,19 @@ class Publisher:
             sys.stderr.flush()
 
     # --- dedup state --------------------------------------------------------
+    def _published_files(self) -> dict:
+        """{file_path: iso_ts} of recently published module files. Guards the
+        same-module/two-directives hole (2026-07-10: #1397 + #1398 were both
+        `server_risk_delta_timeline_api.py` from two different directives, so
+        their dedup_keys differed and both merged). State-file only -- on a
+        cold start the map is empty and the guard simply passes; it converges
+        after the first publish."""
+        if self._state_file:
+            _pf = self._state_load().get("published_files")
+            if isinstance(_pf, dict):
+                return _pf
+        return {}
+
     def _already_published(self) -> set:
         if self._state_file:
             _pub = self._state_load().get("published")
@@ -272,6 +316,7 @@ class Publisher:
     def run_once(self, limit: int = 20) -> List[dict]:
         enabled = self.is_enabled()
         published = self._already_published()
+        published_files = dict(self._published_files())
         watermark = self._load_watermark()
 
         # Daily budget (UTC day). Reset the in-memory count when the day rolls,
@@ -293,6 +338,18 @@ class Publisher:
                 continue
             if art.dedup_key in published:
                 advance_wm = _max_iso(advance_wm, created_at)   # already done; skip past it
+                continue
+            # Same-module guard: a DIFFERENT directive rebuilding the SAME file
+            # within the window is churn, not an update (byte-identical rebuilds
+            # already no-op at gitops; failed builds never enter published_files).
+            _seen = published_files.get(art.file)
+            if _seen and _within_days(_seen, created_at, self.dup_file_window_days):
+                results.append({"dedup_key": art.dedup_key, "file": art.file,
+                                "action": "duplicate_module",
+                                "detail": f"same file published {_seen}; "
+                                          f"window {self.dup_file_window_days}d"})
+                new_keys.append(art.dedup_key)   # never re-attempt this artifact
+                advance_wm = _max_iso(advance_wm, created_at)
                 continue
             content = self._resolver(art)
             if not content:
@@ -343,6 +400,9 @@ class Publisher:
             # queue forever (the bug that stalled every PR behind OPERATIONS.md).
             new_keys.append(art.dedup_key)
             advance_wm = _max_iso(advance_wm, created_at)
+            # Remember the target file (noop included: content is on base either
+            # way) so a different directive rebuilding it soon gets skipped.
+            published_files[art.file] = created_at or self._clock().isoformat()
             if noop:
                 # Nothing was opened: don't consume a daily-cap slot or PR spacing.
                 continue
@@ -354,7 +414,14 @@ class Publisher:
 
         if enabled:
             if new_keys:
-                self._state_update(published=sorted(published | set(new_keys)))
+                # Prune the file map so the state file stays bounded: anything
+                # older than 10x the guard window can never match again.
+                _now = self._clock().isoformat()
+                _keep = self.dup_file_window_days * 10 or 30
+                published_files = {f: ts for f, ts in published_files.items()
+                                   if _within_days(ts, _now, _keep)}
+                self._state_update(published=sorted(published | set(new_keys)),
+                                   published_files=published_files)
                 self._write_durable("mesh_memory", {
                     "agent_id": PUBLISHER_AGENT_ID,
                     "memory_type": PR_PUBLISHED_TYPE,

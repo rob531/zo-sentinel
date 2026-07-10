@@ -379,3 +379,59 @@ def test_watermark_persists_through_flaky_writes():
     _pub(store, enabled=True).run_once()
     # despite 2 dropped writes, the 3rd retry lands -> watermark persisted
     assert store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) == "2026-05-30T00:00:00Z"
+
+
+# --- same-module duplicate guard (2026-07-10: PRs #1397/#1398 were the same
+# file from two directives -> both merged; dedup_key = file|built_at so the
+# key-level dedup can't see it) -------------------------------------------
+
+def test_duplicate_module_same_pass_skipped():
+    # Two DIFFERENT directives, same target file, an hour apart.
+    store = InMemoryMeshStore(artifacts=[
+        _artifact("dup.py", built_at="2026-07-10T10:00:00Z", task="build_dup_a"),
+        _artifact2("dup.py", built_at="2026-07-10T11:00:00Z", task="build_dup_b"),
+    ])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops).run_once()
+    assert [r["action"] for r in res] == ["published", "duplicate_module"]
+    assert len(gitops.published) == 1
+    # the duplicate's key is recorded so it is never re-attempted
+    pub_rows = store.writes_of_type(PR_PUBLISHED_TYPE)
+    assert "dup.py|2026-07-10T11:00:00Z" in json.loads(pub_rows[-1]["content"])
+
+
+def test_duplicate_module_across_runs_skipped(tmp_path):
+    state = str(tmp_path / "pub_state.json")
+    store = InMemoryMeshStore(artifacts=[
+        _artifact("dup.py", built_at="2026-07-10T10:00:00Z", task="build_dup_a"),
+    ])
+    _pub(store, enabled=True, state_file=state).run_once()
+    store2 = InMemoryMeshStore(artifacts=[
+        _artifact2("dup.py", built_at="2026-07-11T10:00:00Z", task="build_dup_b"),
+    ])
+    gitops2 = FakeGitOps()
+    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state).run_once()
+    assert res[0]["action"] == "duplicate_module"
+    assert gitops2.published == []
+
+
+def test_same_file_outside_window_publishes(tmp_path):
+    state = str(tmp_path / "pub_state.json")
+    store = InMemoryMeshStore(artifacts=[
+        _artifact("old.py", built_at="2026-05-30T00:00:00Z", task="build_old"),
+    ])
+    _pub(store, enabled=True, state_file=state).run_once()
+    store2 = InMemoryMeshStore(artifacts=[
+        _artifact2("old.py", built_at="2026-06-20T00:00:00Z", task="build_old_v2"),
+    ])
+    gitops2 = FakeGitOps()
+    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state).run_once()
+    assert res[0]["action"] == "published"
+    assert len(gitops2.published) == 1
+
+
+def _artifact2(file, built_at, task):
+    """Same as _artifact but with a distinct row id per (file, built_at)."""
+    c = {"file": file, "built_at": built_at, "phase": "p1", "bytes": 10,
+         "interface": "compute_score", "task": task}
+    return (f"row-{file}-{built_at}", json.dumps(c))

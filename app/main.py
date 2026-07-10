@@ -129,6 +129,12 @@ def scan_page():
     return _render_root("scan_view.html")
 
 
+@app.get("/dispute", response_class=HTMLResponse)
+def dispute_page():
+    """User-facing score-dispute form (closes the dispute-UI frontend gap; backend live since 2026-06-28)."""
+    return _render_root("dispute_view.html")
+
+
 @app.get("/ask", response_class=HTMLResponse)
 def ask_page():
     """v2 slice: grounded Ask with mandatory citations."""

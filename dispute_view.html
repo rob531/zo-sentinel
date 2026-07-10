@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispute a score — MCPRisky</title>
+<meta name="description" content="Think we got a server's risk score wrong? Submit a dispute — pick the server, the risk tier you believe is right, and your reasoning. Every dispute is reviewed by an admin and logged.">
+<style>
+  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;
+        --hi:#ff5b6a;--med:#ffb84d;--low:#39d98a;--warn:#ffb84d}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
+    font:15px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
+  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
+  main{max-width:760px;margin:0 auto;padding:26px 20px}
+  h2{margin:0 0 4px}.sub{color:var(--dim);margin:0 0 16px}
+  label{display:block;margin:14px 0 4px;font-weight:600;font-size:13px}
+  input,select,textarea{width:100%;background:var(--panel);border:1px solid var(--line);
+    color:var(--txt);border-radius:10px;padding:10px 12px;font:inherit}
+  textarea{height:130px;resize:vertical}
+  .hint{color:var(--dim);font-size:12px;margin-top:3px}
+  .bar{display:flex;gap:10px;align-items:center;margin-top:16px}
+  button{background:var(--acc);border:0;color:#fff;border-radius:10px;padding:11px 18px;font:inherit;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  #status{color:var(--dim)}
+  #status.ok{color:var(--low)} #status.err{color:var(--hi)}
+  .mine{margin-top:34px}
+  .row{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;font-size:13px}
+  .row .id{color:var(--dim);font-size:11px}
+  .st{padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800;margin-left:8px}
+  .st.pending{background:rgba(255,184,77,.15);color:var(--med)}
+  .st.approved{background:rgba(57,217,138,.15);color:var(--low)}
+  .st.rejected{background:rgba(255,91,106,.15);color:var(--hi)}
+  .signin{background:rgba(255,184,77,.08);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:14px 0;color:var(--dim)}
+  .signin a{color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+  <h1>MCPRisky</h1><span style="color:var(--dim)">Dispute a score</span>
+  <span style="flex:1"></span>
+  <a href="/scan">Scan →</a> <a href="/perspectives">Perspectives →</a> <a href="/ask">Ask →</a> <a href="/app">App →</a>
+</header>
+<main>
+  <h2>Dispute a risk score</h2>
+  <p class="sub">Think we got a server wrong? Tell us which server, what tier you believe is right,
+     and why. Disputes are reviewed by an admin, and the outcome is recorded — this is how the
+     registry gets better. Signing in is required so we can follow up on your dispute.</p>
+
+  <div class="signin" id="signinNote" style="display:none">
+    You need to <a href="/app">sign in</a> to submit a dispute.
+  </div>
+
+  <label for="sid">Server ID</label>
+  <input id="sid" spellcheck="false" placeholder="e.g. npm:@modelcontextprotocol/server-filesystem">
+  <div class="hint">The server_id shown on the server's detail page (or in a /scan result).</div>
+
+  <label for="risk">Risk tier you believe is correct</label>
+  <select id="risk">
+    <option value="">— choose —</option>
+    <option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option>
+  </select>
+
+  <label for="cat">Reason</label>
+  <select id="cat">
+    <option value="">— choose —</option>
+    <option value="official_or_established_maintainer">Official / established maintainer</option>
+    <option value="false_positive_overrated">Overrated — false positive</option>
+    <option value="underrated_actual_risk">Underrated — actual risk is higher</option>
+    <option value="outdated_assessment">Assessment is outdated</option>
+    <option value="incorrect_capability_or_axis">A capability / axis is wrong</option>
+    <option value="other">Other</option>
+  </select>
+
+  <label for="why">Explanation</label>
+  <textarea id="why" placeholder="What's wrong, and what evidence supports the tier you propose? (min 10 characters)"></textarea>
+
+  <div class="bar">
+    <button id="sendBtn">Submit dispute</button>
+    <span style="flex:1"></span>
+    <span id="status" role="status" aria-live="polite"></span>
+  </div>
+
+  <div class="mine">
+    <h2 style="font-size:16px">My disputes</h2>
+    <div id="mine"><span class="hint">Sign in to see your submitted disputes.</span></div>
+  </div>
+</main>
+<script>
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
+const $=id=>document.getElementById(id);
+function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+function setStatus(msg,cls){const el=$('status');el.textContent=msg;el.className=cls||'';}
+
+async function loadMine(){
+  const t=await tok(); if(!t){$('signinNote').style.display='block';return;}
+  $('signinNote').style.display='none';
+  try{
+    const r=await fetch('/api/disputes/mine',{headers:{Authorization:'Bearer '+t}});
+    if(!r.ok) return;
+    const d=await r.json();
+    const rows=(d.disputes||d||[]);
+    if(!rows.length){$('mine').innerHTML='<span class="hint">No disputes submitted yet.</span>';return;}
+    $('mine').innerHTML=rows.map(x=>'<div class="row"><b>'+esc(x.server_id)+'</b>'+
+      '<span class="st '+esc(x.status)+'">'+esc(x.status)+'</span>'+
+      ' → proposed <b>'+esc(x.proposed_overall_risk)+'</b>'+
+      '<div class="id">'+esc(x.reason_category)+' · '+esc((x.created_at||'').slice(0,10))+
+      (x.admin_note?' · admin: '+esc(x.admin_note):'')+'</div></div>').join('');
+  }catch(e){}
+}
+
+async function send(){
+  const sid=$('sid').value.trim(), risk=$('risk').value, cat=$('cat').value, why=$('why').value.trim();
+  if(!sid||!risk||!cat){setStatus('fill in server, tier and reason','err');return;}
+  if(why.length<10){setStatus('explanation must be at least 10 characters','err');return;}
+  const t=await tok();
+  if(!t){setStatus('sign in first (via /app)','err');$('signinNote').style.display='block';return;}
+  $('sendBtn').disabled=true; setStatus('submitting…');
+  try{
+    const r=await fetch('/api/disputes',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},
+      body:JSON.stringify({server_id:sid,proposed_overall_risk:risk,reason_category:cat,explanation:why})});
+    if(!r.ok){setStatus('error '+r.status+': '+(await r.text()).slice(0,200),'err');}
+    else{const d=await r.json();setStatus('submitted (id '+d.id+') — thank you','ok');
+      $('sid').value='';$('risk').value='';$('cat').value='';$('why').value='';loadMine();}
+  }catch(e){setStatus('error: '+e.message,'err');}
+  $('sendBtn').disabled=false;
+}
+$('sendBtn').onclick=send;
+
+const CLERK_PK="__CLERK_PK__";
+function clerkHost(pk){try{return atob(pk.split('_')[2]).replace(/\$+$/,'');}catch(e){return '';}}
+if(CLERK_PK.indexOf("pk_")===0&&clerkHost(CLERK_PK)){
+  const sc=document.createElement('script');
+  sc.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  sc.src='https://'+clerkHost(CLERK_PK)+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  sc.onload=async()=>{await window.Clerk.load();loadMine();};
+  document.head.appendChild(sc);
+}
+</script>
+</body>
+</html>

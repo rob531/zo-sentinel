@@ -19,6 +19,7 @@ from .security import Principal, get_principal
 from .settings import settings
 
 # Factory-built single-file routers to mount when present + importable.
+# Routers from app/routers/ package are imported via app.routers.<name>.
 _OPTIONAL_ROUTERS = [
     "server_compare_api",
     "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",

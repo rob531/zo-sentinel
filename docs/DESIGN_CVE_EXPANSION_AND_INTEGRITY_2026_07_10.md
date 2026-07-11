@@ -85,7 +85,7 @@ source_url, fetched_at, match_confidence, feed. NO fuzzy/embedding matching.
   `aliases[]` field, exact IDs only) so a finding referenced by three feeds
   counts once. Output: alias groups table with provenance per edge.
   Exemplar: `vuln_registry_linker.py`.
-- `vuln_link_expander.py` — expanded findings: raise linker coverage past the
+- the vuln-link-expander module (name de-tokenized: AGENT-ONLY per sensitivity list below, not factory-mineable) — expanded findings: raise linker coverage past the
   ~1% baseline via repo-URL normalization (trailing .git, www, case) and exact
   version-range evaluation against advisory `affected[]` ranges. Still 100%
   deterministic; every new link records match_basis='url_normalized' or
@@ -93,7 +93,7 @@ source_url, fetched_at, match_confidence, feed. NO fuzzy/embedding matching.
 - `verdict_findings_join_api.py` — the /verdict surface gains a findings block:
   per-server vuln_links + threat_refs + freshness, one call. INSUFFICIENT when
   kill-switch off or data staler than SLA. Exemplar: `vuln_exposure_api.py`.
-- `advisory_freshness_stamper.py` — stamp newest_advisory_fetched_at per feed
+- the advisory-freshness-stamper module (name de-tokenized: AGENT-ONLY per sensitivity list below, not factory-mineable) — stamp newest_advisory_fetched_at per feed
   into the freshness surface so vuln claims inherit THE LINE (no keyed surface
   on stale data). Exemplar: `freshness_metadata_api.py`.
 
@@ -152,10 +152,10 @@ tower-side, OSV-OOM lesson), `vuln_alias_resolver.py`,
   police inherit its blind spots, and canary/injection fixtures leaking into
   factory context would let the student memorize the test. Fixtures live
   OUTSIDE factory-readable paths.
-- `vuln_link_expander.py` — writes rows that become user-facing risk claims;
+- the vuln-link-expander module (name de-tokenized: AGENT-ONLY per sensitivity list below, not factory-mineable) — writes rows that become user-facing risk claims;
   agent-built, or factory-built but dark until an agent verifies precision on
   a sample (week-1-style gate) and flips it on.
-- `advisory_freshness_stamper.py` + badge STALE-gating verify — THE LINE
+- the advisory-freshness-stamper module (name de-tokenized: AGENT-ONLY per sensitivity list below, not factory-mineable) + badge STALE-gating verify — THE LINE
   enforcement itself; a silent bug here fakes freshness, the one lie we must
   never tell.
 - Public teaser layer, `mcprisky_mcp_server` (when approved), claim-your-server

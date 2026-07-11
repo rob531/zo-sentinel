@@ -100,8 +100,10 @@ source_url, fetched_at, match_confidence, feed. NO fuzzy/embedding matching.
 ## P3 — Scoring-integrity program (novel, product-grade)
 
 Corpus: 66,565 servers × 7 axes (v3.0_40974559). The integrity claim must be
-testable by an outsider. Factory-buildable probes (each = read-only module +
-one metrics row, exemplar `vuln_coverage_sla_api.py` unless noted):
+testable by an outsider. Probes (each = read-only module + one metrics row,
+exemplar `vuln_coverage_sla_api.py` unless noted); build assignment per the
+sensitivity eval below — the factory NEVER authors probe fixtures or
+invariants, only reporting plumbing where marked:
 
 - `score_canary_corpus.py` — tracer rounds: ~50 synthetic MCP definitions with
   KNOWN ground-truth axis labels (flagrantly WEAK auth, obviously ESTABLISHED
@@ -127,6 +129,43 @@ one metrics row, exemplar `vuln_coverage_sla_api.py` unless noted):
   stratified sample rescored by the teacher model; publish student↔teacher
   agreement as THE public integrity metric. Managed via vast_jobs manifest +
   DESTROY_READY gate; hard cost ceiling per run.
+
+## Build assignment — sensitivity eval (chairman-directed, 2026-07-10)
+
+Ruling: a component is FACTORY-eligible only if it is (a) exemplar-grounded
+single-file work over known schema, (b) not a public/keyed/unauthenticated
+surface, (c) not self-referential (the factory must not build the instruments
+that grade the factory's own product), and (d) not an outreach action. All
+else is AGENT-built (CEO-emitted PRs).
+
+**FACTORY-eligible (P2 lane):** `ghsa_feed_ingestor.py`,
+`nvd_cve_feed_ingestor.py` (exemplar `osv_feed_ingestor.py` — proven 7/10; run
+tower-side, OSV-OOM lesson), `vuln_alias_resolver.py`,
+`verdict_findings_join_api.py`, and the read-only REPORTING halves of
+`metamorphic_scoring_probe.py`, `twin_divergence_audit.py`,
+`score_distribution_sentinel.py` once their agent-authored specs exist.
+
+**AGENT-ONLY (too sensitive for arch/builder-goose):**
+
+- `score_canary_corpus.py` fixtures + `adversarial_description_probe.py` in
+  full — conflict of interest: probes designed by the same pipeline they
+  police inherit its blind spots, and canary/injection fixtures leaking into
+  factory context would let the student memorize the test. Fixtures live
+  OUTSIDE factory-readable paths.
+- `vuln_link_expander.py` — writes rows that become user-facing risk claims;
+  agent-built, or factory-built but dark until an agent verifies precision on
+  a sample (week-1-style gate) and flips it on.
+- `advisory_freshness_stamper.py` + badge STALE-gating verify — THE LINE
+  enforcement itself; a silent bug here fakes freshness, the one lie we must
+  never tell.
+- Public teaser layer, `mcprisky_mcp_server` (when approved), claim-your-server
+  flow — unauthenticated/public/auth surfaces; app-spine class, always
+  agent-built (builder re-scope decision, 2026-06-26).
+- Registry submissions and ALL outreach — agent-only with the per-registry
+  checklist; doctrine (DECISION_OUTREACH_ETIQUETTE_DOCTRINE_2026_07_10.md)
+  forbids the factory from ever holding an outreach directive.
+- Publisher/promoter/janitor self-modification — factory infra stays
+  agent-maintained (the factory does not rewrite its own gates).
 
 ## Explicit rejections (do not resurrect without a new council)
 

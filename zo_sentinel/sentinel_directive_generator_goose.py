@@ -405,6 +405,20 @@ def _ensure_goose_env() -> None:
         _am = (os.environ.get("ZO_ARCHITECT_MODEL", "") or "").strip()
         if _am.lower() in ("", "minimax-text-01", "zo-ladder-v1"):
             _am = "zo-ladder-cerebras"
+        # Capable-rung ROTATION on consecutive non-convergence (mirrors
+        # build_routing._CAPABLE for the builder). Env-tunable, reversible:
+        # DGG_ROTATE_AFTER=0 disables; rotation list override via
+        # ZO_ARCHITECT_MODEL_ROTATION (comma-separated ladder aliases).
+        _rot_after = int(os.environ.get("DGG_ROTATE_AFTER", 2))
+        _rotation = [m.strip() for m in os.environ.get(
+            "ZO_ARCHITECT_MODEL_ROTATION",
+            "zo-ladder-cerebras,zo-ladder-nvidia,zo-ladder-mistral,zo-ladder-groq",
+        ).split(",") if m.strip()]
+        _picked = _rotated_model(_am, _consec_nonconverge, _rot_after, _rotation)
+        if _picked != _am:
+            log.warning("architect rung ROTATION: %s -> %s after %d consecutive "
+                        "non-converged cycles", _am, _picked, _consec_nonconverge)
+            _am = _picked
         os.environ["GOOSE_MODEL"] = _am
         os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:8796/v1")
         os.environ.setdefault("OPENAI_API_KEY",  "dummy_key_for_shim")  # set => goose skips keyring
@@ -433,12 +447,39 @@ def _ensure_goose_env() -> None:
         # extension tools. The architect_budget plugin is left in-tree but no longer deployed.
 
 
+# Consecutive architect cycles that did NOT converge to a propose_directive
+# (+0 or timeout). Reset on any +N cycle. Drives capable-rung rotation so a
+# single weak/flaky rung can never silently starve the queue (2026-07-12:
+# cerebras +0 for ~13h, proposed/ empty, builder idle).
+_consec_nonconverge = 0
+
+
+def _rotated_model(am: str, consec: int, rot_after: int, rotation: list) -> str:
+    """Pure rung-rotation policy (unit-testable, no env access).
+
+    After ``rot_after`` consecutive non-converged cycles, step through
+    ``rotation`` (one step per further ``rot_after`` cycles), starting from
+    the home rung ``am``. rot_after<=0 disables rotation. If ``am`` is not in
+    the rotation list it is prepended as the home rung, so an explicit
+    chairman override still participates (and recovers) instead of pinning."""
+    if rot_after <= 0 or not rotation or consec < rot_after:
+        return am
+    rot = list(rotation)
+    if am not in rot:
+        rot = [am] + rot
+    home = rot.index(am)
+    step = (consec - rot_after) // rot_after + 1
+    return rot[(home + step) % len(rot)]
+
+
 def _emit_nonconvergence(secs, delta, rc, kind: str) -> None:
     """LOUD failure when an architect cycle does NOT converge to a directive (timeout, or
     rc=0 but +0). The model burned ~secs of tool calls without landing a propose_directive
     -- a goose tool-call LOOP / over-exploration, NOT a silent timeout. Emits a
     failure_classifier-catchable log line + a best-effort mesh_memory row so loop_watch /
     pipeline-watch surface it. (Stop + emit-a-failure-log, per the convergence-guard design.)"""
+    global _consec_nonconverge
+    _consec_nonconverge += 1
     model = os.environ.get("GOOSE_MODEL", "?")
     log.error("ARCHITECT NON-CONVERGENCE (%s): goose [%s] model=%s ran ~%ss, proposed +%d "
               "-- did NOT reach propose_directive (tool-call loop / over-exploration); rc=%s",
@@ -541,6 +582,9 @@ def run_goose_cycle() -> dict:
         _elapsed = int(time.time() - _t0)
         log.info("goose returned rc=%d in %ds; proposed_depth %d -> %d (+%d)",
                  rc, _elapsed, depth, new_depth, delta)
+        if delta > 0:
+            global _consec_nonconverge
+            _consec_nonconverge = 0
         if delta <= 0:
             # Log the model's transcript tail so a +0 is diagnosable (proposed & rejected?
             # hit the --max-turns cap mid-explore? emitted inline text instead of a tool call?).

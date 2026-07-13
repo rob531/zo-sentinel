@@ -64,7 +64,43 @@ contradicts it.
 Ownership proof required: GitHub OAuth with push/admin on the linked repo, or
 a well-known file drop in the repo. A claim grants NO influence over scoring
 inputs — only badge issuance + dispute standing. All claims audit-logged
-(actor, evidence, timestamp).
+(actor, evidence, timestamp). Concrete validation in the addendum below.
+
+### T5 addendum — how OAuth proof is actually validated (2026-07-12)
+
+**Path A — Clerk-mediated GitHub OAuth (primary).**
+1. User signs in with the GitHub social connection on our EXISTING Clerk
+   instance (no second auth system). We never see or accept a user-pasted
+   token; the only token source is Clerk's backend API
+   (`GET /v1/users/{uid}/oauth_access_tokens/oauth_github`). Known gotcha:
+   api.clerk.com Cloudflare-blocks default urllib UA — send a User-Agent.
+2. **The repo of record comes from OUR corpus provenance** (registry-scraped
+   source URL), never from the claimant. If they think our linkage is wrong,
+   that is a dispute, not a claim — otherwise a claimant could nominate any
+   repo they own and "prove" ownership of someone else's listing.
+3. At claim init we resolve the repo of record once (unauthenticated
+   `GET /repos/{owner}/{repo}`) and pin its **numeric repo id** — ids survive
+   renames/transfers; a deleted-and-recreated same-name repo gets a NEW id.
+   All checks compare ids, not names, killing the name-squat replay.
+4. With the user's token: `GET /repos/{owner}/{repo}` → require
+   `.permissions.admin == true` or `.maintain == true` (push alone is too
+   weak — drive-by collaborators shouldn't issue badges) AND `.id` matches
+   the pinned id. Minimal scopes: none beyond default public read; we request
+   NO write scopes ever (outreach doctrine: minimal footprint).
+
+**Path B — nonce file drop (fallback for org-policy-blocked OAuth).**
+Single-use nonce, bound to (user, server), 48h TTL. Claimant commits
+`.mcprisky-claim` containing the nonce at the ROOT of the DEFAULT branch of
+the repo of record; we fetch via raw.githubusercontent (id-pinned repo). A
+commit to the default branch requires write+review rights, proving control.
+Nonce burned on first verification attempt, pass or fail.
+
+**Both paths then:** evidence JSON persisted (gh login, method, permission
+level or nonce commit SHA, repo id, checked_at) + audit_log row.
+**Re-verification:** every 90 days AND on maintainer-change/transfer events
+from rug_pull_monitor — repos get sold; ownership proof decays. Failed
+re-verify ⇒ claim suspended, badge degrades to neutral pointer (fail-closed,
+same machinery as `badge.enabled`).
 
 **T6. Dispute-laundering (claim + spam disputes to raise score).**
 Disputes remain record-only + admin review (shipped #1378 semantics). A

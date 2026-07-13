@@ -108,7 +108,13 @@ def _max_iso(a: Optional[str], b: Optional[str]) -> Optional[str]:
 # be restated here; three copies of a regex are three chances for the seams to
 # disagree, and a rule the builder satisfies but CI rejects is worse than none.
 # Re-exported so callers (and tests) can keep importing it from the publisher.
+from zo_sentinel.build_completion import park_directive   # noqa: E402
 from zo_sentinel.gates.hollow import hollow_scaffold_scan   # noqa: F401,E402
+
+# Durable quarantine store, OUTSIDE the git tree: `git clean` on a daemon
+# respawn wipes untracked sentinels, which un-parks the directive (council
+# 2026-06-20). Same path goose_runner parks to.
+DURABLE_QUARANTINE_DIR = Path('/home/workspace/zo_sentinel_state/quarantine')
 
 
 # --- saturated-family gate (2026-07-12) --------------------------------------
@@ -150,7 +156,8 @@ class Publisher:
                  clock: Optional[Callable[[], datetime]] = None,
                  sleep: Optional[Callable[[float], None]] = None,
                  state_file: Optional[str] = None,
-                 dup_file_window_days: Optional[int] = None):
+                 dup_file_window_days: Optional[int] = None,
+                 quarantine_dir: Optional[str] = None):
         self.store = store
         # Local durable state file (watermark/dedup/budget). When set it is the
         # AUTHORITATIVE store for the publisher's own bookkeeping so a dropped
@@ -159,6 +166,11 @@ class Publisher:
         self._state_file = state_file
         self.gitops = gitops or FakeGitOps(repo_url)
         self.home = Path(home)
+        # Directive sentinels live under the publisher's OWN home (injectable, so a
+        # test never writes into a real /home/workspace), and the durable park store
+        # sits outside the git tree so git clean cannot un-park (council 2026-06-20).
+        self._directives_dir = self.home / "directives"
+        self._quarantine_dir = Path(quarantine_dir or DURABLE_QUARANTINE_DIR)
         self.repo_url = repo_url.rstrip("/")
         self._resolver = content_resolver or self._read_from_home
         self._enabled_override = enabled_override
@@ -414,8 +426,22 @@ class Publisher:
                 # never pass, so mark + advance past it (mirror the safety
                 # "blocked" path). A future FIXED rebuild is a NEW artifact
                 # (new built_at/dedup_key) and publishes normally.
+                #
+                # PARK the directive too. The build stamped <task>.done.json when
+                # it completed -- but done != merged, and we are refusing the PR,
+                # so that sentinel is now asserting a success that will never land.
+                # Left alone it makes is_goose_eligible skip the directive forever
+                # and silently swallow any same-name reseed (the *_v2 tax). Parking
+                # writes .failed (durable) and clears the false .done: loud, and
+                # NOT re-admitted -- a hollow build re-admitted just rebuilds hollow
+                # ("clearing first just re-ghosts them", 2026-06-13).
+                if art.task:
+                    park_directive(art.task, f"publisher refused a hollow build: {hollow}",
+                                   self._clock().isoformat(),
+                                   self._directives_dir, self._quarantine_dir)
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "hollow_blocked", "detail": hollow})
+                                "action": "hollow_blocked", "detail": hollow,
+                                "parked": bool(art.task)})
                 advance_wm = _max_iso(advance_wm, created_at)
                 continue
             tier = self._tier_of(raw)

@@ -134,6 +134,34 @@ def hollow_scaffold_scan(file_path: str, source: str) -> Optional[str]:
     return None
 
 
+# --- saturated-family gate (2026-07-12) --------------------------------------
+# Enforces the council saturation declaration (docs/DESIGN_CVE_EXPANSION_AND_
+# INTEGRITY_2026_07_10.md) in CODE -- the prose-only steer did not hold
+# (#1441 fleet_exploit_surface_api and #1447 fleet_risk_composition_api merged
+# 2026-07-12 despite it; HISTO precedent: reads[] is a placebo, gates are not).
+# New members of saturated permutation families are skipped pre-PR. Filename-
+# only check, root-level modules only. Env kill-switch: PR_SATURATION_GATE=0.
+_SATURATED_FAMILIES = re.compile(
+    r"^(fleet_|org_risk_|mcp_risk_tier|server_risk_delta|server_risk_tier|"
+    r"axis_top_servers|scoring_trend|server_exemption|cadence_job_runs)"
+    r"\w*\.(py|html)$")
+
+
+def saturated_family_scan(file_path: str) -> Optional[str]:
+    """Return a skip reason if a ROOT-LEVEL artifact belongs to a council-
+    saturated module family, else None. Value in these areas = wiring/joining
+    EXISTING modules, never new permutations."""
+    if os.environ.get("PR_SATURATION_GATE", "1").strip().lower() in ("0", "false", "off"):
+        return None
+    fp = str(file_path or "")
+    if "/" in fp:
+        return None
+    if _SATURATED_FAMILIES.match(fp):
+        return (f"saturated family (council_cve_expansion_2026_07_10): {fp} -- "
+                f"no new permutations; wire/join existing modules instead")
+    return None
+
+
 class Publisher:
     def __init__(self, store: MeshStore, gitops: Optional[GitOps] = None,
                  home: str = DEFAULT_HOME,
@@ -381,6 +409,13 @@ class Publisher:
                                 "action": "duplicate_module",
                                 "detail": f"same file published {_seen}; "
                                           f"window {self.dup_file_window_days}d"})
+                new_keys.append(art.dedup_key)   # never re-attempt this artifact
+                advance_wm = _max_iso(advance_wm, created_at)
+                continue
+            saturated = saturated_family_scan(art.file)
+            if saturated:
+                results.append({"dedup_key": art.dedup_key, "file": art.file,
+                                "action": "saturated_family", "detail": saturated})
                 new_keys.append(art.dedup_key)   # never re-attempt this artifact
                 advance_wm = _max_iso(advance_wm, created_at)
                 continue

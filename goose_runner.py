@@ -23,6 +23,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
     output_confirmed, failed_quarantined)
+from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
 from zo_sentinel.build_lessons import (  # noqa: E402
     record_lesson, resolve_lessons, open_lessons_for, format_lessons_context)
 
@@ -903,6 +904,57 @@ def _schema_prm_gate(directive, directive_id):
         return True
 
 
+def _no_hollow_gate(directive, directive_id):
+    """Reject a HOLLOW build BEFORE it is marked .done -- the earliest seam.
+
+    A hollow scaffold (standalone FastAPI module with no app.db/app.models layer,
+    or a mock/placeholder DB) compiles cleanly, so the Tier-0 syntax gate passes it
+    and the build completes. The publisher (#1450) and CI then reject it -- correctly,
+    but far too late: the build tokens are already spent, and the .done sentinel it
+    left behind silently swallows any same-name reseed (which is why a rejected
+    build has to come back renamed *_v2). Blocking HERE means the directive never
+    completes, so it stays live and RETRIES -- and the lesson below puts the exact
+    rejection into the next attempt's context, closing the loop the way the schema
+    PRM does. Prose told the builder about this rule and it leaked anyway; the rule
+    now lives in code (zo_sentinel.gates.hollow), shared verbatim with CI.
+
+    Fail-open on any internal error, and live-flippable via the policy layer
+    (builder.no_hollow_gate) -- a false positive here starves the builder, so the
+    chairman must be able to switch it off without a redeploy. Publisher + CI remain
+    as backstops either way.
+    """
+    try:
+        try:
+            from zo_sentinel import policy as _policy
+            if not _policy.flag("builder.no_hollow_gate", directives_root=DIRECTIVES_PATH):
+                return True
+        except Exception:
+            pass   # policy fault -> gate stays ON (fail-safe, not fail-open)
+        out = declared_output(directive)
+        if out is None or not out.exists():
+            return True
+        try:
+            rel = str(out.relative_to(PROJECT_DIR)).replace("\\", "/")
+        except Exception:
+            rel = out.name
+        reason = hollow_scaffold_scan(rel, out.read_text(encoding="utf-8"))
+        if reason is None:
+            return True
+        obs = ("no-hollow gate rejected this build -- " + reason + ". The module must read the "
+               "REAL data layer: import from app.db / app.models (get_session), mirror "
+               "verdict_breakdown_api.py, and carry NO mock/placeholder/in-memory DB. "
+               "Rebuild it against the real schema.")
+        log(f"[no-hollow] {directive_id}: BLOCKED -- {reason} ({out.name})")
+        try:
+            record_lesson(LESSONS_DIR, out.name, directive_id, "no_hollow", obs, severity=3)
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        log(f"[no-hollow] {directive_id}: gate error (passing): {e}")
+        return True
+
+
 def _selftest_gate(directive, directive_id):
     """Run the module's __main__ self-test and require PASS before completing. Degrades to
     True (Tier-0 only) when there is no self-test or it fails purely on an environment/import
@@ -1336,6 +1388,7 @@ def run():
                     if (result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)
                             and _schema_prm_gate(directive, directive_id)
+                            and _no_hollow_gate(directive, directive_id)
                             and _selftest_gate(directive, directive_id)):
                         _complete(directive, directive_id, result.get("stdout", ""),
                                   routed_model=_routed_model)
@@ -1372,6 +1425,7 @@ def run():
                     if (fallback_result.get("success") and output_confirmed(directive)
                             and _syntax_gate(directive, directive_id)
                             and _schema_prm_gate(directive, directive_id)
+                            and _no_hollow_gate(directive, directive_id)
                             and _selftest_gate(directive, directive_id)):
                         _complete(directive, directive_id,
                                   fallback_result.get("result", ""), fallback_used=True,

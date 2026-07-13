@@ -16,6 +16,7 @@ janitor = true            # skip=>retire in the promoter cycle
 janitor_limit = 200       # max retirements per pass
 
 [builder]
+no_hollow_gate = true    # reject hollow scaffolds at the builder seam (before .done)
 engine_build = true       # grounded deterministic engine fallback
 engine_rungs = "zo-ladder-nvidia,zo-ladder-high"   # free rungs only
 engine_max_repairs = 1    # bounded repair rounds

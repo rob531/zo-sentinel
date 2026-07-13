@@ -435,3 +435,63 @@ def _artifact2(file, built_at, task):
     c = {"file": file, "built_at": built_at, "phase": "p1", "bytes": 10,
          "interface": "compute_score", "task": task}
     return (f"row-{file}-{built_at}", json.dumps(c))
+
+# --- anti-hollow pre-publish gate (mirrors tests/ci/no_hollow_scaffold.py) ---
+
+def test_hollow_fastapi_scaffold_blocked_before_pr():
+    # The #1438 failure mode: an ingestor wrapped in a standalone FastAPI app
+    # with no real data layer. Must never reach a PR.
+    src = "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/x')\ndef x():\n    return {}\n"
+    store = InMemoryMeshStore(artifacts=[_artifact("hollow_api.py")])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops, content=src).run_once()
+    assert res[0]["action"] == "hollow_blocked"
+    assert "no real data layer" in res[0]["detail"]
+    assert gitops.published == []
+
+
+def test_hollow_mock_text_blocked_before_pr():
+    # The #1449 failure mode: inline "# Mock ..." test scaffolding in a root
+    # module trips the CI mock regex; block it here instead of burning a PR.
+    src = "import requests_mock\n# Mock write_service responses\nprint('x')\n"
+    store = InMemoryMeshStore(artifacts=[_artifact("mocky.py")])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops, content=src).run_once()
+    assert res[0]["action"] == "hollow_blocked"
+    assert gitops.published == []
+
+
+def test_real_datalayer_api_passes_hollow_gate():
+    src = ("from fastapi import APIRouter\nfrom app.db import get_session\n"
+           "router = APIRouter()\n@router.get('/y')\ndef y():\n    return 1\n")
+    store = InMemoryMeshStore(artifacts=[_artifact("real_api.py")])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops, content=src).run_once()
+    assert res[0]["action"] == "published"
+    assert len(gitops.published) == 1
+
+
+def test_non_root_and_non_py_skip_hollow_gate():
+    # CI's no-hollow gate only inspects added ROOT-LEVEL .py modules; the
+    # pre-publish scan must stay exactly as permissive.
+    src = "app = FastAPI()\n"
+    store = InMemoryMeshStore(artifacts=[_artifact("app/sub_module.py"),
+                                         _artifact("notes.md", built_at="2026-05-30T00:00:01Z")])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops, content=src).run_once()
+    assert [r["action"] for r in res] == ["published", "published"]
+
+
+def test_hollow_block_advances_watermark_and_does_not_stall_queue():
+    src_bad = "app = FastAPI()\n"
+    store = InMemoryMeshStore(artifacts=[_artifact("hollow_api.py"),
+                                         _artifact("good.py", built_at="2026-05-30T00:00:01Z")])
+    gitops = FakeGitOps()
+    pub = _pub(store, enabled=True, gitops=gitops,
+               content=None)
+    # per-artifact content: hollow for the first file, clean for the second
+    pub._resolver = lambda art: src_bad if art.file == "hollow_api.py" else "print('ok')\n"
+    res = pub.run_once()
+    actions = {r["file"]: r["action"] for r in res}
+    assert actions["hollow_api.py"] == "hollow_blocked"
+    assert actions["good.py"] == "published"

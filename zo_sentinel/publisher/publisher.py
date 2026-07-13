@@ -101,6 +101,39 @@ def _max_iso(a: Optional[str], b: Optional[str]) -> Optional[str]:
     return a
 
 
+
+# --- anti-hollow pre-publish gate (2026-07-13) -------------------------------
+# Mirrors tests/ci/no_hollow_scaffold.py (the no-hollow CI gate). The builder
+# recurringly emits hollow scaffolds -- standalone FastAPI modules with no real
+# data layer (the #1438 NVD ingestor wrapped in FastAPI()), or modules carrying
+# mock/placeholder text (#1449 inline requests_mock tests). CI rejects them,
+# but each one still burned a PR + chairman triage (5 closed 2026-07-13 alone,
+# ~50% of that cycle's builder yield). Blocking HERE converts a doomed PR into
+# a mesh-visible "hollow_blocked" result. Patterns are kept IDENTICAL to the
+# CI gate so this never blocks something CI would accept.
+_HOLLOW_MOCK = re.compile(r"class\s+Mock|MockDB|mock database|mock data|placeholder|dummy data|"
+                          r"simulate fetching|in-memory (db|database)|# *Mock", re.I)
+_HOLLOW_BUILDS_API = re.compile(r"FastAPI\(|APIRouter\(|@app\.(get|post)|@router\.(get|post)")
+_HOLLOW_REAL = re.compile(r"from app\.db|from app\.models|import app\.db|app\.models import|"
+                          r"get_session|from app import|import verdict_breakdown_api")
+
+
+def hollow_scaffold_scan(file_path: str, source: str) -> Optional[str]:
+    """Return a block reason if a ROOT-LEVEL .py artifact is a hollow scaffold
+    (per the no-hollow CI gate), else None. Non-root and non-.py files pass:
+    the CI gate only inspects added root-level modules, and this scan must
+    stay exactly as permissive."""
+    fp = str(file_path or "")
+    if "/" in fp or not fp.endswith(".py"):
+        return None
+    if _HOLLOW_MOCK.search(source):
+        return "hollow scaffold: mock/placeholder DB (no-hollow CI would reject)"
+    if _HOLLOW_BUILDS_API.search(source) and not _HOLLOW_REAL.search(source):
+        return ("hollow scaffold: standalone API with no real data layer "
+                "(app.db/app.models) (no-hollow CI would reject)")
+    return None
+
+
 class Publisher:
     def __init__(self, store: MeshStore, gitops: Optional[GitOps] = None,
                  home: str = DEFAULT_HOME,
@@ -361,6 +394,16 @@ class Publisher:
             if safety:
                 results.append({"dedup_key": art.dedup_key, "file": art.file,
                                 "action": "blocked", "detail": safety})
+                advance_wm = _max_iso(advance_wm, created_at)
+                continue
+            hollow = hollow_scaffold_scan(art.file, content)
+            if hollow:
+                # Deterministic on these bytes: retrying the SAME artifact can
+                # never pass, so mark + advance past it (mirror the safety
+                # "blocked" path). A future FIXED rebuild is a NEW artifact
+                # (new built_at/dedup_key) and publishes normally.
+                results.append({"dedup_key": art.dedup_key, "file": art.file,
+                                "action": "hollow_blocked", "detail": hollow})
                 advance_wm = _max_iso(advance_wm, created_at)
                 continue
             tier = self._tier_of(raw)

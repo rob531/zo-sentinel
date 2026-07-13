@@ -495,3 +495,39 @@ def test_hollow_block_advances_watermark_and_does_not_stall_queue():
     actions = {r["file"]: r["action"] for r in res}
     assert actions["hollow_api.py"] == "hollow_blocked"
     assert actions["good.py"] == "published"
+
+
+# --- saturated-family gate (council enforcement in code, 2026-07-12) ---------
+
+def test_saturated_family_skipped():
+    store = InMemoryMeshStore(artifacts=[
+        _artifact("fleet_exploit_surface_api.py", task="build_fleet_exploit"),
+        _artifact("nvd_cve2_feed_loader.py", task="build_nvd_loader"),
+    ])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops).run_once()
+    by_file = {r["file"]: r["action"] for r in res}
+    assert by_file["fleet_exploit_surface_api.py"] == "saturated_family"
+    assert by_file["nvd_cve2_feed_loader.py"] == "published"
+    assert len(gitops.published) == 1
+    # saturated artifact's key is recorded so it never re-surfaces
+    pub_rows = store.writes_of_type(PR_PUBLISHED_TYPE)
+    assert "fleet_exploit_surface_api.py|2026-05-30T00:00:00Z" in json.loads(
+        pub_rows[-1]["content"])
+
+
+def test_saturation_gate_env_off(monkeypatch):
+    monkeypatch.setenv("PR_SATURATION_GATE", "0")
+    store = InMemoryMeshStore(artifacts=[
+        _artifact("fleet_exploit_surface_api.py", task="build_fleet_exploit"),
+    ])
+    gitops = FakeGitOps()
+    res = _pub(store, enabled=True, gitops=gitops).run_once()
+    assert res[0]["action"] == "published"
+
+
+def test_saturation_gate_ignores_non_root_paths():
+    from zo_sentinel.publisher.publisher import saturated_family_scan
+    assert saturated_family_scan("app/api/fleet_risk_x.py") is None
+    assert saturated_family_scan("server_freshness_dashboard_api.py") is None
+    assert saturated_family_scan("fleet_risk_composition_api.py") is not None

@@ -84,6 +84,10 @@ KEYS: Dict[str, Dict[str, Any]] = {
                                    "env": "ZO_JANITOR_LIMIT",
                                    "doc": "max retirements per janitor pass"},
     # builder
+    "builder.no_hollow_gate":     {"type": "bool", "default": True,
+                                   "env": "ZO_NO_HOLLOW_GATE",
+                                   "sentinel": ".no_hollow_gate_on",
+                                   "doc": "block hollow scaffolds at the builder seam (before .done)"},
     "builder.engine_build":       {"type": "bool", "default": False,
                                    "env": "ZO_ENGINE_BUILD",
                                    "sentinel": ".engine_build_on",

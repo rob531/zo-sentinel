@@ -53,6 +53,7 @@ jobs:
         #   tests/test_scoring.py       - pure scoring boundary tests
         #   tests/test_evaluator_smoke.py - reverse-feed fetcher smoke
         #   tests/test_proposed_to_pending_promoter.py - Step 4b promoter
+#   tests/test_hollow_gate.py   - the anti-hollow rule + every seam that calls it
         # Other tests (test_wiring, smoke_test, test_known_threats) require
         # the live ZoComputer host or have pre-existing failures unrelated
         # to this PR; they are intentionally not in the evaluator scope.
@@ -66,6 +67,7 @@ jobs:
             tests/test_schema_loader.py \
             tests/test_duckdb_schema_uptime_probe.py \
             tests/test_proposed_to_pending_promoter.py \
+          tests/test_hollow_gate.py \
             tests/test_sft_ingest.py \
             tests/test_artifact_ingestor.py \
             tests/test_ingestor_governor.py \

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Comparison Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .comparison-container {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .server-card {
+            flex: 1;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .attribute-row {
+            margin-bottom: 10px;
+        }
+        .attribute-label {
+            font-weight: bold;
+            width: 150px;
+            display: inline-block;
+        }
+        .score-bar {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        .score-fill {
+            height: 100%;
+            border-radius: 4px;
+        }
+        .trust-score {
+            background-color: #28a745;
+        }
+        .verdict-positive {
+            background-color: #28a745;
+        }
+        .verdict-negative {
+            background-color: #dc3545;
+        }
+        .verdict-neutral {
+            background-color: #ffc107;
+        }
+        .signal-score {
+            background-color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Server Comparison Dashboard</h1>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="server1-select" class="form-label">Select First Server:</label>
+                    <select class="form-select" id="server1-select">
+                        <option value="">-- Select a server --</option>
+                        <option value="server1">Server 1</option>
+                        <option value="server2">Server 2</option>
+                        <option value="server3">Server 3</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="server2-select" class="form-label">Select Second Server:</label>
+                    <select class="form-select" id="server2-select">
+                        <option value="">-- Select a server --</option>
+                        <option value="server1">Server 1</option>
+                        <option value="server2">Server 2</option>
+                        <option value="server3">Server 3</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison-container">
+            <div class="server-card" id="server1-card">
+                <h3 class="mb-3">Server 1</h3>
+                <div class="attribute-row">
+                    <span class="attribute-label">Name:</span>
+                    <span id="server1-name">-</span>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Registry Source:</span>
+                    <span id="server1-registry">-</span>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Trust Score:</span>
+                    <span id="server1-trust-score">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill trust-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Verdict:</span>
+                    <span id="server1-verdict">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill verdict-neutral" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <h4 class="mt-4">Signal Scores</h4>
+                <div class="attribute-row">
+                    <span class="attribute-label">Performance:</span>
+                    <span id="server1-performance">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill signal-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Security:</span>
+                    <span id="server1-security">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill signal-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Reliability:</span>
+                    <span id="server1-reliability">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill signal-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="server-card" id="server2-card">
+                <h3 class="mb-3">Server 2</h3>
+                <div class="attribute-row">
+                    <span class="attribute-label">Name:</span>
+                    <span id="server2-name">-</span>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Registry Source:</span>
+                    <span id="server2-registry">-</span>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Trust Score:</span>
+                    <span id="server2-trust-score">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill trust-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Verdict:</span>
+                    <span id="server2-verdict">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill verdict-neutral" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <h4 class="mt-4">Signal Scores</h4>
+                <div class="attribute-row">
+                    <span class="attribute-label">Performance:</span>
+                    <span id="server2-performance">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill signal-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Security:</span>
+                    <span id="server2-security">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill signal-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="attribute-row">
+                    <span class="attribute-label">Reliability:</span>
+                    <span id="server2-reliability">-</span>
+                    <div class="score-bar mt-1">
+                        <div class="score-fill signal-score" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

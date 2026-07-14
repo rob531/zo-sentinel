@@ -63,9 +63,11 @@ def test_shape_contract_and_sla_boundary(monkeypatch):
 
 
 def test_bad_sla_env_falls_back(monkeypatch):
+    # Falls back to the ONE shared default (freshness_gate.DEFAULT_SLA_DAYS = 7).
+    # Was 30 until 2026-07-14, which is why 11-day-old scores read "FRESH".
     monkeypatch.setenv("FRESHNESS_SLA_DAYS", "not-a-number")
     from freshness_metadata_api import sla_days
-    assert sla_days() == 30
+    assert sla_days() == 7
 
 # --- public observability surfaces (chairman-built 2026-07-14) ---------------
 

@@ -30,18 +30,19 @@ from verdict_breakdown_api import Principal, get_principal
 
 router = APIRouter(prefix="/api", tags=["freshness"])
 
-DEFAULT_SLA_DAYS = 30
+from freshness_gate import sla_days as _shared_sla_days  # ONE number (CofC 7/14)
 
 FRESH, STALE, UNKNOWN = "FRESH", "STALE", "UNKNOWN"
 
 
 def sla_days() -> int:
-    """The DECLARED freshness SLA. Env-tunable so ops can tighten it without
-    a deploy; defaults conservative (30d ~ the scoring-run cadence ceiling)."""
-    try:
-        return max(1, int(os.environ.get("FRESHNESS_SLA_DAYS", DEFAULT_SLA_DAYS)))
-    except (TypeError, ValueError):
-        return DEFAULT_SLA_DAYS
+    """Delegates to freshness_gate: the SLA is declared in exactly one place.
+
+    This module used to default to 30 days while the operational SLA (watch,
+    council doctrine) was 7 -- so 11-day-old scores were reported FRESH. That
+    divergence WAS the silent-staleness bug. Never re-introduce a second number.
+    """
+    return _shared_sla_days()
 
 
 def server_freshness(db: Session, server_id: str,
@@ -101,14 +102,14 @@ if __name__ == "__main__":
     s.commit()
     f = server_freshness(s, "fresh1")
     assert f["sla_status"] == "FRESH" and f["model_version"] == "v3.0", f
-    assert f["sla_days"] == 30 and f["last_scored_at"] is not None
+    assert f["sla_days"] == 7 and f["last_scored_at"] is not None
     assert server_freshness(s, "stale1")["sla_status"] == "STALE"
     u = server_freshness(s, "never-scored")
     assert u["sla_status"] == "UNKNOWN" and u["last_scored_at"] is None
     # declared-SLA tunability: at 60d the 45d-old score is FRESH again
     os.environ["FRESHNESS_SLA_DAYS"] = "60"
     assert server_freshness(s, "stale1")["sla_status"] == "FRESH"
-    os.environ["FRESHNESS_SLA_DAYS"] = "30"
+    os.environ.pop("FRESHNESS_SLA_DAYS", None)
     # the gate helper fails closed on both STALE and UNKNOWN
     assert is_fresh(s, "fresh1") is True
     assert is_fresh(s, "stale1") is False and is_fresh(s, "nope") is False

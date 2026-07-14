@@ -48,6 +48,10 @@ _OPTIONAL_ROUTERS = [
     # unblinds pipeline-watch CHECK B (moat freshness), /version unblinds
     # CHECK C (deploy drift). Aggregate/identity data only, nothing keyed.
     "scoring_freshness_surface", "runtime_deploy_info_endpoint",
+    # THE LINE enforced in code (CofC ruling 2026-07-14): freshness_gate is the
+    # single SLA source + fail-closed gate for keyed surfaces; this router is
+    # its public, auditable statement. Public surfaces fail VISIBLE, never closed.
+    "freshness_policy_api",
 ]
 
 

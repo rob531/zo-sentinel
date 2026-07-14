@@ -133,16 +133,32 @@ def test_recipe_does_not_order_a_read_before_proposing():
 # A floor that seeds junk is worse than no floor: it manufactures hollow builds.
 # ---------------------------------------------------------------------------
 
-def test_placeholder_names_are_never_seeded(gen):
-    """`foo_bar` is spec PROSE, not a build target."""
-    for junk in ("foo_bar.py", "foo.py", "example.py", "template.py", "main.py"):
+
+# ---------------------------------------------------------------------------
+# Filter: an ALLOWLIST on shape, not a denylist on junk.
+#
+# Two live fires, same lesson:
+#   17:02  foo_bar / anchor_refill / tier1_inline_enricher
+#   17:18  snake_case            <- walked straight around the denylist
+#
+# The gaps map is mined from PROSE. It will keep inventing new junk that no
+# denylist can anticipate. So reject by default; accept only what LOOKS like a
+# real module (named for what it DOES).
+# ---------------------------------------------------------------------------
+
+def test_prose_artifacts_are_never_seeded(gen):
+    """Every junk name BOTH live fires produced, plus the ones we never saw."""
+    for junk in ("foo_bar.py",        # PRODUCT_SPEC.md:149 placeholder
+                 "snake_case.py",     # sat in the gaps map next to settings.py
+                 "settings.py",
+                 "example.py", "template.py", "main.py", "thing.py",
+                 "utils.py", "helpers.py", "constants.py"):
         assert not gen._is_seedworthy(junk), junk
 
 
 def test_deprecated_classes_are_never_seeded(gen):
-    """The SFT student model OWNS scoring. Hand-built enrichers are dead work --
-    the recipe forbids the ARCHITECT from proposing them, so the floor must not
-    become a back door around that rule."""
+    """The SFT student model OWNS scoring. The recipe forbids the ARCHITECT from
+    proposing enrichers -- the floor must not be a back door around that."""
     for dead in ("tier1_inline_enricher.py", "domain_trust_enrichment.py",
                  "signal_analyser_v2.py", "tool_fingerprint_scan.py"):
         assert not gen._is_seedworthy(dead), dead
@@ -154,17 +170,22 @@ def test_frontend_is_never_seeded(gen):
 
 
 def test_real_targets_are_seedworthy(gen):
-    for good in ("vuln_alias_resolver.py", "server_score_staleness_api.py",
-                 "unscored_registry_gap_api.py"):
+    """Everything the factory actually shipped today must still pass."""
+    for good in ("vuln_alias_resolver.py",            # _resolver
+                 "unscored_registry_gap_api.py",      # _api
+                 "server_score_staleness_api.py",     # _api
+                 "nvd_cve2_feed_loader.py",           # _loader
+                 "perspective_snapshot_daemon.py",    # _daemon
+                 "wire_orphan_value_routers.py",      # wire_ prefix
+                 "verify_app_scoring_consumer.py"):   # verify_ prefix
         assert gen._is_seedworthy(good), good
 
 
-def test_modules_existing_in_a_subpackage_are_excluded(gen, tmp_path, monkeypatch):
+def test_modules_existing_in_a_subpackage_are_excluded(gen):
     """anchor_refill.py lives at zo_sentinel/anchor_refill.py. The miner's
     _disk_names() only scans the TOP level, so the floor 'discovered' a module
     that had existed for months. _existing_anywhere() must recurse."""
-    sentinel = gen.SENTINEL_DIR
-    pkg = sentinel / "zo_sentinel"
+    pkg = gen.SENTINEL_DIR / "zo_sentinel"
     pkg.mkdir(parents=True, exist_ok=True)
     (pkg / "anchor_refill.py").write_text("# exists", encoding="utf-8")
 
@@ -173,8 +194,8 @@ def test_modules_existing_in_a_subpackage_are_excluded(gen, tmp_path, monkeypatc
 
 
 def test_floor_seeds_nothing_rather_than_seeding_junk(gen, monkeypatch):
-    """If every candidate is junk, seed NOTHING and say so loudly. An empty
-    queue is bad; a queue full of hollow builds is worse."""
+    """If nothing matches the shape, seed NOTHING and say so loudly.
+    An empty queue is bad; a queue full of hollow builds is worse."""
     monkeypatch.setattr(gen, "_is_seedworthy", lambda f: False)
     assert gen._starvation_floor() == 0
     assert not list(gen.PROPOSED_DIR.glob("floor_*.json"))

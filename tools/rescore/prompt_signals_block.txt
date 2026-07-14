@@ -1,0 +1,15 @@
+SIGNALS TO LABEL:
+  1. auth_strength: How securely the MCP authenticates clients. Values: STRONG (mTLS, OAuth with PKCE, hardware tokens), MODERATE (OAuth with secrets, session tokens), WEAK (API keys, basic auth, no auth), UNKNOWN.
+     Values: STRONG | MODERATE | WEAK | UNKNOWN
+  2. capability_breadth: How broad the tool's capabilities are. NARROW (one specific function), MODERATE (a focused domain), BROAD (general-purpose / many tools), UNKNOWN.
+     Values: NARROW | MODERATE | BROAD | UNKNOWN
+  3. data_sensitivity: Sensitivity of data the MCP handles. PUBLIC (open data, web), INTERNAL (org data, low-risk), SENSITIVE (PII, secrets, financial), CRITICAL (auth tokens, credentials, prod data), UNKNOWN.
+     Values: PUBLIC | INTERNAL | SENSITIVE | CRITICAL | UNKNOWN
+  4. network_egress: Whether the MCP can reach external networks. NONE (local-only), INTERNAL (intranet only), EXTERNAL (internet), ARBITRARY (user-controlled URLs / SSRF risk), UNKNOWN.
+     Values: NONE | INTERNAL | EXTERNAL | ARBITRARY | UNKNOWN
+  5. maintainer_trust: Trustworthiness of the maintainer. ESTABLISHED (well-known org, long history), VERIFIED (signed packages, GitHub-verified org), COMMUNITY (active OSS project, multiple contributors), UNKNOWN_AUTHOR (unknown individual or empty signals), SUSPICIOUS (red flags: typosquat, sudden ownership change, malicious history).
+     Values: ESTABLISHED | VERIFIED | COMMUNITY | UNKNOWN_AUTHOR | SUSPICIOUS
+  6. exploit_surface: Estimated exploit surface for an attacker. MINIMAL (read-only, sandboxed), LIMITED (writes to scoped resources), MODERATE (multiple capabilities, some elevated), BROAD (file system, command execution, or arbitrary code paths), UNKNOWN.
+     Values: MINIMAL | LIMITED | MODERATE | BROAD | UNKNOWN
+
+Output a single JSON object now.

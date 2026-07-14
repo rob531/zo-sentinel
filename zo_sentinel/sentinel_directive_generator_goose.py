@@ -50,6 +50,7 @@ SERVICE_NAME    = "directive_generator_goose"   # distinct from legacy
 SENTINEL_DIR    = Path("/home/workspace/zo_sentinel")
 RECIPE_PATH     = SENTINEL_DIR / "goose_recipes" / "directive_architect.yaml"
 PROPOSED_DIR    = SENTINEL_DIR / "directives" / "proposed"
+PENDING_DIR     = SENTINEL_DIR / "directives" / "pending"
 LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
 
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
@@ -57,6 +58,9 @@ HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
 GOOSE_TIMEOUT   = int(os.environ.get("DGG_GOOSE_TIMEOUT", 240))   # was 480; a converging cycle is fast, a tool-call LOOP just burns -- fail it sooner
 ARCHITECT_MAX_TURNS = int(os.environ.get("DGG_MAX_TURNS", 24))   # CLI --max-turns: hard cap inside goose core loop; canary-proven to bound stdio-MCP bridge-tool loops where recipe settings.max_turns + PreToolUse hook did NOT. 0 = off.
 MAX_PROPOSED    = int(os.environ.get("DGG_MAX_PROPOSED_DEPTH", 40))
+# STARVATION FLOOR: the builder queue is NEVER empty. See _starvation_floor().
+FLOOR_ON        = os.environ.get("DGG_STARVATION_FLOOR", "1") == "1"
+FLOOR_SEED_N    = int(os.environ.get("DGG_FLOOR_SEED_N", 3))
 # Architect-scoped goose BINARY -- lets the architect run a DIFFERENT goose
 # version from the builder (goose_runner.py, which keeps bare `goose` on PATH).
 # Default "goose" = today (both roles share the PATH binary). Point this at a
@@ -140,6 +144,146 @@ def _count_proposed() -> int:
         if not p.name.endswith(".done.json")
         and not p.name.endswith(".failed.json")
     )
+
+
+def _count_pending() -> int:
+    if not PENDING_DIR.exists():
+        return 0
+    return sum(1 for p in PENDING_DIR.glob("*.json"))
+
+
+def _queued_stems() -> set:
+    """Every task name already in flight or finished -- the dedup set."""
+    stems = set()
+    for d in (PROPOSED_DIR, PENDING_DIR, PROPOSED_DIR.parent):
+        if not d.exists():
+            continue
+        for p in d.glob("*.json"):
+            stems.add(p.stem.replace(".done", "").replace(".failed", ""))
+    return stems
+
+
+def _starvation_floor() -> int:
+    """THE INVARIANT: the builder's queue is NEVER empty.
+
+    WHY THIS EXISTS
+    ---------------
+    On 2026-07-14 the factory was found with proposed=0, pending=0 and the
+    builder idle for 178 consecutive cycles -- no build PR in 13 hours. The
+    architect had been returning +0 for a day: it burned its whole turn budget
+    on read_* tools re-fetching context it had ALREADY been handed, and never
+    reached propose_directive.
+
+    The chairman's standing rule is "directives must NEVER be empty". Until now
+    that rule lived in prose, and was enforced by a human noticing and
+    hand-seeding directives. That IS the failure -- the same class as a rescore
+    that only runs when someone remembers to fire it.
+
+    So: the architect converging is NOT a precondition for the factory running.
+    If the queue hits zero, we seed it DETERMINISTICALLY from the spec/KL gaps
+    map (anchor_refill.mine_candidates -- the same miner the architect's own
+    gaps map is built from), using the real spec paragraph as the build spec.
+
+    This is a FLOOR, not a replacement: it only fires when the queue is empty,
+    it seeds a handful, and a converging architect makes it dormant forever.
+    An empty queue is now a bug the code fixes, not a bug a human discovers.
+    """
+    if not FLOOR_ON:
+        return 0
+    depth = _count_proposed() + _count_pending()
+    if depth > 0:
+        return 0                      # queue has work; the floor stays dormant
+
+    log.error("STARVATION: proposed=0 pending=0 -- the builder has NOTHING to "
+              "build. Seeding %d directive(s) deterministically from the gaps "
+              "map. (The architect converging is not a precondition for the "
+              "factory running.)", FLOOR_SEED_N)
+    try:
+        from zo_sentinel import anchor_refill as ar
+    except Exception as e:                                  # pragma: no cover
+        log.error("STARVATION FLOOR UNAVAILABLE: cannot import anchor_refill "
+                  "(%s) -- the queue stays EMPTY. This is the worst state; fix "
+                  "the import.", e)
+        return 0
+
+    try:
+        sources = [SENTINEL_DIR / "PRODUCT_SPEC.md",
+                   SENTINEL_DIR / ar.AUTO_ANCHOR_NAME]
+        sources = [p for p in sources if p.exists()]
+        exclude = ar._disk_names(SENTINEL_DIR) | _queued_stems()
+        # a stem in _queued_stems() has no extension; also exclude the .py form
+        exclude |= {s + ".py" for s in _queued_stems()}
+        terminal = ar._terminal_stems(SENTINEL_DIR / "directives", None)
+        cands = ar.mine_candidates(sources, exclude, terminal)
+    except Exception as e:
+        log.error("STARVATION FLOOR: candidate mining failed (%s)", e)
+        return 0
+
+    # The front-end and the app/auth spine are AGENT-built, never directive-built
+    # (they ghost). The builder only succeeds on self-contained .py modules.
+    cands = [c for c in cands if c["file"].endswith(".py")]
+    if not cands:
+        log.error("STARVATION FLOOR: gaps map is EXHAUSTED -- no unbuilt "
+                  "spec-named .py targets remain. The queue stays empty and the "
+                  "builder stays idle. This needs a human: extend PRODUCT_SPEC "
+                  "or the roadmap anchor.")
+        return 0
+
+    PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
+    seeded = 0
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    for c in cands[:FLOOR_SEED_N]:
+        name = c["file"]
+        task = name[:-3]                                   # strip .py
+        spec = (c.get("desc") or "").strip()
+        # A thin description GHOSTS -- goose builds from `description` and
+        # nothing else. Ground it in the real spec paragraph and pin the
+        # house rules the builder lane requires.
+        desc = (
+            f"STARVATION-FLOOR SEED ({stamp}): the directive queue was EMPTY and "
+            f"the builder was idle, so this target was mined deterministically "
+            f"from {c.get('source','the spec')} line {c.get('line','?')}.\n\n"
+            f"SPEC CONTEXT (verbatim from the roadmap):\n{spec}\n\n"
+            f"BUILD {name} as a SELF-CONTAINED module mirroring a working "
+            f"exemplar (read server_detail_api.py for a FastAPI read-only "
+            f"router, or nvd_cve2_feed_loader.py for a daemon). REQUIREMENTS: "
+            f"(1) state the exact public interface and return shapes; (2) app "
+            f"code uses the app SQLAlchemy session (app/db.py, app/models.py) -- "
+            f"daemons use write_service at http://127.0.0.1:8772/query and "
+            f"/write with {{'table','rows','wait'}}, NEVER duckdb and NEVER a "
+            f"direct DB connection; (3) the 7 axes in mcp_llm_axis_scores are "
+            f"EXACTLY overall_risk, auth_strength, capability_breadth, "
+            f"data_sensitivity, network_egress, maintainer_trust, "
+            f"exploit_surface -- invent no columns or axes; (4) read-only unless "
+            f"the spec says otherwise; (5) NO stubs, NO TODOs, NO placeholder "
+            f"returns -- a hollow file is refused at the builder seam. "
+            f"ACCEPTANCE: a __main__ block with asserts that proves it works "
+            f"and prints PASS."
+        )
+        payload = {
+            "task": task,
+            "handler": "generate_file",
+            "output_file": name,
+            "complexity": "medium",
+            "priority": 0.80,
+            "description": desc,
+            "reads": ["server_detail_api.py", "app/db.py", "app/models.py"],
+            "rationale": "starvation floor: builder queue was empty",
+            "next_directive": {},
+        }
+        out = PROPOSED_DIR / f"floor_{stamp}_{task}.json"
+        try:
+            out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+            seeded += 1
+            log.warning("STARVATION FLOOR seeded: %s (from %s:%s)",
+                        task, c.get("source"), c.get("line"))
+        except Exception as e:
+            log.error("STARVATION FLOOR: could not write %s (%s)", out.name, e)
+
+    log.error("STARVATION FLOOR: seeded %d directive(s); the queue is no longer "
+              "empty. The architect remains the primary source -- this is a "
+              "floor, not a replacement.", seeded)
+    return seeded
 
 
 def _try_import_layer1():
@@ -652,6 +796,8 @@ def main() -> int:
     log.info("  Heartbeat:     %ds", HEARTBEAT_SECS)
     log.info("  Goose timeout: %ds", GOOSE_TIMEOUT)
     log.info("  Proposed cap:  %d", MAX_PROPOSED)
+    log.info("  Starvation floor: %s (seed %d when queue hits 0)",
+             "ON" if FLOOR_ON else "OFF", FLOOR_SEED_N)
     log.info("=" * 60)
 
     hb = threading.Thread(target=_heartbeat_loop, daemon=True, name="hb")
@@ -660,6 +806,7 @@ def main() -> int:
     # Immediate cycle on startup
     summary = run_goose_cycle()
     _record_cycle(summary)
+    _starvation_floor()
 
     while not _stop_requested.is_set():
         _stop_requested.wait(POLL_SECS)
@@ -668,6 +815,9 @@ def main() -> int:
         try:
             summary = run_goose_cycle()
             _record_cycle(summary)
+            # The queue must never be empty -- enforced in code, every cycle,
+            # whether or not the architect converged. See _starvation_floor().
+            _starvation_floor()
         except Exception as e:
             log.error("cycle error: %s", e)
 

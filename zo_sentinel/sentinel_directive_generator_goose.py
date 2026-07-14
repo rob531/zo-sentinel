@@ -163,6 +163,66 @@ def _queued_stems() -> set:
     return stems
 
 
+# A floor that seeds JUNK is worse than no floor: it manufactures hollow builds
+# and churn PRs. First live fire (2026-07-14 17:02) seeded three bad targets and
+# each exposed a distinct hole -- all three are closed below.
+
+# 1. Spec prose contains PLACEHOLDER names (`foo_bar` came from PRODUCT_SPEC.md
+#    line 149). They are examples, not build targets.
+_FLOOR_JUNK_NAMES = {
+    "foo_bar", "foo", "bar", "baz", "example", "sample", "template",
+    "module", "mymodule", "my_module", "some_module", "thing", "widget",
+    "placeholder", "todo", "untitled", "main", "setup", "conftest",
+}
+
+# 2. DEPRECATED classes: the SFT student model OWNS risk scoring now, so
+#    hand-built signal/enrichment modules are dead work. The recipe already
+#    forbids the architect from proposing these -- the floor must obey the same
+#    rule, or it becomes a back door around the architect's own guardrails.
+#    (`tier1_inline_enricher` walked straight through it.)
+_FLOOR_DEPRECATED_SUBSTR = (
+    "enrich", "signal_", "_signal", "enumerat", "fingerprint",
+    "trust_synthesiser", "signal_analyser",
+)
+
+
+def _existing_anywhere() -> set:
+    """Every module basename that EXISTS anywhere in the tree.
+
+    anchor_refill.py lives at zo_sentinel/anchor_refill.py, but
+    anchor_refill._disk_names() only scans the SENTINEL_DIR top level -- so the
+    floor happily "discovered" a module that has existed for months and proposed
+    rebuilding it. Recurse, and skip the noise dirs.
+    """
+    skip = {".git", "__pycache__", "node_modules", ".venv", "directives",
+            "logs", "backups"}
+    names = set()
+    try:
+        for p in SENTINEL_DIR.rglob("*"):
+            if p.is_file() and p.suffix in (".py", ".html"):
+                if any(part in skip for part in p.parts):
+                    continue
+                names.add(p.name)
+                names.add(p.stem)
+    except Exception:
+        pass
+    return names
+
+
+def _is_seedworthy(fname: str) -> bool:
+    """Would a competent engineer put this in the build queue? If not, don't."""
+    if not fname.endswith(".py"):
+        return False            # FE/.html + the app spine are AGENT-built; they ghost
+    stem = fname[:-3]
+    if stem in _FLOOR_JUNK_NAMES:
+        return False            # a placeholder in spec prose is not a build target
+    if any(s in stem for s in _FLOOR_DEPRECATED_SUBSTR):
+        return False            # deprecated: the student model owns scoring
+    if len(stem) < 6 or "_" not in stem:
+        return False            # real module names here are descriptive + snake_case
+    return True
+
+
 def _starvation_floor() -> int:
     """THE INVARIANT: the builder's queue is NEVER empty.
 
@@ -210,18 +270,16 @@ def _starvation_floor() -> int:
         sources = [SENTINEL_DIR / "PRODUCT_SPEC.md",
                    SENTINEL_DIR / ar.AUTO_ANCHOR_NAME]
         sources = [p for p in sources if p.exists()]
-        exclude = ar._disk_names(SENTINEL_DIR) | _queued_stems()
-        # a stem in _queued_stems() has no extension; also exclude the .py form
-        exclude |= {s + ".py" for s in _queued_stems()}
+        exclude = ar._disk_names(SENTINEL_DIR) | _existing_anywhere()
+        stems = _queued_stems()
+        exclude |= stems | {s + ".py" for s in stems}
         terminal = ar._terminal_stems(SENTINEL_DIR / "directives", None)
         cands = ar.mine_candidates(sources, exclude, terminal)
     except Exception as e:
         log.error("STARVATION FLOOR: candidate mining failed (%s)", e)
         return 0
 
-    # The front-end and the app/auth spine are AGENT-built, never directive-built
-    # (they ghost). The builder only succeeds on self-contained .py modules.
-    cands = [c for c in cands if c["file"].endswith(".py")]
+    cands = [c for c in cands if _is_seedworthy(c["file"])]
     if not cands:
         log.error("STARVATION FLOOR: gaps map is EXHAUSTED -- no unbuilt "
                   "spec-named .py targets remain. The queue stays empty and the "

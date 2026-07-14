@@ -122,3 +122,59 @@ def test_recipe_does_not_order_a_read_before_proposing():
     assert "CALL THIS FIRST" not in y
     assert "Execute step 1 immediately" not in y
     assert "FIRST tool call MUST be zo_directive_bridge__propose_directive" in y
+
+
+# ---------------------------------------------------------------------------
+# Filter hardening -- from the floor's FIRST LIVE FIRE (2026-07-14 17:02).
+# It correctly caught an empty queue and seeded within one cycle... with junk:
+#   foo_bar               <- a placeholder name in PRODUCT_SPEC.md:149
+#   anchor_refill         <- ALREADY EXISTS at zo_sentinel/anchor_refill.py
+#   tier1_inline_enricher <- "enricher": the DEPRECATED class the recipe forbids
+# A floor that seeds junk is worse than no floor: it manufactures hollow builds.
+# ---------------------------------------------------------------------------
+
+def test_placeholder_names_are_never_seeded(gen):
+    """`foo_bar` is spec PROSE, not a build target."""
+    for junk in ("foo_bar.py", "foo.py", "example.py", "template.py", "main.py"):
+        assert not gen._is_seedworthy(junk), junk
+
+
+def test_deprecated_classes_are_never_seeded(gen):
+    """The SFT student model OWNS scoring. Hand-built enrichers are dead work --
+    the recipe forbids the ARCHITECT from proposing them, so the floor must not
+    become a back door around that rule."""
+    for dead in ("tier1_inline_enricher.py", "domain_trust_enrichment.py",
+                 "signal_analyser_v2.py", "tool_fingerprint_scan.py"):
+        assert not gen._is_seedworthy(dead), dead
+
+
+def test_frontend_is_never_seeded(gen):
+    """FE/.html and the app spine are AGENT-built in-session; they ghost."""
+    assert not gen._is_seedworthy("admin_dashboard_view.html")
+
+
+def test_real_targets_are_seedworthy(gen):
+    for good in ("vuln_alias_resolver.py", "server_score_staleness_api.py",
+                 "unscored_registry_gap_api.py"):
+        assert gen._is_seedworthy(good), good
+
+
+def test_modules_existing_in_a_subpackage_are_excluded(gen, tmp_path, monkeypatch):
+    """anchor_refill.py lives at zo_sentinel/anchor_refill.py. The miner's
+    _disk_names() only scans the TOP level, so the floor 'discovered' a module
+    that had existed for months. _existing_anywhere() must recurse."""
+    sentinel = gen.SENTINEL_DIR
+    pkg = sentinel / "zo_sentinel"
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "anchor_refill.py").write_text("# exists", encoding="utf-8")
+
+    names = gen._existing_anywhere()
+    assert "anchor_refill.py" in names and "anchor_refill" in names
+
+
+def test_floor_seeds_nothing_rather_than_seeding_junk(gen, monkeypatch):
+    """If every candidate is junk, seed NOTHING and say so loudly. An empty
+    queue is bad; a queue full of hollow builds is worse."""
+    monkeypatch.setattr(gen, "_is_seedworthy", lambda f: False)
+    assert gen._starvation_floor() == 0
+    assert not list(gen.PROPOSED_DIR.glob("floor_*.json"))

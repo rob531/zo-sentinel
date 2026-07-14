@@ -9,6 +9,8 @@ artifacts before they ever reach a PR, and carries goose ladder-tier provenance.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import random
 import types
 
@@ -39,6 +41,14 @@ def _pub(store, enabled, content="print('ok')\n", gitops=None, **kw):
     # pr_spacing_sec=0 so tests never sleep; daily_cap high unless overridden.
     kw.setdefault("daily_cap", 50)
     kw.setdefault("pr_spacing_sec", 0)
+    # HERMETIC: the publisher parks a directive when it refuses a hollow build,
+    # which writes sentinels under home/ and the durable quarantine store. Without
+    # a sandbox home those writes land in the REAL /home/workspace/zo_sentinel --
+    # a test run would park a live directive. Give every test its own throwaway.
+    _sandbox = tempfile.mkdtemp(prefix="pub-test-")
+    kw.setdefault("home", _sandbox)
+    kw.setdefault("quarantine_dir", os.path.join(_sandbox, "quarantine"))
+    os.makedirs(os.path.join(_sandbox, "directives"), exist_ok=True)
     return Publisher(
         store,
         gitops=gitops or FakeGitOps(),

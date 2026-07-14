@@ -22,6 +22,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
     resolve_directive_id, tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
+    park_directive,
     output_confirmed, failed_quarantined)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
 from zo_sentinel.build_lessons import (  # noqa: E402
@@ -1184,18 +1185,10 @@ def _mark_directive_failed(directive, directive_id, reason):
         })
     except Exception as _le:
         log(f"[lesson] emit failed for {directive_id}: {_le}")
-    _failed_payload = json.dumps({"directive_id": directive_id, "reason": reason,
-                                  "failed_at": get_utc_now()})
-    try:
-        Path(f"{DIRECTIVES_PATH}/{directive_id}.failed.json").write_text(_failed_payload)
-    except Exception as e:
-        log(f"Failed to write .failed sentinel for {directive_id}: {e}")
-    # Durable copy outside the git tree -> survives `git clean` on respawn.
-    try:
-        DURABLE_QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
-        (DURABLE_QUARANTINE_DIR / f"{directive_id}.failed.json").write_text(_failed_payload)
-    except Exception as e:
-        log(f"durable quarantine write failed for {directive_id}: {e}")
+    # Shared park primitive: in-repo + durable sentinel, and clears a stale .done.
+    if not park_directive(directive_id, reason, get_utc_now(),
+                          DIRECTIVES_PATH, DURABLE_QUARANTINE_DIR):
+        log(f"Failed to write .failed sentinel for {directive_id}")
     try:
         ws_write("mesh_events", {
             "agent_id": "goose_tier1",

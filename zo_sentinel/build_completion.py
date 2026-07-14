@@ -60,6 +60,57 @@ def failed_quarantined(directive_id, *dirs) -> bool:
     return False
 
 
+def park_directive(directive_id: str, reason: str, when: str,
+                   directives_dir, durable_dir=None) -> bool:
+    """Park a directive as FAILED: write <id>.failed.json, and clear any stale
+    <id>.done.json that is claiming a success which never landed.
+
+    The ONE way a directive gets parked. Two callers with two different reasons
+    reach it: goose_runner after MAX_GHOST_ATTEMPTS, and the publisher when it
+    refuses to open a PR for a hollow build. Both need the SAME two properties,
+    which is why this is a shared primitive rather than a second inline copy:
+
+      * durable -- the sentinel is written to `directives/` AND to a store
+        OUTSIDE the git tree, because `git clean` on daemon respawn/refresh
+        wipes untracked sentinels and un-parks the directive (the re-flush
+        treadmill, council 2026-06-20).
+      * honest -- a stale `.done` is REMOVED. done != merged: a hollow build
+        stamps .done when the PR opens, so when that PR is refused the sentinel
+        is left asserting a success that does not exist, and is_goose_eligible
+        skips the directive forever. Any same-name reseed is then silently
+        swallowed -- which is why a rejected build has to come back renamed _v2.
+
+    We park rather than DELETE the sentinel outright: deleting re-admits the
+    directive to the builder, and a build that just produced a hollow module
+    will most likely produce another one -- "clearing first just re-ghosts them"
+    (2026-06-13). `.failed` is deliberately never self-healed. Parking makes the
+    failure loud and leaves the retry a deliberate act (clear the sentinel, or
+    reseed under a new name), instead of an automatic treadmill.
+
+    Never raises: parking is a bookkeeping step and must never break the caller.
+    Returns True if a durable or in-repo sentinel was written.
+    """
+    payload = json.dumps({"directive_id": directive_id, "reason": reason,
+                          "failed_at": when})
+    wrote = False
+    for d in (directives_dir, durable_dir):
+        if d is None:
+            continue
+        try:
+            Path(d).mkdir(parents=True, exist_ok=True)
+            (Path(d) / f"{directive_id}.failed.json").write_text(payload, encoding="utf-8")
+            wrote = True
+        except Exception:
+            continue
+    try:
+        stale = Path(directives_dir) / f"{directive_id}.done.json"
+        if stale.exists():
+            stale.unlink()
+    except Exception:
+        pass
+    return wrote
+
+
 def output_file_is_sane(output_file) -> Tuple[bool, str]:
     """Reject an obviously-malformed declared output filename that can never be
     produced and would ghost-loop forever -- specifically a DOUBLED LEADING

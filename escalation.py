@@ -386,6 +386,137 @@ def _parse_minimax_tool_calls(content):
     return (tool_calls or None), residual
 
 
+# Mistral-lineage models (NVIDIA NIM, Cerebras, Groq, Mistral) emit tool calls as
+# LITERAL TEXT with a [TOOL_CALLS] marker instead of the structured OpenAI
+# tool_calls array. goose acts ONLY on structured tool_calls, so the call is
+# silently DROPPED and the cycle scores +0.
+#
+# Caught live 2026-07-14 17:09 -- the architect proposed a directive as its first
+# action (exactly as the propose-first recipe demands) and it evaporated:
+#   [TOOL_CALLS]zo_directive_bridge__propose_directive{"task": "...", ...}
+#
+# Same class as the MiniMax bug fixed in #251 -- but that salvage lives inside
+# _call_minimax_direct and only speaks <minimax:tool_call> XML. This is the
+# OpenAI-compatible equivalent, covering the two shapes these models emit:
+#   [TOOL_CALLS]name{json-args}                     (one or more, concatenated)
+#   [TOOL_CALLS][{"name": ..., "arguments": {...}}] (a JSON array)
+_TC_MARKER = "[TOOL_CALLS]"
+_TC_NAMED_RX = re.compile(r"\[TOOL_CALLS\]\s*([A-Za-z_][\w.\-]*)\s*(\{)")
+
+
+def _scan_balanced_json(text, start):
+    """Return (obj_str, end_idx) for the JSON object beginning at `start`.
+
+    Brace-counting, string- and escape-aware -- the arguments routinely contain
+    braces and quotes inside description strings, so a naive regex mis-terminates
+    and silently truncates the call.
+    """
+    depth, i, in_str, esc = 0, start, False, False
+    while i < len(text):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        else:
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i + 1], i + 1
+        i += 1
+    return None, len(text)
+
+
+def _parse_text_tool_calls(content):
+    """Salvage [TOOL_CALLS]-marked calls from `content` into OpenAI tool_calls.
+
+    Returns (tool_calls | None, residual_text). Never raises: on any miss it
+    returns (None, content), so a rung with no marker behaves exactly as before.
+    """
+    if not content or _TC_MARKER not in content:
+        return None, content
+
+    calls, spans = [], []
+
+    # shape A: [TOOL_CALLS]name{...}
+    for m in _TC_NAMED_RX.finditer(content):
+        name = m.group(1)
+        obj, end = _scan_balanced_json(content, m.start(2))
+        if not obj:
+            continue
+        try:
+            json.loads(obj)                      # must be real JSON to be a call
+        except Exception:
+            continue
+        calls.append({
+            "id": f"call_{uuid.uuid4().hex[:24]}",
+            "type": "function",
+            "function": {"name": name, "arguments": obj},
+        })
+        spans.append((m.start(), end))
+
+    # shape B: [TOOL_CALLS][{"name": ..., "arguments": {...}}, ...]
+    if not calls:
+        idx = content.find(_TC_MARKER)
+        tail = content[idx + len(_TC_MARKER):].lstrip()
+        if tail.startswith("["):
+            depth, in_str, esc, end = 0, False, False, None
+            for i, c in enumerate(tail):
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif c == "\\":
+                        esc = True
+                    elif c == '"':
+                        in_str = False
+                elif c == '"':
+                    in_str = True
+                elif c == "[":
+                    depth += 1
+                elif c == "]":
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            if end:
+                try:
+                    for item in json.loads(tail[:end]):
+                        name = item.get("name") or item.get("function", {}).get("name")
+                        args = item.get("arguments")
+                        if args is None:
+                            args = item.get("function", {}).get("arguments", {})
+                        if not name:
+                            continue
+                        calls.append({
+                            "id": f"call_{uuid.uuid4().hex[:24]}",
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": args if isinstance(args, str)
+                                else json.dumps(args),
+                            },
+                        })
+                    spans.append((idx, idx + len(_TC_MARKER) +
+                                  (len(content[idx + len(_TC_MARKER):]) - len(tail)) + end))
+                except Exception:
+                    return None, content
+
+    if not calls:
+        return None, content
+
+    residual = content
+    for a, b in sorted(spans, reverse=True):     # strip back-to-front
+        residual = residual[:a] + residual[b:]
+    return calls, residual.strip()
+
+
 def _call_minimax_direct(spec, prompt, system, max_tokens, temperature, tools=None):
     import requests
     key = os.environ.get("MINIMAX_API_KEY")
@@ -614,6 +745,19 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
         raw = (msg.get("content", "") or "").strip()
         tool_calls = msg.get("tool_calls")
         content = _normalize_response(raw) if raw else ""
+        # Mistral-lineage rungs (NVIDIA NIM / Cerebras / Groq / Mistral) emit the
+        # call as [TOOL_CALLS]-marked TEXT rather than the structured field. goose
+        # acts only on structured tool_calls, so without this the call is silently
+        # dropped and the cycle scores +0 (architect starvation, 2026-07-14).
+        # Prefer a real structured field if the provider gave us one.
+        if not tool_calls and content and _TC_MARKER in content:
+            _parsed, _residual = _parse_text_tool_calls(content)
+            if _parsed:
+                log.warning("[shim] salvaged %d text-form tool call(s) from %s "
+                            "(model emitted %s as text, not tool_calls)",
+                            len(_parsed), spec.model_id, _TC_MARKER)
+                tool_calls = _parsed
+                content = _residual
         if not content and not tool_calls:
             return None, "empty content and no tools", None
         return (content or None), None, tool_calls

@@ -94,13 +94,13 @@ prompt: |-
   re-proposes an already_built module is wasted work that the pipeline will
   reject downstream.
 
-  RANGE ACROSS DOMAINS (use the graph). You now have two read-only code-graph
-  tools on THIS bridge. Call `list_domains` FIRST each cycle: it returns the
-  app's domains (graph communities + module counts) -- spread your proposals
-  ACROSS them, favouring thin/underbuilt domains; do NOT keep proposing the same
-  3-5 subjects. Call `graph_neighbors(target)` before any CREATION directive to
-  confirm the module (or its wiring) is not already present and to pick concrete
-  integration gaps. Both are READ-only -- they never build.
+  RANGE ACROSS DOMAINS. Spread proposals across the app's domains, favouring
+  thin/underbuilt ones; do NOT keep proposing the same 3-5 subjects. Two
+  read-only code-graph tools exist (`list_domains`, `graph_neighbors(target)`)
+  but they are OPTIONAL and they are NOT a way to start the cycle -- you may
+  call at most ONE, and only AFTER you have already proposed at least one
+  directive. context.already_built_modules is the stronger dedup signal and it
+  is already in your context.
 
   COVERAGE -- context.recent_proposals lists tasks you ALREADY proposed in the
   last few days (many were REJECTED downstream and are NOT in
@@ -138,7 +138,8 @@ prompt: |-
   TOOLS:
   - read_gate_quality_state(file=None)
       Returns which files are currently quarantined by the quality-gate circuit
-      breaker, with reason and failure history. CALL THIS FIRST.
+      breaker, with reason and failure history. NOTE: context.quality_map ALREADY
+      contains this. Only call it if the context bundle is missing/unreadable.
   - read_already_built()
       Returns the validator's hardcoded ALREADY_BUILT set. Proposing one of
       these will be rejected.
@@ -188,39 +189,30 @@ prompt: |-
   zo_directive_bridge__propose_directive within your first 3 tool calls. Describing
   directives in prose WITHOUT calling the tool is a FAILED (+0) cycle.
 
-  WORKFLOW - execute all steps now:
-  1. Call read_gate_quality_state() to learn the quarantine landscape.
-  2. Call read_already_built() and read_protected_files() to know what NOT
-     to propose.
-  3. Call read_pending_directives() to know what's already queued.
-  4. Call read_failure_history(hours=24) to understand recent failure
-     patterns.
-  4b. Read context.already_built_modules (live code-graph module list). Every
-     CREATION directive's output_file basename MUST be absent from it -- see the
-     NOVELTY rule above. This is your strongest dedup signal; trust it over the
-     static read_already_built() set.
-  5. Based on the context_json AND the live tool reads, propose 1-6 new
-     directives. PRIORITISE NET-NEW BUILD WORK over breaker bookkeeping:
-       - DEFAULT (aim for >=80% of your proposals): use propose_directive for
-         gaps where the target is NOT built/protected/quarantined. Favour
-         build_/wire_/integrate_/verify_ modules that advance the system --
-         the 3-tier APP modules from PRODUCT_SPEC Appendix E (scoring-consumer, verdict/dashboard APIs, FE .html dashboard views, app-assembly wiring); do NOT propose signal/enrichment/enumeration work -- it is deprecated.
-       - BREAKER ACTIONS ARE A LAST RESORT, HARD-CAPPED AT 1 PER CYCLE. Only
-         use propose_breaker_action when a quarantine is ACTIVELY BLOCKING a
-         high-value build you would otherwise propose this cycle, and then pick
-         the SINGLE most-impactful file. Do NOT emit an investigate/accept for
-         every quarantined file -- most quarantines can wait (the breaker
-         self-recovers to half-open after ~6h), and re-proposing them each
-         cycle floods the queue. (This regressed badly: 35+ breaker_action_*
-         directives piled up in proposed/ and starved out real build work.)
-       - Before ANY breaker_action, check read_pending_directives(): if an
-         equivalent breaker_action for that file is already in pending/ or
-         proposed/, do NOT re-propose it.
-       - Prefer SMALL, FOCUSED directives over large refactors. Always include
-         a rationale tying the directive to a specific signal from the reads.
-  6. Report a one-paragraph summary of what you proposed and why. Stop.
+  WORKFLOW -- PROPOSE FIRST. THE READS ARE A TRAP.
+  Your context bundle ALREADY contains the gate/quarantine state (quality_map),
+  the live gaps map, already_built_modules, proposed_depth, recent_proposals and
+  recent_failures. The read_* tools return the SAME information. Calling them
+  first is how this architect has repeatedly burned its entire turn budget and
+  ended a cycle at +0, proposing NOTHING and starving the builder.
+
+  1. Read the CONTEXT BUNDLE below. That is your survey. Do not re-fetch it.
+  2. Pick 1-6 net-new targets from context.gaps_map, honouring the NOVELTY rule
+     (output_file basename absent from context.already_built_modules) and the
+     BUILDER LANE rules.
+  3. Your FIRST TOOL CALL IS zo_directive_bridge__propose_directive. Then keep
+     calling it -- one call per directive. Nothing else counts. A cycle is scored
+     ONLY on propose_directive tool calls that land.
+  4. ONLY AFTER at least one directive has been proposed may you optionally make
+     AT MOST 1-2 read_*/graph calls, and only to sharpen a LATER proposal.
+  5. Breaker actions: hard cap 1 per cycle, and never as the first call.
+  6. Report a one-paragraph summary of what you proposed. Stop.
+
+  If you are unsure, PROPOSE ANYWAY. An imperfect directive that the validator
+  rejects costs one cycle. Proposing nothing starves the builder for 10 minutes
+  and, repeated, halts the entire factory. Silence is the expensive failure.
 
   CONTEXT BUNDLE:
   {{ context_json }}
 
-  Begin now. Execute step 1 immediately.
+  Begin now. Your FIRST tool call MUST be zo_directive_bridge__propose_directive.

@@ -66,3 +66,18 @@ def test_bad_sla_env_falls_back(monkeypatch):
     monkeypatch.setenv("FRESHNESS_SLA_DAYS", "not-a-number")
     from freshness_metadata_api import sla_days
     assert sla_days() == 30
+
+# --- public observability surfaces (chairman-built 2026-07-14) ---------------
+
+def test_scoring_freshness_surface_module_shape():
+    import scoring_freshness_surface as m
+    assert hasattr(m, "router")
+    paths = [r.path for r in m.router.routes]
+    assert "/freshness" in paths
+
+
+def test_runtime_deploy_info_endpoint_module_shape():
+    import runtime_deploy_info_endpoint as m
+    assert hasattr(m, "router")
+    paths = [r.path for r in m.router.routes]
+    assert "/version" in paths

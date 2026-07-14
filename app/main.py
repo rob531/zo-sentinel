@@ -44,6 +44,10 @@ _OPTIONAL_ROUTERS = [
     # cadence write path (CofC ruling 2026-07-08: NOT daemons; replaces
     # perspective_snapshot_daemon + ask_corpus_drift_guard candidates)
     "cadence_admin_api",
+    # public observability surfaces (chairman-built 2026-07-14): /freshness
+    # unblinds pipeline-watch CHECK B (moat freshness), /version unblinds
+    # CHECK C (deploy drift). Aggregate/identity data only, nothing keyed.
+    "scoring_freshness_surface", "runtime_deploy_info_endpoint",
 ]
 
 

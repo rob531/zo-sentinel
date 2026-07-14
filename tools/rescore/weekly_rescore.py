@@ -67,7 +67,10 @@ AXES = ["overall_risk", "auth_strength", "capability_breadth", "data_sensitivity
         "network_egress", "maintainer_trust", "exploit_surface"]
 
 SFT_REPO = "rob531/zomesh-sentinel-sft"
-ADAPTER_SOURCE_BRANCH = "score-job-20260625-104150"     # promoted adapter lives here
+# Promoted adapter source: local dir first (the score-job-* git branches are
+# periodically cleaned; the 6/25 one vanished by 7/14). Sha-pinned either way.
+ADAPTER_LOCAL_DIR = Path(os.environ.get("RESCORE_ADAPTER_DIR",
+                                        r"D:\zo\runs\v3.0_40974559_FULL\final"))
 FLY_PG_APP = "mcplookup-db"
 PROXY_PORT = 15432
 DSN_FILE = Path(os.environ.get("RESCORE_DSN_FILE", r"D:\zo\runs\rescore_20260703\_dsn.txt"))
@@ -184,7 +187,8 @@ def pg_conn():
     if not m:
         raise RuntimeError("DSN file unparseable")
     return psycopg2.connect(host="127.0.0.1", port=PROXY_PORT, dbname=m.group(3),
-                            user=m.group(1), password=m.group(2), connect_timeout=15)
+                            user=m.group(1), password=m.group(2), connect_timeout=15,
+                            options="-c statement_timeout=600000")
 
 
 def freshness() -> dict:
@@ -218,70 +222,86 @@ def ph_preflight(run: Run, args) -> None:
     log(f"preflight OK: scored_before={scored_before} newest={base.get('newest_scored_at')}")
 
 
-EXPORT_SQL_NEW = f"""
-SELECT DISTINCT ON (COALESCE(url,server_id)) server_id, name,
-       COALESCE(registry_source,'remote') src, COALESCE(url,'') url,
-       replace(replace(description,chr(10),' '),chr(13),' ') descr
-FROM mcp_server_registry r
-WHERE (verdict IS NULL OR verdict IN ('unreviewed','unknown'))
-  AND description IS NOT NULL AND length(description)>20
-  AND NOT EXISTS (SELECT 1 FROM mcp_llm_axis_scores s
-                  WHERE s.server_id=r.server_id AND s.model_version='{MODEL_VERSION}')
-  AND COALESCE(url,server_id) NOT IN
-      (SELECT COALESCE(r2.url,r2.server_id)
-       FROM mcp_llm_axis_scores s2 JOIN mcp_server_registry r2 ON r2.server_id=s2.server_id
-       WHERE s2.model_version='{MODEL_VERSION}')
-ORDER BY COALESCE(url,server_id), server_id
+# Export strategy (2026-07-14, v2): the 1GB Fly PG spills on server-side
+# anti-joins/GROUP BYs (both the 7/3 NOT IN form and a materialized-CTE
+# NOT EXISTS form ran >7 min). So we stream two CHEAP scans and do the
+# set logic client-side -- surgical on the DB, deterministic in Python.
+SQL_REGISTRY = """
+SELECT server_id, name, COALESCE(registry_source,'remote') src, COALESCE(url,'') url,
+       replace(replace(description,chr(10),' '),chr(13),' ') descr,
+       (verdict IS NULL OR verdict IN ('unreviewed','unknown')) scorable
+FROM mcp_server_registry
+WHERE description IS NOT NULL AND length(description)>20
 """
-
-EXPORT_SQL_REFRESH = f"""
-WITH scored AS (
-  SELECT server_id, min(scored_at) scored_at FROM mcp_llm_axis_scores
-  WHERE model_version='{MODEL_VERSION}' GROUP BY server_id
-)
-SELECT DISTINCT ON (COALESCE(r.url,r.server_id)) r.server_id, r.name,
-       COALESCE(r.registry_source,'remote') src, COALESCE(r.url,'') url,
-       replace(replace(r.description,chr(10),' '),chr(13),' ') descr,
-       sc.scored_at
-FROM mcp_server_registry r JOIN scored sc ON sc.server_id=r.server_id
-WHERE r.description IS NOT NULL AND length(r.description)>20
-ORDER BY COALESCE(r.url,r.server_id), sc.scored_at ASC
+# one row per scored server: every axis row of a server shares scored_at,
+# so overall_risk alone gives (server_id, scored_at) without a GROUP BY.
+SQL_SCORED = f"""
+SELECT server_id, scored_at FROM mcp_llm_axis_scores
+WHERE model_version='{MODEL_VERSION}' AND axis_name='overall_risk'
 """
 
 
 def ph_export(run: Run, args) -> None:
     if run.done("export"):
         return
-    conn = pg_conn(); cur = conn.cursor()
-    rows = []
-    cur.execute(EXPORT_SQL_NEW)
-    new_rows = cur.fetchall()
-    rows.extend((r[0], r[1], r[2], r[3], r[4]) for r in new_rows)
-    if run.state["mode"] == "full":
-        cur.execute(EXPORT_SQL_REFRESH)
-        rows.extend((r[0], r[1], r[2], r[3], r[4]) for r in cur.fetchall())
-    else:
-        cur.execute(EXPORT_SQL_REFRESH)
-        ref = cur.fetchall()
-        ref.sort(key=lambda r: r[5] or datetime.min)      # oldest scored first
-        rows.extend((r[0], r[1], r[2], r[3], r[4]) for r in ref[:args.refresh_cap])
+    conn = pg_conn()
+    # small fetch batches + per-batch progress: the fly proxy tunnel stalls on
+    # multi-MB bursts (observed 2026-07-14: server idle-in-txn, client starved).
+    cur = conn.cursor("reg_stream")
+    cur.itersize = 1000
+    cur.execute(SQL_REGISTRY)
+    reg = []
+    t0 = time.time()
+    for row in cur:
+        reg.append(row)
+        if len(reg) % 10000 == 0:
+            log(f"export: registry stream {len(reg)} rows "
+                f"({len(reg)/(time.time()-t0):.0f} rows/s)")
+    cur.close()
+    cur2 = conn.cursor()
+    cur2.execute(SQL_SCORED)
+    scored_at = dict(cur2.fetchall())         # sid -> scored_at (66k)
     conn.close()
-    # de-dup on server_id (a server can appear in both lanes)
-    seen, uniq = set(), []
-    for r in rows:
-        if r[0] in seen:
-            continue
-        seen.add(r[0]); uniq.append(r)
+    log(f"export: streamed registry={len(reg)} scored={len(scored_at)}")
+
+    def ukey(sid, url):
+        return url or sid
+
+    # distinct-URL representative selection (replicates DISTINCT ON semantics:
+    # order by (url_key, server_id) and keep the first) -- but prefer an
+    # already-scored representative so the refresh lane refreshes in place.
+    reg.sort(key=lambda r: (ukey(r[0], r[3]), r[0]))
+    reps = {}
+    for r in reg:
+        k = ukey(r[0], r[3])
+        cur_rep = reps.get(k)
+        if cur_rep is None:
+            reps[k] = r
+        elif cur_rep[0] not in scored_at and r[0] in scored_at:
+            reps[k] = r                        # scored rep wins for refresh
+    new_rows, refresh_rows = [], []
+    for k, r in reps.items():
+        if r[0] in scored_at:
+            refresh_rows.append(r)
+        elif r[5]:                             # scorable (verdict unreviewed/unknown)
+            new_rows.append(r)
+    refresh_rows.sort(key=lambda r: scored_at[r[0]])       # oldest scored first
+    if run.state["mode"] != "full":
+        refresh_rows = refresh_rows[:args.refresh_cap]
+    uniq = new_rows + refresh_rows
+
     inp = run.dir / "inputs.jsonl.gz"
     with gzip.open(inp, "wt", encoding="utf-8") as f:
-        for sid, name, src, url, descr in uniq:
+        for sid, name, src, url, descr, _sc in uniq:
             hdr = (f"MCP SERVER UNDER REVIEW:\n  server_id: {sid}\n  name:      {name}\n"
                    f"  source:    {src}\n  url:       {url}\n  description: {descr}\n\n")
             f.write(json.dumps({"messages": [{"role": "system", "content": SYS},
                                              {"role": "user", "content": hdr + SIG}],
                                 "metadata": {"server_id": sid}}) + "\n")
-    run.mark("export", exported=len(uniq), new_servers=len(new_rows))
-    log(f"export OK: {len(uniq)} inputs ({len(new_rows)} never-scored)")
+    run.mark("export", exported=len(uniq), new_servers=len(new_rows),
+             refresh_servers=len(refresh_rows))
+    log(f"export OK: {len(uniq)} inputs ({len(new_rows)} never-scored + "
+        f"{len(refresh_rows)} refresh)")
     if len(uniq) == 0:
         run.mark("bundle", "skipped"); run.mark("fire", "skipped")
         run.mark("watch", "skipped"); run.mark("collect", "skipped")
@@ -297,19 +317,24 @@ def ph_bundle(run: Run, args) -> None:
     ts = run.state["run_id"]
     score_branch = f"score-job-{ts}"
     repo_url = f"https://x-access-token:{pat}@github.com/{SFT_REPO}.git"
-    work = run.dir / "sft"
-    if work.exists():
-        shutil.rmtree(work, ignore_errors=True)
+    # unique dir per attempt: Windows file locks make rmtree unreliable, and a
+    # half-deleted dir fails `git clone` with rc=128.
+    work = run.dir / f"sft_{int(time.time())}"
     def git(*a, **kw):
         r = subprocess.run(["git", *a], cwd=kw.pop("cwd", work), capture_output=True,
                            text=True, timeout=600)
         if r.returncode != 0:
             raise RuntimeError(f"git {a[0]} failed: {r.stderr[-300:]}")
         return r
-    subprocess.run(["git", "clone", "--depth", "1", repo_url, str(work)],
-                   capture_output=True, text=True, timeout=900, check=True)
-    git("fetch", "--depth", "1", "origin", ADAPTER_SOURCE_BRANCH)
-    git("checkout", "FETCH_HEAD", "--", "score_transfer/adapter")
+    r0 = subprocess.run(["git", "clone", "--depth", "1", repo_url, str(work)],
+                        capture_output=True, text=True, timeout=900)
+    if r0.returncode != 0:
+        raise RuntimeError("git clone failed: " +
+                           r0.stderr[-300:].replace(pat, "***"))
+    (work / "score_transfer/adapter").mkdir(parents=True, exist_ok=True)
+    for p in ADAPTER_LOCAL_DIR.iterdir():
+        if p.is_file():
+            shutil.copy(p, work / "score_transfer/adapter" / p.name)
     # I5: adapter sha pin
     shas = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
             for p in (work / "score_transfer/adapter").iterdir() if p.is_file()}

@@ -84,16 +84,23 @@ def main():
             from _tier_stage t where r.server_id = t.server_id
         """, (now,))
         n_direct = cur.rowcount
+
+        # Retro-revert: any row still wearing a tier it never earned (no direct
+        # axis scores) goes back to 'unassessed'. 'unassessed' -- NOT NULL --
+        # because it is already the discovery-time default and every consumer
+        # handles it. This un-asserts the 14,015 fabricated tiers.
         cur.execute("""
             update mcp_server_registry r
-            set risk_tier = x.tier, last_assessed = %s
-            from (select r2.url, t.tier
-                  from mcp_server_registry r2 join _tier_stage t on t.server_id = r2.server_id) x
-            where r.url = x.url and (r.risk_tier is null or r.risk_tier = 'unassessed')
-        """, (now,))
-        n_prop = cur.rowcount
+            set risk_tier = 'unassessed'
+            where (r.risk_tier is not null and r.risk_tier <> 'unassessed')
+              and not exists (
+                select 1 from mcp_llm_axis_scores s where s.server_id = r.server_id
+              )
+        """)
+        n_unasserted = cur.rowcount
         conn.commit()
-        print(f"[backfill] APPLIED direct={n_direct} url-propagated={n_prop}")
+        print(f"[backfill] APPLIED direct={n_direct} un-asserted={n_unasserted} "
+              f"(url-propagation DELETED -- CofC 2026-07-14)")
     else:
         cur.execute("""
             select count(*) from mcp_server_registry

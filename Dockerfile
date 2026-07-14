@@ -9,7 +9,8 @@ COPY verdict_breakdown_api.py server_compare_api.py trust_gating_override.py sco
 # v1.1 Perspectives + v2 Ask slice (feature routers + root-served views)
 COPY facet_enum_service.py perspective_model.py perspective_query_api.py perspective_admin_api.py perspective_diff_service.py ask_corpus_indexer.py ask_retrieval_service.py ask_answer_api.py dashboard_summary_api.py vuln_identity.py vuln_osv_ingestor.py vuln_registry_linker.py vuln_exposure_api.py config_scan_api.py otx_threat_refs.py vuln_pkg_enricher.py \
      freshness_metadata_api.py vuln_facet_extension.py vuln_coverage_sla_api.py \
-     cadence_admin_api.py scoring_freshness_surface.py runtime_deploy_info_endpoint.py /srv/
+     cadence_admin_api.py scoring_freshness_surface.py runtime_deploy_info_endpoint.py \
+     freshness_gate.py freshness_policy_api.py /srv/
 # policy module (kill-switch chain) -- without this the vuln surfaces are
 # permanently fail-closed on Fly (found 2026-07-04: ZO_VULN_ENABLED had no lever)
 COPY zo_sentinel/__init__.py zo_sentinel/policy.py zo_sentinel/policy_defaults.toml /srv/zo_sentinel/

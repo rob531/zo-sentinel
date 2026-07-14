@@ -164,22 +164,40 @@ def _queued_stems() -> set:
 
 
 # A floor that seeds JUNK is worse than no floor: it manufactures hollow builds
-# and churn PRs. First live fire (2026-07-14 17:02) seeded three bad targets and
-# each exposed a distinct hole -- all three are closed below.
+# and churn PRs. Two live fires taught the same lesson twice:
+#
+#   17:02  foo_bar               <- a PLACEHOLDER in PRODUCT_SPEC.md:149
+#          anchor_refill         <- ALREADY EXISTS (zo_sentinel/anchor_refill.py)
+#          tier1_inline_enricher <- "enricher": a DEPRECATED class
+#   17:18  snake_case            <- another prose artifact, sitting in the gaps
+#                                   map right next to settings.py
+#
+# The first fix denylisted the junk. The second fire walked straight around it.
+#
+# DENYLISTING JUNK IS WHACK-A-MOLE. The gaps map is mined from PROSE, so it will
+# always contain words that merely LOOK like filenames, and you cannot enumerate
+# them in advance. So: invert it. A real build target in this codebase has a
+# recognisable SHAPE -- it is named for what it DOES. Everything else is rejected
+# by DEFAULT, including whatever the prose invents tomorrow.
 
-# 1. Spec prose contains PLACEHOLDER names (`foo_bar` came from PRODUCT_SPEC.md
-#    line 149). They are examples, not build targets.
-_FLOOR_JUNK_NAMES = {
-    "foo_bar", "foo", "bar", "baz", "example", "sample", "template",
-    "module", "mymodule", "my_module", "some_module", "thing", "widget",
-    "placeholder", "todo", "untitled", "main", "setup", "conftest",
-}
+# What a real module in this repo is called: <domain>_<role>.py
+_FLOOR_ROLE_SUFFIXES = (
+    "_api", "_service", "_daemon", "_loader", "_resolver", "_ingestor",
+    "_ingester", "_consumer", "_monitor", "_linker", "_indexer", "_watcher",
+    "_publisher", "_exporter", "_importer", "_collector", "_adapter",
+    "_bridge", "_gate", "_guard", "_worker", "_job", "_feed", "_scorer",
+    "_refresher", "_validator", "_analyzer", "_analyser", "_reporter",
+    "_dashboard", "_view", "_report", "_sync", "_router", "_routers",
+    "_rollup", "_summary", "_audit", "_probe", "_runner",
+)
 
-# 2. DEPRECATED classes: the SFT student model OWNS risk scoring now, so
-#    hand-built signal/enrichment modules are dead work. The recipe already
-#    forbids the architect from proposing these -- the floor must obey the same
-#    rule, or it becomes a back door around the architect's own guardrails.
-#    (`tier1_inline_enricher` walked straight through it.)
+# Task-shaped prefixes (edit/wire work) are also legitimate build targets.
+_FLOOR_TASK_PREFIXES = ("wire_", "rewire_", "integrate_", "verify_", "build_")
+
+# DEPRECATED classes: the SFT student model OWNS risk scoring now, so hand-built
+# signal/enrichment modules are dead work. The recipe already forbids the
+# ARCHITECT from proposing these -- the floor must obey the SAME rule, or it
+# becomes a back door around the architect's own guardrails.
 _FLOOR_DEPRECATED_SUBSTR = (
     "enrich", "signal_", "_signal", "enumerat", "fingerprint",
     "trust_synthesiser", "signal_analyser",
@@ -210,17 +228,22 @@ def _existing_anywhere() -> set:
 
 
 def _is_seedworthy(fname: str) -> bool:
-    """Would a competent engineer put this in the build queue? If not, don't."""
+    """Does this LOOK like a real build target? Reject by default.
+
+    An ALLOWLIST on shape, not a denylist on junk -- because the gaps map is
+    mined from prose and will keep inventing new junk (`foo_bar`, `snake_case`,
+    `settings`) that no denylist can anticipate.
+    """
     if not fname.endswith(".py"):
         return False            # FE/.html + the app spine are AGENT-built; they ghost
     stem = fname[:-3]
-    if stem in _FLOOR_JUNK_NAMES:
-        return False            # a placeholder in spec prose is not a build target
     if any(s in stem for s in _FLOOR_DEPRECATED_SUBSTR):
         return False            # deprecated: the student model owns scoring
-    if len(stem) < 6 or "_" not in stem:
-        return False            # real module names here are descriptive + snake_case
-    return True
+    if stem.startswith(_FLOOR_TASK_PREFIXES):
+        return True             # wire_/integrate_/verify_/build_ = real work
+    if stem.endswith(_FLOOR_ROLE_SUFFIXES):
+        return True             # <domain>_<role> = a module named for what it does
+    return False                # everything else: prose, placeholders, nouns
 
 
 def _starvation_floor() -> int:

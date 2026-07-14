@@ -16,5 +16,5 @@
     "I5 adapter sha256 pin verified before every launch"
   ],
   "ledger": "D:/zo/runs/weekly_rescore/ledger.jsonl (vast-jobs-daily-audit live-instance check is the backstop)",
-  "post_steps_automated": ["import (delete+reinsert per returned server)", "apply_risk_tier_backfill --apply", "postcheck via https://mcprisky.io/freshness"]
+  "post_steps_automated": ["import (delete+reinsert per returned server)", "apply_risk_tier_backfill --apply (direct stamp ONLY; URL propagation deleted 2026-07-14, CofC FATHER R1)", "postcheck via https://mcprisky.io/freshness"]
 }

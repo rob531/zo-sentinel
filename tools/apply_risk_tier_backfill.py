@@ -135,15 +135,23 @@ def main():
             from _tier_stage t where r.server_id = t.server_id
         """, (now,))
         n_direct = cur.rowcount
+
+        # URL-PROPAGATION DELETED (CofC ruling 2026-07-14, FATHER R1).
+        # A repo URL is not a server identity: of 11,623 duplicate-URL groups only
+        # 332 were true duplicates; 11,291 were DISTINCT SERVERS in one repo.
+        # Retro-revert anything wearing a tier it never earned.
         cur.execute("""
             update mcp_server_registry r
-            set risk_tier = x.tier, last_assessed = %s
-            from (select r2.url, t.tier
-                  from mcp_server_registry r2 join _tier_stage t on t.server_id = r2.server_id) x
-            where r.url = x.url and (r.risk_tier is null or r.risk_tier = 'unassessed')
-        """, (now,))
-        n_prop = cur.rowcount
-        print(f"[backfill] APPLIED direct={n_direct} url-propagated={n_prop}")
+            set risk_tier = 'unassessed'
+            where (r.risk_tier is not null and r.risk_tier <> 'unassessed')
+              and not exists (
+                select 1 from mcp_llm_axis_scores s where s.server_id = r.server_id
+              )
+        """)
+        n_unasserted = cur.rowcount
+        conn.commit()
+        print(f"[backfill] APPLIED direct={n_direct} un-asserted={n_unasserted} "
+              f"(url-propagation DELETED -- CofC 2026-07-14)")
     else:
         cur.execute("select count(*) from mcp_server_registry where server_id = any(%s)",
                     (list(tiers.keys()),))

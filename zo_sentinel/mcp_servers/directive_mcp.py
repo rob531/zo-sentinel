@@ -483,9 +483,12 @@ def propose_directive(
     description: str,
     output_file: str = "",
     complexity: str = "medium",
-    phase: str | None = None,
-    priority: float | None = None,
+    phase: str | int | float | None = None,
+    priority: float | int | str | None = None,
     rationale: str | None = None,
+    reads: list | str | None = None,
+    recipe: str | None = None,
+    next_directive: dict | str | None = None,
 ) -> dict:
     """Validate and write a directive JSON to directives/proposed/.
 
@@ -500,6 +503,23 @@ def propose_directive(
     # Edit-class tasks never create a <task>.py -- drop any output_file the model
     # supplied so the directive is honest and the ghost-guard trusts process
     # success (build_completion.is_edit_task does the same defensively).
+    # LLM-tolerant coercion (2026-07-15): models emit phase as a JSON int and
+    # priority as int/str, and add reads/recipe/next_directive copied from the
+    # directive JSON example in context_json. FastMCP's pydantic layer rejected
+    # those calls BEFORE this function ran ('Input should be a valid string'),
+    # goose swallowed the error into model context, the model apologised, and
+    # the cycle scored +0 -- which the daemon then MISLABELLED as 'did NOT
+    # reach propose_directive'. A bridge that rejects the caller's dialect on
+    # a representational nit is a bridge to nowhere: accept, coerce, and
+    # ignore the placebo fields (recipe is stamped server-side per the
+    # exemplar doctrine; reads is a placebo; next_directive is not honoured).
+    phase = str(phase) if phase is not None else None
+    try:
+        priority = float(priority) if priority is not None else None
+    except (TypeError, ValueError):
+        priority = None
+    del reads, recipe, next_directive   # tolerated, never trusted
+
     if _is_edit_task(task):
         output_file = ""
     d = {

@@ -195,9 +195,24 @@ async function viewDetail(id){
         <input id="dexp" placeholder="What's wrong, and what evidence supports the change?" style="width:100%">
         <div style="margin-top:.8rem"><button onclick="doDispute('${esc(v.server_id||id)}')">Submit dispute</button></div>
         <p class="note" id="dmsg">Disputes are recorded and reviewed by an admin; they don't change the published score until accepted.</p>
-      </div></div>`;
+      </div></div>
+      <div class="panel" id="vulnpanel"><h2>Known vulnerabilities</h2><p class="muted">// checking advisories…</p></div>`;
+    loadVulns(v.server_id||id);
     refreshMe();
   }catch(e){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}}
+
+async function loadVulns(id){const el=E('vulnpanel');if(!el)return;
+  try{const d=await j('/api/servers/'+encodeURIComponent(id)+'/vulns');
+    if(!d||d.status==='disabled'){el.innerHTML='<h2>Known vulnerabilities</h2><p class="muted">// INSUFFICIENT — the vulnerability-intel surface is disabled; no claims either way.</p>';return;}
+    if(!d.count){el.innerHTML='<h2>Known vulnerabilities</h2><p class="muted">// no advisories linked to this server (exact package/repo identity match · absence of a link is not a safety guarantee)</p>';return;}
+    const sc={CRITICAL:'var(--HIGH)',HIGH:'var(--HIGH)',MODERATE:'var(--MEDIUM)',MEDIUM:'var(--MEDIUM)',LOW:'var(--LOW)'};
+    el.innerHTML='<h2>Known vulnerabilities ('+d.count+')</h2>'+d.vulns.map(function(x){
+      var idh=x.source_url?('<a href="'+esc(x.source_url)+'" target="_blank" rel="noopener">'+esc(x.id)+'</a>'):esc(x.id);
+      var conf=(x.match_confidence!=null)?Math.round(x.match_confidence*100)+'%':'—';
+      return '<div class="row" style="cursor:default"><div class="nm"><b>'+idh+'</b><span>'+esc((x.summary||'').slice(0,160))+'</span>'
+        +'<span class="note" style="display:block">'+esc(x.feed||'')+' · matched '+esc(x.match_basis||'')+' = '+esc(x.match_value||'')+' (confidence '+conf+')'+(x.published_at?(' · published '+esc(x.published_at.slice(0,10))):'')+'</span></div>'
+        +'<span class="badge" style="color:'+(sc[x.severity]||'var(--mut)')+'">'+esc(x.severity||'UNKNOWN')+'</span></div>';}).join('');
+  }catch(e){el.innerHTML='<h2>Known vulnerabilities</h2><p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}}
 
 function viewSubmit(){
   E('view').innerHTML=`<h2>Submit an MCP server</h2>

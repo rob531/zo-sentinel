@@ -146,7 +146,7 @@ for LLM inference. That is infrastructure, not peer state exchange.
 
 ## 8. Naming & Idempotency Invariants
 
-- File names match import names exactly. `foo_bar.py` is imported as `foo_bar`.
+- File names match import names exactly (a module's import name is its stem).
 - NEVER prefix an output filename with `build_` or `rebuild_` (those
   belong on task names only).
 - NEVER suffix a filename with `_v3`, `_v4`, `_final`, `_new`. Use `_v2`
@@ -460,3 +460,27 @@ Phase-3 design decision).*
   "STALE" shield) when older than the freshness SLA -- the LINE enforced in code. ACCEPTANCE:
   __main__ asserts fresh sample renders tier color, stale sample renders the grey STALE shield;
   prints PASS.
+
+**PHASE 4 lanes (chairman spec extension 2026-07-15: CVE surfacing follow-through + orphan-value wiring + ops honesty. Context: the SPA CVE panel shipped in #1481; these lanes make vuln intel DISCOVERABLE, keep provenance auditable, and mount already-built value. Same wiring rules as everywhere: DB access ONLY via write_service :8772 /query + /write; provenance-first; fail-visible; deterministic joins only.):**
+
+- directive candidate: `server_cve_search_api.py` -- CVE discoverability: GET /vuln/servers_with_cves?severity=&limit=&offset= returning servers having >=1 vuln_link, joined to the registry: {server_id, name, url, risk_tier, cve_count, max_severity, latest_published_at}. SQL via requests.post('http://127.0.0.1:8772/query', ...) joining vuln_links -> vuln_advisories -> mcp_server_registry, GROUP BY server, ORDER BY cve_count DESC. Severity order CRITICAL>HIGH>MODERATE>MEDIUM>LOW>UNKNOWN. Exemplars: vuln_links_query_api.py, vuln_exposure_rollup_api.py. ACCEPTANCE: __main__ queries live, asserts every returned row has cve_count >= 1 and rows are ordered by cve_count desc; prints PASS.
+
+- directive candidate: `cve_severity_rollup_api.py` -- fleet exposure matrix: GET /vuln/severity_rollup returns counts of DISTINCT linked servers and advisories cross-tabbed severity x risk_tier from vuln_links x vuln_advisories x mcp_server_registry, plus totals and generated_at (UTC ISO). No estimates: only counted rows. Exemplar: vuln_exposure_rollup_api.py. ACCEPTANCE: __main__ asserts totals equal the sum of cells and the distinct-server total <= count(distinct server_id) in vuln_links; prints PASS.
+
+- directive candidate: `cve_facet_compile_service.py` -- deterministic facet membership compiler: servers_with_known_cve() -> set[str] and servers_with_curated_threat_ref() -> set[str] reading vuln_links and threat_intel_refs (is_aggregator=False only) via :8772/query; plus compile_filter(filters: dict, ids: set) applying a has_known_cve true/false intersection. Pure read-only. Exemplar: vuln_facet_extension.py (same membership semantics; this gives the perspectives compile path a deterministic set to intersect). ACCEPTANCE: __main__ asserts every id from servers_with_known_cve() has >=1 vuln_link row and the false-filter returns the complement within a sample; prints PASS.
+
+- directive candidate: `vuln_link_provenance_audit.py` -- THE LINE for vuln claims: audit every vuln_links row for (a) advisory_id present in vuln_advisories, (b) match_confidence in [0,1], (c) match_basis in ('package_exact','repo_exact','name_version_exact','package_alias'), (d) the advisory has a non-empty source_url. Emits {checked, ok, violations:[{id, reason}]} and writes ONE summary row to audit_log via :8772/write (action='vuln_link_provenance_audit', meta=summary). ACCEPTANCE: __main__ runs live, asserts checked == count(vuln_links); prints PASS.
+
+- directive candidate: `advisory_freshness_gate_probe.py` -- fail-visible feed freshness: for each feed in ('osv','ghsa','nvd') compute max(fetched_at) from vuln_advisories and age vs SLA_DAYS=7 (env ZO_VULN_FEED_SLA_DAYS); output {feed, newest, age_days, status fresh|STALE|EMPTY}; nonzero exit when any feed is STALE/EMPTY so cron surfaces it. NO default-fresh: unknown => STALE (an uncalled gate is not a gate). Exemplar: freshness_coverage_api.py. ACCEPTANCE: __main__ feeds a 30-day-old timestamp through the age check and asserts STALE, then live-runs and prints per-feed ages; prints PASS.
+
+- directive candidate: `orphan_router_wiring_report.py` -- the 282-orphans map: scan the repo root for modules defining APIRouter(, parse app/main.py's ROUTER_MODULES mount list, and report {module, mounted: bool, tables_touched: [...]} ranked with unmounted modules touching high-value tables (vuln_*, threat_intel_refs, mcp_llm_axis_scores, mcp_score_disputes) first. Pure static TEXT scan (never import scanned modules), stdlib only. Output JSON to stdout AND /home/workspace/shared/outputs/orphan_router_report.json. ACCEPTANCE: __main__ asserts vuln_exposure_api reports mounted=True and at least one unmounted module is found, prints the top 10; prints PASS.
+
+- directive candidate: `wire_high_value_routers_into_main.py` -- one-shot idempotent wiring script (NEW name; the earlier wire_orphan_value_routers directive ghosted with zero diff): read orphan_router_report.json (or compute inline), take the top N=5 unmounted router modules, and extend the ROUTER_MODULES list in app/main.py by an exact-anchor insert (write a .bak first; never regex-rewrite unrelated lines). Refuses (exit 2, clear message) when the anchor is not found EXACTLY once. Skips modules already present (idempotent). ACCEPTANCE: __main__ --dry-run prints the modules it WOULD mount and asserts the anchor is found exactly once; prints PASS.
+
+- directive candidate: `dispute_backlog_summary_api.py` -- GET /disputes/backlog_summary: mcp_score_disputes grouped by status with oldest-pending age_days, counts by reason_category, and the last resolved_at -- surfaces a stuck review queue instead of hiding it. Exemplar: dashboard_summary_api.py. ACCEPTANCE: __main__ asserts group counts sum to count(*) of mcp_score_disputes; prints PASS.
+
+- directive candidate: `registry_source_freshness_report.py` -- per registry_source honesty table: count, scored (>=1 mcp_llm_axis_scores row), never_scored, stale_beyond_sla (newest scored_at older than 7d), newest_scored_at. Output markdown + JSON to stdout. Exemplar: freshness_coverage_api.py. ACCEPTANCE: __main__ asserts scored + never_scored == count for a sampled source; prints PASS.
+
+- directive candidate: `perspective_event_rollup_api.py` -- GET /perspectives/events_rollup: unseen PerspectiveEvent counts per perspective_id with newest created_at and a change_type breakdown -- the digest precursor surface (perspective_email_digest consumes it). Reads perspective_events + perspectives via :8772/query. ACCEPTANCE: __main__ asserts unseen counts are non-negative and every returned perspective_id exists in perspectives; prints PASS.
+
+- directive candidate: `cadence_job_health_api.py` -- GET /cadence/health_rollup from cadence_job_runs: per job, last status, last finished_at, overdue bool vs CADENCE_SLA_HOURS=36 (never-ran => overdue=True, honest fail-closed). Exemplar: freshness_coverage_dashboard_api.py. ACCEPTANCE: __main__ asserts a never-ran fake job evaluates overdue=True; prints PASS.

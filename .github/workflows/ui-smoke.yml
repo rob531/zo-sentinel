@@ -34,7 +34,7 @@ jobs:
       DATABASE_URL: sqlite:////tmp/smoke.db
       CLERK_PUBLISHABLE_KEY: ""
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:

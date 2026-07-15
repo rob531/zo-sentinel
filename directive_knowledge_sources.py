@@ -314,6 +314,28 @@ def _existing_filenames() -> set[str]:
     return names
 
 
+def _disk_filenames_recursive() -> set:
+    """Filenames that exist ANYWHERE in the tree (recursive).
+
+    The gaps map previously trusted mesh-memory registration only, so modules
+    that exist on disk but were never registered (zo_sentinel/anchor_refill.py)
+    showed as 'do NOT exist yet' forever -- phantom targets the architect kept
+    proposing and the bridge kept rejecting (+0 mislabelled as non-convergence).
+    Disk is truth: a file that exists is not a gap, wherever it lives."""
+    skip = {".git", "__pycache__", "node_modules", ".venv", "directives",
+            "logs", "backups"}
+    names = set()
+    try:
+        for pp in SENTINEL_DIR.rglob("*"):
+            if pp.is_file() and pp.suffix in (".py", ".html", ".md"):
+                if any(part in skip for part in pp.parts):
+                    continue
+                names.add(pp.name)
+    except Exception:
+        pass
+    return names
+
+
 def live_gaps_map() -> str:
     """Cross-reference PRODUCT_SPEC.md's candidate list against live filesystem."""
     nl = chr(10)
@@ -325,7 +347,7 @@ def live_gaps_map() -> str:
         return nl.join(parts)
 
     candidates = _spec_candidate_files(spec)
-    existing   = _existing_filenames()
+    existing   = _existing_filenames() | _disk_filenames_recursive()
 
     missing_files = [c for c in candidates if c not in existing]
     built_files   = [c for c in candidates if c in existing]

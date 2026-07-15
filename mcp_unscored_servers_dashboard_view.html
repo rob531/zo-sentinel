@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unscored Servers Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .summary-banner {
+            background-color: #2d2d2d;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .summary-text {
+            font-size: 18px;
+        }
+        .summary-count {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #2d2d2d;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+        th {
+            background-color: #333;
+            color: #fff;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #3a3a3a;
+        }
+        tr:hover {
+            background-color: #4a4a4a;
+        }
+        .action-button {
+            background-color: #0078d7;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .action-button:hover {
+            background-color: #005aa0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Unscored Servers Dashboard</h1>
+        <div class="summary-banner">
+            <div>
+                <div class="summary-text">Total Servers in Registry:</div>
+                <div class="summary-count">{{ total_registry_count }}</div>
+            </div>
+            <div>
+                <div class="summary-text">Unscored Servers:</div>
+                <div class="summary-count">{{ total_unscored_count }}</div>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Server Name</th>
+                    <th>Registry Source</th>
+                    <th>First Seen</th>
+                    <th>Age (days)</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for server in unscored_servers %}
+                <tr>
+                    <td>{{ server.name }}</td>
+                    <td>{{ server.registry_source }}</td>
+                    <td>{{ server.first_seen }}</td>
+                    <td>{{ server.age_in_days }}</td>
+                    <td><button class="action-button" onclick="window.location.href='/score-server/{{ server.server_id }}'">Score Now</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

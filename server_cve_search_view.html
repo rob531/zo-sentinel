@@ -1,0 +1,132 @@
+# server_cve_search_view.html
+# -*- coding: utf-8 -*-
+
+"""
+HTML view for searching CVEs associated with servers.
+Provides a search form and displays results in a table with pagination.
+"""
+
+from jinja2 import Environment, BaseLoader
+import json
+import os
+
+TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Server CVE Search</title>
+    <style>
+        body {font-family: Arial, sans-serif; margin: 20px;}
+        form {margin-bottom: 20px;}
+        table {border-collapse: collapse; width: 100%;}
+        th, td {border: 1px solid #ddd; padding: 8px; text-align: left;}
+        th {background-color: #f2f2f2;}
+        .pagination {margin-top: 10px;}
+        .pagination a {margin: 0 5px; text-decoration: none; color: #007BFF;}
+    </style>
+</head>
+<body>
+    <h1>Search CVEs for Servers</h1>
+    <form method="GET" action="/search">
+        <label for="severity">Severity:</label>
+        <select name="severity" id="severity">
+            <option value="">Any</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+        </select>
+
+        <label for="ecosystem">Ecosystem:</label>
+        <input type="text" name="ecosystem" id="ecosystem" placeholder="e.g., npm, PyPI">
+
+        <label for="package">Package:</label>
+        <input type="text" name="package" id="package" placeholder="Package name">
+
+        <button type="submit">Search</button>
+    </form>
+
+    {% if cves %}
+    <table>
+        <thead>
+            <tr>
+                <th>CVE ID</th>
+                <th>Severity</th>
+                <th>Ecosystem</th>
+                <th>Package</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cve in cves %}
+            <tr>
+                <td>{{ cve.cve_id }}</td>
+                <td>{{ cve.severity }}</td>
+                <td>{{ cve.ecosystem }}</td>
+                <td>{{ cve.package }}</td>
+                <td>{{ cve.description }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}">&laquo; Prev</a>
+        {% endif %}
+        Page {{ page }} of {{ total_pages }}
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+    {% else %}
+    <p>No CVE records found.</p>
+    {% endif %}
+</body>
+</html>
+"""
+
+def render_template(context: dict) -> str:
+    """Render the Jinja2 template with the supplied context."""
+    env = Environment(loader=BaseLoader())
+    tmpl = env.from_string(TEMPLATE)
+    return tmpl.render(**context)
+
+if __name__ == "__main__":
+    # Mock API response
+    mock_response = {
+        "cves": [
+            {
+                "cve_id": "CVE-2023-1234",
+                "severity": "Critical",
+                "ecosystem": "npm",
+                "package": "lodash",
+                "description": "Prototype pollution vulnerability."
+            },
+            {
+                "cve_id": "CVE-2022-5678",
+                "severity": "High",
+                "ecosystem": "PyPI",
+                "package": "requests",
+                "description": "Man-in-the-middle attack vector."
+            }
+        ],
+        "page": 1,
+        "total_pages": 1
+    }
+
+    rendered_html = render_template(mock_response)
+
+    output_path = "rendered_server_cve_search.html"
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(rendered_html)
+
+    # Simple assertions to verify expected structure and data
+    with open(output_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    assert "<table" in content, "Table element missing"
+    assert "CVE-2023-1234" in content, "Mock CVE ID missing"
+    assert "Prototype pollution vulnerability." in content, "Mock description missing"
+
+    print("PASS")

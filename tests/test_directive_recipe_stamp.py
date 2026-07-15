@@ -63,3 +63,38 @@ def test_edit_directive_is_not_stamped(dm, tmp_path):
     assert files, "directive not written"
     d = json.loads(files[0].read_text())
     assert "recipe" not in d, d
+
+def test_int_phase_float_priority_coerced_not_rejected(dm, tmp_path):
+    """2026-07-15 regression: models emit phase as a JSON int (phase: 11).
+    The old signature (phase: str|None) made FastMCP's pydantic layer reject
+    the call before the handler ran; goose swallowed the error and the cycle
+    scored +0, mislabelled as non-convergence. The bridge must coerce."""
+    r = dm.propose_directive(
+        task="build_probe_alpha_api", handler="generate_file",
+        description="probe directive for int-phase coercion regression " * 2,
+        output_file="probe_alpha_api.py", complexity="medium",
+        phase=11, priority=0.85)
+    assert r["status"] == "written", r
+
+
+def test_llm_dialect_extra_fields_tolerated(dm):
+    """Models copy reads/recipe/next_directive from the directive JSON example
+    in context_json. Unknown-kwarg rejection is the same +0 death: tolerate
+    them (never trusted: recipe is stamped server-side, reads is a placebo)."""
+    r = dm.propose_directive(
+        task="build_probe_beta_api", handler="generate_file",
+        description="probe directive for extra-field tolerance regression " * 2,
+        output_file="probe_beta_api.py", complexity="medium",
+        phase="11", priority="0.9",
+        reads=["app/db.py", "app/models.py"],
+        recipe="module_from_exemplar", next_directive={})
+    assert r["status"] == "written", r
+
+
+def test_garbage_priority_never_raises(dm):
+    r = dm.propose_directive(
+        task="build_probe_gamma_api", handler="generate_file",
+        description="probe directive for garbage-priority tolerance " * 2,
+        output_file="probe_gamma_api.py", complexity="medium",
+        priority="highest")
+    assert r["status"] == "written", r

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Comparison</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .filter-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="my-4">MCP Server Risk Tier Comparison</h1>
+
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="timeRange" class="form-label">Time Range</label>
+                    <select id="timeRange" class="form-select">
+                        <option value="last_7_days">Last 7 Days</option>
+                        <option value="last_30_days">Last 30 Days</option>
+                        <option value="last_90_days">Last 90 Days</option>
+                        <option value="all_time">All Time</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="riskTier" class="form-label">Risk Tier</label>
+                    <select id="riskTier" class="form-select">
+                        <option value="all">All Tiers</option>
+                        <option value="low">Low Risk</option>
+                        <option value="medium">Medium Risk</option>
+                        <option value="high">High Risk</option>
+                        <option value="critical">Critical Risk</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button id="applyFilters" class="btn btn-primary w-100">Apply Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Risk Score Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="riskScoreChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Servers by Risk Tier</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="riskTierChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Server Comparison Table</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="comparisonTable" class="table table-striped table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Server ID</th>
+                                        <th>Organization</th>
+                                        <th>Risk Tier</th>
+                                        <th>Overall Score</th>
+                                        <th>Signal Score</th>
+                                        <th>LLM Score</th>
+                                        <th>Disputes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Initialize charts
+            const riskScoreCtx = document.getElementById('riskScoreChart').getContext('2d');
+            const riskTierCtx = document.getElementById('riskTierChart').getContext('2d');
+
+            let riskScoreChart = new Chart(riskScoreCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Risk Score',
+                        data: [],
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            let riskTierChart = new Chart(riskTierCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(54, 162, 235, 0.6)',
+                            'rgba(255, 206, 86, 0.6)'
+                        ],
+                        borderColor: [
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                }
+            });
+
+            // Function to fetch data and update charts
+            function fetchData() {
+                const timeRange = $('#timeRange').val();
+                const riskTier = $('#riskTier').val();
+
+                $.ajax({
+                    url: '/api/risk_tier_comparison',
+                    method: 'GET',
+                    data: {
+                        time_range: timeRange,
+                        risk_tier: riskTier
+                    },
+                    success: function(response) {
+                        updateCharts(response);
+                        updateTable(response.servers);
+                    },
+                    error: function(error) {
+                        console.error('Error fetching data:', error);
+                    }
+                });
+            }
+
+            // Function to update charts with new data
+            function updateCharts(data) {
+                // Update Risk Score Distribution chart
+                riskScoreChart.data.labels = data.score_distribution.labels;
+                riskScoreChart.data.datasets[0].data = data.score_distribution.data;
+                riskScoreChart.update();
+
+                // Update Servers by Risk Tier chart
+                riskTierChart.data.labels = data.tier_distribution.labels;
+                riskTierChart.data.datasets[0].data = data.tier_distribution.data;
+                riskTierChart.update();
+            }
+
+            // Function to update comparison table
+            function updateTable(servers) {
+                const tableBody = $('#comparisonTable tbody');
+                tableBody.empty();
+
+                servers.forEach(server => {
+                    const row = `
+                        <tr>
+                            <td>${server.server_id}</td>
+                            <td>${server.organization}</td>
+                            <td>${server.risk_tier}</td>
+                            <td>${server.overall_score.toFixed(2)}</td>
+                            <td>${server.signal_score.toFixed(2)}</td>
+                            <td>${server.llm_score.toFixed(2)}</td>
+                            <td>${server.disputes}</td>
+                        </tr>
+                    `;
+                    tableBody.append(row);
+                });
+            }
+
+            // Apply filters on button click
+            $('#applyFilters').click(fetchData);
+
+            // Fetch initial data
+            fetchData();
+        });
+    </script>
+</body>
+</html>

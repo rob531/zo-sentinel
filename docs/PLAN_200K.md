@@ -51,6 +51,26 @@ Projected total: 80.5K + 100–160K → **180K–240K**. 200K is P50 by mid-Octo
 - **Provenance-first, fail-closed**: every row carries `registry_source` + fetch timestamp + raw-payload hash. No source, no row.
 - Pre-flight tests for each lane use **real corpus variance** (variable-length labels, heterogeneous metadata), not synthetic uniform inputs.
 
+## 5b. Canonicalization & derived-repo detection (build on prior art, don't reinvent)
+
+The dedup machinery for lanes B–D already exists in-repo — `canonicalizer.py` (Commit B), `mcp_project_canonicalizer.py`, `fixes/pilot_canonicalization.py` (+results), `deduplicator.py`. April 2026 pilot verdict: **GO, 100% cross-registry bridge rate** on sample via ecosyste.ms.
+
+**Existing mechanisms to reuse:**
+
+- **Canonical keys**: `repo:<host>/<owner>/<name>` and purl `pkg:<ecosystem>/<name>`; `canonical_id` = sha256 of sorted identifier set. Tables: `mcp_project_canonical`, `mcp_project_members`, `canonical_drift_log`, `_uncertain`.
+- **ecosyste.ms lookup** (`packages.ecosyste.ms/api/v1/packages/lookup`): repo URL → "cousins" across npm/PyPI/Go. This is the Phase C package→repo bridge, already validated. It directly surfaces republished derivatives (pilot found `@iflow-mcp/chrome-devtools-mcp`, `chrome-devtools-mcp-customized`, `@skeksk91/...` all descending from `ChromeDevTools/chrome-devtools-mcp`).
+- **Deterministic rule ladder** (first match wins): SELF → DOMINANT (top cousin ≥5× #2 by downloads) → NAME_MATCH → SCOPE (unscoped beats `@scope/X`) → UNCERTAIN review bucket (~20% burden accepted). Static rules, no LLM.
+- **Republisher denylist**: `@mseep/*`, `@iflow-mcp/*` — extend as uncertain-bucket reviews surface more.
+- **Noise filters**: `%21` case-encoded Go duplicates; downloads<10 dropped when any cousin >1,000.
+- **Sticky canonical_id** via COALESCE — changes require a governance event; drift is logged, never auto-applied.
+
+**Extensions needed for 200K scale:**
+
+- **GitHub fork lineage** (Phase B/D): the repos API returns `fork=true` + `parent`/`source` — stamp `derived_from` at ingest. Free signal, not currently consumed.
+- **Detached-fork detection** (uploads-not-forks): same default-branch tree-hash or tools-schema content hash ⇒ same family even without fork metadata; name-similarity + "fork of X" in README/description as weak corroborators routed to UNCERTAIN, never auto-merged.
+- **Family rollup in product**: derived servers inherit a *pointer* to the canonical parent's assessment plus a delta (drift = its own risk signal — a republished fork lagging upstream security fixes is exactly what Sentinel should flag). Family members still count individually toward 200K only if independently assessed; canonical rollup prevents junk inflation from 50 identical republishes.
+- Run canonicalizer as a **post-ingest pass per lane** (it's already a daemon w/ --once/--dry-run/--loop), with member_count deltas in the weekly audit.
+
 ## 6. Scoring & cost
 
 Student adapter (Qwen2.5-3B + LoRA, leaderboard-selected `bar_passes=True`) batch scoring, extending the weekly delta-mode moat-rescore job (#1468/#1470). Measured cost: 20K imports = $0.33 → full 200K pass ≈ **$3.30–4.00**. Ceilings: **$5/run, $25/mo hard halt** → surface to chairman, never burn. Vast/RunPod jobs stay inside the managed-jobs manifest (DESTROY_READY gate, forensics-before-destroy).
@@ -77,6 +97,7 @@ Kill criteria: junk-rate >10% on any weekly sample ⇒ freeze the offending lane
 | Failure class (precedent) | Risk here | Mitigation | Verdict |
 |---|---|---|---|
 | Fabricated fields (Glama tool_count, 48.5K rows) | HIGH — 4 new lanes, heterogeneous APIs | §5 unknown≠zero + per-lane fabrication audit query, in CODE not convention | PASS |
+| Republish/fork inflation (50 clones of one server) | HIGH — npm tail is full of `@mseep/`-style republishes | §5b canonicalizer ladder + family rollup; assessed-count audited per canonical family | PASS |
 | URL ≠ identity (14K sibling-tier stamp) | HIGH — package→repo mapping in Phase C is exactly this trap | ukey=sid; package merge requires repo *content* match, not URL match | PASS |
 | Uncalled helper ≠ gate (is_fresh) | MED — Phase D fingerprint gate could be decorative | Precision-audit gate blocks lane *opening*; gate is in the admission path | PASS |
 | Volume vanity (junk inflation) | HIGH — "mcp in name" tail is 272K mostly junk | tier=catalogued vs assessed split; only assessed counts; junk-rate kill criterion | PASS |

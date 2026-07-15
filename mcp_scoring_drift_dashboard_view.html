@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Scoring Drift Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #ffffff;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            background-color: #2d2d2d;
+            color: #ffffff;
+        }
+        tr:hover {
+            background-color: #3a3a3a;
+        }
+        .tier-upgraded {
+            background-color: #2e8b57;
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 2px 6px;
+        }
+        .tier-downgraded {
+            background-color: #8b0000;
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 2px 6px;
+        }
+        .tier-stable {
+            background-color: #4682b4;
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 2px 6px;
+        }
+        .badge {
+            background-color: #4682b4;
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.8em;
+        }
+        .chart-container {
+            width: 300px;
+            height: 300px;
+            margin: 20px auto;
+        }
+        .summary {
+            background-color: #2d2d2d;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP Scoring Drift Dashboard</h1>
+
+    <div class="summary">
+        <h2>Drift Summary</h2>
+        <div class="chart-container">
+            <svg id="driftChart" width="300" height="300"></svg>
+        </div>
+    </div>
+
+    <table id="driftTable">
+        <thead>
+            <tr>
+                <th>Server Name</th>
+                <th>Previous Tier</th>
+                <th>Current Tier</th>
+                <th>Drift Score</th>
+                <th>Axis Shifts</th>
+                <th>Last Scored</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Table rows will be populated by JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        // Sample data - in production this would come from the API
+        const driftData = [
+            {
+                "server_id": 1,
+                "server_name": "Server Alpha",
+                "previous_tier": "Medium",
+                "current_tier": "High",
+                "drift_score": 0.75,
+                "axis_shifts": 3,
+                "last_scored_at": "2023-10-15T14:30:00Z"
+            },
+            {
+                "server_id": 2,
+                "server_name": "Server Beta",
+                "previous_tier": "High",
+                "current_tier": "Medium",
+                "drift_score": 0.60,
+                "axis_shifts": 2,
+                "last_scored_at": "2023-10-15T13:45:00Z"
+            },
+            {
+                "server_id": 3,
+                "server_name": "Server Gamma",
+                "previous_tier": "Low",
+                "current_tier": "Low",
+                "drift_score": 0.10,
+                "axis_shifts": 0,
+                "last_scored_at": "2023-10-15T12:15:00Z"
+            },
+            {
+                "server_id": 4,
+                "server_name": "Server Delta",
+                "previous_tier": "Medium",
+                "current_tier": "High",
+                "drift_score": 0.85,
+                "axis_shifts": 4,
+                "last_scored_at": "2023-10-15T11:30:00Z"
+            },
+            {
+                "server_id": 5,
+                "server_name": "Server Epsilon",
+                "previous_tier": "High",
+                "current_tier": "Low",
+                "drift_score": 0.90,
+                "axis_shifts": 5,
+                "last_scored_at": "2023-10-15T10:45:00Z"
+            }
+        ];
+
+        // Function to determine tier class
+        function getTierClass(previousTier, currentTier) {
+            if (previousTier === currentTier) {
+                return 'tier-stable';
+            } else if (['Low', 'Medium', 'High'].indexOf(currentTier) > ['Low', 'Medium', 'High'].indexOf(previousTier)) {
+                return 'tier-upgraded';
+            } else {
+                return 'tier-downgraded';
+            }
+        }
+
+        // Function to format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        // Populate the table
+        const tableBody = document.getElementById('driftTable').getElementsByTagName('tbody')[0];
+        driftData.forEach(server => {
+            const row = document.createElement('tr');
+
+            const nameCell = document.createElement('td');
+            nameCell.textContent = server.server_name;
+            row.appendChild(nameCell);
+
+            const prevTierCell = document.createElement('td');
+            prevTierCell.className = getTierClass(server.previous_tier, server.current_tier);
+            prevTierCell.textContent = server.previous_tier;
+            row.appendChild(prevTierCell);
+
+            const currTierCell = document.createElement('td');
+            currTierCell.className = getTierClass(server.previous_tier, server.current_tier);
+            currTierCell.textContent = server.current_tier;
+            row.appendChild(currTierCell);
+
+            const driftScoreCell = document.createElement('td');
+            driftScoreCell.textContent = server.drift_score.toFixed(2);
+            row.appendChild(driftScoreCell);
+
+            const axisShiftsCell = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = server.axis_shifts;
+            axisShiftsCell.appendChild(badge);
+            row.appendChild(axisShiftsCell);
+
+            const lastScoredCell = document.createElement('td');
+            lastScoredCell.textContent = formatDate(server.last_scored_at);
+            row.appendChild(lastScoredCell);
+
+            tableBody.appendChild(row);
+        });
+
+        // Create the pie chart
+        const chartData = {
+            upgraded: driftData.filter(server => {
+                return ['Low', 'Medium', 'High'].indexOf(server.current_tier) > ['Low', 'Medium', 'High'].indexOf(server.previous_tier);
+            }).length,
+            downgraded: driftData.filter(server => {
+                return ['Low', 'Medium', 'High'].indexOf(server.current_tier) < ['Low', 'Medium', 'High'].indexOf(server.previous_tier);
+            }).length,
+            stable: driftData.filter(server => {
+                return server.previous_tier === server.current_tier;
+            }).length
+        };
+
+        const total = chartData.upgraded + chartData.downgraded + chartData.stable;
+        const chart = document.getElementById('driftChart');
+        const centerX = 150;
+        const centerY = 150;
+        const radius = 100;
+
+        // Draw pie slices
+        let startAngle = -Math.PI / 2;
+        const colors = ['#2e8b57', '#8b0000', '#4682b4'];
+
+        Object.entries(chartData).forEach(([label, value], index) => {
+            const angle = (value / total) * 2 * Math.PI;
+            const endAngle = startAngle + angle;
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `
+                M ${centerX},${centerY}
+                L ${centerX + radius * Math.cos(startAngle)},${centerY + radius * Math.sin(startAngle)}
+                A ${radius},${radius} 0 ${angle > Math.PI ? 1 : 0},1
+                ${centerX + radius * Math.cos(endAngle)},${centerY + radius * Math.sin(endAngle)}
+                Z
+            `);
+            path.setAttribute('fill', colors[index]);
+            chart.appendChild(path);
+
+            startAngle = endAngle;
+        });
+
+        // Add legend
+        const legend = document.createElement('g');
+        legend.setAttribute('transform', 'translate(200, 10)');
+
+        Object.entries(chartData).forEach(([label, value], index) => {
+            const legendItem = document.createElement('g');
+            legendItem.setAttribute('transform', `translate(0, ${index * 20})`);
+
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('width', 15);
+            rect.setAttribute('height', 15);
+            rect.setAttribute('fill', colors[index]);
+            legendItem.appendChild(rect);
+
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', 20);
+            text.setAttribute('y', 12);
+            text.setAttribute('fill', '#d4d4d4');
+            text.textContent = `${label}: ${value}`;
+            legendItem.appendChild(text);
+
+            legend.appendChild(legendItem);
+        });
+
+        chart.appendChild(legend);
+    </script>
+</body>
+</html>

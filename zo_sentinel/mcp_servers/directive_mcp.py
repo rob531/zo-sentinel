@@ -50,6 +50,19 @@ _stdlib_dir = _sysconfig.get_paths().get("stdlib")
 if _stdlib_dir:
     sys.path.insert(0, _stdlib_dir)
     sys.modules.pop("argparse", None)
+# The bridge must be import-SELF-SUFFICIENT: it is launched as a SCRIPT
+# (`python3 zo_sentinel/mcp_servers/directive_mcp.py`), so sys.path[0] is its
+# OWN directory -- `zo_sentinel.*` resolves only if the LAUNCHER happened to
+# export PYTHONPATH. After a daemon-wrapper relaunch the architect env has no
+# PYTHONPATH, so every CREATION proposal died inside _validate at
+# `from zo_sentinel.build_completion import output_file_is_sane` with
+# "No module named 'zo_sentinel'" -> goose swallowed it -> +0 (edit-class
+# proposals skipped the import, which is why wire_* still landed). Same class
+# as the argparse pin above: never depend on the launcher's environment.
+import pathlib as _pathlib
+_repo_root = str(_pathlib.Path(__file__).resolve().parent.parent.parent)
+if _repo_root not in sys.path:
+    sys.path.insert(1, _repo_root)
 
 # MCP stdio framing -- minimal hand-rolled to avoid extra dependency surface.
 # Matches the protocol used by builder_mcp.py (Goose stdio extension).

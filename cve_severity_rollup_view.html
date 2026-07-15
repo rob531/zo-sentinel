@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE Severity Rollup</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .summary {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f4f4f4;
+            border-radius: 5px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CVE Severity Rollup</h1>
+
+    <div class="summary">
+        <h2>Summary</h2>
+        <p>Total CVEs: <span id="total-cves">0</span></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Severity</th>
+                    <th>Count</th>
+                    <th>Percentage</th>
+                </tr>
+            </thead>
+            <tbody id="severity-distribution">
+                <!-- Data will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="severityChart"></canvas>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                const response = await fetch('/api/cve-severity-rollup');
+                const data = await response.json();
+
+                const totalCves = data.severity_counts.reduce((sum, item) => sum + item.count, 0);
+                document.getElementById('total-cves').textContent = totalCves;
+
+                const severityDistribution = document.getElementById('severity-distribution');
+                severityDistribution.innerHTML = data.severity_counts.map(item => `
+                    <tr>
+                        <td>${item.severity}</td>
+                        <td>${item.count}</td>
+                        <td>${((item.count / totalCves) * 100).toFixed(2)}%</td>
+                    </tr>
+                `).join('');
+
+                const ctx = document.getElementById('severityChart').getContext('2d');
+                const severityChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.severity_counts.map(item => item.severity),
+                        datasets: [{
+                            label: 'Number of CVEs',
+                            data: data.severity_counts.map(item => item.count),
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.7)',
+                                'rgba(54, 162, 235, 0.7)',
+                                'rgba(255, 206, 86, 0.7)',
+                                'rgba(75, 192, 192, 0.7)',
+                                'rgba(153, 102, 255, 0.7)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        });
+    </script>
+</body>
+</html>

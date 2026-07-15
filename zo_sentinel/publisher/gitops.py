@@ -88,6 +88,21 @@ def _is_retryable(text: Optional[str]) -> bool:
     return _is_rate_limited(text) or _is_transient_net(text)
 
 
+_DIRTY_TREE_MARKERS = (
+    "would be overwritten by checkout",
+    "would be overwritten by merge",
+    "Please commit your changes or stash them",
+)
+
+
+def _is_dirty_tree(text: Optional[str]) -> bool:
+    """True when git refuses a checkout because the clone's working tree has
+    uncommitted local modifications. Deterministic (NOT transient): without
+    intervention every subsequent publish fails identically."""
+    t = text or ""
+    return any(m in t for m in _DIRTY_TREE_MARKERS)
+
+
 @dataclass
 class PublishPlan:
     branch: str
@@ -196,6 +211,14 @@ class CliGitOps:
             self._sleep(delay)
             attempt += 1
 
+    def _stash_dirty_tree(self) -> bool:
+        """Preserve illegitimate local edits in the pub clone as a stash entry
+        (forensics-first), returning True when the tree is clean for a retry."""
+        ts = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
+        r = self._git("stash", "push", "--include-untracked",
+                      "-m", f"publisher-selfheal {ts}")
+        return r.returncode == 0
+
     def publish(self, plan: PublishPlan) -> PublishResult:
         # fetch + checkout go through backoff: a transient network blip (broken
         # pipe, connection reset, DNS) on these pre-steps is recoverable and must
@@ -218,8 +241,20 @@ class CliGitOps:
             lambda: self._git("fetch", "--prune", self.remote),
             lambda: self._git("checkout", "-B", plan.branch, f"{self.remote}/{plan.base}"),
         ]
-        for step in steps:
+        for idx, step in enumerate(steps):
             r = self._run_with_backoff(step)
+            if (r.returncode != 0 and idx == 1
+                    and _is_dirty_tree((r.stderr or "") + (r.stdout or ""))):
+                # Dirty-tree self-heal (2026-07-15): an out-of-band edit inside
+                # the pub clone (a stray working-tree edit deleted the saturated-
+                # family gate on 2026-07-13) made EVERY checkout fail with
+                # 'would be overwritten by checkout' and wedged publishing for
+                # ~2 days. The pub clone is publisher-only -- any uncommitted
+                # local change is illegitimate -- so preserve the evidence in a
+                # stash (recoverable via `git stash list`, never a silent
+                # discard) and retry the checkout ONCE.
+                if self._stash_dirty_tree():
+                    r = self._run_with_backoff(step)
             if r.returncode != 0:
                 self.last_error = (r.stderr or r.stdout)[:300]
                 return PublishResult(ok=False, branch=plan.branch, detail=self.last_error)

@@ -541,3 +541,83 @@ def test_saturation_gate_ignores_non_root_paths():
     assert saturated_family_scan("app/api/fleet_risk_x.py") is None
     assert saturated_family_scan("server_freshness_dashboard_api.py") is None
     assert saturated_family_scan("fleet_risk_composition_api.py") is not None
+
+
+def test_is_dirty_tree_markers():
+    from zo_sentinel.publisher.gitops import _is_dirty_tree
+    assert _is_dirty_tree("error: Your local changes to the following files "
+                          "would be overwritten by checkout:")
+    assert _is_dirty_tree("Please commit your changes or stash them before "
+                          "you switch branches.")
+    assert not _is_dirty_tree("fatal: not a git repository")
+    assert not _is_dirty_tree("")
+    assert not _is_dirty_tree(None)
+
+
+def test_cligitops_selfheals_dirty_clone(tmp_path, monkeypatch):
+    """An out-of-band edit inside the pub clone must not wedge publishing:
+    checkout fails would-be-overwritten, the publisher stashes the dirt
+    (--include-untracked: preserved for forensics, never discarded) and
+    retries the checkout ONCE. Regression for 2026-07-13..15: a stray
+    working-tree edit deleted the saturated-family gate inside the clone and
+    every publish failed identically for ~2 days."""
+    import zo_sentinel.publisher.gitops as gmod
+
+    seen = []
+    state = {"checkouts": 0}
+
+    def fake_run(args, **kw):
+        seen.append(list(args))
+        if args[:1] == ["git"] and "checkout" in args:
+            state["checkouts"] += 1
+            if state["checkouts"] == 1:
+                return types.SimpleNamespace(
+                    returncode=1, stdout="",
+                    stderr="error: Your local changes to the following files "
+                           "would be overwritten by checkout:"
+                           " zo_sentinel/publisher/publisher.py "
+                           "Please commit your changes or stash them before "
+                           "you switch branches. Aborting")
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if args[:1] == ["git"] and args[3:4] == ["diff"]:   # staged diff present
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="")
+        if args[:3] == ["gh", "pr", "create"]:
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout="https://github.com/rob531/zo-sentinel/pull/9",
+                stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(gmod.subprocess, "run", fake_run)
+    g = gmod.CliGitOps(str(tmp_path), sleep=lambda *_: None)
+    plan = gmod.PublishPlan(branch="auto/build/x", title="t", body="b",
+                            file_path="x.py", content="print(1)", dedup_key="k")
+    res = g.publish(plan)
+
+    assert res.ok is True and res.pr_url
+    stash = next(c for c in seen if c[:1] == ["git"] and "stash" in c)
+    assert "--include-untracked" in stash       # dirt preserved, not discarded
+    assert state["checkouts"] == 2              # exactly one retry
+
+
+def test_cligitops_dirty_tree_still_fails_when_stash_fails(tmp_path, monkeypatch):
+    """If the stash itself fails, the publish must fail visibly (no retry
+    loop, no silent reset): the cycle reports the checkout error as before."""
+    import zo_sentinel.publisher.gitops as gmod
+
+    def fake_run(args, **kw):
+        if args[:1] == ["git"] and "checkout" in args:
+            return types.SimpleNamespace(
+                returncode=1, stdout="",
+                stderr="error: ... would be overwritten by checkout: ...")
+        if args[:1] == ["git"] and "stash" in args:
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="stash failed")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(gmod.subprocess, "run", fake_run)
+    g = gmod.CliGitOps(str(tmp_path), sleep=lambda *_: None)
+    plan = gmod.PublishPlan(branch="auto/build/x", title="t", body="b",
+                            file_path="x.py", content="print(1)", dedup_key="k")
+    res = g.publish(plan)
+    assert res.ok is False
+    assert "overwritten" in (res.detail or "")

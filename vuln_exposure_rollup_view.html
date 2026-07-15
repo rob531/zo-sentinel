@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Exposure Rollup</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .summary-card {
+            margin-bottom: 20px;
+        }
+        .table-hover tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Vulnerability Exposure Rollup</h1>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card summary-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Summary</h5>
+                        <p class="card-text">Total Exposed Servers: <strong>{{ summary.total_servers }}</strong></p>
+                        <p class="card-text">Most Critical Vulnerabilities:</p>
+                        <ul>
+                            {% for vuln in summary.most_critical_vulnerabilities %}
+                                <li>{{ vuln.name }} (CVSS: {{ vuln.cvss_score }}) - {{ vuln.affected_servers }} servers</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th scope="col" data-sort="server_name">Server Name</th>
+                        <th scope="col" data-sort="vulnerability_count">Vulnerability Count</th>
+                        <th scope="col" data-sort="high_severity">High Severity</th>
+                        <th scope="col" data-sort="critical_severity">Critical Severity</th>
+                        <th scope="col" data-sort="last_scan">Last Scan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for server in servers %}
+                        <tr>
+                            <td>{{ server.server_name }}</td>
+                            <td>{{ server.vulnerability_count }}</td>
+                            <td>{{ server.high_severity }}</td>
+                            <td>{{ server.critical_severity }}</td>
+                            <td>{{ server.last_scan|strftime('%Y-%m-%d') }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tableHeaders = document.querySelectorAll('th[data-sort]');
+            let sortDirection = {};
+
+            tableHeaders.forEach(header => {
+                header.addEventListener('click', function() {
+                    const column = this.getAttribute('data-sort');
+                    const table = this.closest('table');
+                    const tbody = table.querySelector('tbody');
+                    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                    // Determine sort direction
+                    sortDirection[column] = sortDirection[column] === 'asc' ? 'desc' : 'asc';
+
+                    // Sort rows
+                    rows.sort((a, b) => {
+                        const aValue = a.querySelector(`td:nth-child(${Array.from(this.parentNode.children).indexOf(this) + 1})`).textContent;
+                        const bValue = b.querySelector(`td:nth-child(${Array.from(this.parentNode.children).indexOf(this) + 1})`).textContent;
+
+                        if (sortDirection[column] === 'asc') {
+                            return aValue.localeCompare(bValue, undefined, { numeric: true, sensitivity: 'base' });
+                        } else {
+                            return bValue.localeCompare(aValue, undefined, { numeric: true, sensitivity: 'base' });
+                        }
+                    });
+
+                    // Rebuild table
+                    rows.forEach(row => tbody.appendChild(row));
+
+                    // Update header UI
+                    tableHeaders.forEach(h => {
+                        h.classList.remove('asc', 'desc');
+                        if (h === this) {
+                            h.classList.add(sortDirection[column]);
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>

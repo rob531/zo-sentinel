@@ -26,6 +26,10 @@ HEADERS_BASE = {
     'User-Agent': 'zo-sentinel/1.0 (mcp-trust-intelligence)'
 }
 SORT_OPTIONS = ['updated', 'stars', 'forks']
+# GitHub search API returns HTTP 422 for OR between topic: qualifiers
+# ("Logical operators only apply to text, not to qualifiers").
+# Rotate single-topic queries instead of OR-ing them.
+QUERY_OPTIONS = ['topic:mcp-server', 'topic:model-context-protocol', 'topic:modelcontextprotocol']
 SCHEMA_VERIFIED = False
 COLUMNS_CACHE = None
 
@@ -145,9 +149,9 @@ def handle_rate_limit(remaining, reset_epoch):
     return False
 
 
-def fetch_page(page, sort_option):
+def fetch_page(page, sort_option, query):
     params = {
-        'q': 'topic:mcp-server OR topic:model-context-protocol OR topic:modelcontextprotocol',
+        'q': query,
         'per_page': PER_PAGE,
         'page': page,
         'sort': sort_option,
@@ -225,9 +229,11 @@ def cycle():
     seen = cursor.get('seen', 0)
 
     sort_option = SORT_OPTIONS[sort_index % len(SORT_OPTIONS)]
+    query_index = cursor.get('query_index', 0)
+    query = QUERY_OPTIONS[query_index % len(QUERY_OPTIONS)]
 
-    log(f'fetching page {page} sort={sort_option}')
-    items, fetched_total, rl_remaining, rl_reset = fetch_page(page, sort_option)
+    log(f'fetching page {page} sort={sort_option} query={query}')
+    items, fetched_total, rl_remaining, rl_reset = fetch_page(page, sort_option, query)
 
     if items is None:
         log(f'fetch failed or rate limited, skipping cycle')
@@ -249,8 +255,12 @@ def cycle():
         log(f'exhausted at seen={seen}, total={total_count}, resetting')
         page = 1
         seen = 0
+        total_count = 0
         sort_index = (sort_index + 1) % len(SORT_OPTIONS)
         sort_option = SORT_OPTIONS[sort_index]
+        if sort_index == 0:
+            query_index = (query_index + 1) % len(QUERY_OPTIONS)
+            log(f'rotating query to {QUERY_OPTIONS[query_index]}')
         log(f'rotating sort to {sort_option}')
     else:
         page = page + 1
@@ -258,6 +268,7 @@ def cycle():
     cursor['page'] = page
     cursor['total_count'] = total_count
     cursor['sort_index'] = sort_index
+    cursor['query_index'] = query_index
     cursor['seen'] = seen
     cursor['updated_at'] = datetime.datetime.utcnow().isoformat()
     save_cursor(cursor)

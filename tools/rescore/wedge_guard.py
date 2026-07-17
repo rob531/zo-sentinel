@@ -98,9 +98,16 @@ def main():
             log(f"{iid} WEDGED: loading {el:.1f}m >= {WEDGE_MIN}m -- destroying")
             try: vast_api("DELETE", f"/instances/{iid}/", key)
             except Exception as e: log(f"destroy error: {e}")
+            mid = i.get("machine_id")
+            if mid:
+                bp = ROOT / "wedged_machines.json"
+                cur = set(json.loads(bp.read_text())) if bp.exists() else set()
+                cur.add(mid)
+                bp.write_text(json.dumps(sorted(cur)))
+                log(f"machine {mid} added to wedged_machines.json ({len(cur)} total)")
             rid = state.get("run_id", "?") if state else "?"
             burned = round(el / 60 * float((state or {}).get("dph", 0.33)), 2)
-            ledger("wedge_guard_destroy", rid, instance=iid, loading_min=round(el, 1), est_cost_usd=burned)
+            ledger("wedge_guard_destroy", rid, instance=iid, machine=i.get("machine_id"), loading_min=round(el, 1), est_cost_usd=burned)
             if run_dir:
                 close_run(run_dir, state, f"Instance {iid} wedged in loading {el:.1f}m; "
                           f"destroyed by wedge_guard at {now()}; run closed for refire.")

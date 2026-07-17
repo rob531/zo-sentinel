@@ -81,7 +81,7 @@ COST_CAP_DEFAULT = 3.00
 DEADLINE_MIN_DEFAULT = 300
 REFRESH_CAP_DEFAULT = 20000
 GEO_BLOCK = ("CN", "HK", "TW", "RU", "IR", "KP")
-IMAGE = "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-devel"
+IMAGE = "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime"
 
 SYS = (HERE / "prompt_system.txt").read_text(encoding="utf-8")
 SIG = (HERE / "prompt_signals_block.txt").read_text(encoding="utf-8")

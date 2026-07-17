@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Threat Intelligence Summary</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Threat Intelligence Summary for Server <span id="server-id"></span></h1>
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Associated CVEs</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>CVE ID</th>
+                                    <th>Severity</th>
+                                    <th>Ecosystem</th>
+                                    <th>Summary</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cve-table-body">
+                                <!-- CVE rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Extract server_id from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const serverId = urlParams.get('server_id');
+            document.getElementById('server-id').textContent = serverId;
+
+            // Fetch threat intelligence data
+            fetch(`/api/server_threat_intel/${serverId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('cve-table-body');
+                    data.cves.forEach(cve => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${cve.cve_id}</td>
+                            <td>${cve.severity}</td>
+                            <td>${cve.ecosystem}</td>
+                            <td>${cve.summary}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        });
+    </script>
+</body>
+</html>

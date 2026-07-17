@@ -363,13 +363,20 @@ def ph_fire(run: Run, args) -> None:
     def geo_ok(o):
         return not any(b in str(o.get("geolocation", "")).upper() for b in GEO_BLOCK)
 
+    blocklist_path = RUNS_ROOT / "wedged_machines.json"
+    wedged_machines = (set(json.loads(blocklist_path.read_text()))
+                       if blocklist_path.exists() else set())
+    if wedged_machines:
+        log(f"offer filter: excluding {len(wedged_machines)} wedged machine(s)")
+
     def cheapest(q):
         offers = v.search_offers(query=q)
-        c = [o for o in offers if geo_ok(o) and float(o.get("dph_total", 99)) <= max_dph]
+        c = [o for o in offers if geo_ok(o) and float(o.get("dph_total", 99)) <= max_dph
+             and o.get("machine_id") not in wedged_machines]
         return min(c, key=lambda o: float(o["dph_total"])) if c else None
 
     best = cheapest(f"gpu_name=RTX_4090 num_gpus=1 dph_total<{max_dph} verified=true "
-                    f"rentable=true disk_space>=50 inet_down>=100")
+                    f"rentable=true disk_space>=50 inet_down>=200")
     if not best:
         best = cheapest(f"gpu_name in [RTX_4090,L40S,L40,RTX_3090,A40,A6000] num_gpus=1 "
                         f"dph_total<{max_dph} verified=true rentable=true disk_space>=50")
@@ -384,7 +391,7 @@ def ph_fire(run: Run, args) -> None:
         onstart_cmd=ONSTART, runtype="ssh", label="zo-sentinel-score")
     iid = resp.get("new_contract") or resp.get("contract_id") or resp.get("id")
     run.mark("fire", instance_id=iid, dph=dph, gpu=best.get("gpu_name"),
-             fired_at=utcnow())
+             machine_id=best.get("machine_id"), fired_at=utcnow())
     log(f"fire OK: instance={iid} {best.get('gpu_name')} ${dph}/hr "
         f"(cap ${args.cost_cap}, deadline {args.deadline_min}m)")
 

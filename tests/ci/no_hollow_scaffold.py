@@ -27,9 +27,11 @@ def added_files():
 def main():
     bad = []
     for f in added_files():
+        if not f.endswith(".py"):
+            continue    # gate scope is .py modules; binary assets crash a utf-8 read
         try:
             src = open(f, encoding="utf-8").read()
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             continue
         why = hollow_scaffold_scan(f, src)
         if why:

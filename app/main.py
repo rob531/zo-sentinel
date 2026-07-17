@@ -52,6 +52,8 @@ _OPTIONAL_ROUTERS = [
     # single SLA source + fail-closed gate for keyed surfaces; this router is
     # its public, auditable statement. Public surfaces fail VISIBLE, never closed.
     "freshness_policy_api",
+    # public marketing/media assets (chairman 2026-07-17): 200K-campaign robot ad
+    "app.routers.media_assets",
 ]
 
 

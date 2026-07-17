@@ -459,6 +459,13 @@ def ph_watch_collect(run: Run, args) -> None:
         for f in (coll / "r" / "score_results").glob("*"):
             shutil.copy(f, coll / f.name)
             got.append(f.name)
+    if not (coll / "preds.jsonl.gz").exists():
+        parts = sorted(coll.glob("preds.jsonl.gz.part.*"))
+        if parts:
+            with open(coll / "preds.jsonl.gz", "wb") as w:
+                for pt in parts:
+                    w.write(pt.read_bytes())
+            got.append("preds.jsonl.gz(reassembled from %d parts)" % len(parts))
     run.mark("collect", collected=got)
     log(f"collect: {got or 'nothing on remote (instance may still be running the job)'}")
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.

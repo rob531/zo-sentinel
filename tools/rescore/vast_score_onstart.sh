@@ -81,6 +81,20 @@ cp /workspace/onstart.log    score_results/ 2>/dev/null || true
 cp /workspace/rpt.json       score_results/ 2>/dev/null || true
 git add score_results
 git -c user.email=pod@vast -c user.name=score-pod commit -q -m "score results ($RESULTS_BRANCH)" || fail "commit results"
-git push "$REPO_URL" "HEAD:refs/heads/$RESULTS_BRANCH" >/dev/null 2>&1 || fail "push results"
+PUSH_ERR=$(git push "$REPO_URL" "HEAD:refs/heads/$RESULTS_BRANCH" 2>&1) || {
+  echo "[score-onstart] push results failed: ${PUSH_ERR}"
+  echo "[score-onstart] fallback: chunked plain-git push (sidesteps LFS/size limits)"
+  git rm -r --cached score_results >/dev/null 2>&1 || true
+  rm -rf score_results; mkdir -p score_results
+  cp /workspace/onstart.log score_results/ 2>/dev/null || true
+  cp /workspace/rpt.json    score_results/ 2>/dev/null || true
+  split -b 20m -d /workspace/preds.jsonl.gz score_results/preds.jsonl.gz.part.
+  ( cd score_results && sha256sum preds.jsonl.gz.part.* ) > score_results/preds.sha256
+  sha256sum /workspace/preds.jsonl.gz >> score_results/preds.sha256
+  git add score_results
+  git -c user.email=pod@vast -c user.name=score-pod commit -q -m "score results chunked ($RESULTS_BRANCH)" || fail "commit chunked"
+  git push "$REPO_URL" "HEAD:refs/heads/$RESULTS_BRANCH" 2>&1 | tail -3
+  git ls-remote "$REPO_URL" "refs/heads/$RESULTS_BRANCH" | grep -q . || fail "push results (chunked)"
+}
 echo "===== SCORE_DONE $(date -u +%FT%TZ) ====="
 sleep 30

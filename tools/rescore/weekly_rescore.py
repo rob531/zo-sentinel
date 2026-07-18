@@ -630,7 +630,7 @@ def ph_backfill(run: Run, args) -> None:
     r = subprocess.run([sys.executable, str(HERE / "apply_risk_tier_backfill.py"),
                         "--dsn-file", str(DSN_FILE), "--apply",
                         "--model-version", MODEL_VERSION],
-                       capture_output=True, text=True, timeout=1800)
+                       capture_output=True, text=True, timeout=7200)   # 1800s cap killed backfill mid-UPDATE at 232K-registry scale (2026-07-18)
     (run.dir / "backfill.log").write_text(r.stdout[-5000:] + "\n" + r.stderr[-2000:])
     if r.returncode != 0:
         raise SystemExit(f"ALERT: risk-tier backfill failed rc={r.returncode}; "

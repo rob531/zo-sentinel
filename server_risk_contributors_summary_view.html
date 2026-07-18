@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Risk Contributors Summary</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Server Risk Contributors Summary</h1>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Server Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Server ID:</strong> <span id="server-id">Loading...</span></p>
+                                <p><strong>Organization:</strong> <span id="server-org">Loading...</span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Last Updated:</strong> <span id="last-updated">Loading...</span></p>
+                                <p><strong>Status:</strong> <span id="server-status">Loading...</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Overall Risk Score</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="progress">
+                            <div id="risk-score-progress" class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <p class="mt-2"><strong>Score:</strong> <span id="risk-score">0</span>/100</p>
+                        <p><strong>Risk Level:</strong> <span id="risk-level">Unknown</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Risk Contributors Breakdown</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="riskContributorsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Top 5 Risk Factors</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Factor</th>
+                                    <th>Score</th>
+                                    <th>Weight</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-risk-factors">
+                                <tr>
+                                    <td colspan="3" class="text-center">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Recent Risk Changes</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Change</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-risk-changes">
+                                <tr>
+                                    <td colspan="3" class="text-center">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const serverId = 'test_server';
+            fetch(`/api/server_risk_contributors_summary/${serverId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Server Information
+                    document.getElementById('server-id').textContent = data.server.id;
+                    document.getElementById('server-org').textContent = data.server.org_name;
+                    document.getElementById('last-updated').textContent = new Date(data.server.last_updated).toLocaleString();
+                    document.getElementById('server-status').textContent = data.server.status;
+
+                    // Risk Score
+                    const riskScore = data.risk_score;
+                    document.getElementById('risk-score').textContent = riskScore.toFixed(2);
+                    document.getElementById('risk-score-progress').style.width = `${riskScore}%`;
+                    document.getElementById('risk-score-progress').setAttribute('aria-valuenow', riskScore);
+
+                    // Risk Level
+                    let riskLevel;
+                    if (riskScore >= 80) {
+                        riskLevel = 'Critical';
+                        document.getElementById('risk-score-progress').classList.add('bg-danger');
+                    } else if (riskScore >= 60) {
+                        riskLevel = 'High';
+                        document.getElementById('risk-score-progress').classList.add('bg-warning');
+                    } else if (riskScore >= 40) {
+                        riskLevel = 'Medium';
+                        document.getElementById('risk-score-progress').classList.add('bg-primary');
+                    } else {
+                        riskLevel = 'Low';
+                        document.getElementById('risk-score-progress').classList.add('bg-success');
+                    }
+                    document.getElementById('risk-level').textContent = riskLevel;
+
+                    // Risk Contributors Chart
+                    const ctx = document.getElementById('riskContributorsChart').getContext('2d');
+                    const riskContributorsChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.risk_contributors.map(rc => rc.factor),
+                            datasets: [{
+                                data: data.risk_contributors.map(rc => rc.score),
+                                backgroundColor: [
+                                    'rgba(255, 99, 132, 0.7)',
+                                    'rgba(54, 162, 235, 0.7)',
+                                    'rgba(255, 206, 86, 0.7)',
+                                    'rgba(75, 192, 192, 0.7)',
+                                    'rgba(153, 102, 255, 0.7)',
+                                    'rgba(255, 159, 64, 0.7)'
+                                ],
+                                borderColor: [
+                                    'rgba(255, 99, 132, 1)',
+                                    'rgba(54, 162, 235, 1)',
+                                    'rgba(255, 206, 86, 1)',
+                                    'rgba(75, 192, 192, 1)',
+                                    'rgba(153, 102, 255, 1)',
+                                    'rgba(255, 159, 64, 1)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'right'
+                                }
+                            }
+                        }
+                    });
+
+                    // Top 5 Risk Factors
+                    const topRiskFactors = document.getElementById('top-risk-factors');
+                    topRiskFactors.innerHTML = '';
+                    data.top_risk_factors.slice(0, 5).forEach(factor => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${factor.factor}</td>
+                            <td>${factor.score.toFixed(2)}</td>
+                            <td>${factor.weight.toFixed(2)}</td>
+                        `;
+                        topRiskFactors.appendChild(row);
+                    });
+
+                    // Recent Risk Changes
+                    const recentRiskChanges = document.getElementById('recent-risk-changes');
+                    recentRiskChanges.innerHTML = '';
+                    data.recent_changes.slice(0, 5).forEach(change => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${new Date(change.timestamp).toLocaleString()}</td>
+                            <td>${change.change.toFixed(2)}</td>
+                            <td>${change.reason}</td>
+                        `;
+                        recentRiskChanges.appendChild(row);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    alert('Failed to load server risk contributors data. Please try again later.');
+                });
+        });
+    </script>
+</body>
+</html>

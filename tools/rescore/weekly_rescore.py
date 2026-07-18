@@ -494,6 +494,8 @@ def ph_import(run: Run, args) -> None:
         raise SystemExit("ALERT: preds.jsonl.gz missing at import; aborting (no writes)")
     scored_at = datetime.utcnow()
     conn = pg_conn(); cur = conn.cursor()
+    capture = os.environ.get("RESCORE_CAPTURE_DELTAS", "1") != "0"   # kill switch
+    delta_stats = {}          # axis -> {"new": n, "changed": n, "unchanged": n}
 
     def gate(orp):
         pcrit = orp[3] if len(orp) > 3 else 0.0
@@ -507,16 +509,58 @@ def ph_import(run: Run, args) -> None:
     rows, sids, servers, seen = [], [], 0, set()
 
     def flush():
-        nonlocal rows, sids
+        nonlocal rows, sids, capture
         if not rows:
             return
-        cur.execute("delete from mcp_llm_axis_scores where model_version=%s and server_id=any(%s)",
-                    (MODEL_VERSION, sids))
-        execute_values(cur,
-            "insert into mcp_llm_axis_scores (server_id, axis_name, label, label_index, probs, "
-            "p_top, p_critical, p_danger, escalated, escalated_to, decision_rule_version, "
-            "model_version, adapter_sha256, scored_at) values %s", rows)
-        conn.commit()
+        prev = {}
+        if capture:
+            try:
+                cur.execute("select server_id, axis_name, label, label_index, p_top, escalated, scored_at "
+                            "from mcp_llm_axis_scores where model_version=%s and server_id=any(%s)",
+                            (MODEL_VERSION, sids))
+                prev = {(r[0], r[1]): r[2:] for r in cur.fetchall()}
+            except Exception as e:
+                conn.rollback(); capture = False
+                log(f"delta-capture OFF (prev-read failed): {e}")
+        events = []
+        if capture:
+            for r in rows:
+                sid_r, axis, lbl, lidx, ptop_new, esc_new = r[0], r[1], r[2], r[3], r[5], r[8]
+                st = delta_stats.setdefault(axis, {"new": 0, "changed": 0, "unchanged": 0})
+                old = prev.get((sid_r, axis))
+                if old is None:
+                    st["new"] += 1
+                elif old[1] != lidx or bool(old[3]) != bool(esc_new):
+                    st["changed"] += 1
+                    events.append((sid_r, axis, MODEL_VERSION, run.state["run_id"],
+                                   old[0], old[1], old[2], old[4], lbl, lidx, ptop_new))
+                else:
+                    st["unchanged"] += 1
+
+        def _apply(evs):
+            cur.execute("delete from mcp_llm_axis_scores where model_version=%s and server_id=any(%s)",
+                        (MODEL_VERSION, sids))
+            execute_values(cur,
+                "insert into mcp_llm_axis_scores (server_id, axis_name, label, label_index, probs, "
+                "p_top, p_critical, p_danger, escalated, escalated_to, decision_rule_version, "
+                "model_version, adapter_sha256, scored_at) values %s", rows)
+            if evs:
+                execute_values(cur,
+                    "insert into score_change_events (server_id, axis_name, model_version, run_id, "
+                    "prev_label, prev_label_index, prev_p_top, prev_scored_at, new_label, "
+                    "new_label_index, new_p_top) values %s", evs)
+            conn.commit()
+
+        try:
+            _apply(events if capture else None)
+        except Exception as e:
+            conn.rollback()
+            if capture:               # analytics must never break scoring: retry bare
+                capture = False
+                log(f"delta-capture OFF (events insert failed): {e}; batch retried without events")
+                _apply(None)
+            else:
+                raise
         rows, sids = [], []
 
     with gzip.open(preds_gz, "rt", encoding="utf-8") as f:
@@ -553,6 +597,19 @@ def ph_import(run: Run, args) -> None:
     cur.execute("select count(distinct server_id) from mcp_llm_axis_scores where model_version=%s",
                 (MODEL_VERSION,))
     scored_after = cur.fetchone()[0]
+    if capture and delta_stats:
+        try:
+            execute_values(cur,
+                "insert into score_change_runs (run_id, model_version, axis_name, n_new, n_changed, "
+                "n_unchanged) values %s on conflict on constraint uq_scr_run_axis do update set "
+                "n_new=excluded.n_new, n_changed=excluded.n_changed, n_unchanged=excluded.n_unchanged",
+                [(run.state["run_id"], MODEL_VERSION, a, s["new"], s["changed"], s["unchanged"])
+                 for a, s in sorted(delta_stats.items())])
+            conn.commit()
+            log("delta-capture: " + json.dumps(delta_stats, sort_keys=True))
+        except Exception as e:
+            conn.rollback()
+            log(f"delta-capture aggregates skipped: {e}")
     conn.close()
     before = run.state.get("scored_before", 0)
     if scored_after < before:                              # I1
@@ -561,7 +618,8 @@ def ph_import(run: Run, args) -> None:
     coverage = servers / max(1, run.state.get("exported", 1))
     run.mark("import", imported_servers=servers, scored_after=scored_after,
              coverage=round(coverage, 3),
-             degraded=coverage < 0.90)                     # I2
+             degraded=coverage < 0.90,                     # I2
+             delta_summary=delta_stats or None)
     log(f"import OK: servers={servers} coverage={coverage:.1%} scored_after={scored_after}")
 
 

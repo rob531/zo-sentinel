@@ -88,7 +88,7 @@ def main():
         el = (time.time() - i["start_date"]) / 60
         if stat == "running":
             log(f"{iid} RUNNING after {el:.1f}m -- guard done, collect watcher owns it"); return
-        if stat in ("loading", "created") and el >= WEDGE_MIN:
+        if stat != "running" and el >= WEDGE_MIN:
             if refires >= MAX_REFIRES:
                 try: vast_api("DELETE", f"/instances/{iid}/", key)
                 except Exception as e: log(f"destroy error: {e}")

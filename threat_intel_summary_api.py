@@ -10,11 +10,11 @@ Output: {server_id, threat_refs, vuln_advisories, overall_threat_level, fetched_
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func, or_, and_, distinct
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     j2 = r2.json()
     # Debug
     print(f"DEBUG clean-server response: {j2}")
-    print(f"DEBUG sev_counts: total_refs=0, CRITICAL=0, HIGH=0, MEDIUM=0, LOW=0, UNKNOWN=0")
+    print("DEBUG sev_counts: total_refs=0, CRITICAL=0, HIGH=0, MEDIUM=0, LOW=0, UNKNOWN=0")
     assert j2["overall_threat_level"] in ("none",), f"got {j2['overall_threat_level']!r}"
     assert j2["threat_refs"]["total_refs"] == 0
     assert j2["vuln_advisories"]["total"] == 0

@@ -21,7 +21,15 @@
 #      durable copy is the archive, not the stack)
 #   4. prune archived auto-stash entries older than $SAFE_FF_STASH_KEEP_DAYS
 #      (default 7) -- never prunes an entry whose patch archive is missing
-#   5. git merge --ff-only origin/main
+#   5. git merge --ff-only origin/main; if untracked colliders STILL block it
+#      (anything the step-2 scan missed, e.g. dir/file conflicts or rename
+#      edge cases), MOVE each path git names (mv, never rm; path-preserving)
+#      into $SAFE_FF_BACKUP_ROOT/<utc-ts>/colliders/ and retry exactly once
+#      (FU-007). No-op on a clean clone: the first ff succeeds and the rescue
+#      never fires. NOTE (2026-07-19): the runtime clone carries thousands of
+#      untracked runtime-state files (directive queue, flag files, app db)
+#      that daemons depend on -- so we deliberately move ONLY paths that
+#      actually block the ff, never the whole untracked set.
 #
 # Exit: 0 ok (incl. already-up-to-date) | 2 env/fetch failure | 3 ff refused.
 # Usage: bash ops/host/safe_ff.sh [repo_dir]
@@ -42,6 +50,8 @@ if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
 fi
 
 # --- 1. back up untracked files that the incoming tree will add ---------------
+# --no-renames: keep renamed-in paths visible as plain adds so colliders at a
+# rename destination are caught here too (FU-007).
 moved=0
 while IFS= read -r path; do
     [ -n "$path" ] || continue
@@ -52,7 +62,7 @@ while IFS= read -r path; do
         mv "$path" "$dest" && moved=$((moved + 1)) \
             && echo "BACKED-UP untracked collider: $path"
     fi
-done < <(git diff --name-only --diff-filter=A HEAD origin/main)
+done < <(git diff --name-only --no-renames --diff-filter=A HEAD origin/main)
 [ "$moved" -gt 0 ] && echo "backup dir: $BACKUP_ROOT/$TS ($moved file(s))"
 
 # --- 2. stash tracked local modifications + durable patch archive -------------
@@ -88,10 +98,41 @@ if [ -n "$CUTOFF" ]; then
     [ "$pruned" -gt 0 ] && echo "PRUNED $pruned auto-stash entr(ies) older than ${KEEP_DAYS}d (patches: $STASH_ARCHIVE)"
 fi
 
-# --- 4. fast-forward -----------------------------------------------------------
-if git merge --ff-only origin/main -q; then
+# --- 4. fast-forward (with one-shot untracked-collider rescue, FU-007) --------
+if ff_out="$(git merge --ff-only origin/main -q 2>&1)"; then
     echo "HEAD: $(git rev-parse --short HEAD)  $(git log -1 --pretty=%s | cut -c1-60)"
     exit 0
 fi
+
+# ff refused. If git names untracked files it would overwrite/remove, MOVE each
+# one (mv, never rm; path-preserving) into $BACKUP_ROOT/$TS/colliders/ and
+# retry exactly once. Anything else falls through to the existing FATAL path.
+# Two error formats exist: a plural block (unpack-trees) and a singular
+# one-line variant (read-tree codepath) -- parse both.
+rescued=0
+while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    [ -e "$path" ] || continue
+    # safety: never move a tracked path from here
+    git ls-files --error-unmatch "$path" >/dev/null 2>&1 && continue
+    dest="$BACKUP_ROOT/$TS/colliders/$path"
+    mkdir -p "$(dirname "$dest")"
+    mv "$path" "$dest" && rescued=$((rescued + 1)) \
+        && echo "RESCUED untracked collider: $path"
+done < <(printf '%s\n' "$ff_out" \
+         | awk '/untracked working tree files would be (overwritten|removed) by/ {grab=1; next}
+                /^(Please move or remove|Aborting)/ {grab=0}
+                grab {sub(/^[ \t]+/, ""); print}'
+         printf '%s\n' "$ff_out" \
+         | sed -n "s/^error: Untracked working tree file '\(.*\)' would be [a-z]* by [a-z]*\.\$/\1/p")
+
+if [ "$rescued" -gt 0 ]; then
+    echo "collider dir: $BACKUP_ROOT/$TS/colliders ($rescued file(s)); retrying ff once"
+    if git merge --ff-only origin/main -q; then
+        echo "HEAD: $(git rev-parse --short HEAD)  $(git log -1 --pretty=%s | cut -c1-60)"
+        exit 0
+    fi
+fi
+printf '%s\n' "$ff_out"
 echo "FATAL: ff refused even after backup+stash -- inspect manually (diverged history?)"
 exit 3

@@ -217,24 +217,27 @@ if __name__ == "__main__":
 
     main_app.dependency_overrides[get_session] = _override_session
 
-    # Patch principal to avoid real auth
-    from unittest.mock import patch
+    # Mock principal via FastAPI dependency_overrides -- unittest.mock.patch on
+    # app.security.get_principal does NOT work here: FastAPI captured the
+    # dependency callable by reference at import time, so the module-attribute
+    # patch never reaches the resolver (this is why the original build failed
+    # with 401 "Invalid token").
     _mock_principal = Principal(
         user_id="user-001",
         email="admin@test.dev",
         org_id=_org.id,
         role="admin",
     )
-    with patch("app.security.get_principal", return_value=_mock_principal):
-        client = TestClient(main_app)
+    main_app.dependency_overrides[get_principal] = lambda: _mock_principal
+    client = TestClient(main_app)
 
-        # Happy path: /search/servers returns 200
-        r = client.get("/search/servers?q=test", headers={"Authorization": "Bearer test"})
-        assert r.status_code == 200, f"/search/servers failed: {r.status_code} {r.text}"
+    # Happy path: /search/servers returns 200
+    r = client.get("/search/servers?q=test")
+    assert r.status_code == 200, f"/search/servers failed: {r.status_code} {r.text}"
 
-        # Auth failure: missing principal -> 401/403
-        with patch("app.security.get_principal", side_effect=HTTPException(status.HTTP_401_UNAUTHORIZED)):
-            r2 = client.get("/search/servers?q=test")
-            assert r2.status_code in (401, 403), f"Expected 401/403, got {r2.status_code}"
+    # Auth failure: real auth path with no credentials -> 401/403
+    del main_app.dependency_overrides[get_principal]
+    r2 = client.get("/search/servers?q=test")
+    assert r2.status_code in (401, 403), f"Expected 401/403, got {r2.status_code}"
 
     print("PASS")

@@ -14,8 +14,14 @@
 #      untracked -> move each (path-preserving) into
 #      $SAFE_FF_BACKUP_ROOT/<utc-ts>/ (default lives in zo_sentinel_state/,
 #      OUTSIDE the repo, so `git clean` on daemon respawn can't eat it)
-#   3. stash tracked local modifications (tagged, recoverable)
-#   4. git merge --ff-only origin/main
+#   3. stash tracked local modifications (tagged, recoverable) AND write the
+#      stash out as a durable .patch archive (2026-07-19: stash stack had
+#      silently grown 17 deep; entries are snapshots of recurring daemon
+#      churn -- runtime state files + orphaned builder outputs -- so the
+#      durable copy is the archive, not the stack)
+#   4. prune archived auto-stash entries older than $SAFE_FF_STASH_KEEP_DAYS
+#      (default 7) -- never prunes an entry whose patch archive is missing
+#   5. git merge --ff-only origin/main
 #
 # Exit: 0 ok (incl. already-up-to-date) | 2 env/fetch failure | 3 ff refused.
 # Usage: bash ops/host/safe_ff.sh [repo_dir]
@@ -23,6 +29,8 @@ set -uo pipefail
 
 REPO_DIR="${1:-/home/workspace/zo_sentinel}"
 BACKUP_ROOT="${SAFE_FF_BACKUP_ROOT:-/home/workspace/zo_sentinel_state/refresh_backups}"
+STASH_ARCHIVE="${SAFE_FF_STASH_ARCHIVE:-/home/workspace/zo_sentinel_state/stash_archive}"
+KEEP_DAYS="${SAFE_FF_STASH_KEEP_DAYS:-7}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 cd "$REPO_DIR" || { echo "FATAL: cannot cd $REPO_DIR"; exit 2; }
@@ -47,13 +55,40 @@ while IFS= read -r path; do
 done < <(git diff --name-only --diff-filter=A HEAD origin/main)
 [ "$moved" -gt 0 ] && echo "backup dir: $BACKUP_ROOT/$TS ($moved file(s))"
 
-# --- 2. stash tracked local modifications (never lose local work) -------------
+# --- 2. stash tracked local modifications + durable patch archive -------------
 if ! git diff --quiet || ! git diff --cached --quiet; then
     git stash push -m "safe_ff auto-stash $TS" -q \
         && echo "STASHED tracked local modifications (git stash list to inspect)"
+    mkdir -p "$STASH_ARCHIVE"
+    git stash show -p "stash@{0}" > "$STASH_ARCHIVE/$TS.patch" 2>/dev/null \
+        && echo "ARCHIVED stash patch: $STASH_ARCHIVE/$TS.patch"
 fi
 
-# --- 3. fast-forward -----------------------------------------------------------
+# --- 3. prune archived auto-stashes older than KEEP_DAYS ----------------------
+CUTOFF="$(date -u -d "$KEEP_DAYS days ago" +%Y%m%dT%H%M%SZ 2>/dev/null || echo "")"
+if [ -n "$CUTOFF" ]; then
+    pruned=0
+    # collect (index, ts) for auto-stash entries older than cutoff; drop from
+    # the HIGHEST index down because dropping renumbers the stack
+    while IFS=' ' read -r idx sts; do
+        [ -n "$idx" ] || continue
+        # durable copy must exist before we drop (write it now if missing)
+        if [ ! -s "$STASH_ARCHIVE/$sts.patch" ]; then
+            mkdir -p "$STASH_ARCHIVE"
+            git stash show -p "stash@{$idx}" > "$STASH_ARCHIVE/$sts.patch" 2>/dev/null || continue
+        fi
+        git stash drop "stash@{$idx}" -q && pruned=$((pruned + 1))
+    done < <(git stash list --format='%gs' \
+             | awk -v cut="$CUTOFF" '{
+                   line = NR - 1
+                   ts = $0
+                   if (sub(/.*safe_ff auto-stash /, "", ts) && ts < cut)
+                       print line, ts
+               }' | sort -rn)
+    [ "$pruned" -gt 0 ] && echo "PRUNED $pruned auto-stash entr(ies) older than ${KEEP_DAYS}d (patches: $STASH_ARCHIVE)"
+fi
+
+# --- 4. fast-forward -----------------------------------------------------------
 if git merge --ff-only origin/main -q; then
     echo "HEAD: $(git rev-parse --short HEAD)  $(git log -1 --pretty=%s | cut -c1-60)"
     exit 0

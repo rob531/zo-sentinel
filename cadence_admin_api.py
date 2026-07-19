@@ -283,8 +283,8 @@ def _run_reindex(run_id: int) -> None:
             return
         from ask_corpus_indexer import reindex
         stats = reindex(db)
-        # reindex() bounds memory by expunging its session working set, which
-        # detaches OUR run row too -- re-fetch or _finish writes to a ghost.
+        # Defensive re-fetch after the long chunked pass (its commits
+        # expire this session's objects): _finish must write a live row.
         run = db.get(CadenceJobRun, run_id)
         corpus_after = db.execute(
             select(func.count()).select_from(AskCorpusDoc)).scalar() or 0

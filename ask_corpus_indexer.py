@@ -13,7 +13,7 @@ full-registry ORM scan; the 1GB Fly worker was OOM-killed at ~790MB two
 minutes in (cadence runs 24/26 died as zombie 'running' rows and took the
 co-resident snapshots worker with them). This version holds at most ONE
 keyset-paginated chunk of servers, their axis labels, and their existing
-corpus rows; every chunk ends with commit + expunge_all.
+corpus rows; every chunk ends with a commit.
 
 Run:  python3 ask_corpus_indexer.py            (CLI full pass, prints stats)
 API:  POST /api/ask/reindex                    (admin-only)
@@ -135,8 +135,12 @@ def reindex(db: Session, batch_size: int = 1000, limit: int = 0,
             row.content_hash = h
             row.indexed_at = datetime.now(timezone.utc)
             stats["written"] += 1
-        db.commit()       # bound the transaction to one chunk ...
-        db.expunge_all()  # ... and release every ORM object it touched
+        # Commit per chunk: bounds the transaction and expires chunk
+        # objects (expire_on_commit); the weak identity map lets them be
+        # GC'd when the next chunk rebinds servers/existing/axis_map.
+        # NEVER expunge_all here: callers (treewalk seed, cadence worker)
+        # hold live objects on this same session (CI caught the detach).
+        db.commit()
     return stats
 
 

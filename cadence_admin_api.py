@@ -123,6 +123,31 @@ def _last_ok(db: Session, job: str) -> Optional[CadenceJobRun]:
         .limit(1)).scalars().first()
 
 
+def _reap_zombies(db: Session) -> int:
+    """Zombie-run janitor (2026-07-19 scar: the Fly reindex worker was
+    OOM-killed mid-run twice, leaving cadence_job_runs rows stuck at
+    status='running' forever -- runs 24/26 -- which poisons every consumer
+    that trusts status). Any running row older than CADENCE_ZOMBIE_HOURS
+    (default 6) becomes failed with a zombie marker. Called at the top of
+    each POST endpoint: request-scoped, no daemon, same CofC write path."""
+    max_h = _env_int("CADENCE_ZOMBIE_HOURS", 6)
+    cutoff = datetime.utcnow() - timedelta(hours=max_h)
+    n = 0
+    for run in db.execute(
+            select(CadenceJobRun)
+            .where(CadenceJobRun.status == "running",
+                   CadenceJobRun.started_at < cutoff)).scalars():
+        run.finished_at = datetime.utcnow()
+        run.status = "failed"
+        run.detail = {**(run.detail or {}),
+                      "error": f"zombie: still 'running' after {max_h}h; "
+                               "worker presumed dead (OOM/restart); reaped"}
+        n += 1
+    if n:
+        db.commit()
+    return n
+
+
 def _start_run(db: Session, job: str) -> CadenceJobRun:
     run = CadenceJobRun(job=job, status="running", started_at=datetime.utcnow())
     db.add(run)
@@ -258,6 +283,9 @@ def _run_reindex(run_id: int) -> None:
             return
         from ask_corpus_indexer import reindex
         stats = reindex(db)
+        # Defensive re-fetch after the long chunked pass (its commits
+        # expire this session's objects): _finish must write a live row.
+        run = db.get(CadenceJobRun, run_id)
         corpus_after = db.execute(
             select(func.count()).select_from(AskCorpusDoc)).scalar() or 0
         _finish(db, run, "ok", corpus_after,
@@ -284,6 +312,7 @@ def run_snapshots(background: BackgroundTasks, force: bool = False,
                   invoker: str = Depends(require_cadence_invoker)) -> dict:
     """Enqueue one snapshot+diff cycle over every saved perspective.
     Idempotent within CADENCE_MIN_INTERVAL_HOURS (default 12) unless force."""
+    _reap_zombies(db)
     min_h = _env_int("CADENCE_MIN_INTERVAL_HOURS", 12)
     last = _last_ok(db, JOB_SNAPSHOTS)
     if (not force and last and last.finished_at and
@@ -307,6 +336,7 @@ def drift_check(background: BackgroundTasks, force: bool = False,
     """Cheap drift measurement inline; the ~66k-row reindex only ever runs as
     an enqueued background job (MUST 5). No drift => records an ok no-op run
     (a clean check IS a successful cadence)."""
+    _reap_zombies(db)
     stats = _drift_stats(db)
     pct = _env_float("CADENCE_DRIFT_PCT", 5.0)
     triggered = bool(force or stats["drift_pct"] > pct
@@ -348,8 +378,14 @@ def cadence_health(db: Session = Depends(get_session),
         jobs[job] = {"last_ok": (last.finished_at.isoformat()
                                  if last and last.finished_at else None),
                      "overdue": overdue}
-    return {"sla_hours": sla_h, "jobs": jobs,
-            "alert": any(j["overdue"] for j in jobs.values())}
+    zombies = db.execute(
+        select(func.count()).select_from(CadenceJobRun)
+        .where(CadenceJobRun.status == "running",
+               CadenceJobRun.started_at <
+               now - timedelta(hours=_env_int("CADENCE_ZOMBIE_HOURS", 6)))
+    ).scalar() or 0
+    return {"sla_hours": sla_h, "jobs": jobs, "zombie_running": zombies,
+            "alert": any(j["overdue"] for j in jobs.values()) or zombies > 0}
 
 
 # --------------------------------------------------------------------------
@@ -452,5 +488,28 @@ if __name__ == "__main__":
     h = client.get("/api/admin/cadence/health", headers=H).json()
     assert h["alert"] is False, h
     assert all(v["last_ok"] for v in h["jobs"].values()), h
+
+    # 6) zombie reap (2026-07-19 Fly OOM scar): a 'running' row older than
+    # CADENCE_ZOMBIE_HOURS alerts via health, is closed as failed by the next
+    # POST, and health goes quiet again.
+    os.environ["CADENCE_ZOMBIE_HOURS"] = "6"
+    s = TestSession()
+    zrun = CadenceJobRun(job=JOB_DRIFT, status="running",
+                         started_at=datetime.utcnow() - timedelta(hours=7))
+    s.add(zrun)
+    s.commit()
+    zid = zrun.id
+    s.close()
+    h2 = client.get("/api/admin/cadence/health", headers=H).json()
+    assert h2["zombie_running"] == 1 and h2["alert"] is True, h2
+    client.post("/api/admin/cadence/ask/drift-check", headers=H)
+    s = TestSession()
+    z = s.get(CadenceJobRun, zid)
+    assert z.status == "failed", z.status
+    assert "zombie" in ((z.detail or {}).get("error") or ""), z.detail
+    s.close()
+    h3 = client.get("/api/admin/cadence/health", headers=H).json()
+    assert h3["zombie_running"] == 0, h3
+    assert h3["alert"] is False, h3
 
     print("PASS")

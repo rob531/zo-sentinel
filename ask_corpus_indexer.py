@@ -7,15 +7,24 @@ are ONLY mcp_server_registry + mcp_llm_axis_scores. Idempotent: unchanged
 input -> identical rows, no duplicates (server_id is the PK; content hash
 short-circuits rewrites). Bounded batches; resumable by construction (upsert).
 
+MEMORY-BOUNDED (2026-07-19): the previous implementation loaded a global
+sid->axis-label map (~1.6M entries at 232K servers) plus an unstreamed
+full-registry ORM scan; the 1GB Fly worker was OOM-killed at ~790MB two
+minutes in (cadence runs 24/26 died as zombie 'running' rows and took the
+co-resident snapshots worker with them). This version holds at most ONE
+keyset-paginated chunk of servers, their axis labels, and their existing
+corpus rows; every chunk ends with a commit.
+
 Run:  python3 ask_corpus_indexer.py            (CLI full pass, prints stats)
 API:  POST /api/ask/reindex                    (admin-only)
 """
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -61,46 +70,77 @@ def _content_hash(doc: dict) -> str:
                           + doc["snippet"].encode()).hexdigest()[:16]
 
 
-def reindex(db: Session, batch_size: int = 1000, limit: int = 0) -> dict:
-    """Full corpus pass. Upsert-by-PK => idempotent; unchanged docs skipped
-    via content hash stored on the row (indexed_at only bumps on change)."""
-    mv = latest_global_model_version(db)
-    stats = {"scanned": 0, "written": 0, "unchanged": 0, "model_version": mv}
-
-    axis_map: Dict[str, Dict[str, str]] = {}
-    if mv:
+def _axis_labels_for(db: Session, sids: Sequence[str],
+                     mv: Optional[str]) -> Dict[str, Dict[str, str]]:
+    """Axis labels for ONE chunk of server_ids only -- never the whole fleet."""
+    out: Dict[str, Dict[str, str]] = {}
+    if mv and sids:
         for sid, axis, label in db.execute(
                 select(McpLlmAxisScore.server_id, McpLlmAxisScore.axis_name,
                        McpLlmAxisScore.label)
-                .where(McpLlmAxisScore.model_version == mv)):
+                .where(McpLlmAxisScore.model_version == mv,
+                       McpLlmAxisScore.server_id.in_(list(sids)))):
             if label:
-                axis_map.setdefault(sid, {})[axis] = str(label)
+                out.setdefault(sid, {})[axis] = str(label)
+    return out
 
-    q = select(McpServerRegistry)
-    if limit:
-        q = q.limit(limit)
-    n_in_batch = 0
-    for server in db.execute(q).scalars():
-        stats["scanned"] += 1
-        doc = build_doc(server, axis_map.get(server.server_id, {}))
-        h = _content_hash(doc)
-        row = db.get(AskCorpusDoc, server.server_id)
-        if row is not None and row.content_hash == h:
-            stats["unchanged"] += 1
-            continue
-        if row is None:
-            row = AskCorpusDoc(server_id=server.server_id)
-            db.add(row)
-        row.snippet = doc["snippet"]
-        row.terms = doc["terms"]
-        row.content_hash = h
-        row.indexed_at = datetime.now(timezone.utc)
-        stats["written"] += 1
-        n_in_batch += 1
-        if n_in_batch >= batch_size:
-            db.commit()
-            n_in_batch = 0
-    db.commit()
+
+def reindex(db: Session, batch_size: int = 1000, limit: int = 0,
+            chunk_size: int = 0) -> dict:
+    """Full corpus pass in bounded chunks. Upsert-by-PK => idempotent;
+    unchanged docs skipped via content hash stored on the row (indexed_at
+    only bumps on change). batch_size is retained for call compatibility;
+    the working-set bound is chunk_size (env ASK_REINDEX_CHUNK, default
+    2000 rows ~= a few MB, safe on a 1GB Fly machine)."""
+    if chunk_size <= 0:
+        try:
+            chunk_size = max(1, int(os.environ.get("ASK_REINDEX_CHUNK", "2000")))
+        except (TypeError, ValueError):
+            chunk_size = 2000
+    mv = latest_global_model_version(db)
+    stats = {"scanned": 0, "written": 0, "unchanged": 0, "model_version": mv,
+             "chunk_size": chunk_size}
+    last_sid = ""
+    while True:
+        if limit and stats["scanned"] >= limit:
+            break
+        take = chunk_size if not limit else min(chunk_size,
+                                                limit - stats["scanned"])
+        servers = db.execute(
+            select(McpServerRegistry)
+            .where(McpServerRegistry.server_id > last_sid)
+            .order_by(McpServerRegistry.server_id)
+            .limit(take)).scalars().all()
+        if not servers:
+            break
+        sids = [s.server_id for s in servers]
+        last_sid = sids[-1]
+        axis_map = _axis_labels_for(db, sids, mv)
+        existing = {r.server_id: r for r in db.execute(
+            select(AskCorpusDoc)
+            .where(AskCorpusDoc.server_id.in_(sids))).scalars()}
+        for server in servers:
+            stats["scanned"] += 1
+            doc = build_doc(server, axis_map.get(server.server_id, {}))
+            h = _content_hash(doc)
+            row = existing.get(server.server_id)
+            if row is not None and row.content_hash == h:
+                stats["unchanged"] += 1
+                continue
+            if row is None:
+                row = AskCorpusDoc(server_id=server.server_id)
+                db.add(row)
+            row.snippet = doc["snippet"]
+            row.terms = doc["terms"]
+            row.content_hash = h
+            row.indexed_at = datetime.now(timezone.utc)
+            stats["written"] += 1
+        # Commit per chunk: bounds the transaction and expires chunk
+        # objects (expire_on_commit); the weak identity map lets them be
+        # GC'd when the next chunk rebinds servers/existing/axis_map.
+        # NEVER expunge_all here: callers (treewalk seed, cadence worker)
+        # hold live objects on this same session (CI caught the detach).
+        db.commit()
     return stats
 
 
@@ -111,7 +151,7 @@ def api_reindex(db: Session = Depends(get_session),
 
 
 if __name__ == "__main__":
-    import os, sys
+    import sys
     os.environ.setdefault("DATABASE_URL", "sqlite://")
     if "--live" in sys.argv:
         from app.db import SessionLocal
@@ -128,13 +168,25 @@ if __name__ == "__main__":
         R(server_id="s1", name="Weak Auth Github Server", verdict="HIGH",
           risk_tier="HIGH", registry_source="github",
           description="A server with weak authentication."),
-        A(id=1, server_id="s1", axis_name="auth_strength", label="WEAK", model_version="v3"),
+        R(server_id="s2", name="Beta MCP", verdict="LOW",
+          risk_tier="LOW", registry_source="npm",
+          description="A quiet low-risk server."),
+        R(server_id="s3", name="Gamma MCP", verdict="MEDIUM",
+          risk_tier="MEDIUM", registry_source="pypi",
+          description="A middling server."),
+        A(id=1, server_id="s1", axis_name="auth_strength", label="WEAK",
+          model_version="v3"),
     ])
     s.commit()
-    st1 = reindex(s)
-    assert st1["written"] == 1, st1
+    # chunk_size=2 across 3 rows exercises the keyset chunk boundary
+    st1 = reindex(s, chunk_size=2)
+    assert st1["written"] == 3 and st1["scanned"] == 3, st1
     doc = s.get(AskCorpusDoc, "s1")
     assert "verdict=HIGH" in doc.snippet and "auth_strength=WEAK" in doc.snippet
-    st2 = reindex(s)   # idempotent: second run writes nothing
-    assert st2["written"] == 0 and st2["unchanged"] == 1, st2
+    st2 = reindex(s, chunk_size=2)   # idempotent: second run writes nothing
+    assert st2["written"] == 0 and st2["unchanged"] == 3, st2
+    st3 = reindex(s, chunk_size=1000)  # chunk-size independence
+    assert st3["written"] == 0 and st3["unchanged"] == 3, st3
+    st4 = reindex(s, limit=2, chunk_size=2)  # limit still honored
+    assert st4["scanned"] == 2, st4
     print("PASS")

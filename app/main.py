@@ -22,6 +22,7 @@ from .settings import settings
 # Routers from app/routers/ package are imported via app.routers.<name>.
 _OPTIONAL_ROUTERS = [
     "server_compare_api",
+    "server_axis_scores_summary_router",
     "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",
     "entity_report_exporter", "org_api_key_manager", "verdict_watchlist_service",
     "score_dispute_api",

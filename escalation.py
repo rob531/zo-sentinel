@@ -758,11 +758,97 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
                             len(_parsed), spec.model_id, _TC_MARKER)
                 tool_calls = _parsed
                 content = _residual
+        # TOOL:-as-prose (phase-8): nvidia/groq/cerebras/mistral rungs emit
+        # `TOOL: name` as prose -- and, worse, fabricate tool RESULTS as
+        # `TOOL: {json}`. Salvage real calls; strip fabrications; if ONLY
+        # fabrications remain, fail the turn so the rung rotates instead of
+        # wedging on roleplayed results.
+        if not tool_calls and content and _PROSE_TOOL_MARKER in content:
+            _pcalls, _presidual, _nfake = _parse_prose_tool_calls(content)
+            if _pcalls:
+                log.warning("[shim] salvaged %d prose-form TOOL: call(s) from "
+                            "%s (%d fabricated result block(s) stripped)",
+                            len(_pcalls), spec.model_id, _nfake)
+                tool_calls = _pcalls
+                content = _presidual
+            elif _nfake:
+                log.warning("[shim] %s fabricated %d TOOL: result block(s) "
+                            "with no actionable call -- failing turn for "
+                            "rung rotation", spec.model_id, _nfake)
+                return None, f"hallucinated TOOL: results x{_nfake}, no actionable call", None
         if not content and not tool_calls:
             return None, "empty content and no tools", None
         return (content or None), None, tool_calls
     except Exception as e:
         return None, f"{type(e).__name__}: {e}", None
+
+
+
+# --- TOOL:-as-prose salvage (phase-8 open item) ------------------------------
+# Beyond [TOOL_CALLS], capable rungs (NVIDIA NIM, Groq, Cerebras, Mistral) drop
+# to a `TOOL:` prose convention. Three shapes caught live 2026-07-14..15:
+#   TOOL: ns__tool_name                        (bare -- zero-arg intent)
+#   TOOL: ns__tool_name + ```json {...} ```    (name + fenced or bare JSON args)
+#   TOOL: {"status": "ok", ...}                (FABRICATED tool RESULT -- the
+#                                               model roleplays the bridge;
+#                                               never a call, must not pass on)
+_PROSE_TOOL_MARKER = "TOOL:"
+_PROSE_NAME_RX = re.compile(r"^[ \t]*TOOL:[ \t]*([A-Za-z_][\w.\-]*)[ \t]*$", re.M)
+_PROSE_RESULT_RX = re.compile(r"^[ \t]*TOOL:[ \t]*(\{)", re.M)
+_PROSE_ARGS_PROBE_RX = re.compile(r"\s*(?:```(?:json)?\s*)?\{")
+_PROSE_FENCE_CLOSE_RX = re.compile(r"\s*```")
+
+
+def _parse_prose_tool_calls(content):
+    """Salvage `TOOL: name [+ json args]` prose into OpenAI tool_calls.
+
+    Returns (tool_calls | None, residual_text, n_fabricated_results).
+    Never raises; with no salvageable shapes returns (None, content, 0).
+    Bare names get "{}" args -- an invalid-args bridge error is visible to
+    goose and self-corrects; a silent drop is not.
+    """
+    if not content or _PROSE_TOOL_MARKER not in content:
+        return None, content, 0
+
+    spans, calls, n_fake = [], [], 0
+
+    # fabricated results: TOOL: { ... } -- strip, never execute
+    for m in _PROSE_RESULT_RX.finditer(content):
+        obj, end = _scan_balanced_json(content, m.start(1))
+        if obj is None:
+            continue
+        n_fake += 1
+        spans.append((m.start(), end))
+
+    # real calls: TOOL: name, optionally followed by fenced/bare JSON args
+    for m in _PROSE_NAME_RX.finditer(content):
+        name, args, end = m.group(1), "{}", m.end()
+        probe = _PROSE_ARGS_PROBE_RX.match(content, m.end(), m.end() + 4096)
+        if probe:
+            obj, obj_end = _scan_balanced_json(content, probe.end() - 1)
+            if obj:
+                try:
+                    json.loads(obj)
+                    args, end = obj, obj_end
+                    fence = _PROSE_FENCE_CLOSE_RX.match(content, obj_end, obj_end + 16)
+                    if fence:
+                        end = fence.end()
+                except Exception:
+                    pass
+        calls.append({
+            "id": f"call_{uuid.uuid4().hex[:24]}",
+            "type": "function",
+            "function": {"name": name, "arguments": args},
+        })
+        spans.append((m.start(), end))
+
+    if not calls and not n_fake:
+        return None, content, 0
+
+    residual = content
+    for s, e in sorted(spans, key=lambda p: p[0], reverse=True):
+        residual = residual[:s] + residual[e:]
+    return (calls or None), residual.strip(), n_fake
 
 
 BACKEND_ADAPTERS = {

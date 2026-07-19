@@ -1,0 +1,33 @@
+version: "1.0.0"
+title: "stdio namespacing probe (scar #454)"
+description: >
+  Scar #454: goose 1.38 namespaced stdio tools away from what the architect
+  recipe expects and starved the architect (every call -> Tool not found -> +0).
+  This probe loads the REAL zo_directive_bridge stdio extension (same cmd/args
+  as directive_architect.yaml, cwd must be /home/workspace/zo_sentinel) and
+  makes ONE read-only call to the VERBATIM name the architect recipe hardcodes:
+  zo_directive_bridge__read_protected_files. If a candidate goose version
+  presents different tool names, the call fails and the nonce marker never
+  appears: canary FAIL, do not flip.
+extensions:
+  - name: zo_directive_bridge
+    type: stdio
+    cmd: "python3"
+    timeout: 900  # FU-017: MCP request timeout for this extension. NOTE (canary-proven 2026-07-19): the 1.43 developer-shell kill (#10348) is governed ONLY by GOOSE_DEFAULT_EXTENSION_TIMEOUT env/config (set 900 in zo_mesh/.zo_env), NOT this field.
+    args:
+      - "zo_sentinel/mcp_servers/directive_mcp.py"
+prompt: |-
+  You are a tool-namespace probe. Do EXACTLY this and nothing else:
+  1. Call the tool named EXACTLY `zo_directive_bridge__read_protected_files`
+     (full verbatim name, no arguments). Do NOT call any other tool.
+  2. If the call SUCCEEDS (returns any data), reply with exactly:
+       NAMESPACING_OK::{{ nonce }}
+  3. If the call FAILS (tool not found or any error), reply with exactly:
+       NAMESPACING_FAIL::{{ nonce }}
+     followed by the exact list of tool names you DO have available.
+  Then STOP.
+parameters:
+  - key: nonce
+    input_type: string
+    requirement: required
+    description: "unique token the CI asserts on"

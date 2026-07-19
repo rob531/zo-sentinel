@@ -53,6 +53,15 @@ POLL_SECS = 60
 HEARTBEAT_INTERVAL = 30
 GOOSE_TIMEOUT = 900   # headroom for the architect loop + delegate_to_builder codegen
 
+# FU-017: builder-scoped goose BINARY (mirror of the architect's
+# ZO_ARCHITECT_GOOSE_BIN). Default "goose" = the PATH binary (1.34.1 today).
+# Point ZO_BUILDER_GOOSE_BIN at /usr/local/bin/goose-1.43 to flip ONLY the
+# builder; unset to roll back. When non-default, run_goose_task gives the
+# subprocess an ISOLATED config/data HOME -- version skew on the shared
+# ~/.config/goose session store panics a different goose version (same scar
+# the architect hit flipping to 1.38).
+GOOSE_BIN = os.environ.get("ZO_BUILDER_GOOSE_BIN", "goose")
+
 PROJECT_DIR = Path("/home/workspace/zo_sentinel")
 LOGS_DIR = Path("/home/workspace/logs")
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -406,7 +415,7 @@ def check_goose_installed():
     """Check if Goose CLI is available."""
     try:
         result = subprocess.run(
-            ["goose", "--version"],
+            [GOOSE_BIN, "--version"],
             capture_output=True,
             text=True,
             timeout=10
@@ -567,10 +576,21 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None):
             log(f"[recipe] {directive_id} -> {recipe_path.name}")
         task_desc = json.dumps(content)
         env = {**os.environ, **(extra_env or {})}
+        if GOOSE_BIN != "goose":
+            # FU-017: isolated store for a versioned goose (see GOOSE_BIN note).
+            _iso = os.environ.get("ZO_BUILDER_GOOSE_HOME", "/home/workspace/.goose_builder")
+            try:
+                os.makedirs(_iso, exist_ok=True)
+            except Exception:
+                pass
+            env["HOME"] = _iso
+            env["XDG_CONFIG_HOME"] = f"{_iso}/.config"
+            env["XDG_DATA_HOME"] = f"{_iso}/.local/share"
+            env["XDG_STATE_HOME"] = f"{_iso}/.local/state"
         if extra_env:
             log(f"[LADDER] {directive_id} -> {extra_env.get('GOOSE_MODEL')}")
         result = subprocess.run(
-            ["goose", "run", "--recipe", str(recipe_path),
+            [GOOSE_BIN, "run", "--recipe", str(recipe_path),
              "--params", f"task_description={task_desc}"],
             capture_output=True,
             text=True,

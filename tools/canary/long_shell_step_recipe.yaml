@@ -1,0 +1,28 @@
+version: "1.0.0"
+title: "long shell step canary (FU-017)"
+description: >
+  Proves the EXPLICIT extension timeout takes effect on a CANDIDATE goose version.
+  goose 1.43 (#10348) applies the default extension timeout (300s) to developer
+  shell tool calls; previously-unbounded long builder shell steps would be silently
+  killed post-flip. This recipe runs ONE shell call that sleeps 400s -- past the
+  1.43 default -- and must COMPLETE, echoing the nonce. CANARY-PROVEN 2026-07-19:
+  the recipe/config per-extension `timeout:` field is NOT honoured for the 1.43
+  builtin shell kill; the ONLY operative guard is GOOSE_DEFAULT_EXTENSION_TIMEOUT
+  (env or config key; exported =900 in zo_mesh/.zo_env). Run this recipe WITH that
+  env var set; if the call is killed at ~300s and the nonce never appears:
+  canary FAIL, do not flip.
+extensions:
+  - type: builtin
+    name: developer
+    timeout: 900  # FU-017: MCP request timeout for this extension. NOTE (canary-proven 2026-07-19): the 1.43 developer-shell kill (#10348) is governed ONLY by GOOSE_DEFAULT_EXTENSION_TIMEOUT env/config (set 900 in zo_mesh/.zo_env), NOT this field.
+prompt: |-
+  Run exactly this ONE shell command as a SINGLE developer shell tool call, wait
+  for it to finish (it takes about 7 minutes -- that is expected, do NOT abort or
+  background it), report its output, then STOP:
+    sleep 400 && echo "LONG_STEP_OK::{{ nonce }}"
+  Do not run anything else. Do not split it into multiple calls.
+parameters:
+  - key: nonce
+    input_type: string
+    requirement: required
+    description: "unique token the CI asserts on"

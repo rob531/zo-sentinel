@@ -34,7 +34,7 @@ from sqlalchemy import and_, case, exists, false, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import McpLlmAxisScore, McpServerRegistry
+from app.models import McpLlmAxisScore, McpServerRegistry, VulnLink
 from facet_enum_service import (AXES, REGISTRY_FACETS, TRUST_BANDS,
                                 cached_facets, latest_global_model_version)
 from perspective_model import get_perspective, validate_facet_filters
@@ -43,6 +43,24 @@ from verdict_breakdown_api import Principal, get_principal
 router = APIRouter(prefix="/api", tags=["perspectives"])
 
 MAX_PAGE_SIZE = 100
+
+
+def _vuln_facets_on() -> bool:
+    """FU-005: the has_known_cve facet obeys the same vuln kill-switch as
+    vuln_facet_extension.extend_facets -- off => the key compiles to NOTHING
+    and contributes no counts (zero claims, zero trace)."""
+    try:
+        from vuln_facet_extension import kill_switch_on
+        return kill_switch_on()
+    except Exception:
+        return False   # fail-closed, same as the facet enumerator
+
+
+def _cve_member_pred():
+    """EXISTS predicate: server has >=1 exact vuln_link row -- the same
+    membership rule vuln_facet_extension.extend_facets counts."""
+    return exists(select(VulnLink.advisory_id).where(
+        VulnLink.server_id == McpServerRegistry.server_id))
 
 
 def _trust_bounds(db: Session) -> Tuple[float, float]:
@@ -87,6 +105,17 @@ def compile_filters(filters: dict, model_version: Optional[str],
                                   _band_expr(*trust_bounds).in_(vals)))
             else:
                 preds.append(false())
+        elif key == "has_known_cve":
+            # FU-005: boolean vuln facet -- validated against the enum since
+            # extend_facets, but silently DROPPED here until now.
+            if not _vuln_facets_on():
+                continue   # kill-switch off: ignored, exactly like before
+            want = {str(v).lower() for v in vals}
+            if want == {"true"}:
+                preds.append(_cve_member_pred())
+            elif want == {"false"}:
+                preds.append(~_cve_member_pred())
+            # true+false selected = the whole universe -> no predicate
         elif key.startswith("axis:") and model_version:
             axis = key[len("axis:"):]
             preds.append(exists(
@@ -136,6 +165,20 @@ def conditional_facet_counts(db: Session, filters: dict,
             band_counts[str(b)] = int(c)
     counts["trust_band"] = [{"value": b, "count": band_counts[b]}
                             for b in TRUST_BANDS]
+
+    # FU-005: has_known_cve conditional counts -- same exclude-own-group
+    # semantics as every other group; absent entirely when the kill-switch
+    # is off (mirrors extend_facets: an off switch leaves zero trace).
+    if _vuln_facets_on():
+        preds = compile_filters(filters, model_version, exclude="has_known_cve",
+                                trust_bounds=trust_bounds)
+        base = select(func.count()).select_from(McpServerRegistry)
+        if preds:
+            base = base.where(and_(*preds))
+        n_cve = int(db.execute(base.where(_cve_member_pred())).scalar_one())
+        n_clean = int(db.execute(base.where(~_cve_member_pred())).scalar_one())
+        counts["has_known_cve"] = [{"value": "true", "count": n_cve},
+                                   {"value": "false", "count": n_clean}]
 
     if model_version:
         for axis in AXES:
@@ -246,11 +289,13 @@ def perspective_servers(perspective_id: str,
 
 if __name__ == "__main__":
     import os
+    os.environ["ZO_VULN_ENABLED"] = "1"   # FU-005: vuln facet ON for the self-test
     os.environ.setdefault("DATABASE_URL", "sqlite://")
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.db import Base
     from app.models import McpLlmAxisScore as A, McpServerRegistry as R
+    from app.models import VulnAdvisory
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)
     s = sessionmaker(bind=eng)()
@@ -261,6 +306,12 @@ if __name__ == "__main__":
           registry_source="npm", trust_score=90.0),
         A(id=1, server_id="s1", axis_name="auth_strength", label="WEAK", model_version="v3"),
         A(id=2, server_id="s2", axis_name="auth_strength", label="STRONG", model_version="v3"),
+        # FU-005: s1 carries one exact vuln_link; s2 stays clean.
+        VulnAdvisory(id="GHSA-fu5", feed="ghsa", severity="HIGH", summary="rce",
+                     source_url="https://github.com/advisories/GHSA-fu5",
+                     aliases=["CVE-2026-0005"]),
+        VulnLink(advisory_id="GHSA-fu5", server_id="s1", match_basis="repo_exact",
+                 match_value="repo:github.com/o/r", match_confidence=1.0),
     ])
     s.commit()
 
@@ -307,4 +358,33 @@ if __name__ == "__main__":
     # v1.2: membership helper -- tuple path, no ORM, same filter semantics.
     m = query_membership(s, {"risk_tier": ["HIGH"]})
     assert m == {"s1": "HIGH"}, m
+
+    # FU-005: has_known_cve compiles into the SQL path (vuln_link membership,
+    # values bound) instead of being silently dropped.
+    cve_preds = compile_filters({"has_known_cve": ["true"]}, "v3")
+    assert len(cve_preds) == 1
+    cve_sql = str(select(McpServerRegistry).where(and_(*cve_preds)))
+    assert "EXISTS" in cve_sql.upper() and "vuln_links" in cve_sql
+    hit, cve_total, cve_fc = query_perspective_servers(s, {"has_known_cve": ["true"]})
+    assert cve_total == 1 and hit[0]["server_id"] == "s1", (cve_total, hit)
+    clean, clean_total, _ = query_perspective_servers(s, {"has_known_cve": ["false"]})
+    assert clean_total == 1 and clean[0]["server_id"] == "s2", (clean_total, clean)
+    # exclude-own-group: both options stay clickable; other groups are
+    # counted against the CVE selection.
+    assert {d["value"]: d["count"] for d in cve_fc["has_known_cve"]} == \
+        {"true": 1, "false": 1}, cve_fc.get("has_known_cve")
+    assert {d["value"]: d["count"] for d in cve_fc["registry_source"]} == \
+        {"github": 1}, cve_fc["registry_source"]
+    # OR-within-group with both values = the whole universe.
+    _, both_total, _ = query_perspective_servers(
+        s, {"has_known_cve": ["true", "false"]})
+    assert both_total == 2, both_total
+    # membership helper sees the same predicate (trust-diff path).
+    assert query_membership(s, {"has_known_cve": ["true"]}) == {"s1": "HIGH"}
+    # kill-switch off => the key compiles to NOTHING and counts show no trace.
+    os.environ["ZO_VULN_ENABLED"] = "0"
+    assert compile_filters({"has_known_cve": ["true"]}, "v3") == []
+    _, off_total, off_fc = query_perspective_servers(s, {"has_known_cve": ["true"]})
+    assert off_total == 2 and "has_known_cve" not in off_fc, (off_total, sorted(off_fc))
+    os.environ["ZO_VULN_ENABLED"] = "1"
     print("PASS")

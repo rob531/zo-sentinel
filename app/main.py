@@ -39,6 +39,11 @@ _OPTIONAL_ROUTERS = [
     "vuln_pkg_enricher", "otx_threat_refs",
     # P2 vuln/OTX/CVE surfacing (DESIGN_NEXT_BUILD_TARGETS_2026_07; agent-built)
     "vuln_facet_extension", "vuln_coverage_sla_api",
+    # FU-005 (2026-07-19): un-orphan the aggregated per-server threat-intel
+    # read surface (/servers/{id}/threat-intel-summary). Its two factory
+    # siblings stay unmounted as hollow near-dupes (broken imports/DI):
+    # threat_intel_reference_api, server_threat_intel_status_api.
+    "threat_intel_summary_api",
     # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
     # scorecard_badge_api stays unmounted until STALE-gating consumes this)
     "freshness_metadata_api",

@@ -1,0 +1,1 @@
+{ "exempt": [], "note": "modules that expose a router but are deliberately mounted by another mechanism (or are not app surface). Add the module stem + a reason in the PR body." }

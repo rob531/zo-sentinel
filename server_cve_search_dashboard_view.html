@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server CVE Search Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .severity-badge {
+            font-size: 0.8em;
+            padding: 0.2em 0.5em;
+            margin-right: 0.5em;
+        }
+        .cve-row {
+            margin-bottom: 1em;
+            padding: 1em;
+            border-radius: 0.5em;
+        }
+        .cve-row:hover {
+            background-color: #f8f9fa;
+        }
+        .filter-section {
+            margin-bottom: 2em;
+        }
+        .summary-card {
+            margin-bottom: 2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="my-4">Server CVE Search Dashboard</h1>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card summary-card">
+                    <div class="card-body">
+                        <h5 class="card-title">CVE Summary</h5>
+                        <div class="row">
+                            <div class="col">
+                                <h3 id="total-cves">0</h3>
+                                <p>Total CVEs</p>
+                            </div>
+                            <div class="col">
+                                <h3 id="critical-cves">0</h3>
+                                <p>Critical</p>
+                            </div>
+                            <div class="col">
+                                <h3 id="high-cves">0</h3>
+                                <p>High</p>
+                            </div>
+                            <div class="col">
+                                <h3 id="medium-cves">0</h3>
+                                <p>Medium</p>
+                            </div>
+                            <div class="col">
+                                <h3 id="low-cves">0</h3>
+                                <p>Low</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Search & Filters</h5>
+                        <div class="mb-3">
+                            <input type="text" class="form-control" id="search-input" placeholder="Search by CVE ID or keyword">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <select class="form-select" id="severity-filter">
+                                    <option value="">All Severities</option>
+                                    <option value="Critical">Critical</option>
+                                    <option value="High">High</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="Low">Low</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <select class="form-select" id="source-filter">
+                                    <option value="">All Sources</option>
+                                    <option value="NVD">NVD</option>
+                                    <option value="Red Hat">Red Hat</option>
+                                    <option value="Ubuntu">Ubuntu</option>
+                                    <option value="Debian">Debian</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <select class="form-select" id="date-filter">
+                                    <option value="">All Dates</option>
+                                    <option value="last-week">Last Week</option>
+                                    <option value="last-month">Last Month</option>
+                                    <option value="last-3-months">Last 3 Months</option>
+                                    <option value="last-6-months">Last 6 Months</option>
+                                    <option value="last-year">Last Year</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div id="cve-list">
+                    <!-- CVE entries will be inserted here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Mock data for self-test
+        const mockCveData = [
+            {
+                id: 1,
+                cve_id: "CVE-2023-1234",
+                description: "Buffer overflow vulnerability in example software",
+                severity: "Critical",
+                published_date: "2023-01-15",
+                source: "NVD",
+                llm_score: 95,
+                dispute_count: 0
+            },
+            {
+                id: 2,
+                cve_id: "CVE-2023-5678",
+                description: "SQL injection vulnerability in web application",
+                severity: "High",
+                published_date: "2023-02-20",
+                source: "Red Hat",
+                llm_score: 85,
+                dispute_count: 1
+            },
+            {
+                id: 3,
+                cve_id: "CVE-2023-9012",
+                description: "Information disclosure in API endpoint",
+                severity: "Medium",
+                published_date: "2023-03-10",
+                source: "Ubuntu",
+                llm_score: 70,
+                dispute_count: 0
+            },
+            {
+                id: 4,
+                cve_id: "CVE-2023-3456",
+                description: "Cross-site scripting vulnerability",
+                severity: "Medium",
+                published_date: "2023-04-05",
+                source: "Debian",
+                llm_score: 65,
+                dispute_count: 2
+            },
+            {
+                id: 5,
+                cve_id: "CVE-2023-7890",
+                description: "Denial of service vulnerability in network service",
+                severity: "Low",
+                published_date: "2023-05-18",
+                source: "NVD",
+                llm_score: 50,
+                dispute_count: 0
+            }
+        ];
+
+        // Function to render CVE list
+        function renderCveList(cves) {
+            const cveListElement = document.getElementById('cve-list');
+            cveListElement.innerHTML = '';
+
+            if (cves.length === 0) {
+                cveListElement.innerHTML = '<div class="alert alert-info">No CVEs found matching your criteria.</div>';
+                return;
+            }
+
+            cves.forEach(cve => {
+                const severityClass = getSeverityClass(cve.severity);
+                const disputeBadge = cve.dispute_count > 0 ? `<span class="badge bg-warning">Disputed (${cve.dispute_count})</span>` : '';
+
+                const cveElement = document.createElement('div');
+                cveElement.className = 'cve-row border rounded';
+                cveElement.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="mb-0">${cve.cve_id}</h5>
+                        <span class="severity-badge badge ${severityClass}">${cve.severity}</span>
+                        ${disputeBadge}
+                    </div>
+                    <p class="mb-1">${cve.description}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            Published: ${cve.published_date} | Source: ${cve.source}
+                        </small>
+                        <div class="d-flex">
+                            <span class="badge bg-light text-dark me-1">LLM Score: ${cve.llm_score}</span>
+                        </div>
+                    </div>
+                `;
+                cveListElement.appendChild(cveElement);
+            });
+        }
+
+        // Function to get severity class for badge
+        function getSeverityClass(severity) {
+            switch (severity) {
+                case 'Critical':
+                    return 'bg-danger';
+                case 'High':
+                    return 'bg-warning';
+                case 'Medium':
+                    return 'bg-primary';
+                case 'Low':
+                    return 'bg-success';
+                default:
+                    return 'bg-secondary';
+            }
+        }
+
+        // Function to update summary counts
+        function updateSummaryCounts(cves) {
+            const total = cves.length;
+            const critical = cves.filter(cve => cve.severity === 'Critical').length;
+            const high = cves.filter(cve => cve.severity === 'High').length;
+            const medium = cves.filter(cve => cve.severity === 'Medium').length;
+            const low = cves.filter(cve => cve.severity === 'Low').length;
+
+            document.getElementById('total-cves').textContent = total;
+            document.getElementById('critical-cves').textContent = critical;
+            document.getElementById('high-cves').textContent = high;
+            document.getElementById('medium-cves').textContent = medium;
+            document.getElementById('low-cves').textContent = low;
+        }
+
+        // Function to filter CVEs
+        function filterCves() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const severityFilter = document.getElementById('severity-filter').value;
+            const sourceFilter = document.getElementById('source-filter').value;
+            const dateFilter = document.getElementById('date-filter').value;
+
+            let filteredCves = [...mockCveData];
+
+            // Apply search term filter
+            if (searchTerm) {
+                filteredCves = filteredCves.filter(cve =>
+                    cve.cve_id.toLowerCase().includes(searchTerm) ||
+                    cve.description.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            // Apply severity filter
+            if (severityFilter) {
+                filteredCves = filteredCves.filter(cve => cve.severity === severityFilter);
+            }
+
+            // Apply source filter
+            if (sourceFilter) {
+                filteredCves = filteredCves.filter(cve => cve.source === sourceFilter);
+            }
+
+            // Apply date filter
+            if (dateFilter) {
+                const now = new Date();
+                let cutoffDate;
+
+                switch (dateFilter) {
+                    case 'last-week':
+                        cutoffDate = new Date(now);
+                        cutoffDate.setDate(now.getDate() - 7);
+                        break;
+                    case 'last-month':
+                        cutoffDate = new Date(now);
+                        cutoffDate.setMonth(now.getMonth() - 1);
+                        break;
+                    case 'last-3-months':
+                        cutoffDate = new Date(now);
+                        cutoffDate.setMonth(now.getMonth() - 3);
+                        break;
+                    case 'last-6-months':
+                        cutoffDate = new Date(now);
+                        cutoffDate.setMonth(now.getMonth() - 6);
+                        break;
+                    case 'last-year':
+                        cutoffDate = new Date(now);
+                        cutoffDate.setFullYear(now.getFullYear() - 1);
+                        break;
+                }
+
+                filteredCves = filteredCves.filter(cve => {
+                    const publishedDate = new Date(cve.published_date);
+                    return publishedDate >= cutoffDate;
+                });
+            }
+
+            updateSummaryCounts(filteredCves);
+            renderCveList(filteredCves);
+        }
+
+        // Event listeners for filters
+        document.getElementById('search-input').addEventListener('input', filterCves);
+        document.getElementById('severity-filter').addEventListener('change', filterCves);
+        document.getElementById('source-filter').addEventListener('change', filterCves);
+        document.getElementById('date-filter').addEventListener('change', filterCves);
+
+        // Initial render
+        updateSummaryCounts(mockCveData);
+        renderCveList(mockCveData);
+
+        // Self-test
+        console.log("Running self-test...");
+        const testCases = [
+            { description: "No filters", expected: 5 },
+            { description: "Search for 'buffer'", search: "buffer", expected: 1 },
+            { description: "Critical severity", severity: "Critical", expected: 1 },
+            { description: "Red Hat source", source: "Red Hat", expected: 1 },
+            { description: "Last month", date: "last-month", expected: 2 },
+            { description: "High severity + Ubuntu source", severity: "High", source: "Ubuntu", expected: 0 },
+            { description: "Search for 'nonexistent'", search: "nonexistent", expected: 0 }
+        ];
+
+        let allPassed = true;
+
+        testCases.forEach((test, index) => {
+            if (test.search) document.getElementById('search-input').value = test.search;
+            if (test.severity) document.getElementById('severity-filter').value = test.severity;
+            if (test.source) document.getElementById('source-filter').value = test.source;
+            if (test.date) document.getElementById('date-filter').value = test.date;
+
+            filterCves();
+
+            const actual = document.querySelectorAll('.cve-row').length;
+            const passed = actual === test.expected;
+
+            if (!passed) {
+                allPassed = false;
+                console.log(`Test ${index + 1} failed: ${test.description}`);
+                console.log(`  Expected: ${test.expected}, Actual: ${actual}`);
+            }
+        });
+
+        if (allPassed) {
+            console.log("PASS");
+        } else {
+            console.log("FAIL");
+        }
+    </script>
+</body>
+</html>

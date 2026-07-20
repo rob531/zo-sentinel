@@ -23,7 +23,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
     park_directive,
-    output_confirmed, failed_quarantined)
+    output_confirmed, failed_quarantined, workspace_diff_state)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
 from zo_sentinel.build_lessons import (  # noqa: E402
     record_lesson, resolve_lessons, open_lessons_for, format_lessons_context)
@@ -52,6 +52,15 @@ NL_QUERY_URL = "http://127.0.0.1:8784"
 POLL_SECS = 60
 HEARTBEAT_INTERVAL = 30
 GOOSE_TIMEOUT = 900   # headroom for the architect loop + delegate_to_builder codegen
+
+# FU-017: builder-scoped goose BINARY (mirror of the architect's
+# ZO_ARCHITECT_GOOSE_BIN). Default "goose" = the PATH binary (1.34.1 today).
+# Point ZO_BUILDER_GOOSE_BIN at /usr/local/bin/goose-1.43 to flip ONLY the
+# builder; unset to roll back. When non-default, run_goose_task gives the
+# subprocess an ISOLATED config/data HOME -- version skew on the shared
+# ~/.config/goose session store panics a different goose version (same scar
+# the architect hit flipping to 1.38).
+GOOSE_BIN = os.environ.get("ZO_BUILDER_GOOSE_BIN", "goose")
 
 PROJECT_DIR = Path("/home/workspace/zo_sentinel")
 LOGS_DIR = Path("/home/workspace/logs")
@@ -406,7 +415,7 @@ def check_goose_installed():
     """Check if Goose CLI is available."""
     try:
         result = subprocess.run(
-            ["goose", "--version"],
+            [GOOSE_BIN, "--version"],
             capture_output=True,
             text=True,
             timeout=10
@@ -567,10 +576,21 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None):
             log(f"[recipe] {directive_id} -> {recipe_path.name}")
         task_desc = json.dumps(content)
         env = {**os.environ, **(extra_env or {})}
+        if GOOSE_BIN != "goose":
+            # FU-017: isolated store for a versioned goose (see GOOSE_BIN note).
+            _iso = os.environ.get("ZO_BUILDER_GOOSE_HOME", "/home/workspace/.goose_builder")
+            try:
+                os.makedirs(_iso, exist_ok=True)
+            except Exception:
+                pass
+            env["HOME"] = _iso
+            env["XDG_CONFIG_HOME"] = f"{_iso}/.config"
+            env["XDG_DATA_HOME"] = f"{_iso}/.local/share"
+            env["XDG_STATE_HOME"] = f"{_iso}/.local/state"
         if extra_env:
             log(f"[LADDER] {directive_id} -> {extra_env.get('GOOSE_MODEL')}")
         result = subprocess.run(
-            ["goose", "run", "--recipe", str(recipe_path),
+            [GOOSE_BIN, "run", "--recipe", str(recipe_path),
              "--params", f"task_description={task_desc}"],
             capture_output=True,
             text=True,
@@ -997,6 +1017,49 @@ def _selftest_gate(directive, directive_id):
     return False
 
 
+def _edit_diff_gate(directive, directive_id, pre_diff_state):
+    """FU-015 ghost-edit guard: an edit-class directive (declared_output None)
+    bypasses every file-existence gate -- output_confirmed trusts it, and the
+    syntax/schema/hollow/self-test gates all no-op without a declared output --
+    so a build that edited NOTHING used to complete and stamp .done (observed
+    2026-07-14: a .done sentinel on 0 bytes of diff). Completion now requires
+    the build workspace's git state (git status --porcelain + git diff HEAD)
+    to be non-empty AND to have CHANGED from the fingerprint captured before
+    the build started; a plain non-empty check alone is useless because the
+    live workspace is permanently dirty. On an empty diff the directive routes
+    to the existing ghost/failure path (bounded retries, then .failed) with the
+    distinct marker "ghost-edit: empty diff". Fail-open (True) when git is
+    unavailable or no pre-state was captured -- the guard must never block a
+    real build on tooling absence. File-producing directives pass through
+    untouched (output_confirmed owns those)."""
+    try:
+        if declared_output(directive) is not None:
+            return True   # file-producing directive: file-based gates own it
+        post = workspace_diff_state(str(PROJECT_DIR))
+        if post is None:
+            return True   # git unavailable -> fail open
+        post_fp, post_dirty = post
+        if not post_dirty:
+            reason = "workspace has no uncommitted changes at all"
+        elif pre_diff_state is not None and post_fp == pre_diff_state[0]:
+            reason = "workspace diff unchanged since build start"
+        else:
+            return True
+        log(f"[ghost-guard] {directive_id}: ghost-edit: empty diff -- {reason} "
+            f"-- edit-class build produced no edit; not completing")
+        try:
+            record_lesson(LESSONS_DIR, directive_id, directive_id, "ghost_edit",
+                          f"ghost-edit: empty diff -- {reason}. The build reported "
+                          "success but modified no files in the workspace; the edit "
+                          "must actually land on disk.", severity=3)
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        log(f"[ghost-edit] {directive_id}: gate error (passing): {e}")
+        return True
+
+
 def _syntax_gate(directive, directive_id):
     """Tier-0 syntax gate on the declared output, recorded to the Default-FAIL
     manifest. Returns True when the file parses, or when there is no single
@@ -1376,9 +1439,14 @@ def run():
                 _dctx = _data_access_context(directive)   # proactive DB-access grounding (pre-empt CSV hallucination)
                 if _dctx:
                     _task = f"{_task}\n\n{_dctx}"
+                # FU-015: fingerprint the workspace's git state BEFORE the build
+                # so _edit_diff_gate can prove an edit-class build actually changed
+                # something (None -> that gate fails open).
+                _pre_diff = workspace_diff_state(str(PROJECT_DIR))
                 if goose_installed:
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
                     if (result.get("success") and output_confirmed(directive)
+                            and _edit_diff_gate(directive, directive_id, _pre_diff)
                             and _syntax_gate(directive, directive_id)
                             and _schema_prm_gate(directive, directive_id)
                             and _no_hollow_gate(directive, directive_id)
@@ -1416,6 +1484,7 @@ def run():
                     if fallback_result is None:
                         fallback_result = call_minimax_fallback(directive)
                     if (fallback_result.get("success") and output_confirmed(directive)
+                            and _edit_diff_gate(directive, directive_id, _pre_diff)
                             and _syntax_gate(directive, directive_id)
                             and _schema_prm_gate(directive, directive_id)
                             and _no_hollow_gate(directive, directive_id)

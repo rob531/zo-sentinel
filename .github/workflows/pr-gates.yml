@@ -37,6 +37,26 @@ jobs:
       - name: Deterministic capmap pull-check (BLOCKING -- fails on schema drift)
         run: python tools/pull_check.py
 
+      - name: Reachability ratchet (OBSERVE -- records the orphan census)
+        # 2026-07-19 postmortem: every gate we had was differential or local, so
+        # none could see 246 routers that mount nowhere. This is the missing
+        # assertion class -- a global existential invariant over the repo.
+        #
+        # OBSERVE, not enforce, until app/mounts.toml exists: today a module has
+        # no way to mount itself, so failing the PR would block work the builder
+        # physically cannot fix and wedge the publisher queue behind it. Flip the
+        # flag to --enforce in the same line once the mount seam ships.
+        run: python tools/reachability_ratchet.py
+
+      - name: Upload reachability census
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reachability-ratchet
+          path: artifacts/reachability_ratchet.json
+          if-no-files-found: warn
+          retention-days: 30
+
   static-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 6

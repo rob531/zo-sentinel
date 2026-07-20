@@ -143,13 +143,16 @@ def _count_proposed() -> int:
         1 for p in PROPOSED_DIR.glob("*.json")
         if not p.name.endswith(".done.json")
         and not p.name.endswith(".failed.json")
+        and ".bak" not in p.name   # FU-011: stale .bak copies must not mask queue emptiness
     )
 
 
 def _count_pending() -> int:
     if not PENDING_DIR.exists():
         return 0
-    return sum(1 for p in PENDING_DIR.glob("*.json"))
+    # FU-011: stale .bak copies must not mask queue emptiness (starvation floor
+    # reads this count -- a .bak-named leftover would keep the floor dormant).
+    return sum(1 for p in PENDING_DIR.glob("*.json") if ".bak" not in p.name)
 
 
 def _queued_stems() -> set:
@@ -159,6 +162,8 @@ def _queued_stems() -> set:
         if not d.exists():
             continue
         for p in d.glob("*.json"):
+            if ".bak" in p.name:   # FU-011: a stale .bak must not suppress a live re-proposal
+                continue
             stems.add(p.stem.replace(".done", "").replace(".failed", ""))
     return stems
 

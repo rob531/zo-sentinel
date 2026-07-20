@@ -8,6 +8,7 @@ description: >
   for the nonce to assert the full loop worked.
 extensions:
   - type: builtin
+    timeout: 900  # FU-017: MCP request timeout for this extension. NOTE (canary-proven 2026-07-19): the 1.43 developer-shell kill (#10348) is governed ONLY by GOOSE_DEFAULT_EXTENSION_TIMEOUT env/config (set 900 in zo_mesh/.zo_env), NOT this field.
     name: developer
 prompt: |-
   Run exactly this shell command and report its output, then STOP:

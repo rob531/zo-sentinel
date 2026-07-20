@@ -22,6 +22,7 @@ from .settings import settings
 # Routers from app/routers/ package are imported via app.routers.<name>.
 _OPTIONAL_ROUTERS = [
     "server_compare_api",
+    "server_axis_scores_summary_router",
     "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",
     "entity_report_exporter", "org_api_key_manager", "verdict_watchlist_service",
     "score_dispute_api",
@@ -38,6 +39,11 @@ _OPTIONAL_ROUTERS = [
     "vuln_pkg_enricher", "otx_threat_refs",
     # P2 vuln/OTX/CVE surfacing (DESIGN_NEXT_BUILD_TARGETS_2026_07; agent-built)
     "vuln_facet_extension", "vuln_coverage_sla_api",
+    # FU-005 (2026-07-19): un-orphan the aggregated per-server threat-intel
+    # read surface (/servers/{id}/threat-intel-summary). Its two factory
+    # siblings stay unmounted as hollow near-dupes (broken imports/DI):
+    # threat_intel_reference_api, server_threat_intel_status_api.
+    "threat_intel_summary_api",
     # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
     # scorecard_badge_api stays unmounted until STALE-gating consumes this)
     "freshness_metadata_api",

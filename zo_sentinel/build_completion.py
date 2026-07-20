@@ -16,7 +16,9 @@ import-time side effects) so both sides agree on one definition:
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -168,6 +170,42 @@ def output_confirmed(directive: dict, home: str = DEFAULT_HOME,
     if out is None:
         return True
     return output_present(out, min_bytes)
+
+
+
+def workspace_diff_state(home: str = DEFAULT_HOME) -> Optional[Tuple[str, bool]]:
+    """FU-015 ghost-edit guard support: fingerprint the build workspace's
+    uncommitted git state.
+
+    Returns (sha256_hex, has_uncommitted_changes), where the hash covers the
+    raw output of `git status --porcelain` + `git diff HEAD` run in `home`,
+    or None when git is unavailable / `home` is not a repo -- callers MUST
+    fail OPEN on None (never block a build on tooling absence).
+
+    Why a fingerprint and not a bare non-empty check: edit-class directives
+    (declared_output None) produce no new file, so output_confirmed cannot
+    catch a ghost "edit" that changed nothing (a .done stamped on 0 bytes of
+    diff, observed 2026-07-14). And the live workspace is permanently dirty,
+    so "git status is non-empty" is trivially true forever. The only honest
+    completion signal is the state CHANGING across the build: capture this
+    fingerprint before the build, compare after. Concurrent daemon writes can
+    change it mid-build (false pass) -- that is the fail-open direction,
+    accepted."""
+    try:
+        outputs = []
+        for args in (("git", "status", "--porcelain"), ("git", "diff", "HEAD")):
+            proc = subprocess.run(args, cwd=str(home), capture_output=True,
+                                  timeout=120)
+            if proc.returncode != 0:
+                return None
+            outputs.append(proc.stdout or b"")
+        h = hashlib.sha256()
+        for o in outputs:
+            h.update(o)
+            h.update(b"\x00")
+        return h.hexdigest(), any(o.strip() for o in outputs)
+    except Exception:
+        return None
 
 
 # --- ghost-attempt tracking -------------------------------------------------

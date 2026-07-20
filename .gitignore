@@ -11,3 +11,6 @@ shared/outputs/
 memories/
 .env
 *.key
+
+# reachability ratchet census -- regenerated on every run, uploaded as a CI artifact
+artifacts/reachability_ratchet.json

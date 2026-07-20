@@ -267,6 +267,22 @@ def live_wiring_map() -> str:
 # can keep writing prose without special markup.
 _CANDIDATE_FILENAME = re.compile(r"\b([a-z][a-z0-9_]{2,40}\.(?:py|html|md))\b")
 
+# FU-040: everything after an "Exemplar:"/"Exemplars:" marker on a spec line is a
+# REFERENCE to a module that should already exist, never an ask. The window scan
+# below used to harvest those references as build targets, so any lane whose
+# exemplar was missing from disk silently became a directive nobody specified
+# (schema_prm_guard.py, 2026-07-20 -- no spec row, no acceptance clause, no
+# exemplar of its own). Every candidate line names its own target BEFORE the
+# exemplar marker, so truncating here can never drop a real target.
+_EXEMPLAR_MARKER = re.compile(r"\bexemplars?\s*:", re.IGNORECASE)
+
+
+def _strip_exemplar_refs(line: str) -> str:
+    """Drop the trailing 'Exemplar: <file>' reference from a spec line."""
+    m = _EXEMPLAR_MARKER.search(line)
+    return line[: m.start()] if m else line
+
+
 
 def _spec_candidate_files(spec_text: str) -> list[str]:
     """Extract filenames mentioned near 'NOT YET', 'directive candidate',
@@ -279,7 +295,7 @@ def _spec_candidate_files(spec_text: str) -> list[str]:
                                          "candidate:", "candidates:",
                                          "propose directives", "dormant")):
             # look at this line + the next 3 for filename-like tokens
-            window = "\n".join(lines[i : i + 4])
+            window = "\n".join(_strip_exemplar_refs(l) for l in lines[i : i + 4])
             for m in _CANDIDATE_FILENAME.finditer(window):
                 name = m.group(1)
                 if name not in out:

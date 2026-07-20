@@ -19,6 +19,7 @@ parameters:
 
 extensions:
   - name: zo_directive_bridge
+    timeout: 900  # FU-017: MCP request timeout for this extension. NOTE (canary-proven 2026-07-19): the 1.43 developer-shell kill (#10348) is governed ONLY by GOOSE_DEFAULT_EXTENSION_TIMEOUT env/config (set 900 in zo_mesh/.zo_env), NOT this field.
     type: stdio
     cmd: "python3"
     args:

@@ -1,0 +1,5 @@
+{
+  "orphan_count": 246,
+  "set_at": "2026-07-19T23:58:50Z",
+  "note": "Set 2026-07-19 from the reachability postmortem. 277 root modules expose an HTTP router; 31 are mounted under app/; 246 are not. This is a RATCHET, not a target: it may only go down. Lower it with --update-baseline in the same PR that mounts or deletes a module."
+}

@@ -263,6 +263,11 @@ def _iter_proposals(proposed_dir: Path):
             continue
         if name.endswith(".done.json") or name.endswith(".failed.json"):
             continue
+        if ".bak" in name:
+            # FU-011: a stale .bak copy is not a live proposal -- promoting or
+            # counting it masks real queue emptiness. Janitor moves them to
+            # directives_archive/bak_janitor/; never promote them.
+            continue
         candidates.append(p)
     candidates.sort(key=lambda p: p.stat().st_mtime)
     for p in candidates:

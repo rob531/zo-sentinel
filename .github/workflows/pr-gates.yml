@@ -37,16 +37,30 @@ jobs:
       - name: Deterministic capmap pull-check (BLOCKING -- fails on schema drift)
         run: python tools/pull_check.py
 
-      - name: Reachability ratchet (OBSERVE -- records the orphan census)
+      - name: Reachability ratchet (ENFORCE -- blocks silent orphan growth)
         # 2026-07-19 postmortem: every gate we had was differential or local, so
         # none could see 246 routers that mount nowhere. This is the missing
         # assertion class -- a global existential invariant over the repo.
         #
-        # OBSERVE, not enforce, until app/mounts.toml exists: today a module has
-        # no way to mount itself, so failing the PR would block work the builder
-        # physically cannot fix and wedge the publisher queue behind it. Flip the
-        # flag to --enforce in the same line once the mount seam ships.
-        run: python tools/reachability_ratchet.py
+        # ARMED 2026-07-21 by CofC ruling. It sat in observe for two days and
+        # the census drifted 246 -> 276 (+30 in a single day) while the gate
+        # blocked nothing, which is the same shape as every expensive failure
+        # here: an instrument reporting faithfully into a place nobody reads.
+        #
+        # This does NOT require anyone to mount anything. The baseline is pinned
+        # at 276 (the level, frozen) and the gate is on the DERIVATIVE, so no
+        # pre-existing orphan fails any PR. A PR that adds a NEW unmounted
+        # router passes by either mounting it or naming it in
+        # tools/reachability_deferred.json with a one-line reason. The builder
+        # is structurally incapable of mounting (module_from_exemplar lane guard
+        # + edit-class output_file:null), so without that hatch this flag would
+        # be an unsatisfiable predicate and every builder PR would go red for a
+        # rule none of them could comply with. Declaring is not mounting; what
+        # stops here is SILENT orphan growth.
+        #
+        # ROLLBACK is one word: delete `--enforce` from the run line below.
+        # HALT CONDITION (ruling): >3 builder PRs red on this gate within 6h.
+        run: python tools/reachability_ratchet.py --enforce
 
       - name: Upload reachability census
         if: always()
@@ -56,6 +70,14 @@ jobs:
           path: artifacts/reachability_ratchet.json
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Reachability trend check (advisory)
+        # The ratchet is per-PR; this is the cross-day view it structurally
+        # cannot have. Advisory in CI (|| true) because a shallow CI checkout
+        # has no trend history -- the authoritative daily row is appended on the
+        # tower by the chairman review. Here it only proves the script runs.
+        if: always()
+        run: python tools/reachability_trend.py --check-only || true
 
   static-analysis:
     runs-on: ubuntu-latest

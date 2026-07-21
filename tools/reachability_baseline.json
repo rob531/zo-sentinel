@@ -1,5 +1,5 @@
 {
-  "orphan_count": 246,
-  "set_at": "2026-07-19T23:58:50Z",
-  "note": "Set 2026-07-19 from the reachability postmortem. 277 root modules expose an HTTP router; 31 are mounted under app/; 246 are not. This is a RATCHET, not a target: it may only go down. Lower it with --update-baseline in the same PR that mounts or deletes a module."
+  "orphan_count": 276,
+  "set_at": "2026-07-21T12:30:00Z",
+  "note": "Re-pinned 2026-07-21 by CofC ruling in the same change that armed --enforce. Previous baseline was 246, set 2026-07-19 from the reachability postmortem; the census drifted to 276 (+30 in a single day) while the gate sat in observe mode and blocked nothing. Pinning at 276 rather than 246 is deliberate: the ratchet is on the DERIVATIVE, not the level, so no in-flight PR goes red for a pre-existing orphan and the existing graveyard blocks nobody. It may only go DOWN from here -- lower it with --update-baseline in the same PR that mounts or deletes a module. Do NOT raise it to make a red PR green; that is the one move that turns a ratchet back into a thermometer. A PR that adds a new unmounted router passes by mounting it OR by declaring it in tools/reachability_deferred.json with a one-line reason."
 }

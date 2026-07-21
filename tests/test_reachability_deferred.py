@@ -8,7 +8,6 @@ is a way the gate could go decorative while still reporting green -- which is
 precisely the failure the 2026-07-19 postmortem indicted.
 """
 import importlib.util
-import json
 import os
 import sys
 import tempfile

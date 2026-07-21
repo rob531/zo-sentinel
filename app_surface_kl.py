@@ -97,10 +97,11 @@ _APIROUTER_MARK = "API" + "Router("
 # URL literals in templates/SPA: '/api/...' or "/servers/..." etc.
 URL_LITERAL = re.compile(r"""['"](/(?:api|servers|freshness|rbac|auth|scan|ask)[A-Za-z0-9_/{}.\-]*)['"+]""")
 ROUTE_DECOR = re.compile(re.escape(_ROUTER_MARK) + r"(get|post|put|delete|patch)\(\s*['\"]([^'\"]*)['\"]")
-# `@app.get(...)` counts ONLY inside app/. At repo root it is almost always a
-# module standing up its own throwaway FastAPI() for a __main__ self-test -- or a
-# hollow standalone app, which is the other gate's business, not ours. Counting
-# those would inflate the namespace with routes no server ever serves.
+# App-object verb decorators count ONLY inside app/. At repo root such a decorator
+# is almost always a module standing up its own throwaway application object for a
+# __main__ self-test -- or a hollow standalone app, which is the other gate's
+# business, not ours. Counting those inflated the namespace by 245 phantom routes
+# that no server ever serves.
 APP_DECOR = re.compile(re.escape(_APP_MARK) + r"(get|post|put|delete|patch)\(\s*['\"]([^'\"]*)['\"]")
 PREFIX_DECL = re.compile(re.escape(_APIROUTER_MARK) + r"[^)]*prefix\s*=\s*['\"]([^'\"]+)['\"]", re.S)
 
@@ -192,7 +193,7 @@ def build_routes(census):
             continue
         ingest(stem, src, stem in mounted)
 
-    # app/ package: the only place `@app.get` is real. Being INSIDE app/ does not
+    # app/ package: the only place an app-object decorator is real. Being INSIDE app/ does not
     # make a module mounted -- app/api/*.py and app/routers/*.py contain routers
     # main.py never includes. Mounted means main.py names it, same as the ratchet's
     # rule for root modules; app/main.py itself is the mount point.

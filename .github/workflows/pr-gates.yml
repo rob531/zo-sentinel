@@ -62,6 +62,24 @@ jobs:
         # HALT CONDITION (ruling): >3 builder PRs red on this gate within 6h.
         run: python tools/reachability_ratchet.py --enforce
 
+      - name: App-surface KL (REPORT-ONLY -- duplicate routes + prefix collisions)
+        # FU-071. The KL is generated on every PR so it can never go stale relative
+        # to the branch, and REPORTED so it has a reader from day one -- the CofC's
+        # standing warning is that a registry nothing reads is the uncalled-helper
+        # failure class. Report-only: this makes FU-069 measurable, it does not yet
+        # gate on it. Promoting DUPLICATE_ROUTE to a hard failure is a separate,
+        # deliberate decision once the duplicate backlog is triaged.
+        run: python app_surface_kl.py --out artifacts/app_surface_kl.json --report
+
+      - name: Upload app-surface KL
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-surface-kl
+          path: artifacts/app_surface_kl.json
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload reachability census
         if: always()
         uses: actions/upload-artifact@v7

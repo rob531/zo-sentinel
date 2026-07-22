@@ -31,7 +31,7 @@ def _seeded_session():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.db import Base
-    from app.models import McpServerRegistry
+    from app.models import McpServerRegistry, VulnLink
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)
     s = sessionmaker(bind=eng)()
@@ -46,6 +46,9 @@ def _seeded_session():
                           url="https://gitlab.com/o/c",
                           last_scanned=now - timedelta(days=200)),
     ])
+    s.commit()
+    s.add(VulnLink(advisory_id="GHSA-1", server_id="a", match_basis="repo_exact",
+                   match_value="repo:github.com/o/a", match_confidence=1.0))
     s.commit()
     return s, now
 
@@ -64,6 +67,8 @@ def test_deterministic_signals_spread_and_tier_concentrates(monkeypatch):
     # deterministic signals partition the registry cleanly
     assert dist["signals"]["transport"] == {"https": 2, "http": 1}
     assert dist["signals"]["has_public_repo"] == {"true": 2, "false": 1}
+    # deterministic security axis from vuln_links: only server "a" is linked
+    assert dist["signals"]["has_known_cve"] == {"true": 1, "false": 2}
     assert dist["signals"]["scan_recency"]["never"] == 1
     # community-signal coverage only where the key is actually present
     assert dist["meta_coverage"].get("stars") == 1

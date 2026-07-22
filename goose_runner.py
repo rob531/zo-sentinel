@@ -237,6 +237,8 @@ def prune_done_pending():
     for f in PENDING_DIR.glob("*.json"):
         if f.name.endswith(".done.json") or f.name.endswith(".failed.json"):
             continue
+        if f.name.startswith((".bak", ".duplicate")):  # backup/dup copies mask the queue (FU-020)
+            continue
         try:
             d = json.loads(f.read_text())
             if not isinstance(d, dict):
@@ -287,6 +289,8 @@ def load_directives_from_mesh():
     # Source 2: pending directory (always scan, merge)
     if PENDING_DIR.exists():
         for f in sorted(PENDING_DIR.glob("*.json")):
+            if f.name.startswith((".bak", ".duplicate")):  # backup/dup copies mask the queue (FU-020)
+                continue
             try:
                 raw = f.read_text().strip()
                 if not raw:

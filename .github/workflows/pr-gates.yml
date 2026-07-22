@@ -80,6 +80,28 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Spine manifest (REPORT-ONLY reference -- Option B, non-binding)
+        # FU-072 sec 6.5. A working reference of the build-time spine generator so
+        # the 07-23 mount-lane review can rule on a running mechanism, not prose.
+        # It derives the mount manifest by scanning (no hand-list), emits a preview
+        # of the fail-loud include prod would run, and validates every entry.
+        # REPORT-ONLY: no --strict, so it exits 0 even when it finds broken entries;
+        # prod consumes nothing this writes and app/main.py is untouched. Flipping to
+        # --strict (enforce) is the review's call, alongside app/main.py adopting the
+        # generated file. Runs in the light lane -- pure stdlib, no app deps.
+        run: python tools/spine_manifest.py --emit artifacts
+
+      - name: Upload spine manifest + generated preview
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: spine-manifest
+          path: |
+            artifacts/spine_manifest.json
+            artifacts/spine_mounts.generated.py
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload reachability census
         if: always()
         uses: actions/upload-artifact@v7

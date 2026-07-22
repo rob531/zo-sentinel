@@ -7,10 +7,14 @@ show that legible deterministic signals actually spread.
 REPORT ONLY. This module reads the registry and returns/prints distributions. It
 changes no scores, re-tiers nothing, mounts no route, writes no registry data.
 
-Scope honesty (FU-076): of the four signals that follow-up named, only ones
-derivable from a stored `mcp_server_registry` row are computed here -- transport
-(from url), public-repo presence (from url), OUR scan recency (last_scanned), and
-which community-signal keys exist in the free-form `meta` blob. Repo
+Signals computed here (all deterministic, all available today): transport (from
+url), public-repo presence (from url), has_known_cve (membership in the vuln_links
+join -- the same deterministic linkage the has_known_cve facet uses), OUR scan
+recency (last_scanned), and which community-signal keys exist in the free-form
+`meta` blob.
+
+Scope honesty (FU-076): none of the FOUR marquee signals that follow-up named are
+computable from the app tier yet. Repo
 maintenance-age, declared scopes/permissions, tests-present and pinned-deps are
 NOT in the app Postgres tier; they live only in the builder DuckDB and need
 ingestion first. That gap is recorded in SIGNALS_NEEDING_INGESTION below (its own
@@ -107,9 +111,18 @@ def compute_distributions(session, now: Optional[datetime] = None) -> dict:
     now = now or datetime.now(timezone.utc)
     rows = session.query(McpServerRegistry).all()
 
+    # has_known_cve: deterministic membership in the vuln_links table (exact
+    # advisory<->server identity match written by the vuln linker -- the same data
+    # the has_known_cve facet exposes). No LLM, no ingestion; already computed.
+    try:
+        from app.models import VulnLink
+        cve_ids = {sid for (sid,) in session.query(VulnLink.server_id).distinct()}
+    except Exception:
+        cve_ids = None  # vuln_links absent this run -> omit the axis, never raise
+
     tier, verdict = Counter(), Counter()
     transport, repo, scan = Counter(), Counter(), Counter()
-    meta_cov = Counter()
+    cve, meta_cov = Counter(), Counter()
 
     for r in rows:
         tier[(r.risk_tier or "UNSET").upper()] += 1
@@ -117,18 +130,25 @@ def compute_distributions(session, now: Optional[datetime] = None) -> dict:
         transport[_transport(r.url)] += 1
         repo["true" if _has_public_repo(r.url) else "false"] += 1
         scan[_scan_bucket(r.last_scanned, now)] += 1
+        if cve_ids is not None:
+            cve["true" if r.server_id in cve_ids else "false"] += 1
         for k in _meta_keys_present(r.meta):
             meta_cov[k] += 1
 
+    signals = {
+        "risk_tier": dict(tier),        # blended LLM label -- the FU-058 collapse
+        "verdict": dict(verdict),       # blended LLM label
+        "transport": dict(transport),   # deterministic, from url
+        "has_public_repo": dict(repo),  # deterministic, from url
+        "has_known_cve": dict(cve),     # deterministic security axis, from vuln_links
+        "scan_recency": dict(scan),     # OUR scan cadence, NOT upstream maintenance
+    }
+    if cve_ids is None:                 # table absent -> signal genuinely unavailable
+        del signals["has_known_cve"]
+
     return {
         "total": len(rows),
-        "signals": {
-            "risk_tier": dict(tier),        # blended LLM label -- the FU-058 collapse
-            "verdict": dict(verdict),       # blended LLM label
-            "transport": dict(transport),   # deterministic, from url
-            "has_public_repo": dict(repo),  # deterministic, from url
-            "scan_recency": dict(scan),     # OUR scan cadence, NOT upstream maintenance
-        },
+        "signals": signals,
         "meta_coverage": dict(meta_cov),
     }
 
@@ -184,7 +204,7 @@ def _selftest() -> None:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.db import Base
-    from app.models import McpServerRegistry
+    from app.models import McpServerRegistry, VulnLink
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)
     s = sessionmaker(bind=eng)()
@@ -207,6 +227,14 @@ def _selftest() -> None:
         meta=json.dumps({"download_count": 12})))
     s.add_all(rows)
     s.commit()
+    # two servers carry a known CVE (deterministic vuln_links membership).
+    s.add_all([
+        VulnLink(advisory_id="GHSA-1", server_id="h0", match_basis="repo_exact",
+                 match_value="repo:github.com/o/r0", match_confidence=1.0),
+        VulnLink(advisory_id="GHSA-2", server_id="c0", match_basis="repo_exact",
+                 match_value="repo:mcp.example.io", match_confidence=1.0),
+    ])
+    s.commit()
 
     dist = compute_distributions(s, now=now)
     summ = summarize(dist)
@@ -224,6 +252,8 @@ def _selftest() -> None:
     # public-repo presence is a clean boolean partition.
     assert dist["signals"]["has_public_repo"]["true"] == 18   # github+gitlab
     assert dist["signals"]["has_public_repo"]["false"] == 2   # the example.io pair
+    # has_known_cve: deterministic security axis from vuln_links -- 2 linked, 18 not.
+    assert dist["signals"]["has_known_cve"] == {"true": 2, "false": 18}, dist["signals"].get("has_known_cve")
     # scan recency spreads across buckets incl. never.
     assert dist["signals"]["scan_recency"]["never"] == 1
     assert dist["signals"]["scan_recency"]["<=7d"] == 17

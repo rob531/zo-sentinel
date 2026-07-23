@@ -1015,7 +1015,7 @@ def _selftest_gate(directive, directive_id):
         log(f"[selftest] {directive_id}: self-test PASS")
         return True
     if proc.returncode != 0 and ("ModuleNotFoundError" in combined or "ImportError" in combined):
-        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking)")
+        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
         return True
     log(f"[selftest] {directive_id}: self-test FAILED -- blocking completion :: " + combined.strip()[-400:])
     return False

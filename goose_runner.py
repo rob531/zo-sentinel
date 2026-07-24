@@ -998,6 +998,24 @@ def _selftest_gate(directive, directive_id):
         src = out.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return True
+    # FU-031 harness repair (autonomous, deterministic, flag-gated). The dominant
+    # self-test degradation is the model emitting WRONG-CASED app.models symbols
+    # (e.g. MCPServerRegistry vs the real McpServerRegistry, or McpLlmAxisScores vs
+    # McpLlmAxisScore) -> ImportError -> "degrade to Tier-0" below, i.e. presence
+    # passing for correctness. Auto-correct the casing BEFORE the self-test runs so
+    # it actually EXECUTES (it then still has to PASS on its own merits). Same shape
+    # as _strip_code_fences: a deterministic pre-gate repair, no human in the loop,
+    # false-positive-free (distinctive Mcp* names only). Kill with ZO_MODEL_CASING_AUTOFIX=0.
+    import os as _oscas
+    if _oscas.environ.get("ZO_MODEL_CASING_AUTOFIX", "1") != "0":
+        try:
+            from tools import model_import_linter as _mil
+            _r = _mil.lint_file(str(out), _mil.build_map(_mil.canonical_models()), fix=True)
+            if _r.get("fixed"):
+                log(f"[casing-repair] {directive_id}: corrected {_r['drift']} before self-test")
+                src = out.read_text(encoding="utf-8", errors="ignore")
+        except Exception as _ce:
+            log(f"[casing-repair] {directive_id}: skipped ({type(_ce).__name__}: {_ce})")
     if "__main__" not in src:
         return True
     try:

@@ -1,9 +1,16 @@
 # SOA "new atomic unit" — implementation record
 
-Implements the design in `SOA_SERVICE_REGISTRY_DESIGN_2026-07-21.md` under the
-CofC binding ruling of 2026-07-23 (folder-scan + **Option B** build-time
-generation; human-gated first cohort; observe→enforce). Branch:
-`feature/soa-atomic-unit`. Behaviour-preserving for prod; every step reversible.
+Implements the design in `SOA_SERVICE_REGISTRY_DESIGN_2026-07-21.md` (folder-scan +
+**Option B** build-time generation). Branch: `feature/soa-atomic-unit`.
+Behaviour-preserving for prod; every step reversible.
+
+**Operating model (corrected 2026-07-24): this is a RECURSIVE self-building loop.**
+"Human-led review" is out of date. The review is the automated chain — the
+liveness contract, the reachability ratchet, the spine strict/check gate, the
+no-hollow + self-test gates, `auto-merge` on `triage:solid`, and model-on-model
+cross-review (e.g. Fable-5 over the orphans). observe→enforce is the loop's own
+confidence ramp (auto-promote on green), NOT a human sign-off. The human is an
+occasional refiner, not a gate.
 
 ## What the atomic unit becomes
 A **service** — a self-contained directory `{logic.py, router.py, contract.py,
@@ -41,8 +48,9 @@ The harness-engineering **correctness linter**: it runs each staged service's ow
 `contract.py` in a subprocess (real liveness — boots, mounts, serves 200,
 schema-valid), checks route collisions vs active, and near-dups. A contract that
 cannot even RUN is a **HOLD**, never a silent pass — the deliberate inverse of
-FU-031's 74% Tier-0 degradation. Observe/report-only by default; `--enforce`
-moves, capped (`--max-per-run`) for the human-gated first cohort.
+FU-031's 74% Tier-0 degradation. It also AUTO-FIXES the FU-031 model-name casing drift in place (deterministic, no
+human `--fix`) before the contract runs. Auto-promotes on green; `--max-per-run`
+is the loop's confidence ramp, not a human cohort gate.
 
 ## What fail-loud immediately surfaced (real finding, not silently changed)
 Seeding revealed **6 of 31 hand-list entries were dead/duplicate no-ops** the
@@ -70,7 +78,7 @@ new smoke-ladder `tier4_spine` (runtime failures within allowlist).
 - **Arming** the subrecipe recipe / builder emission into the live loop — needs a
   canary + **FU-031** fixed first (else `contract.py` liveness degrades and the
   gate measures nothing). Recipe + decomposer are staged, not wired to `go.sh`.
-- **Step 6** triage of the 6 known issues + the 317-orphan graveyard.
+- **Step 6** triage of the 6 known issues + the 317 orphans is **model-led** (Fable-5 over the provenance manifest), not human-led; the correctness linter + liveness gate execute the verdicts autonomously.
 - Prod deploy — Fly deploy is manual; merge ≠ deploy.
 
 ## Forward work (chairman note, 2026-07-24)

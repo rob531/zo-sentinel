@@ -116,10 +116,15 @@ def test_no_fuzzy_matching(tmp_path, monkeypatch):
 
 
 def test_scan_and_views_mounted():
-    main = (REPO / "app" / "main.py").read_text(encoding="utf-8")
+    """SOA update (2026-07-24): mount truth = services/active/ registry + the
+    generated spine (app/_spine_generated.py), not a hand-list in main.py."""
+    spine = (REPO / "app" / "_spine_generated.py").read_text(encoding="utf-8")
     for mod in ("vuln_exposure_api", "config_scan_api", "vuln_osv_ingestor",
                 "vuln_registry_linker"):
-        assert f'"{mod}"' in main, f"{mod} not mounted"
+        assert (REPO / "services" / "active" / mod / "service.toml").exists(), \
+            f"{mod} not registered in services/active/"
+        assert f'"{mod}"' in spine, f"{mod} registered but absent from the generated spine"
+    main = (REPO / "app" / "main.py").read_text(encoding="utf-8")
     assert '"/scan"' in main
     html = (REPO / "scan_view.html").read_text(encoding="utf-8")
     assert "localStorage" not in html and "/api/scan" in html

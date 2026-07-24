@@ -54,11 +54,19 @@ def test_views_and_roadmap_exist_and_are_selfcontained():
 
 
 def test_routers_are_mounted_in_app_main():
-    main = (REPO / "app" / "main.py").read_text(encoding="utf-8")
+    """SOA update (2026-07-24): the mount truth is no longer a hand-list in
+    app/main.py (that mechanism let 6 dead entries pass as 'mounted' for weeks --
+    listed is not reachable). Assert the REAL chain instead: each module is
+    REGISTERED (services/active/<name>/service.toml exists) AND carried in the
+    generated spine prod actually runs (app/_spine_generated.py)."""
+    spine = (REPO / "app" / "_spine_generated.py").read_text(encoding="utf-8")
     for mod in ("facet_enum_service", "perspective_admin_api",
                 "perspective_query_api", "perspective_diff_service",
                 "ask_corpus_indexer", "ask_answer_api"):
-        assert f'"{mod}"' in main, f"{mod} missing from _OPTIONAL_ROUTERS"
+        assert (REPO / "services" / "active" / mod / "service.toml").exists(), \
+            f"{mod} not registered in services/active/"
+        assert f'"{mod}"' in spine, f"{mod} registered but absent from the generated spine"
+    main = (REPO / "app" / "main.py").read_text(encoding="utf-8")
     for route in ("/perspectives", "/ask", "/roadmap"):
         assert f'"{route}"' in main, f"route {route} not served"
 

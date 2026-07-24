@@ -43,6 +43,8 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # tools/ -> linter importable
+import model_import_linter as _linter  # noqa: E402  FU-031 harness linter
 STAGED = os.path.join(ROOT, "services", "staged")
 ACTIVE = os.path.join(ROOT, "services", "active")
 ARTIFACT = os.path.join(ROOT, "artifacts", "staged_promotion_report.json")
@@ -119,6 +121,19 @@ def _run_contract(name, timeout=120):
     return proc.returncode == 0, ("exit=%d %s" % (proc.returncode, tail.strip()))
 
 
+def _casing_drift(sdir):
+    """Wrong-cased app.models refs in a staged service (FU-031). Named + autofixable."""
+    norm_map = _linter.build_map(_linter.canonical_models())
+    drift = {}
+    for dp, _d, files in os.walk(sdir):
+        if "__pycache__" in dp:
+            continue
+        for fn in files:
+            if fn.endswith(".py"):
+                drift.update(_linter.scan_text(_read(os.path.join(dp, fn)), norm_map))
+    return drift
+
+
 def evaluate(name, active_routes):
     """Full gate for one staged service dir. Returns a verdict dict."""
     sdir = os.path.join(STAGED, name)
@@ -138,6 +153,12 @@ def evaluate(name, active_routes):
     # near-dup by name
     if os.path.isdir(os.path.join(ACTIVE, name)):
         reasons.append("a service named '%s' is already active" % name)
+    # FU-031 harness linter: wrong-cased app.models refs crash the contract with a
+    # raw ImportError; name it explicitly and point at the one-command autofix.
+    drift = _casing_drift(sdir)
+    if drift:
+        reasons.append("model-name casing drift (autofixable: python tools/"
+                       "model_import_linter.py --fix services/staged/%s): %s" % (name, drift))
     # LIVENESS (subprocess) -- the correctness proof; only if static gates pass
     contract_ok, contract_detail = (None, "skipped (static gate failed)")
     if not reasons:

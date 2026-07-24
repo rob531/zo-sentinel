@@ -244,14 +244,43 @@ def _validate(d: dict) -> tuple[bool, str]:
         _svc = _task[len("build_service_"):]
         if not _svc or not _svc.replace("_", "").isalnum():
             return False, "build_service_<snake_name>: snake_name missing/invalid"
-        if len(str(d.get("description", "")) or "") < 120:
-            return False, ("build_service description IS the service spec -- >=120 chars "
+        if len(str(d.get("description", "")) or "") < 200:
+            return False, ("build_service description IS the service spec -- >=200 chars "
                            "naming route+prefix, tables/columns read, response shape, "
                            "and the acceptance assertions its contract must make")
         for _sd in ("active", "staged"):
             if (Path(__file__).resolve().parents[2] / "services" / _sd / _svc).exists():
                 return False, f"service '{_svc}' already exists in services/{_sd}/ -- not net-new"
         return True, "ok"
+    # SERVICE-UNIT REDIRECT (rejection-time teaching, the mechanism that provably
+    # lands here -- same pattern as the PARKED and already-built rejects: prose in
+    # the recipe gets ignored; a reject with a steer corrects the model in-context
+    # at the moment of failure). A single-FILE directive that clearly declares an
+    # HTTP surface is the old 2.9%-yield unit; redirect it to build_service.
+    # Kill: ZO_SERVICE_UNIT_REDIRECT=0. Consumers/reports without routes pass.
+    if (d["handler"] in ("generate_file", "write_raw")
+            and os.environ.get("ZO_SERVICE_UNIT_REDIRECT", "1") != "0"):
+        _surface_probe = f"{d.get('output_file', '')} {d.get('description', '')}"
+        _looks_route = bool(re.search(
+            r"APIRouter|@router\.|FastAPI router|\b(GET|POST|PUT|DELETE|PATCH) /"
+            r"|_api\.py\b|_router\.py\b|\bendpoint\b", _surface_probe))
+        if _looks_route:
+            try:  # report card: one JSONL row per lesson, so the chairman review can
+                  # grade convergence (redirects/day -> 0 while .expanded/day rises)
+                import time as _t
+                with open(PROPOSED_DIR / ".service_redirects.jsonl", "a", encoding="utf-8") as _fh:
+                    _fh.write(json.dumps({"ts": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
+                                          "task": d.get("task", ""), "output_file": d.get("output_file", "")}) + "\n")
+            except Exception:
+                pass
+            return False, (
+                "HTTP-surface module proposed as a single FILE -- that is the retired "
+                "unit (559 built, 16 load-bearing). Re-propose this ONCE as the SERVICE "
+                "UNIT: propose_directive(task='build_service_<snake_name>', "
+                "handler='build_service', description=<full spec: route+prefix, "
+                "tables/columns read, response shape, ACCEPTANCE assertions>). "
+                "No output_file. The pipeline fans it out, builds each file, and mounts "
+                "it only when its contract proves a live 200.")
     output = (d.get("output_file") or "").strip()
     # Edit-class tasks modify existing files and declare no creation output;
     # every other task must name the file it will create.

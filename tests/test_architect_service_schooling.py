@@ -87,3 +87,46 @@ class ChainShapeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RejectionTimeSteeringTests(unittest.TestCase):
+    """The pedagogy that provably lands: single-file HTTP-surface proposals are
+    rejected WITH the re-propose recipe; non-surface single-file work passes."""
+
+    def setUp(self):
+        self.v = _load_validate()
+        if self.v is None:
+            self.skipTest("mcp package unavailable")
+
+    def test_single_file_router_redirected(self):
+        ok, why = self.v({"task": "build_tier_summary_api", "handler": "generate_file",
+                          "output_file": "tier_summary_api.py",
+                          "description": "FastAPI router exposing GET /api/tiers via APIRouter, "
+                                         "reads mcp_llm_axis_scores, returns counts. " + "x" * 140})
+        self.assertFalse(ok)
+        self.assertIn("build_service_<snake_name>", why)   # the lesson is IN the rejection
+
+    def test_consumer_without_route_passes_lane(self):
+        ok, why = self.v({"task": "build_tier_rollup_consumer", "handler": "generate_file",
+                          "output_file": "tier_rollup_consumer.py",
+                          "description": "Batch consumer reading mcp_llm_axis_scores and writing "
+                                         "risk_tier rollups via the app session; no HTTP surface; "
+                                         "__main__ self-test seeds SQLite and prints PASS. " + "x" * 100})
+        self.assertTrue(ok, why)
+
+    def test_kill_switch(self):
+        os.environ["ZO_SERVICE_UNIT_REDIRECT"] = "0"
+        try:
+            ok, _ = self.v({"task": "build_some_api", "handler": "generate_file",
+                            "output_file": "some_api.py",
+                            "description": "APIRouter GET /api/x reads mcp_llm_axis_scores, "
+                                           "returns counts by tier; ACCEPTANCE: __main__ "
+                                           "TestClient asserts 200 and prints PASS. " + "y" * 200})
+            self.assertTrue(ok)
+        finally:
+            del os.environ["ZO_SERVICE_UNIT_REDIRECT"]
+
+    def test_build_service_not_redirected(self):
+        ok, why = self.v({"task": "build_service_tier_summary", "handler": "build_service",
+                          "description": GOOD_SPEC})
+        self.assertTrue(ok, why)

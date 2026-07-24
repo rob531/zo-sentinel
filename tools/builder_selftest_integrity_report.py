@@ -35,7 +35,7 @@ import json
 import os
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timezone
 
 DEFAULT_LOG = os.environ.get("GOOSE_RUNNER_LOG", "/home/workspace/logs/goose_runner.log")

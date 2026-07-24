@@ -154,7 +154,7 @@ def _log(msg: str) -> None:
 # Validator -- mirrors sentinel_directive_generator.validate_directive
 # ---------------------------------------------------------------------------
 
-VALID_HANDLERS = {"generate_file", "write_raw", "run_script"}
+VALID_HANDLERS = {"generate_file", "write_raw", "run_script", "build_service"}
 VALID_COMPLEXITY = {"low", "medium", "high"}
 VALID_BREAKER_ACTIONS = {"investigate", "reset", "accept"}
 REQUIRED_FIELDS = {"task", "handler", "description"}   # output_file required only for non-edit tasks (see _validate)
@@ -234,6 +234,24 @@ def _validate(d: dict) -> tuple[bool, str]:
             "Do NOT propose build/wire/verify work for it. Propose a NEW capability in a "
             "CURRENT underbuilt domain instead: call list_domains and pick a thin/uncovered "
             "one, or target a concrete integration gap.")
+    # SERVICE UNIT (SOA atomic unit, 2026-07-24): a build_service directive names a
+    # SERVICE, not a file. The promoter fans it out into single-file directives;
+    # the staged->active gate makes it live only when its contract proves a 200.
+    if d["handler"] == "build_service":
+        _task = str(d.get("task", ""))
+        if not _task.startswith("build_service_"):
+            return False, "build_service task must be named build_service_<snake_name>"
+        _svc = _task[len("build_service_"):]
+        if not _svc or not _svc.replace("_", "").isalnum():
+            return False, "build_service_<snake_name>: snake_name missing/invalid"
+        if len(str(d.get("description", "")) or "") < 120:
+            return False, ("build_service description IS the service spec -- >=120 chars "
+                           "naming route+prefix, tables/columns read, response shape, "
+                           "and the acceptance assertions its contract must make")
+        for _sd in ("active", "staged"):
+            if (Path(__file__).resolve().parents[2] / "services" / _sd / _svc).exists():
+                return False, f"service '{_svc}' already exists in services/{_sd}/ -- not net-new"
+        return True, "ok"
     output = (d.get("output_file") or "").strip()
     # Edit-class tasks modify existing files and declare no creation output;
     # every other task must name the file it will create.
@@ -511,6 +529,12 @@ def propose_directive(
     process success + their own smoke-test. Stamping a bogus output_file=<task>.py
     on an edit task makes the ghost-guard fail it forever.
 
+    SERVICE UNIT (preferred for ANY new API surface/feature): handler="build_service",
+    task="build_service_<snake_name>", output_file EMPTY, description = the FULL service
+    spec (route + prefix, tables/columns read, response shape, acceptance assertions).
+    The pipeline fans it out into single-file builds and only mounts the service when
+    its own contract proves a live 200 -- wiring is no longer your concern.
+
     Returns: {"status": "written"|"duplicate"|"rejected", "path": str?, "reason": str?}
     """
     # Edit-class tasks never create a <task>.py -- drop any output_file the model
@@ -535,6 +559,8 @@ def propose_directive(
 
     if _is_edit_task(task):
         output_file = ""
+    if handler == "build_service":
+        output_file = ""   # a service declares no single file; the fan-out children do
     d = {
         "task": task,
         "handler": handler,
@@ -559,6 +585,8 @@ def propose_directive(
     if rationale is not None:
         d["rationale"] = rationale
 
+    if handler == "build_service":
+        d["service_name"] = task[len("build_service_"):] if task.startswith("build_service_") else ""
     ok, reason = _validate(d)
     if not ok:
         _log(f"REJECT {task}: {reason}")

@@ -9,3 +9,9 @@ PyJWT>=2.8,<3.0
 passlib>=1.7,<2.0
 psycopg[binary]>=3.1,<4.0
 cryptography>=42.0,<46.0
+# requests: imported at module scope by verdict_breakdown_api.py (webhook POST,
+# line 253). Wired into the app import chain by #1798 but never declared here,
+# so the ui-smoke harness died at import with ModuleNotFoundError and the
+# treewalk-smoke gate has been dead-red on every PR since. Undeclared runtime
+# dep = prod risk on any image rebuild that stops pulling it transitively.
+requests>=2.31,<3.0

@@ -211,6 +211,68 @@ def _resolve_directive_id(d: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Service-unit fan-out (SOA atomic unit -- the multi-step ladder build)
+# ---------------------------------------------------------------------------
+#
+# The ladder attribution audit's verdict: 559 single-file emissions, 16 load-
+# bearing (2.9%) -- the FILE unit produced hollow, spineless inventory. The new
+# unit is the SERVICE (logic/router/contract/service.toml under services/staged/
+# <name>/), and it is built in MULTI STEPS by the ladder: the architect emits ONE
+# general service-level directive; THIS pre-pass deterministically fans it out
+# into N single-file directives (the builder's proven lane -- engine writes each
+# in its own single-shot pass); the staged dir ACCRETES as each lands; the
+# staged->active promotion gate is the completion condition (the whole unit must
+# prove LIVE before it mounts). No orchestration state machine: the folder is the
+# accumulator, the liveness contract is the join.
+#
+# A service directive is {"handler": "build_service", "service_name": ..,
+# "description"/"spec": .., optional "prefix"/"tag"}. After fan-out the parent is
+# renamed .expanded (auditable, never re-scanned). Kill: ZO_SERVICE_UNIT_EXPANSION=0.
+
+def _expand_service_directives(proposed_dir: Path) -> int:
+    if os.environ.get("ZO_SERVICE_UNIT_EXPANSION", "1") == "0":
+        return 0
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from tools.service_decomposer import decompose  # stdlib-only, like us
+    except Exception as e:  # decomposer absent -> fan-out unavailable, visible
+        log.warning("service fan-out unavailable (%s); build_service directives will be rejected", e)
+        return 0
+    expanded = 0
+    for p in list(_iter_proposals(proposed_dir)):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(d, dict) or d.get("handler") != "build_service":
+            continue
+        name = str(d.get("service_name") or d.get("name") or "").strip()
+        spec = str(d.get("spec") or d.get("description") or "").strip()
+        if not name or len(spec) < 50:
+            log.warning("build_service %s: missing service_name or spec<50 chars -> .rejected", p.name)
+            try:
+                os.replace(p, p.with_name(p.name + ".rejected"))
+            except OSError:
+                pass
+            continue
+        children = decompose(name, spec, str(d.get("prefix") or "/api"), str(d.get("tag") or ""))
+        for c in children:
+            c["parent_service_directive"] = p.name
+            stem = c["output_file"].replace("/", "_").replace(".", "_")
+            child_path = proposed_dir / ("svc_%s.json" % stem)
+            with open(child_path, "w", encoding="utf-8") as fh:
+                json.dump(c, fh, indent=2)
+        try:
+            os.replace(p, p.with_name(p.name + ".expanded"))
+        except OSError:
+            pass
+        expanded += 1
+        log.info("service fan-out: %s -> %d single-file directives (unit=services/staged/%s)",
+                 p.name, len(children), name)
+    return expanded
+
+
+# ---------------------------------------------------------------------------
 # Promotion pass
 # ---------------------------------------------------------------------------
 
@@ -544,6 +606,7 @@ def run_once(
     If omitted, defaults to pending_dir.parent — the canonical layout has
     directives_root/{proposed,pending,*.done.json} as siblings.
     """
+    _expand_service_directives(Path(proposed_dir))
     counters = PromotionCounters()
 
     if not proposed_dir.exists():

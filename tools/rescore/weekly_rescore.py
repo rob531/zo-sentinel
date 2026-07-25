@@ -388,12 +388,17 @@ def ph_preflight(run: Run, args) -> None:
 # anti-joins/GROUP BYs (both the 7/3 NOT IN form and a materialized-CTE
 # NOT EXISTS form ran >7 min). So we stream two CHEAP scans and do the
 # set logic client-side -- surgical on the DB, deterministic in Python.
-SQL_REGISTRY = """
-SELECT server_id, name, COALESCE(registry_source,'remote') src, COALESCE(url,'') url,
-       replace(replace(description,chr(10),' '),chr(13),' ') descr,
+SQL_REGISTRY_KEYS = """
+SELECT server_id, COALESCE(url,'') url,
        (verdict IS NULL OR verdict IN ('unreviewed','unknown')) scorable
 FROM mcp_server_registry
 WHERE description IS NOT NULL AND length(description)>20
+"""
+SQL_DETAIL = """
+SELECT server_id, name, COALESCE(registry_source,'remote') src, COALESCE(url,'') url,
+       replace(replace(description,chr(10),' '),chr(13),' ') descr
+FROM mcp_server_registry
+WHERE server_id = ANY(%s)
 """
 # one row per scored server: every axis row of a server shares scored_at,
 # so overall_risk alone gives (server_id, scored_at) without a GROUP BY.
@@ -407,35 +412,38 @@ def ph_export(run: Run, args) -> None:
     if run.done("export"):
         return
     conn = pg_conn()
-    # small fetch batches + per-batch progress: the fly proxy tunnel stalls on
-    # multi-MB bursts (observed 2026-07-14: server idle-in-txn, client starved).
-    cur = conn.cursor("reg_stream")
-    cur.itersize = 1000
-    cur.execute(SQL_REGISTRY)
+    # v3 (2026-07-25, FU-100): the old path streamed the FULL registry WITH
+    # descriptions and was the export bottleneck (~80 rows/s, payload-bound over
+    # the fly proxy). The 1GB Fly PG still spills on server-side anti-joins/windows
+    # (the 2026-07-14 finding), so the set logic stays client-side -- but we now
+    # stream only the LEAN keys (id,url,scorable), do the distinct-URL + new/refresh
+    # split on those, then fetch descriptions for the bounded COHORT only. Identical
+    # cohort; ~15x less wire payload.
+    cur = conn.cursor("reg_keys")
+    cur.itersize = 5000
+    cur.execute(SQL_REGISTRY_KEYS)
     reg = []
     t0 = time.time()
     for row in cur:
         reg.append(row)
-        if len(reg) % 10000 == 0:
-            log(f"export: registry stream {len(reg)} rows "
+        if len(reg) % 50000 == 0:
+            log(f"export: key stream {len(reg)} rows "
                 f"({len(reg)/(time.time()-t0):.0f} rows/s)")
     cur.close()
     cur2 = conn.cursor()
     cur2.execute(SQL_SCORED)
-    scored_at = dict(cur2.fetchall())         # sid -> scored_at (66k)
-    conn.close()
-    log(f"export: streamed registry={len(reg)} scored={len(scored_at)}")
+    scored_at = dict(cur2.fetchall())         # sid -> scored_at
+    log(f"export: streamed keys={len(reg)} scored={len(scored_at)}")
 
     def ukey(sid, url):
         return url or sid
 
-    # distinct-URL representative selection (replicates DISTINCT ON semantics:
-    # order by (url_key, server_id) and keep the first) -- but prefer an
-    # already-scored representative so the refresh lane refreshes in place.
-    reg.sort(key=lambda r: (ukey(r[0], r[3]), r[0]))
+    # distinct-URL representative (order by (url_key, server_id), keep first),
+    # preferring an already-scored rep so the refresh lane refreshes in place.
+    reg.sort(key=lambda r: (ukey(r[0], r[1]), r[0]))
     reps = {}
     for r in reg:
-        k = ukey(r[0], r[3])
+        k = ukey(r[0], r[1])
         cur_rep = reps.get(k)
         if cur_rep is None:
             reps[k] = r
@@ -445,16 +453,31 @@ def ph_export(run: Run, args) -> None:
     for k, r in reps.items():
         if r[0] in scored_at:
             refresh_rows.append(r)
-        elif r[5]:                             # scorable (verdict unreviewed/unknown)
+        elif r[2]:                             # scorable (verdict unreviewed/unknown)
             new_rows.append(r)
     refresh_rows.sort(key=lambda r: scored_at[r[0]])       # oldest scored first
     if run.state["mode"] != "full":
         refresh_rows = refresh_rows[:args.refresh_cap]
     uniq = new_rows + refresh_rows
+    cohort_sids = [r[0] for r in uniq]
+
+    # descriptions for the COHORT only (server_id is PK -> indexed, no spill)
+    detail = {}
+    if cohort_sids:
+        cur3 = conn.cursor()
+        cur3.execute(SQL_DETAIL, (cohort_sids,))
+        for d_sid, d_name, d_src, d_url, d_descr in cur3:
+            detail[d_sid] = (d_name, d_src, d_url, d_descr)
+        cur3.close()
+    conn.close()
 
     inp = run.dir / "inputs.jsonl.gz"
     with gzip.open(inp, "wt", encoding="utf-8") as f:
-        for sid, name, src, url, descr, _sc in uniq:
+        for sid in cohort_sids:
+            d = detail.get(sid)
+            if d is None:
+                continue
+            name, src, url, descr = d
             hdr = (f"MCP SERVER UNDER REVIEW:\n  server_id: {sid}\n  name:      {name}\n"
                    f"  source:    {src}\n  url:       {url}\n  description: {descr}\n\n")
             f.write(json.dumps({"messages": [{"role": "system", "content": SYS},

@@ -39,17 +39,41 @@ only stops the number going up. That is the whole point -- a cleanup sprint for
 
 MODES
 -----
-    observe (default) -- always exit 0; record the census. Use while the
-                         mounts.toml seam does not exist yet, so the builder
-                         has no way to comply and blocking would only wedge
-                         the publisher queue behind un-mergeable PRs.
-    enforce           -- exit 1 on regression. Flip to this once a module CAN
-                         mount itself (one-line append to app/mounts.toml).
+    observe           -- always exit 0; record the census.
+    enforce (2026-07-21 CofC ruling) -- exit 1 on regression. A PR that adds an
+                         unmounted router passes by EITHER mounting it OR naming
+                         it in tools/reachability_deferred.json with a one-line
+                         reason. You may not add one silently.
 
     python tools/reachability_ratchet.py                 # observe
     python tools/reachability_ratchet.py --enforce       # blocking
     python tools/reachability_ratchet.py --update-baseline
     python tools/reachability_ratchet.py --quiet
+
+WHY A DEFERRED LIST RATHER THAN A HARD BLOCK (CofC 2026-07-21)
+--------------------------------------------------------------
+The builder is structurally incapable of mounting anything: the
+`module_from_exemplar` lane guard forbids it and edit-class directives carry
+`output_file: null`, which no-ops 4 of 6 build gates. A naive --enforce would
+therefore be an UNSATISFIABLE predicate -- ~15 builder PRs/day would go red for
+a rule none of them could ever comply with, and the failure would present as
+model regression rather than policy contradiction (the council's Seat 1
+objection, which is correct against a naive enforce and void against this one).
+The deferred list makes the predicate satisfiable without mounting: declaring is
+not mounting. What stops today is SILENT orphan growth, not orphan growth.
+
+THE DEFERRED LIST IS NOT A LOOPHOLE
+-----------------------------------
+Three integrity checks keep it from becoming the new graveyard:
+  * a deferral for a module that is no longer an orphan (mounted, renamed or
+    deleted) is STALE and fails enforce -- stale entries silently inflate the
+    headroom, which is exactly how an exemption list goes decorative while
+    still reporting green.
+  * every deferral needs a one-line reason. Reasonless deferrals fail.
+  * every exemption in reachability_exempt.json needs a reason too, and
+    exempted_count is reported on every run so it can be alarmed on.
+The list is capped by review, not by code: >40 active deferrals is a documented
+reopen trigger for the council, and is printed loudly here.
 
 Every run writes artifacts/reachability_ratchet.json: the count, the delta, and
 the full orphan census with the shape of each module (declared prefix, tags,
@@ -72,8 +96,14 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE_PATH = os.path.join(ROOT, "tools", "reachability_baseline.json")
 EXEMPT_PATH = os.path.join(ROOT, "tools", "reachability_exempt.json")
+DEFERRED_PATH = os.path.join(ROOT, "tools", "reachability_deferred.json")
 ARTIFACT_DIR = os.path.join(ROOT, "artifacts")
 ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "reachability_ratchet.json")
+
+# >40 active deferrals = the hatch has become the new graveyard.
+# Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Do not raise this
+# number to make the warning quiet; escalate to the chairman instead.
+DEFERRED_REVIEW_CAP = 40
 
 # A module "exposes a router" if it constructs an APIRouter or decorates one.
 ROUTER_DEF = re.compile(r"APIRouter\s*\(|@router\.(get|post|put|delete|patch)")
@@ -128,6 +158,7 @@ def describe(path, src):
         parses = True
     except SyntaxError:
         parses = False
+
     return {
         "module": path[:-3],
         "routes": routes,
@@ -140,13 +171,53 @@ def describe(path, src):
     }
 
 
+def _entries(raw):
+    """Normalise {stem: reason} | {stem: {reason}} | [stem] | [{module,reason}].
+
+    A bare string entry maps to an EMPTY reason on purpose -- that is what the
+    reasonless checks below are looking for.
+    """
+    out = {}
+    if isinstance(raw, dict):
+        for stem, val in raw.items():
+            if isinstance(val, dict):
+                out[str(stem)] = str(val.get("reason", "")).strip()
+            else:
+                out[str(stem)] = str(val).strip()
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                stem = item.get("module") or item.get("stem")
+                if stem:
+                    out[str(stem)] = str(item.get("reason", "")).strip()
+            else:
+                out[str(item)] = ""
+    return out
+
+
+def _load_entries(path, key):
+    if not os.path.exists(path):
+        return {}
+    try:
+        return _entries(json.load(open(path, encoding="utf-8")).get(key, {}))
+    except (OSError, ValueError):
+        return {}
+
+
+def load_deferred():
+    """{module_stem: reason} -- routers a PR declined to mount, with a reason."""
+    return _load_entries(DEFERRED_PATH, "deferred")
+
+
+def load_exempt_entries():
+    """{module_stem: reason} -- routers mounted by some other mechanism."""
+    return _load_entries(EXEMPT_PATH, "exempt")
+
+
 def census():
-    exempt = set()
-    if os.path.exists(EXEMPT_PATH):
-        try:
-            exempt = set(json.load(open(EXEMPT_PATH, encoding="utf-8")).get("exempt", []))
-        except (OSError, ValueError):
-            exempt = set()
+    exempt_entries = load_exempt_entries()
+    exempt = set(exempt_entries)
+    deferred = load_deferred()
 
     surface = mount_surface_text()
     mounted, orphans, exempted = [], [], []
@@ -163,6 +234,11 @@ def census():
         else:
             orphans.append(describe(fn, src))
 
+    # A deferred module is STILL an orphan -- the census stays truthful. The
+    # declaration buys headroom against the ratchet, it does not launder the
+    # number. Anything else and the artifact stops describing reality.
+    orphan_stems = {o["module"] for o in orphans}
+
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "router_modules_total": len(mounted) + len(orphans) + len(exempted),
@@ -172,6 +248,12 @@ def census():
         "exempted_count": len(exempted),
         "orphan_count": len(orphans),
         "orphans": sorted(orphans, key=lambda d: d["module"]),
+        # --- CofC 2026-07-21: the deferred hatch and its integrity checks ---
+        "deferred_active": sorted(set(deferred) & orphan_stems),
+        "deferred_stale": sorted(set(deferred) - orphan_stems),
+        "deferred_reasonless": sorted(s for s, r in deferred.items() if not r),
+        "deferred_declared_count": len(deferred),
+        "exempt_reasonless": sorted(s for s, r in exempt_entries.items() if not r),
     }
 
 
@@ -203,10 +285,18 @@ def main():
     count = data["orphan_count"]
     baseline = load_baseline()
 
+    active_deferred = data["deferred_active"]
+    # Declaring is not mounting: a declared orphan still counts in orphan_count
+    # but it buys the PR headroom against the ratchet.
+    effective = count - len(active_deferred)
+
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
     data["baseline"] = baseline
     data["delta"] = None if baseline is None else count - baseline
     data["mode"] = "enforce" if enforce else "observe"
+    data["deferred_active_count"] = len(active_deferred)
+    data["effective_orphan_count"] = effective
+    data["effective_delta"] = None if baseline is None else effective - baseline
     with open(ARTIFACT_PATH, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=1)
 
@@ -237,15 +327,67 @@ def main():
     verdict = "REGRESSION" if delta > 0 else ("IMPROVED" if delta < 0 else "HOLD")
     print("\nverdict: %s  (orphans=%d baseline=%d delta=%+d mode=%s)"
           % (verdict, count, baseline, delta, data["mode"]))
+    if active_deferred:
+        print("  deferred (declared, unmounted): %d  -> effective=%d delta=%+d"
+              % (len(active_deferred), effective, effective - baseline))
 
-    if delta > 0:
-        print("  %d new unmounted router(s). A module that mounts nowhere is inventory, not a build." % delta)
-        if enforce:
-            return 1
-        print("  observe mode -- not failing. Flip to --enforce once app/mounts.toml exists.")
+    failures = []
+
+    # --- integrity checks: this is how a hatch stops being decorative ---
+    if data["deferred_stale"]:
+        print("\n  STALE DEFERRALS (%d) -- declared, but no longer orphans. These"
+              % len(data["deferred_stale"]))
+        print("  silently inflate the headroom; remove them from "
+              "tools/reachability_deferred.json:")
+        for s in data["deferred_stale"][:20]:
+            print("    %s" % s)
+        failures.append("stale deferrals")
+
+    if data["deferred_reasonless"]:
+        print("\n  REASONLESS DEFERRALS (%d) -- a deferral needs a one-line reason:"
+              % len(data["deferred_reasonless"]))
+        for s in data["deferred_reasonless"][:20]:
+            print("    %s" % s)
+        failures.append("reasonless deferrals")
+
+    if data["exempt_reasonless"]:
+        print("\n  REASONLESS EXEMPTIONS (%d) in tools/reachability_exempt.json."
+              % len(data["exempt_reasonless"]))
+        print("  An exemption without a reason is how this gate goes decorative "
+              "while still reporting green:")
+        for s in data["exempt_reasonless"][:20]:
+            print("    %s" % s)
+        failures.append("reasonless exemptions")
+
+    if data["exempted_count"]:
+        print("\n  NOTE: exempted_count=%d (was 0 when the ratchet was armed on "
+              "2026-07-21). Exemptions are alarmed on by the daily trend check."
+              % data["exempted_count"])
+
+    if len(active_deferred) > DEFERRED_REVIEW_CAP:
+        print("\n  DEFERRED LIST OVER CAP: %d > %d. Per the 2026-07-21 CofC ruling "
+              "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
+              "Escalate to the chairman; do not raise the cap to make this quiet."
+              % (len(active_deferred), DEFERRED_REVIEW_CAP))
+
+    if effective > baseline:
+        excess = effective - baseline
+        print("\n  %d new unmounted router(s) neither mounted nor declared." % excess)
+        print("  Fix EITHER way:")
+        print("    * mount it under app/, or")
+        print("    * add it to tools/reachability_deferred.json with a one-line reason.")
+        print("  A module that mounts nowhere is inventory, not a build.")
+        failures.append("undeclared new orphans")
     elif delta < 0:
         print("  ratchet can tighten: commit the new baseline with "
-              "`python tools/reachability_ratchet.py --update-baseline` (%d -> %d)." % (baseline, count))
+              "`python tools/reachability_ratchet.py --update-baseline` (%d -> %d)."
+              % (baseline, count))
+
+    if failures:
+        if enforce:
+            print("\nFAIL (enforce): %s" % ", ".join(failures))
+            return 1
+        print("\n  observe mode -- not failing on: %s" % ", ".join(failures))
     return 0
 
 

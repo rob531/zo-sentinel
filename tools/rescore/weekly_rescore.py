@@ -502,10 +502,39 @@ def ph_bundle(run: Run, args) -> None:
     shutil.copy(run.dir / "inputs.jsonl.gz", work / "score_transfer/inputs.jsonl.gz")
     git("checkout", "--orphan", score_branch)
     git("rm", "-r", "--cached", ".")
-    git("add", "score_transfer")
+    # FU-093: -f is MANDATORY. The SFT repo .gitignore lists *.safetensors, *.pt,
+    # *.bin, so a plain git add SILENTLY skips the adapter weights + heads. The
+    # pod then gets only adapter_config.json, PEFT cannot attach, and eval scores
+    # on base + RANDOM HEADS while reporting success (3 weeks of garbage:
+    # 07-18/07-21/07-24; same class as the RunPod-era "weights keep vanishing").
+    git("add", "-f", "score_transfer")
     git("-c", "user.email=tower@zo", "-c", "user.name=weekly-rescore",
         "commit", "-q", "-m", f"score transfer bundle {ts}")
+    # FU-093 I5b: verify the COMMITTED TREE, not the filesystem. The old I5
+    # hashed the local copy, so it passed green while git had silently dropped
+    # the weights (.gitignore). Also catch the known 133-byte LFS-POINTER
+    # signature (documented: 'pointers, the real 29.5MB weights live elsewhere').
+    tree = git("ls-tree", "-r", "-l", "HEAD", "score_transfer/adapter").stdout
+    for need in ("adapter_model.safetensors", "heads_state_dict.pt"):
+        if need not in tree:
+            raise SystemExit(f"ABORT: {need} missing from the COMMITTED bundle -- "
+                             f".gitignore swallowed it. tree=\\n{tree}")
+    for line in tree.splitlines():
+        f = line.split()
+        if len(f) >= 4 and f[3].endswith("adapter_model.safetensors") and int(f[2]) < 1_000_000:
+            raise SystemExit(f"ABORT: committed adapter is {f[2]}B -- an LFS pointer/stub, "
+                             f"not weights (the 133-byte failure class).")
     git("push", repo_url, f"HEAD:refs/heads/{score_branch}")
+    # FU-093: NEVER trust the push exit code (standing SFT lesson). Re-read the
+    # REMOTE tree and assert real bytes actually landed.
+    git("fetch", "--depth", "1", repo_url, score_branch)
+    rtree = git("ls-tree", "-r", "-l", "FETCH_HEAD", "score_transfer/adapter").stdout
+    ok = any(x.split()[3].endswith("adapter_model.safetensors") and int(x.split()[2]) >= 1_000_000
+             for x in rtree.splitlines() if len(x.split()) >= 4)
+    if not ok:
+        raise SystemExit(f"ABORT: post-push REMOTE verify failed -- adapter weights did "
+                         f"not land on {score_branch}. remote tree=\\n{rtree}")
+    log("bundle verify: adapter weights confirmed on the remote branch")
     run.mark("bundle", score_branch=score_branch,
              results_branch=f"{score_branch}-results")
     log(f"bundle OK: pushed {score_branch} (adapter pin verified)")

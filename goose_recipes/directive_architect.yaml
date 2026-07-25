@@ -69,17 +69,42 @@ prompt: |-
   app-assembly wiring. Propose EXCLUSIVELY from this app surface. A cycle that proposes a
   signal/enrichment/enumeration module is a FAILED cycle -- it will be frozen and never merge.
 
+  THE SERVICE UNIT -- PREFERRED FOR ANY NEW API SURFACE (2026-07-24 SOA).
+  The single-file unit produced 559 modules of which 16 went load-bearing (2.9%):
+  well-formed, orphaned, never reachable. The unit of success is now a SERVICE
+  serving a live 200, and you propose it as ONE directive:
+    propose_directive(task="build_service_<snake_name>", handler="build_service",
+      description=<the FULL service spec>)     # output_file EMPTY -- no single file
+  The description IS the spec (>=200 chars, same SPEC QUALITY bar as below): state the
+  route + prefix, the tables/columns read (mcp_llm_axis_scores / mcp_server_registry ...),
+  the exact response shape, and the ACCEPTANCE assertions its contract must make.
+  The pipeline fans your ONE directive into 5 single-file builds (logic/router/contract/
+  toml), the builder writes each in its proven lane, and the service mounts ONLY when its
+  own contract proves a live 200. You never propose wiring; reachability is the
+  pipeline's job now. GOLD STANDARD:
+    task="build_service_risk_tier_trend", handler="build_service", description=
+    "GET /api/risk/trend?days=N on prefix /api. logic.py reads mcp_llm_axis_scores
+     joined to mcp_server_registry, counts per-day risk_tier transitions over N days;
+     router.py returns {days, series: [{date, tier, count}]} via pydantic; Postgres-
+     portable SQL, no network. ACCEPTANCE: contract seeds 3 servers with tier changes
+     across 2 days in in-memory SQLite, asserts 200, asserts series length and one
+     known count, prints PASS."
+  Use build_service for EVERY net-new endpoint/feature. Use module_from_exemplar ONLY
+  for single-file non-surface work: scoring-consumers, report generators, test suites.
+
   BUILDER LANE -- TAG EVERY CREATION DIRECTIVE WITH ITS RECIPE (see docs/builder_lane.md).
   The autonomous builder only succeeds on SELF-CONTAINED, schema-bounded modules that
   mirror a working exemplar. For EVERY creation directive you propose:
     - set recipe="module_from_exemplar" and name the exemplar + data layer in `reads`, e.g.
       reads=["verdict_breakdown_api.py","app/db.py","app/models.py","trust_gating_override.py"].
-    - eligible ONLY: read-only API routers over mcp_llm_axis_scores / mcp_server_registry,
-      scoring-consumers, report/export endpoints, data enrichers/adapters, test suites.
+    - eligible ONLY: scoring-consumers, report/export generators (no HTTP route),
+      data enrichers/adapters, test suites. API routers/endpoints are NOT in this
+      lane any more -- ANY module that serves an HTTP route is proposed as ONE
+      build_service directive (THE SERVICE UNIT above), never as a single file.
   DO NOT PROPOSE -- these are AGENT-BUILT in-session, never directive-built (proposing them
   is a FAILED cycle; they ghost or hollow-stub): the app spine / app/main.py wiring,
   authentication / session / JWT / OAuth / RBAC / tenancy, ANY frontend / HTML / UX / template,
-  or anything spanning MULTIPLE files. This SUPERSEDES any earlier mention of proposing FE/.html
+  or ad-hoc MULTI-FILE work expressed as separate wire_/integrate_ directives -- multi-file features are expressed ONLY as ONE build_service directive (THE SERVICE UNIT above). This SUPERSEDES any earlier mention of proposing FE/.html
   views -- the front-end and the app/auth spine are owned by in-session agent work now.
 
   NOVELTY -- DO NOT RE-PROPOSE WHAT ALREADY EXISTS. context.already_built_modules

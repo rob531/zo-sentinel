@@ -1,0 +1,11 @@
+[service]
+name = "entity_report_exporter"
+import_path = "entity_report_exporter"
+prefix = ""
+tag = ""
+origin = "live"
+auth = "public"
+needs_data_layer = false
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

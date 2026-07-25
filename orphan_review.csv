@@ -1,0 +1,318 @@
+module,why_unmounted,suggested_action,route_count,imports_data_layer,lines,origin_pr_or_subject,origin_date,casing_fix
+sentinel_external_api_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",5,True,223,build: build_sentinel_external_api_router (#1749),2026-07-23,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScore->McpLlmAxisScore;MCPScoreDispute->McpScoreDispute
+server_exemptions_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",4,True,186,build: server_exemptions_api (#1376),2026-07-10,MCPServerRegistry->McpServerRegistry
+axis_scores_query_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",3,True,307,build: axis_scores_query_api (#1770),2026-07-24,McpLlmAxisScores->McpLlmAxisScore
+risk_tier_axis_score_consumer_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",3,True,223,build: build_risk_tier_axis_score_consumer_router (#1692),2026-07-20,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+scoring_precision_audit_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",3,True,237,build: scoring_precision_audit_report (#1535),2026-07-16,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_risk_tier_bulk_lookup_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",3,True,156,build: server_risk_tier_bulk_lookup_api (#1405),2026-07-10,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_vuln_advisories_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",3,True,270,build: server_vuln_advisories_api (#1363),2026-07-09,MCPServerRegistry->McpServerRegistry
+dispute_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,89,build: dispute_summary_api (#1499),2026-07-15,MCPScoreDispute->McpScoreDispute
+entity_report_exporter_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,119,build: entity_report_exporter_router (#1651),2026-07-19,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+fleet_risk_tier_aggregation_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,202,build: fleet_risk_tier_aggregation_api (#1396),2026-07-10,MCPLLMAxisScore->McpLlmAxisScore
+risk_tier_criteria_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,120,build: risk_tier_criteria_api (#1328),2026-07-07,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+scoring_consistency_audit_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,217,build: scoring_consistency_audit_api (#1740),2026-07-22,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScore->McpLlmAxisScore
+scoring_coverage_audit_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,131,build: scoring_coverage_audit_api (#1554),2026-07-16,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+scoring_gap_analysis_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,157,build: scoring_gap_analysis_api (#1464),2026-07-14,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_freshness_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,137,build: server_freshness_dashboard_api (#1434),2026-07-12,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_risk_tier_computation_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,190,build: server_risk_tier_computation_api (#1327),2026-07-07,McpLlmAxisScores->McpLlmAxisScore
+server_scoring_status_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,158,build: build_server_scoring_status_api (#1750),2026-07-23,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScore->McpLlmAxisScore
+server_verdict_scoring_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,248,build: server_verdict_scoring_api (#1330),2026-07-07,MCPServerRegistry->McpServerRegistry;MCPLlmAxisScore->McpLlmAxisScore
+verdict_changes_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,195,build: verdict_changes_api (#1318),2026-07-07,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+verdict_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,False,145,build: build_verdict_dashboard_api (#587),2026-06-25,McpLlmAxisScores->McpLlmAxisScore
+verdict_distribution_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",2,True,141,build: verdict_distribution_summary_api (#1700),2026-07-21,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+adversarial_description_probe,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,104,build: adversarial_description_probe (#1605),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+app_axis_scores_overall_risk_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,148,build: app_axis_scores_overall_risk_router (#1698),2026-07-21,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+app_score_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,306,build: app_score_api (#1455),2026-07-13,MCPLLMAxisScore->McpLlmAxisScore
+ask_question_intent_routing_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,145,build: ask_question_intent_routing_api (#1336),2026-07-08,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+axis_critical_servers_bulk_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,118,build: build_axis_critical_servers_bulk_api (#1457),2026-07-13,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+axis_evidence_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,66,build: build_axis_evidence_api (#1192),2026-07-02,MCPLLMAxisScores->McpLlmAxisScore
+axis_score_variance_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,205,build: axis_score_variance_report (#1772),2026-07-24,McpLlmAxisScores->McpLlmAxisScore
+axis_scores_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,162,build: axis_scores_api (#1511),2026-07-15,MCPLLMAxisScores->McpLlmAxisScore
+axis_scores_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,79,build: axis_scores_summary_api (#1549),2026-07-16,MCPLLMAxisScores->McpLlmAxisScore
+axis_top_servers_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,111,build: axis_top_servers_api (#1325),2026-07-07,McpLlmAxisScores->McpLlmAxisScore
+axis_top_servers_by_critical_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,185,build: axis_top_servers_by_critical_api (#1393),2026-07-10,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+deferred_router_triage_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,98,build: build_deferred_router_triage_report (#1752),2026-07-23,MCPServerRegistry->McpServerRegistry
+directive_queue_health_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,111,build: directive_queue_health_api (#1607),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+factory_liveness_continuity_probe,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,96,build: build_factory_liveness_continuity_probe (#1672),2026-07-20,MCPServerRegistry->McpServerRegistry
+family_rollup_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,151,build: build_family_rollup_api (#1627),2026-07-19,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+fleet_risk_tier_trend_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,157,build: fleet_risk_tier_trend_api (#1407),2026-07-10,MCPServerRegistry->McpServerRegistry
+gate_attribution_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,68,build: build_gate_attribution_report (#1671),2026-07-20,MCPServerRegistry->McpServerRegistry
+high_risk_servers_export_csv,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,173,build: high_risk_servers_export_csv (#1509),2026-07-15,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+high_value_servers_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,94,build: high_value_servers_api (#1485),2026-07-15,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+ladder_rung_convergence_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,156,build: build_ladder_rung_convergence_report (#1629),2026-07-19,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+mcp_axis_score_history_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,102,build: build_mcp_axis_score_history_view (#1187),2026-07-02,McpLlmAxisScores->McpLlmAxisScore
+mcp_latest_axis_scores_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,95,build: build_mcp_latest_axis_scores_view (#1257),2026-07-04,McpLlmAxisScores->McpLlmAxisScore
+mcp_llm_axis_scores_comparison_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,176,build: mcp_llm_axis_scores_comparison_api (#1354),2026-07-09,MCPLLMAxisScores->McpLlmAxisScore
+mcp_llm_axis_scores_trend_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,196,build: axis_scores_trend_api (#1362),2026-07-09,McpLlmAxisScores->McpLlmAxisScore
+mcp_risk_tier_aggregator_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,225,build: mcp_risk_tier_aggregator_api (#1403),2026-07-10,MCPLLMAxisScore->McpLlmAxisScore
+mcp_risk_tier_comparison_analysis_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,135,build: build_mcp_risk_tier_comparison_analysis_api (#1210),2026-07-03,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_comparison_analysis_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,80,build: build_mcp_risk_tier_comparison_analysis_dashboard_api (#1276),2026-07-04,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_comparison_analysis_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,80,build: build_mcp_risk_tier_comparison_analysis_view (#1158),2026-07-02,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_comparison_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,67,build: build_mcp_risk_tier_comparison_dashboard_api (#1273),2026-07-04,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_detail_analysis_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,98,build: build_mcp_risk_tier_detail_analysis_api (#1208),2026-07-03,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_detail_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,119,build: build_mcp_risk_tier_detail_dashboard_api (#1275),2026-07-04,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+mcp_risk_tier_distribution_analysis_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,68,build: build_mcp_risk_tier_distribution_analysis_api (#1202),2026-07-03,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_distribution_analysis_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,75,build: build_mcp_risk_tier_distribution_analysis_dashboard_api (#1274),2026-07-04,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_overview_analysis_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,74,build: build_mcp_risk_tier_overview_analysis_api (#1288),2026-07-04,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_overview_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,125,build: build_mcp_risk_tier_overview_dashboard_api (#1286),2026-07-04,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+mcp_risk_tier_trend_analysis_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,85,build: build_mcp_risk_tier_trend_analysis_dashboard_api (#1277),2026-07-04,MCPServerRegistry->McpServerRegistry
+mcp_risk_tier_trend_analysis_dashboard_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,101,build: build_mcp_risk_tier_trend_analysis_dashboard_view (#1154),2026-07-02,MCPServerRegistry->McpServerRegistry
+mcp_server_axis_probabilities_analysis_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,57,build: build_mcp_server_axis_probabilities_analysis_api (#1209),2026-07-03,McpLlmAxisScores->McpLlmAxisScore
+mcp_server_axis_probabilities_analysis_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,114,build: build_mcp_server_axis_probabilities_analysis_view (#1218),2026-07-03,McpLlmAxisScores->McpLlmAxisScore
+mcp_server_axis_probabilities_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,153,build: build_mcp_server_axis_probabilities_dashboard_api (#1268),2026-07-04,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+mcp_server_axis_probabilities_dashboard_view_integration,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,38,build: build_mcp_server_axis_probabilities_dashboard_view_integration ,2026-07-03,McpScoreDisputes->McpScoreDispute;McpLlmAxisScores->McpLlmAxisScore
+mcp_server_registry_overview_dashboard_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,137,build: build_mcp_server_registry_overview_dashboard_view (#1140),2026-07-02,McpLlmAxisScores->McpLlmAxisScore;McpScoreDisputes->McpScoreDispute
+mcp_server_registry_source_distribution_analysis_view,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,48,build: build_mcp_server_registry_source_distribution_analysis_view (#1,2026-07-03,MCPServerRegistry->McpServerRegistry
+mcp_signal_scores_distribution_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,139,build: build_mcp_signal_scores_distribution_dashboard_api (#1265),2026-07-04,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+mcp_submissions_admin_list_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,129,build: build_mcp_submissions_admin_list_api (#1360),2026-07-09,MCPServerRegistry->McpServerRegistry
+metamorphic_scoring_probe,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,121,build: metamorphic_scoring_probe (#1606),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+never_scored_backlog_rollup,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,118,build: build_never_scored_backlog_rollup (#1536),2026-07-16,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+never_scored_burndown_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,135,build: never_scored_burndown_api (#1569),2026-07-17,McpLlmAxisScores->McpLlmAxisScore
+org_fleet_risk_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,218,build: org_fleet_risk_summary_api (#1428),2026-07-11,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+org_health_dashboard,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,109,build: build_org_health_dashboard (#1661),2026-07-20,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+org_server_risk_tier_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,68,build: org_server_risk_tier_api (#1524),2026-07-16,MCPServerRegistry->McpServerRegistry
+orphan_router_caller_probe,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,78,build: build_orphan_router_caller_probe (#1709),2026-07-21,MCPServerRegistry->McpServerRegistry
+overall_risk_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,71,build: overall_risk_router (#1593),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+registry_family_dedup_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,144,build: registry_family_dedup_report (#1567),2026-07-17,MCPServerRegistry->McpServerRegistry
+registry_freshness_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,200,build: server_registry_freshness_report (#1513),2026-07-15,MCPServerRegistry->McpServerRegistry
+registry_growth_snapshot_rollup,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,90,build: registry_growth_snapshot_rollup (#1533),2026-07-16,MCPServerRegistry->McpServerRegistry
+registry_source_freshness_report_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,171,build: build_registry_source_freshness_report_api (#1748),2026-07-22,MCPServerRegistry->McpServerRegistry
+registry_source_risk_breakdown_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,199,build: build_registry_source_risk_breakdown_api (#1689),2026-07-20,MCPServerRegistry->McpServerRegistry
+rescore_wallclock_projection_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,115,build: rescore_wallclock_projection_report (#1538),2026-07-16,MCPServerRegistry->McpServerRegistry
+risk_tier_by_source_report_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,101,build: build_risk_tier_by_source_report_api (#1745),2026-07-22,MCPServerRegistry->McpServerRegistry
+risk_tier_comparison_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,74,build: build_risk_tier_comparison_api (#1487),2026-07-15,MCPServerRegistry->McpServerRegistry
+risk_tier_distribution_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,125,build: risk_tier_distribution_api (#1337),2026-07-08,MCPServerRegistry->McpServerRegistry
+risk_tier_overview_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,113,build: build_risk_tier_overview_api (#1682),2026-07-20,MCPServerRegistry->McpServerRegistry
+risk_tier_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,126,build: risk_tier_router (#1660),2026-07-20,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+risk_tier_summary_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,64,build: risk_tier_summary_router (#1765),2026-07-23,MCPLLMAxisScore->McpLlmAxisScore
+run_reconciliation_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,84,build: run_reconciliation_report (#1664),2026-07-20,McpLlmAxisScores->McpLlmAxisScore
+score_change_delta_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,194,build: build_score_change_delta_report (#1630),2026-07-19,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+score_change_timeline_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,144,build: build_score_change_timeline_api (#1626),2026-07-19,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+score_delta_audit_report_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,218,build: score_delta_audit_report_api (#1697),2026-07-21,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScore->McpLlmAxisScore
+scoring_axis_distribution_heatmap_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,121,build: scoring_axis_distribution_heatmap_api (#1657),2026-07-20,McpLlmAxisScores->McpLlmAxisScore
+scoring_axis_label_distribution_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,168,build: scoring_axis_label_distribution_api (#1586),2026-07-17,McpLlmAxisScores->McpLlmAxisScore
+scoring_consumer_health_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,104,build: scoring_consumer_health_api (#1353),2026-07-09,McpLlmAxisScores->McpLlmAxisScore
+scoring_drift_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,165,build: scoring_drift_api (#1497),2026-07-15,MCPLLMAxisScore->McpLlmAxisScore
+scoring_trend_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,176,build: scoring_trend_api (#1371),2026-07-10,McpLlmAxisScores->McpLlmAxisScore
+scoring_wave_history_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,98,build: scoring_wave_history_api (#1615),2026-07-18,McpLlmAxisScores->McpLlmAxisScore
+server_age_rollup_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,114,build: server_age_rollup_api (#1507),2026-07-15,MCPServerRegistry->McpServerRegistry
+server_axis_detail_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,247,build: server_axis_detail_api (#1433),2026-07-12,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_axis_detail_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,82,build: server_axis_detail_router (#1501),2026-07-15,MCPLLMAxisScore->McpLlmAxisScore
+server_axis_evidence_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,158,build: server_axis_evidence_api (#1355),2026-07-09,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScore->McpLlmAxisScore
+server_axis_history_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,274,build: build_server_axis_history_api (#1691),2026-07-21,MCPLLMAxisScore->McpLlmAxisScore
+server_axis_score_detail_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,133,build: server_axis_score_detail_api (#1563),2026-07-17,MCPLLMAxisScore->McpLlmAxisScore
+server_axis_score_detail_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,117,build: server_axis_score_detail_router (#1581),2026-07-17,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_axis_score_timeline_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,224,build: server_axis_score_timeline_api (#1558),2026-07-17,McpLlmAxisScores->McpLlmAxisScore
+server_axis_scores_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,103,build: server_axis_scores_summary_api (#1595),2026-07-18,McpLlmAxisScores->McpLlmAxisScore
+server_capability_comparison_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,140,build: server_capability_comparison_api (#1373),2026-07-10,McpLlmAxisScores->McpLlmAxisScore
+server_compare_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,114,build: build_server_compare_dashboard_api (#1523),2026-07-16,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_compare_dashboard_api_v2,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,153,build: server_compare_dashboard_api_v2 (#1553),2026-07-16,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_detail_api_v2,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,122,build: build_server_detail_api_v2 (#1488),2026-07-15,MCPServerRegistry->McpServerRegistry
+server_facet_search_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,197,build: server_facet_search_api (#1495),2026-07-15,MCPServerRegistry->McpServerRegistry
+server_full_scorecard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,141,build: server_full_scorecard_api (#1735),2026-07-22,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+server_never_scored_backlog_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,134,build: build_server_never_scored_backlog_api (#1591),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_overall_risk_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,73,build: server_overall_risk_api (#1491),2026-07-15,MCPServerRegistry->McpServerRegistry
+server_overall_risk_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,108,build: server_overall_risk_summary_api (#1559),2026-07-17,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_overall_risk_summary_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,137,build: server_overall_risk_summary_router (#1521),2026-07-16,MCPLLMAxisScores->McpLlmAxisScore
+server_pagination_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,101,build: server_pagination_api (#1769),2026-07-24,MCPServerRegistry->McpServerRegistry
+server_perspective_change_timeline_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,123,build: server_perspective_change_timeline_api (#1728),2026-07-22,MCPServerRegistry->McpServerRegistry
+server_risk_audit_log_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,66,build: server_risk_audit_log_router (#1520),2026-07-16,MCPServerRegistry->McpServerRegistry
+server_risk_delta_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,168,build: server_risk_delta_api (#1372),2026-07-10,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_risk_detail_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,219,build: server_risk_detail_api (#1759),2026-07-23,McpLlmAxisScores->McpLlmAxisScore
+server_risk_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,120,build: server_risk_summary_api (#1529),2026-07-16,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_risk_tier_history_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,101,build: server_risk_tier_history_api (#1367),2026-07-09,MCPLLMAxisScore->McpLlmAxisScore
+server_risk_trend_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,136,build: server_risk_trend_api (#1459),2026-07-13,McpLlmAxisScores->McpLlmAxisScore
+server_risk_trend_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,88,build: server_risk_trend_router (#1649),2026-07-19,MCPLLMAxisScores->McpLlmAxisScore
+server_score_delta_timeline_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,120,build: server_score_delta_timeline_api (#1658),2026-07-20,MCPServerRegistry->McpServerRegistry;MCPLlmAxisScore->McpLlmAxisScore
+server_score_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,168,build: server_score_summary_api (#1370),2026-07-10,MCPLLMAxisScore->McpLlmAxisScore
+server_scorecard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,147,build: server_scorecard_api (#1780),2026-07-24,McpLlmAxisScores->McpLlmAxisScore
+server_scoring_freshness_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,130,build: server_scoring_freshness_api (#1555),2026-07-17,McpLlmAxisScores->McpLlmAxisScore
+server_scoring_history_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,276,build: server_scoring_history_api (#1425),2026-07-11,MCPLLMAxisScore->McpLlmAxisScore
+server_scoring_metadata_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,104,build: server_scoring_metadata_api (#1415),2026-07-11,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_scoring_timeline_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,192,build: server_scoring_timeline_router (#1522),2026-07-16,MCPServerRegistry->McpServerRegistry
+server_timeline_event_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,253,build: server_timeline_event_api (#1723),2026-07-21,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore;MCPScoreDisputes->McpScoreDispute
+server_unscored_servers_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,135,build: server_unscored_servers_api (#1696),2026-07-21,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+server_verdict_detail_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,149,build: server_verdict_detail_router (#1622),2026-07-19,MCPLLMAxisScore->McpLlmAxisScore
+server_verdict_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,130,build: build_server_verdict_router (#1516),2026-07-15,MCPLLMAxisScore->McpLlmAxisScore
+server_verdict_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,239,build: server_verdict_summary_api (#1366),2026-07-09,MCPLLMAxisScores->McpLlmAxisScore
+server_verdict_watchlist_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,102,build: build_server_verdict_watchlist_api (#1552),2026-07-16,MCPServerRegistry->McpServerRegistry
+service_extraction_candidate_report_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,147,build: build_service_extraction_candidate_report_api (#1737),2026-07-22,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+trust_gating_status_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,107,build: trust_gating_status_api (#1445),2026-07-13,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+trust_tier_dashboard_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,77,build: build_trust_tier_dashboard_api (#1592),2026-07-18,MCPServerRegistry->McpServerRegistry
+unscored_servers_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,82,build: unscored_servers_api (#1498),2026-07-15,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+verdict_comprehensive_report_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,187,build: verdict_comprehensive_report_api (#1659),2026-07-20,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+verdict_distribution_by_source_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,92,build: verdict_distribution_by_source_api (#1613),2026-07-18,MCPServerRegistry->McpServerRegistry
+verdict_findings_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,207,build: verdict_findings_join_consumer (#1432),2026-07-12,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+verdict_findings_join_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,193,build: build_verdict_findings_join_api (#1599),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+verdict_history_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,130,build: build_verdict_history_api (#1456),2026-07-13,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScore->McpLlmAxisScore
+verdict_router_health_check,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,75,build: verdict_router_health_check (#1773),2026-07-24,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+wave_import_axis_drift_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,175,build: wave_import_axis_drift_report (#1602),2026-07-18,MCPLLMAxisScores->McpLlmAxisScore
+wave_refresh_verification_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,143,build: build_wave_refresh_verification_report (#1631),2026-07-19,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+wedge_spend_ledger_report,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",1,True,130,build: wedge_spend_ledger_report (#1604),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+axis_score_summary_api,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,134,build: axis_score_summary_api (#1633),2026-07-19,MCPLLMAxisScores->McpLlmAxisScore
+export_server_risk_tier_csv,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,121,build: export_server_risk_tier_csv (#1493),2026-07-15,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+gate_attribution_report_consumer,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,100,build: gate_attribution_report_consumer (#1694),2026-07-21,MCPLLMAxisScores->McpLlmAxisScore
+mcp_server_axis_probabilities_api_integration,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,43,build: build_mcp_server_axis_probabilities_api_integration (#1194),2026-07-03,MCPServerRegistry->McpServerRegistry;MCPScoreDisputes->McpScoreDispute;MCPLLMAxisScores->McpLlmAxisScore
+score_dispute_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,74,build: score_dispute_router (#1768),2026-07-24,MCPScoreDispute->McpScoreDispute
+score_results_push_consumer,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,89,build: score_results_push_consumer (#1779),2026-07-24,MCPLLMAxisScore->McpLlmAxisScore
+server_axis_breakdown_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,88,build: server_axis_breakdown_router (#1518),2026-07-16,MCPLLMAxisScores->McpLlmAxisScore
+server_axis_scores_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,137,build: server_axis_scores_router (#1583),2026-07-17,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+verdict_export_router,BROKEN_IMPORT,"REVIVE (linter --fix, then judge)",0,True,120,build: verdict_export_router (#1776),2026-07-24,MCPLLMAxisScores->McpLlmAxisScore
+wire_orphan_value_routers,EDIT_CLASS,REMIT,1,True,85,build: build_wire_orphan_value_routers (#1611),2026-07-18,MCPServerRegistry->McpServerRegistry;MCPLLMAxisScores->McpLlmAxisScore
+perspective_service,MOUNTABLE,KEEP? (mount if load-bearing),5,True,274,build: perspective_service (#1500),2026-07-15,
+server_policy_rules_api,MOUNTABLE,KEEP? (mount if load-bearing),5,True,227,build: server_policy_rules_api (#1374),2026-07-10,
+cadence_job_runs_api,MOUNTABLE,KEEP? (mount if load-bearing),3,True,219,build: cadence_job_runs_api (#1381),2026-07-10,
+mcp_score_dispute_api,MOUNTABLE,KEEP? (mount if load-bearing),3,True,301,build: mcp_score_dispute_api (#1319),2026-07-07,
+api_key_rotation_service,MOUNTABLE,KEEP? (mount if load-bearing),2,True,216,build: build_api_key_rotation_service (#1546),2026-07-16,
+cadence_pipeline_health_report,MOUNTABLE,KEEP? (mount if load-bearing),2,True,221,build: cadence_pipeline_health_report (#1515),2026-07-15,
+mcp_signal_evidence_archive_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,150,build: build_mcp_signal_evidence_archive_api (#1323),2026-07-07,
+rbac_enforcer,MOUNTABLE,KEEP? (mount if load-bearing),2,True,162,build: build_rbac_enforcer (#1049),2026-06-29,
+risk_tier_alert_router,MOUNTABLE,KEEP? (mount if load-bearing),2,True,108,build: build_risk_tier_alert_router (#1775),2026-07-24,
+scoring_wave_cost_ledger_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,169,build: scoring_wave_cost_ledger_api (#1568),2026-07-17,
+scoring_wave_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,216,build: scoring_wave_detail_api (#1610),2026-07-18,
+sentinel_service_health_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,146,build: sentinel_service_health_api (#1444),2026-07-13,
+server_exemption_audit_trail_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,397,build: server_exemption_audit_trail_api (#1395),2026-07-10,
+server_exemptions_history_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,159,build: server_exemptions_history_api (#1385),2026-07-10,
+server_submission_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,101,build: server_submission_api (#1757),2026-07-23,
+server_verdict_timeline_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,165,build: server_verdict_timeline_api (#1326),2026-07-07,
+server_vuln_severity_distribution_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,121,build: server_vuln_severity_distribution_api (#1528),2026-07-16,
+server_vuln_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,301,build: server_vuln_summary_api (#1364),2026-07-09,
+service_health_aggregator_api,MOUNTABLE,KEEP? (mount if load-bearing),2,True,138,build: service_health_aggregator_api (#1352),2026-07-09,
+ask_answer_export_service,MOUNTABLE,KEEP? (mount if load-bearing),1,True,220,build: ask_answer_export_service (#1550),2026-07-16,
+ask_corpus_search_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,120,build: ask_corpus_search_api (#1440),2026-07-12,
+ask_corpus_timeline_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,80,build: ask_corpus_timeline_api (#1423),2026-07-11,
+ask_query_expansion_api_v3,MOUNTABLE,KEEP? (mount if load-bearing),1,True,66,build: build_ask_query_expansion_api_v3 (#1447),2026-07-13,
+ask_query_expansion_v2,MOUNTABLE,KEEP? (mount if load-bearing),1,True,107,build: build_ask_query_expansion_v2 (#1310),2026-07-06,
+audit_log_export_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,159,build: audit_log_export_api (#1731),2026-07-22,
+axis_change_attribution_probe,MOUNTABLE,KEEP? (mount if load-bearing),1,True,309,build: build_axis_change_attribution_probe (#1708),2026-07-21,
+axis_distribution_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,90,build: build_axis_distribution_api_v1 (#1007),2026-06-28,
+axis_p_top_calibration_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,293,build: build_axis_p_top_calibration_api (#1690),2026-07-20,
+axis_top_labels_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,163,build: axis_top_labels_api (#1548),2026-07-16,
+cadence_job_runs_recent_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,125,build: cadence_job_runs_recent_api (#1406),2026-07-10,
+circuit_breaker_status_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,115,build: circuit_breaker_status_api (#1695),2026-07-21,
+cve_facet_compile_wiring_v3,MOUNTABLE,KEEP? (mount if load-bearing),1,True,79,build: build_cve_facet_compile_wiring_v3 (#1746),2026-07-22,
+deferred_router_ledger_report,MOUNTABLE,KEEP? (mount if load-bearing),1,True,61,build: build_deferred_router_ledger_report (#1707),2026-07-21,
+escalation_timeline_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,189,build: escalation_timeline_api (#1392),2026-07-10,
+fleet_exploit_surface_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,163,build: fleet_exploit_surface_api (#1441),2026-07-12,
+fleet_risk_composition_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,117,build: fleet_risk_composition_api (#1430),2026-07-12,
+gate_attribution_report_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,95,build: build_gate_attribution_report_api (#1683),2026-07-20,
+gate_attribution_report_router,MOUNTABLE,KEEP? (mount if load-bearing),1,True,164,build: gate_attribution_report_router (#1693),2026-07-21,
+ghost_retry_burn_report,MOUNTABLE,KEEP? (mount if load-bearing),1,True,130,build: ghost_retry_burn_report (#1681),2026-07-20,
+harvest_lane_throughput_report,MOUNTABLE,KEEP? (mount if load-bearing),1,True,149,build: harvest_lane_throughput_report (#1570),2026-07-17,
+high_risk_servers_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,250,build: build_high_risk_servers_api_v3 (#1005),2026-06-28,
+insufficient_verdict_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,79,build: build_insufficient_verdict_api (#1147),2026-07-02,
+mcp_api_health_checker,MOUNTABLE,KEEP? (mount if load-bearing),1,True,80,build: build_mcp_api_health_checker (#1334),2026-07-08,
+mcp_definition_history_ingestion_rate_analysis_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,66,build: build_mcp_definition_history_ingestion_rate_analysis_api (#1213,2026-07-03,
+mcp_definition_history_ingestion_rate_analysis_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,69,build: build_mcp_definition_history_ingestion_rate_analysis_dashboard_,2026-07-03,
+mcp_definition_history_ingestion_rate_analysis_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,76,build: build_mcp_definition_history_ingestion_rate_analysis_view (#121,2026-07-03,
+mcp_definition_history_ingestion_rate_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,65,build: build_mcp_definition_history_ingestion_rate_api (#1139),2026-07-02,
+mcp_definition_history_ingestion_rate_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,74,build: build_mcp_definition_history_ingestion_rate_view (#1141),2026-07-02,
+mcp_definition_history_pipeline_status_analysis_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,109,build: build_mcp_definition_history_pipeline_status_analysis_api (#113,2026-07-02,
+mcp_definition_history_pipeline_status_analysis_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,74,build: build_mcp_definition_history_pipeline_status_analysis_view (#11,2026-07-02,
+mcp_llm_axis_scores_distribution_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,84,build: build_mcp_llm_axis_scores_distribution_dashboard_view (#1077),2026-06-30,
+mcp_risk_register_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,69,build: build_mcp_risk_register_api (#608),2026-06-25,
+mcp_risk_tier_definition_history_analysis_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,100,build: build_mcp_risk_tier_definition_history_analysis_api (#1291),2026-07-05,
+mcp_risk_tier_definition_history_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,115,build: build_mcp_risk_tier_definition_history_dashboard_api (#1302),2026-07-05,
+mcp_risk_tier_definition_history_pipeline_status_analysis_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,102,build: build_mcp_risk_tier_definition_history_pipeline_status_analysis,2026-07-05,
+mcp_risk_tier_definition_history_pipeline_status_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,77,build: build_mcp_risk_tier_definition_history_pipeline_status_dashboar,2026-07-05,
+mcp_risk_tier_detail_analysis_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,93,build: build_mcp_risk_tier_detail_analysis_dashboard_view (#1204),2026-07-03,
+mcp_risk_tier_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,85,build: build_mcp_risk_tier_detail_api (#1107),2026-07-01,
+mcp_risk_tier_distribution_analysis_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,64,build: build_mcp_risk_tier_distribution_analysis_dashboard_view (#1130,2026-07-02,
+mcp_risk_tier_distribution_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,85,build: build_mcp_risk_tier_distribution_dashboard_api (#1272),2026-07-04,
+mcp_risk_tier_listing_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,115,build: build_mcp_risk_tier_listing_api (#1102),2026-07-01,
+mcp_risk_tier_summary_analysis_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,74,,,
+mcp_risk_tier_summary_analysis_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,91,build: build_mcp_risk_tier_summary_analysis_dashboard_api (#1281),2026-07-04,
+mcp_risk_tier_summary_analysis_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,56,build: build_mcp_risk_tier_summary_analysis_view (#1157),2026-07-02,
+mcp_risk_tier_trend_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,90,build: build_mcp_risk_tier_trend_dashboard_api (#1259),2026-07-04,
+mcp_server_axis_probabilities_analysis_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,93,build: build_mcp_server_axis_probabilities_analysis_dashboard_view (#1,2026-07-03,
+mcp_server_axis_probabilities_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,84,build: build_mcp_server_axis_probabilities_dashboard_view (#1176),2026-07-02,
+mcp_server_registry_overview_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,73,build: build_mcp_server_registry_overview_view (#1129),2026-07-02,
+mcp_server_registry_source_distribution_analysis_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,88,build: build_mcp_server_registry_source_distribution_analysis_api (#11,2026-07-02,
+mcp_server_registry_source_distribution_analysis_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,66,build: build_mcp_server_registry_source_distribution_analysis_dashboar,2026-07-04,
+mcp_server_registry_source_distribution_analysis_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,106,build: build_mcp_server_registry_source_distribution_analysis_dashboar,2026-07-02,
+mcp_server_registry_source_distribution_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,70,build: build_mcp_server_registry_source_distribution_dashboard_view (#,2026-06-30,
+mcp_signal_scores_distribution_analysis_dashboard_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,68,build: build_mcp_signal_scores_distribution_analysis_dashboard_view (#,2026-07-02,
+mcp_signal_scores_distribution_analysis_view,MOUNTABLE,KEEP? (mount if load-bearing),1,True,106,build: build_mcp_signal_scores_distribution_analysis_view (#1179),2026-07-02,
+mcp_submission_create_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,135,build: mcp_submission_create_api (#1379),2026-07-10,
+mcp_threat_associations_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,102,build: build_mcp_threat_associations_detail_api (#1111),2026-07-01,
+org_health_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,177,build: org_health_dashboard_api (#1358),2026-07-09,
+org_risk_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,267,build: org_risk_summary_api (#1391),2026-07-10,
+perspective_event_stream_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,169,build: perspective_event_stream_api (#1442),2026-07-12,
+perspective_event_timeline_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,153,build: perspective_event_timeline_api (#1309),2026-07-06,
+perspective_snapshot_comparison_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,206,build: build_perspective_snapshot_comparison_api (#1458),2026-07-13,
+perspective_snapshot_diff_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,162,build: perspective_snapshot_diff_api (#1394),2026-07-10,
+propose_directive_outcome_log,MOUNTABLE,KEEP? (mount if load-bearing),1,True,98,build: build_propose_directive_outcome_log (#1705),2026-07-21,
+registry_freshness_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,285,build: build_registry_freshness_api (#1761),2026-07-23,
+registry_growth_progress_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,214,build: build_registry_growth_progress_api (#1537),2026-07-16,
+registry_ingest_anomaly_report,MOUNTABLE,KEEP? (mount if load-bearing),1,True,316,build: build_registry_ingest_anomaly_report (#1783),2026-07-24,
+registry_source_health_report,MOUNTABLE,KEEP? (mount if load-bearing),1,True,180,build: registry_source_health_report (#1756),2026-07-23,
+risk_tier_alert_service,MOUNTABLE,KEEP? (mount if load-bearing),1,True,363,build: build_risk_tier_alert_service (#1655),2026-07-20,
+risk_tier_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,243,build: risk_tier_api (#1510),2026-07-15,
+risk_tier_axis_score_consumer,MOUNTABLE,KEEP? (mount if load-bearing),1,True,166,build: risk_tier_axis_score_consumer (#1686),2026-07-20,
+risk_tier_comparison_router,MOUNTABLE,KEEP? (mount if load-bearing),1,True,223,build: build_risk_tier_comparison_router (#1502),2026-07-15,
+risk_tier_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,92,build: risk_tier_summary_api (#1617),2026-07-18,
+risk_tier_summary_dashboard,MOUNTABLE,KEEP? (mount if load-bearing),1,True,202,build: build_risk_tier_summary_dashboard (#1720),2026-07-21,
+risk_tier_threshold_calibration_probe,MOUNTABLE,KEEP? (mount if load-bearing),1,True,250,build: build_risk_tier_threshold_calibration_probe (#1710),2026-07-21,
+risk_tier_thresholds_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,73,build: build_risk_tier_thresholds_api (#1747),2026-07-22,
+risk_tier_trend_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,140,build: build_risk_tier_trend_api (#1724),2026-07-21,
+score_run_ledger_writer,MOUNTABLE,KEEP? (mount if load-bearing),1,True,75,build: build_score_run_ledger_writer (#1663),2026-07-20,
+scoring_consumer_status_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,106,build: scoring_consumer_status_api (#1365),2026-07-09,
+scoring_criteria_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,97,build: scoring_criteria_api (#1647),2026-07-19,
+scoring_tier_csv_export_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,219,build: scoring_tier_csv_export_api (#1685),2026-07-20,
+scoring_trend_consumer_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,243,build: scoring_trend_consumer_api (#1388),2026-07-10,
+server_axis_scores_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,289,build: axis_scores_read_api (#1460),2026-07-13,
+server_axis_scores_bulk_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,300,build: server_axis_scores_bulk_api (#1349),2026-07-08,
+server_axis_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,194,build: server_axis_summary_api (#1687),2026-07-20,
+server_csv_export_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,113,build: server_csv_export_api (#1361),2026-07-09,
+server_cve_exposure_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,136,build: server_cve_exposure_summary_api (#1730),2026-07-22,
+server_cve_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,161,build: server_cve_summary_api (#1574),2026-07-17,
+server_detail_composite_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,341,build: server_detail_composite_api (#1667),2026-07-20,
+server_export_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,150,build: server_export_api (#1322),2026-07-07,
+server_overall_risk_router,MOUNTABLE,KEEP? (mount if load-bearing),1,True,175,build: server_overall_risk_router (#1547),2026-07-16,
+server_overview_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,180,build: server_overview_api (#1512),2026-07-15,
+server_risk_comparison_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,250,build: server_risk_comparison_api (#1383),2026-07-10,
+server_risk_contributors_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,217,build: server_risk_contributors_api (#1530),2026-07-16,
+server_risk_contributors_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,290,build: server_risk_contributors_summary_api (#1560),2026-07-17,
+server_risk_delta_timeline_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,295,build: server_risk_delta_timeline_api (#1398),2026-07-10,
+server_risk_overview_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,157,build: server_risk_overview_api (#1339),2026-07-08,
+server_risk_summary_router,MOUNTABLE,KEEP? (mount if load-bearing),1,True,232,build: server_risk_summary_router (#1545),2026-07-16,
+server_risk_tier_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,289,build: server_risk_tier_detail_api (#1356),2026-07-09,
+server_risk_tier_readback_api_v2,MOUNTABLE,KEEP? (mount if load-bearing),1,True,309,build: server_risk_tier_readback_api_v2 (#1461),2026-07-13,
+server_risk_trajectory_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,251,build: server_risk_trajectory_api (#1389),2026-07-10,
+server_security_recommendation_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,288,build: server_security_recommendation_api (#1688),2026-07-20,
+server_statistics_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,230,build: server_statistics_api (#1351),2026-07-08,
+server_threat_intel_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,160,build: server_threat_intel_detail_api (#1699),2026-07-21,
+server_tier_change_events_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,168,build: server_tier_change_events_api (#1402),2026-07-10,
+server_trust_gating_override_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,180,build: server_trust_gating_override_api (#1387),2026-07-10,
+server_trust_signal_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,231,build: server_trust_signal_detail_api (#1404),2026-07-10,
+server_verdict_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,232,build: server_verdict_api (#1386),2026-07-10,
+server_verdict_detail_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,197,build: server_verdict_detail_api (#1399),2026-07-10,
+server_verdict_history_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,303,build: server_verdict_history_api (#1424),2026-07-11,
+server_verdict_history_router,MOUNTABLE,KEEP? (mount if load-bearing),1,True,138,build: server_verdict_history_router (#1517),2026-07-16,
+server_vuln_exposure_summary_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,100,build: server_vuln_exposure_summary_api (#1666),2026-07-20,
+service_health_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,47,build: get_service_health_api (#1766),2026-07-23,
+signal_score_freshness_audit,MOUNTABLE,KEEP? (mount if load-bearing),1,True,369,build: signal_score_freshness_audit (#1052),2026-06-29,
+sprint_progress_dashboard_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,267,build: sprint_progress_dashboard_api (#1571),2026-07-17,
+trust_gate_decision_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,283,build: trust_gate_decision_api (#1542),2026-07-16,
+verdict_breakdown_router,MOUNTABLE,KEEP? (mount if load-bearing),1,True,59,build: verdict_breakdown_router (#1762),2026-07-23,
+verdict_criteria_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,223,build: verdict_criteria_api (#1614),2026-07-18,
+verdict_history_timeline_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,130,build: verdict_history_timeline_api (#1589),2026-07-18,
+verified_cves_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,102,build: build_verified_cves_api (#1755),2026-07-23,
+vulnerability_facet_rollup_api,MOUNTABLE,KEEP? (mount if load-bearing),1,True,87,build: build_vulnerability_facet_rollup_api (#1543),2026-07-16,
+audit_log_api,NO_ROUTES,REMIT,0,True,268,build: product_audit_log (#1763),2026-07-23,
+sentinel_external_api_v2_history,NO_ROUTES,REMIT,0,False,124,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+verify_github_pr_checker_webhook_wiring,NO_ROUTES,REMIT,0,False,599,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+admin_policies_integration,UNKNOWN,JUDGE,8,False,274,build: admin_policies_integration (#483),2026-06-23,
+admin_exemptions_integration,UNKNOWN,JUDGE,7,False,328,build: admin_exemptions_integration (#469),2026-06-23,
+mcp_decisions_api,UNKNOWN,JUDGE,5,False,128,build: build_mcp_decisions_management_api (#606),2026-06-25,
+sentinel_external_api_v2_signals,UNKNOWN,JUDGE,2,False,301,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+sentinel_ui_evidence_drawer_route,UNKNOWN,JUDGE,2,False,72,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+sentinel_ui_signal_diversity_panel,UNKNOWN,JUDGE,2,False,102,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+compliance_overview_api,UNKNOWN,JUDGE,1,False,155,build: build_compliance_overview_api (#615),2026-06-25,
+mcp_definition_history_report_api,UNKNOWN,JUDGE,1,False,225,build: build_mcp_definition_history_report_api (#590),2026-06-25,
+mcp_search_autocomplete_api,UNKNOWN,JUDGE,1,False,74,build: build_mcp_search_autocomplete_api (#594),2026-06-25,
+risk_trend_api,UNKNOWN,JUDGE,1,False,208,build: build_risk_trend_api (#613),2026-06-25,
+sentinel_external_api_v2_attestation,UNKNOWN,JUDGE,1,False,135,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+sentinel_ui_inventory_paginator,UNKNOWN,JUDGE,1,False,241,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,
+system_health_dashboard_api,UNKNOWN,JUDGE,1,False,85,build: build_system_health_dashboard_api (#647),2026-06-25,
+wiring_snow_connector_to_approval,UNKNOWN,JUDGE,1,False,51,ZoSentinel v2.0 live codebase 2026-05-25,2026-05-25,

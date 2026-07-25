@@ -1,0 +1,11 @@
+[service]
+name = "vuln_registry_linker"
+import_path = "vuln_registry_linker"
+prefix = "/api"
+tag = "vuln"
+origin = "live"
+auth = "public"
+needs_data_layer = true
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

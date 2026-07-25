@@ -502,10 +502,39 @@ def ph_bundle(run: Run, args) -> None:
     shutil.copy(run.dir / "inputs.jsonl.gz", work / "score_transfer/inputs.jsonl.gz")
     git("checkout", "--orphan", score_branch)
     git("rm", "-r", "--cached", ".")
-    git("add", "score_transfer")
+    # FU-093: -f is MANDATORY. The SFT repo .gitignore lists *.safetensors, *.pt,
+    # *.bin, so a plain git add SILENTLY skips the adapter weights + heads. The
+    # pod then gets only adapter_config.json, PEFT cannot attach, and eval scores
+    # on base + RANDOM HEADS while reporting success (3 weeks of garbage:
+    # 07-18/07-21/07-24; same class as the RunPod-era "weights keep vanishing").
+    git("add", "-f", "score_transfer")
     git("-c", "user.email=tower@zo", "-c", "user.name=weekly-rescore",
         "commit", "-q", "-m", f"score transfer bundle {ts}")
+    # FU-093 I5b: verify the COMMITTED TREE, not the filesystem. The old I5
+    # hashed the local copy, so it passed green while git had silently dropped
+    # the weights (.gitignore). Also catch the known 133-byte LFS-POINTER
+    # signature (documented: 'pointers, the real 29.5MB weights live elsewhere').
+    tree = git("ls-tree", "-r", "-l", "HEAD", "score_transfer/adapter").stdout
+    for need in ("adapter_model.safetensors", "heads_state_dict.pt"):
+        if need not in tree:
+            raise SystemExit(f"ABORT: {need} missing from the COMMITTED bundle -- "
+                             f".gitignore swallowed it. tree=\\n{tree}")
+    for line in tree.splitlines():
+        f = line.split()
+        if len(f) >= 4 and f[3].endswith("adapter_model.safetensors") and int(f[2]) < 1_000_000:
+            raise SystemExit(f"ABORT: committed adapter is {f[2]}B -- an LFS pointer/stub, "
+                             f"not weights (the 133-byte failure class).")
     git("push", repo_url, f"HEAD:refs/heads/{score_branch}")
+    # FU-093: NEVER trust the push exit code (standing SFT lesson). Re-read the
+    # REMOTE tree and assert real bytes actually landed.
+    git("fetch", "--depth", "1", repo_url, score_branch)
+    rtree = git("ls-tree", "-r", "-l", "FETCH_HEAD", "score_transfer/adapter").stdout
+    ok = any(x.split()[3].endswith("adapter_model.safetensors") and int(x.split()[2]) >= 1_000_000
+             for x in rtree.splitlines() if len(x.split()) >= 4)
+    if not ok:
+        raise SystemExit(f"ABORT: post-push REMOTE verify failed -- adapter weights did "
+                         f"not land on {score_branch}. remote tree=\\n{rtree}")
+    log("bundle verify: adapter weights confirmed on the remote branch")
     run.mark("bundle", score_branch=score_branch,
              results_branch=f"{score_branch}-results")
     log(f"bundle OK: pushed {score_branch} (adapter pin verified)")
@@ -650,6 +679,34 @@ def ph_import(run: Run, args) -> None:
     preds_gz = run.dir / "results" / "preds.jsonl.gz"
     if not preds_gz.exists():
         raise SystemExit("ALERT: preds.jsonl.gz missing at import; aborting (no writes)")
+    # FU-094: VALIDITY GATE. Row counts and degraded=false are proxies; they
+    # let 3 weeks of base+random-head noise into the moat. Judge the OUTPUT:
+    # a real classifier cannot emit one label ~100% of the time. Fail CLOSED.
+    import gzip as _gz, json as _json
+    sys.path.insert(0, str(HERE))
+    from score_validity import assert_importable
+    _rows = []
+    with _gz.open(preds_gz, "rt", encoding="utf-8") as _fh:
+        for _line in _fh:
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _d = _json.loads(_line)
+            except Exception:
+                continue
+            for _ax in AXES:
+                _lb = (_d.get(_ax) or _d.get("axes", {}).get(_ax)
+                       if isinstance(_d.get("axes"), dict) else _d.get(_ax))
+                if isinstance(_lb, dict):
+                    _lb = _lb.get("label")
+                if _lb:
+                    _rows.append({"axis_name": _ax, "label": str(_lb)})
+    _v = assert_importable(_rows)          # raises SystemExit on garbage
+    log("validity gate PASS: " + ", ".join(
+        "{}={}({:.0%} top, {:.2f} bits)".format(a["axis"], a["verdict"],
+                                                a["top_share"], a["entropy_bits"])
+        for a in _v["axes"] if a["verdict"] == "VALID"))
     scored_at = datetime.utcnow()
     conn = pg_conn(); cur = conn.cursor()
     capture = os.environ.get("RESCORE_CAPTURE_DELTAS", "1") != "0"   # kill switch

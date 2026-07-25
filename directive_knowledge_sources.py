@@ -284,18 +284,30 @@ def _strip_exemplar_refs(line: str) -> str:
 
 
 
+# FU-052: "dormant" was the ONE flag word above that marked a NEGATIVE, so the
+# NOT-IN-SCOPE section's own lines ("x.py is dormant; do not wire it") were read
+# as asks. It is removed. As a backstop, a positive flag word ("not yet",
+# "candidate:") can still land on a do-not / out-of-scope line; the markers below
+# cause such a line to be skipped so a forbidden target is never seeded.
+_NEGATIVE_MARKERS = ("not in scope", "not-in-scope", "out of scope",
+                     "out-of-scope", "do not", "don't", "do-not")
+
+
 def _spec_candidate_files(spec_text: str) -> list[str]:
     """Extract filenames mentioned near 'NOT YET', 'directive candidate',
-    'Not yet built', 'NOT YET BUILT' — these are the spec's ask list."""
+    'Not yet built', 'NOT YET BUILT' — these are the spec's ask list. NOT-IN-SCOPE / "do not" lines are skipped (FU-052)."""
     out = []
     lines = spec_text.splitlines()
     for i, ln in enumerate(lines):
         low = ln.lower()
         if any(flag in low for flag in ("not yet", "directive candidate",
                                          "candidate:", "candidates:",
-                                         "propose directives", "dormant")):
+                                         "propose directives")):
             # look at this line + the next 3 for filename-like tokens
             window = "\n".join(_strip_exemplar_refs(l) for l in lines[i : i + 4])
+            # FU-052: never harvest a target off a NOT-IN-SCOPE / "do not" line
+            if any(neg in low for neg in _NEGATIVE_MARKERS):
+                continue
             for m in _CANDIDATE_FILENAME.finditer(window):
                 name = m.group(1)
                 if name not in out:

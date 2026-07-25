@@ -237,6 +237,8 @@ def prune_done_pending():
     for f in PENDING_DIR.glob("*.json"):
         if f.name.endswith(".done.json") or f.name.endswith(".failed.json"):
             continue
+        if f.name.startswith((".bak", ".duplicate")):  # backup/dup copies mask the queue (FU-020)
+            continue
         try:
             d = json.loads(f.read_text())
             if not isinstance(d, dict):
@@ -287,6 +289,8 @@ def load_directives_from_mesh():
     # Source 2: pending directory (always scan, merge)
     if PENDING_DIR.exists():
         for f in sorted(PENDING_DIR.glob("*.json")):
+            if f.name.startswith((".bak", ".duplicate")):  # backup/dup copies mask the queue (FU-020)
+                continue
             try:
                 raw = f.read_text().strip()
                 if not raw:
@@ -519,7 +523,7 @@ def _data_access_context(directive):
     return _DATA_ACCESS_CTX
 
 
-_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "module_from_exemplar", "architect"}
+_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "module_from_exemplar", "architect", "service_dir_from_exemplar"}
 # Conservative inference: only the auth/RBAC/tenant SECURITY SPINE (where the generic
 # single-file builder produced hollow stubs) is keyword-routed to the FastAPI recipe.
 # Reports/search/etc. stay on architect.yaml unless the directive sets `recipe` explicitly.
@@ -994,6 +998,24 @@ def _selftest_gate(directive, directive_id):
         src = out.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return True
+    # FU-031 harness repair (autonomous, deterministic, flag-gated). The dominant
+    # self-test degradation is the model emitting WRONG-CASED app.models symbols
+    # (e.g. MCPServerRegistry vs the real McpServerRegistry, or McpLlmAxisScores vs
+    # McpLlmAxisScore) -> ImportError -> "degrade to Tier-0" below, i.e. presence
+    # passing for correctness. Auto-correct the casing BEFORE the self-test runs so
+    # it actually EXECUTES (it then still has to PASS on its own merits). Same shape
+    # as _strip_code_fences: a deterministic pre-gate repair, no human in the loop,
+    # false-positive-free (distinctive Mcp* names only). Kill with ZO_MODEL_CASING_AUTOFIX=0.
+    import os as _oscas
+    if _oscas.environ.get("ZO_MODEL_CASING_AUTOFIX", "1") != "0":
+        try:
+            from tools import model_import_linter as _mil
+            _r = _mil.lint_file(str(out), _mil.build_map(_mil.canonical_models()), fix=True)
+            if _r.get("fixed"):
+                log(f"[casing-repair] {directive_id}: corrected {_r['drift']} before self-test")
+                src = out.read_text(encoding="utf-8", errors="ignore")
+        except Exception as _ce:
+            log(f"[casing-repair] {directive_id}: skipped ({type(_ce).__name__}: {_ce})")
     if "__main__" not in src:
         return True
     try:
@@ -1011,7 +1033,7 @@ def _selftest_gate(directive, directive_id):
         log(f"[selftest] {directive_id}: self-test PASS")
         return True
     if proc.returncode != 0 and ("ModuleNotFoundError" in combined or "ImportError" in combined):
-        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking)")
+        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
         return True
     log(f"[selftest] {directive_id}: self-test FAILED -- blocking completion :: " + combined.strip()[-400:])
     return False

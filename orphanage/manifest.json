@@ -1,0 +1,5173 @@
+{
+  "orphan_count": 317,
+  "by_why": {
+    "BROKEN_IMPORT": 159,
+    "MOUNTABLE": 140,
+    "UNKNOWN": 14,
+    "NO_ROUTES": 3,
+    "EDIT_CLASS": 1
+  },
+  "legend": {
+    "MOUNTABLE": "clean + data-wired: promotion candidate (keep, mount)",
+    "BROKEN_IMPORT": "dead on model-name casing: model_import_linter --fix likely revives",
+    "SUPERSEDED": "a mounted sibling already serves its route: remit candidate",
+    "NO_ROUTES": "declares no routes: probably not a service: remit candidate",
+    "EDIT_CLASS": "wire_/integrate_ name: structurally unbuildable, never a service: remit",
+    "SYNTAX_ERROR": "does not parse: broken emission: remit or repair",
+    "UNKNOWN": "needs human/Fable-5 judgement"
+  },
+  "orphans": [
+    {
+      "module": "sentinel_external_api_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 5,
+      "declared_prefix": "/external",
+      "imports_data_layer": true,
+      "lines": 223,
+      "casing_autofixable": {
+        "MCPScoreDispute": "McpScoreDispute",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "a68f09bb",
+        "date": "2026-07-23 03:44:46 +0000",
+        "author": "rob531",
+        "subject": "build: build_sentinel_external_api_router (#1749)"
+      }
+    },
+    {
+      "module": "server_exemptions_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 4,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 186,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "abfcbb70",
+        "date": "2026-07-10 09:44:26 +0000",
+        "author": "rob531",
+        "subject": "build: server_exemptions_api (#1376)"
+      }
+    },
+    {
+      "module": "axis_scores_query_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 3,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 307,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "84e7993c",
+        "date": "2026-07-24 01:19:12 +0000",
+        "author": "rob531",
+        "subject": "build: axis_scores_query_api (#1770)"
+      }
+    },
+    {
+      "module": "risk_tier_axis_score_consumer_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 3,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 223,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "7d0a0b69",
+        "date": "2026-07-20 22:50:13 -0400",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_axis_score_consumer_router (#1692)"
+      }
+    },
+    {
+      "module": "scoring_precision_audit_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 3,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 237,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "9810b671",
+        "date": "2026-07-16 13:46:29 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_precision_audit_report (#1535)"
+      }
+    },
+    {
+      "module": "server_risk_tier_bulk_lookup_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 3,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 156,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "0e59849b",
+        "date": "2026-07-10 21:55:53 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_tier_bulk_lookup_api (#1405)"
+      }
+    },
+    {
+      "module": "server_vuln_advisories_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 3,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 270,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "79708f2d",
+        "date": "2026-07-09 19:58:39 +0000",
+        "author": "rob531",
+        "subject": "build: server_vuln_advisories_api (#1363)"
+      }
+    },
+    {
+      "module": "dispute_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 89,
+      "casing_autofixable": {
+        "MCPScoreDispute": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "dadf275b",
+        "date": "2026-07-15 16:03:16 +0000",
+        "author": "rob531",
+        "subject": "build: dispute_summary_api (#1499)"
+      }
+    },
+    {
+      "module": "entity_report_exporter_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 119,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "14f6cacf",
+        "date": "2026-07-19 21:08:15 +0000",
+        "author": "rob531",
+        "subject": "build: entity_report_exporter_router (#1651)"
+      }
+    },
+    {
+      "module": "fleet_risk_tier_aggregation_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 202,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "9b0ff1df",
+        "date": "2026-07-10 19:50:42 +0000",
+        "author": "rob531",
+        "subject": "build: fleet_risk_tier_aggregation_api (#1396)"
+      }
+    },
+    {
+      "module": "risk_tier_criteria_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 120,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "a086eef7",
+        "date": "2026-07-07 22:45:35 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_criteria_api (#1328)"
+      }
+    },
+    {
+      "module": "scoring_consistency_audit_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 217,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "c24c41c9",
+        "date": "2026-07-22 15:27:14 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_consistency_audit_api (#1740)"
+      }
+    },
+    {
+      "module": "scoring_coverage_audit_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 131,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "cfa72f44",
+        "date": "2026-07-16 23:19:56 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_coverage_audit_api (#1554)"
+      }
+    },
+    {
+      "module": "scoring_gap_analysis_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 157,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "0b6015b1",
+        "date": "2026-07-14 00:00:30 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_gap_analysis_api (#1464)"
+      }
+    },
+    {
+      "module": "server_freshness_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 137,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "62c61253",
+        "date": "2026-07-12 08:31:22 +0000",
+        "author": "rob531",
+        "subject": "build: server_freshness_dashboard_api (#1434)"
+      }
+    },
+    {
+      "module": "server_risk_tier_computation_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 190,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "d8f55cdb",
+        "date": "2026-07-07 22:45:39 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_tier_computation_api (#1327)"
+      }
+    },
+    {
+      "module": "server_scoring_status_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 158,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "c641a157",
+        "date": "2026-07-23 03:44:42 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_scoring_status_api (#1750)"
+      }
+    },
+    {
+      "module": "server_verdict_scoring_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 248,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLlmAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "42507b8c",
+        "date": "2026-07-07 23:44:40 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_scoring_api (#1330)"
+      }
+    },
+    {
+      "module": "verdict_changes_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": "/verdicts",
+      "imports_data_layer": true,
+      "lines": 195,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "85923236",
+        "date": "2026-07-07 10:00:24 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_changes_api (#1318)"
+      }
+    },
+    {
+      "module": "verdict_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": "/api/verdict-dashboard",
+      "imports_data_layer": false,
+      "lines": 145,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "007fcdef",
+        "date": "2026-06-25 09:10:42 +0000",
+        "author": "rob531",
+        "subject": "build: build_verdict_dashboard_api (#587)"
+      }
+    },
+    {
+      "module": "verdict_distribution_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 141,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "44f18cd7",
+        "date": "2026-07-21 12:16:04 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_distribution_summary_api (#1700)"
+      }
+    },
+    {
+      "module": "adversarial_description_probe",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 104,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "f54f2af6",
+        "date": "2026-07-18 13:24:09 +0000",
+        "author": "rob531",
+        "subject": "build: adversarial_description_probe (#1605)"
+      }
+    },
+    {
+      "module": "app_axis_scores_overall_risk_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 148,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "b5029745",
+        "date": "2026-07-21 10:43:55 +0000",
+        "author": "rob531",
+        "subject": "build: app_axis_scores_overall_risk_router (#1698)"
+      }
+    },
+    {
+      "module": "app_score_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 306,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "9e1ba866",
+        "date": "2026-07-13 15:10:36 +0000",
+        "author": "rob531",
+        "subject": "build: app_score_api (#1455)"
+      }
+    },
+    {
+      "module": "ask_question_intent_routing_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 145,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "e897868c",
+        "date": "2026-07-08 14:41:40 +0000",
+        "author": "rob531",
+        "subject": "build: ask_question_intent_routing_api (#1336)"
+      }
+    },
+    {
+      "module": "axis_critical_servers_bulk_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 118,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "af2454c4",
+        "date": "2026-07-13 16:56:43 +0000",
+        "author": "rob531",
+        "subject": "build: build_axis_critical_servers_bulk_api (#1457)"
+      }
+    },
+    {
+      "module": "axis_evidence_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 66,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "68d3a9ed",
+        "date": "2026-07-02 23:00:14 +0000",
+        "author": "rob531",
+        "subject": "build: build_axis_evidence_api (#1192)"
+      }
+    },
+    {
+      "module": "axis_score_variance_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 205,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "c0e24534",
+        "date": "2026-07-24 02:29:39 +0000",
+        "author": "rob531",
+        "subject": "build: axis_score_variance_report (#1772)"
+      }
+    },
+    {
+      "module": "axis_scores_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 162,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "e49f3644",
+        "date": "2026-07-15 22:15:51 +0000",
+        "author": "rob531",
+        "subject": "build: axis_scores_api (#1511)"
+      }
+    },
+    {
+      "module": "axis_scores_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 79,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "7de4b746",
+        "date": "2026-07-16 18:48:52 +0000",
+        "author": "rob531",
+        "subject": "build: axis_scores_summary_api (#1549)"
+      }
+    },
+    {
+      "module": "axis_top_servers_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 111,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "1c6adfd7",
+        "date": "2026-07-07 20:14:09 +0000",
+        "author": "rob531",
+        "subject": "build: axis_top_servers_api (#1325)"
+      }
+    },
+    {
+      "module": "axis_top_servers_by_critical_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": "/axis",
+      "imports_data_layer": true,
+      "lines": 185,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "ba17e83c",
+        "date": "2026-07-10 18:29:09 +0000",
+        "author": "rob531",
+        "subject": "build: axis_top_servers_by_critical_api (#1393)"
+      }
+    },
+    {
+      "module": "deferred_router_triage_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": "/routers/deferred",
+      "imports_data_layer": true,
+      "lines": 98,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "9987490d",
+        "date": "2026-07-23 13:52:43 +0000",
+        "author": "rob531",
+        "subject": "build: build_deferred_router_triage_report (#1752)"
+      }
+    },
+    {
+      "module": "directive_queue_health_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 111,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "782940c8",
+        "date": "2026-07-18 13:47:41 +0000",
+        "author": "rob531",
+        "subject": "build: directive_queue_health_api (#1607)"
+      }
+    },
+    {
+      "module": "factory_liveness_continuity_probe",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 96,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "a6b79a85",
+        "date": "2026-07-20 13:00:57 +0000",
+        "author": "rob531",
+        "subject": "build: build_factory_liveness_continuity_probe (#1672)"
+      }
+    },
+    {
+      "module": "family_rollup_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 151,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "17b78dac",
+        "date": "2026-07-19 14:18:13 +0000",
+        "author": "rob531",
+        "subject": "build: build_family_rollup_api (#1627)"
+      }
+    },
+    {
+      "module": "fleet_risk_tier_trend_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 157,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "6a2b15e9",
+        "date": "2026-07-10 21:55:46 +0000",
+        "author": "rob531",
+        "subject": "build: fleet_risk_tier_trend_api (#1407)"
+      }
+    },
+    {
+      "module": "gate_attribution_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 68,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "9468a44e",
+        "date": "2026-07-20 12:50:31 +0000",
+        "author": "rob531",
+        "subject": "build: build_gate_attribution_report (#1671)"
+      }
+    },
+    {
+      "module": "high_risk_servers_export_csv",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 173,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "27c47805",
+        "date": "2026-07-15 19:35:47 +0000",
+        "author": "rob531",
+        "subject": "build: high_risk_servers_export_csv (#1509)"
+      }
+    },
+    {
+      "module": "high_value_servers_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 94,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "b8e61513",
+        "date": "2026-07-15 12:21:57 +0000",
+        "author": "rob531",
+        "subject": "build: high_value_servers_api (#1485)"
+      }
+    },
+    {
+      "module": "ladder_rung_convergence_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 156,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "f16d5c5d",
+        "date": "2026-07-19 13:08:12 +0000",
+        "author": "rob531",
+        "subject": "build: build_ladder_rung_convergence_report (#1629)"
+      }
+    },
+    {
+      "module": "mcp_axis_score_history_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 102,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "49eebec9",
+        "date": "2026-07-02 21:41:48 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_axis_score_history_view (#1187)"
+      }
+    },
+    {
+      "module": "mcp_latest_axis_scores_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 95,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "f16913ee",
+        "date": "2026-07-04 08:17:42 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_latest_axis_scores_view (#1257)"
+      }
+    },
+    {
+      "module": "mcp_llm_axis_scores_comparison_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 176,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "f44f7742",
+        "date": "2026-07-09 17:18:53 -0400",
+        "author": "rob531",
+        "subject": "build: mcp_llm_axis_scores_comparison_api (#1354)"
+      }
+    },
+    {
+      "module": "mcp_llm_axis_scores_trend_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 196,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "1cfe0ea0",
+        "date": "2026-07-09 17:18:48 -0400",
+        "author": "rob531",
+        "subject": "build: axis_scores_trend_api (#1362)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_aggregator_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 225,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "955ab5ca",
+        "date": "2026-07-10 21:45:34 +0000",
+        "author": "rob531",
+        "subject": "build: mcp_risk_tier_aggregator_api (#1403)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_comparison_analysis_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 135,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "7707668a",
+        "date": "2026-07-03 12:14:22 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_comparison_analysis_api (#1210)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_comparison_analysis_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 80,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4eedcd9f",
+        "date": "2026-07-04 16:16:25 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_comparison_analysis_dashboard_api (#1276)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_comparison_analysis_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 80,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "88b63fa1",
+        "date": "2026-07-02 17:04:24 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_comparison_analysis_view (#1158)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_comparison_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 67,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "0630281d",
+        "date": "2026-07-04 16:13:51 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_comparison_dashboard_api (#1273)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_detail_analysis_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 98,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "7e3ecf45",
+        "date": "2026-07-03 11:37:02 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_detail_analysis_api (#1208)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_detail_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 119,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "6f63e588",
+        "date": "2026-07-04 16:13:44 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_detail_dashboard_api (#1275)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_distribution_analysis_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 68,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3dff9d9e",
+        "date": "2026-07-03 09:31:29 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_distribution_analysis_api (#1202)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_distribution_analysis_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 75,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "16104ae3",
+        "date": "2026-07-04 16:13:47 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_distribution_analysis_dashboard_api (#1274)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_overview_analysis_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 74,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "f44142b8",
+        "date": "2026-07-04 22:36:45 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_overview_analysis_api (#1288)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_overview_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 125,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "c1861aa3",
+        "date": "2026-07-04 20:34:28 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_overview_dashboard_api (#1286)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_trend_analysis_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 85,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "32f9f3c9",
+        "date": "2026-07-04 17:10:43 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_trend_analysis_dashboard_api (#1277)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_trend_analysis_dashboard_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 101,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "d7291581",
+        "date": "2026-07-02 16:53:23 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_trend_analysis_dashboard_view (#1154)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_analysis_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 57,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "17e846d2",
+        "date": "2026-07-03 11:44:09 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_analysis_api (#1209)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_analysis_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 114,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "c69643f1",
+        "date": "2026-07-03 19:20:20 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_analysis_view (#1218)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 153,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "f763f74e",
+        "date": "2026-07-04 14:00:30 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_dashboard_api (#1268)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_dashboard_view_integration",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 38,
+      "casing_autofixable": {
+        "McpScoreDisputes": "McpScoreDispute",
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "fe550d0b",
+        "date": "2026-07-03 01:20:44 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_dashboard_view_integration (#1195)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_overview_dashboard_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 137,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore",
+        "McpScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "3abd3b7a",
+        "date": "2026-07-02 15:42:34 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_overview_dashboard_view (#1140)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_source_distribution_analysis_view",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 48,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3c042922",
+        "date": "2026-07-03 09:37:33 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_source_distribution_analysis_view (#1203)"
+      }
+    },
+    {
+      "module": "mcp_signal_scores_distribution_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 139,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "814e83bb",
+        "date": "2026-07-04 13:55:01 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_signal_scores_distribution_dashboard_api (#1265)"
+      }
+    },
+    {
+      "module": "mcp_submissions_admin_list_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 129,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3314a68b",
+        "date": "2026-07-09 09:57:44 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_submissions_admin_list_api (#1360)"
+      }
+    },
+    {
+      "module": "metamorphic_scoring_probe",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 121,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "84d87dfe",
+        "date": "2026-07-18 13:47:45 +0000",
+        "author": "rob531",
+        "subject": "build: metamorphic_scoring_probe (#1606)"
+      }
+    },
+    {
+      "module": "never_scored_backlog_rollup",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 118,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "9df400f9",
+        "date": "2026-07-16 13:46:25 +0000",
+        "author": "rob531",
+        "subject": "build: build_never_scored_backlog_rollup (#1536)"
+      }
+    },
+    {
+      "module": "never_scored_burndown_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 135,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "8a6693f3",
+        "date": "2026-07-17 14:40:17 +0000",
+        "author": "rob531",
+        "subject": "build: never_scored_burndown_api (#1569)"
+      }
+    },
+    {
+      "module": "org_fleet_risk_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 218,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "7a7ce99e",
+        "date": "2026-07-11 21:17:44 +0000",
+        "author": "rob531",
+        "subject": "build: org_fleet_risk_summary_api (#1428)"
+      }
+    },
+    {
+      "module": "org_health_dashboard",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 109,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "cdd71b5b",
+        "date": "2026-07-20 08:59:37 +0000",
+        "author": "rob531",
+        "subject": "build: build_org_health_dashboard (#1661)"
+      }
+    },
+    {
+      "module": "org_server_risk_tier_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 68,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "39417ca3",
+        "date": "2026-07-16 05:29:45 +0000",
+        "author": "rob531",
+        "subject": "build: org_server_risk_tier_api (#1524)"
+      }
+    },
+    {
+      "module": "orphan_router_caller_probe",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 78,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "759c83c2",
+        "date": "2026-07-21 17:30:08 +0000",
+        "author": "rob531",
+        "subject": "build: build_orphan_router_caller_probe (#1709)"
+      }
+    },
+    {
+      "module": "overall_risk_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 71,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4ce45193",
+        "date": "2026-07-18 11:52:27 +0000",
+        "author": "rob531",
+        "subject": "build: overall_risk_router (#1593)"
+      }
+    },
+    {
+      "module": "registry_family_dedup_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 144,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "06d8f829",
+        "date": "2026-07-17 14:10:10 +0000",
+        "author": "rob531",
+        "subject": "build: registry_family_dedup_report (#1567)"
+      }
+    },
+    {
+      "module": "registry_freshness_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 200,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "bf04fb73",
+        "date": "2026-07-15 23:06:49 +0000",
+        "author": "rob531",
+        "subject": "build: server_registry_freshness_report (#1513)"
+      }
+    },
+    {
+      "module": "registry_growth_snapshot_rollup",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 90,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "8752ff46",
+        "date": "2026-07-16 13:07:28 +0000",
+        "author": "rob531",
+        "subject": "build: registry_growth_snapshot_rollup (#1533)"
+      }
+    },
+    {
+      "module": "registry_source_freshness_report_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 171,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "9f2f2747",
+        "date": "2026-07-22 23:52:01 +0000",
+        "author": "rob531",
+        "subject": "build: build_registry_source_freshness_report_api (#1748)"
+      }
+    },
+    {
+      "module": "registry_source_risk_breakdown_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 199,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "9f63d06a",
+        "date": "2026-07-20 22:32:18 +0000",
+        "author": "rob531",
+        "subject": "build: build_registry_source_risk_breakdown_api (#1689)"
+      }
+    },
+    {
+      "module": "rescore_wallclock_projection_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": "/reports",
+      "imports_data_layer": true,
+      "lines": 115,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3f28a8cf",
+        "date": "2026-07-16 14:21:50 +0000",
+        "author": "rob531",
+        "subject": "build: rescore_wallclock_projection_report (#1538)"
+      }
+    },
+    {
+      "module": "risk_tier_by_source_report_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 101,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "46c5aeb0",
+        "date": "2026-07-22 21:26:36 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_by_source_report_api (#1745)"
+      }
+    },
+    {
+      "module": "risk_tier_comparison_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 74,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "6a7d0ec5",
+        "date": "2026-07-15 12:21:36 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_comparison_api (#1487)"
+      }
+    },
+    {
+      "module": "risk_tier_distribution_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 125,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4f879010",
+        "date": "2026-07-08 14:41:19 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_distribution_api (#1337)"
+      }
+    },
+    {
+      "module": "risk_tier_overview_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 113,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "360da566",
+        "date": "2026-07-20 16:52:31 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_overview_api (#1682)"
+      }
+    },
+    {
+      "module": "risk_tier_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 126,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "34e720f4",
+        "date": "2026-07-20 08:19:28 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_router (#1660)"
+      }
+    },
+    {
+      "module": "risk_tier_summary_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 64,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "1ddf55c1",
+        "date": "2026-07-23 21:17:49 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_summary_router (#1765)"
+      }
+    },
+    {
+      "module": "run_reconciliation_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": "/runs/reconciliation",
+      "imports_data_layer": true,
+      "lines": 84,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "3a134a32",
+        "date": "2026-07-20 09:33:23 +0000",
+        "author": "rob531",
+        "subject": "build: run_reconciliation_report (#1664)"
+      }
+    },
+    {
+      "module": "score_change_delta_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 194,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "15879707",
+        "date": "2026-07-19 13:08:09 +0000",
+        "author": "rob531",
+        "subject": "build: build_score_change_delta_report (#1630)"
+      }
+    },
+    {
+      "module": "score_change_timeline_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 144,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3acec251",
+        "date": "2026-07-19 13:08:17 +0000",
+        "author": "rob531",
+        "subject": "build: build_score_change_timeline_api (#1626)"
+      }
+    },
+    {
+      "module": "score_delta_audit_report_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 218,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "5a83b52b",
+        "date": "2026-07-21 10:33:42 +0000",
+        "author": "rob531",
+        "subject": "build: score_delta_audit_report_api (#1697)"
+      }
+    },
+    {
+      "module": "scoring_axis_distribution_heatmap_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 121,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "fc5df979",
+        "date": "2026-07-20 01:28:52 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_axis_distribution_heatmap_api (#1657)"
+      }
+    },
+    {
+      "module": "scoring_axis_label_distribution_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 168,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "06576d42",
+        "date": "2026-07-17 23:52:13 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_axis_label_distribution_api (#1586)"
+      }
+    },
+    {
+      "module": "scoring_consumer_health_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 104,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "270f4959",
+        "date": "2026-07-09 04:13:42 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_consumer_health_api (#1353)"
+      }
+    },
+    {
+      "module": "scoring_drift_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 165,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "d1a34986",
+        "date": "2026-07-15 15:23:13 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_drift_api (#1497)"
+      }
+    },
+    {
+      "module": "scoring_trend_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 176,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "680a2a24",
+        "date": "2026-07-10 04:13:42 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_trend_api (#1371)"
+      }
+    },
+    {
+      "module": "scoring_wave_history_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 98,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "aa541614",
+        "date": "2026-07-18 18:16:23 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_wave_history_api (#1615)"
+      }
+    },
+    {
+      "module": "server_age_rollup_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 114,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "33a8c0b4",
+        "date": "2026-07-15 19:35:54 +0000",
+        "author": "rob531",
+        "subject": "build: server_age_rollup_api (#1507)"
+      }
+    },
+    {
+      "module": "server_axis_detail_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 247,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "bc676ef5",
+        "date": "2026-07-12 03:56:05 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_detail_api (#1433)"
+      }
+    },
+    {
+      "module": "server_axis_detail_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 82,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "09a28609",
+        "date": "2026-07-15 16:53:38 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_detail_router (#1501)"
+      }
+    },
+    {
+      "module": "server_axis_evidence_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 158,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "4b89bbf8",
+        "date": "2026-07-09 05:55:30 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_evidence_api (#1355)"
+      }
+    },
+    {
+      "module": "server_axis_history_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 274,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "a37e5dfe",
+        "date": "2026-07-21 00:03:16 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_axis_history_api (#1691)"
+      }
+    },
+    {
+      "module": "server_axis_score_detail_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 133,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "efc496b9",
+        "date": "2026-07-17 09:20:43 -0400",
+        "author": "rob531",
+        "subject": "build: server_axis_score_detail_api (#1563)"
+      }
+    },
+    {
+      "module": "server_axis_score_detail_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 117,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "f25e8dbd",
+        "date": "2026-07-17 21:08:32 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_score_detail_router (#1581)"
+      }
+    },
+    {
+      "module": "server_axis_score_timeline_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 224,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "e8adf290",
+        "date": "2026-07-17 10:20:43 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_score_timeline_api (#1558)"
+      }
+    },
+    {
+      "module": "server_axis_scores_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 103,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "1a9e5231",
+        "date": "2026-07-18 12:07:33 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_scores_summary_api (#1595)"
+      }
+    },
+    {
+      "module": "server_capability_comparison_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 140,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "93a81cac",
+        "date": "2026-07-10 09:24:14 +0000",
+        "author": "rob531",
+        "subject": "build: server_capability_comparison_api (#1373)"
+      }
+    },
+    {
+      "module": "server_compare_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 114,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "6c299e52",
+        "date": "2026-07-16 03:35:25 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_compare_dashboard_api (#1523)"
+      }
+    },
+    {
+      "module": "server_compare_dashboard_api_v2",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 153,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4d389dfb",
+        "date": "2026-07-16 23:19:59 +0000",
+        "author": "rob531",
+        "subject": "build: server_compare_dashboard_api_v2 (#1553)"
+      }
+    },
+    {
+      "module": "server_detail_api_v2",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 122,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "edff58a0",
+        "date": "2026-07-15 12:21:34 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_detail_api_v2 (#1488)"
+      }
+    },
+    {
+      "module": "server_facet_search_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 197,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "2c1df592",
+        "date": "2026-07-15 14:42:16 +0000",
+        "author": "rob531",
+        "subject": "build: server_facet_search_api (#1495)"
+      }
+    },
+    {
+      "module": "server_full_scorecard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 141,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "e351b097",
+        "date": "2026-07-22 12:17:58 +0000",
+        "author": "rob531",
+        "subject": "build: server_full_scorecard_api (#1735)"
+      }
+    },
+    {
+      "module": "server_never_scored_backlog_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 134,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "763aa509",
+        "date": "2026-07-18 08:07:36 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_never_scored_backlog_api (#1591)"
+      }
+    },
+    {
+      "module": "server_overall_risk_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 73,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "a7e51c2c",
+        "date": "2026-07-15 12:57:13 +0000",
+        "author": "rob531",
+        "subject": "build: server_overall_risk_api (#1491)"
+      }
+    },
+    {
+      "module": "server_overall_risk_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 108,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "43d4d20c",
+        "date": "2026-07-17 11:31:03 +0000",
+        "author": "rob531",
+        "subject": "build: server_overall_risk_summary_api (#1559)"
+      }
+    },
+    {
+      "module": "server_overall_risk_summary_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 137,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "5a427c02",
+        "date": "2026-07-16 02:19:01 +0000",
+        "author": "rob531",
+        "subject": "build: server_overall_risk_summary_router (#1521)"
+      }
+    },
+    {
+      "module": "server_pagination_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 101,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4e561cd6",
+        "date": "2026-07-24 01:09:08 +0000",
+        "author": "rob531",
+        "subject": "build: server_pagination_api (#1769)"
+      }
+    },
+    {
+      "module": "server_perspective_change_timeline_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 123,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3bf54f60",
+        "date": "2026-07-22 00:56:05 +0000",
+        "author": "rob531",
+        "subject": "build: server_perspective_change_timeline_api (#1728)"
+      }
+    },
+    {
+      "module": "server_risk_audit_log_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 66,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "f9085565",
+        "date": "2026-07-16 01:28:47 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_audit_log_router (#1520)"
+      }
+    },
+    {
+      "module": "server_risk_delta_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 168,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "be5927c3",
+        "date": "2026-07-10 09:13:33 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_delta_api (#1372)"
+      }
+    },
+    {
+      "module": "server_risk_detail_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 219,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "168ec0e9",
+        "date": "2026-07-23 16:30:28 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_detail_api (#1759)"
+      }
+    },
+    {
+      "module": "server_risk_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 120,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "37c9f125",
+        "date": "2026-07-16 10:41:02 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_summary_api (#1529)"
+      }
+    },
+    {
+      "module": "server_risk_tier_history_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 101,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "39ea3bd1",
+        "date": "2026-07-09 17:18:45 -0400",
+        "author": "rob531",
+        "subject": "build: server_risk_tier_history_api (#1367)"
+      }
+    },
+    {
+      "module": "server_risk_trend_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 136,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "f3c4544c",
+        "date": "2026-07-13 19:48:38 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_trend_api (#1459)"
+      }
+    },
+    {
+      "module": "server_risk_trend_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 88,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "da6a5f0a",
+        "date": "2026-07-19 20:53:47 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_trend_router (#1649)"
+      }
+    },
+    {
+      "module": "server_score_delta_timeline_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 120,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLlmAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "4f003d89",
+        "date": "2026-07-20 02:59:09 +0000",
+        "author": "rob531",
+        "subject": "build: server_score_delta_timeline_api (#1658)"
+      }
+    },
+    {
+      "module": "server_score_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 168,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "c4b8d8aa",
+        "date": "2026-07-10 04:13:45 +0000",
+        "author": "rob531",
+        "subject": "build: server_score_summary_api (#1370)"
+      }
+    },
+    {
+      "module": "server_scorecard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 147,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "04c511cc",
+        "date": "2026-07-24 12:17:48 +0000",
+        "author": "rob531",
+        "subject": "build: server_scorecard_api (#1780)"
+      }
+    },
+    {
+      "module": "server_scoring_freshness_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 130,
+      "casing_autofixable": {
+        "McpLlmAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "e40dd69a",
+        "date": "2026-07-17 03:20:11 +0000",
+        "author": "rob531",
+        "subject": "build: server_scoring_freshness_api (#1555)"
+      }
+    },
+    {
+      "module": "server_scoring_history_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 276,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "605f6422",
+        "date": "2026-07-11 21:17:47 +0000",
+        "author": "rob531",
+        "subject": "build: server_scoring_history_api (#1425)"
+      }
+    },
+    {
+      "module": "server_scoring_metadata_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 104,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "1ed57e9a",
+        "date": "2026-07-11 08:02:00 -0400",
+        "author": "rob531",
+        "subject": "build: server_scoring_metadata_api (#1415)"
+      }
+    },
+    {
+      "module": "server_scoring_timeline_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 192,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "ed34c46a",
+        "date": "2026-07-16 02:49:13 +0000",
+        "author": "rob531",
+        "subject": "build: server_scoring_timeline_router (#1522)"
+      }
+    },
+    {
+      "module": "server_timeline_event_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 253,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "4870fd6b",
+        "date": "2026-07-21 16:51:47 -0400",
+        "author": "rob531",
+        "subject": "build: server_timeline_event_api (#1723)"
+      }
+    },
+    {
+      "module": "server_unscored_servers_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 135,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "17304059",
+        "date": "2026-07-21 08:44:10 +0000",
+        "author": "rob531",
+        "subject": "build: server_unscored_servers_api (#1696)"
+      }
+    },
+    {
+      "module": "server_verdict_detail_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 149,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "d45d658b",
+        "date": "2026-07-19 08:32:26 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_detail_router (#1622)"
+      }
+    },
+    {
+      "module": "server_verdict_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 130,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "6ef52869",
+        "date": "2026-07-15 23:48:04 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_verdict_router (#1516)"
+      }
+    },
+    {
+      "module": "server_verdict_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 239,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "041a5c15",
+        "date": "2026-07-09 20:04:52 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_summary_api (#1366)"
+      }
+    },
+    {
+      "module": "server_verdict_watchlist_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 102,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "b3a9390f",
+        "date": "2026-07-16 23:09:45 +0000",
+        "author": "rob531",
+        "subject": "build: build_server_verdict_watchlist_api (#1552)"
+      }
+    },
+    {
+      "module": "service_extraction_candidate_report_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 147,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "98eb6a6c",
+        "date": "2026-07-22 12:46:26 +0000",
+        "author": "rob531",
+        "subject": "build: build_service_extraction_candidate_report_api (#1737)"
+      }
+    },
+    {
+      "module": "trust_gating_status_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 107,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4d46f4a2",
+        "date": "2026-07-13 01:16:19 +0000",
+        "author": "rob531",
+        "subject": "build: trust_gating_status_api (#1445)"
+      }
+    },
+    {
+      "module": "trust_tier_dashboard_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 77,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "1dd91300",
+        "date": "2026-07-18 10:22:00 +0000",
+        "author": "rob531",
+        "subject": "build: build_trust_tier_dashboard_api (#1592)"
+      }
+    },
+    {
+      "module": "unscored_servers_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 82,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "009f1430",
+        "date": "2026-07-15 15:23:08 +0000",
+        "author": "rob531",
+        "subject": "build: unscored_servers_api (#1498)"
+      }
+    },
+    {
+      "module": "verdict_comprehensive_report_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 187,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "d4c394fa",
+        "date": "2026-07-20 04:03:14 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_comprehensive_report_api (#1659)"
+      }
+    },
+    {
+      "module": "verdict_distribution_by_source_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 92,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "a3bef5f5",
+        "date": "2026-07-18 17:36:03 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_distribution_by_source_api (#1613)"
+      }
+    },
+    {
+      "module": "verdict_findings_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 207,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "165de755",
+        "date": "2026-07-12 03:18:29 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_findings_join_consumer (#1432)"
+      }
+    },
+    {
+      "module": "verdict_findings_join_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 193,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "fae54fd0",
+        "date": "2026-07-18 12:32:52 +0000",
+        "author": "rob531",
+        "subject": "build: build_verdict_findings_join_api (#1599)"
+      }
+    },
+    {
+      "module": "verdict_history_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 130,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "f3feda57",
+        "date": "2026-07-13 16:56:47 +0000",
+        "author": "rob531",
+        "subject": "build: build_verdict_history_api (#1456)"
+      }
+    },
+    {
+      "module": "verdict_router_health_check",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 75,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "4e204358",
+        "date": "2026-07-24 02:39:25 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_router_health_check (#1773)"
+      }
+    },
+    {
+      "module": "wave_import_axis_drift_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 175,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "efffe524",
+        "date": "2026-07-18 13:03:48 +0000",
+        "author": "rob531",
+        "subject": "build: wave_import_axis_drift_report (#1602)"
+      }
+    },
+    {
+      "module": "wave_refresh_verification_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 143,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "d88ac8c1",
+        "date": "2026-07-19 13:52:35 +0000",
+        "author": "rob531",
+        "subject": "build: build_wave_refresh_verification_report (#1631)"
+      }
+    },
+    {
+      "module": "wedge_spend_ledger_report",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 130,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "dfc37713",
+        "date": "2026-07-18 13:14:06 +0000",
+        "author": "rob531",
+        "subject": "build: wedge_spend_ledger_report (#1604)"
+      }
+    },
+    {
+      "module": "axis_score_summary_api",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 134,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "dbf80661",
+        "date": "2026-07-19 15:49:18 +0000",
+        "author": "rob531",
+        "subject": "build: axis_score_summary_api (#1633)"
+      }
+    },
+    {
+      "module": "export_server_risk_tier_csv",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 121,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "6bbb8b2d",
+        "date": "2026-07-15 13:47:37 +0000",
+        "author": "rob531",
+        "subject": "build: export_server_risk_tier_csv (#1493)"
+      }
+    },
+    {
+      "module": "gate_attribution_report_consumer",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 100,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "95784266",
+        "date": "2026-07-21 06:14:14 +0000",
+        "author": "rob531",
+        "subject": "build: gate_attribution_report_consumer (#1694)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_api_integration",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 43,
+      "casing_autofixable": {
+        "MCPServerRegistry": "McpServerRegistry",
+        "MCPScoreDisputes": "McpScoreDispute",
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "6362fb29",
+        "date": "2026-07-03 01:20:48 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_api_integration (#1194)"
+      }
+    },
+    {
+      "module": "score_dispute_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 74,
+      "casing_autofixable": {
+        "MCPScoreDispute": "McpScoreDispute"
+      },
+      "origin": {
+        "commit": "c6804fa7",
+        "date": "2026-07-24 00:28:54 +0000",
+        "author": "rob531",
+        "subject": "build: score_dispute_router (#1768)"
+      }
+    },
+    {
+      "module": "score_results_push_consumer",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 89,
+      "casing_autofixable": {
+        "MCPLLMAxisScore": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "d98d7a1e",
+        "date": "2026-07-24 11:02:30 +0000",
+        "author": "rob531",
+        "subject": "build: score_results_push_consumer (#1779)"
+      }
+    },
+    {
+      "module": "server_axis_breakdown_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 88,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "718419e0",
+        "date": "2026-07-16 00:48:22 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_breakdown_router (#1518)"
+      }
+    },
+    {
+      "module": "server_axis_scores_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 137,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "220adc17",
+        "date": "2026-07-17 22:12:20 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_scores_router (#1583)"
+      }
+    },
+    {
+      "module": "verdict_export_router",
+      "why_unmounted": "BROKEN_IMPORT",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 120,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore"
+      },
+      "origin": {
+        "commit": "ab197dae",
+        "date": "2026-07-24 05:30:30 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_export_router (#1776)"
+      }
+    },
+    {
+      "module": "wire_orphan_value_routers",
+      "why_unmounted": "EDIT_CLASS",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 85,
+      "casing_autofixable": {
+        "MCPLLMAxisScores": "McpLlmAxisScore",
+        "MCPServerRegistry": "McpServerRegistry"
+      },
+      "origin": {
+        "commit": "3c708c3d",
+        "date": "2026-07-18 19:58:20 -0400",
+        "author": "rob531",
+        "subject": "build: build_wire_orphan_value_routers (#1611)"
+      }
+    },
+    {
+      "module": "perspective_service",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 5,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 274,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fdf63e49",
+        "date": "2026-07-15 16:23:24 +0000",
+        "author": "rob531",
+        "subject": "build: perspective_service (#1500)"
+      }
+    },
+    {
+      "module": "server_policy_rules_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 5,
+      "declared_prefix": "/policy-rules",
+      "imports_data_layer": true,
+      "lines": 227,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "de14e70b",
+        "date": "2026-07-10 09:44:29 +0000",
+        "author": "rob531",
+        "subject": "build: server_policy_rules_api (#1374)"
+      }
+    },
+    {
+      "module": "cadence_job_runs_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 3,
+      "declared_prefix": "/api/cadence",
+      "imports_data_layer": true,
+      "lines": 219,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "dbfd090a",
+        "date": "2026-07-10 15:15:46 +0000",
+        "author": "rob531",
+        "subject": "build: cadence_job_runs_api (#1381)"
+      }
+    },
+    {
+      "module": "mcp_score_dispute_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 3,
+      "declared_prefix": "/servers/{server_id}/disputes",
+      "imports_data_layer": true,
+      "lines": 301,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "cbe5db7c",
+        "date": "2026-07-07 10:00:20 +0000",
+        "author": "rob531",
+        "subject": "build: mcp_score_dispute_api (#1319)"
+      }
+    },
+    {
+      "module": "api_key_rotation_service",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": "/api/keys",
+      "imports_data_layer": true,
+      "lines": 216,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "38d1a319",
+        "date": "2026-07-16 17:18:39 +0000",
+        "author": "rob531",
+        "subject": "build: build_api_key_rotation_service (#1546)"
+      }
+    },
+    {
+      "module": "cadence_pipeline_health_report",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 221,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1354db11",
+        "date": "2026-07-15 23:27:53 +0000",
+        "author": "rob531",
+        "subject": "build: cadence_pipeline_health_report (#1515)"
+      }
+    },
+    {
+      "module": "mcp_signal_evidence_archive_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 150,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "0b7fb0ce",
+        "date": "2026-07-07 19:27:38 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_signal_evidence_archive_api (#1323)"
+      }
+    },
+    {
+      "module": "rbac_enforcer",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 162,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e074763c",
+        "date": "2026-06-29 16:03:57 +0000",
+        "author": "rob531",
+        "subject": "build: build_rbac_enforcer (#1049)"
+      }
+    },
+    {
+      "module": "risk_tier_alert_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 108,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "5755d5e8",
+        "date": "2026-07-24 04:40:21 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_alert_router (#1775)"
+      }
+    },
+    {
+      "module": "scoring_wave_cost_ledger_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 169,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "80e1d148",
+        "date": "2026-07-17 14:10:07 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_wave_cost_ledger_api (#1568)"
+      }
+    },
+    {
+      "module": "scoring_wave_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": "/scoring",
+      "imports_data_layer": true,
+      "lines": 216,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ed792b8d",
+        "date": "2026-07-18 15:05:11 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_wave_detail_api (#1610)"
+      }
+    },
+    {
+      "module": "sentinel_service_health_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 146,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "08c3318c",
+        "date": "2026-07-13 03:58:44 +0000",
+        "author": "rob531",
+        "subject": "build: sentinel_service_health_api (#1444)"
+      }
+    },
+    {
+      "module": "server_exemption_audit_trail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 397,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "7b924323",
+        "date": "2026-07-10 18:39:22 +0000",
+        "author": "rob531",
+        "subject": "build: server_exemption_audit_trail_api (#1395)"
+      }
+    },
+    {
+      "module": "server_exemptions_history_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 159,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "2997162a",
+        "date": "2026-07-10 15:56:14 +0000",
+        "author": "rob531",
+        "subject": "build: server_exemptions_history_api (#1385)"
+      }
+    },
+    {
+      "module": "server_submission_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 101,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "9976f475",
+        "date": "2026-07-23 15:56:50 +0000",
+        "author": "rob531",
+        "subject": "build: server_submission_api (#1757)"
+      }
+    },
+    {
+      "module": "server_verdict_timeline_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 165,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "51d109bd",
+        "date": "2026-07-07 22:45:41 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_timeline_api (#1326)"
+      }
+    },
+    {
+      "module": "server_vuln_severity_distribution_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 121,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c680057b",
+        "date": "2026-07-16 10:41:07 +0000",
+        "author": "rob531",
+        "subject": "build: server_vuln_severity_distribution_api (#1528)"
+      }
+    },
+    {
+      "module": "server_vuln_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 301,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "0972a72b",
+        "date": "2026-07-09 19:58:35 +0000",
+        "author": "rob531",
+        "subject": "build: server_vuln_summary_api (#1364)"
+      }
+    },
+    {
+      "module": "service_health_aggregator_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 138,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "cc0db1d0",
+        "date": "2026-07-09 01:29:19 +0000",
+        "author": "rob531",
+        "subject": "build: service_health_aggregator_api (#1352)"
+      }
+    },
+    {
+      "module": "ask_answer_export_service",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/ask/search",
+      "imports_data_layer": true,
+      "lines": 220,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c1807ca6",
+        "date": "2026-07-16 19:34:14 +0000",
+        "author": "rob531",
+        "subject": "build: ask_answer_export_service (#1550)"
+      }
+    },
+    {
+      "module": "ask_corpus_search_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 120,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "9bc00477",
+        "date": "2026-07-12 16:51:59 +0000",
+        "author": "rob531",
+        "subject": "build: ask_corpus_search_api (#1440)"
+      }
+    },
+    {
+      "module": "ask_corpus_timeline_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 80,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "175e8964",
+        "date": "2026-07-11 19:31:13 +0000",
+        "author": "rob531",
+        "subject": "build: ask_corpus_timeline_api (#1423)"
+      }
+    },
+    {
+      "module": "ask_query_expansion_api_v3",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 66,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b9d99512",
+        "date": "2026-07-13 02:26:55 +0000",
+        "author": "rob531",
+        "subject": "build: build_ask_query_expansion_api_v3 (#1447)"
+      }
+    },
+    {
+      "module": "ask_query_expansion_v2",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/ask",
+      "imports_data_layer": true,
+      "lines": 107,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8bccf7fe",
+        "date": "2026-07-06 11:06:56 +0000",
+        "author": "rob531",
+        "subject": "build: build_ask_query_expansion_v2 (#1310)"
+      }
+    },
+    {
+      "module": "audit_log_export_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 159,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fe5e023a",
+        "date": "2026-07-22 05:32:31 +0000",
+        "author": "rob531",
+        "subject": "build: audit_log_export_api (#1731)"
+      }
+    },
+    {
+      "module": "axis_change_attribution_probe",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api/probes",
+      "imports_data_layer": true,
+      "lines": 309,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8d2abd71",
+        "date": "2026-07-21 17:26:45 +0000",
+        "author": "rob531",
+        "subject": "build: build_axis_change_attribution_probe (#1708)"
+      }
+    },
+    {
+      "module": "axis_distribution_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 90,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "edbac74c",
+        "date": "2026-06-28 18:09:05 +0000",
+        "author": "rob531",
+        "subject": "build: build_axis_distribution_api_v1 (#1007)"
+      }
+    },
+    {
+      "module": "axis_p_top_calibration_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 293,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "85e79b7e",
+        "date": "2026-07-20 23:42:41 +0000",
+        "author": "rob531",
+        "subject": "build: build_axis_p_top_calibration_api (#1690)"
+      }
+    },
+    {
+      "module": "axis_top_labels_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 163,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "d786fc19",
+        "date": "2026-07-16 18:28:57 +0000",
+        "author": "rob531",
+        "subject": "build: axis_top_labels_api (#1548)"
+      }
+    },
+    {
+      "module": "cadence_job_runs_recent_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 125,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ccc9b5e7",
+        "date": "2026-07-10 21:55:49 +0000",
+        "author": "rob531",
+        "subject": "build: cadence_job_runs_recent_api (#1406)"
+      }
+    },
+    {
+      "module": "circuit_breaker_status_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 115,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e8f8e5c9",
+        "date": "2026-07-21 07:56:57 +0000",
+        "author": "rob531",
+        "subject": "build: circuit_breaker_status_api (#1695)"
+      }
+    },
+    {
+      "module": "cve_facet_compile_wiring_v3",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 79,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "440a1ac1",
+        "date": "2026-07-22 21:54:26 +0000",
+        "author": "rob531",
+        "subject": "build: build_cve_facet_compile_wiring_v3 (#1746)"
+      }
+    },
+    {
+      "module": "deferred_router_ledger_report",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 61,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "31fda64d",
+        "date": "2026-07-21 13:23:14 -0400",
+        "author": "rob531",
+        "subject": "build: build_deferred_router_ledger_report (#1707)"
+      }
+    },
+    {
+      "module": "escalation_timeline_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 189,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b195607a",
+        "date": "2026-07-10 17:48:29 +0000",
+        "author": "rob531",
+        "subject": "build: escalation_timeline_api (#1392)"
+      }
+    },
+    {
+      "module": "fleet_exploit_surface_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 163,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "6c655968",
+        "date": "2026-07-12 19:30:13 +0000",
+        "author": "rob531",
+        "subject": "build: fleet_exploit_surface_api (#1441)"
+      }
+    },
+    {
+      "module": "fleet_risk_composition_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/fleet",
+      "imports_data_layer": true,
+      "lines": 117,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "547023f0",
+        "date": "2026-07-12 02:58:18 +0000",
+        "author": "rob531",
+        "subject": "build: fleet_risk_composition_api (#1430)"
+      }
+    },
+    {
+      "module": "gate_attribution_report_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 95,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "297b730c",
+        "date": "2026-07-20 17:12:42 +0000",
+        "author": "rob531",
+        "subject": "build: build_gate_attribution_report_api (#1683)"
+      }
+    },
+    {
+      "module": "gate_attribution_report_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/gate",
+      "imports_data_layer": true,
+      "lines": 164,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "5e633fec",
+        "date": "2026-07-21 03:43:50 +0000",
+        "author": "rob531",
+        "subject": "build: gate_attribution_report_router (#1693)"
+      }
+    },
+    {
+      "module": "ghost_retry_burn_report",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 130,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "98e3dc88",
+        "date": "2026-07-20 14:52:33 +0000",
+        "author": "rob531",
+        "subject": "build: ghost_retry_burn_report (#1681)"
+      }
+    },
+    {
+      "module": "harvest_lane_throughput_report",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/reporting",
+      "imports_data_layer": true,
+      "lines": 149,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "98880a0e",
+        "date": "2026-07-17 14:50:48 +0000",
+        "author": "rob531",
+        "subject": "build: harvest_lane_throughput_report (#1570)"
+      }
+    },
+    {
+      "module": "high_risk_servers_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 250,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c60f9850",
+        "date": "2026-06-28 17:56:11 +0000",
+        "author": "rob531",
+        "subject": "build: build_high_risk_servers_api_v3 (#1005)"
+      }
+    },
+    {
+      "module": "insufficient_verdict_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 79,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1220e67b",
+        "date": "2026-07-02 16:11:19 +0000",
+        "author": "rob531",
+        "subject": "build: build_insufficient_verdict_api (#1147)"
+      }
+    },
+    {
+      "module": "mcp_api_health_checker",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 80,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a6648a83",
+        "date": "2026-07-08 08:44:14 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_api_health_checker (#1334)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_ingestion_rate_analysis_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 66,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "bcffb158",
+        "date": "2026-07-03 15:44:55 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_ingestion_rate_analysis_api (#1213)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_ingestion_rate_analysis_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 69,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b831dd79",
+        "date": "2026-07-03 16:15:18 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_ingestion_rate_analysis_dashboard_view (#1214)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_ingestion_rate_analysis_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 76,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "44cfefb7",
+        "date": "2026-07-03 16:55:25 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_ingestion_rate_analysis_view (#1215)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_ingestion_rate_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 65,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "82b04a05",
+        "date": "2026-07-02 15:39:49 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_ingestion_rate_api (#1139)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_ingestion_rate_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 74,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1272d9be",
+        "date": "2026-07-02 15:50:28 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_ingestion_rate_view (#1141)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_pipeline_status_analysis_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 109,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8fd44579",
+        "date": "2026-07-02 14:51:36 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_pipeline_status_analysis_api (#1131)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_pipeline_status_analysis_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 74,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "f2f7314a",
+        "date": "2026-07-02 16:11:23 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_pipeline_status_analysis_view (#1146)"
+      }
+    },
+    {
+      "module": "mcp_llm_axis_scores_distribution_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 84,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a0509cdc",
+        "date": "2026-06-30 08:40:17 -0400",
+        "author": "rob531",
+        "subject": "build: build_mcp_llm_axis_scores_distribution_dashboard_view (#1077)"
+      }
+    },
+    {
+      "module": "mcp_risk_register_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 69,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "73e33b80",
+        "date": "2026-06-25 11:40:46 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_register_api (#608)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_definition_history_analysis_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 100,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ea74bd63",
+        "date": "2026-07-05 03:59:49 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_definition_history_analysis_api (#1291)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_definition_history_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 115,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c76fc6dc",
+        "date": "2026-07-05 06:21:38 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_definition_history_dashboard_api (#1302)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_definition_history_pipeline_status_analysis_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 102,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "4b27904e",
+        "date": "2026-07-05 04:19:40 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_definition_history_pipeline_status_analysis_dashboard_api (#1296)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_definition_history_pipeline_status_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 77,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "dc178f42",
+        "date": "2026-07-05 05:51:03 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_definition_history_pipeline_status_dashboard_api (#1301)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_detail_analysis_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 93,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "9ea40620",
+        "date": "2026-07-03 10:53:21 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_detail_analysis_dashboard_view (#1204)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 85,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "91863295",
+        "date": "2026-07-01 17:46:32 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_detail_api (#1107)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_distribution_analysis_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 64,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "0c860111",
+        "date": "2026-07-02 14:34:40 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_distribution_analysis_dashboard_view (#1130)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_distribution_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 85,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1dc73986",
+        "date": "2026-07-04 15:52:32 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_distribution_dashboard_api (#1272)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_listing_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 115,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "9343599f",
+        "date": "2026-07-01 17:06:41 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_listing_api (#1102)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_summary_analysis_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 74,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "70767bc8",
+        "date": "2026-07-02 16:11:25 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_summary_analysis_api (#1145)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_summary_analysis_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 91,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1c541095",
+        "date": "2026-07-04 17:58:29 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_summary_analysis_dashboard_api (#1281)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_summary_analysis_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 56,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a67c6fc4",
+        "date": "2026-07-02 16:56:42 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_summary_analysis_view (#1157)"
+      }
+    },
+    {
+      "module": "mcp_risk_tier_trend_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 90,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "6e394d60",
+        "date": "2026-07-04 09:47:22 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_risk_tier_trend_dashboard_api (#1259)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_analysis_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/analysis",
+      "imports_data_layer": true,
+      "lines": 93,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "d49610b3",
+        "date": "2026-07-03 13:56:02 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_analysis_dashboard_view (#1211)"
+      }
+    },
+    {
+      "module": "mcp_server_axis_probabilities_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 84,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "202825b1",
+        "date": "2026-07-02 19:46:05 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_axis_probabilities_dashboard_view (#1176)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_overview_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 73,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "55a2e12d",
+        "date": "2026-07-02 14:30:59 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_overview_view (#1129)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_source_distribution_analysis_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 88,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "98235e3b",
+        "date": "2026-07-02 16:03:20 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_source_distribution_analysis_api (#1143)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_source_distribution_analysis_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 66,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "77d89953",
+        "date": "2026-07-04 19:38:29 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_source_distribution_analysis_dashboard_api (#1283)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_source_distribution_analysis_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 106,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "bb4dc8df",
+        "date": "2026-07-02 16:31:33 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_source_distribution_analysis_dashboard_view (#1151)"
+      }
+    },
+    {
+      "module": "mcp_server_registry_source_distribution_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 70,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "564437b1",
+        "date": "2026-06-30 00:39:58 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_server_registry_source_distribution_dashboard_view (#1078)"
+      }
+    },
+    {
+      "module": "mcp_signal_scores_distribution_analysis_dashboard_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 68,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1732e93c",
+        "date": "2026-07-02 16:53:19 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_signal_scores_distribution_analysis_dashboard_view (#1155)"
+      }
+    },
+    {
+      "module": "mcp_signal_scores_distribution_analysis_view",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 106,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1a8634f4",
+        "date": "2026-07-02 19:54:57 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_signal_scores_distribution_analysis_view (#1179)"
+      }
+    },
+    {
+      "module": "mcp_submission_create_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 135,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "776229d4",
+        "date": "2026-07-10 14:34:42 +0000",
+        "author": "rob531",
+        "subject": "build: mcp_submission_create_api (#1379)"
+      }
+    },
+    {
+      "module": "mcp_threat_associations_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 102,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e3071121",
+        "date": "2026-07-01 14:51:19 -0400",
+        "author": "rob531",
+        "subject": "build: build_mcp_threat_associations_detail_api (#1111)"
+      }
+    },
+    {
+      "module": "org_health_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/orgs",
+      "imports_data_layer": true,
+      "lines": 177,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ccde4aaa",
+        "date": "2026-07-09 06:26:27 +0000",
+        "author": "rob531",
+        "subject": "build: org_health_dashboard_api (#1358)"
+      }
+    },
+    {
+      "module": "org_risk_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 267,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "6ad97864",
+        "date": "2026-07-10 17:28:16 +0000",
+        "author": "rob531",
+        "subject": "build: org_risk_summary_api (#1391)"
+      }
+    },
+    {
+      "module": "perspective_event_stream_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 169,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c5fbd8fc",
+        "date": "2026-07-12 22:57:27 +0000",
+        "author": "rob531",
+        "subject": "build: perspective_event_stream_api (#1442)"
+      }
+    },
+    {
+      "module": "perspective_event_timeline_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 153,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1122b0a7",
+        "date": "2026-07-06 09:43:51 +0000",
+        "author": "rob531",
+        "subject": "build: perspective_event_timeline_api (#1309)"
+      }
+    },
+    {
+      "module": "perspective_snapshot_comparison_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 206,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "60ee0064",
+        "date": "2026-07-13 18:37:00 +0000",
+        "author": "rob531",
+        "subject": "build: build_perspective_snapshot_comparison_api (#1458)"
+      }
+    },
+    {
+      "module": "perspective_snapshot_diff_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api/perspectives",
+      "imports_data_layer": true,
+      "lines": 162,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c24c9d7c",
+        "date": "2026-07-10 18:29:05 +0000",
+        "author": "rob531",
+        "subject": "build: perspective_snapshot_diff_api (#1394)"
+      }
+    },
+    {
+      "module": "propose_directive_outcome_log",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 98,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "61e69a1b",
+        "date": "2026-07-21 13:19:20 -0400",
+        "author": "rob531",
+        "subject": "build: build_propose_directive_outcome_log (#1705)"
+      }
+    },
+    {
+      "module": "registry_freshness_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/registry",
+      "imports_data_layer": true,
+      "lines": 285,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e91f1065",
+        "date": "2026-07-23 19:21:10 +0000",
+        "author": "rob531",
+        "subject": "build: build_registry_freshness_api (#1761)"
+      }
+    },
+    {
+      "module": "registry_growth_progress_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 214,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "3c39fe6d",
+        "date": "2026-07-16 14:26:48 +0000",
+        "author": "rob531",
+        "subject": "build: build_registry_growth_progress_api (#1537)"
+      }
+    },
+    {
+      "module": "registry_ingest_anomaly_report",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/registry/ingest",
+      "imports_data_layer": true,
+      "lines": 316,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1d88e072",
+        "date": "2026-07-24 14:22:06 +0000",
+        "author": "rob531",
+        "subject": "build: build_registry_ingest_anomaly_report (#1783)"
+      }
+    },
+    {
+      "module": "registry_source_health_report",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 180,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "f42a1d1e",
+        "date": "2026-07-23 15:50:13 +0000",
+        "author": "rob531",
+        "subject": "build: registry_source_health_report (#1756)"
+      }
+    },
+    {
+      "module": "risk_tier_alert_service",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/alerts",
+      "imports_data_layer": true,
+      "lines": 363,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "89de3329",
+        "date": "2026-07-20 00:02:50 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_alert_service (#1655)"
+      }
+    },
+    {
+      "module": "risk_tier_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 243,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e0177598",
+        "date": "2026-07-15 20:55:40 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_api (#1510)"
+      }
+    },
+    {
+      "module": "risk_tier_axis_score_consumer",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 166,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "944c3baa",
+        "date": "2026-07-20 19:01:32 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_axis_score_consumer (#1686)"
+      }
+    },
+    {
+      "module": "risk_tier_comparison_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/risk-tier",
+      "imports_data_layer": true,
+      "lines": 223,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ed2c88fc",
+        "date": "2026-07-15 17:23:58 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_comparison_router (#1502)"
+      }
+    },
+    {
+      "module": "risk_tier_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 92,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "7b7a42e6",
+        "date": "2026-07-18 19:30:26 +0000",
+        "author": "rob531",
+        "subject": "build: risk_tier_summary_api (#1617)"
+      }
+    },
+    {
+      "module": "risk_tier_summary_dashboard",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 202,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "d0e2763a",
+        "date": "2026-07-21 19:00:37 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_summary_dashboard (#1720)"
+      }
+    },
+    {
+      "module": "risk_tier_threshold_calibration_probe",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/probes",
+      "imports_data_layer": true,
+      "lines": 250,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1c6c4a06",
+        "date": "2026-07-21 17:33:42 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_threshold_calibration_probe (#1710)"
+      }
+    },
+    {
+      "module": "risk_tier_thresholds_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 73,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ce684b4d",
+        "date": "2026-07-22 22:31:48 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_thresholds_api (#1747)"
+      }
+    },
+    {
+      "module": "risk_tier_trend_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 140,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "475703c3",
+        "date": "2026-07-21 23:01:10 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_tier_trend_api (#1724)"
+      }
+    },
+    {
+      "module": "score_run_ledger_writer",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 75,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8ec80eb0",
+        "date": "2026-07-20 09:30:07 +0000",
+        "author": "rob531",
+        "subject": "build: build_score_run_ledger_writer (#1663)"
+      }
+    },
+    {
+      "module": "scoring_consumer_status_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 106,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "9bd48d7e",
+        "date": "2026-07-09 20:04:56 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_consumer_status_api (#1365)"
+      }
+    },
+    {
+      "module": "scoring_criteria_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/scoring",
+      "imports_data_layer": true,
+      "lines": 97,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "bd97d590",
+        "date": "2026-07-19 19:31:22 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_criteria_api (#1647)"
+      }
+    },
+    {
+      "module": "scoring_tier_csv_export_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/export",
+      "imports_data_layer": true,
+      "lines": 219,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e1c85b82",
+        "date": "2026-07-20 18:41:15 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_tier_csv_export_api (#1685)"
+      }
+    },
+    {
+      "module": "scoring_trend_consumer_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 243,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "d0a3a75d",
+        "date": "2026-07-10 16:57:18 +0000",
+        "author": "rob531",
+        "subject": "build: scoring_trend_consumer_api (#1388)"
+      }
+    },
+    {
+      "module": "server_axis_scores_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 289,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "f94aa812",
+        "date": "2026-07-13 21:18:00 +0000",
+        "author": "rob531",
+        "subject": "build: axis_scores_read_api (#1460)"
+      }
+    },
+    {
+      "module": "server_axis_scores_bulk_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 300,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "54d27b3b",
+        "date": "2026-07-08 21:48:51 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_scores_bulk_api (#1349)"
+      }
+    },
+    {
+      "module": "server_axis_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 194,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "362dfb83",
+        "date": "2026-07-20 19:41:52 +0000",
+        "author": "rob531",
+        "subject": "build: server_axis_summary_api (#1687)"
+      }
+    },
+    {
+      "module": "server_csv_export_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 113,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "623e3959",
+        "date": "2026-07-09 13:20:54 +0000",
+        "author": "rob531",
+        "subject": "build: server_csv_export_api (#1361)"
+      }
+    },
+    {
+      "module": "server_cve_exposure_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 136,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c2dab8d3",
+        "date": "2026-07-22 03:45:28 +0000",
+        "author": "rob531",
+        "subject": "build: server_cve_exposure_summary_api (#1730)"
+      }
+    },
+    {
+      "module": "server_cve_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 161,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b469eb8f",
+        "date": "2026-07-17 16:56:45 +0000",
+        "author": "rob531",
+        "subject": "build: server_cve_summary_api (#1574)"
+      }
+    },
+    {
+      "module": "server_detail_composite_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 341,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8c4d0341",
+        "date": "2026-07-20 08:10:08 -0400",
+        "author": "rob531",
+        "subject": "build: server_detail_composite_api (#1667)"
+      }
+    },
+    {
+      "module": "server_export_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 150,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "e5e8a1eb",
+        "date": "2026-07-07 18:47:37 +0000",
+        "author": "rob531",
+        "subject": "build: server_export_api (#1322)"
+      }
+    },
+    {
+      "module": "server_overall_risk_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 175,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "0826e398",
+        "date": "2026-07-16 17:18:34 +0000",
+        "author": "rob531",
+        "subject": "build: server_overall_risk_router (#1547)"
+      }
+    },
+    {
+      "module": "server_overview_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 180,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "5b7336ce",
+        "date": "2026-07-15 22:26:05 +0000",
+        "author": "rob531",
+        "subject": "build: server_overview_api (#1512)"
+      }
+    },
+    {
+      "module": "server_risk_comparison_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 250,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a8499930",
+        "date": "2026-07-10 15:46:17 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_comparison_api (#1383)"
+      }
+    },
+    {
+      "module": "server_risk_contributors_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 217,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "d0b0ccbc",
+        "date": "2026-07-16 11:01:10 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_contributors_api (#1530)"
+      }
+    },
+    {
+      "module": "server_risk_contributors_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 290,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b51d9867",
+        "date": "2026-07-17 11:41:06 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_contributors_summary_api (#1560)"
+      }
+    },
+    {
+      "module": "server_risk_delta_timeline_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 295,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a4c84824",
+        "date": "2026-07-10 20:14:36 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_delta_timeline_api (#1398)"
+      }
+    },
+    {
+      "module": "server_risk_overview_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 157,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b2c8d97b",
+        "date": "2026-07-08 16:15:12 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_overview_api (#1339)"
+      }
+    },
+    {
+      "module": "server_risk_summary_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 232,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "df3b3fb2",
+        "date": "2026-07-16 17:08:20 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_summary_router (#1545)"
+      }
+    },
+    {
+      "module": "server_risk_tier_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 289,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "c22428fe",
+        "date": "2026-07-09 06:26:32 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_tier_detail_api (#1356)"
+      }
+    },
+    {
+      "module": "server_risk_tier_readback_api_v2",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 309,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "f5d65323",
+        "date": "2026-07-13 23:08:17 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_tier_readback_api_v2 (#1461)"
+      }
+    },
+    {
+      "module": "server_risk_trajectory_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 251,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "989d1f97",
+        "date": "2026-07-10 17:07:32 +0000",
+        "author": "rob531",
+        "subject": "build: server_risk_trajectory_api (#1389)"
+      }
+    },
+    {
+      "module": "server_security_recommendation_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 288,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "1933c88e",
+        "date": "2026-07-20 19:55:41 +0000",
+        "author": "rob531",
+        "subject": "build: server_security_recommendation_api (#1688)"
+      }
+    },
+    {
+      "module": "server_statistics_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 230,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "77df22a6",
+        "date": "2026-07-08 23:49:18 +0000",
+        "author": "rob531",
+        "subject": "build: server_statistics_api (#1351)"
+      }
+    },
+    {
+      "module": "server_threat_intel_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 160,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "2ac29b56",
+        "date": "2026-07-21 12:03:59 +0000",
+        "author": "rob531",
+        "subject": "build: server_threat_intel_detail_api (#1699)"
+      }
+    },
+    {
+      "module": "server_tier_change_events_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 168,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "b1cbd069",
+        "date": "2026-07-10 21:34:51 +0000",
+        "author": "rob531",
+        "subject": "build: server_tier_change_events_api (#1402)"
+      }
+    },
+    {
+      "module": "server_trust_gating_override_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 180,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a76efa2a",
+        "date": "2026-07-10 16:37:01 +0000",
+        "author": "rob531",
+        "subject": "build: server_trust_gating_override_api (#1387)"
+      }
+    },
+    {
+      "module": "server_trust_signal_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 231,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "44edd2cc",
+        "date": "2026-07-10 21:45:30 +0000",
+        "author": "rob531",
+        "subject": "build: server_trust_signal_detail_api (#1404)"
+      }
+    },
+    {
+      "module": "server_verdict_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 232,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "5fc14bb4",
+        "date": "2026-07-10 16:37:05 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_api (#1386)"
+      }
+    },
+    {
+      "module": "server_verdict_detail_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 197,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "4cd2b6c8",
+        "date": "2026-07-10 20:14:32 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_detail_api (#1399)"
+      }
+    },
+    {
+      "module": "server_verdict_history_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/servers",
+      "imports_data_layer": true,
+      "lines": 303,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8fdc455d",
+        "date": "2026-07-11 20:56:54 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_history_api (#1424)"
+      }
+    },
+    {
+      "module": "server_verdict_history_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 138,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "264b710b",
+        "date": "2026-07-16 00:08:13 +0000",
+        "author": "rob531",
+        "subject": "build: server_verdict_history_router (#1517)"
+      }
+    },
+    {
+      "module": "server_vuln_exposure_summary_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 100,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "8ff5694e",
+        "date": "2026-07-20 11:49:51 +0000",
+        "author": "rob531",
+        "subject": "build: server_vuln_exposure_summary_api (#1666)"
+      }
+    },
+    {
+      "module": "service_health_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 47,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "7c0055e2",
+        "date": "2026-07-23 22:58:03 +0000",
+        "author": "rob531",
+        "subject": "build: get_service_health_api (#1766)"
+      }
+    },
+    {
+      "module": "signal_score_freshness_audit",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 369,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "7c97d6a0",
+        "date": "2026-06-29 17:04:33 +0000",
+        "author": "rob531",
+        "subject": "build: signal_score_freshness_audit (#1052)"
+      }
+    },
+    {
+      "module": "sprint_progress_dashboard_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/reporting",
+      "imports_data_layer": true,
+      "lines": 267,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "d9fa6f64",
+        "date": "2026-07-17 14:50:45 +0000",
+        "author": "rob531",
+        "subject": "build: sprint_progress_dashboard_api (#1571)"
+      }
+    },
+    {
+      "module": "trust_gate_decision_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 283,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "df731073",
+        "date": "2026-07-16 16:07:37 +0000",
+        "author": "rob531",
+        "subject": "build: trust_gate_decision_api (#1542)"
+      }
+    },
+    {
+      "module": "verdict_breakdown_router",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/verdict",
+      "imports_data_layer": true,
+      "lines": 59,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "2c0bc329",
+        "date": "2026-07-23 19:46:01 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_breakdown_router (#1762)"
+      }
+    },
+    {
+      "module": "verdict_criteria_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": "/api",
+      "imports_data_layer": true,
+      "lines": 223,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a1dda784",
+        "date": "2026-07-18 17:56:07 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_criteria_api (#1614)"
+      }
+    },
+    {
+      "module": "verdict_history_timeline_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 130,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "be8c13bc",
+        "date": "2026-07-18 04:41:16 +0000",
+        "author": "rob531",
+        "subject": "build: verdict_history_timeline_api (#1589)"
+      }
+    },
+    {
+      "module": "verified_cves_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 102,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "307e8365",
+        "date": "2026-07-23 15:29:51 +0000",
+        "author": "rob531",
+        "subject": "build: build_verified_cves_api (#1755)"
+      }
+    },
+    {
+      "module": "vulnerability_facet_rollup_api",
+      "why_unmounted": "MOUNTABLE",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": true,
+      "lines": 87,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "4e2ff6fe",
+        "date": "2026-07-16 16:48:07 +0000",
+        "author": "rob531",
+        "subject": "build: build_vulnerability_facet_rollup_api (#1543)"
+      }
+    },
+    {
+      "module": "audit_log_api",
+      "why_unmounted": "NO_ROUTES",
+      "route_count": 0,
+      "declared_prefix": "/audit-log",
+      "imports_data_layer": true,
+      "lines": 268,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "6ab50d69",
+        "date": "2026-07-23 20:01:30 +0000",
+        "author": "rob531",
+        "subject": "build: product_audit_log (#1763)"
+      }
+    },
+    {
+      "module": "sentinel_external_api_v2_history",
+      "why_unmounted": "NO_ROUTES",
+      "route_count": 0,
+      "declared_prefix": "/v1/mcp",
+      "imports_data_layer": false,
+      "lines": 124,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "verify_github_pr_checker_webhook_wiring",
+      "why_unmounted": "NO_ROUTES",
+      "route_count": 0,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 599,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "admin_policies_integration",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 8,
+      "declared_prefix": "/api/v1/admin/policies",
+      "imports_data_layer": false,
+      "lines": 274,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "5ef2a5c3",
+        "date": "2026-06-23 07:45:53 +0000",
+        "author": "rob531",
+        "subject": "build: admin_policies_integration (#483)"
+      }
+    },
+    {
+      "module": "admin_exemptions_integration",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 7,
+      "declared_prefix": "/api/admin/exemptions",
+      "imports_data_layer": false,
+      "lines": 328,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "5089cd59",
+        "date": "2026-06-23 07:29:56 +0000",
+        "author": "rob531",
+        "subject": "build: admin_exemptions_integration (#469)"
+      }
+    },
+    {
+      "module": "mcp_decisions_api",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 5,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 128,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fdd20e8b",
+        "date": "2026-06-25 11:36:48 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_decisions_management_api (#606)"
+      }
+    },
+    {
+      "module": "sentinel_external_api_v2_signals",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 2,
+      "declared_prefix": "/v1/mcp",
+      "imports_data_layer": false,
+      "lines": 301,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "sentinel_ui_evidence_drawer_route",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 2,
+      "declared_prefix": "/evidence",
+      "imports_data_layer": false,
+      "lines": 72,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "sentinel_ui_signal_diversity_panel",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 2,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 102,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "compliance_overview_api",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 155,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "ee511d5f",
+        "date": "2026-06-25 12:20:26 +0000",
+        "author": "rob531",
+        "subject": "build: build_compliance_overview_api (#615)"
+      }
+    },
+    {
+      "module": "mcp_definition_history_report_api",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 225,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a40d97b4",
+        "date": "2026-06-25 09:31:22 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_definition_history_report_api (#590)"
+      }
+    },
+    {
+      "module": "mcp_search_autocomplete_api",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 74,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "0c7ceaec",
+        "date": "2026-06-25 10:33:53 +0000",
+        "author": "rob531",
+        "subject": "build: build_mcp_search_autocomplete_api (#594)"
+      }
+    },
+    {
+      "module": "risk_trend_api",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 208,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "129caf14",
+        "date": "2026-06-25 12:21:08 +0000",
+        "author": "rob531",
+        "subject": "build: build_risk_trend_api (#613)"
+      }
+    },
+    {
+      "module": "sentinel_external_api_v2_attestation",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": "/v1/mcp",
+      "imports_data_layer": false,
+      "lines": 135,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "sentinel_ui_inventory_paginator",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": "/inventory",
+      "imports_data_layer": false,
+      "lines": 241,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    },
+    {
+      "module": "system_health_dashboard_api",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 85,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "a92278ba",
+        "date": "2026-06-25 15:45:40 +0000",
+        "author": "rob531",
+        "subject": "build: build_system_health_dashboard_api (#647)"
+      }
+    },
+    {
+      "module": "wiring_snow_connector_to_approval",
+      "why_unmounted": "UNKNOWN",
+      "route_count": 1,
+      "declared_prefix": null,
+      "imports_data_layer": false,
+      "lines": 51,
+      "casing_autofixable": null,
+      "origin": {
+        "commit": "fafce62d",
+        "date": "2026-05-25 22:51:30 +0000",
+        "author": "ZoComputer",
+        "subject": "ZoSentinel v2.0 live codebase 2026-05-25"
+      }
+    }
+  ]
+}

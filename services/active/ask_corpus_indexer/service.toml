@@ -1,0 +1,11 @@
+[service]
+name = "ask_corpus_indexer"
+import_path = "ask_corpus_indexer"
+prefix = "/api"
+tag = "ask"
+origin = "live"
+auth = "public"
+needs_data_layer = true
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

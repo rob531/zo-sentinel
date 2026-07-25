@@ -679,6 +679,34 @@ def ph_import(run: Run, args) -> None:
     preds_gz = run.dir / "results" / "preds.jsonl.gz"
     if not preds_gz.exists():
         raise SystemExit("ALERT: preds.jsonl.gz missing at import; aborting (no writes)")
+    # FU-094: VALIDITY GATE. Row counts and degraded=false are proxies; they
+    # let 3 weeks of base+random-head noise into the moat. Judge the OUTPUT:
+    # a real classifier cannot emit one label ~100% of the time. Fail CLOSED.
+    import gzip as _gz, json as _json
+    sys.path.insert(0, str(HERE))
+    from score_validity import assert_importable
+    _rows = []
+    with _gz.open(preds_gz, "rt", encoding="utf-8") as _fh:
+        for _line in _fh:
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _d = _json.loads(_line)
+            except Exception:
+                continue
+            for _ax in AXES:
+                _lb = (_d.get(_ax) or _d.get("axes", {}).get(_ax)
+                       if isinstance(_d.get("axes"), dict) else _d.get(_ax))
+                if isinstance(_lb, dict):
+                    _lb = _lb.get("label")
+                if _lb:
+                    _rows.append({"axis_name": _ax, "label": str(_lb)})
+    _v = assert_importable(_rows)          # raises SystemExit on garbage
+    log("validity gate PASS: " + ", ".join(
+        "{}={}({:.0%} top, {:.2f} bits)".format(a["axis"], a["verdict"],
+                                                a["top_share"], a["entropy_bits"])
+        for a in _v["axes"] if a["verdict"] == "VALID"))
     scored_at = datetime.utcnow()
     conn = pg_conn(); cur = conn.cursor()
     capture = os.environ.get("RESCORE_CAPTURE_DELTAS", "1") != "0"   # kill switch

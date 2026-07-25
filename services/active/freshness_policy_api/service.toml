@@ -1,0 +1,11 @@
+[service]
+name = "freshness_policy_api"
+import_path = "freshness_policy_api"
+prefix = ""
+tag = "freshness"
+origin = "live"
+auth = "public"
+needs_data_layer = true
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

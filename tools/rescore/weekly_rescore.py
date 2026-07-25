@@ -75,6 +75,13 @@ FLY_PG_APP = "mcplookup-db"
 PROXY_PORT = 15432
 DSN_FILE = Path(os.environ.get("RESCORE_DSN_FILE", r"D:\zo\runs\rescore_20260703\_dsn.txt"))
 FRESHNESS_URL = "https://mcprisky.io/freshness"
+# FU-027: /freshness has a per-machine cache with a 600s TTL and a cold recompute
+# measured in the 20-300s band, so a 30s read is BELOW the observed cold path and
+# fails deterministically on a cache miss rather than occasionally. Budget past the
+# cold path and retry -- a cache miss warms the cache, so attempt 2 is usually fast.
+FRESHNESS_TIMEOUT = int(os.environ.get("RESCORE_FRESHNESS_TIMEOUT", "120"))
+FRESHNESS_RETRIES = int(os.environ.get("RESCORE_FRESHNESS_RETRIES", "3"))
+FRESHNESS_BACKOFF = float(os.environ.get("RESCORE_FRESHNESS_BACKOFF", "5"))
 
 MAX_DPH_DEFAULT = 0.45
 COST_CAP_DEFAULT = 3.00
@@ -151,6 +158,121 @@ def open_run(new_mode: str | None) -> Run:
     return r
 
 
+# ------------------------------------------------- FU-056: open-run detection
+# The 8-day liveness rule asks "was there a recent SUCCESS?". Run 20260719-003024
+# opened, paid $1.19, imported half its cohort, died, and never closed -- and that
+# question answered "yes" (7/18 had succeeded) while half the moat sat a wave behind
+# for two days. An open-but-never-closed run is a different shape, and the ledger has
+# carried the evidence the whole time: a `run_opened` with no `run_closed`.
+#
+# Two shapes look alike in the ledger and must not be conflated, or the detector
+# alarms forever and gets ignored -- the decorative-gate failure this project keeps
+# rediscovering. Verified against the live ledger (13 runs, 2026-07-14..07-21):
+#
+#   ABORTED  -- ended out-of-band on purpose: `wedge_guard_destroy`,
+#               `manual_destroy_*`, `wedge_check_closed_run`. 10 such runs exist.
+#               Informational, never alarming.
+#   STRANDED -- the pipeline's own last word was a `phase_*` event and then silence.
+#               This is the 7/19 shape. Alarming once older than the threshold.
+#
+# `phase_destroy_done` and `destroyed` are NOT terminal: they are mid-pipeline (the
+# GPU instance is torn down before import/backfill/postcheck), which is exactly why
+# run 20260719-003024 looked finished while three phases were still owed.
+STALE_OPEN_RUN_HOURS = float(os.environ.get("RESCORE_STALE_OPEN_RUN_HOURS", "24"))
+_CLOSED_EVENTS = {"run_closed"}
+
+
+def _is_abort_event(event: str) -> bool:
+    """An out-of-band abandonment, as opposed to a mid-pipeline phase event."""
+    if event.startswith("phase_"):
+        return False
+    return (event.startswith(("wedge_", "manual_"))
+            and ("destroy" in event or "closed" in event))
+
+
+def _parse_ts(ts: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
+def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
+              include_aborted: bool = False) -> list[dict]:
+    """Return runs that opened and never reached `run_closed`, newest first.
+
+    Reads the ledger as an event log rather than a success log. Each record carries
+    the run id, when it opened, its last observed event, how long it has been open,
+    and an `outcome` of "stranded" or "aborted". Aborted runs are excluded by default
+    because they were abandoned deliberately and alarming on them is noise.
+    """
+    path = LEDGER if ledger_path is None else ledger_path
+    now = datetime.now(timezone.utc) if now is None else now
+    if not path.exists():
+        return []
+    opened: dict[str, dict] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue                       # a torn write must not blind the detector
+        rid, event = ev.get("run"), ev.get("event")
+        if not rid or not event:
+            continue
+        if event == "run_opened":
+            opened.setdefault(rid, {"run_id": rid, "opened_at": ev.get("ts"),
+                                    "last_event": event, "last_ts": ev.get("ts")})
+        elif rid in opened:
+            if event in _CLOSED_EVENTS:
+                opened.pop(rid, None)
+            else:
+                opened[rid]["last_event"] = event
+                opened[rid]["last_ts"] = ev.get("ts")
+    out = []
+    for rec in opened.values():
+        aborted = _is_abort_event(rec["last_event"])
+        rec["outcome"] = "aborted" if aborted else "stranded"
+        t0 = _parse_ts(rec.get("opened_at") or "")
+        rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
+        # Only a STRANDED run can be stale; an aborted run is already finished.
+        rec["stale"] = bool(not aborted and rec["open_hours"] is not None
+                            and rec["open_hours"] > STALE_OPEN_RUN_HOURS)
+        if aborted and not include_aborted:
+            continue
+        out.append(rec)
+    return sorted(out, key=lambda r: r.get("opened_at") or "", reverse=True)
+
+
+def check_open_runs(ledger_path: Path | None = None) -> int:
+    """CLI check. Exit 1 if any run has been open longer than the stale threshold."""
+    runs = open_runs(ledger_path)
+    aborted = [r for r in open_runs(ledger_path, include_aborted=True)
+               if r["outcome"] == "aborted"]
+    stale = [r for r in runs if r["stale"]]
+    if aborted:
+        log(f"OPEN-RUN CHECK: {len(aborted)} aborted run(s) ignored "
+            f"(deliberate out-of-band teardown, not stranded).")
+    if not runs:
+        log("OPEN-RUN CHECK: no stranded runs.")
+        return 0
+    for r in runs:
+        log(f"STRANDED RUN {r['run_id']}: opened {r['opened_at']} "
+            f"({r['open_hours']}h ago), last event {r['last_event']} at {r['last_ts']}"
+            f"{'  <-- STALE' if r['stale'] else ''}")
+    if stale:
+        log(f"OPEN-RUN CHECK FAILED: {len(stale)} run(s) stranded > "
+            f"{STALE_OPEN_RUN_HOURS}h. A run that opened, spent, and never closed "
+            f"leaves writes half-applied while the liveness rule still reads GREEN "
+            f"off the previous success.")
+        return 1
+    log(f"OPEN-RUN CHECK: {len(runs)} run(s) stranded but none older than "
+        f"{STALE_OPEN_RUN_HOURS}h.")
+    return 0
+
+
 # ---------------------------------------------------------------- fly proxy
 _PROXY = None
 
@@ -191,10 +313,46 @@ def pg_conn():
                             options="-c statement_timeout=600000")
 
 
-def freshness() -> dict:
+def freshness(timeout: int | None = None, retries: int | None = None) -> dict:
+    """Read the public freshness surface.
+
+    FU-027: the endpoint's cold path is slow and intermittently unavailable. Raising
+    the budget and retrying turns a deterministic failure on a cache miss back into
+    an occasional one. Callers that MUST NOT die on this should use freshness_safe().
+    """
     import urllib.request
-    with urllib.request.urlopen(FRESHNESS_URL, timeout=30) as r:
-        return json.loads(r.read().decode())
+    timeout = FRESHNESS_TIMEOUT if timeout is None else timeout
+    retries = FRESHNESS_RETRIES if retries is None else retries
+    last: Exception | None = None
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            t0 = time.time()
+            with urllib.request.urlopen(FRESHNESS_URL, timeout=timeout) as r:
+                payload = json.loads(r.read().decode())
+            if attempt > 1:
+                log(f"freshness OK on attempt {attempt} ({time.time() - t0:.1f}s)")
+            return payload
+        except Exception as e:                                   # noqa: BLE001
+            last = e
+            log(f"freshness attempt {attempt}/{retries} failed after "
+                f"{time.time() - t0:.1f}s: {type(e).__name__}: {e}")
+            if attempt < retries:
+                time.sleep(FRESHNESS_BACKOFF)
+    raise RuntimeError(f"freshness unreachable after {retries} attempt(s): {last}") from last
+
+
+def freshness_safe() -> tuple[dict, str | None]:
+    """freshness() that never raises. Returns (payload, error_string).
+
+    FU-027/FU-056: a read-only observability call must never fail a run whose writes
+    have already been committed. On 2026-07-19 an unguarded 30s read killed a rescore
+    after import and backfill had both succeeded, leaving the run open and half the
+    moat a wave behind for two days with no detector able to see it.
+    """
+    try:
+        return freshness(), None
+    except Exception as e:                                       # noqa: BLE001
+        return {}, f"{type(e).__name__}: {e}"
 
 
 # ---------------------------------------------------------------- phases
@@ -344,10 +502,39 @@ def ph_bundle(run: Run, args) -> None:
     shutil.copy(run.dir / "inputs.jsonl.gz", work / "score_transfer/inputs.jsonl.gz")
     git("checkout", "--orphan", score_branch)
     git("rm", "-r", "--cached", ".")
-    git("add", "score_transfer")
+    # FU-093: -f is MANDATORY. The SFT repo .gitignore lists *.safetensors, *.pt,
+    # *.bin, so a plain git add SILENTLY skips the adapter weights + heads. The
+    # pod then gets only adapter_config.json, PEFT cannot attach, and eval scores
+    # on base + RANDOM HEADS while reporting success (3 weeks of garbage:
+    # 07-18/07-21/07-24; same class as the RunPod-era "weights keep vanishing").
+    git("add", "-f", "score_transfer")
     git("-c", "user.email=tower@zo", "-c", "user.name=weekly-rescore",
         "commit", "-q", "-m", f"score transfer bundle {ts}")
+    # FU-093 I5b: verify the COMMITTED TREE, not the filesystem. The old I5
+    # hashed the local copy, so it passed green while git had silently dropped
+    # the weights (.gitignore). Also catch the known 133-byte LFS-POINTER
+    # signature (documented: 'pointers, the real 29.5MB weights live elsewhere').
+    tree = git("ls-tree", "-r", "-l", "HEAD", "score_transfer/adapter").stdout
+    for need in ("adapter_model.safetensors", "heads_state_dict.pt"):
+        if need not in tree:
+            raise SystemExit(f"ABORT: {need} missing from the COMMITTED bundle -- "
+                             f".gitignore swallowed it. tree=\\n{tree}")
+    for line in tree.splitlines():
+        f = line.split()
+        if len(f) >= 4 and f[3].endswith("adapter_model.safetensors") and int(f[2]) < 1_000_000:
+            raise SystemExit(f"ABORT: committed adapter is {f[2]}B -- an LFS pointer/stub, "
+                             f"not weights (the 133-byte failure class).")
     git("push", repo_url, f"HEAD:refs/heads/{score_branch}")
+    # FU-093: NEVER trust the push exit code (standing SFT lesson). Re-read the
+    # REMOTE tree and assert real bytes actually landed.
+    git("fetch", "--depth", "1", repo_url, score_branch)
+    rtree = git("ls-tree", "-r", "-l", "FETCH_HEAD", "score_transfer/adapter").stdout
+    ok = any(x.split()[3].endswith("adapter_model.safetensors") and int(x.split()[2]) >= 1_000_000
+             for x in rtree.splitlines() if len(x.split()) >= 4)
+    if not ok:
+        raise SystemExit(f"ABORT: post-push REMOTE verify failed -- adapter weights did "
+                         f"not land on {score_branch}. remote tree=\\n{rtree}")
+    log("bundle verify: adapter weights confirmed on the remote branch")
     run.mark("bundle", score_branch=score_branch,
              results_branch=f"{score_branch}-results")
     log(f"bundle OK: pushed {score_branch} (adapter pin verified)")
@@ -492,6 +679,34 @@ def ph_import(run: Run, args) -> None:
     preds_gz = run.dir / "results" / "preds.jsonl.gz"
     if not preds_gz.exists():
         raise SystemExit("ALERT: preds.jsonl.gz missing at import; aborting (no writes)")
+    # FU-094: VALIDITY GATE. Row counts and degraded=false are proxies; they
+    # let 3 weeks of base+random-head noise into the moat. Judge the OUTPUT:
+    # a real classifier cannot emit one label ~100% of the time. Fail CLOSED.
+    import gzip as _gz, json as _json
+    sys.path.insert(0, str(HERE))
+    from score_validity import assert_importable
+    _rows = []
+    with _gz.open(preds_gz, "rt", encoding="utf-8") as _fh:
+        for _line in _fh:
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _d = _json.loads(_line)
+            except Exception:
+                continue
+            for _ax in AXES:
+                _lb = (_d.get(_ax) or _d.get("axes", {}).get(_ax)
+                       if isinstance(_d.get("axes"), dict) else _d.get(_ax))
+                if isinstance(_lb, dict):
+                    _lb = _lb.get("label")
+                if _lb:
+                    _rows.append({"axis_name": _ax, "label": str(_lb)})
+    _v = assert_importable(_rows)          # raises SystemExit on garbage
+    log("validity gate PASS: " + ", ".join(
+        "{}={}({:.0%} top, {:.2f} bits)".format(a["axis"], a["verdict"],
+                                                a["top_share"], a["entropy_bits"])
+        for a in _v["axes"] if a["verdict"] == "VALID"))
     scored_at = datetime.utcnow()
     conn = pg_conn(); cur = conn.cursor()
     capture = os.environ.get("RESCORE_CAPTURE_DELTAS", "1") != "0"   # kill switch
@@ -642,10 +857,20 @@ def ph_backfill(run: Run, args) -> None:
 def ph_postcheck(run: Run, args) -> None:
     if run.done("postcheck"):
         return
-    after = freshness()
+    # FU-027: NON-FATAL. Every write this run makes is already committed by the time
+    # postcheck runs (import -> backfill -> postcheck). If the freshness surface is
+    # unreachable we still close the run and record WHY the comparison is missing,
+    # because an open run is invisible to the liveness rule (FU-056) whereas a
+    # degraded report is loud and harmless.
+    after, freshness_error = freshness_safe()
+    if freshness_error:
+        log(f"POSTCHECK DEGRADED: freshness unreadable ({freshness_error}); "
+            f"closing the run anyway -- all writes were already committed")
     base = run.state.get("baseline_freshness", {})
     report = {
         "run_id": run.state["run_id"], "mode": run.state["mode"],
+        "freshness_error": freshness_error,
+        "degraded_postcheck": bool(freshness_error),
         "exported": run.state.get("exported"), "imported": run.state.get("imported_servers"),
         "coverage": run.state.get("coverage"), "degraded": run.state.get("degraded"),
         "est_cost_usd": run.state.get("est_cost"),
@@ -674,6 +899,9 @@ def main() -> None:
     ap.add_argument("--run", action="store_true", help="all phases, one process")
     ap.add_argument("--phase", choices=["fire-all", "collect-all"],
                     help="scheduled-task halves")
+    ap.add_argument("--check-open-runs", action="store_true",
+                    help="FU-056: report runs opened but never closed; "
+                         "exit 1 if any is older than the stale threshold")
     ap.add_argument("--full", action="store_true", help="full rescore (default: delta)")
     ap.add_argument("--refresh-cap", type=int, default=REFRESH_CAP_DEFAULT)
     ap.add_argument("--max-dph", type=float, default=MAX_DPH_DEFAULT)
@@ -681,8 +909,10 @@ def main() -> None:
     ap.add_argument("--deadline-min", type=int, default=DEADLINE_MIN_DEFAULT)
     ap.add_argument("--poll-secs", type=int, default=120)
     args = ap.parse_args()
+    if args.check_open_runs:
+        raise SystemExit(check_open_runs())
     if not (args.run or args.phase):
-        ap.error("need --run or --phase")
+        ap.error("need --run, --phase or --check-open-runs")
     mode = "full" if args.full else "delta"
     try:
         if args.phase == "collect-all":

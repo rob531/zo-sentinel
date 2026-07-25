@@ -62,6 +62,19 @@ jobs:
         # HALT CONDITION (ruling): >3 builder PRs red on this gate within 6h.
         run: python tools/reachability_ratchet.py --enforce
 
+      - name: Spine generator in-sync (BLOCKING -- committed file matches services/active/)
+        # FU-039/072 Option B, AUTHORITATIVE. app/_spine_generated.py is what prod
+        # mounts; it MUST equal a fresh render from services/active/, else the spine
+        # has drifted from the registry. Pure stdlib, no host/deps.
+        run: python tools/generate_spine.py --check
+
+      - name: Spine strict validation (BLOCKING -- every active service valid)
+        # Fails on any UNLISTED dead/duplicate service (missing module, declares no
+        # router, duplicate route) and on any STALE entry in spine_known_issues.json.
+        # Satisfiable on the seed (inherited debt is allow-listed with reasons), so it
+        # gates the DERIVATIVE -- a NEW broken service -- exactly like the ratchet.
+        run: python tools/generate_spine.py --strict
+
       - name: App-surface KL (REPORT-ONLY -- duplicate routes + prefix collisions)
         # FU-071. The KL is generated on every PR so it can never go stale relative
         # to the branch, and REPORTED so it has a reader from day one -- the CofC's

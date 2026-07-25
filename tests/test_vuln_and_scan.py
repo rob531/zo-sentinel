@@ -13,6 +13,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import re
 
 import pytest
 
@@ -115,11 +116,27 @@ def test_no_fuzzy_matching(tmp_path, monkeypatch):
     assert relink(s)["links_created"] == 0   # -fork is a different repo
 
 
+def _spine_mount_names():
+    """Parse the generated spine's SPINE_MOUNTS literal (quote-style agnostic --
+    the renderer may emit single or double quotes; never string-match a generated
+    artifact)."""
+    import ast
+    src = (REPO / "app" / "_spine_generated.py").read_text(encoding="utf-8")
+    m = re.search(r"SPINE_MOUNTS = (\[.*?\])\n\n", src, re.S)
+    assert m, "SPINE_MOUNTS literal not found in app/_spine_generated.py"
+    return {e["name"] for e in ast.literal_eval(m.group(1))}
+
+
 def test_scan_and_views_mounted():
-    main = (REPO / "app" / "main.py").read_text(encoding="utf-8")
+    """SOA update (2026-07-24): mount truth = services/active/ registry + the
+    generated spine (app/_spine_generated.py), not a hand-list in main.py."""
+    mounted = _spine_mount_names()
     for mod in ("vuln_exposure_api", "config_scan_api", "vuln_osv_ingestor",
                 "vuln_registry_linker"):
-        assert f'"{mod}"' in main, f"{mod} not mounted"
+        assert (REPO / "services" / "active" / mod / "service.toml").exists(), \
+            f"{mod} not registered in services/active/"
+        assert mod in mounted, f"{mod} registered but absent from the generated spine"
+    main = (REPO / "app" / "main.py").read_text(encoding="utf-8")
     assert '"/scan"' in main
     html = (REPO / "scan_view.html").read_text(encoding="utf-8")
     assert "localStorage" not in html and "/api/scan" in html

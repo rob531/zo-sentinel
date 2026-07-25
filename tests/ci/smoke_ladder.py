@@ -354,11 +354,60 @@ def tier3_service() -> Tier:
 # Ladder runner (recursive short-circuit) + reporting
 # =============================================================================
 
+def tier4_spine() -> Tier:
+    """SOA spine RUNTIME correctness (design 2026-07-21; CofC 2026-07-23).
+
+    The static gate (tools/generate_spine.py --strict, run in pr-gates) proves
+    PRESENCE -- module exists, declares a router, no duplicate route. It cannot
+    see a router that imports-and-CRASHES. This tier asserts the app's actual
+    runtime mount failures do not exceed the known-issue allowlist -- the
+    correctness half, and it FAILS LOUD rather than degrading (FU-031: a check
+    that silently degrades is how presence-not-correctness got here).
+
+    Import health of app.main itself is tier1's job; if the app cannot import at
+    all we warn and let tier1 own it, so this tier never double-jeopardies on an
+    unrelated env fault -- what it owns is "app imported but a service crashed".
+    """
+    import json as _json
+    t = Tier(4, "spine")
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    allow: dict[str, str] = {}
+    ki = REPO_ROOT / "tools" / "spine_known_issues.json"
+    if ki.exists():
+        try:
+            for e in _json.loads(ki.read_text(encoding="utf-8")).get("known_runtime", []):
+                allow[e["service"]] = e.get("error_contains", "")
+        except ValueError:
+            pass
+    start = time.monotonic()
+    try:
+        import app.main as _m
+        failures = list(getattr(_m.app.state, "spine_mount_failures", []))
+        unexpected = [
+            f for f in failures
+            if f.get("service") not in allow
+            or (allow[f["service"]] and allow[f["service"]] not in f.get("error", ""))
+        ]
+        ok = not unexpected
+        detail = "" if ok else ("NEW spine mount failure(s) outside the allowlist "
+                                "(a router that imports-and-crashes): %r" % unexpected)
+        t.checks.append(Check("spine::runtime_failures_within_allowlist", ok, detail,
+                              int((time.monotonic() - start) * 1000)))
+    except Exception as e:  # noqa: BLE001 -- import health is tier1's; warn only
+        t.warnings.append(f"app.main did not import in tier4 (tier1 owns this): "
+                          f"{type(e).__name__}: {e}")
+        t.checks.append(Check("spine::runtime_failures_within_allowlist", True,
+                              "skipped: app.main import owned by tier1"))
+    return t
+
+
 LADDER: list[tuple[int, str, Callable[[], Tier]]] = [
     (0, "syntax", tier0_syntax),
     (1, "import", tier1_import),
     (2, "schema", tier2_schema),
     (3, "service", tier3_service),
+    (4, "spine", tier4_spine),
 ]
 
 

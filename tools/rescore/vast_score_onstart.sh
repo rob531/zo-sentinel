@@ -60,6 +60,36 @@ torch.zeros(8, device="cuda").sum().item()
 PY
 
 export BASE_MODEL="Qwen/Qwen2.5-3B" EMIT_PREDICTIONS_JSONL=1 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 PYTHONPATH=/workspace/repo
+# --- FU-091: HF-robust base-model pre-fetch (2026-07-24 hang fix) ---
+# eval_phase2 from_pretrained("Qwen/Qwen2.5-3B") stalled ~2h at 0% GPU when the live
+# HF download hung. Pre-fetch with a hard timeout + retries so a hang FAILS LOUD
+# (SCORE_FAIL) in minutes instead of stalling to the 12h deadline; eval loads from cache.
+export HF_HUB_DOWNLOAD_TIMEOUT=60
+export BASE_MODEL="Qwen/Qwen2.5-3B"
+echo "[score-onstart] pre-fetch base model $BASE_MODEL (hard timeout 600s x3)"
+fetched=0
+for attempt in 1 2 3; do
+  if timeout 600 python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+print("[prefetch] cached at", snapshot_download(os.environ["BASE_MODEL"]))
+PY
+  then fetched=1; break; fi
+  echo "[score-onstart] base-model fetch attempt $attempt failed/timed out; retrying"; sleep 10
+done
+[ "$fetched" = "1" ] || fail "base-model fetch (HF hang/timeout after 3 tries)"
+
+# --- FU-093: adapter-ARRIVAL gate (pod side). For 3 weeks the bundle shipped
+# ONLY adapter_config.json (.gitignore ate *.safetensors/*.pt); eval then fell
+# back to base + RANDOM HEADS and produced garbage that looked successful.
+# Also catches the known 133-byte LFS-pointer failure class. Fail loud.
+AD=score_transfer/adapter
+[ -s "$AD/adapter_model.safetensors" ] || fail "adapter_model.safetensors MISSING in bundle"
+[ -s "$AD/heads_state_dict.pt" ]       || fail "heads_state_dict.pt MISSING (heads would be RANDOM)"
+_asz=$(stat -c%s "$AD/adapter_model.safetensors")
+[ "$_asz" -ge 1000000 ] || fail "adapter is only ${_asz}B -- LFS pointer/stub, not weights"
+echo "[score-onstart] adapter OK: ${_asz}B + heads $(stat -c%s "$AD/heads_state_dict.pt")B"
+
 echo "[score-onstart] === eval_phase2 --device cuda (62k) start $(date -u +%FT%TZ) ==="
 python scripts/eval_phase2.py \
     --adapter score_transfer/adapter \
@@ -68,6 +98,11 @@ python scripts/eval_phase2.py \
     --output-json /workspace/rpt.json \
     --predictions-jsonl /workspace/preds.jsonl \
     --device cuda || fail "eval_phase2"
+# FU-093: eval_phase2 only WARNs when the adapter cannot attach, then scores on
+# random heads. Treat those warnings as FATAL -- garbage must never reach import.
+if grep -qE "could not attach adapter|heads have random init" /workspace/onstart.log; then
+  fail "adapter did NOT attach (random heads) -- refusing to publish garbage scores"
+fi
 echo "[score-onstart] === eval done $(date -u +%FT%TZ); preds: $(wc -l < /workspace/preds.jsonl) lines ==="
 
 gzip -c /workspace/preds.jsonl > /workspace/preds.jsonl.gz || fail "gzip preds"

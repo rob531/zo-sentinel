@@ -273,7 +273,7 @@ def _run_reindex(run_id: int) -> None:
             _finish(db, run, "failed", 0,
                     {"error": "advisory lock unavailable (another run in flight)"})
             return
-        ceiling = _env_int("CADENCE_REINDEX_MAX_ROWS", 400_000)
+        ceiling = _env_int("CADENCE_REINDEX_MAX_ROWS", 1_000_000)
         registry = db.execute(
             select(func.count()).select_from(McpServerRegistry)).scalar() or 0
         if registry == 0 or registry > ceiling:

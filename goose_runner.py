@@ -237,6 +237,8 @@ def prune_done_pending():
     for f in PENDING_DIR.glob("*.json"):
         if f.name.endswith(".done.json") or f.name.endswith(".failed.json"):
             continue
+        if f.name.startswith((".bak", ".duplicate")):  # backup/dup copies mask the queue (FU-020)
+            continue
         try:
             d = json.loads(f.read_text())
             if not isinstance(d, dict):
@@ -287,6 +289,8 @@ def load_directives_from_mesh():
     # Source 2: pending directory (always scan, merge)
     if PENDING_DIR.exists():
         for f in sorted(PENDING_DIR.glob("*.json")):
+            if f.name.startswith((".bak", ".duplicate")):  # backup/dup copies mask the queue (FU-020)
+                continue
             try:
                 raw = f.read_text().strip()
                 if not raw:
@@ -519,7 +523,7 @@ def _data_access_context(directive):
     return _DATA_ACCESS_CTX
 
 
-_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "module_from_exemplar", "architect"}
+_RECIPE_ALLOW = {"webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "module_from_exemplar", "architect", "service_dir_from_exemplar"}
 # Conservative inference: only the auth/RBAC/tenant SECURITY SPINE (where the generic
 # single-file builder produced hollow stubs) is keyword-routed to the FastAPI recipe.
 # Reports/search/etc. stay on architect.yaml unless the directive sets `recipe` explicitly.
@@ -994,6 +998,24 @@ def _selftest_gate(directive, directive_id):
         src = out.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return True
+    # FU-031 harness repair (autonomous, deterministic, flag-gated). The dominant
+    # self-test degradation is the model emitting WRONG-CASED app.models symbols
+    # (e.g. MCPServerRegistry vs the real McpServerRegistry, or McpLlmAxisScores vs
+    # McpLlmAxisScore) -> ImportError -> "degrade to Tier-0" below, i.e. presence
+    # passing for correctness. Auto-correct the casing BEFORE the self-test runs so
+    # it actually EXECUTES (it then still has to PASS on its own merits). Same shape
+    # as _strip_code_fences: a deterministic pre-gate repair, no human in the loop,
+    # false-positive-free (distinctive Mcp* names only). Kill with ZO_MODEL_CASING_AUTOFIX=0.
+    import os as _oscas
+    if _oscas.environ.get("ZO_MODEL_CASING_AUTOFIX", "1") != "0":
+        try:
+            from tools import model_import_linter as _mil
+            _r = _mil.lint_file(str(out), _mil.build_map(_mil.canonical_models()), fix=True)
+            if _r.get("fixed"):
+                log(f"[casing-repair] {directive_id}: corrected {_r['drift']} before self-test")
+                src = out.read_text(encoding="utf-8", errors="ignore")
+        except Exception as _ce:
+            log(f"[casing-repair] {directive_id}: skipped ({type(_ce).__name__}: {_ce})")
     if "__main__" not in src:
         return True
     try:
@@ -1011,7 +1033,7 @@ def _selftest_gate(directive, directive_id):
         log(f"[selftest] {directive_id}: self-test PASS")
         return True
     if proc.returncode != 0 and ("ModuleNotFoundError" in combined or "ImportError" in combined):
-        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking)")
+        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
         return True
     log(f"[selftest] {directive_id}: self-test FAILED -- blocking completion :: " + combined.strip()[-400:])
     return False
@@ -1270,24 +1292,92 @@ def _mark_directive_failed(directive, directive_id, reason):
         except Exception:
             pass
 
-def _ghost_or_fail(directive, directive_id, routed_model=""):
-    """goose/fallback reported success but the declared output never appeared.
-    Count the ghost attempt; requeue for another try, or fail it once the cap
-    is hit. Crucially we do NOT mark it .done -- that was the regression."""
+# --- Gate attribution (chairman review 2026-07-20, CofC ruling item 1) ------
+# The completion gate chain has SEVEN distinct ways to reject a build, but every
+# rejection used to be recorded in build_provenance with one hardcoded string:
+# "ghost build: declared output_file was not produced". That string is a lie for
+# six of the seven cases. On 2026-07-20, 17 of 37 builds were logged as ghosts
+# under that message; the runtime log showed 12 of them were actually
+# _edit_diff_gate rejections ("edit-class build produced no edit") -- the exact
+# signal we need to explain 246 unmounted routers. The truth existed only in a
+# tail-able log file, never in the queryable ledger, so every downstream
+# analysis (census, ladder eval, FU triage) was reasoning off a single
+# undifferentiated bucket.
+#
+# GATE_REASONS maps a gate key to the durable human-readable reason. The gate
+# key is emitted into build_provenance.error as a "gate=<key>: <reason>" prefix.
+# smoke_result stays "ghost" deliberately: existing consumers filter on it, and
+# this change is meant to ADD attribution without moving anything downstream.
+GATE_REASONS = {
+    "engine_failed":  "engine reported failure (no build produced)",
+    "output_missing": "declared output_file was not produced",
+    "edit_diff":      "ghost-edit: empty diff -- edit-class build produced no edit",
+    "syntax":         "declared output failed the syntax/parse gate",
+    "schema_prm":     "declared output failed the schema-PRM gate",
+    "no_hollow":      "declared output failed the no-hollow gate",
+    "selftest":       "module __main__ self-test ran and did not PASS",
+}
+DEFAULT_GATE = "output_missing"
+
+
+def gate_error_text(gate):
+    """Durable ledger string for a gate rejection. Unknown gate -> honest
+    'unattributed' rather than silently claiming the output was missing."""
+    key = gate or DEFAULT_GATE
+    reason = GATE_REASONS.get(key)
+    if reason is None:
+        return f"gate=unattributed: build rejected by an unrecognised gate ({key})"
+    return f"gate={key}: {reason}"
+
+
+def _gate_chain(directive, directive_id, pre_diff_state, engine_ok):
+    """Run the completion gate chain, returning (passed, failing_gate).
+
+    Order and short-circuit semantics are IDENTICAL to the inline `and` chain
+    this replaces -- the only new behaviour is that we remember WHICH gate said
+    no. Note the asymmetry that made the old message so misleading: when
+    declared_output(directive) is None (every wire_*/integrate_* edit-class
+    directive), output_confirmed trusts it and the syntax/schema/hollow/selftest
+    gates all no-op to True, so _edit_diff_gate is the ONLY gate that can reject
+    such a build -- yet it was reported as a missing output_file."""
+    if not engine_ok:
+        return False, "engine_failed"
+    if not output_confirmed(directive):
+        return False, "output_missing"
+    if not _edit_diff_gate(directive, directive_id, pre_diff_state):
+        return False, "edit_diff"
+    if not _syntax_gate(directive, directive_id):
+        return False, "syntax"
+    if not _schema_prm_gate(directive, directive_id):
+        return False, "schema_prm"
+    if not _no_hollow_gate(directive, directive_id):
+        return False, "no_hollow"
+    if not _selftest_gate(directive, directive_id):
+        return False, "selftest"
+    return True, None
+
+
+def _ghost_or_fail(directive, directive_id, routed_model="", gate=None):
+    """goose/fallback reported success but the build did not clear the gate
+    chain. Count the ghost attempt; requeue for another try, or fail it once the
+    cap is hit. Crucially we do NOT mark it .done -- that was the regression.
+
+    `gate` names the gate that actually rejected the build (see GATE_REASONS);
+    it is recorded in build_provenance so the ledger stops attributing every
+    rejection to a missing output_file."""
     n = bump_ghost(DIRECTIVES_PATH, directive_id, get_utc_now())
+    err = gate_error_text(gate)
     try:
-        sl.record_fail(directive_id, f"ghost/gate fail, attempt {n}")  # Default-FAIL history
+        sl.record_fail(directive_id, f"ghost/gate fail ({gate or DEFAULT_GATE}), attempt {n}")
     except Exception:
         pass
     _record_build_provenance(directive, success=False, smoke_result="ghost",
                              attempt=n, rescue_count=n, routed_model=routed_model,
-                             error="ghost build: declared output_file was not produced")
+                             error=err)
     if n >= MAX_GHOST_ATTEMPTS:
-        _mark_directive_failed(directive, directive_id,
-                               "declared output never produced (ghost build)")
+        _mark_directive_failed(directive, directive_id, err)
         return
-    write_result(directive_id, False,
-                 error="ghost build: declared output_file was not produced")
+    write_result(directive_id, False, error=err)
     try:
         ws_write("mesh_events", {
             # mesh_events.agent_id is NOT NULL, and content/complexity/source/
@@ -1443,21 +1533,23 @@ def run():
                 # so _edit_diff_gate can prove an edit-class build actually changed
                 # something (None -> that gate fails open).
                 _pre_diff = workspace_diff_state(str(PROJECT_DIR))
+                # Which gate rejected the build. Carried to _ghost_or_fail so the
+                # ledger records the real reason instead of a blanket
+                # "output_file was not produced" (chairman review 2026-07-20).
+                _failed_gate = None
                 if goose_installed:
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
-                    if (result.get("success") and output_confirmed(directive)
-                            and _edit_diff_gate(directive, directive_id, _pre_diff)
-                            and _syntax_gate(directive, directive_id)
-                            and _schema_prm_gate(directive, directive_id)
-                            and _no_hollow_gate(directive, directive_id)
-                            and _selftest_gate(directive, directive_id)):
+                    _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
+                                                    bool(result.get("success")))
+                    if _ok:
                         _complete(directive, directive_id, result.get("stdout", ""),
                                   routed_model=_routed_model)
                         produced = True
                     elif result.get("success"):
-                        log(f"[ghost-guard] {directive_id}: goose reported success but output "
-                            f"missing or failed Tier-0 gate ({declared_output(directive)}) "
-                            f"-- not completing")
+                        log(f"[ghost-guard] {directive_id}: goose reported success but the build "
+                            f"was rejected by gate '{_failed_gate}' "
+                            f"({GATE_REASONS.get(_failed_gate, 'unattributed')}); "
+                            f"declared output = {declared_output(directive)} -- not completing")
                     else:
                         log(f"Goose failed for {directive_id}: {result.get('error')}")
 
@@ -1483,21 +1575,21 @@ def run():
                         fallback_result = None
                     if fallback_result is None:
                         fallback_result = call_minimax_fallback(directive)
-                    if (fallback_result.get("success") and output_confirmed(directive)
-                            and _edit_diff_gate(directive, directive_id, _pre_diff)
-                            and _syntax_gate(directive, directive_id)
-                            and _schema_prm_gate(directive, directive_id)
-                            and _no_hollow_gate(directive, directive_id)
-                            and _selftest_gate(directive, directive_id)):
+                    _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
+                                                    bool(fallback_result.get("success")))
+                    if _ok:
                         _complete(directive, directive_id,
                                   fallback_result.get("result", ""), fallback_used=True,
                                   routed_model=_routed_model)
                         produced = True
 
                 if not produced:
-                    # Neither path produced the declared output -> ghost build.
-                    # Retry (bounded) instead of stamping a bogus .done.
-                    _ghost_or_fail(directive, directive_id, routed_model=_routed_model)
+                    # Neither path cleared the gate chain -> ghost build. Retry
+                    # (bounded) instead of stamping a bogus .done. _failed_gate
+                    # carries the LAST gate that rejected, so the ledger records
+                    # the real reason.
+                    _ghost_or_fail(directive, directive_id, routed_model=_routed_model,
+                                   gate=_failed_gate)
 
                 # Small delay between directives
                 time.sleep(2)

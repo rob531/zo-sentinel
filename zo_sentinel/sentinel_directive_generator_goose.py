@@ -194,6 +194,17 @@ _FLOOR_ROLE_SUFFIXES = (
     "_refresher", "_validator", "_analyzer", "_analyser", "_reporter",
     "_dashboard", "_view", "_report", "_sync", "_router", "_routers",
     "_rollup", "_summary", "_audit", "_probe", "_runner",
+    # FU-040/FU-032 audit 2026-07-20: these role words appear on live
+    # `- directive candidate:` lines in PRODUCT_SPEC.md but had no entry here,
+    # so chairman-spec'd targets were invisible to the seeding path purely on
+    # name shape. score_run_ledger_writer.py (PHASE 8b) was the case that
+    # surfaced it. Deliberately restricted to suffixes the spec ACTIVELY asks
+    # for: role words that only appear on out-of-scope lines (_builder,
+    # _dispatcher, _learner -- graphql_schema_builder / incident_webhook_
+    # dispatcher / pattern_learner are all explicitly OUT OF SCOPE) are NOT
+    # added, so the floor still cannot seed something the spec forbids.
+    "_writer", "_registry", "_planner", "_manager", "_digest",
+    "_model", "_log", "_enforcer", "_verifier", "_override",
 )
 
 # Task-shaped prefixes (edit/wire work) are also legitimate build targets.
@@ -249,6 +260,59 @@ def _is_seedworthy(fname: str) -> bool:
     if stem.endswith(_FLOOR_ROLE_SUFFIXES):
         return True             # <domain>_<role> = a module named for what it does
     return False                # everything else: prose, placeholders, nouns
+
+
+def _checkout_drift_note() -> str:
+    """One line distinguishing a genuinely spent anchor from a stale checkout.
+
+    FU-032: on 2026-07-20 the floor printed "This needs a human: extend
+    PRODUCT_SPEC" while the spec HAD been extended 17h earlier (#1639, PHASE
+    8b) -- the runtime clone was simply 22 commits behind, so the anchor was
+    not spent and the fix was a deploy, not spec authorship. The floor cannot
+    tell those apart and asserted the wrong one, sending a human to write a
+    spec that already existed.
+
+    Uses `git ls-remote` rather than `origin/main`: the runtime clone has no
+    refs/remotes/origin/main (only feature branches), so `git rev-parse
+    origin/main` fails there (FU-028). Never raises, never blocks: this only
+    decorates a log line, so every fault degrades to UNKNOWN.
+    """
+    def _git(*args: str, timeout: int = 10) -> str:
+        return subprocess.run(
+            ("git", *args), cwd=str(SENTINEL_DIR), capture_output=True,
+            text=True, timeout=timeout,
+        ).stdout.strip()
+
+    try:
+        head = _git("rev-parse", "HEAD")[:8]
+    except Exception:
+        return "CHECKOUT: UNKNOWN (git unavailable) -- verify the runtime clone is current before extending the spec."
+    if not head:
+        return "CHECKOUT: UNKNOWN (not a git checkout) -- verify the runtime clone is current before extending the spec."
+
+    try:
+        line = _git("ls-remote", "origin", "refs/heads/main", timeout=20)
+        remote = line.split()[0][:8] if line else ""
+    except Exception:
+        remote = ""
+    if not remote:
+        return (f"CHECKOUT: HEAD={head}, origin/main=UNREACHABLE -- cannot tell a spent "
+                f"anchor from a stale checkout; check the deploy before extending the spec.")
+    if remote == head:
+        return (f"CHECKOUT: HEAD={head} == origin/main -- the checkout IS current, so the "
+                f"anchor is genuinely spent and this really does need a spec extension.")
+
+    # The remote commit is usually NOT in the local object store (no fetch has
+    # happened), in which case rev-list cannot count. Say so rather than
+    # printing a "?" that reads like a real number.
+    try:
+        behind = _git("rev-list", "--count", f"{head}..{remote}", timeout=20)
+    except Exception:
+        behind = ""
+    gap = f"behind by {behind} commits" if behind else "behind by an uncounted number of commits (no local fetch)"
+    return (f"CHECKOUT: HEAD={head} != origin/main={remote} ({gap}) -- "
+            f"the anchor may NOT be spent; this checkout may simply predate the refill. "
+            f"DEPLOY FIRST (safe_ff.sh), then re-check before extending the spec.")
 
 
 def _starvation_floor() -> int:
@@ -312,7 +376,7 @@ def _starvation_floor() -> int:
         log.error("STARVATION FLOOR: gaps map is EXHAUSTED -- no unbuilt "
                   "spec-named .py targets remain. The queue stays empty and the "
                   "builder stays idle. This needs a human: extend PRODUCT_SPEC "
-                  "or the roadmap anchor.")
+                  "or the roadmap anchor. %s", _checkout_drift_note())
         return 0
 
     PROPOSED_DIR.mkdir(parents=True, exist_ok=True)

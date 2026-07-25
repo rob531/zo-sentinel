@@ -114,6 +114,15 @@ def refresh(force=False):
         print("[graph_refresh] schema_kl.json refreshed")
     except Exception as e:
         print(f"[graph_refresh] schema_kl refresh skipped: {e}", file=sys.stderr)
+    # And the APP-SURFACE KL (FU-071): the route/mount/consumer namespace the
+    # architect must allocate from. Same best-effort contract as schema_kl -- this
+    # is a knowledge layer, never a blocker on the code-graph refresh.
+    try:
+        subprocess.run([PY, os.path.join(ROOT, "app_surface_kl.py"), "--quiet"],
+                       cwd=ROOT, timeout=180)
+        print("[graph_refresh] app_surface_kl.json refreshed")
+    except Exception as e:
+        print(f"[graph_refresh] app_surface_kl refresh skipped: {e}", file=sys.stderr)
     print(f"[graph_refresh] OK -- graph now at {head[:8]}")
     return 0
 

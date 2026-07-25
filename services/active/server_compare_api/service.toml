@@ -1,0 +1,11 @@
+[service]
+name = "server_compare_api"
+import_path = "server_compare_api"
+prefix = "/api"
+tag = "compare"
+origin = "live"
+auth = "public"
+needs_data_layer = true
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

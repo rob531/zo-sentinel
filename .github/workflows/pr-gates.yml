@@ -62,6 +62,59 @@ jobs:
         # HALT CONDITION (ruling): >3 builder PRs red on this gate within 6h.
         run: python tools/reachability_ratchet.py --enforce
 
+      - name: Spine generator in-sync (BLOCKING -- committed file matches services/active/)
+        # FU-039/072 Option B, AUTHORITATIVE. app/_spine_generated.py is what prod
+        # mounts; it MUST equal a fresh render from services/active/, else the spine
+        # has drifted from the registry. Pure stdlib, no host/deps.
+        run: python tools/generate_spine.py --check
+
+      - name: Spine strict validation (BLOCKING -- every active service valid)
+        # Fails on any UNLISTED dead/duplicate service (missing module, declares no
+        # router, duplicate route) and on any STALE entry in spine_known_issues.json.
+        # Satisfiable on the seed (inherited debt is allow-listed with reasons), so it
+        # gates the DERIVATIVE -- a NEW broken service -- exactly like the ratchet.
+        run: python tools/generate_spine.py --strict
+
+      - name: App-surface KL (REPORT-ONLY -- duplicate routes + prefix collisions)
+        # FU-071. The KL is generated on every PR so it can never go stale relative
+        # to the branch, and REPORTED so it has a reader from day one -- the CofC's
+        # standing warning is that a registry nothing reads is the uncalled-helper
+        # failure class. Report-only: this makes FU-069 measurable, it does not yet
+        # gate on it. Promoting DUPLICATE_ROUTE to a hard failure is a separate,
+        # deliberate decision once the duplicate backlog is triaged.
+        run: python app_surface_kl.py --out artifacts/app_surface_kl.json --report
+
+      - name: Upload app-surface KL
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-surface-kl
+          path: artifacts/app_surface_kl.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Spine manifest (REPORT-ONLY reference -- Option B, non-binding)
+        # FU-072 sec 6.5. A working reference of the build-time spine generator so
+        # the 07-23 mount-lane review can rule on a running mechanism, not prose.
+        # It derives the mount manifest by scanning (no hand-list), emits a preview
+        # of the fail-loud include prod would run, and validates every entry.
+        # REPORT-ONLY: no --strict, so it exits 0 even when it finds broken entries;
+        # prod consumes nothing this writes and app/main.py is untouched. Flipping to
+        # --strict (enforce) is the review's call, alongside app/main.py adopting the
+        # generated file. Runs in the light lane -- pure stdlib, no app deps.
+        run: python tools/spine_manifest.py --emit artifacts
+
+      - name: Upload spine manifest + generated preview
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: spine-manifest
+          path: |
+            artifacts/spine_manifest.json
+            artifacts/spine_mounts.generated.py
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload reachability census
         if: always()
         uses: actions/upload-artifact@v7

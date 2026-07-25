@@ -3,7 +3,6 @@ Mounts auth + RBAC demo routes + health, and best-effort mounts any factory-buil
 feature router that exposes `router` (loose/unbuilt ones are skipped, never block boot).
 """
 from __future__ import annotations
-import importlib
 from contextlib import asynccontextmanager
 
 import pathlib
@@ -18,49 +17,13 @@ from .rbac import require_role
 from .security import Principal, get_principal
 from .settings import settings
 
-# Factory-built single-file routers to mount when present + importable.
-# Routers from app/routers/ package are imported via app.routers.<name>.
-_OPTIONAL_ROUTERS = [
-    "server_compare_api",
-    "server_axis_scores_summary_router",
-    "verdict_breakdown_api", "overview_dashboard_api", "org_entity_search_api",
-    "entity_report_exporter", "org_api_key_manager", "verdict_watchlist_service",
-    "score_dispute_api",
-    # v1.1 Perspectives + v2 Ask slice (FATHER roadmap; direct-built 2026-07-02)
-    "facet_enum_service", "perspective_admin_api", "perspective_query_api",
-    "perspective_diff_service", "ask_corpus_indexer", "ask_answer_api",
-    # real /api/dashboard/summary (the hollow factory one never mounted --
-    # the SPA dashboard sat on 'loading' forever; treewalk fix 2026-07-02)
-    "dashboard_summary_api",
-    # vuln-intel spine + Scan-my-config killer feature (FATHER urgency ruling 2026-07-02)
-    "vuln_osv_ingestor", "vuln_registry_linker", "vuln_exposure_api", "config_scan_api",
-    # linker recall fix (repo->package identity) + OTX threat-intel context layer
-    # (kill-switched OFF; council to rule on the provenance bar before arming)
-    "vuln_pkg_enricher", "otx_threat_refs",
-    # P2 vuln/OTX/CVE surfacing (DESIGN_NEXT_BUILD_TARGETS_2026_07; agent-built)
-    "vuln_facet_extension", "vuln_coverage_sla_api",
-    # FU-005 (2026-07-19): un-orphan the aggregated per-server threat-intel
-    # read surface (/servers/{id}/threat-intel-summary). Its two factory
-    # siblings stay unmounted as hollow near-dupes (broken imports/DI):
-    # threat_intel_reference_api, server_threat_intel_status_api.
-    "threat_intel_summary_api",
-    # P1 freshness gate (THE LINE: lands before any keyed/badge surface;
-    # scorecard_badge_api stays unmounted until STALE-gating consumes this)
-    "freshness_metadata_api",
-    # cadence write path (CofC ruling 2026-07-08: NOT daemons; replaces
-    # perspective_snapshot_daemon + ask_corpus_drift_guard candidates)
-    "cadence_admin_api",
-    # public observability surfaces (chairman-built 2026-07-14): /freshness
-    # unblinds pipeline-watch CHECK B (moat freshness), /version unblinds
-    # CHECK C (deploy drift). Aggregate/identity data only, nothing keyed.
-    "scoring_freshness_surface", "runtime_deploy_info_endpoint",
-    # THE LINE enforced in code (CofC ruling 2026-07-14): freshness_gate is the
-    # single SLA source + fail-closed gate for keyed surfaces; this router is
-    # its public, auditable statement. Public surfaces fail VISIBLE, never closed.
-    "freshness_policy_api",
-    # public marketing/media assets (chairman 2026-07-17): 200K-campaign robot ad
-    "app.routers.media_assets",
-]
+# Factory-built routers are no longer hand-listed here. The SOA spine
+# (services/active/ -> app/_spine_generated.py) is the source of truth; see below.
+# Census parity (do NOT delete without updating tools/reachability_deferred.json):
+# these siblings are DOCUMENTED-UNMOUNTED and were named in the old list's comments.
+# Keeping the names here holds the reachability census delta-neutral across this
+# refactor -- their triage (mount / redirect / delete) is Step 6, not this PR:
+#   freshness_gate  scorecard_badge_api  threat_intel_reference_api  server_threat_intel_status_api
 
 
 @asynccontextmanager
@@ -114,14 +77,30 @@ def consent_gate():
 def disclaimer_page():
     return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
 
-for _modname in _OPTIONAL_ROUTERS:
-    try:
-        _m = importlib.import_module(_modname)
-        _r = getattr(_m, "router", None)
-        if _r is not None:
-            app.include_router(_r)
-    except Exception:
-        pass  # loose/unbuilt feature module -- skip, never block boot
+# --- SOA spine (FU-039/072; CofC 2026-07-23) --------------------------------
+# Mounts are GENERATED at build time from services/active/ into
+# app/_spine_generated.py by tools/generate_spine.py, and fail LOUD: CI raises
+# via `generate_spine.py --strict`; prod boots anyway but records every outcome
+# on app.state (surfaced at /spine/health) + logs. This REPLACES the old silent
+# `except Exception: pass` loop -- the invisibility bug the reachability
+# postmortem (FU-044) exists to kill. Source of truth is services/active/.
+from ._spine_generated import include_spine
+include_spine(app)  # boot-anyway in prod; strict raise is a CI-only gate
+
+
+@app.get("/spine/health")
+def spine_health():
+    """Visible mount status for the SOA spine -- the anti-invisibility surface.
+    mounted / skipped_no_router / failures are recorded by include_spine()."""
+    st = app.state
+    failures = getattr(st, "spine_mount_failures", [])
+    return {
+        "ok": not failures,
+        "service_count": getattr(st, "spine_service_count", 0),
+        "mounted": getattr(st, "spine_mounted", []),
+        "skipped_no_router": getattr(st, "spine_skipped_no_router", []),
+        "failures": failures,
+    }
 
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]

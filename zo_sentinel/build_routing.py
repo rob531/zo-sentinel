@@ -35,7 +35,10 @@ COMPLEXITY_TO_ALIAS = {
     "unknown": "zo-ladder-low",
 }
 DEFAULT_ALIAS = "zo-ladder-low"          # rung 0 (MiniMax) -- prior behaviour
-_CAPABLE_RECIPES = {"module_from_exemplar", "webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack"}
+_CAPABLE_RECIPES = {"module_from_exemplar", "webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "service_dir_from_exemplar"}
+# NOTE (chairman steer 2026-07-24): rungs are ALIASES resolved by the ladder shim,
+# never vendor pins -- provider TOS/pricing shifts (MiniMax stays paid/stable, others
+# vary) are absorbed by re-pointing the alias, not by editing routing code.
 
 # Phase 5 escalation ladder (cost-ordered). A FAILED directive re-asserts UP this
 # list on its next attempt -- one alias per attempt (preserve #73; the bump is

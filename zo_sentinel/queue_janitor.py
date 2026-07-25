@@ -68,6 +68,12 @@ ENV_FLAG = "ZO_QUEUE_JANITOR"
 QUEUES = ("pending", "proposed")
 # Suffixes that mark a file as not-a-live-directive.
 _EXCLUDED_SUFFIXES = (".done.json", ".failed.json")
+# Name PREFIXES that mark a .json as a backup/dup copy, not a live directive.
+# These still end in .json (e.g. ".bak_<id>.json", ".duplicate_<id>.json") so the
+# suffix filter misses them; they mask queue emptiness (FU-011/FU-020). Mirrors the
+# rule directive_queue_health_api.py already applies. Real directives are never
+# dot-prefixed (<id>.json / gen_<key>_<task>.json).
+_EXCLUDED_PREFIXES = (".bak", ".duplicate")
 
 
 def _durable_quarantine_dir() -> Path:
@@ -109,9 +115,12 @@ def _resolve_directive_id(d: dict) -> str:
 
 
 def _iter_directive_files(queue_dir: Path) -> List[Path]:
-    """Live directive JSONs in a queue dir: *.json minus terminal sentinels.
+    """Live directive JSONs in a queue dir: *.json minus terminal sentinels
+    and backup/dup copies.
     (.rejected/.duplicate/.skip don't end in .json, so they're excluded by
-    construction -- same rule as the promoter's _iter_proposals.)"""
+    construction -- same rule as the promoter's _iter_proposals.) Backup copies
+    that DO end in .json (".bak_<id>.json", ".duplicate_<id>.json") are excluded
+    by _EXCLUDED_PREFIXES, or they mask queue emptiness (FU-011/FU-020)."""
     if not queue_dir.is_dir():
         return []
     out = []
@@ -119,6 +128,8 @@ def _iter_directive_files(queue_dir: Path) -> List[Path]:
         if not p.is_file() or not p.name.endswith(".json"):
             continue
         if p.name.endswith(_EXCLUDED_SUFFIXES):
+            continue
+        if p.name.startswith(_EXCLUDED_PREFIXES):
             continue
         out.append(p)
     return out

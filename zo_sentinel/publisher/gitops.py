@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Protocol
 
+from . import auto_declare
+
 
 def _repo_relative(file_path: str) -> str:
     """Coerce an artifact path to repo-relative. Producers sometimes emit an
@@ -274,6 +276,29 @@ class CliGitOps:
         if add.returncode != 0:
             return PublishResult(ok=False, branch=plan.branch, permanent=True,
                                  detail=(add.stderr or "git add failed")[:300])
+
+        # Declare-or-mount (CofC 2026-07-21). The reachability ratchet enforces
+        # that a PR adding an unmounted router either mounts it or names it in
+        # tools/reachability_deferred.json. The builder cannot do either -- the
+        # module_from_exemplar lane guard forbids self-mounting and it emits
+        # exactly one file -- so without this the gate would be unsatisfiable
+        # for every autonomous build and ~15 PRs/day would go red for a rule
+        # none could comply with. The declaration is written HERE, by ordinary
+        # deterministic publisher code, so the lane guard is untouched and the
+        # builder gains no write scope. A declared router is still counted as an
+        # orphan; what this buys is that the growth is no longer SILENT.
+        changed, detail = auto_declare.declare(
+            self.clone_dir, rel_path, plan.content,
+            task=getattr(plan, "dedup_key", None))
+        if changed:
+            d_add = self._git("add", auto_declare.DEFERRED_REL)
+            if d_add.returncode != 0:
+                # Non-fatal by design: losing the declaration means the ratchet
+                # flags this PR, which is loud and correct. Losing the artifact
+                # would not be.
+                self.last_error = "auto-declare stage failed: %s" % (
+                    (d_add.stderr or "")[:200])
+
         # Nothing staged => the artifact is byte-identical to base (goose rebuilt
         # an existing file). `git commit` would exit 1 with "nothing to commit" on
         # STDOUT (empty stderr -> the bare "git commit failed" fallback), which the

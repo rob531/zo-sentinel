@@ -20,6 +20,7 @@ from datetime import date
 from typing import Dict, Optional
 
 import jwt
+import requests
 from jwt import PyJWKClient
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -30,6 +31,8 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
 from trust_gating_override import trust_gate
+
+WRITE_SERVICE = "http://127.0.0.1:8772"
 
 router = APIRouter(prefix="/api", tags=["verdict"])
 
@@ -187,6 +190,8 @@ class Verdict(BaseModel):
     axes: Dict[str, AxisScore]
     model_overall_risk: Optional[str] = None       # raw model overall_risk label
     published_overall_risk: Optional[str] = None    # after trust_gating_override (capped)
+    trusted_override: bool = False                   # trust_gate applied an override
+    override_reason: Optional[str] = None           # basis string when override applied
     trusted: bool = False
     trust_basis: Optional[str] = None
     masquerade_flag: bool = False
@@ -233,13 +238,54 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
             labels[r.axis_name] = r.label
 
     gate = trust_gate(url, name, labels)
+
+    trusted = bool(gate.get("trusted"))
+    trust_basis = gate.get("trust_basis")
+    masquerade_flag = bool(gate.get("masquerade_flag"))
+    # An override was applied when trust_gate changed the published tier (trusted cap)
+    # or flagged a possible masquerade. When trusted=False with no masquerade, no override.
+    trusted_override = bool(gate.get("trusted")) or bool(gate.get("masquerade_flag"))
+    override_reason = trust_basis if trusted_override else None
+
+    # Audit: log override application to write_service (fire-and-forget)
+    if trusted_override:
+        try:
+            requests.post(
+                f"{WRITE_SERVICE}/execute",
+                json={
+                    "sql": (
+                        "INSERT INTO trust_gating_audit_log "
+                        "(server_id, url, name, trusted, trust_basis, masquerade_flag, "
+                        "model_overall_risk, published_overall_risk, logged_at) "
+                        "VALUES (:sid, :url, :name, :trusted, :basis, :masq, "
+                        ":model_risk, :pub_risk, now())"
+                    ),
+                    "params": {
+                        "sid": server_id,
+                        "url": url,
+                        "name": name,
+                        "trusted": trusted,
+                        "basis": trust_basis,
+                        "masq": masquerade_flag,
+                        "model_risk": gate.get("original_overall_risk") or labels.get("overall_risk"),
+                        "pub_risk": gate.get("published_overall_risk") or labels.get("overall_risk"),
+                    },
+                    "wait": False,
+                },
+                timeout=5,
+            )
+        except Exception:
+            pass  # never fail the request on audit write failure
+
     return Verdict(
         server_id=server_id, name=name, url=url, model_version=mv, axes=axes,
         model_overall_risk=gate.get("original_overall_risk") or labels.get("overall_risk"),
         published_overall_risk=gate.get("published_overall_risk") or labels.get("overall_risk"),
-        trusted=bool(gate.get("trusted")),
-        trust_basis=gate.get("trust_basis"),
-        masquerade_flag=bool(gate.get("masquerade_flag")),
+        trusted_override=trusted_override,
+        override_reason=override_reason,
+        trusted=trusted,
+        trust_basis=trust_basis,
+        masquerade_flag=masquerade_flag,
         display_label=gate.get("display_label", "Automated heuristic assessment"),
     )
 

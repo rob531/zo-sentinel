@@ -76,15 +76,36 @@ def test_ci_gate_uses_the_shared_rule():
 def test_builder_completion_chains_all_call_the_gate():
     """Every path that can mark a build .done must run the gate.
 
-    goose_runner has two completion chains (goose build + deterministic engine
+    goose_runner has two completion paths (goose build + deterministic engine
     fallback). A gate wired into only one of them is a hole -- that is precisely
     the bug class this suite guards.
+
+    2026-07-20: the two inline `and` chains were replaced by a single
+    `_gate_chain()` helper so the ledger can record WHICH gate rejected a build
+    (gate attribution). The invariant is unchanged and now structurally
+    stronger -- there is ONE chain, it runs the no-hollow gate, and every
+    completion path must go through it -- so this test asserts that shape
+    rather than counting occurrences of an inline expression.
     """
     src = io.open(os.path.join(ROOT, "goose_runner.py"), encoding="utf-8").read()
-    chains = src.count("and _schema_prm_gate(directive, directive_id)")
-    gated = src.count("and _no_hollow_gate(directive, directive_id)")
-    assert chains >= 2, "expected the builder's completion chains to still exist"
-    assert gated == chains, f"{chains - gated} completion chain(s) skip the no-hollow gate"
+
+    # 1. The single chain exists and runs the no-hollow gate.
+    assert "def _gate_chain(" in src, "the builder's completion gate chain is gone"
+    chain_body = src.split("def _gate_chain(")[1].split("\ndef ")[0]
+    assert "_no_hollow_gate(directive, directive_id)" in chain_body, (
+        "the completion chain no longer runs the no-hollow gate")
+    for gate in ("output_confirmed(", "_edit_diff_gate(", "_syntax_gate(",
+                 "_schema_prm_gate(", "_selftest_gate("):
+        assert gate in chain_body, f"{gate} dropped out of the completion chain"
+
+    # 2. Both completion paths route through it, and NOTHING completes without it.
+    chain_calls = src.count("_gate_chain(directive, directive_id")
+    completions = src.count("_complete(directive, directive_id")
+    assert chain_calls >= 2, (
+        f"expected both completion paths to run the gate chain, found {chain_calls}")
+    assert completions == chain_calls, (
+        f"{completions} completion site(s) vs {chain_calls} gate-chain call(s) -- "
+        "a build can complete without running the gate")
 
 
 def test_the_gate_records_a_lesson_so_the_retry_is_grounded():

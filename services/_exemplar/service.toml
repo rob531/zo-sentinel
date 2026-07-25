@@ -1,0 +1,18 @@
+[service]
+name = "example_risk_tier_histogram"
+import_path = "services._exemplar.router"
+prefix = "/api/example"
+tag = "example"
+origin = "exemplar"
+auth = "public"
+needs_data_layer = true
+
+# CANONICAL SERVICE-DIR EXEMPLAR -- the SOA "new atomic unit".
+# NOT mounted: lives under services/_exemplar/ (underscore -> generate_spine's
+# active-scan skips it). It exists to be MIRRORED, one file per concern:
+#   logic.py     -- data/computation over the REAL app.db/app.models (no stubs)
+#   router.py    -- thin HTTP surface exposing `router`; RELATIVE intra-imports
+#   contract.py  -- acceptance self-test = the liveness gate (python -m ...contract)
+#   service.toml -- this registration/contract (import_path/prefix/tag/auth/...)
+# The builder emits ONE file per subrecipe into services/staged/<name>/, then the
+# promoter runs contract.py and, on green, moves the dir staged/ -> active/.

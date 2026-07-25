@@ -1,0 +1,11 @@
+[service]
+name = "perspective_diff_service"
+import_path = "perspective_diff_service"
+prefix = "/api"
+tag = "perspectives"
+origin = "live"
+auth = "public"
+needs_data_layer = true
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

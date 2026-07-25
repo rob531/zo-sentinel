@@ -1,0 +1,11 @@
+[service]
+name = "org_api_key_manager"
+import_path = "org_api_key_manager"
+prefix = ""
+tag = ""
+origin = "live"
+auth = "public"
+needs_data_layer = false
+
+# Seeded from app/main.py _OPTIONAL_ROUTERS by tools/seed_active_registry.py.
+# Live pre-SOA router: code stays at its module path; this file registers it.

@@ -553,16 +553,16 @@ def ph_bundle(run: Run, args) -> None:
                              f".gitignore swallowed it. tree=\\n{tree}")
     for line in tree.splitlines():
         f = line.split()
-        if len(f) >= 4 and f[3].endswith("adapter_model.safetensors") and int(f[2]) < 1_000_000:
+        if len(f) >= 5 and f[4].endswith("adapter_model.safetensors") and int(f[3]) < 1_000_000:
             raise SystemExit(f"ABORT: committed adapter is {f[2]}B -- an LFS pointer/stub, "
                              f"not weights (the 133-byte failure class).")
-    git("push", repo_url, f"HEAD:refs/heads/{score_branch}")
+    git("push", repo_url, f"+HEAD:refs/heads/{score_branch}")  # force: re-bundle/resume idempotent
     # FU-093: NEVER trust the push exit code (standing SFT lesson). Re-read the
     # REMOTE tree and assert real bytes actually landed.
     git("fetch", "--depth", "1", repo_url, score_branch)
     rtree = git("ls-tree", "-r", "-l", "FETCH_HEAD", "score_transfer/adapter").stdout
-    ok = any(x.split()[3].endswith("adapter_model.safetensors") and int(x.split()[2]) >= 1_000_000
-             for x in rtree.splitlines() if len(x.split()) >= 4)
+    ok = any(x.split()[4].endswith("adapter_model.safetensors") and int(x.split()[3]) >= 1_000_000
+             for x in rtree.splitlines() if len(x.split()) >= 5)
     if not ok:
         raise SystemExit(f"ABORT: post-push REMOTE verify failed -- adapter weights did "
                          f"not land on {score_branch}. remote tree=\\n{rtree}")

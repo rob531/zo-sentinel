@@ -287,5 +287,20 @@ def test_promoter_dry_run_never_mutates(tmp_path, monkeypatch):
     assert squatter.exists()
 
 
+def test_iter_directive_files_excludes_bak_and_duplicate_backups(tmp_path):
+    """FU-020(b): backup/dup copies that still end in .json (".bak_<id>.json",
+    ".duplicate_<id>.json") must NOT be counted as live directives -- they are
+    the stale files that mask queue emptiness (FU-011). Real directives plus the
+    done/failed terminal sentinels behave unchanged."""
+    home, directives, _ = _mk_home(tmp_path)
+    pending = directives / "pending"
+    live = _write(pending, "realdir.json", _directive("realdir"))
+    _write(pending, ".bak_realdir.json", _directive("realdir"))
+    _write(pending, ".duplicate_realdir.json", _directive("realdir"))
+    _write(pending, "realdir.done.json", _directive("realdir"))
+    _write(pending, "realdir.failed.json", _directive("realdir"))
+    assert queue_janitor._iter_directive_files(pending) == [live]
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

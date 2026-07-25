@@ -41,6 +41,10 @@ already complete. `--run` does everything in one process (interactive use).
 """
 from __future__ import annotations
 
+import os as _sg_os, sys as _sg_sys
+_sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.abspath(__file__)))
+from spend_guard import scaled_budget, scaled_deadline_min  # FU-090 #1784
+
 import argparse
 import gzip
 import hashlib
@@ -460,6 +464,11 @@ def ph_export(run: Run, args) -> None:
              refresh_servers=len(refresh_rows))
     log(f"export OK: {len(uniq)} inputs ({len(new_rows)} never-scored + "
         f"{len(refresh_rows)} refresh)")
+    run.state["cost_cap_scaled"] = round(scaled_budget(len(uniq)), 2)
+    run.state["deadline_scaled"] = scaled_deadline_min(len(uniq))
+    run.save()
+    log(f"spend guard (FU-090 #1784): N={len(uniq)} -> cost_cap "
+        f"${run.state['cost_cap_scaled']:.2f}, deadline {run.state['deadline_scaled']}m")
     if len(uniq) == 0:
         run.mark("bundle", "skipped"); run.mark("fire", "skipped")
         run.mark("watch", "skipped"); run.mark("collect", "skipped")
@@ -580,7 +589,7 @@ def ph_fire(run: Run, args) -> None:
     run.mark("fire", instance_id=iid, dph=dph, gpu=best.get("gpu_name"),
              machine_id=best.get("machine_id"), fired_at=utcnow())
     log(f"fire OK: instance={iid} {best.get('gpu_name')} ${dph}/hr "
-        f"(cap ${args.cost_cap}, deadline {args.deadline_min}m)")
+        f"(cap ${_eff_cost_cap(run, args):.2f}, deadline {_eff_deadline(run, args)}m)")
 
 
 def _results_state(run: Run, pat: str) -> str:
@@ -618,6 +627,19 @@ def _destroy(run: Run, reason: str) -> None:
     log(f"instance {iid} destroyed ({reason})")
 
 
+def _eff_cost_cap(run, args):
+    """CLI --cost-cap overrides; else size-scaled value fixed at export (FU-090)."""
+    if getattr(args, "cost_cap", None) is not None:
+        return args.cost_cap
+    return run.state.get("cost_cap_scaled", COST_CAP_DEFAULT)
+
+
+def _eff_deadline(run, args):
+    if getattr(args, "deadline_min", None) is not None:
+        return args.deadline_min
+    return run.state.get("deadline_scaled", DEADLINE_MIN_DEFAULT)
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
@@ -631,11 +653,11 @@ def ph_watch_collect(run: Run, args) -> None:
         if st:
             run.mark("watch", result=st, est_cost=round(est_cost, 2))
             break
-        if est_cost >= args.cost_cap:
+        if est_cost >= _eff_cost_cap(run, args):
             ledger("cost_ceiling_breach", run.state["run_id"], est=est_cost)
             run.mark("watch", "failed", result="cost_breach")
             break
-        if elapsed_h * 60 >= args.deadline_min:
+        if elapsed_h * 60 >= _eff_deadline(run, args):
             ledger("deadline_breach", run.state["run_id"], elapsed_h=round(elapsed_h, 2))
             run.mark("watch", "failed", result="deadline")
             break
@@ -905,8 +927,10 @@ def main() -> None:
     ap.add_argument("--full", action="store_true", help="full rescore (default: delta)")
     ap.add_argument("--refresh-cap", type=int, default=REFRESH_CAP_DEFAULT)
     ap.add_argument("--max-dph", type=float, default=MAX_DPH_DEFAULT)
-    ap.add_argument("--cost-cap", type=float, default=COST_CAP_DEFAULT)
-    ap.add_argument("--deadline-min", type=int, default=DEADLINE_MIN_DEFAULT)
+    ap.add_argument("--cost-cap", type=float, default=None,
+                    help="override the FU-090 size-scaled cap (default: scaled)")
+    ap.add_argument("--deadline-min", type=int, default=None,
+                    help="override the FU-090 size-scaled deadline (default: scaled)")
     ap.add_argument("--poll-secs", type=int, default=120)
     args = ap.parse_args()
     if args.check_open_runs:

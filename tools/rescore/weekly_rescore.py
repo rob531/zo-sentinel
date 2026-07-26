@@ -755,31 +755,47 @@ def ph_import(run: Run, args) -> None:
     # FU-094: VALIDITY GATE. Row counts and degraded=false are proxies; they
     # let 3 weeks of base+random-head noise into the moat. Judge the OUTPUT:
     # a real classifier cannot emit one label ~100% of the time. Fail CLOSED.
+    #
+    # FU-108: this block used to re-implement label extraction and read
+    # record[axis], but the preds shape nests labels under `axis_pred_label`.
+    # It handed the gate 0 rows on 20,576 VALID records and aborted the run --
+    # the gate condemned data it never saw. Extraction now lives in ONE place,
+    # score_validity.extract_axis_rows, which the writer loop below also uses,
+    # so gate and writer can no longer read different shapes.
     import gzip as _gz, json as _json
     sys.path.insert(0, str(HERE))
-    from score_validity import assert_importable
-    _rows = []
+    from score_validity import (assert_importable, extract_axis_rows,
+                                format_report, ExtractionFailure)
+    _recs = []
     with _gz.open(preds_gz, "rt", encoding="utf-8") as _fh:
         for _line in _fh:
             _line = _line.strip()
             if not _line:
                 continue
             try:
-                _d = _json.loads(_line)
+                _recs.append(_json.loads(_line))
             except Exception:
                 continue
-            for _ax in AXES:
-                _lb = (_d.get(_ax) or _d.get("axes", {}).get(_ax)
-                       if isinstance(_d.get("axes"), dict) else _d.get(_ax))
-                if isinstance(_lb, dict):
-                    _lb = _lb.get("label")
-                if _lb:
-                    _rows.append({"axis_name": _ax, "label": str(_lb)})
-    _v = assert_importable(_rows)          # raises SystemExit on garbage
-    log("validity gate PASS: " + ", ".join(
-        "{}={}({:.0%} top, {:.2f} bits)".format(a["axis"], a["verdict"],
-                                                a["top_share"], a["entropy_bits"])
-        for a in _v["axes"] if a["verdict"] == "VALID"))
+    _rows = extract_axis_rows(_recs, AXES)
+    _parsed = sum(1 for _d in _recs if _d.get("status") == "parsed")
+    log("validity gate input: {} records ({} parsed) -> {} gradeable rows".format(
+        len(_recs), _parsed, len(_rows)))
+    try:
+        _v = assert_importable(_rows, source_records=len(_recs))
+    except ExtractionFailure as _e:
+        # A shape/caller defect is NOT a verdict on the scores. Say so loudly
+        # and do not let anyone read this as "the run produced garbage".
+        raise SystemExit(
+            "ALERT: validity gate could not READ the preds (caller/shape "
+            "defect, not bad scores) -- {} records, {} parsed, 0 gradeable. "
+            "The run artifacts are intact and re-importable once fixed; do NOT "
+            "re-fire a paid job. {}".format(len(_recs), _parsed, _e))
+    log("validity gate PASS: " + format_report(_v))
+    for _a in _v["axes"]:
+        if _a["verdict"] == "VALID_DECLARED":
+            log("validity gate WARN: {} passed under a DECLARED exception -- {}"
+                .format(_a["axis"], _a.get("reason")))
+    _gate_rows = len(_rows)
     scored_at = datetime.utcnow()
     conn = pg_conn(); cur = conn.cursor()
     capture = os.environ.get("RESCORE_CAPTURE_DELTAS", "1") != "0"   # kill switch
@@ -795,6 +811,7 @@ def ph_import(run: Run, args) -> None:
         return False, None, pcrit
 
     rows, sids, servers, seen = [], [], 0, set()
+    written = 0                      # FU-108: counted against the gate's view
 
     def flush():
         nonlocal rows, sids, capture
@@ -866,6 +883,7 @@ def ph_import(run: Run, args) -> None:
             pl, pi = p.get("axis_pred_label", {}), p.get("axis_pred_int", {})
             mp, pr = p.get("axis_max_prob", {}), p.get("axis_probs", {})
             esc, esc_to, pc = gate(pr.get("overall_risk", [0, 0, 0, 0]))
+            _pre_len = len(rows)
             for a in AXES:
                 if pi.get(a) == -1:
                     continue
@@ -879,9 +897,18 @@ def ph_import(run: Run, args) -> None:
                              RULE, MODEL_VERSION, ADAPTER_SHA_PIN, scored_at))
             sids.append(sid)
             servers += 1
+            written += len(rows) - _pre_len
             if len(rows) >= 3500:
                 flush()
     flush()
+    # FU-108 differential: the gate must have judged exactly what we wrote.
+    # A mismatch means gate and writer disagree about the preds shape again --
+    # fail loudly rather than let a partially-judged import land.
+    if written != _gate_rows:
+        raise SystemExit(
+            "ALERT: GATE/WRITER SHAPE DRIFT -- gate judged {} rows but writer "
+            "produced {}. Import already committed in batches; investigate "
+            "before trusting these scores (FU-108).".format(_gate_rows, written))
     cur.execute("select count(distinct server_id) from mcp_llm_axis_scores where model_version=%s",
                 (MODEL_VERSION,))
     scored_after = cur.fetchone()[0]

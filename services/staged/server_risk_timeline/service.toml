@@ -1,0 +1,12 @@
+[service]
+name = "server_risk_timeline"
+import_path = "services.active.server_risk_timeline.router"
+prefix = "/api"
+tag = "server_risk_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.server_risk_timeline"
+expected_output = "PASS"

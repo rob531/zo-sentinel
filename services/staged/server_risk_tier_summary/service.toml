@@ -1,0 +1,16 @@
+[service]
+name = "server_risk_tier_summary"
+import_path = "services.active.server_risk_tier_summary.router"
+prefix = "/api"
+tag = "server_risk_tier_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+app_db = "app.db"
+app_models = "app.models"
+write_service = "http://127.0.0.1:8772/query"
+
+[service.test]
+self_test = "PASS"

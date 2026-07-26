@@ -28,9 +28,15 @@ CER_MAX          = 2.0       # trip threshold (size-invariant)
 ROWS_FLOOR_FRAC  = 0.25      # CER cannot trip until >= 25% of N scored ...
 ROWS_FLOOR_ABS   = 10_000    # ... or >= 10k rows, whichever is larger
 CHURN_K          = 1.5       # cumulative-refire budget = CHURN_K * B(N)
-THROUGHPUT_RPH   = 19_200    # rows/hr (empirical 320 rows/min)
+THROUGHPUT_RPH   = 19_200    # rows/hr (empirical 320 rows/min) -- $/row econ anchor
+PLAN_RPH         = 14_000    # rows/hr PLANNING rate = SLOWEST observed clean run
+                             # (65,045 rows / 275.4 min). Observed clean rates span
+                             # 14.2k-27.1k/hr, ~2x. Plan with the slow end, not the mean.
+STARTUP_MIN      = 45        # FIXED pre-row-1 cost: vast provisioning + docker pull +
+                             # HF prefetch of Qwen2.5-3B (~6GB) + model load. Measured
+                             # >=34.8 min on run 20260725-182808 (and still not done).
 DEADLINE_K       = 1.5
-D_MIN_MIN        = 45
+D_MIN_MIN        = 90        # was 45 -- guillotined run 20260725-182808 mid-startup
 D_ABS_MIN        = 18 * 60
 MONTHLY_HARD     = 25.00     # $/month pool hard-halt
 MONTHLY_ALERT    = 20.00
@@ -44,8 +50,23 @@ def scaled_budget(n_rows: int, r: float = R_FLOOR) -> float:
 
 
 def scaled_deadline_min(n_rows: int) -> int:
-    hrs = (max(0, n_rows) / THROUGHPUT_RPH) * DEADLINE_K
-    return int(min(D_ABS_MIN, max(D_MIN_MIN, round(hrs * 60))))
+    """Wall-clock deadline = FIXED startup allowance + K * scoring time at the
+    SLOWEST observed clean rate. AFFINE, not linear-through-origin.
+
+    FU-104. The old model was pure throughput (N/rate) with a 45m floor, which
+    implicitly asserted that a small cohort is a FAST one. It is not: a 3,576-row
+    cohort is CHEAP but still pays the full fixed cost of provisioning a pod,
+    pulling the image, prefetching the 6GB base model and loading it before row 1
+    is scored. Run 20260725-182808 was handed deadline=45m, spent ~35m of it on
+    startup, breached at exactly 45m, collected NOTHING and self-destroyed.
+
+    Separation of concerns: the COST CAP (scaled_budget) is the money guard and
+    the CER is the efficiency guard. The deadline is only a WEDGE guard -- so it
+    should be generous. A deadline tighter than the work is a self-inflicted
+    zero-yield burn; a loose one costs nothing extra because cap+CER still bind.
+    """
+    scoring_min = (max(0, n_rows) / PLAN_RPH) * 60.0 * DEADLINE_K
+    return int(min(D_ABS_MIN, max(D_MIN_MIN, round(STARTUP_MIN + scoring_min))))
 
 
 def cer(spend_usd: float, rows_scored: int, r: float = R_FLOOR) -> float:
@@ -123,10 +144,26 @@ if __name__ == "__main__":
     assert scaled_budget(10**9) == B_ABS          # runaway -> absolute backstop
     assert abs(scaled_budget(58_000) - 1.5921) < 1e-3, scaled_budget(58_000)
     # ---- deadline scaling ----
-    assert scaled_deadline_min(230_000) == 1078, scaled_deadline_min(230_000)  # ~18h
+    assert scaled_deadline_min(230_000) == D_ABS_MIN, scaled_deadline_min(230_000)
     assert scaled_deadline_min(10**7) == D_ABS_MIN           # huge N -> 18h clamp
-    assert scaled_deadline_min(58_000) == 272, scaled_deadline_min(58_000)  # ~4.5h
+    assert scaled_deadline_min(58_000) == 418, scaled_deadline_min(58_000)   # ~7h
     assert scaled_deadline_min(100) == D_MIN_MIN
+    # REGRESSION (FU-104): run 20260725-182808, N=3576, got 45m under the old
+    # pure-throughput model, burned ~35m on startup, breached, collected [].
+    assert scaled_deadline_min(3576) == 90, scaled_deadline_min(3576)
+    # deadline must ALWAYS clear the fixed startup cost, even at N=0
+    assert scaled_deadline_min(0) >= STARTUP_MIN
+    # monotonic in N
+    assert all(scaled_deadline_min(a) <= scaled_deadline_min(b)
+               for a, b in [(0, 100), (100, 3576), (3576, 58_000), (58_000, 10**7)])
+    # every CLEAN historical run must fit inside the deadline it would now get
+    for n, observed_min in [(20_000, 64.1), (65_045, 275.4), (171_050, 432.0),
+                            (125_731, 278.0)]:
+        assert scaled_deadline_min(n) >= observed_min, (n, scaled_deadline_min(n))
+    # COHERENCE: at nominal $/hr the deadline must not outlive the cost cap's
+    # runway by much -- the two guards must not contradict each other.
+    _DPH = 0.30
+    assert scaled_deadline_min(3576) <= (scaled_budget(3576) / _DPH) * 60 + 1
     # ---- CER: size-invariant, healthy ~1 ----
     assert abs(cer(4.20, 230_000) - 0.997) < 0.01, cer(4.20, 230_000)
     assert cer(1.0, 0) == float("inf")            # wedge -> inf

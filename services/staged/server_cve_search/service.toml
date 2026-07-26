@@ -1,0 +1,8 @@
+[service]
+name = "server_cve_search"
+import_path = "services.active.server_cve_search.router"
+prefix = "/api"
+tag = "server_cve_search"
+origin = "service"
+auth = "public"
+needs_data_layer = true

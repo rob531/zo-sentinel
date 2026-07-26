@@ -500,6 +500,32 @@ def ph_export(run: Run, args) -> None:
         log("nothing to score -- run will close at postcheck")
 
 
+# --------------------------------------------------- FU-105: ls-tree -l parsing
+# `git ls-tree -r -l` emits FIVE fields, because -l inserts an object SIZE column:
+#
+#   100644 blob 934805596ff4...eba6c 29528024\tscore_transfer/adapter/adapter_model.safetensors
+#   <mode> <type> <sha>              <size>  \t<path>
+#     f[0]  f[1]   f[2]               f[3]      f[4]
+#
+# FU-093 shipped index math for the FOUR-field (`-r`, no `-l`) shape: it read f[3]
+# as the PATH (it is the SIZE) and f[2] as the SIZE (it is the SHA). Consequences,
+# both silent:
+#   * the post-push REMOTE verify could NEVER return ok -> it aborted every single
+#     bundle, even when the 28.2MB adapter had landed perfectly (run 20260726-014732);
+#   * the 133-byte LFS-POINTER guard could NEVER fire, because its path test was
+#     comparing against a number -- a DECORATIVE gate, the exact failure class
+#     FU-093 was written to eliminate.
+# One parser now serves both call sites, and it is pinned by tests built from real
+# captured `git ls-tree -r -l` bytes rather than a hand-written fixture.
+def adapter_blob_size(tree_text: str, name: str = "adapter_model.safetensors"):
+    """Size in bytes of `name` in `git ls-tree -r -l` output, or None if absent."""
+    for line in tree_text.splitlines():
+        f = line.split()
+        if len(f) >= 5 and f[4].endswith(name) and f[3].isdigit():
+            return int(f[3])
+    return None
+
+
 def ph_bundle(run: Run, args) -> None:
     if run.done("bundle") or run.state["phases"].get("bundle") == "skipped":
         return
@@ -551,18 +577,20 @@ def ph_bundle(run: Run, args) -> None:
         if need not in tree:
             raise SystemExit(f"ABORT: {need} missing from the COMMITTED bundle -- "
                              f".gitignore swallowed it. tree=\\n{tree}")
-    for line in tree.splitlines():
-        f = line.split()
-        if len(f) >= 4 and f[3].endswith("adapter_model.safetensors") and int(f[2]) < 1_000_000:
-            raise SystemExit(f"ABORT: committed adapter is {f[2]}B -- an LFS pointer/stub, "
-                             f"not weights (the 133-byte failure class).")
+    csize = adapter_blob_size(tree)
+    if csize is None:
+        raise SystemExit(f"ABORT: adapter_model.safetensors not parseable in the "
+                         f"COMMITTED tree. tree=\\n{tree}")
+    if csize < 1_000_000:
+        raise SystemExit(f"ABORT: committed adapter is {csize}B -- an LFS pointer/stub, "
+                         f"not weights (the 133-byte failure class).")
     git("push", repo_url, f"HEAD:refs/heads/{score_branch}")
     # FU-093: NEVER trust the push exit code (standing SFT lesson). Re-read the
     # REMOTE tree and assert real bytes actually landed.
     git("fetch", "--depth", "1", repo_url, score_branch)
     rtree = git("ls-tree", "-r", "-l", "FETCH_HEAD", "score_transfer/adapter").stdout
-    ok = any(x.split()[3].endswith("adapter_model.safetensors") and int(x.split()[2]) >= 1_000_000
-             for x in rtree.splitlines() if len(x.split()) >= 4)
+    rsize = adapter_blob_size(rtree)
+    ok = rsize is not None and rsize >= 1_000_000
     if not ok:
         raise SystemExit(f"ABORT: post-push REMOTE verify failed -- adapter weights did "
                          f"not land on {score_branch}. remote tree=\\n{rtree}")

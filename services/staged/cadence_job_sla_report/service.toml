@@ -1,0 +1,7 @@
+name = "cadence_job_sla_report"
+import_path = "services.active.cadence_job_sla_report.router"
+prefix = "/api"
+tag = "cadence_job_sla_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

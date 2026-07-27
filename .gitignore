@@ -22,3 +22,6 @@ graphify-out/app_surface_kl.json
 # spine manifest reference -- regenerated every run, uploaded as a CI artifact
 artifacts/spine_manifest.json
 artifacts/spine_mounts.generated.py
+
+# prod-drift-sentinel candidate-tree gate verdict (tools/verify_deploy_candidate.py)
+artifacts/deploy_candidate_verdict.json

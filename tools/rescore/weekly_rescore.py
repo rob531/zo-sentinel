@@ -15,9 +15,13 @@ PHASES (state.json in the run dir; every phase idempotent, rerun resumes):
 
 MODES:
   --delta (default): score (a) never-scored distinct-URL servers (the 20k-goal
-      lane) + (b) a refresh cohort of the OLDEST-scored servers, capped by
-      --refresh-cap (default 20000). Weekly delta => every server refreshed
-      <= ~4 weeks, newest_scored_at advances weekly, cost ~$0.3-0.6/run.
+      lane) + (b) a refresh cohort ordered DISTRUSTED-FIRST, then oldest-scored
+      first, capped by --refresh-cap (default 20000). Weekly delta => every
+      server refreshed <= ~4 weeks, newest_scored_at advances weekly, cost
+      ~$0.3-0.6/run. "Distrusted" is derived every run from the moat's own
+      label histogram via score_validity (see cohort_trust): known-garbage
+      cohorts are the NEWEST timestamps, so pure age-ordering would sort them
+      LAST and the cadence would never reach them.
   --full: every distinct-URL server (the 7/3 shape, ~66k, ~$1.2).
 
 NO-LOSS INVARIANTS (enforced, run aborts loudly on breach):
@@ -407,6 +411,47 @@ SELECT server_id, scored_at FROM mcp_llm_axis_scores
 WHERE model_version='{MODEL_VERSION}' AND axis_name='overall_risk'
 """
 
+# Per-cohort trust audit (FU-093 / FU-108, added 2026-07-26). ONE aggregate
+# over the whole moat -- the Fly box is 1-vCPU burstable, so this is
+# deliberately a single GROUP BY returning a few hundred rows, never a query
+# per cohort. Result set is tiny; the scan is the cost.
+SQL_COHORT_TRUST = """
+SELECT scored_at, axis_name, label, count(*)
+FROM mcp_llm_axis_scores
+WHERE model_version=%s
+GROUP BY scored_at, axis_name, label
+"""
+
+
+def cohort_trust(conn, model_version: str = MODEL_VERSION):
+    """Which scored_at cohorts already in the moat are NOT trustworthy?
+
+    Every scoring wave stamps ONE shared scored_at on every row it writes, so
+    scored_at IS the cohort key. Hand each cohort's own label histogram to the
+    SAME gate that guards the import (score_validity) and believe its verdict.
+
+    DERIVED on every run, never a hardcoded list of bad dates: a date list
+    would be correct for exactly as long as it took the next wave to go wrong,
+    and would silently keep condemning cohorts that had since been rescored.
+
+    Returns (distrusted_cohorts:set, verdicts:{scored_at -> verdict}).
+    """
+    from score_validity import (DEGENERATE, SCHEMA_VIOLATION,
+                                validate_run_from_histogram)
+    cur = conn.cursor()
+    cur.execute(SQL_COHORT_TRUST, (model_version,))
+    hist: dict = {}
+    for cohort, axis, label, n in cur.fetchall():
+        hist.setdefault(cohort, {}).setdefault(axis, {})[label] = int(n)
+    cur.close()
+    verdicts, distrusted = {}, set()
+    for cohort, axes in hist.items():
+        verdict = validate_run_from_histogram(axes)["verdict"]
+        verdicts[cohort] = verdict
+        if verdict in (DEGENERATE, SCHEMA_VIOLATION):
+            distrusted.add(cohort)
+    return distrusted, verdicts
+
 
 def ph_export(run: Run, args) -> None:
     if run.done("export"):
@@ -455,7 +500,27 @@ def ph_export(run: Run, args) -> None:
             refresh_rows.append(r)
         elif r[2]:                             # scorable (verdict unreviewed/unknown)
             new_rows.append(r)
-    refresh_rows.sort(key=lambda r: scored_at[r[0]])       # oldest scored first
+    # FU-093 trust priority (2026-07-26). A garbage score is WORSE than no
+    # score: it is served to customers as though it were real. Plain
+    # oldest-first is a trap here -- the three random-head waves carry the
+    # NEWEST scored_at values, so age-ordering sorts the known-garbage cohorts
+    # LAST and the weekly cadence would never reach them. Rank distrust ahead
+    # of age; within each group, oldest first as before.
+    distrusted: set = set()
+    try:
+        distrusted, verdicts = cohort_trust(conn)
+        bad_servers = sum(1 for r in refresh_rows if scored_at[r[0]] in distrusted)
+        log(f"export: trust audit -- {len(verdicts)} cohorts, "
+            f"{len(distrusted)} distrusted ({bad_servers} servers) "
+            f"prioritised ahead of age")
+    except Exception as exc:      # FAIL-SAFE: this must never block an export
+        distrusted = set()
+        log(f"export: trust audit FAILED ({exc.__class__.__name__}: {exc}) -- "
+            f"falling back to oldest-first ordering; FU-093 priority NOT applied")
+    # sort key = (trust_rank, scored_at): False(0) sorts before True(1), so
+    # distrusted cohorts lead, then everything else oldest-scored first.
+    refresh_rows.sort(key=lambda r: (scored_at[r[0]] not in distrusted,
+                                     scored_at[r[0]]))
     if run.state["mode"] != "full":
         refresh_rows = refresh_rows[:args.refresh_cap]
     uniq = new_rows + refresh_rows

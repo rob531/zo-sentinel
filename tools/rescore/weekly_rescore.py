@@ -756,12 +756,48 @@ def _eff_deadline(run, args):
     return run.state.get("deadline_scaled", DEADLINE_MIN_DEFAULT)
 
 
+def _billed_dph(run, args) -> float:
+    """The rate we are ACTUALLY billed, not the rate we were quoted.
+
+    `fire` stamps state["dph"] from the OFFER's dph_total, which prices compute
+    only. Once the instance is rented, vast adds the allocated-storage component,
+    so the live instance's dph_total is strictly >= the offer's. Observed on run
+    20260727-105859: offer 0.296111, live 0.321111 -- an 8.4% under-count, which
+    means the COST_CAP_USD ceiling fires ~8% late and every "est $x" line we log
+    understates the bill. Same failure shape as the MTD spend guard (FU-035):
+    a guard is only as honest as the number it compares against.
+
+    Falls back to the stamped offer dph if the API is unreachable -- a watch loop
+    must never die because vast is having a moment. Returns the LARGER of the two
+    so a lookup failure can never lower the ceiling's basis.
+    """
+    quoted = float(run.state.get("dph", args.max_dph))
+    iid = run.state.get("instance_id")
+    if not iid:
+        return quoted
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        for i in (v.show_instances() or []):
+            if str(i.get("id")) == str(iid):
+                live = float(i.get("dph_total") or 0)
+                if live > quoted:
+                    log(f"watch: billed dph {live:.6f}/hr > quoted {quoted:.6f}/hr "
+                        f"(storage component); using billed for the cost ceiling")
+                    return live
+                return quoted
+    except Exception as e:
+        log(f"watch: live dph lookup failed ({e.__class__.__name__}: {e}); "
+            f"falling back to quoted ${quoted:.6f}/hr")
+    return quoted
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
     pat = secret("github")
     fired = datetime.fromisoformat(run.state["fired_at"])
-    dph = float(run.state.get("dph", args.max_dph))
+    dph = _billed_dph(run, args)
     while True:
         st = _results_state(run, pat)
         elapsed_h = (datetime.now(timezone.utc) - fired).total_seconds() / 3600

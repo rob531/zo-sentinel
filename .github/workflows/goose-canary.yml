@@ -112,6 +112,12 @@ jobs:
       #       build -- an architect with no bridge is dead either way.
       #   (b) genuine RENAME -- bridge started, but the verbatim tool name is gone.
       - name: stdio namespacing probe (scar #454 -- MANDATORY for any version bump)
+        env:
+          # The bridge defaults its root to /home/workspace/zo_sentinel (the tower).
+          # A runner cannot write there, so point it at a scratch root. The DEFAULT
+          # is unchanged -- this only exercises the override.
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel
+          ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp.log
         run: |
           set -euo pipefail
           NONCE="ns-$RANDOM-$RANDOM"

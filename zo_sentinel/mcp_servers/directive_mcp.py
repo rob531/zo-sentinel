@@ -80,13 +80,37 @@ except Exception as e:
 # Paths
 # ---------------------------------------------------------------------------
 
-SENTINEL_DIR = Path("/home/workspace/zo_sentinel")
+# Root is OVERRIDABLE but the DEFAULT IS UNCHANGED -- the tower behaves exactly
+# as before. The override exists so the bridge can be exercised somewhere other
+# than /home/workspace (goose-canary CI, a scratch checkout) without editing code.
+#
+# THIRD INSTANCE OF THE SAME SCAR (see the argparse pin and the PYTHONPATH fix
+# above): anything that makes this module fail at IMPORT time takes the bridge
+# down, and goose does NOT treat that as fatal -- it warns
+# ("Failed to start extension ... continuing without it") and runs the session
+# with only python/bash. The architect then presents as healthy and emits +0.
+# So: never do unguarded filesystem work at import time against a path this
+# module does not control.
+SENTINEL_DIR = Path(os.environ.get("ZO_SENTINEL_DIR", "/home/workspace/zo_sentinel"))
 DIRECTIVE_DIR = SENTINEL_DIR / "directives"
 PROPOSED_DIR = DIRECTIVE_DIR / "proposed"   # NEW: this MCP only writes here
 PENDING_DIR = DIRECTIVE_DIR / "pending"     # read-only from this module
-LOG_PATH = Path("/home/workspace/logs/directive_mcp.log")
+LOG_PATH = Path(
+    os.environ.get("ZO_DIRECTIVE_MCP_LOG", "/home/workspace/logs/directive_mcp.log")
+)
 
-PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
+except OSError as _e:
+    # Fail LOUD on the one surface goose actually surfaces (stderr), naming the
+    # consequence rather than just the errno -- a silent +0 architect is the
+    # expensive failure, not the mkdir.
+    sys.stderr.write(
+        f"directive_mcp: cannot create {PROPOSED_DIR} ({_e}). The bridge cannot "
+        f"accept proposals, so the architect will emit +0 while appearing healthy. "
+        f"Set ZO_SENTINEL_DIR to a writable root.\n"
+    )
+    sys.exit(2)
 
 
 _VERSION_RE = re.compile(r"(_v\d+)+$")           # trailing _v2 / _v3_v4 etc.

@@ -84,25 +84,56 @@ jobs:
             exit 1
           fi
 
+      # The bridge needs the MCP SDK. It is NOT declared in any requirements file
+      # in this repo -- it exists only in the tower's ambient Python env, which is
+      # why the first CI run of this probe died on `No module named 'mcp'`. Pinned
+      # loose-but-bounded, same philosophy as tests/ci/requirements-ci.txt.
+      - name: Install the MCP SDK the bridge imports
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install "mcp>=1.2,<2.0"
+          python -c "from mcp.server.fastmcp import FastMCP; print('mcp SDK import OK')"
+
       # SCAR #454 (goose 1.38): stdio tool names were namespaced away from what
       # directive_architect.yaml hardcodes, every architect call returned
       # "Tool not found", and the architect silently emitted +0 for days. The
       # probe loads the REAL zo_directive_bridge stdio extension and calls the
       # VERBATIM name the architect recipe uses. cwd MUST be the repo root so the
       # relative extension arg resolves (goose stdio extensions resolve paths
-      # against the goose PROCESS cwd). directive_mcp.py is stdlib-only, so this
-      # step needs no extra install.
+      # against the goose PROCESS cwd).
+      #
+      # TWO FAILURE MODES, and they are NOT the same defect (the FU-108 lesson:
+      # EXTRACTION_FAILURE != DEGENERATE -- never let one bucket absorb the other):
+      #   (a) EXTENSION_START_FAILURE -- the bridge process never initialised.
+      #       goose does NOT abort on this: it prints "continuing without it" and
+      #       runs the session with only python/bash. That is the 1.38 starvation
+      #       shape reproduced by a different cause, so it must still fail the
+      #       build -- an architect with no bridge is dead either way.
+      #   (b) genuine RENAME -- bridge started, but the verbatim tool name is gone.
       - name: stdio namespacing probe (scar #454 -- MANDATORY for any version bump)
         run: |
           set -euo pipefail
           NONCE="ns-$RANDOM-$RANDOM"
           goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
             --params nonce="$NONCE" 2>&1 | tee /tmp/namespacing.out
+
+          if grep -qi "Failed to start extension 'zo_directive_bridge'" /tmp/namespacing.out; then
+            echo "CANARY FAIL (a): EXTENSION_START_FAILURE -- the bridge never initialised."
+            echo "This is NOT a goose namespacing regression; it is our extension being unloadable."
+            echo "Note what goose did: it warned and CONTINUED WITHOUT THE BRIDGE. A bridge that"
+            echo "fails to start on the tower therefore produces a live-looking architect with no"
+            echo "bridge tools -- i.e. +0 -- and goose will not tell you louder than a warning."
+            grep -i "Failed to start extension" -A2 /tmp/namespacing.out || true
+            exit 1
+          fi
+
           if grep -q "NAMESPACING_OK::$NONCE" /tmp/namespacing.out; then
             echo "NAMESPACING PASS: zo_directive_bridge__read_protected_files resolves verbatim under this goose"
           else
-            echo "NAMESPACING FAIL: the architect's hardcoded tool name did NOT resolve."
-            echo "This is the 1.38 starvation shape. DO NOT FLIP. Tool list the agent reported:"
+            echo "CANARY FAIL (b): the architect's hardcoded tool name did NOT resolve, and the"
+            echo "bridge DID start -- so this is a genuine rename. The 1.38 starvation shape."
+            echo "DO NOT FLIP. Tool list the agent reported:"
             tail -40 /tmp/namespacing.out
             exit 1
           fi

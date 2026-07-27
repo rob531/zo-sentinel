@@ -118,6 +118,25 @@ jobs:
           # is unchanged -- this only exercises the override.
           ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel
           ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp.log
+          # DRIVE THIS STEP ON A NON-REASONING MODEL, and understand why before
+          # changing it back. This canary points goose DIRECTLY at a provider,
+          # whereas the mesh points goose at the ladder shim on :8796. On the
+          # direct path, a multi-turn tool-calling turn against a REASONING model
+          # (cerebras gpt-oss-120b) dies with:
+          #   400: messages.2.assistant.reasoning_content ... is unsupported
+          # because goose preserves reasoning_content across tool-call turns
+          # (upstream #10366) and the provider rejects the property on replay.
+          # PROVEN NOT A VERSION REGRESSION: runs 30262869986 (1.44.0) and
+          # 30262977744 (1.43.0 control) fail identically, and 1.43 is what is
+          # live today. PROVEN NOT A PRODUCTION BUG EITHER: ladder_shim.py
+          # chat_completions() reads only role+content off each message and
+          # rebuilds a fresh [system, user] payload, so reasoning_content never
+          # reaches a provider in the real path.
+          # The single-turn smoke above is unaffected -- it never replays an
+          # assistant turn. See FU-119 for the standing divergence this exposes.
+          OPENAI_BASE_URL: https://api.groq.com/openai/v1
+          OPENAI_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOSE_MODEL: llama-3.3-70b-versatile
         run: |
           set -euo pipefail
           NONCE="ns-$RANDOM-$RANDOM"

@@ -4,7 +4,7 @@ from typing import List, Optional
 import requests
 from datetime import datetime
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 
 router = APIRouter()
 

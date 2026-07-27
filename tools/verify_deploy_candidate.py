@@ -251,16 +251,26 @@ def tree_sha():
         return None
 
 
-def working_tree_dirty():
+def dirty_paths():
+    """Paths git reports as modified/untracked, or None if git is unavailable.
+
+    Returns a list so callers can say WHICH files are dirty -- "dirty: true"
+    with no path list sent a prod-drift run chasing a phantom.
+    """
     try:
         out = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=str(REPO_ROOT), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=60,
         )
-        return bool(out.stdout.decode().strip())
+        return [ln[3:].strip() for ln in out.stdout.decode().splitlines() if ln.strip()]
     except Exception:
         return None
+
+
+def working_tree_dirty():
+    paths = dirty_paths()
+    return None if paths is None else bool(paths)
 
 
 def main(argv=None):
@@ -279,6 +289,12 @@ def main(argv=None):
     if args.only:
         gates = [g for g in gates if g.name in set(args.only)]
     skip = set(args.skip)
+
+    # Snapshot dirtiness BEFORE any gate runs. Gates write tracked artifacts
+    # (e.g. artifacts/ci_smoke_junit.xml from smoke-ladder), so measuring
+    # afterwards reports DIRTY on a pristine checkout every single time and
+    # trains the reader to ignore the one warning that matters.
+    dirty_before = dirty_paths()
 
     results = []
     for gate in gates:
@@ -300,12 +316,16 @@ def main(argv=None):
                                              res["duration_s"]), flush=True)
 
     blocking = [r for r in results if r["status"] not in ("PASS", "SKIP")]
-    dirty = working_tree_dirty()
+    dirty = None if dirty_before is None else bool(dirty_before)
+    dirty_after = dirty_paths() or []
+    gate_written = sorted(set(dirty_after) - set(dirty_before or []))
     verdict = {
         "verdict": "PASS" if not blocking else "FAIL",
         "head_sha": head_sha(),
         "tree_sha": tree_sha(),
         "working_tree_dirty": dirty,
+        "working_tree_dirty_paths": (dirty_before or [])[:50],
+        "gate_written_paths": gate_written[:50],
         "checked_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "gates_run": len([r for r in results if r["status"] != "SKIP"]),
         "gates_skipped": len([r for r in results if r["status"] == "SKIP"]),
@@ -316,8 +336,9 @@ def main(argv=None):
         # A dirty tree means the verdict does not describe head_sha. Say so
         # rather than letting a caller attribute the result to a commit.
         verdict["warning"] = (
-            "working tree is DIRTY -- this verdict describes the files on disk, "
-            "not commit {}".format(verdict["head_sha"])
+            "working tree was DIRTY BEFORE the gates ran -- this verdict "
+            "describes the files on disk, not commit {}. Dirty: {}".format(
+                verdict["head_sha"], ", ".join((dirty_before or [])[:10]) or "?")
         )
 
     ARTIFACT.parent.mkdir(parents=True, exist_ok=True)

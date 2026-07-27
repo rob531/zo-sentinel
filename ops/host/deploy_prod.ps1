@@ -73,6 +73,68 @@ function Git-BestEffort {
     try { & git @GitArgs 2>&1 | Out-Null } catch { } finally { $ErrorActionPreference = $prev }
 }
 
+# ---------------------------------------------------------------- teardown
+# HEAL, RETRY, VERIFY. `git worktree remove --force` can prune the metadata and
+# still leave the directory on disk: on 2026-07-27 it left 3,466 files behind,
+# `git worktree list` showed nothing, and the NEXT run died on
+# "fatal: '<path>' already exists" -- a state neither `remove` nor `prune` can
+# fix. The old teardown here was `Remove-Item ... -ErrorAction SilentlyContinue`
+# with no check after it, so that failure mode was SILENT in the one path the
+# chairman actually fires.
+#
+# Retry before failing: on Windows a file handle can outlive the process that
+# opened it by a moment, so "cannot delete" is a TIMING fact before it is a
+# FAULT. A closing handle clears in seconds; a wedged process does not. Bounded
+# backoff tells the two apart instead of guessing.
+#
+# MustSucceed differs by call site ON PURPOSE, and this is where this wrapper
+# diverges from verify_candidate.ps1:
+#   * BEFORE the worktree is created -- fatal. A stale path means `worktree add`
+#     cannot pin the sha, so deploying anyway would ship an unknown tree.
+#   * AFTER a deploy has already run -- LOUD WARNING, never fatal. The deploy and
+#     its acceptance gate are the verdict; failing the script over leftover files
+#     would report a successful ship as a failure. Loud, not fatal, not silent.
+function Reset-DisposableWorktree {
+    param(
+        [string]$RepoPath,
+        [string]$Path,
+        [bool]$MustSucceed = $false,
+        [int]$Attempts = 5
+    )
+    for ($i = 1; $i -le $Attempts; $i++) {
+        Push-Location $RepoPath
+        try {
+            Git-BestEffort worktree remove --force $Path
+            Git-BestEffort worktree prune
+            if (Test-Path $Path) {
+                Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Git-BestEffort worktree prune
+        } finally { Pop-Location }
+
+        if (-not (Test-Path $Path)) {
+            if ($i -gt 1) { Say "worktree path cleared on attempt $i" }
+            Say "worktree path VERIFIED gone: $Path"
+            return $true
+        }
+
+        $left = @(Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue).Count
+        if ($i -lt $Attempts) {
+            $wait = [Math]::Min(8, [Math]::Pow(2, $i - 1))
+            Say "attempt $i/$Attempts left $left file(s) at $Path -- retrying in ${wait}s (handle likely still closing)"
+            Start-Sleep -Seconds $wait
+        } else {
+            Say "attempt $i/$Attempts left $left file(s) at $Path"
+        }
+    }
+
+    if ($MustSucceed) {
+        Die "could not clear $Path after $Attempts attempts -- refusing to deploy from a path that cannot be pinned to $Sha. A process is holding a file open; find it before firing."
+    }
+    Say "WARNING: $Path SURVIVED teardown after $Attempts attempts -- the deploy verdict above still stands, but the next run will inherit this orphan. Clear it by hand: Remove-Item -LiteralPath $Path -Recurse -Force"
+    return $false
+}
+
 if ($Sha -notmatch '^[0-9a-f]{40}$') {
     Die "-Sha must be a full 40-char commit sha (got '$Sha'). Short shas make the deployed identity ambiguous."
 }
@@ -100,9 +162,10 @@ Say "ROLLBACK ANCHOR: $rollbackCmd"
 # ---------------------------------------------------------------- clean worktree
 Push-Location $Repo
 Git-BestEffort fetch origin main --quiet
-Git-BestEffort worktree remove --force $WorktreePath
-if (Test-Path $WorktreePath) { Remove-Item -Recurse -Force $WorktreePath }
-Git-BestEffort worktree prune
+Pop-Location
+# fatal if it will not clear: see Reset-DisposableWorktree
+[void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true)
+Push-Location $Repo
 Say "creating disposable worktree at $WorktreePath pinned to $Sha"
 git worktree add --detach $WorktreePath $Sha
 Pop-Location
@@ -184,10 +247,7 @@ try {
 }
 finally {
     Pop-Location
-    Push-Location $Repo
     Say "removing disposable worktree $WorktreePath"
-    Git-BestEffort worktree remove --force $WorktreePath
-    if (Test-Path $WorktreePath) { Remove-Item -Recurse -Force $WorktreePath -ErrorAction SilentlyContinue }
-    Git-BestEffort worktree prune
-    Pop-Location
+    # loud, never fatal: the deploy verdict above is the result, not this
+    [void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $false)
 }

@@ -194,5 +194,81 @@ def test_audit_clean_when_ledger_and_live_agree(iso):
     assert report["ok"] is True and report["alerts"] == []
 
 
+def _live(iid, state="running", dph=0.32, label=None, start_date=None):
+    return {"id": iid, "state": state, "dph": dph, "label": label,
+            "start_date": start_date, "gpu": "RTX 4090", "status_msg": "ok"}
+
+
+def test_instance_facts_computes_uptime_and_burn():
+    now = 1785150111.0 + 3600.0          # one hour after start
+    f = vast_jobs.instance_facts(
+        _live("1", dph=0.32, label="zo-sentinel-score",
+              start_date=1785150111.0), now_ts=now)
+    assert f["uptime_min"] == 60.0
+    assert f["cost_so_far_usd"] == 0.32
+    assert f["label"] == "zo-sentinel-score"
+    assert f["wedged"] is False
+
+
+def test_missing_start_date_yields_unknown_uptime_not_zero():
+    """A 0 would read as 'just started' and silently suppress the wedge guard."""
+    f = vast_jobs.instance_facts(_live("1", state="loading", start_date=None))
+    assert f["uptime_min"] is None
+    assert f["cost_so_far_usd"] is None
+    assert f["wedged"] is False
+
+
+def test_loading_past_threshold_is_a_wedge(iso):
+    now = 2_000_000_000.0
+    old = now - (vast_jobs.WEDGE_LOADING_MIN + 1) * 60
+    assert vast_jobs.instance_facts(
+        _live("9", state="loading", start_date=old), now_ts=now)["wedged"]
+    young = now - (vast_jobs.WEDGE_LOADING_MIN - 1) * 60
+    assert not vast_jobs.instance_facts(
+        _live("9", state="loading", start_date=young), now_ts=now)["wedged"]
+    # ...and a RUNNING instance of the same age is not a wedge
+    assert not vast_jobs.instance_facts(
+        _live("9", state="running", start_date=old), now_ts=now)["wedged"]
+
+
+def test_audit_reports_every_live_instance_even_unledgered(iso):
+    """ScoreWave/moat-rescore write no ledger row, so a ledger-only view of
+    paid compute is structurally blind. report['live'] must show them."""
+    c = FakeClient()
+    c.live = [_live("45996047", label="zo-sentinel-score",
+                    start_date=1785150111.0)]
+    report = vast_jobs.audit(c)
+    assert report["live_instances"] == 1
+    assert [i["instance_id"] for i in report["live"]] == ["45996047"]
+    assert report["live"][0]["label"] == "zo-sentinel-score"
+    assert report["burn_dph_total"] == 0.32
+
+
+def test_orphan_alert_carries_the_evidence_to_judge_it(iso):
+    """A bare {instance_id, dph} forces every reader back to the raw API to
+    tell a legitimate wave from a leak -- carry the facts and the command."""
+    c = FakeClient()
+    c.live = [_live("45996047", label="zo-sentinel-score",
+                    start_date=1785150111.0)]
+    alert = [a for a in vast_jobs.audit(c)["alerts"]
+             if a["class"] == "orphan_instance"][0]
+    for k in ("label", "state", "uptime_min", "cost_so_far_usd",
+              "started_at", "dph"):
+        assert k in alert, k
+    assert alert["destroy_cmd"].endswith("destroy 45996047")
+
+
+def test_audit_never_destroys_a_wedged_instance(iso):
+    """Forensics-before-destroy: audit SURFACES the command, a human fires it."""
+    c = FakeClient()
+    c.live = [_live("9", state="loading", dph=1.0, start_date=0.0)]
+    report = vast_jobs.audit(c)
+    classes = {a["class"] for a in report["alerts"]}
+    assert "wedged_instance" in classes
+    assert c.destroyed == []
+    assert report["ok"] is False
+
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

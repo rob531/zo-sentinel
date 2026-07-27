@@ -14,6 +14,12 @@ COPY facet_enum_service.py perspective_model.py perspective_query_api.py perspec
 # policy module (kill-switch chain) -- without this the vuln surfaces are
 # permanently fail-closed on Fly (found 2026-07-04: ZO_VULN_ENABLED had no lever)
 COPY zo_sentinel/__init__.py zo_sentinel/policy.py zo_sentinel/policy_defaults.toml /srv/zo_sentinel/
+
+# FU-102: root modules registered in services/active/ but absent from the image.
+# Without these the app mounts them at build time and prod raises ModuleNotFoundError
+# (7 failures live on /spine/health since v64, 2026-07-25). Keep this list in sync
+# with services/active/*/ -- a service dir with a root <name>.py MUST be COPY'd.
+COPY entity_report_exporter.py org_api_key_manager.py org_entity_search_api.py overview_dashboard_api.py server_axis_scores_summary_router.py threat_intel_summary_api.py verdict_watchlist_service.py /srv/
 COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html server_threat_intel_view.html /srv/
 COPY migrations /srv/migrations
 COPY alembic.ini /srv/alembic.ini

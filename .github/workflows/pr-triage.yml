@@ -30,7 +30,12 @@ permissions:
 
 concurrency:
   group: pr-triage
-  cancel-in-progress: false
+  # The sweep is a full, idempotent re-triage of EVERY open build PR, so a
+  # queued duplicate can never learn anything the run after it will not -- it
+  # only re-burns the same GraphQL quota. Bursts of build PRs used to queue
+  # N identical sweeps and exhaust the installation rate limit, which fails the
+  # job outright and leaves every PR unlabelled (a silent total gate outage).
+  cancel-in-progress: true
 
 jobs:
   triage:

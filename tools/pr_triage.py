@@ -70,6 +70,18 @@ def _repo() -> str:
     return repo
 
 
+# A quota exhaustion is NOT the same animal as a 502. Exponential backoff in
+# seconds cannot outwait an installation rate limit that resets on the hour, so
+# it gets recognised separately and reported as a GATE OUTAGE rather than as
+# one more flaky call.
+_RATE_LIMITED = ("rate limit", "secondary rate", "api rate limit exceeded")
+
+
+def _is_rate_limited(stderr: str) -> bool:
+    e = (stderr or "").lower()
+    return any(t in e for t in _RATE_LIMITED)
+
+
 _TRANSIENT_GH = ("http 502", "http 503", "http 504", "timed out", "timeout",
                  "couldn't respond", "rate limit", "secondary rate", "eof",
                  "connection reset", "service unavailable", "try again", "bad gateway")
@@ -302,7 +314,20 @@ def main() -> int:
               "--limit", "300", "--json",
               "number,title,files,labels,mergeable,statusCheckRollup")
     if res.returncode != 0:
-        print(f"ERROR: gh pr list failed: {res.stderr.strip()}", file=sys.stderr)
+        err = (res.stderr or "").strip()
+        if _is_rate_limited(err):
+            # Say what actually happened. An unlabelled run is a gate OUTAGE:
+            # nothing was triaged, so nothing can auto-merge, and any red `triage`
+            # check now sitting on a PR is about this quota -- not about that PR.
+            msg = ("TRIAGE GATE OUTAGE: GitHub API quota exhausted -- ZERO PRs "
+                   "triaged this run. No PR can reach triage:solid, so auto-merge "
+                   "is stalled until the next successful run. This is not a defect "
+                   "in any PR carrying a red `triage` check.")
+            print(f"::error title=Triage gate outage (rate limit)::{msg}",
+                  file=sys.stderr)
+            print(f"ERROR: {msg}\n  gh said: {err}", file=sys.stderr)
+            return 1
+        print(f"ERROR: gh pr list failed: {err}", file=sys.stderr)
         return 1
     try:
         prs = json.loads(res.stdout or "[]")

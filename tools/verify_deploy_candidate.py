@@ -161,6 +161,23 @@ def build_gates():
             timeout=300,
             needs=["tests/test_dockerfile_copy_covers_active_services.py"],
         ),
+        # fly.toml runs `alembic upgrade head` as the prod release_command.
+        # Two branch heads in the revision graph abort that command against a
+        # Postgres with no migration rollback (the v61 class) -- and that state
+        # is reachable with NO migration file modified, so the sentinel's
+        # file-path diff structurally cannot see it. Named separately from
+        # pytest-evaluator because pytest-evaluator is SKIPPED on the tower
+        # (test_ladder_routing is not host-reproducible), and the tower is
+        # exactly where a deploy gets staged.
+        Gate(
+            "migration-head",
+            "evaluator.yml",
+            [PY, "-u", "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             "tests/test_migration_graph_single_head.py"],
+            timeout=300,
+            needs=["tests/test_migration_graph_single_head.py",
+                   "migrations/versions"],
+        ),
     ]
     targets = evaluator_pytest_targets()
     if targets:

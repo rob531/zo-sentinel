@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -53,6 +54,21 @@ MIN_SOLID_ADDITIONS = 12  # changes adding fewer lines than this are stub scaffo
 # Filenames that are helper/scaffold artifacts, not shippable product features.
 SCAFFOLD_PREFIXES = ("verify_", "test_", "wire_", "_canary", "canary_")
 SCAFFOLD_SUFFIXES = ("_smoke.py", "_test.py", "_integration_smoke.py")
+
+# A SERVICE REGISTRATION MANIFEST is small BY DESIGN -- declarative metadata,
+# not logic -- so MIN_SOLID_ADDITIONS is a category error for it. Both
+# tools/promote_staged_to_active.py (static gate 1) and tools/generate_spine.py
+# ("presence == registration") key off this exact file, so bucketing it as a
+# stub makes the whole service permanently unpromotable and unmountable.
+# Exempt it from the LINE COUNT only -- and only once its CONTENT resolves the
+# keys the promoter blocks on (CofC 3+FATHER 2026-07-27 directive 2:
+# validate, never bare path-match).
+MANIFEST_RE = re.compile(r"^services/[^/]+/[^/]+/service\.toml$")
+MANIFEST_REQUIRED_KEYS = ("name", "import_path")
+# Audit marker so every merge taken under the exemption stays separable from
+# ordinary solids. Deliberately NOT a triage: bucket -- auto-merge.yml keys on
+# the exact label "triage:solid" and must not need editing for this.
+MANIFEST_MARKER_LABEL = "manifest-exemption"
 
 BUCKETS = {
     "solid": ("0e8a16", "All gates green, mergeable, not a dup/scaffold -- merge candidate"),
@@ -160,6 +176,41 @@ def _primary_path(files: list) -> str:
     return best
 
 
+def _manifest_only(files: list) -> bool:
+    """True when this PR changes exactly one file and it is a service manifest."""
+    paths = [f.get("path", "") for f in (files or [])]
+    return len(paths) == 1 and bool(MANIFEST_RE.match(paths[0] or ""))
+
+
+def _manifest_is_valid(repo: str, number: int) -> bool:
+    """True only if the manifest this PR ADDS parses as TOML and resolves every
+    key promote_staged_to_active.py blocks on.
+
+    Reads the DIFF rather than the head tree, so the thing judged is exactly the
+    thing that would land. Fails CLOSED: parse error, missing key, or an
+    unreadable diff all return False, dropping the PR back into the ordinary
+    scaffold bucket. A gate that cannot read its subject must not bless it.
+    """
+    res = _gh("pr", "diff", str(number), "-R", repo)
+    if res is None or res.returncode != 0:
+        return False
+    added = "\n".join(
+        ln[1:] for ln in (res.stdout or "").splitlines()
+        if ln.startswith("+") and not ln.startswith("+++")
+    )
+    if not added.strip():
+        return False
+    try:
+        import tomllib
+
+        meta = tomllib.loads(added).get("service", {})
+    except Exception:
+        return False
+    if not isinstance(meta, dict):
+        return False
+    return all(str(meta.get(k) or "").strip() for k in MANIFEST_REQUIRED_KEYS)
+
+
 def _is_scaffold(files: list) -> bool:
     paths = [f.get("path", "") for f in (files or [])]
     if not paths:
@@ -178,8 +229,13 @@ def _is_scaffold(files: list) -> bool:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def classify(prs: list) -> dict:
-    """Return {number: bucket-or-None}. None == leave unlabelled (checks pending)."""
+def classify(prs: list, repo: str = "", exempted: set | None = None) -> dict:
+    """Return {number: bucket-or-None}. None == leave unlabelled (checks pending).
+
+    `repo` is required to read a manifest PR's diff for schema validation; with
+    no repo the manifest exemption simply never arms (fail-closed). Numbers that
+    took the exemption are recorded into `exempted` for the audit marker.
+    """
     # Build supersede maps: file/task -> highest open PR number using it.
     newest_for_path: dict[str, int] = {}
     newest_for_task: dict[str, int] = {}
@@ -203,7 +259,16 @@ def classify(prs: list) -> dict:
         if superseded:
             out[n] = "dup"
             continue
-        if _is_scaffold(pr.get("files")):
+        files = pr.get("files")
+        # A single-file service manifest is exempt from the line-count stub rule,
+        # but only once its content proves it actually registers something. Mixed
+        # PRs (manifest + anything else) stay strict (FATHER directive 3).
+        manifest_ok = bool(
+            repo and _manifest_only(files) and _manifest_is_valid(repo, n)
+        )
+        if manifest_ok and exempted is not None:
+            exempted.add(n)
+        if not manifest_ok and _is_scaffold(files):
             out[n] = "scaffold"
             continue
         mergeable = (pr.get("mergeable") or "").upper()
@@ -222,6 +287,11 @@ def ensure_labels(repo: str) -> None:
     for name, (color, desc) in BUCKETS.items():
         _gh("label", "create", f"{TRIAGE_PREFIX}{name}", "-R", repo,
             "--color", color, "--description", desc, "--force")
+    _gh("label", "create", MANIFEST_MARKER_LABEL, "-R", repo,
+        "--color", "1d76db",
+        "--description",
+        "Solid via the service-manifest line-count exemption (schema-validated)",
+        "--force")
     _gh("label", "create", DIGEST_ISSUE_LABEL, "-R", repo,
         "--color", "ededed", "--description", "Tracking issue for auto-build PR triage digest", "--force")
 
@@ -235,7 +305,7 @@ def apply_label(repo: str, number: int, bucket: str) -> None:
         _gh("pr", "edit", str(number), "-R", repo, "--remove-label", o)  # tolerant
 
 
-def build_digest(prs_by_num: dict, buckets: dict) -> str:
+def build_digest(prs_by_num: dict, buckets: dict, exempted: set | None = None) -> str:
     order = ["solid", "stale", "scaffold", "dup"]
     headers = {
         "solid": "✅ SOLID — merge candidates (all gates green, not dup/scaffold)",
@@ -262,7 +332,8 @@ def build_digest(prs_by_num: dict, buckets: dict) -> str:
             lines.append("_none_")
         for n in nums:
             pr = prs_by_num[n]
-            lines.append(f"- #{n} — {pr.get('title','').strip()}")
+            mark = "  `manifest-exemption`" if (exempted and n in exempted) else ""
+            lines.append(f"- #{n} — {pr.get('title','').strip()}{mark}")
         lines.append("")
     if pending:
         lines.append("## ⏳ Pending checks (re-evaluated next run): "
@@ -315,17 +386,24 @@ def main() -> int:
         return 0
 
     ensure_labels(repo)
-    buckets = classify(prs)
+    exempted: set = set()
+    buckets = classify(prs, repo, exempted)
     prs_by_num = {pr["number"]: pr for pr in prs}
 
     for n, b in sorted(buckets.items()):
         if b:
-            print(f"#{n}: {b}")
+            note = " [manifest-exemption]" if n in exempted else ""
+            print(f"#{n}: {b}{note}")
             apply_label(repo, n, b)
+            if n in exempted:
+                # Audit trail (FATHER directive 4): every merge taken under the
+                # exemption stays separable from an ordinary solid.
+                _gh("pr", "edit", str(n), "-R", repo,
+                    "--add-label", MANIFEST_MARKER_LABEL)
         else:
             print(f"#{n}: (pending checks — no label this run)")
 
-    digest = build_digest(prs_by_num, buckets)
+    digest = build_digest(prs_by_num, buckets, exempted)
     upsert_digest_issue(repo, digest)
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")

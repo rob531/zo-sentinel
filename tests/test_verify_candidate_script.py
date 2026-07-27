@@ -166,3 +166,38 @@ def test_dirtiness_is_snapshotted_before_gates_run(script_text: str) -> None:
         "a dirty pre-gate tree must be able to FAIL the run, not just warn: a "
         "PASS that describes disk instead of the commit is not a PASS."
     )
+
+
+def test_teardown_retries_before_it_fails(script_text: str) -> None:
+    """A closing file handle is not a wedged process -- distinguish them.
+
+    The first cut of Reset-DisposableWorktree died on the FIRST failed removal
+    and immediately fired a false alarm: 6 of 3,298 files were still held
+    moments after the gates exited, and a retry 3s later cleared them on the
+    first attempt. Both failure modes are real and they pull in opposite
+    directions, so the helper must do BOTH:
+
+      * retry with backoff, or a normal teardown pages the chairman;
+      * still fail loudly at the end, or a wedge becomes a silent orphan that
+        breaks the next run (the defect this whole script exists to fix).
+    """
+    code = "\n".join(_code_lines(script_text))
+    assert "$Attempts" in code, (
+        "teardown must be bounded-retry, not one-shot -- a handle that is still "
+        "closing is a timing fact, not a fault."
+    )
+    assert "Start-Sleep" in code, "retries must back off rather than spin"
+
+    loop_idx = code.find("for ($i = 1; $i -le $Attempts")
+    assert loop_idx != -1, "expected a bounded retry loop over $Attempts"
+
+    remove_idx = code.find("Remove-Item -LiteralPath $Path", loop_idx)
+    assert remove_idx != -1, "the removal must happen INSIDE the retry loop"
+
+    # The loud failure must survive the retries -- retrying must not become a
+    # way of quietly giving up.
+    die_idx = code.rfind("Die ")
+    assert die_idx > loop_idx, (
+        "after the retries are exhausted the helper must still Die when "
+        "-MustSucceed: bounded patience, not unbounded tolerance."
+    )

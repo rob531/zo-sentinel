@@ -16,7 +16,8 @@
        Observed 2026-07-27T16:50Z; the 14:00Z run had recorded
        "worktrees_cleaned": true while 3,466 files sat in that path. A cleanup
        step that is not VERIFIED is a claim, not a result. So: heal any leftover
-       directory BEFORE add, and assert the path is gone AFTER remove.
+       directory BEFORE add, and assert the path is gone AFTER remove -- with
+       bounded retry, because a handle that is still closing is not a wedge.
 
     2. THE EVIDENCE WAS DELETED. tools/verify_deploy_candidate.py writes
        artifacts/deploy_candidate_verdict.json INSIDE the worktree -- which the
@@ -74,25 +75,54 @@ function Git-BestEffort {
 # The whole point of this script. `remove` alone is not enough (see .DESCRIPTION
 # note 1) -- prune the metadata, delete any surviving directory, then PROVE it.
 function Reset-DisposableWorktree {
-    param([string]$RepoPath, [string]$Path, [bool]$MustSucceed = $false)
-    Push-Location $RepoPath
-    try {
-        Git-BestEffort worktree remove --force $Path
-        Git-BestEffort worktree prune
-        if (Test-Path $Path) {
-            Say "leftover directory at $Path -- removing (orphan heal)"
-            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Git-BestEffort worktree prune
-    } finally { Pop-Location }
+    param(
+        [string]$RepoPath,
+        [string]$Path,
+        [bool]$MustSucceed = $false,
+        [int]$Attempts = 5
+    )
+    # RETRY, then verify, then fail. The first cut of this helper died on the
+    # first failed removal and immediately produced a false alarm: the gates had
+    # just exited and something (an AV scanner, or a reaped child of the smoke
+    # ladder's mock write_service) still held 6 of 3,298 files. A retry three
+    # seconds later cleared it on the first attempt. On Windows a file handle can
+    # outlive the process that opened it by a moment, so "cannot delete" is a
+    # TIMING fact before it is a FAULT -- but only briefly. Bounded backoff tells
+    # the two apart instead of guessing: a closing handle clears in seconds, a
+    # wedged process does not. Dying on the first attempt turns a clean teardown
+    # into a spurious page; never retrying turns a wedge into a silent orphan.
+    for ($i = 1; $i -le $Attempts; $i++) {
+        Push-Location $RepoPath
+        try {
+            Git-BestEffort worktree remove --force $Path
+            Git-BestEffort worktree prune
+            if (Test-Path $Path) {
+                Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Git-BestEffort worktree prune
+        } finally { Pop-Location }
 
-    if (Test-Path $Path) {
-        if ($MustSucceed) { Die "could not clear $Path -- refusing to claim a clean teardown. Check for a process holding a file open." }
-        Say "WARNING: $Path still present after heal"
-        return $false
+        if (-not (Test-Path $Path)) {
+            if ($i -gt 1) { Say "worktree path cleared on attempt $i" }
+            Say "worktree path VERIFIED gone: $Path"
+            return $true
+        }
+
+        $left = @(Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue).Count
+        if ($i -lt $Attempts) {
+            $wait = [Math]::Min(8, [Math]::Pow(2, $i - 1))
+            Say "attempt $i/$Attempts left $left file(s) at $Path -- retrying in ${wait}s (handle likely still closing)"
+            Start-Sleep -Seconds $wait
+        } else {
+            Say "attempt $i/$Attempts left $left file(s) at $Path"
+        }
     }
-    Say "worktree path VERIFIED gone: $Path"
-    return $true
+
+    if ($MustSucceed) {
+        Die "could not clear $Path after $Attempts attempts -- refusing to claim a clean teardown. A process is holding a file open; find it before the next run inherits this."
+    }
+    Say "WARNING: $Path still present after $Attempts attempts"
+    return $false
 }
 
 if ($Sha -notmatch '^[0-9a-f]{40}$') {

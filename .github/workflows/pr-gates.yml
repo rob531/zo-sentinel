@@ -13,6 +13,9 @@ name: pr-gates
 # gh_actions_fetcher.py can reverse-feed failures into mesh_memory.
 
 on:
+  # Lets any SHA (not just a PR head) be gated on demand -- see
+  # tools/verify_deploy_candidate.py for why that distinction matters.
+  workflow_dispatch:
   pull_request:
   push:
     branches:

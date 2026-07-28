@@ -98,9 +98,21 @@ def _is_rate_limited(stderr: str) -> bool:
     return any(t in e for t in _RATE_LIMITED)
 
 
+# An over-budget GraphQL query does not always come back as a tidy "HTTP 504".
+# MEASURED against the live API 2026-07-28T04:5xZ: the same combined PR query
+# failed three ways in four consecutive attempts --
+#   HTTP 504: 504 Gateway Timeout
+#   HTTP 504: We couldn't respond to your request in time...
+#   stream error: stream ID 1; CANCEL; received from peer
+# The third is GitHub killing the HTTP/2 stream rather than answering, and it
+# matches NONE of the tokens above it. Classifying that as non-transient is how
+# a retry/degrade path silently fails to arm on the very failure it was built
+# for -- so the stream-cancel shapes are named explicitly.
 _TRANSIENT_GH = ("http 502", "http 503", "http 504", "timed out", "timeout",
                  "couldn't respond", "rate limit", "secondary rate", "eof",
-                 "connection reset", "service unavailable", "try again", "bad gateway")
+                 "connection reset", "service unavailable", "try again", "bad gateway",
+                 "stream error", "received from peer", "connection closed",
+                 "unexpected end")
 
 
 def _gh(*args: str, check: bool = False, retries: int = 4) -> subprocess.CompletedProcess:
@@ -379,36 +391,153 @@ def upsert_digest_issue(repo: str, body: str) -> None:
             print(f"  warn: could not update digest issue #{num}: {r.stderr.strip()}", file=sys.stderr)
 
 
-def main() -> int:
-    repo = _repo()
+# ---------------------------------------------------------------------------
+# Fetching the open build-PR set
+# ---------------------------------------------------------------------------
+# `files` and `statusCheckRollup` are per-PR GraphQL CONNECTIONS. Asking for
+# both across `--limit 300` builds ONE query whose cost scales with
+# (open PRs x changed files x checks per PR). Past a threshold GitHub answers
+# HTTP 504 *deterministically* -- and because the entire run hangs off that
+# single call, a 504 means ZERO PRs triaged: exactly the total gate outage the
+# rate-limit branch below already has a name for.
+#
+# Exponential backoff cannot fix this. _gh() already retries 504s, and on
+# 2026-07-28T03:33Z it spent five attempts and 71s collecting five 504s from
+# the same query (FU-129). A query that is over budget is over budget on every
+# attempt; it is not intermittently unlucky. Retrying harder only converts a
+# fast failure into a slow one.
+#
+# So: try the combined query first (it is cheap while the backlog is small),
+# and on a TRANSIENT failure DEGRADE to a metadata-only list plus per-PR
+# hydration of the two expensive fields. Many small queries always fit the
+# budget. Cost is O(open PRs) extra calls, paid only when the fast path fails.
+_FULL_FIELDS = "number,title,files,labels,mergeable,statusCheckRollup"
+_CHEAP_FIELDS = "number,title,labels,mergeable"
+_HYDRATE_FIELDS = "files,statusCheckRollup"
+
+
+def _is_transient(stderr: str) -> bool:
+    e = (stderr or "").lower()
+    return any(t in e for t in _TRANSIENT_GH)
+
+
+def fetch_open_build_prs(repo: str):
+    """Return (prs, mode, dropped) for every OPEN autonomous-build PR.
+
+    mode is one of:
+      "full"         -- one combined query answered it
+      "degraded"     -- metadata list + per-PR hydration (the 504 fallback)
+      "rate_limited" -- quota exhausted; caller reports a GATE OUTAGE
+      "error"        -- non-transient failure; caller fails the run
+
+    `dropped` lists PR numbers that could not be hydrated. They are EXCLUDED
+    from `prs` rather than classified on missing data: `files` is what drives
+    the dup and scaffold buckets, so a PR judged without it is judged wrongly,
+    and a wrong label is worse than no label. Same fail-closed reflex as
+    _manifest_is_valid -- a gate that cannot read its subject must not judge it.
+    """
     res = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
-              "--limit", "300", "--json",
-              "number,title,files,labels,mergeable,statusCheckRollup")
-    if res.returncode != 0:
-        err = (res.stderr or "").strip()
-        if _is_rate_limited(err):
-            # Say what actually happened. An unlabelled run is a gate OUTAGE:
-            # nothing was triaged, so nothing can auto-merge, and any red `triage`
-            # check now sitting on a PR is about this quota -- not about that PR.
-            msg = ("TRIAGE GATE OUTAGE: GitHub API quota exhausted -- ZERO PRs "
-                   "triaged this run. No PR can reach triage:solid, so auto-merge "
-                   "is stalled until the next successful run. This is not a defect "
-                   "in any PR carrying a red `triage` check.")
-            print(f"::error title=Triage gate outage (rate limit)::{msg}",
-                  file=sys.stderr)
-            print(f"ERROR: {msg}\n  gh said: {err}", file=sys.stderr)
-            return 1
+              "--limit", "300", "--json", _FULL_FIELDS)
+    if res is not None and res.returncode == 0:
+        try:
+            return json.loads(res.stdout or "[]"), "full", []
+        except json.JSONDecodeError as e:
+            print(f"ERROR: bad JSON from gh: {e}", file=sys.stderr)
+            return [], "error", []
+
+    err = (res.stderr or "").strip() if res is not None else "no result from gh"
+    if _is_rate_limited(err):
+        return [], "rate_limited", []
+    if not _is_transient(err):
         print(f"ERROR: gh pr list failed: {err}", file=sys.stderr)
-        return 1
+        return [], "error", []
+
+    print("::warning title=pr-triage degraded::combined PR query failed "
+          f"({err[:180]}); retrying as metadata list + per-PR hydration",
+          file=sys.stderr)
+
+    cheap = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
+                "--limit", "300", "--json", _CHEAP_FIELDS)
+    if cheap is None or cheap.returncode != 0:
+        cerr = (cheap.stderr or "").strip() if cheap is not None else "no result from gh"
+        if _is_rate_limited(cerr):
+            return [], "rate_limited", []
+        print(f"ERROR: gh pr list failed on the degraded path too: {cerr}",
+              file=sys.stderr)
+        return [], "error", []
     try:
-        prs = json.loads(res.stdout or "[]")
+        stubs = json.loads(cheap.stdout or "[]")
     except json.JSONDecodeError as e:
         print(f"ERROR: bad JSON from gh: {e}", file=sys.stderr)
+        return [], "error", []
+
+    prs: list = []
+    dropped: list = []
+    for stub in stubs:
+        n = stub.get("number")
+        one = _gh("pr", "view", str(n), "-R", repo, "--json", _HYDRATE_FIELDS)
+        if one is None or one.returncode != 0:
+            dropped.append(n)
+            continue
+        try:
+            extra = json.loads(one.stdout or "{}")
+        except json.JSONDecodeError:
+            dropped.append(n)
+            continue
+        if "files" not in extra or "statusCheckRollup" not in extra:
+            dropped.append(n)
+            continue
+        merged = dict(stub)
+        merged.update(extra)
+        prs.append(merged)
+
+    if dropped:
+        # Say it out loud. A silently shrunken batch also shrinks the dup
+        # supersede map, so a real duplicate can survive this run unlabelled.
+        # That is recoverable (the next run re-triages everything); pretending
+        # the PR was triaged would not be.
+        visible = sorted(x for x in dropped if x is not None)
+        print(f"  warn: {len(dropped)} PR(s) left UNTRIAGED this run "
+              f"(hydration failed): {visible}", file=sys.stderr)
+    return prs, "degraded", dropped
+
+
+def main() -> int:
+    repo = _repo()
+    prs, mode, dropped = fetch_open_build_prs(repo)
+
+    if mode == "rate_limited":
+        # Say what actually happened. An unlabelled run is a gate OUTAGE:
+        # nothing was triaged, so nothing can auto-merge, and any red `triage`
+        # check now sitting on a PR is about this quota -- not about that PR.
+        msg = ("TRIAGE GATE OUTAGE: GitHub API quota exhausted -- ZERO PRs "
+               "triaged this run. No PR can reach triage:solid, so auto-merge "
+               "is stalled until the next successful run. This is not a defect "
+               "in any PR carrying a red `triage` check.")
+        print(f"::error title=Triage gate outage (rate limit)::{msg}",
+              file=sys.stderr)
+        print(f"ERROR: {msg}", file=sys.stderr)
+        return 1
+    if mode == "error":
         return 1
 
     if not prs:
+        if dropped:
+            # NOT the same fact as "there is nothing to do". Every PR that
+            # exists failed to hydrate, so this run triaged nothing -- report
+            # it as the outage it is instead of exiting 0 on an empty list.
+            msg = (f"TRIAGE GATE OUTAGE: {len(dropped)} open PR(s) found but "
+                   "NONE could be hydrated -- ZERO PRs triaged this run.")
+            print(f"::error title=Triage gate outage (hydration)::{msg}",
+                  file=sys.stderr)
+            print(f"ERROR: {msg}", file=sys.stderr)
+            return 1
         print("No open autonomous-build PRs to triage.")
         return 0
+
+    if mode == "degraded":
+        print(f"NOTE: ran in DEGRADED mode -- {len(prs)} PR(s) hydrated "
+              f"individually, {len(dropped)} left untriaged.", file=sys.stderr)
 
     ensure_labels(repo)
     exempted: set = set()

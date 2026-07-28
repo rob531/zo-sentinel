@@ -201,3 +201,45 @@ def test_teardown_retries_before_it_fails(script_text: str) -> None:
         "after the retries are exhausted the helper must still Die when "
         "-MustSucceed: bounded patience, not unbounded tolerance."
     )
+
+
+def test_empty_leftover_directory_is_not_fatal(script_text: str) -> None:
+    """An EMPTY leftover worktree dir must be treated as cleared, not fatal.
+
+    Scar 2026-07-28: the 04:47Z prod-drift-sentinel run could not gate its
+    candidate at all. Reset-DisposableWorktree found D:\\zo\\_prod_dryrun
+    present with ZERO entries, retried five times reporting "left 0 file(s) --
+    handle likely still closing", then called Die(). Both halves were wrong:
+    with zero entries no file handle exists to close, and `git worktree add`
+    was MEASURED accepting an existing empty directory (exit 0, full checkout).
+    The guard written to stop orphaned worktrees became the thing that stopped
+    the stage, over a condition that blocks nothing.
+    """
+    assert "$left -eq 0" in script_text, (
+        "Reset-DisposableWorktree must special-case the zero-entry directory; "
+        "without it an empty orphan is fatal and no candidate can be gated"
+    )
+    # The early return must come BEFORE the backoff/Die path, or it is dead code.
+    idx_empty = script_text.index("$left -eq 0")
+    idx_die = script_text.index("could not clear $Path after")
+    assert idx_empty < idx_die, (
+        "the empty-directory escape must precede the fatal path"
+    )
+
+
+def test_empty_case_does_not_claim_a_closing_file_handle(script_text: str) -> None:
+    """The diagnosis must match the evidence.
+
+    "handle likely still closing" is a claim about a FILE. It may only be
+    printed on the branch where files actually remain -- otherwise the message
+    sends the next reader hunting something that cannot exist, which is how a
+    15-second false alarm becomes an hour of someone's time.
+    """
+    handle_line = [ln for ln in script_text.splitlines()
+                   if "handle likely still closing" in ln]
+    assert handle_line, "expected the closing-handle diagnostic to still exist"
+    for ln in handle_line:
+        assert "$left file(s)" in ln, (
+            "the closing-handle message must be attached to a nonzero file "
+            f"count, got: {ln.strip()}"
+        )

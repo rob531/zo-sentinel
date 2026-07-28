@@ -109,6 +109,27 @@ function Reset-DisposableWorktree {
         }
 
         $left = @(Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue).Count
+
+        # An EMPTY leftover directory is NOT an orphan, and dying on it turns
+        # the guard against orphaned worktrees into the thing that wedges the
+        # run. MEASURED 2026-07-28: creating the disposable worktree AT an
+        # existing EMPTY directory succeeds -- exit 0, full 3,316-file checkout.
+        # So this state blocks nothing downstream.
+        #
+        # It is also a different FAULT from the one the backoff above is for.
+        # Zero entries means no file handle is closing; what is held is the
+        # DIRECTORY ITSELF, almost always because some process has it as its
+        # current working directory. Waiting cannot clear that, so retrying
+        # four more times and then failing spends 15s to produce a false alarm
+        # that sends the next reader hunting a file handle which does not
+        # exist. Say what is actually true and carry on.
+        if ($left -eq 0) {
+            Say "worktree path EXISTS but is EMPTY: $Path"
+            Say "  an empty dir does not block worktree creation (measured) -- treating as cleared"
+            Say "  note: the directory itself is held, not a file -- usually a shell whose CWD is that path"
+            return $true
+        }
+
         if ($i -lt $Attempts) {
             $wait = [Math]::Min(8, [Math]::Pow(2, $i - 1))
             Say "attempt $i/$Attempts left $left file(s) at $Path -- retrying in ${wait}s (handle likely still closing)"

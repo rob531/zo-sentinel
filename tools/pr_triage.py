@@ -51,6 +51,23 @@ TRIAGE_PREFIX = "triage:"
 DIGEST_ISSUE_LABEL = "pr-triage-digest"
 MIN_SOLID_ADDITIONS = 12  # changes adding fewer lines than this are stub scaffolds
 
+# WALL-CLOCK BUDGET (FU-133). The job running this has `timeout-minutes: 8`, and
+# a job KILLED by that timeout is the worst possible outcome: no labels, no
+# digest, no step summary, and -- because stdout is a pipe and therefore block
+# buffered -- not one line of its own progress. On 2026-07-28T06:11Z and 06:23Z
+# this tool burned 8m16s and 8m09s and left literally zero output both times.
+# So it now stops ITSELF, early, and always reaches the digest.
+DEADLINE_SEC = float(os.environ.get("PR_TRIAGE_DEADLINE_SEC", "390"))  # 6.5 min
+_STARTED = time.monotonic()
+
+
+def _elapsed() -> float:
+    return time.monotonic() - _STARTED
+
+
+def _out_of_time() -> bool:
+    return _elapsed() >= DEADLINE_SEC
+
 # Filenames that are helper/scaffold artifacts, not shippable product features.
 SCAFFOLD_PREFIXES = ("verify_", "test_", "wire_", "_canary", "canary_")
 SCAFFOLD_SUFFIXES = ("_smoke.py", "_test.py", "_integration_smoke.py")
@@ -320,13 +337,80 @@ def ensure_labels(repo: str) -> None:
         "--color", "ededed", "--description", "Tracking issue for auto-build PR triage digest", "--force")
 
 
-def apply_label(repo: str, number: int, bucket: str) -> None:
-    others = [f"{TRIAGE_PREFIX}{b}" for b in BUCKETS if b != bucket]
-    res = _gh("pr", "edit", str(number), "-R", repo, "--add-label", f"{TRIAGE_PREFIX}{bucket}")
-    if res.returncode != 0:
-        print(f"  warn: could not add label to #{number}: {res.stderr.strip()}", file=sys.stderr)
-    for o in others:
-        _gh("pr", "edit", str(number), "-R", repo, "--remove-label", o)  # tolerant
+def _triage_labels_of(pr: dict):
+    """The triage:* labels GitHub ALREADY has on this PR.
+
+    Free: `labels` is in BOTH _FULL_FIELDS and _CHEAP_FIELDS, so it arrives with
+    the row and costs no extra call. Returns None when the row carries no
+    `labels` key at all -- an UNKNOWN state, which apply_label must handle
+    differently from a known-empty one.
+    """
+    if "labels" not in pr:
+        return None
+    out = set()
+    for lb in (pr.get("labels") or []):
+        name = (lb.get("name") if isinstance(lb, dict) else str(lb)) or ""
+        if name.startswith(TRIAGE_PREFIX):
+            out.add(name)
+    return out
+
+
+def apply_label(repo: str, number: int, bucket: str, current=None) -> int:
+    """Converge PR `number` onto exactly one triage bucket. Returns gh calls made.
+
+    THE SCAR (FU-133): this used to cost FOUR sequential `gh pr edit` calls per
+    PR, unconditionally -- one add plus three blind removes -- whether or not the
+    PR already carried exactly the right label. MEASURED against the live API
+    2026-07-28T07:52Z: 4.06s per PR. At 119 open build PRs that is 483s of pure
+    subprocess round-trip: over the 8-minute job budget ON ITS OWN, before the
+    ~136s the fetch already spends.
+
+    That cost was always there. It was never PAID because every run died in the
+    fetch first. Repairing the fetch (#2172) did not create this -- it EXPOSED
+    it, and #2172's "76.1s live proof" had timed only the half that had ever run.
+
+    The sweep is idempotent by design: it re-derives the same bucket for the same
+    PR every run, so in the steady state EVERY one of those 476 calls was a no-op
+    re-asserting a label already present. The current labels are already in hand,
+    so:
+
+      * already correct  -> ZERO calls
+      * needs a change   -> exactly ONE call, add + removes combined
+      * labels unknown   -> the ORIGINAL shape, unchanged
+
+    Combining add and remove into one invocation is safe ONLY because we remove
+    exclusively labels we have SEEN on the PR: `gh pr edit --remove-label` errors
+    on a label that is not there, and a combined call that errors would lose the
+    ADD with it. That is why the unknown-labels branch keeps the old
+    separate-calls shape rather than guessing -- cheapen the common path, never
+    the correctness.
+    """
+    target = f"{TRIAGE_PREFIX}{bucket}"
+
+    if current is None:
+        others = [f"{TRIAGE_PREFIX}{b}" for b in BUCKETS if b != bucket]
+        res = _gh("pr", "edit", str(number), "-R", repo, "--add-label", target)
+        if res is None or res.returncode != 0:
+            err = res.stderr.strip() if res is not None else "no result from gh"
+            print(f"  warn: could not add label to #{number}: {err}", file=sys.stderr)
+        for o in others:
+            _gh("pr", "edit", str(number), "-R", repo, "--remove-label", o)  # tolerant
+        return 1 + len(others)
+
+    stale = sorted(lb for lb in current if lb != target)
+    if target in current and not stale:
+        return 0  # already converged -- the steady state
+
+    args = ["pr", "edit", str(number), "-R", repo]
+    if target not in current:
+        args += ["--add-label", target]
+    for o in stale:
+        args += ["--remove-label", o]
+    res = _gh(*args)
+    if res is None or res.returncode != 0:
+        err = res.stderr.strip() if res is not None else "no result from gh"
+        print(f"  warn: could not label #{number}: {err}", file=sys.stderr)
+    return 1
 
 
 def build_digest(prs_by_num: dict, buckets: dict, exempted: set | None = None) -> str:
@@ -436,8 +520,12 @@ def fetch_open_build_prs(repo: str):
     and a wrong label is worse than no label. Same fail-closed reflex as
     _manifest_is_valid -- a gate that cannot read its subject must not judge it.
     """
+    # retries=1, deliberately. THE DEGRADED PATH IS THE RETRY, and a better one:
+    # re-asking an over-budget query the default four times cost 71s of an
+    # 8-minute job on 2026-07-28T03:33Z and could never have succeeded. One retry
+    # still absorbs a genuine one-off blip; the rest was pure loss.
     res = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
-              "--limit", "300", "--json", _FULL_FIELDS)
+              "--limit", "300", "--json", _FULL_FIELDS, retries=1)
     if res is not None and res.returncode == 0:
         try:
             return json.loads(res.stdout or "[]"), "full", []
@@ -503,6 +591,23 @@ def fetch_open_build_prs(repo: str):
 
 
 def main() -> int:
+    # Line-buffer the streams. Under Actions these are pipes, so the default
+    # block buffering means a run killed by the job timeout emits NOTHING --
+    # which is exactly how two 8-minute failures on 2026-07-28 became forensic
+    # blackouts. The workflow also passes -u; this is the belt to that braces so
+    # the tool stays diagnosable wherever it is run from.
+    # ...and force UTF-8. The digest is full of emoji bucket headers, and the
+    # final `print(digest)` died with UnicodeEncodeError on a cp1252 Windows
+    # console the first time this was ever run by hand -- AFTER the issue had
+    # been upserted, so the run did its job and then reported a traceback.
+    # A tool that only survives on a UTF-8 runner cannot be exercised where the
+    # operator actually stands.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(line_buffering=True, encoding="utf-8",
+                               errors="replace")
+        except Exception:  # pragma: no cover - very old interpreters
+            pass
     repo = _repo()
     prs, mode, dropped = fetch_open_build_prs(repo)
 
@@ -544,20 +649,49 @@ def main() -> int:
     buckets = classify(prs, repo, exempted)
     prs_by_num = {pr["number"]: pr for pr in prs}
 
+    calls = 0
+    deferred = []
     for n, b in sorted(buckets.items()):
-        if b:
-            note = " [manifest-exemption]" if n in exempted else ""
-            print(f"#{n}: {b}{note}")
-            apply_label(repo, n, b)
-            if n in exempted:
+        if not b:
+            print(f"#{n}: (pending checks -- no label this run)")
+            continue
+        if _out_of_time():
+            # Stop WRITING, but never skip the digest. Classification already
+            # covers every hydrated PR, so the digest stays complete and correct
+            # even when the label writes do not finish. Labelling is idempotent,
+            # so the next run simply converges the remainder.
+            deferred.append(n)
+            continue
+        note = " [manifest-exemption]" if n in exempted else ""
+        print(f"#{n}: {b}{note}")
+        row = prs_by_num.get(n) or {}
+        current = _triage_labels_of(row)
+        calls += apply_label(repo, n, b, current)
+        if n in exempted:
+            have = {(lb.get("name") if isinstance(lb, dict) else str(lb))
+                    for lb in (row.get("labels") or [])}
+            if "labels" not in row or MANIFEST_MARKER_LABEL not in have:
                 # Audit trail (FATHER directive 4): every merge taken under the
                 # exemption stays separable from an ordinary solid.
                 _gh("pr", "edit", str(n), "-R", repo,
                     "--add-label", MANIFEST_MARKER_LABEL)
-        else:
-            print(f"#{n}: (pending checks — no label this run)")
+                calls += 1
+
+    print(f"label writes: {calls} gh call(s) across {len(buckets)} PR(s), "
+          f"t={_elapsed():.1f}s", file=sys.stderr)
 
     digest = build_digest(prs_by_num, buckets, exempted)
+    if deferred:
+        msg = (f"{len(deferred)} PR(s) classified but NOT relabelled this run -- "
+               f"the {DEADLINE_SEC:.0f}s wall-clock budget was spent. The digest "
+               "is COMPLETE; only the label writes are behind, and they converge "
+               "on the next run.")
+        print(f"::warning title=pr-triage label writes deferred::{msg}",
+              file=sys.stderr)
+        print(f"  warn: {msg} deferred={sorted(deferred, reverse=True)}",
+              file=sys.stderr)
+        digest += ("\n\n> **Label writes deferred.** " + msg + " Deferred: "
+                   + ", ".join(f"#{x}" for x in sorted(deferred, reverse=True)))
     upsert_digest_issue(repo, digest)
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")

@@ -62,89 +62,19 @@ $ErrorActionPreference = "Stop"
 function Say([string]$m) { Write-Host ("[verify_candidate] " + $m) }
 function Die([string]$m) { Write-Host ("[verify_candidate] FATAL: " + $m) -ForegroundColor Red; exit 1 }
 
-# Native git stderr is a TERMINATING error under $ErrorActionPreference = "Stop".
-# `worktree remove` on an absent path is expected and harmless: idempotency means
-# the cleanup path must survive a state that was never created.
-function Git-BestEffort {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try { & git @GitArgs 2>&1 | Out-Null } catch { } finally { $ErrorActionPreference = $prev }
+# ---------------------------------------------------------------- worktree lifecycle
+# SINGLE SOURCE (FU-157). Reset-DisposableWorktree and Git-BestEffort used to be
+# copied into this file AND into ops/host/deploy_prod.ps1. The copies diverged: the observer
+# learned that an EMPTY leftover directory is harmless (measured) and the actor
+# did not, so the fire path would abort on a condition that blocks nothing.
+# One definition, two callers. What legitimately differs by call site
+# (-MustSucceed, -FatalMessage) is a parameter, not a fork.
+$WorktreeLifecycle = Join-Path $PSScriptRoot "worktree_lifecycle.ps1"
+if (-not (Test-Path $WorktreeLifecycle)) {
+    # An absent guard must never read as a passing one. Name the file and die.
+    Die "worktree_lifecycle.ps1 not found beside this script ($WorktreeLifecycle). Refusing to run without the healed worktree teardown -- that helper IS the guard against the 3,466-file orphan."
 }
-
-# The whole point of this script. `remove` alone is not enough (see .DESCRIPTION
-# note 1) -- prune the metadata, delete any surviving directory, then PROVE it.
-function Reset-DisposableWorktree {
-    param(
-        [string]$RepoPath,
-        [string]$Path,
-        [bool]$MustSucceed = $false,
-        [int]$Attempts = 5
-    )
-    # RETRY, then verify, then fail. The first cut of this helper died on the
-    # first failed removal and immediately produced a false alarm: the gates had
-    # just exited and something (an AV scanner, or a reaped child of the smoke
-    # ladder's mock write_service) still held 6 of 3,298 files. A retry three
-    # seconds later cleared it on the first attempt. On Windows a file handle can
-    # outlive the process that opened it by a moment, so "cannot delete" is a
-    # TIMING fact before it is a FAULT -- but only briefly. Bounded backoff tells
-    # the two apart instead of guessing: a closing handle clears in seconds, a
-    # wedged process does not. Dying on the first attempt turns a clean teardown
-    # into a spurious page; never retrying turns a wedge into a silent orphan.
-    for ($i = 1; $i -le $Attempts; $i++) {
-        Push-Location $RepoPath
-        try {
-            Git-BestEffort worktree remove --force $Path
-            Git-BestEffort worktree prune
-            if (Test-Path $Path) {
-                Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            Git-BestEffort worktree prune
-        } finally { Pop-Location }
-
-        if (-not (Test-Path $Path)) {
-            if ($i -gt 1) { Say "worktree path cleared on attempt $i" }
-            Say "worktree path VERIFIED gone: $Path"
-            return $true
-        }
-
-        $left = @(Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue).Count
-
-        # An EMPTY leftover directory is NOT an orphan, and dying on it turns
-        # the guard against orphaned worktrees into the thing that wedges the
-        # run. MEASURED 2026-07-28: creating the disposable worktree AT an
-        # existing EMPTY directory succeeds -- exit 0, full 3,316-file checkout.
-        # So this state blocks nothing downstream.
-        #
-        # It is also a different FAULT from the one the backoff above is for.
-        # Zero entries means no file handle is closing; what is held is the
-        # DIRECTORY ITSELF, almost always because some process has it as its
-        # current working directory. Waiting cannot clear that, so retrying
-        # four more times and then failing spends 15s to produce a false alarm
-        # that sends the next reader hunting a file handle which does not
-        # exist. Say what is actually true and carry on.
-        if ($left -eq 0) {
-            Say "worktree path EXISTS but is EMPTY: $Path"
-            Say "  an empty dir does not block worktree creation (measured) -- treating as cleared"
-            Say "  note: the directory itself is held, not a file -- usually a shell whose CWD is that path"
-            return $true
-        }
-
-        if ($i -lt $Attempts) {
-            $wait = [Math]::Min(8, [Math]::Pow(2, $i - 1))
-            Say "attempt $i/$Attempts left $left file(s) at $Path -- retrying in ${wait}s (handle likely still closing)"
-            Start-Sleep -Seconds $wait
-        } else {
-            Say "attempt $i/$Attempts left $left file(s) at $Path"
-        }
-    }
-
-    if ($MustSucceed) {
-        Die "could not clear $Path after $Attempts attempts -- refusing to claim a clean teardown. A process is holding a file open; find it before the next run inherits this."
-    }
-    Say "WARNING: $Path still present after $Attempts attempts"
-    return $false
-}
+. (Join-Path $PSScriptRoot "worktree_lifecycle.ps1")
 
 if ($Sha -notmatch '^[0-9a-f]{40}$') {
     Die "-Sha must be a full 40-char commit sha (got '$Sha')."
@@ -152,7 +82,7 @@ if ($Sha -notmatch '^[0-9a-f]{40}$') {
 if (-not (Test-Path $Repo)) { Die "repo not found: $Repo" }
 
 # ---------------------------------------------------------------- prepare
-Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true | Out-Null
+Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true -LogPrefix "verify_candidate" -FatalMessage 'refusing to claim a clean teardown -- a NON-EMPTY leftover survived. A process is holding a file open; find it before the next run inherits this.' | Out-Null
 
 Push-Location $Repo
 try {
@@ -212,7 +142,7 @@ finally {
     Pop-Location
     # MustSucceed: a teardown that silently leaves an orphan is what broke the
     # next run. Fail loudly here rather than let a sibling inherit the wreckage.
-    Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true | Out-Null
+    Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true -LogPrefix "verify_candidate" -FatalMessage 'refusing to claim a clean teardown -- a NON-EMPTY leftover survived. A process is holding a file open; find it before the next run inherits this.' | Out-Null
 }
 
 if ($verdictPath) { Say "EVIDENCE: $verdictPath" }

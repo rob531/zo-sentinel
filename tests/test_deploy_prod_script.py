@@ -29,12 +29,21 @@ as tests/test_verify_candidate_script.py.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "ops" / "host" / "deploy_prod.ps1"
+# FU-157: the helper is no longer inline. It was copied into this script AND
+# into verify_candidate.ps1, the copies diverged, and the branch that mattered
+# (an EMPTY leftover is harmless) reached only the observer -- so the fire path
+# halted on a condition measured to block nothing. One definition now; these
+# assertions FOLLOW the dot-source rather than assume co-location. They lose no
+# power: what must still be proven is that deploy_prod.ps1 REACHES a helper with
+# bounded retry and a post-removal proof, and every one of them can still go red.
+LIFECYCLE = REPO_ROOT / "ops" / "host" / "worktree_lifecycle.ps1"
 
 HELPER = "Reset-DisposableWorktree"
 
@@ -43,6 +52,26 @@ HELPER = "Reset-DisposableWorktree"
 def script_text() -> str:
     assert SCRIPT.is_file(), f"missing deploy wrapper: {SCRIPT}"
     return SCRIPT.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def helper_text(script_text: str) -> str:
+    """Resolve the helper the way PowerShell will at runtime.
+
+    The dot-source must name $PSScriptRoot, never $WorktreePath: the helper
+    belongs to the RUNBOOK, not to the tree being shipped, which generally
+    predates it. Resolving it inside the checked-out worktree would make the
+    guard vanish exactly when deploying an older sha.
+    """
+    assert re.search(
+        r"\.\s+\(Join-Path\s+\$PSScriptRoot\s+[\"']worktree_lifecycle\.ps1[\"']\)",
+        script_text,
+    ), (
+        f"{SCRIPT.name} must dot-source ops/host/worktree_lifecycle.ps1 from "
+        "$PSScriptRoot -- without that link it has no teardown at all."
+    )
+    assert LIFECYCLE.is_file(), f"missing worktree lifecycle helper: {LIFECYCLE}"
+    return LIFECYCLE.read_text(encoding="utf-8")
 
 
 def _code(text: str) -> str:
@@ -90,16 +119,25 @@ def _helper_body(code: str) -> str:
     raise AssertionError(f"unbalanced braces in {HELPER}")
 
 
-def test_helper_is_defined(script_text: str) -> None:
-    assert f"function {HELPER}" in _code(script_text), (
-        f"{SCRIPT.name} must define {HELPER} -- the verified, bounded-retry "
-        "teardown proven in verify_candidate.ps1 (#2066/#2067)."
+def test_helper_is_defined(script_text: str, helper_text: str) -> None:
+    """The teardown must EXIST and be REACHABLE from the deploy path.
+
+    Two assertions, and the second is the FU-157 one: the script must not carry
+    its own copy. A second definition cannot be kept in agreement by intention,
+    and it drifts in a predictable direction -- the fix lands in whichever copy
+    you were looking at when you learned the lesson, which is never the actor.
+    """
+    assert f"function {HELPER}" in _code(helper_text), (
+        f"ops/host/worktree_lifecycle.ps1 must define {HELPER} -- the verified, "
+        "bounded-retry teardown proven in verify_candidate.ps1 (#2066/#2067)."
+    )
+    assert f"function {HELPER}" not in _code(script_text), (
+        f"{SCRIPT.name} must NOT redefine {HELPER}; dot-source the single source "
+        "instead. Duplicating it is what caused FU-157."
     )
 
 
-def test_teardown_is_verified_after_removal_not_merely_attempted(
-    script_text: str,
-) -> None:
+def test_teardown_is_verified_after_removal_not_merely_attempted(helper_text: str) -> None:
     """The post-removal proof must come AFTER the removal, inside the helper.
 
     Written this way deliberately: the first cut of the sibling test asserted
@@ -107,7 +145,7 @@ def test_teardown_is_verified_after_removal_not_merely_attempted(
     matched the PRE-add heal -- so it stayed green with the post-teardown proof
     deleted. An assertion that cannot go red is not evidence.
     """
-    body = _helper_body(_code(script_text))
+    body = _helper_body(_code(helper_text))
 
     removal = body.index("Remove-Item -LiteralPath $Path")
     proof = body.index("if (-not (Test-Path $Path))")
@@ -117,10 +155,8 @@ def test_teardown_is_verified_after_removal_not_merely_attempted(
     )
 
 
-def test_retry_is_bounded_not_infinite_and_not_single_shot(
-    script_text: str,
-) -> None:
-    body = _helper_body(_code(script_text))
+def test_retry_is_bounded_not_infinite_and_not_single_shot(helper_text: str) -> None:
+    body = _helper_body(_code(helper_text))
     assert "$Attempts" in body, "retry must be bounded by an attempt count"
     assert "Start-Sleep" in body, (
         "a retry with no backoff re-checks a still-closing handle instantly "

@@ -167,13 +167,28 @@ def _gh(*args: str, check: bool = False, retries: int = 4) -> subprocess.Complet
 # Check / mergeability interpretation
 # ---------------------------------------------------------------------------
 _PASS = {"SUCCESS", "NEUTRAL", "SKIPPED", "EXPECTED"}
-_FAIL = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
+_FAIL = {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
+# A CANCELLED check is a KILL, not a verdict (FU-141). Nothing about the PR was
+# judged -- the run was stopped, almost always by this very workflow's
+# `concurrency: cancel-in-progress: true` when the next build PR opened. Reading
+# it as a failure condemns a PR for our own scheduling. It is PENDING: revisit.
+_KILLED = {"CANCELLED"}
+
+# ...and never read our OWN check. `triage` is in every PR's statusCheckRollup,
+# so a cancelled sweep left a red `triage` on N PRs, the NEXT sweep read that as
+# gate==failure, labelled them `triage:stale`, and auto-merge (which arms only on
+# `triage:solid`) never fired -- which grew the backlog, which caused more
+# cancellations. A closed positive-feedback loop in which the monitor is the
+# outage. Self-exclusion breaks it. Same family as [[a_monitor_can_drift_on_itself]].
+_SELF_CHECKS = {"triage", "pr-triage", "triage-solid-sweep"}
 
 
 def _gate_state(rollup: list) -> str:
     """Reduce a statusCheckRollup list to 'success' | 'failure' | 'pending'.
 
     Handles both CheckRun (status/conclusion) and StatusContext (state) shapes.
+    Our own triage checks are EXCLUDED and CANCELLED counts as pending -- see
+    _SELF_CHECKS / _KILLED above for why both are required to break FU-141.
     """
     if not rollup:
         return "pending"  # no checks reported yet
@@ -181,6 +196,9 @@ def _gate_state(rollup: list) -> str:
     for c in rollup:
         if not isinstance(c, dict):
             continue
+        name = (c.get("name") or c.get("context") or "").strip().lower()
+        if name in _SELF_CHECKS:
+            continue  # never grade a PR on our own sweep's exit status
         # CheckRun: in-progress until status == COMPLETED, then look at conclusion
         status = (c.get("status") or "").upper()
         conclusion = (c.get("conclusion") or "").upper()
@@ -188,6 +206,9 @@ def _gate_state(rollup: list) -> str:
         verdict = conclusion or state
         if status and status != "COMPLETED" and not verdict:
             any_pending = True
+            continue
+        if verdict in _KILLED:
+            any_pending = True  # a kill is not a verdict; re-triage next run
             continue
         if verdict in _FAIL:
             return "failure"

@@ -201,7 +201,7 @@ class _FakeResp:
         return False
 
 
-# ------------------------------------------------------------------ FU-131
+# ------------------------------------------------------------------ FU-132
 # The detector classified two ZERO-SPEND runs as STRANDED for 60h, so
 # `--check-open-runs` exited 1 on every invocation. These pin the reconciliation
 # AND, more importantly, pin the cases where it must still go RED.
@@ -314,7 +314,7 @@ def test_reconciliation_reads_the_tree_the_caller_is_auditing(wr, tmp_path):
     assert wr.open_runs(p, now=now, runs_root=tmp_path) == []
 
 
-# --------------------------------------------- FU-131: postcheck keeps its number
+# --------------------------------------------- FU-132: postcheck keeps its number
 def _postcheck_run(wr, tmp_path, **state):
     run = wr.Run(tmp_path / "20260727-105859")
     run.state = {"run_id": "20260727-105859", "mode": "delta", "phases": {},
@@ -369,7 +369,7 @@ def test_postcheck_with_neither_source_says_so_rather_than_guessing(wr, tmp_path
     assert rep["scored_servers"]["after_basis"] is None
 
 
-# ------------------------------------------------------------------ FU-132
+# ------------------------------------------------------------------ FU-133
 # ensure_proxy() ran the command that explains the failure and threw its output
 # away, so a 2026-07-28 preflight abort said "did not come up in 60s" when flyctl
 # had plainly said "no access token available".

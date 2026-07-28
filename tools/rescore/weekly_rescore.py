@@ -204,7 +204,7 @@ _ABANDON_RESULT_PREFIXES = ("killed", "abort", "abandon", "cancel")
 def _state_abandoned(rid: str, runs_root: Path) -> bool:
     """Did the run record its OWN deliberate abandonment, and release its spend?
 
-    FU-131. A run killed BEFORE `fire` never reaches the ledger's abort vocabulary
+    FU-132. A run killed BEFORE `fire` never reaches the ledger's abort vocabulary
     (`wedge_*` / `manual_*`) -- the operator's last word lands in the run's own
     state.json as `result: killed_*`. Runs 20260725-170556 and 20260725-181359 were
     both killed at preflight (read-only: no export, no instance, $0) and the detector
@@ -341,7 +341,7 @@ def ensure_proxy() -> None:
     except OSError:
         pass
     log(f"starting fly proxy {PROXY_PORT}:5432 -a {FLY_PG_APP}")
-    # FU-132: flyctl's stderr used to go to DEVNULL and the failure surfaced as a
+    # FU-133: flyctl's stderr used to go to DEVNULL and the failure surfaced as a
     # bare "did not come up in 60s" -- which names the symptom and hides the cause.
     # On 2026-07-28 the cause was `Error: no access token available`, from flyctl's
     # OWN client-side 720h login timer ageing out at 730h29m; the token itself still
@@ -1139,7 +1139,7 @@ def ph_postcheck(run: Run, args) -> None:
         log(f"POSTCHECK DEGRADED: freshness unreadable ({freshness_error}); "
             f"closing the run anyway -- all writes were already committed")
     base = run.state.get("baseline_freshness", {})
-    # FU-131: when /freshness is unreachable the run still KNOWS its post-state --
+    # FU-132: when /freshness is unreachable the run still KNOWS its post-state --
     # `import` stamped `scored_after` from a DIRECT DB read, which is the very number
     # I1 is enforced against and a strictly better source than the cached endpoint.
     # Run 20260727-105859 shipped `scored_servers.after: null` while its own

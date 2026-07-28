@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fu_ledger  # noqa: E402
+import fu_lock  # noqa: E402
 
 DEFAULT_LEDGER = r"D:\zo\Zocomputer Agents\FOLLOWUPS.md"
 BACKUP_ROOT = r"D:\zo\Zocomputer Agents\_followup_backups"
@@ -198,7 +199,8 @@ def main() -> int:
     args = ap.parse_args()
 
     with open(args.ledger, encoding="utf-8") as fh:
-        lines = fh.read().split("\n")
+        original_text = fh.read()
+    lines = original_text.split("\n")
 
     targets = [f.id for f in fu_ledger.parse(lines)
                if f.is_open() and f.priority in ("P0", "P1")
@@ -246,8 +248,15 @@ def main() -> int:
         os.makedirs(bdir, exist_ok=True)
         shutil.copy2(args.ledger, os.path.join(
             bdir, "FOLLOWUPS.md.%s.bak" % stamp.strftime("%H%M%SZ")))
-        with open(args.ledger, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines))
+        try:
+            with fu_lock.ledger_txn(args.ledger) as txn:
+                if fu_lock.digest("\n".join(txn.lines)) != fu_lock.digest(original_text):
+                    raise fu_lock.LedgerChanged(
+                        "ledger moved between planning and apply; re-run to replan")
+                txn.lines[:] = lines
+        except (fu_lock.LedgerChanged, fu_lock.LedgerBusy) as exc:
+            print("ABORTED: %s" % exc, file=sys.stderr)
+            return 3
         print("APPLIED (backup in %s)" % bdir)
     else:
         print("DRY RUN -- pass --apply to write")

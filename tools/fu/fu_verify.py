@@ -49,6 +49,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fu_ledger  # noqa: E402
+import fu_lock  # noqa: E402
 
 DEFAULT_LEDGER = r"D:\zo\Zocomputer Agents\FOLLOWUPS.md"
 BACKUP_ROOT = r"D:\zo\Zocomputer Agents\_followup_backups"
@@ -304,10 +305,21 @@ def main() -> int:
         os.makedirs(bdir, exist_ok=True)
         shutil.copy2(args.ledger, os.path.join(
             bdir, "FOLLOWUPS.md.%s.bak" % stamp.strftime("%H%M%SZ")))
-        applied = apply_mutations(lines, mutations)
-        with open(args.ledger, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines))
-        fu_ledger.parse(lines)      # prove it still parses after our edit
+        # Probes take minutes; the ledger may well have moved while they ran.
+        # Re-read under the lock and re-apply there, so we never write a
+        # snapshot that is older than someone else's edit.
+        try:
+            with fu_lock.ledger_txn(args.ledger) as txn:
+                applied = apply_mutations(txn.lines, mutations)
+                fu_ledger.parse(txn.lines)   # prove it still parses
+        except fu_lock.LedgerChanged as exc:
+            print("ABORTED (no verdicts lost, state saved): %s" % exc, file=sys.stderr)
+            save_state(args.state, state)
+            return 3
+        except fu_lock.LedgerBusy as exc:
+            print("ABORTED: %s" % exc, file=sys.stderr)
+            save_state(args.state, state)
+            return 4
 
     if not args.dry_run:
         save_state(args.state, state)

@@ -51,6 +51,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fu_ledger  # noqa: E402
+import fu_lock  # noqa: E402
 
 DEFAULT_LEDGER = r"D:\zo\Zocomputer Agents\FOLLOWUPS.md"
 BACKUP_ROOT = r"D:\zo\Zocomputer Agents\_followup_backups"
@@ -209,9 +210,20 @@ def main() -> int:
         os.makedirs(bdir, exist_ok=True)
         shutil.copy2(args.ledger, os.path.join(
             bdir, "FOLLOWUPS.md.%s.bak" % stamp.strftime("%H%M%SZ")))
-        fixed = repair(lines, entries)
-        with open(args.ledger, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines))
+        # Re-read UNDER THE LOCK. The analysis above was unlocked, so the file
+        # may have moved; the txn re-reads and refuses to commit over another
+        # writer's edit rather than clobbering it.
+        try:
+            with fu_lock.ledger_txn(args.ledger) as txn:
+                entries_l, _ = analyse(txn.lines)
+                fixed = repair(txn.lines, entries_l)
+                lines = txn.lines
+        except fu_lock.LedgerChanged as exc:
+            print("ABORTED: %s" % exc, file=sys.stderr)
+            return 3
+        except fu_lock.LedgerBusy as exc:
+            print("ABORTED: %s" % exc, file=sys.stderr)
+            return 4
         entries, errors = analyse(lines)     # re-analyse to prove convergence
 
     result = {"ledger": args.ledger, "entries": len(entries), "errors": errors,

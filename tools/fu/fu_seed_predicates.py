@@ -31,40 +31,31 @@ import fu_lock  # noqa: E402
 DEFAULT_LEDGER = r"D:\zo\Zocomputer Agents\FOLLOWUPS.md"
 BACKUP_ROOT = r"D:\zo\Zocomputer Agents\_followup_backups"
 
-# The write-service query bus. NOT reachable from the tower on 127.0.0.1 --
-# the first live sweep proved it (connection refused). It listens on the
-# ZoComputer runtime, so a tower-side probe must go through the bridge. Set
-# FU_QUERY_ENDPOINT to override per host rather than editing predicates.
+# The write-service query bus binds loopback ON THE RUNTIME (start_all.sh sets
+# PYTHONPATH=/home/workspace/zo_sentinel; `hostname` there is `modal`). It was
+# never reachable from the tower and was never meant to be -- the first live
+# sweep's 13 connection-refused results were a wrong-host error, not an outage.
+# Tower-side predicates therefore go through zo_probe.py, which EXECUTES on the
+# runtime via the Zo MCP bridge.
 QUERY_ENDPOINT = os.environ.get("FU_QUERY_ENDPOINT", "http://127.0.0.1:8772/query")
+ZO_PROBE = os.environ.get(
+    "FU_ZO_PROBE", r"D:\zo\Zocomputer Agents\_tools\zo_probe.py")
 
 
 def sql_assert(sql: str, py_test: str) -> str:
-    """A predicate that queries the bus and asserts a condition on the result.
+    """A predicate that queries the mesh bus and asserts on the result.
 
-    Exit 0 = condition holds (fixed), 1 = condition fails (still broken),
-    2 = the query could not be evaluated at all. The last case MUST NOT be
-    reported as 1: on the first live sweep the bus was not listening and 13
-    predicates would have claimed "bug still present" on no evidence.
+    Routed through `zo_probe.py`, which executes the query ON THE ZOCOMPUTER
+    RUNTIME via the Zo MCP bridge. The bus (`write_service`, :8772) binds
+    loopback on the runtime and is NOT reachable from the tower -- that is by
+    design, not an outage. The bridge is execution, not routing.
+
+    Preserves the three-state contract end to end: 0 GREEN / 1 RED /
+    2 UNKNOWN, carried across the bridge by sentinel tokens because
+    `zo_call.py` does not propagate remote exit codes.
     """
-    body = ("import json,subprocess,sys" + chr(10) +
-            "try:" + chr(10) +
-            "    r=subprocess.run(['curl','-sf','--max-time','25','-X','POST',"
-            "'{ep}','-H','Content-Type: application/json',"
-            "'-d',json.dumps({{'sql':'''{sql}'''}})],capture_output=True,text=True)" + chr(10) +
-            "    if r.returncode!=0: sys.exit(2)" + chr(10) +
-            "    d=json.loads(r.stdout)" + chr(10) +
-            "    rows=d.get('rows') or d.get('result') or d.get('data') or []" + chr(10) +
-            "    v=(rows[0][0] if rows and isinstance(rows[0],(list,tuple)) "
-            "else (list(rows[0].values())[0] if rows else None))" + chr(10) +
-            "    if v is None: sys.exit(2)" + chr(10) +
-            "except SystemExit: raise" + chr(10) +
-            "except Exception: sys.exit(2)" + chr(10) +
-            "sys.exit(0 if ({py_test}) else 1)" + chr(10))
-    body = body.format(ep=QUERY_ENDPOINT, sql=sql, py_test=py_test)
-    import base64
-    b = base64.b64encode(body.encode()).decode()
-    # base64 so that quoting survives cmd.exe, PowerShell and sh identically.
-    return ("python -c \"import base64;exec(base64.b64decode('%s').decode())\"" % b)
+    return ('python "%s" --sql "%s" --assert "%s"'
+            % (ZO_PROBE, sql.replace('"', "'"), py_test.replace('"', "'")))
 
 
 PREDICATES = {

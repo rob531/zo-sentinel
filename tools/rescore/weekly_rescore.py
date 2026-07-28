@@ -49,6 +49,10 @@ import os as _sg_os, sys as _sg_sys
 _sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.abspath(__file__)))
 from spend_guard import scaled_budget, scaled_deadline_min  # FU-090 #1784
 
+# FU-151: one shared credential path for every flyctl caller in this repo.
+_sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.dirname(_sg_os.path.abspath(__file__))))
+from fly_token import hydrate_fly_token  # noqa: E402
+
 import argparse
 import gzip
 import hashlib
@@ -341,6 +345,15 @@ def ensure_proxy() -> None:
     except OSError:
         pass
     log(f"starting fly proxy {PROXY_PORT}:5432 -a {FLY_PG_APP}")
+    # FU-151: hand flyctl the credential this project already mandates BEFORE
+    # spawning it. Measured 2026-07-28: this shell's FIRST attempt died on
+    # "fly proxy did not come up in 60s"; hydrating FLY_API_TOKEN from AgentVault
+    # made the same binary bind on the next run, same minute, same config.yml.
+    # FU-137 shipped this remedy into ONE caller and every other flyctl caller
+    # kept reading the ambient credential -- so the outage recurred the next day
+    # in a different lane. Never raises; a dead vault falls through to ambient.
+    _hydrated, _hydrate_note = hydrate_fly_token()
+    log("fly token: " + _hydrate_note)
     # FU-133: flyctl's stderr used to go to DEVNULL and the failure surfaced as a
     # bare "did not come up in 60s" -- which names the symptom and hides the cause.
     # On 2026-07-28 the cause was `Error: no access token available`, from flyctl's

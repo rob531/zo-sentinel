@@ -19,6 +19,14 @@
        commit and had to infer drift from the release timestamp. One forgotten
        flag turned a measured fact into a guess. Here it is not optional.
 
+    3. The ACCEPTANCE VERDICT IS CODE, NOT PROSE, AND IT LEAVES AN EXIT CODE.
+       This script used to poll inline and then *say* whether it liked what it
+       saw, always exiting 0 -- so a NOT-ACCEPTED deploy was indistinguishable
+       from a clean one to anything reading $LASTEXITCODE. It now delegates to
+       tools/accept_gate.py and exits 0 ACCEPT / 1 REJECT / 2 ERROR. Phase 2
+       promotion is gated on a count of clean staged->fired deploys; a runbook
+       that cannot report its own failure cannot be counted.
+
   AUTHORITY: this script is fired by a human (the chairman). prod-drift-sentinel
   is Phase 1 and MUST NOT invoke it without -DryRun -- it stages the command, it
   does not push. Nothing here grants an agent deploy authority.
@@ -58,6 +66,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Default ERROR. A run that falls over before establishing anything must NOT be
+# readable as success by whatever reads $LASTEXITCODE -- 0 is a claim, and it has
+# to be earned. 0 ACCEPT / 1 REJECT / 2 ERROR, matching tools/accept_gate.py.
+$script:Verdict = 2
+
+# The acceptance gate belongs to the RUNBOOK, not to the deployed tree: the sha
+# being shipped generally predates it (7fc39201 does). Resolve it next to THIS
+# script, never inside $WorktreePath.
+$AcceptGate = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "tools\accept_gate.py"
 
 function Say([string]$m) { Write-Host ("[deploy_prod] " + $m) }
 function Die([string]$m) { Write-Host ("[deploy_prod] FATAL: " + $m) -ForegroundColor Red; exit 1 }
@@ -195,8 +213,16 @@ try {
                 Say ("  {0} -> ERR {1}" -f $p, $_.Exception.Message)
             }
         }
+        if (Test-Path $AcceptGate) {
+            Say "acceptance gate present: $AcceptGate -- probing CURRENT prod through it (expect REJECT while prod is stale; that is the negative control)"
+            & python $AcceptGate --sha $Sha --base-url $BaseUrl --once --rollback-image $RollbackImage
+            Say "accept_gate exit=$LASTEXITCODE (1 = REJECT, expected pre-deploy)"
+        } else {
+            Say "WARNING: acceptance gate NOT FOUND at $AcceptGate -- a real deploy would have no machine verdict."
+        }
         Say "DryRun complete. Nothing was deployed."
-        return
+        $script:Verdict = 0
+        exit 0
     }
 
     # ------------------------------------------------------------ fire
@@ -209,40 +235,29 @@ try {
     # Acceptance: /health 200 AND /version reports OUR sha AND /spine/health 200
     # with ok:true and an EMPTY failures[]. /version is the whole point of the
     # build args: it proves the running image is the tree that was gated.
-    $deadline = (Get-Date).AddSeconds($PollSeconds)
-    $pass = $false
-    $lastSpine = ""
-    $lastVersion = ""
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 10
-        try {
-            $h = Invoke-WebRequest -Uri ($BaseUrl + "/health") -UseBasicParsing -TimeoutSec 20
-            $v = Invoke-WebRequest -Uri ($BaseUrl + "/version") -UseBasicParsing -TimeoutSec 20
-            $s = Invoke-WebRequest -Uri ($BaseUrl + "/spine/health") -UseBasicParsing -TimeoutSec 20
-            $vj = $v.Content | ConvertFrom-Json
-            $sj = $s.Content | ConvertFrom-Json
-            $lastVersion = $v.Content
-            $lastSpine = ("ok={0} services={1} failures={2}" -f $sj.ok, $sj.service_count, @($sj.failures).Count)
-            Say ("  probe: health={0} version.git_sha={1} spine[{2}]" -f $h.StatusCode, $vj.git_sha, $lastSpine)
-            if ($h.StatusCode -eq 200 -and $s.StatusCode -eq 200 -and $vj.git_sha -eq $Sha -and $sj.ok -eq $true -and @($sj.failures).Count -eq 0) {
-                $pass = $true
-                break
-            }
-        } catch {
-            Say ("  probe error: " + $_.Exception.Message)
-        }
+    #
+    # This was 25 lines of inline polling that ended in Write-Host. It is now
+    # tools/accept_gate.py: the same assertions, but unit-tested (22 tests, each
+    # seen RED under mutation) and reusable by prod-drift-sentinel's post-fire
+    # verify, which was re-deriving the same rule from prose.
+    if (-not (Test-Path $AcceptGate)) {
+        # A missing gate is an ERROR, never a pass. The failure mode this whole
+        # file exists to prevent is a check that silently does not run.
+        Say "FATAL: acceptance gate not found at $AcceptGate. The deploy HAS FIRED; it is simply unverified."
+        Say "Verify by hand, then record the outcome:"
+        Say "  curl https://mcprisky.io/version   # git_sha must be $Sha"
+        Say "  curl https://mcprisky.io/spine/health   # ok:true, failures[] empty"
+        Say "ROLLBACK IF WRONG: $rollbackCmd"
+        $script:Verdict = 2
     }
-
-    if ($pass) {
-        Say "ACCEPTED: /health 200, /version git_sha=$Sha, /spine/health ok:true failures[] empty."
-        Say "CAVEAT (FU-114): an empty failures[] means every active service MOUNTED. A service that declares no router mounts clean while serving nothing. Green != serving."
-        Say "Record the accepted sha in D:\zo\Zocomputer Agents\prod_deploy_state.json."
-    } else {
-        Say "NOT ACCEPTED within $PollSeconds s."
-        Say "  last /version : $lastVersion"
-        Say "  last /spine   : $lastSpine"
-        Say "READ BEFORE ROLLING BACK: /spine/health ok:false with a failures[] list is the fail-loud spine WORKING, not an outage -- the app serves 200 and mounted services work. Roll back for 5xx or a wrong git_sha, not for a failures[] list that can be fixed forward."
-        Say "ROLLBACK: $rollbackCmd"
+    else {
+        & python $AcceptGate --sha $Sha --base-url $BaseUrl --timeout-seconds $PollSeconds --rollback-image $RollbackImage
+        $script:Verdict = $LASTEXITCODE
+        switch ($script:Verdict) {
+            0 { Say "ACCEPTED. Record the accepted sha in D:\zo\Zocomputer Agents\prod_deploy_state.json and increment clean_staged_fired_deploys." }
+            1 { Say "REJECTED. Read accept_gate's reasons above BEFORE rolling back -- a populated failures[] is fix-forward, a wrong git_sha is not." ; Say "ROLLBACK: $rollbackCmd" }
+            default { Say "ERROR -- prod could not be read, so NOTHING was established. This is not a red. Re-probe before acting: python $AcceptGate --sha $Sha --once" }
+        }
     }
 }
 finally {
@@ -251,3 +266,8 @@ finally {
     # loud, never fatal: the deploy verdict above is the result, not this
     [void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $false)
 }
+
+# The last word is the verdict, not the teardown. Teardown warns loudly and is
+# deliberately never fatal (see Reset-DisposableWorktree): failing the script over
+# leftover files would report a successful ship as a failure.
+exit $script:Verdict

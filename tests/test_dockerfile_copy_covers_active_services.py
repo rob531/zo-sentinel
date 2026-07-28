@@ -47,14 +47,27 @@ def _read_dockerfile():
         return fh.read()
 
 
+# Directories under services/active/ that are not services. __pycache__ is the
+# one that matters: it does not exist in a fresh CI checkout, but IS created on
+# the tower the moment any earlier gate runs python -- so a check that treats it
+# as a service passes in GitHub and fails in the deploy verifier. Caught exactly
+# that way on 2026-07-28. Pre-flight must mirror runtime variance, not the
+# pristine case.
+_NON_SERVICE_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+
+
+def _is_service_dir(name):
+    if name in _NON_SERVICE_DIRS:
+        return False
+    if name.startswith(".") or name.startswith("__"):
+        return False
+    return os.path.isdir(os.path.join(ACTIVE_DIR, name))
+
+
 def _active_service_names():
     if not os.path.isdir(ACTIVE_DIR):
         return []
-    return sorted(
-        name
-        for name in os.listdir(ACTIVE_DIR)
-        if os.path.isdir(os.path.join(ACTIVE_DIR, name))
-    )
+    return sorted(name for name in os.listdir(ACTIVE_DIR) if _is_service_dir(name))
 
 
 def _declared_import_path(name):
@@ -185,3 +198,17 @@ def test_control_the_real_dockerfile_copies_no_services_tree():
         "the Dockerfile now COPYs a services/ tree: %s -- re-read "
         "tools/image_ship_check.py before accepting this" % shipped_services_trees
     )
+
+
+def test_control_cache_dirs_are_not_mistaken_for_services():
+    """RED-able control for the defect above: __pycache__ under services/active
+    must never be treated as a service, or the gate fails on any machine that
+    has run python in the tree -- i.e. every machine except a fresh CI runner."""
+    assert not _is_service_dir("__pycache__")
+    assert not _is_service_dir(".pytest_cache")
+
+
+def test_control_a_real_service_dir_is_still_recognised():
+    """The exclusion must not be so broad it empties the gate."""
+    assert "config_scan_api" in _active_service_names()
+    assert len(_active_service_names()) >= 20

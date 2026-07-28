@@ -51,7 +51,7 @@ TRIAGE_PREFIX = "triage:"
 DIGEST_ISSUE_LABEL = "pr-triage-digest"
 MIN_SOLID_ADDITIONS = 12  # changes adding fewer lines than this are stub scaffolds
 
-# WALL-CLOCK BUDGET (FU-133). The job running this has `timeout-minutes: 8`, and
+# WALL-CLOCK BUDGET (FU-136). The job running this has `timeout-minutes: 8`, and
 # a job KILLED by that timeout is the worst possible outcome: no labels, no
 # digest, no step summary, and -- because stdout is a pipe and therefore block
 # buffered -- not one line of its own progress. On 2026-07-28T06:11Z and 06:23Z
@@ -358,7 +358,7 @@ def _triage_labels_of(pr: dict):
 def apply_label(repo: str, number: int, bucket: str, current=None) -> int:
     """Converge PR `number` onto exactly one triage bucket. Returns gh calls made.
 
-    THE SCAR (FU-133): this used to cost FOUR sequential `gh pr edit` calls per
+    THE SCAR (FU-136): this used to cost FOUR sequential `gh pr edit` calls per
     PR, unconditionally -- one add plus three blind removes -- whether or not the
     PR already carried exactly the right label. MEASURED against the live API
     2026-07-28T07:52Z: 4.06s per PR. At 119 open build PRs that is 483s of pure

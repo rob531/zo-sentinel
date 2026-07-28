@@ -1022,7 +1022,23 @@ def _selftest_gate(directive, directive_id):
         import os as _os
         # in-memory SQLite + no Clerk -> the self-test imports app.db/app.models and runs
         # WITHOUT Postgres, DuckDB or Docker (lightweight, short-lived, one at a time).
-        _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": ""}
+        # FU-031 root cause. Python sets sys.path[0] to the SCRIPT'S OWN DIRECTORY,
+        # and `cwd=` does NOT put PROJECT_DIR on sys.path. While builder output was
+        # root-level files this was invisible (script dir == repo root, so `app.*`
+        # resolved). The P2->P3 move to services/staged/<name>/*.py made sys.path[0]
+        # the SERVICE directory, and every `from app.db import ...` began raising
+        # ModuleNotFoundError -- which the branch below catches and degrades to
+        # Tier-0, NON-BLOCKING. Result: 319 degradations vs 11 PASS (~96%), i.e. the
+        # acceptance clause that makes a builder target self-verifying had not
+        # executed since 2026-07-25T22:03Z.
+        #
+        # MUST PREPEND, never assign. This daemon inherits PYTHONPATH=/pkg/:/root/
+        # from daemon_wrapper.sh (read from /proc/<pid>/environ); clobbering it would
+        # break unrelated imports inside the self-test subprocess. Verified 3 ways:
+        # cwd alone -> rc=1 regardless of PYTHONPATH; cwd + PYTHONPATH=<repo> -> PASS;
+        # cwd + the real inherited /pkg/:/root/ -> reproduces production exactly.
+        _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": "",
+                "PYTHONPATH": str(PROJECT_DIR) + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
         proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
                               text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:

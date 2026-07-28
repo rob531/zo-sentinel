@@ -198,6 +198,43 @@ def _is_abort_event(event: str) -> bool:
             and ("destroy" in event or "closed" in event))
 
 
+_ABANDON_RESULT_PREFIXES = ("killed", "abort", "abandon", "cancel")
+
+
+def _state_abandoned(rid: str, runs_root: Path) -> bool:
+    """Did the run record its OWN deliberate abandonment, and release its spend?
+
+    FU-131. A run killed BEFORE `fire` never reaches the ledger's abort vocabulary
+    (`wedge_*` / `manual_*`) -- the operator's last word lands in the run's own
+    state.json as `result: killed_*`. Runs 20260725-170556 and 20260725-181359 were
+    both killed at preflight (read-only: no export, no instance, $0) and the detector
+    called them STRANDED for 60h, so `--check-open-runs` exited 1 on every invocation
+    and would have forever. A gate that is permanently red is a gate nobody reads --
+    the decorative-gate failure the header of this section warns about, walked into
+    by the very check that warns about it.
+
+    The bar is NOT lowered. The danger `check_open_runs` exists for is a run that
+    "opened, SPENT, and never closed", so a state-recorded abandonment only counts
+    when the run carries no unreleased spend: it never got an instance, or the
+    instance is already destroyed. A fired run still holding an instance stays
+    STRANDED no matter what its state.json claims -- and the live-instance API, not
+    this function, remains the authoritative guard on that (vast ledger split-brain).
+
+    `result: "ok"` is deliberately NOT an abandonment: a successful run closes via
+    the `run_closed` ledger event, and if it did not, that IS the 7/19 shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    result = str(st.get("result") or "").lower()
+    if not result.startswith(_ABANDON_RESULT_PREFIXES):
+        return False
+    return not st.get("instance_id") or bool(st.get("destroyed"))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -206,7 +243,8 @@ def _parse_ts(ts: str) -> datetime | None:
 
 
 def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
-              include_aborted: bool = False) -> list[dict]:
+              include_aborted: bool = False,
+              runs_root: Path | None = None) -> list[dict]:
     """Return runs that opened and never reached `run_closed`, newest first.
 
     Reads the ledger as an event log rather than a success log. Each record carries
@@ -215,6 +253,10 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     because they were abandoned deliberately and alarming on them is noise.
     """
     path = LEDGER if ledger_path is None else ledger_path
+    # The ledger lives at <runs_root>/ledger.jsonl, so the run dirs sit beside it.
+    # Deriving the root from the ledger keeps the state.json reconciliation pointed
+    # at the SAME tree the caller is auditing (and keeps tests off the live tree).
+    root = path.parent if runs_root is None else runs_root
     now = datetime.now(timezone.utc) if now is None else now
     if not path.exists():
         return []
@@ -241,7 +283,8 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
                 opened[rid]["last_ts"] = ev.get("ts")
     out = []
     for rec in opened.values():
-        aborted = _is_abort_event(rec["last_event"])
+        aborted = (_is_abort_event(rec["last_event"])
+                   or _state_abandoned(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
@@ -254,10 +297,12 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     return sorted(out, key=lambda r: r.get("opened_at") or "", reverse=True)
 
 
-def check_open_runs(ledger_path: Path | None = None) -> int:
+def check_open_runs(ledger_path: Path | None = None,
+                    runs_root: Path | None = None) -> int:
     """CLI check. Exit 1 if any run has been open longer than the stale threshold."""
-    runs = open_runs(ledger_path)
-    aborted = [r for r in open_runs(ledger_path, include_aborted=True)
+    runs = open_runs(ledger_path, runs_root=runs_root)
+    aborted = [r for r in open_runs(ledger_path, include_aborted=True,
+                                    runs_root=runs_root)
                if r["outcome"] == "aborted"]
     stale = [r for r in runs if r["stale"]]
     if aborted:
@@ -1068,6 +1113,20 @@ def ph_postcheck(run: Run, args) -> None:
         log(f"POSTCHECK DEGRADED: freshness unreadable ({freshness_error}); "
             f"closing the run anyway -- all writes were already committed")
     base = run.state.get("baseline_freshness", {})
+    # FU-131: when /freshness is unreachable the run still KNOWS its post-state --
+    # `import` stamped `scored_after` from a DIRECT DB read, which is the very number
+    # I1 is enforced against and a strictly better source than the cached endpoint.
+    # Run 20260727-105859 shipped `scored_servers.after: null` while its own
+    # state.json held 279116: the artifact a successor reads was less true than the
+    # state the run was holding. Publish the figure AND its basis -- a number without
+    # its basis is how "MTD spend" became a 24h delta (FU-035).
+    scored_after = after.get("scored_servers")
+    after_basis = "freshness" if scored_after is not None else None
+    if scored_after is None and run.state.get("scored_after") is not None:
+        scored_after = run.state["scored_after"]
+        after_basis = "db_import"
+        log(f"postcheck: freshness unreadable; scored_servers.after={scored_after} "
+            f"taken from the import phase's direct DB read (basis=db_import)")
     report = {
         "run_id": run.state["run_id"], "mode": run.state["mode"],
         "freshness_error": freshness_error,
@@ -1077,7 +1136,7 @@ def ph_postcheck(run: Run, args) -> None:
         "est_cost_usd": run.state.get("est_cost"),
         "scores_rows": {"before": base.get("scores_rows"), "after": after.get("scores_rows")},
         "scored_servers": {"before": base.get("scored_servers"),
-                           "after": after.get("scored_servers")},
+                           "after": scored_after, "after_basis": after_basis},
         "newest_scored_at": {"before": base.get("newest_scored_at"),
                              "after": after.get("newest_scored_at")},
         "destroyed": run.state.get("destroyed", False) or

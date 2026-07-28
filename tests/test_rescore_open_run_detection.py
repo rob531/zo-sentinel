@@ -199,3 +199,171 @@ class _FakeResp:
 
     def __exit__(self, *a):
         return False
+
+
+# ------------------------------------------------------------------ FU-131
+# The detector classified two ZERO-SPEND runs as STRANDED for 60h, so
+# `--check-open-runs` exited 1 on every invocation. These pin the reconciliation
+# AND, more importantly, pin the cases where it must still go RED.
+def _state(runs_root: Path, rid: str, **fields) -> None:
+    d = runs_root / rid
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "state.json").write_text(json.dumps({"run_id": rid, **fields}),
+                                  encoding="utf-8")
+
+
+def test_preflight_kill_recorded_only_in_state_is_not_stranded(wr, tmp_path):
+    """The live 7/25 shape: killed at preflight, no export, no instance, $0.
+
+    The operator's last word went to state.json (`result: killed_*`), never to the
+    ledger's `wedge_*`/`manual_*` vocabulary, so the detector alarmed forever.
+    """
+    now = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": "2026-07-25T17:05:56Z", "run": "20260725-170556", "event": "run_opened"},
+        {"ts": "2026-07-25T17:09:47Z", "run": "20260725-170556",
+         "event": "phase_preflight_done"},
+    ])
+    _state(tmp_path, "20260725-170556", result="killed_regate_size_scaled",
+           phases={"preflight": "done", "postcheck": "done"}, scored_before=278026)
+    assert wr.open_runs(p, now=now) == []
+    got = wr.open_runs(p, now=now, include_aborted=True)
+    assert [r["outcome"] for r in got] == ["aborted"] and got[0]["stale"] is False
+    assert wr.check_open_runs(p) == 0
+
+
+def test_state_result_cannot_excuse_a_run_still_holding_an_instance(wr, tmp_path):
+    """THE bar this reconciliation must never lower.
+
+    `check_open_runs` exists for a run that "opened, SPENT, and never closed". A
+    `killed_*` scribbled into state.json while an instance is still rented is a
+    claim, not a teardown -- and it is BURNING money. Stays stranded, stays stale.
+    """
+    now = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": "2026-07-25T17:05:56Z", "run": "spender", "event": "run_opened"},
+        {"ts": "2026-07-25T18:00:00Z", "run": "spender", "event": "phase_fire_done"},
+    ])
+    _state(tmp_path, "spender", result="killed_by_hand", instance_id=45996047,
+           destroyed=False)
+    got = wr.open_runs(p, now=now)
+    assert [r["outcome"] for r in got] == ["stranded"]
+    assert got[0]["stale"] is True
+    assert wr.check_open_runs(p) == 1
+
+
+def test_a_destroyed_instance_releases_the_spend_and_may_be_excused(wr, tmp_path):
+    """Same run, once the instance is provably released (I4 satisfied)."""
+    now = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": "2026-07-25T17:05:56Z", "run": "torn_down", "event": "run_opened"},
+        {"ts": "2026-07-25T18:00:00Z", "run": "torn_down", "event": "phase_fire_done"},
+    ])
+    _state(tmp_path, "torn_down", result="aborted_wedge_guard", instance_id=45996047,
+           destroyed=True)
+    assert wr.open_runs(p, now=now) == []
+    assert wr.check_open_runs(p) == 0
+
+
+def test_result_ok_without_run_closed_is_still_stranded(wr, tmp_path):
+    """`ok` is NOT an abandonment. A successful run closes via `run_closed`; one
+    that did not is precisely the 7/19 shape this whole check was built for."""
+    now = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": "2026-07-19T00:30:24Z", "run": "20260719-003024", "event": "run_opened"},
+        {"ts": "2026-07-19T05:17:31Z", "run": "20260719-003024",
+         "event": "phase_destroy_done"},
+    ])
+    _state(tmp_path, "20260719-003024", result="ok", destroyed=True,
+           instance_id=1234, imported_servers=32545)
+    got = wr.open_runs(p, now=now)
+    assert [r["outcome"] for r in got] == ["stranded"] and got[0]["stale"] is True
+    assert wr.check_open_runs(p) == 1
+
+
+def test_missing_or_torn_state_is_not_evidence_of_abandonment(wr, tmp_path):
+    """No state, unreadable state, or a state with no `result` all mean the same
+    thing: nobody recorded a teardown, so the run stays stranded."""
+    now = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": "2026-07-25T17:05:56Z", "run": "no_state", "event": "run_opened"},
+        {"ts": "2026-07-25T17:05:56Z", "run": "torn", "event": "run_opened"},
+        {"ts": "2026-07-25T17:05:56Z", "run": "no_result", "event": "run_opened"},
+    ])
+    (tmp_path / "torn").mkdir()
+    (tmp_path / "torn" / "state.json").write_text('{"run_id": "torn", "resu',
+                                                  encoding="utf-8")
+    _state(tmp_path, "no_result", phases={"preflight": "done"})
+    got = wr.open_runs(p, now=now)
+    assert sorted(r["run_id"] for r in got) == ["no_result", "no_state", "torn"]
+    assert all(r["stale"] for r in got)
+    assert wr.check_open_runs(p) == 1
+
+
+def test_reconciliation_reads_the_tree_the_caller_is_auditing(wr, tmp_path):
+    """A ledger handed in explicitly must not be reconciled against the LIVE run
+    tree -- the guard has to look at the runs sitting beside that ledger."""
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    p = _ledger(other, [
+        {"ts": "2026-07-25T17:05:56Z", "run": "r1", "event": "run_opened"}])
+    _state(tmp_path, "r1", result="killed_somewhere_else")   # wrong tree
+    now = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
+    assert [r["outcome"] for r in wr.open_runs(p, now=now)] == ["stranded"]
+    # ... and honours an explicit override.
+    assert wr.open_runs(p, now=now, runs_root=tmp_path) == []
+
+
+# --------------------------------------------- FU-131: postcheck keeps its number
+def _postcheck_run(wr, tmp_path, **state):
+    run = wr.Run(tmp_path / "20260727-105859")
+    run.state = {"run_id": "20260727-105859", "mode": "delta", "phases": {},
+                 "baseline_freshness": {"scored_servers": 279111,
+                                        "scores_rows": 1953777}, **state}
+    run.dir.mkdir(parents=True, exist_ok=True)
+    return run
+
+
+def test_degraded_postcheck_keeps_the_number_it_already_had(wr, tmp_path, monkeypatch):
+    """Run 20260727-105859 shipped `scored_servers.after: null` while its own
+    state.json held 279116 from the import phase's direct DB read -- the very
+    number I1 is enforced against. A report may be degraded; it must not be
+    emptier than the state that produced it."""
+    monkeypatch.setattr(wr, "freshness_safe",
+                        lambda: ({}, "RuntimeError: freshness unreachable"))
+    monkeypatch.setattr(wr, "ledger", lambda *a, **kw: None)
+    run = _postcheck_run(wr, tmp_path, scored_after=279116, imported_servers=140005,
+                         exported=140005, coverage=1.0, degraded=False, destroyed=True)
+    wr.ph_postcheck(run, None)
+    rep = json.loads((run.dir / "report.json").read_text())
+    assert rep["degraded_postcheck"] is True
+    assert rep["scored_servers"]["after"] == 279116
+    assert rep["scored_servers"]["after_basis"] == "db_import"
+
+
+def test_postcheck_prefers_the_freshness_surface_when_it_answers(wr, tmp_path,
+                                                                 monkeypatch):
+    monkeypatch.setattr(wr, "freshness_safe",
+                        lambda: ({"scored_servers": 279116,
+                                  "scores_rows": 1953812,
+                                  "newest_scored_at": "2026-07-27T16:52:57"}, ""))
+    monkeypatch.setattr(wr, "ledger", lambda *a, **kw: None)
+    run = _postcheck_run(wr, tmp_path, scored_after=279116, destroyed=True)
+    wr.ph_postcheck(run, None)
+    rep = json.loads((run.dir / "report.json").read_text())
+    assert rep["degraded_postcheck"] is False
+    assert rep["scored_servers"]["after_basis"] == "freshness"
+    assert rep["scores_rows"]["after"] == 1953812
+
+
+def test_postcheck_with_neither_source_says_so_rather_than_guessing(wr, tmp_path,
+                                                                    monkeypatch):
+    """A run that failed before import has no DB number either. `after: null` is
+    then the honest answer -- and the basis must say there was none."""
+    monkeypatch.setattr(wr, "freshness_safe", lambda: ({}, "unreachable"))
+    monkeypatch.setattr(wr, "ledger", lambda *a, **kw: None)
+    run = _postcheck_run(wr, tmp_path, destroyed=True)
+    wr.ph_postcheck(run, None)
+    rep = json.loads((run.dir / "report.json").read_text())
+    assert rep["scored_servers"]["after"] is None
+    assert rep["scored_servers"]["after_basis"] is None

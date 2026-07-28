@@ -67,6 +67,8 @@ NOT_FOUND_HINTS = (
     "command not found",
     "no such file or directory",
     "cannot find the path",
+    "cannot find the file specified",   # cmd.exe, seen misreporting FU-156 as RED
+    "the syntax of the command is incorrect",  # malformed predicate, not a finding
     "the term '",                      # PowerShell: The term 'x' is not recognized
 )
 

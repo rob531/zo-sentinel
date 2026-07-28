@@ -1,0 +1,10 @@
+name = "scoring_consumer"
+import_path = "services.active.scoring_consumer.router"
+prefix = "/api"
+tag = "scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

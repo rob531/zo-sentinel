@@ -1,0 +1,8 @@
+[service]
+name = "server_cve_lookup"
+import_path = "services.active.server_cve_lookup.router"
+prefix = "/api"
+tag = "server_cve_lookup"
+origin = "service"
+auth = "public"
+needs_data_layer = true

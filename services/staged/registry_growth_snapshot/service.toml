@@ -1,0 +1,8 @@
+[service]
+name = "registry_growth_snapshot"
+import_path = "services.active.registry_growth_snapshot.router"
+prefix = "/api"
+tag = "registry_growth_snapshot"
+origin = "service"
+auth = "public"
+needs_data_layer = true

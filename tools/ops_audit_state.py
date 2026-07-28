@@ -29,7 +29,13 @@ point that survived is not thrown away.
 
 IDEMPOTENT BY CHARACTER: recording twice on the same date UPDATES that day's
 entry instead of appending a duplicate, and a corrupt/absent file is rebuilt
-rather than raised on -- a run that hits the break repairs it.
+rather than raised on -- a run that hits the break repairs it. A file that has
+to be healed is first copied to ``<name>.<why>-<UTC>.bak.json``, so healing can
+never be the step that destroys the evidence (scar 2026-07-28).
+
+THIS MODULE IS THE ONLY WRITER of the state file. Anything that writes that
+path directly will silently drop ``entries``/``credits``; call ``record()`` or
+the CLI instead.
 
 CLI::
 
@@ -66,6 +72,34 @@ def empty_state() -> dict:
     return {"schema": SCHEMA, "entries": [], "credits": []}
 
 
+def _quarantine(path: Path, why: str) -> Optional[Path]:
+    """Copy a state file we are about to heal PAST to a timestamped sidecar.
+
+    ``load()`` deliberately never raises on a bad file -- an audit that dies
+    on its own state file is worse than one that lost a day. But healing in
+    place means the next ``save()`` overwrites the only copy of whatever was
+    there, and a spend history is NOT reconstructable from the balance API
+    alone (the API knows today's credit and the top-ups, never the daily
+    samples in between).
+
+    Scar 2026-07-28: the daily ops audit hand-rolled a ``json.dump`` into this
+    path instead of calling this module, replacing ``entries``/``credits``
+    with a foreign shape. The next run healed past it exactly as designed and
+    the original was gone; recovery worked only because an unrelated
+    ``.v1.bak`` happened to survive and one balance had been quoted in a
+    ledger log line. Luck is not a backup.
+
+    Never raises: a failed copy must not stop the audit.
+    """
+    try:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dest = path.with_suffix(f".{why}-{stamp}.bak.json")
+        dest.write_bytes(path.read_bytes())
+        return dest
+    except OSError:
+        return None
+
+
 def load(path: Optional[Path] = None) -> dict:
     """Read state, migrating v1 and healing corruption. NEVER raises for a
     bad file: the audit's job is to keep auditing, and a state file that can
@@ -76,6 +110,7 @@ def load(path: Optional[Path] = None) -> dict:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
+        _quarantine(path, "unreadable")
         return dict(empty_state(), migrated_from="unreadable")
     if isinstance(raw, dict) and "balance" in raw and "entries" not in raw:
         # v1: a single overwritten sample. Keep it -- it is a real datapoint.
@@ -85,6 +120,7 @@ def load(path: Optional[Path] = None) -> dict:
                              "balance": float(raw["balance"])}],
                 "migrated_from": 1}
     if not isinstance(raw, dict) or not isinstance(raw.get("entries"), list):
+        _quarantine(path, "malformed")
         return dict(empty_state(), migrated_from="malformed")
     raw.setdefault("schema", SCHEMA)
     raw.setdefault("credits", [])

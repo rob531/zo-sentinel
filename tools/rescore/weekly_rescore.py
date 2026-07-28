@@ -341,8 +341,21 @@ def ensure_proxy() -> None:
     except OSError:
         pass
     log(f"starting fly proxy {PROXY_PORT}:5432 -a {FLY_PG_APP}")
+    # FU-132: flyctl's stderr used to go to DEVNULL and the failure surfaced as a
+    # bare "did not come up in 60s" -- which names the symptom and hides the cause.
+    # On 2026-07-28 the cause was `Error: no access token available`, from flyctl's
+    # OWN client-side 720h login timer ageing out at 730h29m; the token itself still
+    # authenticated against api.fly.io perfectly well. Recovering that one line cost
+    # a manual re-run of the exact command the harness had already run and discarded.
+    #
+    # stderr goes to a FILE, not a PIPE: on the success path the proxy lives for the
+    # whole run (hours) and nobody drains it, so a pipe would eventually fill its
+    # buffer and wedge flyctl itself -- trading a silent failure for a worse one.
+    RUNS_ROOT.mkdir(parents=True, exist_ok=True)
+    err_path = RUNS_ROOT / "_flyctl_proxy.err"
+    err_f = open(err_path, "w+", encoding="utf-8", errors="replace")
     _PROXY = subprocess.Popen(["flyctl", "proxy", f"{PROXY_PORT}:5432", "-a", FLY_PG_APP],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                              stdout=subprocess.DEVNULL, stderr=err_f)
     for _ in range(30):
         time.sleep(2)
         try:
@@ -350,8 +363,21 @@ def ensure_proxy() -> None:
             s.connect(("127.0.0.1", PROXY_PORT)); s.close()
             return
         except OSError:
-            continue
-    raise RuntimeError("fly proxy did not come up in 60s")
+            pass
+        if _PROXY.poll() is not None:
+            break            # it is already dead; waiting out the clock is theatre
+    detail = ""
+    try:
+        err_f.flush()
+        said = err_path.read_text(encoding="utf-8", errors="replace").strip()
+        if said:
+            detail = " -- flyctl said: " + said.splitlines()[-1]
+    except OSError:
+        pass
+    rc = _PROXY.poll()
+    if rc is not None:
+        detail = f" (flyctl exited {rc}){detail}"
+    raise RuntimeError(f"fly proxy did not come up in 60s{detail}")
 
 
 def pg_conn():

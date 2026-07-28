@@ -367,3 +367,100 @@ def test_postcheck_with_neither_source_says_so_rather_than_guessing(wr, tmp_path
     rep = json.loads((run.dir / "report.json").read_text())
     assert rep["scored_servers"]["after"] is None
     assert rep["scored_servers"]["after_basis"] is None
+
+
+# ------------------------------------------------------------------ FU-132
+# ensure_proxy() ran the command that explains the failure and threw its output
+# away, so a 2026-07-28 preflight abort said "did not come up in 60s" when flyctl
+# had plainly said "no access token available".
+class _FakeProc:
+    """A flyctl that writes to the stderr file it was handed, then exits."""
+
+    def __init__(self, says: str = "", rc: int | None = 1, stderr=None):
+        self._rc = rc
+        if says and stderr is not None:
+            stderr.write(says)
+            stderr.flush()
+
+    def poll(self):
+        return self._rc
+
+
+def _no_listener(wr, monkeypatch):
+    """Every connect attempt fails -- the proxy never comes up."""
+    class _Sock:
+        def settimeout(self, *_a):
+            pass
+
+        def connect(self, *_a):
+            raise OSError("refused")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(wr.socket, "socket", lambda *a, **kw: _Sock())
+    monkeypatch.setattr(wr.time, "sleep", lambda *_a: None)
+
+
+def test_proxy_failure_names_flyctls_own_reason(wr, tmp_path, monkeypatch):
+    """The live 2026-07-28 shape: flyctl exits 1 with a one-line explanation."""
+    monkeypatch.setattr(wr, "RUNS_ROOT", tmp_path)
+    _no_listener(wr, monkeypatch)
+    monkeypatch.setattr(wr.subprocess, "Popen", lambda *a, **kw: _FakeProc(
+        "Error: no access token available. Please login with 'flyctl auth login'\n",
+        rc=1, stderr=kw.get("stderr")))
+    with pytest.raises(RuntimeError) as e:
+        wr.ensure_proxy()
+    msg = str(e.value)
+    assert "no access token available" in msg
+    assert "flyctl exited 1" in msg
+
+
+def test_proxy_failure_still_reports_when_flyctl_says_nothing(wr, tmp_path,
+                                                              monkeypatch):
+    """Silence is a valid outcome; the check must not crash trying to explain it."""
+    monkeypatch.setattr(wr, "RUNS_ROOT", tmp_path)
+    _no_listener(wr, monkeypatch)
+    monkeypatch.setattr(wr.subprocess, "Popen",
+                        lambda *a, **kw: _FakeProc("", rc=None, stderr=kw.get("stderr")))
+    with pytest.raises(RuntimeError, match="did not come up in 60s"):
+        wr.ensure_proxy()
+
+
+def test_a_dead_flyctl_is_not_waited_out(wr, tmp_path, monkeypatch):
+    """It exited on attempt one. Sleeping through the remaining 29 polls delays the
+    only useful signal by a minute and teaches the reader nothing."""
+    monkeypatch.setattr(wr, "RUNS_ROOT", tmp_path)
+    _no_listener(wr, monkeypatch)
+    slept = {"n": 0}
+
+    def counting_sleep(*_a):
+        slept["n"] += 1
+
+    monkeypatch.setattr(wr.time, "sleep", counting_sleep)
+    monkeypatch.setattr(wr.subprocess, "Popen", lambda *a, **kw: _FakeProc(
+        "boom\n", rc=2, stderr=kw.get("stderr")))
+    with pytest.raises(RuntimeError):
+        wr.ensure_proxy()
+    assert slept["n"] == 1
+
+
+def test_a_live_proxy_short_circuits_before_spawning_anything(wr, monkeypatch):
+    """An already-listening proxy must be reused, not duplicated onto a taken port."""
+    class _Sock:
+        def settimeout(self, *_a):
+            pass
+
+        def connect(self, *_a):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(wr.socket, "socket", lambda *a, **kw: _Sock())
+
+    def boom(*a, **kw):
+        raise AssertionError("spawned a second proxy over a live one")
+
+    monkeypatch.setattr(wr.subprocess, "Popen", boom)
+    assert wr.ensure_proxy() is None

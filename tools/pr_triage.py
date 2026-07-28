@@ -168,7 +168,7 @@ def _gh(*args: str, check: bool = False, retries: int = 4) -> subprocess.Complet
 # ---------------------------------------------------------------------------
 _PASS = {"SUCCESS", "NEUTRAL", "SKIPPED", "EXPECTED"}
 _FAIL = {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
-# A CANCELLED check is a KILL, not a verdict (FU-137). Nothing about the PR was
+# A CANCELLED check is a KILL, not a verdict (FU-141). Nothing about the PR was
 # judged -- the run was stopped, almost always by this very workflow's
 # `concurrency: cancel-in-progress: true` when the next build PR opened. Reading
 # it as a failure condemns a PR for our own scheduling. It is PENDING: revisit.
@@ -188,7 +188,7 @@ def _gate_state(rollup: list) -> str:
 
     Handles both CheckRun (status/conclusion) and StatusContext (state) shapes.
     Our own triage checks are EXCLUDED and CANCELLED counts as pending -- see
-    _SELF_CHECKS / _KILLED above for why both are required to break FU-137.
+    _SELF_CHECKS / _KILLED above for why both are required to break FU-141.
     """
     if not rollup:
         return "pending"  # no checks reported yet

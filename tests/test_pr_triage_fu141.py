@@ -1,8 +1,8 @@
-"""FU-137 regression: the triage sweep must not condemn a PR for its own kill.
+"""FU-141 regression: the triage sweep must not condemn a PR for its own kill.
 
 Both assertions were confirmed RED against the pre-fix _gate_state before this
 file was committed (cancelled-triage -> "failure" -> triage:stale -> auto-merge
-never arms). See the FU-137 ledger entry for the 58-PR backlog it produced.
+never arms). See the FU-141 ledger entry for the 58-PR backlog it produced.
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))

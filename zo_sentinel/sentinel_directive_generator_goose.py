@@ -794,7 +794,13 @@ def _emit_nonconvergence(secs, delta, rc, kind: str) -> None:
 
 
 def _salvage_transcript(stdout_text) -> int:
-    """Recover fenced directives the harness discarded (delta<=0 path only).
+    """Recover directives the harness discarded, on BOTH total-loss paths.
+
+    Called from the delta<=0 branch (fenced blocks the model emitted without
+    reaching the tool call) AND from the TimeoutExpired branch (goose's own
+    rendered propose_directive calls, killed by the wall clock mid-flight).
+    Both are transcripts that were already going to be thrown away, so salvage
+    can never displace or race a converged tool call.
 
     Returns the number of directives written into PROPOSED_DIR. Never raises:
     a salvage failure must not take down the generator loop.
@@ -949,8 +955,23 @@ def run_goose_cycle() -> dict:
         if getattr(_te, "stdout", None):
             _so = _te.stdout if isinstance(_te.stdout, str) else _te.stdout.decode("utf-8","replace")
             log.warning("goose stdout[-2200:] (timeout transcript tail): %s", _so[-2200:].replace("\n"," | "))
-        _emit_nonconvergence(GOOSE_TIMEOUT, 0, None, "timeout")
-        return {"status": "timeout"}
+        # A timeout transcript is STRONGER evidence than a fenced one: goose
+        # had REACHED propose_directive and the wall clock beat it. Discarding
+        # it wholesale threw away completed tool calls (observed 12:20:53Z
+        # 2026-07-29, two of them). Salvage before declaring non-convergence.
+        _to_out = getattr(_te, "stdout", None)
+        if _to_out is not None and not isinstance(_to_out, str):
+            _to_out = _to_out.decode("utf-8", "replace")
+        _recovered = _salvage_transcript(_to_out)
+        if _recovered:
+            log.warning(
+                "ARCHITECT SALVAGE (timeout): recovered %d directive(s) from a "
+                "transcript that reached propose_directive before the %ds wall "
+                "clock. The builder is not starved by an exhausted anchor.",
+                _recovered, GOOSE_TIMEOUT)
+        _emit_nonconvergence(GOOSE_TIMEOUT, 0, None,
+                             "timeout_salvaged" if _recovered else "timeout")
+        return {"status": "timeout", "salvaged_timeout": _recovered}
     except FileNotFoundError:
         log.error("goose CLI not on PATH; daemon cannot continue")
         return {"status": "no_goose"}

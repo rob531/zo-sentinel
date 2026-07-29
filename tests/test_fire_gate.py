@@ -222,3 +222,89 @@ def test_an_unresolvable_target_is_an_error(monkeypatch):
     monkeypatch.setattr(fire_gate, "_gh", _fake_gh([], head="not-a-sha"))
     with pytest.raises(RuntimeError, match="resolve"):
         fire_gate.resolve_head("r/r", "no-such-branch")
+
+
+# --- FU-170: the EXIT CODE is the interface, and it had never been seen RED ----------
+#
+# Every assertion above exercises classify()/copy_sources()/changed_files() in
+# ISOLATION. But the thing prod-drift-sentinel and the chairman actually read is
+# main()'s EXIT CODE -- 0 SAFE, 1 RESTAGE, 2 ERROR. Nothing in this suite asserted that
+# main() ever RETURNS 1. An implementation that computed `hits` perfectly and then ended
+# `return 0` would have passed all 28 tests while converting every RESTAGE into a false
+# SAFE -- and fire_gate's SAFE is the single assertion that lets the sentinel keep an
+# 18-run-old stage valid without re-verifying. That is the "guard never seen red" class.
+#
+# Observed live 2026-07-29T13:56Z against the real repo:
+#   --staged f63bcb155d0a8f2a35060f686c322224cfe99e0e
+#   --target c02fa1350b5a06b137e42f945afc649a4624e212
+#   -> rc=1, RESTAGE, naming app/scoring_consumer.py [COPY (dir app/)]
+# These tests pin that end-to-end behaviour so it never has to be re-derived by hand.
+
+import base64
+
+
+def _fake_gh_full(dockerfile, compare_docs, head=_HEAD):
+    """Like _fake_gh, but also serves the Dockerfile blob main() fetches first."""
+
+    def _gh(args):
+        endpoint = args[1] if len(args) > 1 else ""
+        if "contents/Dockerfile" in endpoint:
+            return base64.b64encode(dockerfile.encode()).decode()
+        if "/commits/" in endpoint:
+            return head + "\n"
+        if "/compare/" in endpoint:
+            return "".join(json.dumps(d) for d in compare_docs)
+        raise AssertionError(f"unexpected gh call: {args}")
+
+    return _gh
+
+
+def _run_main(monkeypatch, files, dockerfile=REAL_SHAPE):
+    docs = [{
+        "total_commits": 3,
+        "commits": [{"sha": _HEAD}],
+        "files": [{"filename": f} for f in files],
+    }]
+    monkeypatch.setattr(fire_gate, "_gh", _fake_gh_full(dockerfile, docs))
+    monkeypatch.setattr(sys, "argv", ["fire_gate.py", "--staged", "c" * 40])
+    return fire_gate.main()
+
+
+def test_main_returns_1_when_the_delta_reaches_the_image(monkeypatch):
+    """The live negative control, pinned. This is the assertion that was missing."""
+    assert _run_main(monkeypatch, ["app/scoring_consumer.py"]) == 1
+
+
+def test_main_returns_0_only_when_nothing_reaches_the_image(monkeypatch):
+    inert = ["tools/x.py", "services/staged/y.py", ".github/workflows/z.yml", "docs/a.md"]
+    assert _run_main(monkeypatch, inert) == 0
+
+
+def test_one_reaching_path_among_many_inert_ones_still_restages(monkeypatch):
+    """The hit must not be diluted by the inert majority -- FU-160's real shape."""
+    mixed = ["tools/x.py", "services/staged/y.py", "alembic.ini", "docs/a.md"]
+    assert _run_main(monkeypatch, mixed) == 1
+
+
+@pytest.mark.parametrize(
+    "path", ["Dockerfile", ".dockerignore", "fly.toml", "services/active/x.toml"]
+)
+def test_contract_paths_exit_restage_through_main(monkeypatch, path):
+    assert _run_main(monkeypatch, [path]) == 1
+
+
+def test_main_returns_2_and_never_0_when_it_cannot_evaluate(monkeypatch):
+    """A probe that cannot evaluate is not a green."""
+
+    def _boom(args):
+        raise RuntimeError("compare returned 300 files, at or over the cap")
+
+    monkeypatch.setattr(fire_gate, "_gh", _boom)
+    monkeypatch.setattr(sys, "argv", ["fire_gate.py", "--staged", "c" * 40])
+    assert fire_gate.main() == 2
+
+
+def test_an_unparseable_dockerfile_is_an_error_not_a_safe(monkeypatch):
+    """Zero COPY sources => empty surface => every path looks inert. Must be ERROR."""
+    rc = _run_main(monkeypatch, ["app/main.py"], dockerfile="FROM python:3.11\nRUN echo hi\n")
+    assert rc == 2

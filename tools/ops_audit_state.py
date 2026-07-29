@@ -53,6 +53,13 @@ DEFAULT_PATH = Path(os.environ.get("ZO_OPS_AUDIT_STATE",
                                    r"D:/zo/runs/ops_audit_state.json"))
 SCHEMA = 2
 
+# THE BUDGET LINE, IN CODE (FU-035).
+# Chairman ruling 2026-07-17: $25 must last the month; alert at >=$20 spent.
+# Judged against since_funding (exact for a prepaid account), NOT the MTD
+# delta, whose basis can be a few days old and structurally understate burn.
+BUDGET_USD = 25.0
+RED_AT_USD = 20.0
+
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -190,6 +197,35 @@ def since_funding(state: dict) -> dict:
                      "account funded from zero)"}
 
 
+def budget_status(state: dict, budget: float = BUDGET_USD,
+                  red_at: float = RED_AT_USD) -> dict:
+    """Evaluate burn against the budget line and return a machine-readable verdict.
+
+    Encodes the chairman's $25/month rule so the audit does not depend on a
+    reading agent applying a threshold written in prose (FU-035: a guard whose
+    only failure mode is a silent all-clear is not a guard).
+
+    FAILS LOUD, NOT OPEN: when no credit event has been recorded the burn is
+    unknowable from local state, so ``level`` is ``UNKNOWN`` -- never ``GREEN``.
+    An UNKNOWN is a finding the audit must surface, not a pass.
+    """
+    sf = since_funding(state)
+    spend = sf.get("spend_usd")
+    if spend is None:
+        return {"level": "UNKNOWN", "spend_usd": None, "budget_usd": budget,
+                "red_at_usd": red_at, "remaining_usd": None,
+                "metric": "since_funding",
+                "basis": "no credit events recorded -- burn is not computable "
+                         "from local state; treat as a finding, not a pass"}
+    return {"level": "RED" if spend >= red_at else "GREEN",
+            "spend_usd": spend,
+            "budget_usd": budget,
+            "red_at_usd": red_at,
+            "remaining_usd": round(budget - spend, 4),
+            "metric": "since_funding",
+            "basis": "since_funding.spend_usd vs red_at (%s)" % sf.get("basis")}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cmd", choices=["record", "credit", "show"])
@@ -215,7 +251,8 @@ def main(argv=None) -> int:
                       "entries": len(state.get("entries", [])),
                       "credits": len(state.get("credits", [])),
                       "mtd": month_to_date(state, a.month),
-                      "since_funding": since_funding(state)}, indent=2))
+                      "since_funding": since_funding(state),
+                      "budget": budget_status(state)}, indent=2))
     return 0
 
 

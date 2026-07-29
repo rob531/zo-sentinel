@@ -10,6 +10,7 @@ an assertion never seen red is not evidence.
 """
 
 import importlib.util
+import json
 import pathlib
 import sys
 
@@ -127,3 +128,97 @@ def test_copy_dot_makes_the_whole_tree_the_surface():
 def test_zero_copy_sources_is_an_error_not_a_pass():
     """A Dockerfile we failed to parse must never yield an empty (=permissive) surface."""
     assert fire_gate.copy_sources("FROM python:3.11\nRUN echo hi\n") == []
+
+
+# --- FU-160: the target head must be RESOLVED, not read off page one -----------------
+#
+# Compare pages commits 100 at a time. The original implementation took the head from
+# the last commit of the FIRST page, so any delta over 100 commits named the 100th
+# commit as "the target head" -- observed live on a 124-commit delta. The verdict was
+# right and the evidence was wrong, which is the harder failure to notice.
+
+_HEAD = "b" * 40
+_PAGE1_LAST = "a" * 40
+
+
+def _fake_gh(compare_docs, head=_HEAD):
+    """Stand in for fire_gate._gh, dispatching on the endpoint being called."""
+
+    def _gh(args):
+        endpoint = args[1] if len(args) > 1 else ""
+        if "/commits/" in endpoint:
+            return head + "\n"
+        if "/compare/" in endpoint:
+            return "".join(json.dumps(d) for d in compare_docs)
+        raise AssertionError(f"unexpected gh call: {args}")
+
+    return _gh
+
+
+def _two_page_compare(nfiles=3):
+    """Page 1 ends at a commit that is NOT the head; page 2 carries no files."""
+    files = [{"filename": f"services/staged/s{i}.py"} for i in range(nfiles)]
+    return [
+        {"total_commits": 124, "commits": [{"sha": _PAGE1_LAST}] * 100, "files": files},
+        {"total_commits": 124, "commits": [{"sha": _HEAD}] * 24, "files": []},
+    ]
+
+
+def test_head_comes_from_the_commits_api_not_from_page_one(monkeypatch):
+    monkeypatch.setattr(fire_gate, "_gh", _fake_gh(_two_page_compare()))
+    assert fire_gate.resolve_head("r/r", "main") == _HEAD
+    assert fire_gate.resolve_head("r/r", "main") != _PAGE1_LAST
+
+
+def test_compare_is_pinned_to_the_resolved_sha_not_the_ref(monkeypatch):
+    """The sha we NAME must be the sha we JUDGED -- no ref left to move mid-run."""
+    seen = []
+
+    def _gh(args):
+        seen.append(args[1])
+        if "/commits/" in args[1]:
+            return _HEAD + "\n"
+        return "".join(json.dumps(d) for d in _two_page_compare())
+
+    monkeypatch.setattr(fire_gate, "_gh", _gh)
+    head = fire_gate.resolve_head("r/r", "main")
+    fire_gate.changed_files("r/r", "c" * 40, head)
+    compares = [e for e in seen if "/compare/" in e]
+    assert len(compares) == 1
+    assert compares[0].endswith(_HEAD), f"compare was not pinned to the resolved sha: {compares[0]}"
+
+
+def test_files_across_all_pages_are_merged(monkeypatch):
+    monkeypatch.setattr(fire_gate, "_gh", _fake_gh(_two_page_compare(nfiles=5)))
+    changed, ncommits = fire_gate.changed_files("r/r", "c" * 40, _HEAD)
+    assert ncommits == 124
+    assert len(changed) == 5
+
+
+def test_hitting_the_file_cap_is_an_error_not_a_verdict(monkeypatch):
+    """A truncated file list cannot support SAFE -- and looks exactly like a full one."""
+    docs = [{
+        "total_commits": 900,
+        "commits": [{"sha": _HEAD}],
+        "files": [{"filename": f"f{i}.py"} for i in range(fire_gate.COMPARE_FILES_CAP)],
+    }]
+    monkeypatch.setattr(fire_gate, "_gh", _fake_gh(docs))
+    with pytest.raises(RuntimeError, match="cap"):
+        fire_gate.changed_files("r/r", "c" * 40, _HEAD)
+
+
+def test_under_the_cap_still_returns_normally(monkeypatch):
+    docs = [{
+        "total_commits": 10,
+        "commits": [{"sha": _HEAD}],
+        "files": [{"filename": f"f{i}.py"} for i in range(fire_gate.COMPARE_FILES_CAP - 1)],
+    }]
+    monkeypatch.setattr(fire_gate, "_gh", _fake_gh(docs))
+    changed, _ = fire_gate.changed_files("r/r", "c" * 40, _HEAD)
+    assert len(changed) == fire_gate.COMPARE_FILES_CAP - 1
+
+
+def test_an_unresolvable_target_is_an_error(monkeypatch):
+    monkeypatch.setattr(fire_gate, "_gh", _fake_gh([], head="not-a-sha"))
+    with pytest.raises(RuntimeError, match="resolve"):
+        fire_gate.resolve_head("r/r", "no-such-branch")

@@ -124,10 +124,40 @@ def classify(path: str, files: set[str], prefixes: set[str]) -> str | None:
     return None
 
 
-def changed_files(repo: str, staged: str, target: str) -> tuple[list[str], int, str]:
-    out = _gh(["api", f"repos/{repo}/compare/{staged}...{target}", "--paginate"])
-    # --paginate concatenates JSON documents; take the first and merge file lists.
-    decoder, idx, files, total, head = json.JSONDecoder(), 0, [], 0, ""
+# GitHub caps compare responses at 300 files. Past that the `files` array is SILENTLY
+# TRUNCATED -- the response still looks well-formed and still returns 200. A surface
+# audit computed from a truncated file list would return SAFE while never having seen
+# the path that mattered, and its exit code is indistinguishable from a real SAFE. So
+# hitting the cap is an ERROR (exit 2), never a verdict. (2026-07-29, FU-160.)
+COMPARE_FILES_CAP = 300
+
+
+def resolve_head(repo: str, target: str) -> str:
+    """Resolve --target to a concrete 40-char sha BEFORE comparing against it.
+
+    Resolving first, then comparing against the resolved sha, closes two defects:
+
+      * STALE REPORTED HEAD. The previous implementation read the head off the LAST
+        COMMIT OF PAGE ONE of the paginated compare. Compare pages commits 100 at a
+        time, so any delta over 100 commits reported the 100th commit as "the target
+        head". Measured 2026-07-29T04:4xZ on a 124-commit delta: page 1 ended at
+        c1d9917e (01:20Z) while main was actually 77fd0b1b (02:38Z). The VERDICT was
+        unaffected -- the files union across pages is complete -- but every artifact
+        recording "target main @ <sha>" recorded a commit that was not the head, and
+        that sha is the evidence a human reads before firing prod.
+      * TOCTOU. Naming and judging the same sha means the verdict still refers to a
+        real tree even if main advances mid-run.
+    """
+    sha = _gh(["api", f"repos/{repo}/commits/{target}", "--jq", ".sha"]).strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError(f"could not resolve --target {target!r} to a sha (got {sha!r})")
+    return sha
+
+
+def changed_files(repo: str, staged: str, target_sha: str) -> tuple[list[str], int]:
+    out = _gh(["api", f"repos/{repo}/compare/{staged}...{target_sha}", "--paginate"])
+    # --paginate concatenates JSON documents; merge the file lists across ALL of them.
+    decoder, idx, files, total = json.JSONDecoder(), 0, [], 0
     while idx < len(out):
         while idx < len(out) and out[idx].isspace():
             idx += 1
@@ -135,9 +165,15 @@ def changed_files(repo: str, staged: str, target: str) -> tuple[list[str], int, 
             break
         doc, idx = decoder.raw_decode(out, idx)
         total = doc.get("total_commits", total) or total
-        head = head or (doc.get("commits") or [{}])[-1].get("sha", "")
         files.extend(f["filename"] for f in doc.get("files") or [])
-    return sorted(set(files)), total, head
+    uniq = sorted(set(files))
+    if len(uniq) >= COMPARE_FILES_CAP:
+        raise RuntimeError(
+            f"compare returned {len(uniq)} files, at or over the GitHub cap of "
+            f"{COMPARE_FILES_CAP} -- the file list may be truncated, so the image "
+            f"surface cannot be audited. Re-stage at a newer sha rather than firing."
+        )
+    return uniq, total
 
 
 def main() -> int:
@@ -154,7 +190,8 @@ def main() -> int:
         if not srcs:
             raise RuntimeError("parsed ZERO COPY sources -- refusing to call anything safe")
         files, prefixes = build_surface(srcs)
-        changed, ncommits, head = changed_files(a.repo, a.staged, a.target)
+        head = resolve_head(a.repo, a.target)
+        changed, ncommits = changed_files(a.repo, a.staged, head)
     except Exception as exc:  # noqa: BLE001
         print(f"FIRE-GATE ERROR: {exc}", file=sys.stderr)
         print("verdict=ERROR -- do NOT read this as SAFE; re-run or let the sentinel re-verify.")
@@ -173,7 +210,7 @@ def main() -> int:
         }, indent=2))
     else:
         print(f"staged   : {a.staged}")
-        print(f"target   : {a.target} @ {head or '(no new commits)'}")
+        print(f"target   : {a.target} @ {head}")
         print(f"delta    : {ncommits} commits, {len(changed)} files")
         print(f"surface  : {len(files)} COPYed files + {len(prefixes)} COPYed dirs "
               f"+ {len(ALWAYS_SENSITIVE)} contract paths")

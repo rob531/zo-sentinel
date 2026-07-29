@@ -1,0 +1,8 @@
+[service]
+name = "perspective_events_rollup"
+import_path = "services.active.perspective_events_rollup.router"
+prefix = "/api"
+tag = "perspective_events_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true

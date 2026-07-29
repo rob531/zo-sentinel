@@ -129,3 +129,64 @@ def test_since_funding_declines_to_guess_without_a_credit_event(statefile):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# --- FU-035: THE BUDGET LINE IS NOW CODE, NOT PROSE ------------------------
+# A threshold that lives only in a SKILL's prose fires only if the reading
+# agent applies it. These pin the verdict itself.
+
+
+def _state_with(balance, credits=25.0):
+    st = oas.empty_state()
+    st["entries"] = [{"date": "2026-07-29", "at": "x", "balance": balance}]
+    if credits is not None:
+        st["credits"] = [{"date": "2026-07-17", "at": "x", "amount": credits,
+                          "id": 1}]
+    return st
+
+
+def test_budget_green_below_the_red_line():
+    b = oas.budget_status(_state_with(15.44))
+    assert b["level"] == "GREEN"
+    assert b["spend_usd"] == 9.56
+    assert b["remaining_usd"] == 15.44
+
+
+def test_budget_red_exactly_at_the_line_is_red_not_green():
+    # ">=$20 spent" -- the boundary belongs to RED.
+    b = oas.budget_status(_state_with(5.0))
+    assert b["spend_usd"] == 20.0
+    assert b["level"] == "RED"
+
+
+def test_budget_red_above_the_line():
+    assert oas.budget_status(_state_with(1.0))["level"] == "RED"
+
+
+def test_no_credit_history_is_UNKNOWN_never_a_confident_green():
+    # The FU-035 failure shape: absent history must not read as all-clear.
+    b = oas.budget_status(_state_with(15.44, credits=None))
+    assert b["level"] == "UNKNOWN"
+    assert b["level"] != "GREEN"
+    assert b["spend_usd"] is None
+
+
+def test_budget_is_judged_on_since_funding_not_the_thin_mtd_delta():
+    # Two same-month entries: the MTD delta sees $2, since_funding sees $20.
+    st = oas.empty_state()
+    st["entries"] = [{"date": "2026-07-28", "at": "x", "balance": 7.0},
+                     {"date": "2026-07-29", "at": "x", "balance": 5.0}]
+    st["credits"] = [{"date": "2026-07-17", "at": "x", "amount": 25.0, "id": 1}]
+    assert oas.month_to_date(st)["spend_usd"] == 2.0        # would read GREEN
+    assert oas.budget_status(st)["level"] == "RED"          # the honest verdict
+
+
+def test_show_actually_emits_the_budget_block(statefile, capsys):
+    # An uncalled helper is a placebo -- assert the CLI surfaces the verdict.
+    oas.record_credit(25.0, "2026-07-17", 1, path=statefile)
+    oas.record(15.44, "2026-07-29", statefile)
+    rc = oas.main(["show", "--path", str(statefile)])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["budget"]["level"] == "GREEN"
+    assert out["budget"]["red_at_usd"] == 20.0

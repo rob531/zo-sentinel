@@ -10,6 +10,7 @@ The live negative control is recorded in the PR: prod at v64 (git_sha "unknown",
 """
 
 import importlib.util
+import json
 import os
 import sys
 
@@ -229,6 +230,53 @@ def test_poll_returns_last_verdict_at_deadline(monkeypatch):
     verdict, reasons, _ = accept_gate.poll("http://x", SHA, 0, 0, False, log=lambda *_a: None)
     assert verdict == REJECT
     assert reasons == ["never swapped"]
+
+# ------------------------------------------------------- CLI contract: ACCEPT
+#
+# FU-175. The three tests above pin main()'s REJECT (1) and ERROR (2) exit
+# codes. Nothing pinned ACCEPT (0) -- the ONE verdict that lets a fired deploy
+# stand. evaluate() and poll() were asserted to RETURN ACCEPT, but the exit code
+# is a different channel and it is the channel the one-click reads. A mutant
+# that ends main() with `return REJECT` leaves every other test green and makes
+# the gate structurally incapable of ever accepting: a perfectly healthy prod
+# would be rolled back. Same family as #2294 (fire_gate's exit code never seen
+# RED) inverted -- here it had never been seen GREEN.
+
+
+def test_main_accept_verdict_is_exit_code_zero(monkeypatch):
+    monkeypatch.setattr(
+        accept_gate, "poll", lambda *a, **k: (ACCEPT, ["all green"], {"health_status": 200})
+    )
+    assert accept_gate.main(["--sha", SHA, "--once"]) == ACCEPT
+
+
+def test_main_accept_is_numerically_zero_for_a_shell_caller(monkeypatch):
+    """`if ($LASTEXITCODE -ne 0)` is the real caller. ACCEPT must BE 0."""
+    monkeypatch.setattr(accept_gate, "poll", lambda *a, **k: (ACCEPT, ["all green"], {}))
+    assert accept_gate.main(["--sha", SHA, "--once"]) == 0
+    assert ACCEPT == 0
+
+
+def test_main_accept_through_the_json_path_is_also_zero(monkeypatch):
+    """--json returns from a DIFFERENT return statement than the human path."""
+    monkeypatch.setattr(accept_gate, "poll", lambda *a, **k: (ACCEPT, ["all green"], {}))
+    assert accept_gate.main(["--sha", SHA, "--once", "--json"]) == ACCEPT
+
+
+@pytest.mark.parametrize("verdict", [0, 1, 2])
+def test_json_exit_code_field_agrees_with_the_actual_exit_code(verdict, monkeypatch, capsys):
+    """Two channels report the verdict: the JSON body and the process rc.
+
+    A caller may parse either. They must never disagree -- a body saying
+    ACCEPT beside an rc of 1 is exactly the printed-vs-returned split that
+    #2294 found in fire_gate.
+    """
+    monkeypatch.setattr(accept_gate, "poll", lambda *a, **k: (verdict, ["synthetic"], {}))
+    rc = accept_gate.main(["--sha", SHA, "--once", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == verdict
+    assert payload["exit_code"] == rc
+    assert payload["verdict"] == accept_gate._VERDICT_NAME[rc]
 
 
 if __name__ == "__main__":

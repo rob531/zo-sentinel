@@ -129,3 +129,72 @@ def test_since_funding_declines_to_guess_without_a_credit_event(statefile):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# --- healing must not be the step that destroys the evidence (2026-07-28) ---
+#
+# load() heals a bad state file so the audit can keep auditing. Before this
+# guard, the heal was in place: the next save() overwrote the only copy. The
+# scar was self-inflicted -- the daily audit hand-wrote {"history": [...]}
+# over the real entries[]/credits[] -- and recovery depended on luck.
+
+
+def _sidecars(statefile):
+    return sorted(statefile.parent.glob(statefile.stem + ".*.bak.json"))
+
+
+def test_healing_a_clobbered_file_quarantines_the_original(statefile):
+    clobbered = json.dumps({"history": [{"date": "2026-07-28", "balance": 15.4}]})
+    statefile.write_text(clobbered)
+
+    st = oas.load(statefile)
+
+    assert st["migrated_from"] == "malformed"
+    assert st["entries"] == []
+    saved = _sidecars(statefile)
+    assert len(saved) == 1, "the original must survive the heal"
+    assert json.loads(saved[0].read_text()) == json.loads(clobbered)
+    assert "malformed" in saved[0].name
+
+
+def test_healing_unreadable_json_also_quarantines(statefile):
+    statefile.write_text("{not json at all")
+
+    st = oas.load(statefile)
+
+    assert st["migrated_from"] == "unreadable"
+    saved = _sidecars(statefile)
+    assert len(saved) == 1
+    assert saved[0].read_text() == "{not json at all"
+    assert "unreadable" in saved[0].name
+
+
+def test_a_healthy_file_is_never_quarantined(statefile):
+    # Otherwise every daily run would drop a sidecar next to a fine file.
+    oas.record(15.4, "2026-07-28", statefile)
+    oas.load(statefile)
+    oas.record(15.1, "2026-07-29", statefile)
+    assert _sidecars(statefile) == []
+
+
+def test_a_v1_file_is_migrated_not_quarantined(statefile):
+    # v1 is a KNOWN good shape with a real datapoint -- migrating it is not
+    # healing past damage, so it must not be treated as corruption.
+    statefile.write_text(json.dumps({"date": "2026-07-26", "balance": 18.784}))
+    st = oas.load(statefile)
+    assert st["migrated_from"] == 1
+    assert _sidecars(statefile) == []
+
+
+def test_quarantine_failure_never_stops_the_audit(statefile, monkeypatch):
+    statefile.write_text(json.dumps({"history": []}))
+
+    def boom(self, *a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pathlib.Path, "write_bytes", boom)
+
+    st = oas.load(statefile)  # must not raise
+
+    assert st["migrated_from"] == "malformed"
+    assert st["entries"] == []

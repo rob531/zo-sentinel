@@ -1,0 +1,8 @@
+[service]
+name = "scoring_wave_cost_ledger"
+import_path = "services.active.scoring_wave_cost_ledger.router"
+prefix = "/api"
+tag = "scoring_wave_cost_ledger"
+origin = "service"
+auth = "public"
+needs_data_layer = true

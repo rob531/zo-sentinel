@@ -1045,14 +1045,26 @@ def _selftest_gate(directive, directive_id):
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
         return True
     combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
-    if proc.returncode == 0 and "PASS" in (proc.stdout or ""):
+    # FU-031/FU-159: three-state verdict. The old test was a substring match on an
+    # exception NAME, so "the harness could not run" and "the module is broken" got
+    # the same answer -- degrade. Measured post-#2177 (n=89): ALL 39 Tier-0
+    # degradations were real module defects, and `No module named 'app.db'` had
+    # already gone 295 -> 0. The UNKNOWN bucket was being used as a pass.
+    from tools.selftest_verdict import (PASS as _V_PASS, RED as _V_RED,
+                                        classify_selftest as _classify)
+    _verdict, _reason = _classify(proc.returncode, combined, proc.stdout or "")
+    if _verdict == _V_PASS:
         log(f"[selftest] {directive_id}: self-test PASS")
         return True
-    if proc.returncode != 0 and ("ModuleNotFoundError" in combined or "ImportError" in combined):
-        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
-        return True
-    log(f"[selftest] {directive_id}: self-test FAILED -- blocking completion :: " + combined.strip()[-400:])
-    return False
+    if _verdict == _V_RED:
+        # Distinct string per meaning: one string for two meanings is why 39 events
+        # read as one problem for nine days.
+        log(f"[selftest] {directive_id}: self-test RED ({_reason}) -- blocking completion :: "
+            + combined.strip()[-400:])
+        return False
+    log(f"[selftest] {directive_id}: self-test UNKNOWN ({_reason}) -- could not evaluate, "
+        f"degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
+    return True
 
 
 def _edit_diff_gate(directive, directive_id, pre_diff_state):

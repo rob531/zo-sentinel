@@ -58,7 +58,14 @@ def _read(p):
 
 
 def _norm(tok: str) -> str:
-    t = tok.lower()
+    """lower(), drop underscores, drop one optional trailing 's'.
+
+    FU-159: underscores were NOT dropped before, so `mcp_server_registry` could
+    never normalise onto `McpServerRegistry` and the snake_case-table-name-as-a-
+    model-class family was structurally unrepairable. Measured live: that family
+    plus the spurious plural accounted for 9 of 39 post-#2177 Tier-0 degradations.
+    """
+    t = tok.lower().replace("_", "")
     return t[:-1] if t.endswith("s") else t
 
 
@@ -84,6 +91,48 @@ def build_map(canon: set[str]) -> dict[str, str]:
     return {_norm(c): c for c in canon}
 
 
+ALL_CLASS_DEF = re.compile(r"^\s*class\s+(\w+)\s*[(:]", re.M)
+IMPORT_FROM_MODELS = re.compile(
+    r"from\s+app\.models\s+import\s+(?:\(([^)]*)\)|([^\n(]+))")
+
+
+def all_models(models_path: str = MODELS) -> set[str]:
+    """EVERY class in app/models.py, not just the distinctive `Mcp*` ones.
+
+    Only ever used by `scan_imports`, where the surrounding statement is
+    `from app.models import ...` and the intent is therefore unambiguous. The
+    whole-file `scan_text` path keeps the original distinctive-only set so its
+    false-positive-free guarantee is unchanged.
+    """
+    names = ALL_CLASS_DEF.findall(_read(models_path))
+    seen, ambiguous = {}, set()
+    for n in names:
+        k = _norm(n)
+        if k in seen and seen[k] != n:
+            ambiguous.add(k)
+        seen[k] = n
+    return {n for n in names if _norm(n) not in ambiguous}
+
+
+def scan_imports(src: str, full_norm_map: dict[str, str]) -> dict[str, str]:
+    """Drift found INSIDE `from app.models import ...` statements only.
+
+    Scoping to the import statement is what makes it safe to use short names like
+    `Org` here: a token in that position must be a model, so `Orgs -> Org` cannot
+    collide with an unrelated identifier elsewhere in the corpus.
+    """
+    canon_exact = set(full_norm_map.values())
+    out: dict[str, str] = {}
+    for m in IMPORT_FROM_MODELS.finditer(src):
+        for tok in IDENT.findall(m.group(1) or m.group(2) or ""):
+            if tok in canon_exact:
+                continue
+            canon = full_norm_map.get(_norm(tok))
+            if canon and tok != canon:
+                out[tok] = canon
+    return out
+
+
 def scan_text(src: str, norm_map: dict[str, str]) -> dict[str, str]:
     """Return {wrong_token: canonical} found in src (token != canonical but
     normalises to a canonical model name)."""
@@ -103,6 +152,13 @@ def lint_file(path: str, norm_map: dict[str, str], fix: bool):
     if not src:
         return {"file": path, "drift": {}, "fixed": False}
     drift = scan_text(src, norm_map)
+    # FU-159: second, import-scoped pass over the FULL model set. Rewrites are
+    # whole-file (a name in an import is also used in the body), but a name only
+    # qualifies if it appeared in a `from app.models import ...` statement.
+    try:
+        drift = {**scan_imports(src, build_map(all_models())), **drift}
+    except Exception:
+        pass  # never let the widened pass break the original narrow one
     fixed = False
     if drift and fix:
         new = src

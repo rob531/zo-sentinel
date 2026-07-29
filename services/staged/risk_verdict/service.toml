@@ -1,0 +1,8 @@
+[service]
+name = "risk_verdict"
+import_path = "services.active.risk_verdict.router"
+prefix = "/api"
+tag = "risk_verdict"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -36,6 +36,27 @@ ANTI-GAMING (CofC 2026-07-29, extending FATHER's anti-renaming clause)
   is reported separately and resets the consecutive counter to zero. It is the
   only direction of disagreement that matters for safety.
 
+SUPERSEDE IS NOT A DECLINE (FU-180, 2026-07-29) -- THE THIRD OUTCOME.
+
+`task_would_fire_human_held` is the one direction of disagreement that BLOCKS
+C4 and resets the consecutive run. It is a claim about the DECIDER: the task
+said FIRE, and a human looked at that and said no. "Main advanced past the
+staged candidate" is a different event and is evidence about nobody -- the
+sentinel merges a PR on most runs, so scoring a supersede as a hold would let
+its own housekeeping permanently reset a counter meant to measure judgement.
+
+A candidate abandoned without ever being judged therefore reconciles as
+`outcome: "superseded"`: excluded from the numerator AND the denominator, and --
+because the consecutive run is computed over COUNTED records only -- it does not
+break a run of agreements. The normal reason to use it is `fire_gate` returning
+RESTAGE, which forces the stage onto a new candidate. It is NOT for "main
+moved": the discipline holds the candidate sha stable across runs with fire_gate
+certifying byte-equivalence, so main moving is a no-op.
+
+And the easy path no longer fabricates a safety signal: `--held-sha` REQUIRES
+`--evidence` describing the observed human decline. A guard that lives only in
+this docstring is not a guard (FU-035).
+
 TEMPORAL GUARD (FU-177, 2026-07-29) -- A DECISION MADE AFTER THE OUTCOME IS NOT
 A PREDICTION
 ------------------------------------------------------------------------------
@@ -77,7 +98,10 @@ Usage
     shadow_decision.py --record --sha <40> --class A --would-fire yes \
         --migrations-tree <oid> --reasons "gates 8/8; backup 9.7h; ..."
     shadow_decision.py --reconcile --fired-sha <40> [--fired-at <iso>]
-    shadow_decision.py --reconcile --held-sha  <40>      # chairman declined
+    shadow_decision.py --reconcile --held-sha <40> --evidence "..."
+                                                 # chairman LOOKED and DECLINED
+    shadow_decision.py --reconcile --superseded-sha <40> [--superseded-by <40>]
+                                                 # candidate ABANDONED, never judged
     shadow_decision.py --amend --sha <40> --post-hoc yes --evidence "..."
     shadow_decision.py --status [--json]
 
@@ -276,10 +300,28 @@ def record(a) -> int:
 
 
 def reconcile(a) -> int:
-    sha = a.fired_sha or a.held_sha
+    given = [v for v in (a.fired_sha, a.held_sha,
+                         getattr(a, "superseded_sha", None)) if v]
+    if len(given) > 1:
+        print("REFUSED: --fired-sha, --held-sha and --superseded-sha are mutually "
+              "exclusive -- one human action per reconcile.", file=sys.stderr)
+        return 2
+    sha = a.fired_sha or a.held_sha or getattr(a, "superseded_sha", None)
     human_fired = bool(a.fired_sha)
+    superseded = bool(getattr(a, "superseded_sha", None))
     if not sha or len(sha) != 40:
-        print("REFUSED: need --fired-sha or --held-sha (full 40-char)", file=sys.stderr)
+        print("REFUSED: need --fired-sha, --held-sha or --superseded-sha "
+              "(full 40-char)", file=sys.stderr)
+        return 2
+    # A HOLD is the only outcome that accuses the decider, so it costs evidence.
+    # Without this the cheapest verb to reach for is the one that fabricates a
+    # safety signal -- which is exactly how FU-180 arose.
+    if a.held_sha and not (getattr(a, "evidence", None) or "").strip():
+        print("REFUSED: --held-sha records task_would_fire_human_held, the one "
+              "disagreement that blocks C4 -- it requires --evidence describing "
+              "the OBSERVED human decline. If the candidate was merely abandoned "
+              "(e.g. fire_gate RESTAGE), use --superseded-sha instead (FU-180).",
+              file=sys.stderr)
         return 2
     recs = _load()
     target = None
@@ -306,12 +348,30 @@ def reconcile(a) -> int:
             )
         target["human_action_at"] = a.fired_at
 
+    if superseded:
+        # Neither an agreement nor a disagreement: nobody judged this candidate.
+        # Explicitly False rather than absent, so no later reader can mistake a
+        # missing key for a safety signal (R6: unknown is not zero).
+        target["outcome"] = "superseded"
+        target["superseded_by"] = getattr(a, "superseded_by", None) or ""
+        target["reconciled_utc"] = _now()
+        target["task_would_fire_human_held"] = False
+        _rewrite(recs)
+        print("SUPERSEDED %s: task=%s, never judged by a human -> excluded from "
+              "BOTH C4 counts; the consecutive run is untouched.%s"
+              % (sha[:8], "FIRE" if target["would_fire"] else "HOLD",
+                 "  [by %s]" % target["superseded_by"][:8]
+                 if target["superseded_by"] else ""))
+        return 0
+
     agreed = (target["would_fire"] == human_fired)
     target["outcome"] = "agreed" if agreed else "disagreed"
     target["human_fired"] = human_fired
     target["reconciled_utc"] = _now()
     # The only direction that matters for safety: task said FIRE, human HELD.
     target["task_would_fire_human_held"] = bool(target["would_fire"] and not human_fired)
+    if a.held_sha:
+        target["hold_evidence"] = getattr(a, "evidence", None)
     _rewrite(recs)
     print("RECONCILED %s: task=%s human=%s -> %s%s%s"
           % (sha[:8],
@@ -365,6 +425,10 @@ def status(a) -> int:
     recs = _load()
     done = [r for r in recs if r.get("outcome") in ("agreed", "disagreed")]
     pending = [r for r in recs if r.get("outcome") == "pending"]
+    # FU-180: a candidate abandoned without ever being judged is evidence about
+    # nobody. Absent from `done`, so it is in neither the numerator nor the
+    # denominator, and absent from `counted`, so it cannot break a run.
+    superseded = [r for r in recs if r.get("outcome") == "superseded"]
 
     counted = [r for r in done if _counted(r)]
     excluded_post_hoc = [r for r in done if r.get("post_hoc") is True]
@@ -391,6 +455,7 @@ def status(a) -> int:
         "excluded_post_hoc": len(excluded_post_hoc),
         "excluded_post_hoc_unknown": len(excluded_unknown),
         "pending_not_counted": len(pending),
+        "superseded_not_counted": len(superseded),
         "agreements": len(agreed),
         "disagreements": len(counted) - len(agreed),
         "disagreements_task_would_fire_human_held": len(unsafe),
@@ -408,6 +473,11 @@ def status(a) -> int:
         if pending:
             print("  NOTE: %d pending decision(s) are NOT counted -- an unreconciled "
                   "decision is not evidence." % len(pending))
+        if superseded:
+            print("  NOTE: %d SUPERSEDED decision(s) excluded -- the candidate was "
+                  "abandoned, never judged, so it is neither an agreement nor a "
+                  "disagreement and does NOT reset the run (FU-180)."
+                  % len(superseded))
         if excluded_post_hoc:
             print("  NOTE: %d POST-HOC decision(s) excluded -- prod already carried the "
                   "sha when the decision was written, so it could not disagree (FU-177)."
@@ -438,9 +508,14 @@ def main() -> int:
     ap.add_argument("--acted", default="no")
     ap.add_argument("--fired-sha")
     ap.add_argument("--held-sha")
+    ap.add_argument("--superseded-sha", dest="superseded_sha",
+                    help="candidate abandoned without ever being judged (FU-180)")
+    ap.add_argument("--superseded-by", dest="superseded_by",
+                    help="optional: the sha that replaced it")
     ap.add_argument("--fired-at", help="ISO-8601 instant of the observed human action")
     ap.add_argument("--post-hoc", dest="post_hoc", help="yes|no|unknown (with --amend)")
-    ap.add_argument("--evidence", help="mandatory justification for --amend")
+    ap.add_argument("--evidence",
+                    help="mandatory justification for --amend and for --held-sha")
     ap.add_argument("--gate", action="store_true")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()

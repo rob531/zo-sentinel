@@ -92,9 +92,12 @@ def _rec_args_full(**kw):
     return argparse.Namespace(**base)
 
 
-def _reconcile_args(fired_sha=None, held_sha=None, fired_at=None):
+def _reconcile_args(fired_sha=None, held_sha=None, fired_at=None,
+                    superseded_sha=None, superseded_by=None, evidence=None):
     return argparse.Namespace(fired_sha=fired_sha, held_sha=held_sha,
-                             fired_at=fired_at)
+                              superseded_sha=superseded_sha,
+                              superseded_by=superseded_by, evidence=evidence,
+                              fired_at=fired_at)
 
 
 def _amend_args(sha=SHA_LIVE, post_hoc="yes", evidence="because", fired_at=None):
@@ -361,7 +364,9 @@ def test_unsafe_disagreement_blocks_c4(monkeypatch, capsys):
     monkeypatch.setattr(shadow_decision, "REQUIRED_CONSECUTIVE", 1)
     _prod_serving(monkeypatch, SHA_LIVE)
     shadow_decision.record(_rec_args_full(sha=SHA_CAND, would_fire="yes"))
-    assert shadow_decision.reconcile(_reconcile_args(held_sha=SHA_CAND)) == 1
+    assert shadow_decision.reconcile(_reconcile_args(
+        held_sha=SHA_CAND,
+        evidence="chairman replied on 2026-07-29 declining to fire")) == 1
     out = _status_dict(capsys)
     assert out["disagreements_task_would_fire_human_held"] == 1
     assert out["C4_met"] is False
@@ -459,3 +464,144 @@ def test_no_store_yet_reads_as_unproven_not_met(capsys):
     out = _status_dict(capsys)
     assert out["reconciled_decisions"] == 0
     assert out["C4_met"] is False
+
+
+# --------------------------------------------------------------------------
+# FU-180: SUPERSEDE IS NOT A DECLINE
+#
+# `task_would_fire_human_held` is a claim about the DECIDER. "Main advanced past
+# the staged candidate" is evidence about nobody, and the sentinel merges a PR on
+# most runs -- so scoring a supersede as a hold would let its own housekeeping
+# permanently reset the counter that is supposed to measure judgement.
+#
+# NEGATIVE CONTROLS for this block (R4), each a surgical mutant that COMPILES:
+#   mutant 3  in reconcile(), delete the `if superseded:` branch so a supersede
+#             falls through to the hold path (human_fired False -> "disagreed",
+#             task_would_fire_human_held True). This is EXACTLY the pre-fix
+#             behaviour the charter instructed, so it is the shape of the real
+#             bug rather than vandalism.
+#   mutant 4  in status(), `done = [... in ("agreed", "disagreed", "superseded")]`
+#             i.e. count supersedes in the denominator.
+# --------------------------------------------------------------------------
+
+def _agree(monkeypatch, sha):
+    """One genuine, countable agreement on `sha`."""
+    _prod_serving(monkeypatch, SHA_LIVE)                 # prod is elsewhere
+    shadow_decision.record(_rec_args_full(sha=sha))
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=sha)) == 0
+
+
+def test_supersede_returns_zero_not_a_disagreement(monkeypatch, capsys):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    assert shadow_decision.reconcile(
+        _reconcile_args(superseded_sha=SHA_CAND)) == 0
+    assert "SUPERSEDED" in capsys.readouterr().out
+
+
+def test_supersede_is_in_neither_numerator_nor_denominator(monkeypatch, capsys):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    shadow_decision.reconcile(_reconcile_args(superseded_sha=SHA_CAND))
+    out = _status_dict(capsys)
+    assert out["superseded_not_counted"] == 1
+    assert out["reconciled_decisions"] == 0        # denominator untouched
+    assert out["counted_decisions"] == 0
+    assert out["agreements"] == 0
+    assert out["disagreements"] == 0
+    assert out["disagreements_task_would_fire_human_held"] == 0
+    assert out["pending_not_counted"] == 0         # nor is it still open
+
+
+def test_supersede_does_not_reset_the_consecutive_run(monkeypatch, capsys):
+    """THE POINT OF FU-180: a supersede between agreements must not break them.
+
+    Under the pre-fix behaviour this candidate would have been reconciled with
+    --held-sha, landing task_would_fire_human_held=True and zeroing the run.
+    """
+    _agree(monkeypatch, "%040d" % 1)
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    shadow_decision.reconcile(_reconcile_args(superseded_sha=SHA_CAND))
+    _agree(monkeypatch, "%040d" % 2)
+    out = _status_dict(capsys)
+    assert out["consecutive_agreements"] == 2
+    assert out["disagreements_task_would_fire_human_held"] == 0
+
+
+def test_a_genuine_hold_still_does_reset_the_run(monkeypatch, capsys):
+    """The other half of the control: the real signal must survive the fix."""
+    _agree(monkeypatch, "%040d" % 1)
+    _agree(monkeypatch, "%040d" % 2)
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    assert shadow_decision.reconcile(_reconcile_args(
+        held_sha=SHA_CAND, evidence="chairman declined in the 22:49Z thread")) == 1
+    out = _status_dict(capsys)
+    assert out["consecutive_agreements"] == 0
+    assert out["disagreements_task_would_fire_human_held"] == 1
+    assert out["C4_met"] is False
+
+
+def test_supersede_pins_the_safety_flag_to_false_explicitly(monkeypatch):
+    """Absent != False. A later reader must not have to infer it (R6)."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    shadow_decision.reconcile(_reconcile_args(superseded_sha=SHA_CAND))
+    (rec,) = _read_store()
+    assert rec["outcome"] == "superseded"
+    assert rec["task_would_fire_human_held"] is False
+    assert "human_fired" not in rec               # nobody acted; claim nothing
+
+
+def test_superseded_by_is_recorded_when_given(monkeypatch):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    shadow_decision.reconcile(_reconcile_args(superseded_sha=SHA_CAND,
+                                              superseded_by=SHA_OTHER))
+    (rec,) = _read_store()
+    assert rec["superseded_by"] == SHA_OTHER
+
+
+def test_held_sha_without_evidence_is_refused(monkeypatch):
+    """The cheapest verb must not be the one that fabricates a safety signal."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    assert shadow_decision.reconcile(_reconcile_args(held_sha=SHA_CAND)) == 2
+    (rec,) = _read_store()
+    assert rec["outcome"] == "pending"            # refusal changed nothing
+    assert "task_would_fire_human_held" not in rec
+
+
+def test_held_sha_with_evidence_stores_it(monkeypatch):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    shadow_decision.reconcile(_reconcile_args(
+        held_sha=SHA_CAND, evidence="declined by email 22:40Z"))
+    (rec,) = _read_store()
+    assert rec["hold_evidence"] == "declined by email 22:40Z"
+
+
+def test_fired_and_superseded_are_mutually_exclusive(monkeypatch):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    assert shadow_decision.reconcile(_reconcile_args(
+        fired_sha=SHA_CAND, superseded_sha=SHA_CAND)) == 2
+    (rec,) = _read_store()
+    assert rec["outcome"] == "pending"
+
+
+def test_a_superseded_decision_cannot_be_reconciled_again(monkeypatch):
+    """Closed is closed: a supersede must not be laundered into an agreement."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND))
+    shadow_decision.reconcile(_reconcile_args(superseded_sha=SHA_CAND))
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_CAND)) == 2
+    (rec,) = _read_store()
+    assert rec["outcome"] == "superseded"
+
+
+def test_supersede_of_an_unknown_sha_is_not_success(monkeypatch):
+    """rc 2 UNKNOWN, never 0 -- absence of a decision is not a supersede."""
+    assert shadow_decision.reconcile(
+        _reconcile_args(superseded_sha=SHA_OTHER)) == 2

@@ -73,6 +73,17 @@ def extract_directives(text):
             if handler == "generate_file" and not str(it.get("output_file") or "").strip():
                 continue
             out.append(it)
+    for it in _render_blocks(text):
+        task = str(it.get("task") or "").strip()
+        handler = str(it.get("handler") or "").strip()
+        desc = str(it.get("description") or "").strip()
+        if not task or handler not in VALID_HANDLERS:
+            continue
+        if len(desc) < MIN_DESC:
+            continue
+        if handler == "generate_file" and not str(it.get("output_file") or "").strip():
+            continue
+        out.append(it)
     uniq, seen_tasks = [], set()
     for it in out:
         t = it["task"].strip()
@@ -128,3 +139,61 @@ def salvage(text, queued_stems, existing_files, stamp, writer, log=None,
         if log:
             log("SALVAGED directive: %s (handler=%s)" % (task, it["handler"]))
     return written
+
+# ---------------------------------------------------------------------------
+# Shape 2: the RENDERED tool call.
+#
+# When goose is killed by GOOSE_TIMEOUT mid-flight, stdout does not contain
+# fenced JSON -- it contains goose's own render of the tool call it was making:
+#
+#     |xe2|x96|xb8 propose_directive zo_directive_bridge
+#       task: build_service_circuit_breaker_status
+#       handler: build_service
+#       description: GET /api/... prints PASS.
+#
+# That transcript is STRONGER evidence than a fenced block: the model did not
+# merely describe a directive, it REACHED propose_directive and the wall clock
+# beat it. The timeout branch discarded it wholesale. Observed 2026-07-29
+# 12:20:53Z: two complete rendered propose_directive calls thrown away.
+# ---------------------------------------------------------------------------
+
+_RENDER_KEYS = ("task", "handler", "description", "complexity", "output_file")
+
+
+def _render_blocks(text):
+    """Recover directive dicts from goose's rendered propose_directive calls."""
+    out = []
+    lines = (text or "").splitlines()
+    i = 0
+    while i < len(lines):
+        if "propose_directive" not in lines[i]:
+            i += 1
+            continue
+        i += 1
+        cur, key = {}, None
+        while i < len(lines):
+            ln = lines[i]
+            stripped = ln.strip()
+            # A separator rule or the next rendered call ends this block.
+            if stripped.startswith("\u2500" * 4) or "propose_directive" in ln:
+                break
+            matched = False
+            for k in _RENDER_KEYS:
+                prefix = k + ":"
+                if stripped.startswith(prefix):
+                    cur[k] = stripped[len(prefix):].strip()
+                    key = k
+                    matched = True
+                    break
+            if not matched:
+                if not stripped:
+                    # A blank line ends a block only once we have a task.
+                    if cur.get("task"):
+                        break
+                elif key:
+                    # Continuation of the previous value (wrapped description).
+                    cur[key] = (cur[key] + " " + stripped).strip()
+            i += 1
+        if cur.get("task"):
+            out.append(cur)
+    return out

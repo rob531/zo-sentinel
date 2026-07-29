@@ -85,6 +85,58 @@ def test_cap_is_enforced_per_cycle():
     assert salvage(many, set(), set(), "T", lambda f, p: None) == 5
 
 
+
+
+# --- Shape 2: RENDERED tool calls recovered from a TIMEOUT transcript --------
+# Fixture is the real 2026-07-29T12:20:53Z timeout transcript shape (goose
+# renders the tool call it was making when the wall clock killed it).
+
+REAL_TIMEOUT_RENDER = """
+  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  \u25b8 propose_directive zo_directive_bridge
+    task: build_service_circuit_breaker_status
+    handler: build_service
+    description: GET /api/circuit-breaker/status on prefix /api. logic.py reads service_health for the gate_orchestrator row, also queries mcp_server_registry for aggregate counts. router.py returns breaker_state via pydantic. Postgres-portable SQL, no network. ACCEPTANCE: contract seeds a fake gate_orchestrator row plus 2 healthy and 1 stale daemon in in-memory SQLite, asserts 200, prints PASS.
+
+  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  \u25b8 propose_directive zo_directive_bridge
+    task: build_service_verdict_audit_trail
+    handler: build_service
+    description: GET /api/servers/{server_id}/audit-trail on prefix /api. FastAPI router plus pydantic response model. logic.py queries audit_log JOIN mcp_server_registry ORDER BY timestamp DESC LIMIT 50. Contract seeds 2 audit rows, asserts 200, asserts entries length, prints PASS.
+"""
+
+
+def test_timeout_render_recovers_both_calls():
+    got = extract_directives(REAL_TIMEOUT_RENDER)
+    tasks = sorted(d["task"] for d in got)
+    assert tasks == ["build_service_circuit_breaker_status",
+                     "build_service_verdict_audit_trail"], tasks
+
+
+def test_render_without_propose_directive_recovers_nothing():
+    # NEGATIVE CONTROL: the same key/value shape, but no tool call was reached.
+    txt = "    task: build_service_x\n    handler: build_service\n    description: %s\n" % LONG
+    assert extract_directives(txt) == []
+
+
+def test_render_with_thin_description_is_refused():
+    # NEGATIVE CONTROL: reaching the tool call does not lower the content bar.
+    txt = "  \u25b8 propose_directive zo_directive_bridge\n    task: build_x\n    handler: build_service\n    description: do it\n"
+    assert extract_directives(txt) == []
+
+
+def test_render_with_unknown_handler_is_refused():
+    txt = ("  \u25b8 propose_directive zo_directive_bridge\n    task: build_x\n"
+           "    handler: edit_file\n    description: %s\n" % LONG)
+    assert extract_directives(txt) == []
+
+
+def test_render_and_fenced_do_not_double_count_one_task():
+    fenced = _fence('{"task":"build_service_dup","handler":"build_service","description":"%s"}' % LONG)
+    rendered = ("  \u25b8 propose_directive zo_directive_bridge\n    task: build_service_dup\n"
+                "    handler: build_service\n    description: %s\n" % LONG)
+    assert len(extract_directives(fenced + "\n" + rendered)) == 1
+
 if __name__ == "__main__":
     fails = []
     for name, fn in sorted(globals().items()):
@@ -97,3 +149,4 @@ if __name__ == "__main__":
                 fails.append(name)
     print("RESULT:", "ALL PASS" if not fails else "FAILURES: %s" % fails)
     sys.exit(1 if fails else 0)
+

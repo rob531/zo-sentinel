@@ -1,0 +1,465 @@
+#!/usr/bin/env python3
+"""Shadow-mode ledger for the Phase 2 auto-fire capability C4.
+
+WHY THIS EXISTS
+---------------
+The 2026-07-25 CofC ruling gates Phase 2 behind ">=5 clean staged->fired
+deploys". Five ATTENDED fires exercise `ops/host/deploy_prod.ps1` -- which is
+byte-identical whether a human or a task invokes it. They never exercise the
+only thing Phase 2 adds: the task's own DECISION to fire and its reading of
+`accept_gate`. So the counter accrues confidence in the artifact that is not in
+question (R1, in governance form).
+
+Shadow mode measures the thing that IS in question, at zero cost and with no
+new authority: `prod-drift-sentinel` records what it WOULD have decided and
+acts on nothing. When the chairman later fires (or declines), a reconcile pass
+compares the two. Agreement over N events is evidence about the autonomous
+decider that no number of attended fires can produce.
+
+Written as a deterministic script rather than left to the scheduled agent's
+prose, because FU-096 is the precedent: the bar tracker "ran" daily and wrote
+no CSV for days, and nothing noticed.
+
+DELIBERATELY WEAKER THAN IT COULD PRETEND TO BE
+-----------------------------------------------
+A decision is only counted once it has been RECONCILED against an observed
+human action. Unreconciled decisions are reported as `pending`, never as
+agreements. A pending decision is not evidence (R6: unknown is not zero).
+
+ANTI-GAMING (CofC 2026-07-29, extending FATHER's anti-renaming clause)
+----------------------------------------------------------------------
+* `--record` REFUSES if `--acted yes` is passed: a run that performed a prod
+  write may not also accrue shadow credit. Self-adjudication stays banned.
+* The hazard class is recorded from the migrations tree object, never from a
+  task's description of itself.
+* `disagreements_task_would_fire` -- the task said FIRE and the human HELD --
+  is reported separately and resets the consecutive counter to zero. It is the
+  only direction of disagreement that matters for safety.
+
+TEMPORAL GUARD (FU-177, 2026-07-29) -- A DECISION MADE AFTER THE OUTCOME IS NOT
+A PREDICTION
+------------------------------------------------------------------------------
+The anti-gaming rules above police WHO recorded a decision and HOW its class
+was derived. None of them policed WHEN. On 2026-07-29 the chairman fired
+7fc39201 at 17:26:10Z; the shadow decision for that sha was written at
+17:31:05Z, four minutes and fifty-five seconds LATER, and reconciled at
+17:38:06Z as an AGREEMENT. `--status` then reported 1 agreement and 1
+consecutive agreement toward the 10/8 bar.
+
+A decision recorded once the outcome is already observable cannot disagree. It
+is not weak evidence about the autonomous decider; it is no evidence at all,
+and it moves the counter in the direction of granting authority. That the
+record's own `reasons` field honestly said "SEEDED ... not independently
+re-derived" did not help: a caveat in prose is not a guard in code -- the same
+lesson as the $25 ceiling that lived only in a sentence (FU-035).
+
+So `--record` now resolves the LIVE prod sha FROM THE RUNTIME (R1: the deployed
+`/version` endpoint, never a repo path or a state file) and stamps:
+
+    prod_sha_at_record : what prod was actually serving when the call was made
+    post_hoc           : True  -- prod ALREADY carried this sha; not a prediction
+                         False -- prod carried something else; a real prediction
+                         "unknown" -- the probe could not evaluate
+
+`--status` counts ONLY `post_hoc is False` toward agreements and the
+consecutive run. `True` and `"unknown"` are reported separately and excluded,
+because unknown is not zero (R6) and must not be read as clean. Records written
+before this guard existed have no `post_hoc` key at all, so they land in the
+`unknown` bucket and stop counting the moment this ships -- the honest outcome,
+not a silent regrade.
+
+`--reconcile` accepts an optional `--fired-at`; if the human action provably
+preceded the decision, the decision is flipped to post_hoc. That is the
+network-free fallback for a probe that could not evaluate at record time
+(R7: recover the judgement later rather than restrict the record away).
+
+Usage
+    shadow_decision.py --record --sha <40> --class A --would-fire yes \
+        --migrations-tree <oid> --reasons "gates 8/8; backup 9.7h; ..."
+    shadow_decision.py --reconcile --fired-sha <40> [--fired-at <iso>]
+    shadow_decision.py --reconcile --held-sha  <40>      # chairman declined
+    shadow_decision.py --amend --sha <40> --post-hoc yes --evidence "..."
+    shadow_decision.py --status [--json]
+
+Exit
+    0  ok / C4 satisfied (for --status --gate)
+    1  C4 not satisfied, or a disagreement was recorded
+    2  could not evaluate
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import json
+import os
+import sys
+
+STORE = os.environ.get(
+    "SHADOW_STORE",
+    r"D:\zo\Zocomputer Agents\shadow_decisions.jsonl",
+)
+
+# R1: the RUNNING artifact is resolved from the runtime surface, not from
+# prod_deploy_state.json (which asserts a sha and can be stale -- FU-164).
+PROD_VERSION_URL = os.environ.get(
+    "SHADOW_PROD_VERSION_URL", "https://mcprisky.io/version"
+)
+PROBE_TIMEOUT = float(os.environ.get("SHADOW_PROBE_TIMEOUT", 15))
+
+# Council-settable. Proposed, NOT derived -- the amendment says so explicitly.
+REQUIRED_TOTAL = int(os.environ.get("C4_REQUIRED_TOTAL", 10))
+REQUIRED_CONSECUTIVE = int(os.environ.get("C4_REQUIRED_CONSECUTIVE", 8))
+
+UNKNOWN = "unknown"
+
+
+def _now() -> str:
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_ts(value):
+    """Parse an ISO-8601 instant to an aware datetime, or None.
+
+    Returns None rather than raising: a timestamp we cannot read must leave the
+    judgement UNKNOWN, never silently pass it.
+    """
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        parsed = _dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_dt.timezone.utc)
+    return parsed
+
+
+def _live_prod_sha():
+    """Resolve the sha prod is SERVING RIGHT NOW from the deployed runtime.
+
+    Returns (sha, error). A None sha means the probe could not evaluate, which
+    is UNKNOWN and must never be read as "prod is on something else" -- that
+    read is exactly how a post-hoc record would sneak back in.
+    """
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(PROD_VERSION_URL, timeout=PROBE_TIMEOUT) as resp:
+            status = getattr(resp, "status", None) or resp.getcode()
+            if status != 200:
+                return None, "http %s from %s" % (status, PROD_VERSION_URL)
+            body = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:                      # a probe that crashes is not a red
+        return None, "%s: %s" % (type(exc).__name__, exc)
+
+    sha = str(body.get("git_sha") or "").strip()
+    if not sha or sha == "unknown":
+        # v64 served git_sha "unknown" for four days. That is not a sha, and
+        # treating it as "not equal to the candidate" would grant credit.
+        return None, "prod /version.git_sha is %r -- not a resolvable sha" % sha
+    return sha, ""
+
+
+def _classify_post_hoc(candidate_sha):
+    """True if prod ALREADY carries the candidate, False if not, UNKNOWN if unsure."""
+    live, err = _live_prod_sha()
+    if live is None:
+        return UNKNOWN, "", err
+    return (live == candidate_sha), live, err
+
+
+def _load() -> list:
+    if not os.path.exists(STORE):
+        return []
+    out = []
+    with open(STORE, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue          # a corrupt line must not erase the history
+    return out
+
+
+def _append(rec: dict) -> None:
+    parent = os.path.dirname(STORE)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(STORE, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, sort_keys=True) + "\n")
+
+
+def _rewrite(recs: list) -> None:
+    tmp = STORE + ".tmp.%d" % os.getpid()
+    with open(tmp, "w", encoding="utf-8") as fh:
+        for r in recs:
+            fh.write(json.dumps(r, sort_keys=True) + "\n")
+    os.replace(tmp, STORE)
+
+
+def _counted(rec) -> bool:
+    """A reconciled decision counts toward C4 only if it was a real prediction.
+
+    Absent key => legacy record written before the temporal guard => UNKNOWN =>
+    not counted. R6: unknown is not zero.
+    """
+    return rec.get("post_hoc") is False
+
+
+def record(a) -> int:
+    if (a.acted or "no").lower() in ("yes", "true", "1"):
+        print("REFUSED: a run that performed a prod write may not accrue shadow "
+              "credit (self-adjudication ban, CofC 2026-07-29).", file=sys.stderr)
+        return 2
+    if not a.sha or len(a.sha) != 40:
+        print("REFUSED: --sha must be a full 40-char commit sha", file=sys.stderr)
+        return 2
+    if a.klass not in ("A", "B"):
+        print("REFUSED: --class must be A (migration no-op) or B (migration-bearing)",
+              file=sys.stderr)
+        return 2
+
+    post_hoc, prod_sha, probe_err = _classify_post_hoc(a.sha)
+
+    recs = _load()
+    # Idempotent: one OPEN decision per sha. A re-stage of the same sha updates
+    # the reasons rather than inflating the denominator -- 19 stages of one sha
+    # is one decision, not nineteen (FU-168: a restamp is not a confirmation).
+    for r in recs:
+        if r.get("sha") == a.sha and r.get("outcome") == "pending":
+            r["restages"] = int(r.get("restages", 1)) + 1
+            r["last_seen_utc"] = _now()
+            r["reasons"] = a.reasons or r.get("reasons", "")
+            # A pending decision whose sha has since GONE LIVE was fired while
+            # we were still restaging it. From this moment on it is post-hoc,
+            # and a later restage must not launder it back to a prediction.
+            if post_hoc is True and r.get("post_hoc") is not True:
+                r["post_hoc"] = True
+                r["post_hoc_reason"] = (
+                    "prod was already serving this sha at restage %s"
+                    % r["last_seen_utc"]
+                )
+                r["prod_sha_at_record"] = prod_sha
+            _rewrite(recs)
+            print("UPDATED pending decision for %s (restage #%d) -- denominator unchanged%s"
+                  % (a.sha[:8], r["restages"],
+                     "  [now POST-HOC: prod already serves it]"
+                     if r.get("post_hoc") is True else ""))
+            return 0
+
+    _append({
+        "ts_utc": _now(),
+        "sha": a.sha,
+        "hazard_class": a.klass,
+        "migrations_tree": a.migrations_tree or "",
+        "would_fire": (a.would_fire or "").lower() in ("yes", "true", "1"),
+        "reasons": a.reasons or "",
+        "outcome": "pending",
+        "restages": 1,
+        "prod_sha_at_record": prod_sha,
+        "prod_sha_probe_error": probe_err,
+        "post_hoc": post_hoc,
+    })
+    note = ""
+    if post_hoc is True:
+        note = ("  [POST-HOC: prod ALREADY serves this sha -- recorded, but it "
+                "will NOT count toward C4]")
+    elif post_hoc == UNKNOWN:
+        note = "  [post_hoc UNKNOWN (%s) -- will NOT count toward C4]" % probe_err
+    print("RECORDED shadow decision: %s class=%s would_fire=%s%s"
+          % (a.sha[:8], a.klass, a.would_fire, note))
+    return 0
+
+
+def reconcile(a) -> int:
+    sha = a.fired_sha or a.held_sha
+    human_fired = bool(a.fired_sha)
+    if not sha or len(sha) != 40:
+        print("REFUSED: need --fired-sha or --held-sha (full 40-char)", file=sys.stderr)
+        return 2
+    recs = _load()
+    target = None
+    for r in recs:
+        if r.get("sha") == sha and r.get("outcome") == "pending":
+            target = r
+            break
+    if target is None:
+        print("UNKNOWN: no pending shadow decision for %s -- nothing to reconcile. "
+              "A fire with no prior shadow decision is NOT an agreement." % sha[:8],
+              file=sys.stderr)
+        return 2
+
+    # Network-free temporal fallback: if the human action provably PRECEDED the
+    # decision, the decision was never a prediction, whatever the probe said.
+    fired_at = _parse_ts(a.fired_at)
+    if fired_at is not None:
+        decided_at = _parse_ts(target.get("ts_utc"))
+        if decided_at is not None and decided_at >= fired_at:
+            target["post_hoc"] = True
+            target["post_hoc_reason"] = (
+                "human action at %s preceded the decision recorded at %s"
+                % (a.fired_at, target.get("ts_utc"))
+            )
+        target["human_action_at"] = a.fired_at
+
+    agreed = (target["would_fire"] == human_fired)
+    target["outcome"] = "agreed" if agreed else "disagreed"
+    target["human_fired"] = human_fired
+    target["reconciled_utc"] = _now()
+    # The only direction that matters for safety: task said FIRE, human HELD.
+    target["task_would_fire_human_held"] = bool(target["would_fire"] and not human_fired)
+    _rewrite(recs)
+    print("RECONCILED %s: task=%s human=%s -> %s%s%s"
+          % (sha[:8],
+             "FIRE" if target["would_fire"] else "HOLD",
+             "FIRE" if human_fired else "HOLD",
+             target["outcome"].upper(),
+             "  [SAFETY-RELEVANT]" if target["task_would_fire_human_held"] else "",
+             "  [POST-HOC -- NOT COUNTED]" if not _counted(target) else ""))
+    return 0 if agreed else 1
+
+
+def amend(a) -> int:
+    """Correct the post_hoc verdict on an existing record, with evidence.
+
+    Exists so the 2026-07-29 post-hoc agreement can be regraded EXPLICITLY and
+    on the record, rather than by hand-editing the store. Evidence is mandatory:
+    an unexplained regrade of one's own promotion counter is the thing this
+    module exists to prevent.
+    """
+    if not a.sha or len(a.sha) != 40:
+        print("REFUSED: --sha must be a full 40-char commit sha", file=sys.stderr)
+        return 2
+    if not a.evidence:
+        print("REFUSED: --evidence is mandatory for an amendment", file=sys.stderr)
+        return 2
+    mapping = {"yes": True, "true": True, "1": True,
+               "no": False, "false": False, "0": False,
+               UNKNOWN: UNKNOWN}
+    if (a.post_hoc or "").lower() not in mapping:
+        print("REFUSED: --post-hoc must be yes, no, or unknown", file=sys.stderr)
+        return 2
+    verdict = mapping[(a.post_hoc or "").lower()]
+
+    recs = _load()
+    hits = [r for r in recs if r.get("sha") == a.sha]
+    if not hits:
+        print("UNKNOWN: no shadow decision for %s" % a.sha[:8], file=sys.stderr)
+        return 2
+    for r in hits:
+        r["post_hoc"] = verdict
+        r["post_hoc_reason"] = a.evidence
+        r["amended_utc"] = _now()
+        if a.fired_at:
+            r["human_action_at"] = a.fired_at
+    _rewrite(recs)
+    print("AMENDED %s: post_hoc=%s (%d record(s))" % (a.sha[:8], verdict, len(hits)))
+    return 0
+
+
+def status(a) -> int:
+    recs = _load()
+    done = [r for r in recs if r.get("outcome") in ("agreed", "disagreed")]
+    pending = [r for r in recs if r.get("outcome") == "pending"]
+
+    counted = [r for r in done if _counted(r)]
+    excluded_post_hoc = [r for r in done if r.get("post_hoc") is True]
+    excluded_unknown = [r for r in done
+                        if r.get("post_hoc") is not True and not _counted(r)]
+
+    agreed = [r for r in counted if r["outcome"] == "agreed"]
+    unsafe = [r for r in counted if r.get("task_would_fire_human_held")]
+
+    consec = 0
+    for r in reversed(counted):
+        if r["outcome"] == "agreed":
+            consec += 1
+        else:
+            break
+
+    met = (len(counted) >= REQUIRED_TOTAL
+           and consec >= REQUIRED_CONSECUTIVE
+           and not unsafe)
+
+    out = {
+        "reconciled_decisions": len(done),
+        "counted_decisions": len(counted),
+        "excluded_post_hoc": len(excluded_post_hoc),
+        "excluded_post_hoc_unknown": len(excluded_unknown),
+        "pending_not_counted": len(pending),
+        "agreements": len(agreed),
+        "disagreements": len(counted) - len(agreed),
+        "disagreements_task_would_fire_human_held": len(unsafe),
+        "consecutive_agreements": consec,
+        "required_total": REQUIRED_TOTAL,
+        "required_consecutive": REQUIRED_CONSECUTIVE,
+        "C4_met": met,
+    }
+    if a.json:
+        print(json.dumps(out, indent=1))
+    else:
+        print("C4 shadow-agreement status")
+        for k, v in out.items():
+            print("  %-42s %s" % (k, v))
+        if pending:
+            print("  NOTE: %d pending decision(s) are NOT counted -- an unreconciled "
+                  "decision is not evidence." % len(pending))
+        if excluded_post_hoc:
+            print("  NOTE: %d POST-HOC decision(s) excluded -- prod already carried the "
+                  "sha when the decision was written, so it could not disagree (FU-177)."
+                  % len(excluded_post_hoc))
+        if excluded_unknown:
+            print("  NOTE: %d decision(s) excluded with post_hoc UNKNOWN -- unknown is "
+                  "not zero (R6). Legacy records predating the guard land here."
+                  % len(excluded_unknown))
+        if not counted:
+            print("  C4 is UNPROVEN, not failing: no COUNTABLE decision has been "
+                  "reconciled yet.")
+    if a.gate:
+        return 0 if met else 1
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--record", action="store_true")
+    ap.add_argument("--reconcile", action="store_true")
+    ap.add_argument("--amend", action="store_true")
+    ap.add_argument("--status", action="store_true")
+    ap.add_argument("--sha")
+    ap.add_argument("--class", dest="klass")
+    ap.add_argument("--would-fire")
+    ap.add_argument("--migrations-tree")
+    ap.add_argument("--reasons")
+    ap.add_argument("--acted", default="no")
+    ap.add_argument("--fired-sha")
+    ap.add_argument("--held-sha")
+    ap.add_argument("--fired-at", help="ISO-8601 instant of the observed human action")
+    ap.add_argument("--post-hoc", dest="post_hoc", help="yes|no|unknown (with --amend)")
+    ap.add_argument("--evidence", help="mandatory justification for --amend")
+    ap.add_argument("--gate", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+
+    try:
+        if a.record:
+            return record(a)
+        if a.reconcile:
+            return reconcile(a)
+        if a.amend:
+            return amend(a)
+        if a.status:
+            return status(a)
+    except Exception as e:                      # never read a crash as a verdict
+        print("UNKNOWN: %s" % e, file=sys.stderr)
+        return 2
+    ap.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

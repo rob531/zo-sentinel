@@ -287,9 +287,51 @@ def heal(
     return after
 
 
+def resolve_worktree(
+    explicit=None,
+    cwd=None,
+    runner=_git,
+):
+    """Decide WHICH worktree to measure, and return the BASIS alongside it (R1).
+
+    Why this exists (FU-202, 2026-07-30). `DEFAULT_WORKTREE` is the hardcoded
+    shared tree `D:\\zo\\_runbook`. Before lane isolation (#2416) that was the only
+    tree lanes ran from, so a cwd-independent default was right. After it, the
+    default is the one path a lane is told NOT to use -- so
+
+        cd D:\\zo\\_lanes\\prod-fire && python tools/runbook_pin.py --heal
+
+    read as "prove THIS tree is pinned", silently measured `_runbook` instead,
+    found it shared, refused to heal, and returned rc=1. That exact command had
+    already been written into the prod one-click as the step immediately before
+    `accept_gate` -- so the tool whose whole job is to certify WHICH accept_gate
+    you are about to run would have blocked the fire while answering about a
+    different tree. Measured both ways on 2026-07-30: bare -> DRIFTED rc=1 on
+    `_runbook` (0 divergent); `--worktree <lane>` -> PINNED rc=0.
+
+    An explicit `--worktree` always wins, so every existing caller is unchanged.
+    Otherwise the answer is the git worktree ENCLOSING the cwd -- which is what
+    "which copy do you actually run?" means -- and only if the cwd is not inside
+    one do we fall back to the historical constant. The basis is RETURNED rather
+    than printed so it reaches `--json` too: a resolution you cannot name is one
+    you have not made.
+    """
+    if explicit:
+        return explicit, "explicit --worktree"
+    probe = cwd or os.getcwd()
+    rc, out = runner(probe, "rev-parse", "--show-toplevel")
+    if rc == 0 and out:
+        return os.path.normpath(out.splitlines()[0].strip()), (
+            "enclosing git worktree of cwd %s" % probe)
+    return DEFAULT_WORKTREE, (
+        "fallback DEFAULT_WORKTREE -- cwd %s is not inside a git worktree" % probe)
+
+
 # ------------------------------------------------------------------------------- cli
 def _render(r: dict) -> None:
     print("worktree : %s" % r.get("worktree"))
+    if r.get("worktree_basis"):
+        print("resolved : %s" % r["worktree_basis"])
     print("HEAD     : %s" % (r.get("head") or "<unresolved>"))
     print("target   : %s -> %s" % (r.get("target_ref") or DEFAULT_TARGET,
                                    r.get("target") or "<unresolved>"))
@@ -312,7 +354,9 @@ def _render(r: dict) -> None:
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--worktree", default=DEFAULT_WORKTREE)
+    ap.add_argument("--worktree", default=None,
+                    help="worktree to measure; default = the git worktree "
+                         "enclosing the cwd, else " + DEFAULT_WORKTREE)
     ap.add_argument("--target", default=DEFAULT_TARGET)
     ap.add_argument("--fetch", action="store_true",
                     help="git fetch origin main before comparing")
@@ -323,8 +367,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
-    r = (heal(a.worktree, a.target, force=a.force) if a.heal
-         else inspect(a.worktree, a.target, a.fetch))
+    worktree, basis = resolve_worktree(a.worktree)
+    r = (heal(worktree, a.target, force=a.force) if a.heal
+         else inspect(worktree, a.target, a.fetch))
+    r["worktree_basis"] = basis
     if a.json:
         print(json.dumps(r, indent=2, sort_keys=True))
     else:

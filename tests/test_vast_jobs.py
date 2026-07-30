@@ -272,3 +272,134 @@ def test_audit_never_destroys_a_wedged_instance(iso):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ---------------------------------------------------------------------------
+# FU-192 -- the leak audit's all-clear was byte-identical to an auth failure.
+#
+# `vastai show instances --raw --api-key <bad>` exits **0**, prints NOTHING to
+# stdout, and puts {"error": true, "status_code": 401, ...} on **stderr**.
+# Observed RED on 2026-07-30: audit(RealVastClient(api_key="0"*64)) returned
+#   {"live_instances": 0, "open_runs": 0, "live": [], "alerts": [], "ok": true}
+# with rc=0 -- indistinguishable from a genuine zero-leak day. These tests are
+# the NEGATIVE CONTROL for that: they exercise RealVastClient (which every
+# other test in this file bypasses via FakeClient), so the object under test
+# is the one that actually talks to vast.
+# ---------------------------------------------------------------------------
+
+AUTH_401_STDERR = (
+    "DEPRECATED: `vastai show instances` will be removed in a future "
+    "release. Use `vastai show instances-v1` for the new paginated command.\n"
+    '{"error": true, "status_code": 401, "msg": "Invalid user key"}\n'
+)
+
+
+class _FakeProc:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _fake_run(monkeypatch, stdout="", stderr="", returncode=0):
+    monkeypatch.setattr(
+        vast_jobs.subprocess, "run",
+        lambda *a, **k: _FakeProc(returncode, stdout, stderr))
+
+
+def _client():
+    return vast_jobs.RealVastClient(api_key="0" * 64)
+
+
+def test_api_error_detects_envelope_past_the_deprecation_notice():
+    msg = vast_jobs.api_error(AUTH_401_STDERR)
+    assert "401" in msg and "Invalid user key" in msg
+
+
+def test_api_error_is_quiet_on_clean_output():
+    assert vast_jobs.api_error("") == ""
+    assert vast_jobs.api_error("DEPRECATED: use instances-v1\n") == ""
+    assert vast_jobs.api_error('[{"id": 1}]') == ""
+    # a legitimate payload carrying a FALSY error key is not an error
+    assert vast_jobs.api_error('{"error": false, "msg": "ok"}') == ""
+
+
+def test_cli_raises_on_rc0_with_error_envelope_on_stderr(monkeypatch):
+    _fake_run(monkeypatch, stdout="", stderr=AUTH_401_STDERR)
+    with pytest.raises(vast_jobs.VastApiError) as e:
+        _client()._cli("show", "instances")
+    assert "401" in str(e.value)
+
+
+def test_list_instances_raises_instead_of_reporting_zero(monkeypatch):
+    _fake_run(monkeypatch, stdout="", stderr=AUTH_401_STDERR)
+    with pytest.raises(vast_jobs.VastApiError):
+        _client().list_instances()
+
+
+def test_list_instances_raises_on_non_list_shape(monkeypatch):
+    _fake_run(monkeypatch, stdout='{"unexpected": "dict"}', stderr="")
+    with pytest.raises(vast_jobs.VastApiError) as e:
+        _client().list_instances()
+    assert "not a" in str(e.value)
+
+
+def test_audit_does_not_report_ok_true_on_auth_failure(monkeypatch, tmp_path):
+    """THE regression test: an all-clear must be impossible without auth."""
+    monkeypatch.setenv("ZO_VAST_STATE_DIR", str(tmp_path))
+    _fake_run(monkeypatch, stdout="", stderr=AUTH_401_STDERR)
+    with pytest.raises(vast_jobs.VastApiError):
+        vast_jobs.audit(_client())
+    # and it must not have left a reassuring artifact behind
+    assert not (tmp_path / "last_audit.json").exists()
+
+
+def test_status_does_not_call_a_401_instance_gone(monkeypatch):
+    """A live paying instance must not read as `gone` because auth failed."""
+    _fake_run(monkeypatch, stdout="", stderr=AUTH_401_STDERR)
+    with pytest.raises(vast_jobs.VastApiError):
+        _client().status("inst_1")
+
+
+def test_destroy_does_not_claim_success_on_401(monkeypatch):
+    """A destroy that 401'd was ledgered destroyed=True while still billing."""
+    _fake_run(monkeypatch, stdout="", stderr=AUTH_401_STDERR)
+    with pytest.raises(vast_jobs.VastApiError):
+        _client().destroy("inst_1")
+
+
+def test_destroy_honours_explicit_success_false(monkeypatch):
+    _fake_run(monkeypatch, stdout='{"success": false}', stderr="")
+    assert _client().destroy("inst_1") is False
+
+
+# --- POSITIVE CONTROLS: the happy path must still work, or the guard above
+# --- is just a permanently-red check that proves nothing.
+
+def test_list_instances_parses_a_real_payload(monkeypatch):
+    payload = json.dumps([{
+        "id": 12345, "actual_status": "running", "dph_total": 0.42,
+        "label": "scorewave", "start_date": 1750000000.0,
+        "gpu_name": "RTX 4090", "status_msg": "",
+    }])
+    _fake_run(monkeypatch, stdout=payload, stderr="DEPRECATED: whatever\n")
+    got = _client().list_instances()
+    assert len(got) == 1
+    assert got[0]["id"] == "12345"
+    assert got[0]["dph"] == 0.42
+    assert got[0]["label"] == "scorewave"
+
+
+def test_genuine_empty_list_is_still_a_clean_zero(monkeypatch, tmp_path):
+    """An AUTHENTICATED empty list must still produce ok: true -- otherwise
+    the fix has only replaced a false green with a permanent red."""
+    monkeypatch.setenv("ZO_VAST_STATE_DIR", str(tmp_path))
+    _fake_run(monkeypatch, stdout="[]", stderr="DEPRECATED: whatever\n")
+    report = vast_jobs.audit(_client())
+    assert report["live_instances"] == 0
+    assert report["ok"] is True
+    # Also PROVES the tmp_path isolation actually bites: if the env var name
+    # were wrong, audit() would write to the real state dir and this fails.
+    # That makes the `assert not ...exists()` in the auth-failure test above
+    # a real assertion rather than a vacuous one.
+    assert (tmp_path / "last_audit.json").is_file()

@@ -168,6 +168,40 @@ def run_checks(manifest: dict, workdir: Path, pipeline_rc: int) -> dict:
 # Vast client seam (injected; hermetic tests use a fake)
 # ---------------------------------------------------------------------------
 
+class VastApiError(RuntimeError):
+    """The vast API answered with an ERROR ENVELOPE -- not an empty result.
+
+    Exists because the `vastai` CLI reports API failures (401 invalid key,
+    rate limits) as JSON on **stderr** while exiting **0** with an EMPTY
+    stdout. Every layer below then coerced that unknown into a zero:
+    _cli returned {}, list_instances turned a non-list into [], and audit()
+    published `live_instances: 0 / alerts: [] / ok: true` -- byte-identical
+    to a genuine all-clear on the paid-GPU leak audit (FU-192, 2026-07-30).
+    Unknown is not zero.
+    """
+
+
+def api_error(text: str) -> str:
+    """Return a message if `text` carries a vast API error envelope, else "".
+
+    The envelope is a JSON object with a truthy `error`, e.g.
+    {"error": true, "status_code": 401, "msg": "Invalid user key"}.
+    Scanned line-by-line because the CLI also emits DEPRECATED notices.
+    """
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not (line.startswith("{") and line.endswith("}")):
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(obj, dict) and obj.get("error"):
+            return "status_code={} msg={}".format(
+                obj.get("status_code"), obj.get("msg") or obj.get("error"))
+    return ""
+
+
 class RealVastClient:
     """Thin wrapper over the vastai CLI (subprocess) -- present on the tower.
     Only constructed for live runs; never imported paths in tests."""
@@ -181,6 +215,12 @@ class RealVastClient:
         if out.returncode != 0:
             raise RuntimeError(f"vastai {' '.join(args[:2])} rc={out.returncode}: "
                                f"{(out.stderr or out.stdout)[:300]}")
+        # rc=0 does NOT mean the API succeeded: the CLI prints its error
+        # envelope to stderr and still exits 0 (FU-192). Check BOTH streams
+        # before treating empty stdout as an empty result.
+        err = api_error(out.stderr) or api_error(out.stdout)
+        if err:
+            raise VastApiError(f"vastai {' '.join(args[:2])}: {err}")
         return json.loads(out.stdout) if out.stdout.strip() else {}
 
     def launch(self, launch_spec: dict) -> str:
@@ -210,16 +250,28 @@ class RealVastClient:
         # them, and a field dropped HERE cannot be recovered downstream --
         # every caller then re-derives it with a raw API call of its own.
         insts = self._cli("show", "instances")
+        if not isinstance(insts, list):
+            # Refusing to report an unrecognised shape as "no instances":
+            # that silent [] is what made a 401 look like an all-clear.
+            raise VastApiError(
+                f"`show instances` returned {type(insts).__name__}, not a "
+                f"list -- shape unknown, refusing to call it zero instances")
         return [{"id": str(i.get("id")), "state": i.get("actual_status"),
                  "dph": float(i.get("dph_total") or 0),
                  "label": i.get("label"),
                  "start_date": i.get("start_date"),
                  "gpu": i.get("gpu_name"),
                  "status_msg": i.get("status_msg")}
-                for i in (insts if isinstance(insts, list) else [])]
+                for i in insts]
 
     def destroy(self, instance_id: str) -> bool:
-        self._cli("destroy", "instance", str(instance_id))
+        # Previously `return True` unconditionally, so a destroy that 401'd
+        # was ledgered as destroyed=True while the instance kept BILLING.
+        # _cli now raises on the error envelope; an explicit success=False
+        # in the payload is honoured too.
+        res = self._cli("destroy", "instance", str(instance_id))
+        if isinstance(res, dict) and res.get("success") is False:
+            return False
         return True
 
     def scp_from(self, instance: dict, remote_glob: str, local_dir: Path) -> bool:

@@ -1,0 +1,12 @@
+[service]
+name = "vuln_facet_compile"
+import_path = "services.active.vuln_facet_compile.router"
+prefix = "/api"
+tag = "vuln_facet_compile"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+app.db = { module = "app.db", import = "get_session" }
+app.models = { module = "app.models", import = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"] }

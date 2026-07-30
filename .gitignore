@@ -31,3 +31,8 @@ artifacts/deploy_candidate_verdict.json
 # JSON in git would be 8,760 commits a year of pure noise. The tower is the
 # designated host; tools/queue_census.py --json is how another host asks it.
 artifacts/queue_census/
+
+# Lane halt sentinels + the shadow ledger. Per-HOST runtime state, like the queue
+# census history: a halt is a fact about this tower right now, not about the tree.
+# Committing them would let a halt raised on one box block a lane on another.
+artifacts/lane_halts/

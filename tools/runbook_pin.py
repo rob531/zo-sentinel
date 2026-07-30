@@ -82,6 +82,17 @@ SENTINEL_TOOLS = [
 ]
 
 
+def _is_shared(path: str) -> bool:
+    """Ask lane_worktree, which owns the list. Fail SAFE: if the oracle cannot be
+    imported we treat the path as shared, because the dangerous default is to heal."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from lane_worktree import is_shared
+    except Exception:
+        return True
+    return is_shared(path)
+
+
 # --------------------------------------------------------------- pure classification
 def classify(
     head: Optional[str],
@@ -239,11 +250,33 @@ def heal(
     worktree: str = DEFAULT_WORKTREE,
     target_ref: str = DEFAULT_TARGET,
     runner: Callable[..., Tuple[int, str]] = _git,
+    force: bool = False,
 ) -> dict:
-    """Re-detach the worktree to target and re-classify. Idempotent, converging."""
+    """Re-detach the worktree to target and re-classify. Idempotent, converging.
+
+    REFUSES on a SHARED worktree unless `force=True`. Healing a tree you share is
+    the same act that caused the incident this tool exists to detect: on 2026-07-30
+    prod-drift parked `_runbook` at the candidate sha at 09:39:49Z to gate it, and a
+    heal inside that window would have swapped the tree under a running prod gate --
+    silently, because `accept_gate.py` exists at BOTH shas. Fixing contention by
+    adding a second mutator makes the race worse.
+
+    A refusal deliberately KEEPS the DRIFTED rc. Declining to repair is not a
+    repair, and a refusal that reported PINNED would be the exact "gate that skips
+    reads as a gate that passes" defect.
+    """
     before = inspect(worktree, target_ref, fetch=True, runner=runner)
     if before["rc"] == RC_UNKNOWN:
         before["healed"] = False
+        return before
+    if not force and _is_shared(worktree):
+        before["healed"] = False
+        before["refused"] = True
+        before["reason"] = (
+            "%s; REFUSED to heal: %s is SHARED. Give this lane its own worktree "
+            "(python tools/lane_worktree.py --ensure <lane>) or pass --force if you "
+            "own every reader right now." % (before.get("reason", ""), worktree)
+        )
         return before
     rc, out = runner(worktree, "checkout", "--detach", target_ref, "-q")
     after = inspect(worktree, target_ref, fetch=False, runner=runner)
@@ -285,10 +318,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="git fetch origin main before comparing")
     ap.add_argument("--heal", action="store_true",
                     help="re-detach the worktree to target and re-verify (idempotent)")
+    ap.add_argument("--force", action="store_true",
+                    help="heal even a SHARED worktree -- only if you own every reader")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
-    r = heal(a.worktree, a.target) if a.heal else inspect(a.worktree, a.target, a.fetch)
+    r = (heal(a.worktree, a.target, force=a.force) if a.heal
+         else inspect(a.worktree, a.target, a.fetch))
     if a.json:
         print(json.dumps(r, indent=2, sort_keys=True))
     else:

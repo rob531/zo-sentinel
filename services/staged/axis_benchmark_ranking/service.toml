@@ -1,0 +1,7 @@
+name = "axis_benchmark_ranking"
+import_path = "services.active.axis_benchmark_ranking.router"
+prefix = "/api"
+tag = "axis_benchmark_ranking"
+origin = "service"
+auth = "public"
+needs_data_layer = true

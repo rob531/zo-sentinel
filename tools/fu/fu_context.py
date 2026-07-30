@@ -207,6 +207,45 @@ def neighbor_sql(anchors: List[str], limit: int = 400) -> str:
     )
 
 
+_BUS_JSON_RE = re.compile(r"\{\"rows\".*?\}\]?,\s*\"count\":\s*\d+\}", re.DOTALL)
+
+
+def _recover_bus_json(stdout: str) -> Any | None:
+    """Recover the bus's JSON from zo_call stdout at ANY escape depth.
+
+    zo_call returns a small result as a `CmdResult(stdout='...')` repr with bare
+    quotes, but above ~32 KiB it switches to a JSON-encoded form in which every
+    quote is backslash-escaped. A single-shape regex therefore matched only the
+    small form: measured 2026-07-30, FU-110's 34 anchors returned a complete
+    count=174 result in 33,440B that was silently discarded, while the identical
+    query at LIMIT 20 (3,375B) succeeded. The failure surfaced as
+    `kl: unavailable` -- indistinguishable from a refused connection.
+
+    Returns None only when no escape depth yields a dict with a "rows" key, so
+    the caller can report a transport limit instead of blaming the bus.
+    """
+    candidates = [stdout]
+    s = stdout
+    for _ in range(3):
+        nxt = s.replace('\\"', '"').replace("\\n", "\n")
+        if nxt == s:
+            break
+        s = nxt
+        candidates.append(s)
+    for cand in candidates:
+        m = _BUS_JSON_RE.search(cand)
+        if not m:
+            continue
+        for blob in (m.group(0), m.group(0).replace("\\\\", "\\")):
+            try:
+                d = json.loads(blob)
+            except Exception:
+                continue
+            if isinstance(d, dict) and "rows" in d:
+                return d
+    return None
+
+
 def _query_direct(sql: str) -> Any:
     import urllib.request
 
@@ -246,11 +285,21 @@ def _query_via_zo_call(sql: str) -> Any:
     )
     if out.returncode != 0:
         raise RuntimeError(f"zo_call rc={out.returncode}: {out.stderr[:200]}")
-    # zo_call prints a CmdResult repr; recover the JSON object from stdout
-    m = re.search(r"\{\"rows\".*?\}\]?,\s*\"count\":\s*\d+\}", out.stdout)
-    if not m:
-        raise RuntimeError(f"no JSON in zo_call output: {out.stdout[:200]}")
-    return json.loads(m.group(0).replace("\\\\", "\\"))
+    rows = _recover_bus_json(out.stdout)
+    if rows is None:
+        raise RuntimeError(
+            f"payload not recovered from {len(out.stdout)}B of zo_call stdout; "
+            f"the bus ANSWERED -- this is a transport/parse limit, not an "
+            f"unreachable bus: {out.stdout[:160]}")
+    return rows
+
+
+# Descending 1-hop row budgets. zo_call truncates stdout at ~32 KiB and spools
+# the rest to a far-side file, so a wide fan-out must be asked for SMALLER
+# rather than declared unreachable. Measured 2026-07-30: 44 anchors @400 ->
+# 33,440B truncated; @150 -> 26,700B intact. render() only ever displays 40
+# edges, so 150 still over-serves every consumer.
+BUS_LIMIT_LADDER = (400, 150, 60)
 
 
 def bus_neighbors(anchors: List[str]) -> tuple[Any | None, str]:
@@ -263,14 +312,23 @@ def bus_neighbors(anchors: List[str]) -> tuple[Any | None, str]:
     """
     if not anchors:
         return None, "no anchors to expand"
-    sql = neighbor_sql(anchors)
     reasons = []
-    for name, fn in (("direct", _query_direct), ("zo_call", _query_via_zo_call)):
-        try:
-            return fn(sql), f"ok via {name}"
-        except Exception as exc:  # noqa: BLE001 -- degrade, never propagate
-            reasons.append(f"{name}: {type(exc).__name__}")
-    return None, "; ".join(reasons)
+    for limit in BUS_LIMIT_LADDER:
+        sql = neighbor_sql(anchors, limit=limit)
+        for name, fn in (("direct", _query_direct),
+                         ("zo_call", _query_via_zo_call)):
+            try:
+                rows = fn(sql)
+            except Exception as exc:  # noqa: BLE001 -- degrade, never propagate
+                # Keep the MESSAGE, not just the class. The class alone is what
+                # made a 32 KiB transport cliff read as an unreachable bus.
+                reasons.append(f"{name}@{limit}: {type(exc).__name__}: "
+                               f"{str(exc)[:90]}")
+                continue
+            cap = "" if limit == BUS_LIMIT_LADDER[0] else \
+                f" (transport-capped at {limit} edges)"
+            return rows, f"ok via {name}{cap}"
+    return None, "; ".join(reasons[:4])
 
 
 def build_context(fu_num: str, extra_anchors: List[str], agents_dir: Path,
@@ -324,7 +382,9 @@ def build_context(fu_num: str, extra_anchors: List[str], agents_dir: Path,
         ctx["subgraph"] = []
     else:
         payload = rows.get("rows", rows) if isinstance(rows, dict) else rows
-        ctx["kl"] = "ok"
+        # Carry the basis, not just the verdict: `why` names the transport and
+        # any row cap, so a capped subgraph can never be read as a complete one.
+        ctx["kl"] = why or "ok"
         ctx["subgraph"] = payload if isinstance(payload, list) else [payload]
     return ctx
 

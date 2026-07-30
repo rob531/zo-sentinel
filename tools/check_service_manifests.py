@@ -75,12 +75,26 @@ def _repo_root() -> str:
 
 
 def classify(path: str) -> tuple[str, str]:
-    """Return (verdict, detail). verdict in {OK, UNPARSEABLE, FLAT, MISSING_KEYS}."""
+    """Return (verdict, detail) for a manifest ON DISK."""
     try:
-        with open(path, "rb") as fh:
-            data = tomllib.load(fh)
+        text = open(path, encoding="utf-8", errors="replace").read()
     except OSError as exc:
         return "UNPARSEABLE", "unreadable: %s" % exc
+    dirname = os.path.basename(os.path.dirname(os.path.abspath(path)))
+    return classify_source(text, dirname)
+
+
+def classify_source(text: str, dirname: str) -> tuple[str, str]:
+    """Return (verdict, detail) for manifest CONTENT.
+
+    Split out from classify() so tools/queue_census.py can judge a PR DIFF -- the
+    thing that would land -- through exactly this code rather than a second copy of
+    the rule. Two copies of a rule drift, and then one of them is wrong and nobody
+    knows which. verdict in
+    {OK, UNPARSEABLE, FLAT, MISSING_KEYS, BAD_NAME, NAME_MISMATCH, BAD_IMPORT_PATH}.
+    """
+    try:
+        data = tomllib.loads(text)
     except ValueError as exc:
         return "UNPARSEABLE", str(exc)
 
@@ -105,7 +119,6 @@ def classify(path: str) -> tuple[str, str]:
     # The DIRECTORY is the service's identity -- it is what the promoter iterates
     # and what generate_spine falls back to. A manifest that disagrees with its own
     # directory is not a manifest for that service.
-    dirname = os.path.basename(os.path.dirname(os.path.abspath(path)))
     name = str(meta["name"]).strip()
     if not IDENT_RE.match(name):
         return "BAD_NAME", "%r is not a snake_case service identifier" % name

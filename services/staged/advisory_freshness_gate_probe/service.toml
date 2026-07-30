@@ -1,0 +1,7 @@
+name = "advisory_freshness_gate_probe"
+import_path = "services.active.advisory_freshness_gate_probe.router"
+prefix = "/api"
+tag = "advisory_freshness_gate_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

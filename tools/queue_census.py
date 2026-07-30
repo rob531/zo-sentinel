@@ -502,8 +502,8 @@ def main(argv=None) -> int:
     ap.add_argument("--quiet", action="store_true", help="verdict line + exit code only")
     ap.add_argument("--no-persist", action="store_true", help="do not write history")
     ap.add_argument("--halt-mode", choices=("off", "shadow", "armed"),
-                    default="shadow",
-                    help="what to do with VALIDITY_COLLAPSE. shadow (default) RECORDS\nthe halt it would have raised and cannot block anything; armed actually halts\nthat lane only. Never defaults to armed -- see tools/lane_halt.py.")
+                    default="armed",
+                    help="what to do with VALIDITY_COLLAPSE. ARMED (default since 2026-07-30) raises a real per-lane halt; shadow only RECORDS what it would have done and cannot block; off disables. Armed on the chairman's ruling AFTER the shadow report showed 0 halts firing today and the 7/29 founding case reproducing.")
     args = ap.parse_args(argv)
 
     prev = previous()

@@ -246,16 +246,24 @@ def test_halt_mode_off_emits_nothing():
     assert q.emit_halts(alarms, "off") == []
 
 
-def test_the_census_defaults_to_shadow():
-    """Reading the parser rather than trusting the docstring: an armed default
-    would be the single most dangerous line in this change."""
-    q = _load("queue_census")
-    import argparse
-    ap = [a for a in dir(q) if a == "main"]
-    assert ap
+def test_the_census_is_ARMED_and_shadow_is_still_reachable():
+    """ARMED by chairman ruling 2026-07-30, after the shadow report showed 0 halts
+    firing today and the 7/29 founding case reproducing. Shadow must remain
+    available: losing it would remove the only way to re-measure before a future
+    threshold change."""
     src = open(os.path.join(ROOT, "tools", "queue_census.py"), encoding="utf-8").read()
     i = src.find('"--halt-mode"')
     assert i > 0
-    assert 'default="shadow"' in src[i:i + 400]
-    assert 'default="armed"' not in src
-    del argparse
+    assert 'default="armed"' in src[i:i + 400]
+    assert '"shadow"' in src[i:i + 400]
+
+
+def test_enforce_is_the_only_thing_that_makes_a_halt_bite(tmp_path):
+    """A sentinel is not enforcement until a caller consults it. This is that
+    caller, and its red path is asserted -- 'armed' with no consumer would be the
+    'a merge is not an arming' defect."""
+    h = _load("lane_halt")
+    d = str(tmp_path)
+    assert h.is_halted("l", halt_dir=d) is False
+    h.raise_halt("l", "collapse", mode=h.MODE_ARMED, halt_dir=d)
+    assert h.is_halted("l", halt_dir=d) is True

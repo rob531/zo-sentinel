@@ -1,0 +1,8 @@
+[service]
+name = "overview_dashboard"
+import_path = "services.active.overview_dashboard.router"
+prefix = "/api"
+tag = "overview_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

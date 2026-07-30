@@ -216,3 +216,65 @@ def test_heal_on_a_missing_worktree_stays_unknown(tmp_path):
     r = rp.heal(str(tmp_path / "nope"))
     assert r["rc"] == rp.RC_UNKNOWN
     assert r["healed"] is False
+
+
+import os as _os
+
+
+# --------------------------------------------------------------- FU-202: resolution
+#
+# The defect these cover is not "the classifier was wrong" -- the classifier was
+# right about a tree NOBODY WAS RUNNING FROM. `--worktree` defaulted to the
+# hardcoded shared `_runbook`, so after lane isolation (#2416)
+# `cd <lane> && runbook_pin --heal` measured the wrong tree, refused (shared) and
+# returned rc=1 -- as the step immediately before `accept_gate` in the prod
+# one-click. R1 in miniature: naming HOW the artifact was resolved is the check.
+
+
+def _runner_toplevel(top, rc=0):
+    """Fake git that answers `rev-parse --show-toplevel` and nothing else."""
+    def run(worktree, *args):
+        if args[:2] == ("rev-parse", "--show-toplevel"):
+            return rc, top
+        return 1, ""
+    return run
+
+
+def test_explicit_worktree_always_wins_so_existing_callers_are_unchanged():
+    path, basis = rp.resolve_worktree(
+        explicit=r"D:\zo\_lanes\somelane",
+        cwd=r"D:\elsewhere",
+        runner=_runner_toplevel(r"D:\zo\_runbook"),
+    )
+    assert path == r"D:\zo\_lanes\somelane"
+    assert basis == "explicit --worktree"
+
+
+def test_default_is_the_worktree_enclosing_the_cwd_not_the_hardcoded_shared_tree():
+    path, basis = rp.resolve_worktree(
+        cwd=r"D:\zo\_lanes\prod-fire",
+        runner=_runner_toplevel(r"D:\zo\_lanes\prod-fire"),
+    )
+    assert path == _os.path.normpath(r"D:\zo\_lanes\prod-fire")
+    assert path != rp.DEFAULT_WORKTREE
+    assert "enclosing git worktree" in basis
+
+
+def test_falls_back_to_the_constant_only_when_cwd_is_not_in_a_worktree():
+    path, basis = rp.resolve_worktree(
+        cwd="C:/", runner=_runner_toplevel("", rc=128))
+    assert path == rp.DEFAULT_WORKTREE
+    assert "fallback" in basis
+    assert "not inside a git worktree" in basis
+
+
+def test_the_basis_is_always_populated_so_a_resolution_can_be_named():
+    # R1: a resolution you cannot name is one you have not made. Every branch
+    # must return a non-empty basis, including the fallback.
+    for kwargs in (
+        {"explicit": r"D:\x"},
+        {"cwd": r"D:\zo\_lanes\l", "runner": _runner_toplevel(r"D:\zo\_lanes\l")},
+        {"cwd": "C:/", "runner": _runner_toplevel("", rc=128)},
+    ):
+        _, basis = rp.resolve_worktree(**kwargs)
+        assert basis and isinstance(basis, str)

@@ -1,0 +1,7 @@
+name = "cadence_job_health_api"
+import_path = "services.active.cadence_job_health_api.router"
+prefix = "/api"
+tag = "cadence_job_health_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

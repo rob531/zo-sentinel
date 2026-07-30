@@ -20,6 +20,7 @@ build before being trusted.
 """
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -94,9 +95,11 @@ def test_fu_with_title_but_no_anchors_is_ok_not_error(agents):
 
 # ------------------------------------------------------------ honest degradation
 def test_bus_unreachable_still_exits_zero(agents, monkeypatch, capsys):
-    """The whole point of the file. Bus down -> smaller answer, exit 0."""
-    monkeypatch.setattr(fu_context, "BUS_URL", "http://127.0.0.1:9")
-    monkeypatch.setattr(fu_context, "BUS_TIMEOUT_S", 0.05)
+    """The whole point of the file. Every transport down -> smaller answer, exit 0."""
+    def dead(*_a, **_k):
+        raise ConnectionRefusedError("10061")
+    monkeypatch.setattr(fu_context, "_query_direct", dead)
+    monkeypatch.setattr(fu_context, "_query_via_zo_call", dead)
     rc = fu_context.main(["--fu", "181", "--agents-dir", str(agents)])
     out = capsys.readouterr().out
     assert rc == fu_context.EXIT_OK
@@ -105,13 +108,71 @@ def test_bus_unreachable_still_exits_zero(agents, monkeypatch, capsys):
 
 
 def test_bus_neighbors_never_raises(monkeypatch):
-    """Even a bus that explodes in an unexpected way must degrade."""
+    """Even a bus that explodes in an unexpected way must degrade -- on EVERY
+    transport, not just the first."""
     def boom(*_a, **_k):
         raise RuntimeError("socket on fire")
-    monkeypatch.setattr("urllib.request.urlopen", boom)
+    monkeypatch.setattr(fu_context, "_query_direct", boom)
+    monkeypatch.setattr(fu_context, "_query_via_zo_call", boom)
     rows, why = fu_context.bus_neighbors(["a.py"])
     assert rows is None
-    assert "RuntimeError" in why
+    assert "direct" in why and "zo_call" in why
+
+
+def test_zo_call_used_when_direct_refuses(monkeypatch):
+    """:8772 is a LOOPBACK on ZoComputer -- from the tower the direct call can
+    never succeed, so the bridge must be tried rather than reported as failure."""
+    def refused(*_a, **_k):
+        raise ConnectionRefusedError("10061")
+    monkeypatch.setattr(fu_context, "_query_direct", refused)
+    monkeypatch.setattr(fu_context, "_query_via_zo_call",
+                        lambda _sql: {"rows": [{"node": "x"}], "count": 1})
+    rows, why = fu_context.bus_neighbors(["a.py"])
+    assert rows == {"rows": [{"node": "x"}], "count": 1}
+    assert why == "ok via zo_call"
+
+
+# ------------------------------------------------------- the SQL schema contract
+def test_sql_uses_relation_not_rel():
+    """THE regression that mattered. v1 shipped `e.rel`, passed 19 tests and every
+    CI gate, and was wrong -- the column is `relation`. It survived because the
+    bus was unreachable so the query never ran. A query never executed is not a
+    query verified."""
+    sql = fu_context.neighbor_sql(["fu_ledger.py"])
+    assert "e.relation AS rel" in sql
+    assert "e.rel " not in sql and "e.rel," not in sql
+
+
+def test_sql_only_names_real_kl_columns():
+    """Pin the whole schema contract, not just the one column that bit."""
+    sql = fu_context.neighbor_sql(["a.py"])
+    for tok in re.findall(r"\b[nme]\.(\w+)", sql):
+        assert tok in (fu_context.KL_NODE_COLS | fu_context.KL_EDGE_COLS), tok
+
+
+def test_sql_avoids_dollar_anchored_regex():
+    """`regexp_extract(..., '[^/]+$')` returns HTTP 400 through the
+    PowerShell -> zo_call -> shell -> python quoting chain. LIKE survives it."""
+    sql = fu_context.neighbor_sql(["a.py"])
+    assert "regexp_extract" not in sql
+    assert "LIKE '%/a.py'" in sql
+
+
+def test_sql_matches_both_nested_and_root_paths():
+    sql = fu_context.neighbor_sql(["go.sh"])
+    assert "LIKE '%/go.sh'" in sql
+    assert "= 'go.sh'" in sql
+
+
+def test_sql_escapes_quotes_and_bounds_limit():
+    sql = fu_context.neighbor_sql(["we'ird.py"], limit=7)
+    assert "we''ird.py" in sql
+    assert sql.rstrip().endswith("LIMIT 7")
+
+
+def test_sql_with_no_anchors_matches_nothing():
+    """An empty anchor list must not degenerate into WHERE () or a full scan."""
+    assert "1=0" in fu_context.neighbor_sql([])
 
 
 def test_dry_run_does_not_touch_the_bus(agents, monkeypatch):
@@ -226,8 +287,8 @@ def test_json_output_is_valid_json(agents, capsys):
     json.loads(capsys.readouterr().out)
 
 
-def test_sql_quotes_are_escaped(monkeypatch):
-    """An anchor with a quote must not break out of the literal."""
+def test_direct_transport_posts_the_sql(monkeypatch):
+    """The direct path must actually send the generated SQL as a JSON body."""
     seen = {}
 
     class FakeResp:
@@ -238,7 +299,7 @@ def test_sql_quotes_are_escaped(monkeypatch):
             return False
 
         def read(self):
-            return b'{"rows": []}'
+            return b'{"rows": [], "count": 0}'
 
     def fake_urlopen(req, timeout=None):
         seen["body"] = req.data.decode("utf-8")
@@ -246,5 +307,6 @@ def test_sql_quotes_are_escaped(monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     rows, why = fu_context.bus_neighbors(["we'ird.py"])
-    assert why == "ok"
+    assert why == "ok via direct"
     assert "we''ird.py" in seen["body"]
+    assert "e.relation AS rel" in seen["body"]

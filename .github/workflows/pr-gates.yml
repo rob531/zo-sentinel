@@ -40,6 +40,21 @@ jobs:
       - name: Deterministic capmap pull-check (BLOCKING -- fails on schema drift)
         run: python tools/pull_check.py
 
+      - name: Service-manifest shape gate (BLOCKING -- FU-120)
+        # 2026-07-29: pr_triage._manifest_is_valid() parsed manifests correctly but
+        # was wired to a CLASSIFIER. Returning False demoted a PR into the ordinary
+        # scaffold bucket -- a LABEL. Nothing refused the merge, so 7 unparseable
+        # manifests landed on main while the validator was described as fail-closed.
+        #
+        # On the same day ALL 36 open single-file manifest PRs were defective: 30
+        # with every key at top level (promoter reads .get("service", {}) -> {} ->
+        # unpromotable forever, reported as ordinary backlog) and 6 containing
+        # Python -- `True`, and a trailing `if __name__ == "__main__": print("PASS")`.
+        #
+        # A validator wired to a label cannot contain anything. This is the same
+        # assertion, wired where it blocks.
+        run: python tools/check_service_manifests.py
+
       - name: Reachability ratchet (ENFORCE -- blocks silent orphan growth)
         # 2026-07-19 postmortem: every gate we had was differential or local, so
         # none could see 246 routers that mount nowhere. This is the missing

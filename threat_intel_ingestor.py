@@ -5,6 +5,7 @@ import time
 import requests
 import hashlib
 import re
+import traceback
 from datetime import datetime, timedelta
 
 SERVICE_NAME = 'threat_intel_ingestor'
@@ -190,6 +191,12 @@ def get_npm_packages_from_facts():
     return []
 
 def extract_package_name(url):
+    # A SQL NULL deserializes to None, and `server.get('url', '')` does NOT
+    # substitute the default for a key that is PRESENT with value None -- so
+    # None reaches this function and re.search() raises TypeError. Guard at the
+    # boundary rather than relying on the caller's default. (FU-187)
+    if not isinstance(url, str) or not url:
+        return None
     patterns = [
         r'npmjs\.com/(?:package/)?(@?[^/]+)',
         r'github\.com/([^/]+)/([^/]+)',
@@ -282,17 +289,20 @@ def process_osv_vulns():
     for server in servers:
         server_id = server.get('server_id')
         name = server.get('name', '')
-        url = server.get('url', '')
+        # `or ''` (not just the .get default) -- a present-but-NULL column
+        # yields None, which the default never replaces.
+        url = server.get('url') or ''
         
         if not server_id:
             continue
         
         scanned += 1
         
+        package = extract_package_name(url)
+        if not package:
+            continue
+        
         for ecosystem in OSV_ECOSYSTEMS:
-            package = extract_package_name(url)
-            if not package:
-                continue
             
             vulns = query_osv(ecosystem, package)
             
@@ -365,7 +375,17 @@ def run():
     create_tables()
     send_heartbeat()
     
-    cycle()
+    # The priming cycle MUST be as protected as every later one. It used to be
+    # a bare `cycle()`, so any first-cycle exception killed the process BEFORE
+    # it reached the retry loop below -- the daemon could never survive to use
+    # the protection written for it, and the supervisor's only remedy (restart)
+    # re-entered the same unprotected line. That is how one TypeError kept this
+    # service down for 54 days across 184,818 spawns. (FU-187)
+    try:
+        cycle()
+    except Exception as e:
+        log(f'Priming cycle error (continuing into poll loop): {e}')
+        traceback.print_exc()
     
     while True:
         time.sleep(POLL_SECS)
@@ -374,6 +394,7 @@ def run():
             cycle()
         except Exception as e:
             log(f'Cycle error: {e}')
+            traceback.print_exc()
 
 if __name__ == '__main__':
     run()

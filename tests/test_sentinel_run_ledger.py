@@ -97,7 +97,7 @@ def test_a_receipt_redeems_the_orphan(tmp_path):
 def test_missed_slot_with_no_trace_at_all(tmp_path):
     """A slot AT OR AFTER receipts began, with no trace, is a MISSED SLOT."""
     state = write_state(
-        tmp_path, "2026-07-29T01:47:10Z", receipts=["2026-07-29T01:47:10Z"]
+        tmp_path, "2026-07-29T01:15:10Z", receipts=["2026-07-29T01:15:10Z"]
     )
     ev = tmp_path / "_deploy_evidence"
     ev.mkdir()
@@ -105,11 +105,11 @@ def test_missed_slot_with_no_trace_at_all(tmp_path):
     report = srl.reconcile(
         srl.read_state(state),
         srl.collect_evidence(ev),
-        srl.parse_iso("2026-07-29T10:49:00Z"),
+        srl.parse_iso("2026-07-29T10:17:00Z"),
         9,
         25,
     )
-    assert report["missed_slots"] == ["2026-07-29T04:47:00Z", "2026-07-29T07:47:00Z"]
+    assert report["missed_slots"] == ["2026-07-29T04:15:00Z", "2026-07-29T07:15:00Z"]
     assert report["clean"] is False
 
 
@@ -120,7 +120,7 @@ def test_slots_predating_receipts_are_advisory_not_missed(tmp_path):
     presence recordable. Those slots must NOT turn the verdict red.
     """
     state = write_state(
-        tmp_path, "2026-07-29T10:47:05Z", receipts=["2026-07-29T10:47:05Z"]
+        tmp_path, "2026-07-29T10:15:05Z", receipts=["2026-07-29T10:15:05Z"]
     )
     ev = tmp_path / "_deploy_evidence"
     ev.mkdir()
@@ -134,9 +134,9 @@ def test_slots_predating_receipts_are_advisory_not_missed(tmp_path):
     )
     assert report["missed_slots"] == []
     assert report["unattested_slots"] == [
-        "2026-07-29T01:47:00Z",
-        "2026-07-29T04:47:00Z",
-        "2026-07-29T07:47:00Z",
+        "2026-07-29T01:15:00Z",
+        "2026-07-29T04:15:00Z",
+        "2026-07-29T07:15:00Z",
     ]
     assert report["clean"] is True
 
@@ -310,9 +310,9 @@ def test_receipts_are_bounded(tmp_path):
     assert result["count"] == 64
 
 
-def test_expected_slots_are_every_three_hours_on_the_47(tmp_path):
-    slots = srl.expected_slots(srl.parse_iso("2026-07-29T10:49:00Z"), 12)
-    assert [s.strftime("%H:%M") for s in slots] == ["01:47", "04:47", "07:47", "10:47"]
+def test_expected_slots_are_every_three_hours_on_the_15(tmp_path):
+    slots = srl.expected_slots(srl.parse_iso("2026-07-29T10:17:00Z"), 12)
+    assert [s.strftime("%H:%M") for s in slots] == ["01:15", "04:15", "07:15", "10:15"]
     assert all(s.tzinfo == timezone.utc for s in slots)
 
 
@@ -321,12 +321,20 @@ def test_zero_window_is_error(tmp_path):
         srl.expected_slots(datetime.now(timezone.utc), 0)
 
 
-def test_a_run_that_fired_early_still_attests_its_slot(tmp_path):
-    """THE LIVE CASE, 2026-07-30. The 16:47 run started at 16:17:01 -- thirty
-    minutes early, five minutes outside the 25-minute tolerance -- and then ran
-    for three hours. The old nominal-phase test called that slot MISSED, i.e.
-    "cron came due and left no trace at all", while the trace sat in the
-    receipts list it had just read. Nine receipts covered eight slots."""
+def test_a_run_that_fired_off_phase_still_attests_its_slot(tmp_path):
+    """THE LIVE CASE, 2026-07-30 -- and note WHY it was a false alarm.
+
+    The tool reported `2026-07-30T16:47:00Z` MISSED. There was never a 16:47
+    slot: the task had been rescheduled that morning to `15 */3 * * *` local,
+    so the real slot was 16:15 and the run at 16:17:01 was two minutes LATE,
+    not thirty minutes early. The stale SLOT_MINUTE was the root cause; the
+    reported "missed slot" was an artefact of a grid that no longer existed.
+
+    This test pins the robustness half of the fix: even with the receipts
+    sitting off-phase from the grid -- which is what the whole 24h window looks
+    like across a reschedule, half the receipts on the old phase and half on the
+    new -- nearest-slot attestation still covers every slot. Nine receipts, eight
+    slots, nothing missed."""
     state = write_state(
         tmp_path,
         "2026-07-30T19:36:53Z",
@@ -377,7 +385,7 @@ def test_negative_control_a_genuinely_skipped_slot_is_still_missed(tmp_path):
         12,
         25,
     )
-    assert report["missed_slots"] == ["2026-07-30T16:47:00Z"]
+    assert report["missed_slots"] == ["2026-07-30T16:15:00Z"]
     assert report["clean"] is False
 
 
@@ -388,8 +396,8 @@ def test_a_run_more_than_half_a_cadence_off_does_not_attest(tmp_path):
     which would let one run cover two slots."""
     state = write_state(
         tmp_path,
-        "2026-07-30T18:27:00Z",
-        receipts=["2026-07-30T13:47:00Z", "2026-07-30T18:27:00Z"],
+        "2026-07-30T17:55:00Z",
+        receipts=["2026-07-30T13:15:00Z", "2026-07-30T17:55:00Z"],
     )
     ev = tmp_path / "_deploy_evidence"
     ev.mkdir()
@@ -397,9 +405,27 @@ def test_a_run_more_than_half_a_cadence_off_does_not_attest(tmp_path):
     report = srl.reconcile(
         srl.read_state(state),
         srl.collect_evidence(ev),
-        srl.parse_iso("2026-07-30T20:30:00Z"),
+        srl.parse_iso("2026-07-30T20:00:00Z"),
         9,
         25,
     )
-    # 18:27 is 100 min after 16:47 and 80 min before 19:47 -> it attests 19:47.
-    assert "2026-07-30T16:47:00Z" in report["missed_slots"]
+    # 17:55 is 100 min after 16:15 and 80 min before 19:15 -> it attests 19:15.
+    assert "2026-07-30T16:15:00Z" in report["missed_slots"]
+
+
+def test_the_slot_grid_matches_the_live_cron():
+    """The grid is a claim about the scheduled task's cron, which lives outside
+    this repo. On 2026-07-30 the task moved from :47 to `15 */3 * * *` local and
+    this constant did not, putting every slot ~32 minutes off -- more than the
+    old 25-minute tolerance, i.e. every future slot MISSED. Pinning it here at
+    least makes the claim visible to a reader diffing against the live cron."""
+    assert srl.SLOT_MINUTE == 15
+    assert srl.SLOT_EVERY_HOURS == 3
+    assert srl.SLOT_UTC_ANCHOR_HOUR == 1
+
+    now = srl.parse_iso("2026-07-30T19:44:45Z")
+    slots = [srl.fmt(s) for s in srl.expected_slots(now, 12)]
+    # local `15 */3 * * *` at UTC-4 -> 01:15Z, 04:15Z, 07:15Z, ...
+    assert "2026-07-30T16:15:00Z" in slots
+    assert "2026-07-30T19:15:00Z" in slots
+    assert "2026-07-30T13:15:00Z" in slots

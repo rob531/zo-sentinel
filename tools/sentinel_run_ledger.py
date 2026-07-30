@@ -58,9 +58,28 @@ DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 # prod-drift-sentinel cron: "47 */3 * * *" in LOCAL time (UTC-4 on this box),
 # which lands on :47 past 01,04,07,10,13,16,19,22 UTC. Expressed in UTC here
 # because every other timestamp in this system is UTC.
-SLOT_MINUTE = 47
+# THE SLOT GRID IS A CLAIM ABOUT A SCHEDULE THAT LIVES SOMEWHERE ELSE.
+# The authority is the scheduled task's own cron, readable with
+# `list_scheduled_tasks` -> taskId `prod-drift-sentinel`. As of 2026-07-30 that
+# is `15 */3 * * *` in LOCAL time (America/New_York, UTC-4 in summer), i.e.
+# 01:15Z, 04:15Z, 07:15Z ... plus a few minutes of dispatch jitter.
+#
+# These constants said minute 47 until 2026-07-30, and they were RIGHT until
+# that morning, when the task was rescheduled to :15 to clear two long runners.
+# Nothing connected the constant to the cron, so nothing flagged it when the
+# cron moved -- the same shape as FU-202's hardcoded worktree default. Every
+# slot was then ~32 minutes off the grid, which under the old nominal-phase
+# tolerance of 25 minutes would have reported EVERY FUTURE SLOT AS MISSED.
+#
+# Nearest-slot attestation (see reconcile) absorbs a phase error of up to half a
+# cadence, so these two facts are complementary rather than redundant: the
+# corrected grid keeps NEW receipts near their slot, and nearest-slot keeps the
+# OLD :47-era receipts still inside the window attested. If you find them
+# disagreeing with the live cron again, fix the constant AND ask why a value
+# that must track an external schedule is still a literal.
+SLOT_MINUTE = 15
 SLOT_EVERY_HOURS = 3
-SLOT_UTC_ANCHOR_HOUR = 1  # 01:47Z, then every SLOT_EVERY_HOURS
+SLOT_UTC_ANCHOR_HOUR = 1  # 01:15Z, then every SLOT_EVERY_HOURS
 
 NAME_TS_RE = re.compile(r"(\d{8}T\d{6}Z)")
 
@@ -194,13 +213,32 @@ def reconcile(
     # slot that never fired from one whose record was overwritten -- and a probe
     # that cannot evaluate is not a red. Those slots are reported as UNATTESTED
     # (advisory) and only slots at or after the first receipt can be MISSED.
+    # A slot is COVERED BY THE RUN NEAREST TO IT, not only by a run that started
+    # within `tolerance_min` of the slot's nominal minute. The scheduler does not
+    # fire on an exact phase: on 2026-07-30 the 16:47 slot's run started at
+    # 16:17:01 -- thirty minutes early, five minutes outside the tolerance -- and
+    # then ran for three hours, so that slot was continuously covered. The old
+    # test reported it as "cron came due and left no trace at all", which was
+    # false in both clauses: cron had already come, and the trace was sitting in
+    # the receipts list. Over that same 24h there were NINE receipts against
+    # EIGHT expected slots, so no coverage was lost by any counting.
+    #
+    # This does NOT weaken the guard, and the direction matters: it is more
+    # tolerant of PHASE, not of ABSENCE. A slot with no run within half a cadence
+    # still has no run nearest it and is still MISSED -- see the negative control
+    # in tests. What it removes is a hard signal that fires when nothing is
+    # wrong, which is the failure mode that teaches a reader to stop believing
+    # the signal. A MISSED SLOT is an email condition; it must mean something.
+    half_cadence = timedelta(hours=SLOT_EVERY_HOURS) / 2
+    attest = max(tol, half_cadence)
+
     attest_from = min(receipts) if receipts else None
     missed = []
     unattested = []
     for slot in expected_slots(now, window_hours):
-        if now - slot < tol:
+        if now - slot < attest:
             continue  # still in flight; not yet owed a trace
-        if any(abs((t - slot).total_seconds()) <= tol.total_seconds() for t in traces):
+        if any(abs((t - slot).total_seconds()) < attest.total_seconds() for t in traces):
             continue
         if attest_from is not None and slot >= attest_from:
             missed.append(fmt(slot))

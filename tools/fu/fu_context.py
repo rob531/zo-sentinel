@@ -78,6 +78,7 @@ EXIT_CANNOT_EVALUATE = 2
 DEFAULT_AGENTS_DIR = Path(os.environ.get("ZO_AGENTS_DIR", r"D:\zo\Zocomputer Agents"))
 BUS_URL = os.environ.get("ZO_GRAPH_BUS", "http://localhost:8772")
 BUS_TIMEOUT_S = float(os.environ.get("ZO_GRAPH_BUS_TIMEOUT", "6"))
+ZO_CALL = os.environ.get("ZO_CALL_PATH", r"C:\Users\robin\zo_call.py")
 
 # A token in ledger prose that looks like a code anchor. Deliberately narrow:
 # over-matching prose turns every entry into a fake subgraph.
@@ -168,36 +169,108 @@ def classify_unresolved(anchors: List[str], root: Path) -> Dict[str, List[str]]:
     return out
 
 
-def bus_neighbors(anchors: List[str]) -> tuple[Any | None, str]:
-    """1-hop expansion over the :8772 DuckDB code_nodes/code_edges bus.
+# The KL schema, pinned. Verified against the live bus 2026-07-30 via
+# `SELECT * FROM code_{nodes,edges} LIMIT 1` (DESCRIBE is rejected -- /query is
+# SELECT-only). code_nodes: repo,id,label,norm_label,file_type,source_file,
+# source_location,community,built_at_commit. code_edges: repo,src,dst,RELATION,
+# weight,confidence,confidence_score,source_file,source_location,built_at_commit.
+#
+# The edge column is `relation`, NOT `rel`. The first version of this file shipped
+# `e.rel` and passed 19 tests plus every CI gate, because the bus was unreachable
+# from the tower so the query was never executed -- an assertion never seen red is
+# not evidence, and neither is a query never run. `neighbor_sql` is split out
+# precisely so the column names can be tested without a bus.
+KL_NODE_COLS = {"repo", "id", "label", "norm_label", "file_type", "source_file",
+                "source_location", "community", "built_at_commit"}
+KL_EDGE_COLS = {"repo", "src", "dst", "relation", "weight", "confidence",
+                "confidence_score", "source_file", "source_location",
+                "built_at_commit"}
 
-    NEVER raises: returns (None, reason) when the bus is unreachable, because an
-    unreachable graph must degrade to a smaller answer rather than an error.
-    """
-    if not anchors:
-        return None, "no anchors to expand"
-    quoted = ",".join("'" + _norm(a).replace("'", "''") + "'" for a in anchors)
-    sql = (
-        "SELECT n.id AS node, n.source_file AS file, e.rel AS rel, "
+
+def neighbor_sql(anchors: List[str], limit: int = 400) -> str:
+    """1-hop query. LIKE, not regexp_extract: a `$` anchor is mangled by the
+    PowerShell -> zo_call -> shell -> python quoting chain and comes back as
+    HTTP 400. LIKE survives every layer and needs no escaping beyond quotes."""
+    preds = []
+    for a in anchors:
+        n = _norm(a).replace("'", "''")
+        preds.append(f"lower(n.source_file) LIKE '%/{n}'")
+        preds.append(f"lower(n.source_file) = '{n}'")
+    where = " OR ".join(preds) or "1=0"
+    return (
+        "SELECT n.id AS node, n.source_file AS file, e.relation AS rel, "
         "m.id AS neighbour, m.source_file AS neighbour_file "
         "FROM code_nodes n "
         "JOIN code_edges e ON e.src = n.id "
         "JOIN code_nodes m ON m.id = e.dst "
-        f"WHERE lower(regexp_extract(n.source_file, '[^/\\\\]+$')) IN ({quoted}) "
-        "LIMIT 400"
+        f"WHERE ({where}) LIMIT {int(limit)}"
     )
-    try:
-        import urllib.request
 
-        req = urllib.request.Request(
-            f"{BUS_URL}/query",
-            data=json.dumps({"sql": sql}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=BUS_TIMEOUT_S) as r:
-            return json.loads(r.read().decode("utf-8")), "ok"
-    except Exception as exc:  # noqa: BLE001 -- any failure degrades, none propagates
-        return None, f"{type(exc).__name__}: {exc}"
+
+def _query_direct(sql: str) -> Any:
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"{BUS_URL}/query",
+        data=json.dumps({"sql": sql}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=BUS_TIMEOUT_S) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def _query_via_zo_call(sql: str) -> Any:
+    """Reach the bus through the ZoComputer bridge.
+
+    :8772 is a LOOPBACK on ZoComputer -- it refuses connections from the tower, so
+    a direct urllib call can never work from here no matter how healthy the bus is.
+    `zo_call.py bash` runs the request on the far side. Payload goes over base64
+    because the SQL crosses four quoting layers.
+    """
+    import base64
+    import subprocess
+
+    script = "\n".join([
+        "import base64,json,urllib.request as u",
+        f'sql=base64.b64decode("{base64.b64encode(sql.encode()).decode()}").decode()',
+        'r=u.Request("http://localhost:8772/query",'
+        ' data=json.dumps({"sql":sql}).encode(),'
+        ' headers={"Content-Type":"application/json"})',
+        "print(u.urlopen(r,timeout=25).read().decode())",
+    ])
+    b64 = base64.b64encode(script.encode()).decode()
+    out = subprocess.run(
+        [sys.executable, ZO_CALL, "bash",
+         f"echo {b64} | base64 -d > /tmp/_fu_ctx_q.py && python3 /tmp/_fu_ctx_q.py"],
+        capture_output=True, text=True, timeout=90,
+    )
+    if out.returncode != 0:
+        raise RuntimeError(f"zo_call rc={out.returncode}: {out.stderr[:200]}")
+    # zo_call prints a CmdResult repr; recover the JSON object from stdout
+    m = re.search(r"\{\"rows\".*?\}\]?,\s*\"count\":\s*\d+\}", out.stdout)
+    if not m:
+        raise RuntimeError(f"no JSON in zo_call output: {out.stdout[:200]}")
+    return json.loads(m.group(0).replace("\\\\", "\\"))
+
+
+def bus_neighbors(anchors: List[str]) -> tuple[Any | None, str]:
+    """1-hop expansion over the :8772 DuckDB code_nodes/code_edges bus.
+
+    Tries the direct loopback first (works when run ON ZoComputer), then the
+    zo_call bridge (works from the tower). NEVER raises: returns (None, reason)
+    when every transport fails, because an unreachable graph must degrade to a
+    smaller answer rather than an error.
+    """
+    if not anchors:
+        return None, "no anchors to expand"
+    sql = neighbor_sql(anchors)
+    reasons = []
+    for name, fn in (("direct", _query_direct), ("zo_call", _query_via_zo_call)):
+        try:
+            return fn(sql), f"ok via {name}"
+        except Exception as exc:  # noqa: BLE001 -- degrade, never propagate
+            reasons.append(f"{name}: {type(exc).__name__}")
+    return None, "; ".join(reasons)
 
 
 def build_context(fu_num: str, extra_anchors: List[str], agents_dir: Path,

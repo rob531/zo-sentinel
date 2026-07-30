@@ -38,16 +38,28 @@ def log(msg):
         f.write(line + '\n')
 
 def ws_write(table, rows):
+    """Write rows via write_service. Returns the response dict, or None on
+    TOTAL failure after 3 attempts.
+
+    None means NOTHING WAS PERSISTED. Callers must check it. Before FU-190 no
+    caller did, so `Recorded OSV vuln ...` was logged 18,560 times against
+    55,690 HTTP 500s and zero rows in the table -- the daemon's own success
+    message was the reason nobody noticed it had never written anything.
+    """
     payload = {'table': table, 'rows': rows, 'wait': True}
+    last = ''
     for attempt in range(3):
         try:
             r = requests.post(WRITE_SERVICE_URL, json=payload, timeout=30)
             if r.status_code in (200, 201):
                 return r.json()
-            log(f'ws_write warning: {r.status_code} {r.text[:200]}')
+            last = f'HTTP {r.status_code} {r.text[:200]}'
+            log(f'ws_write warning ({table}): {last}')
         except Exception as e:
-            log(f'ws_write attempt {attempt+1} error: {e}')
+            last = f'{type(e).__name__}: {e}'
+            log(f'ws_write attempt {attempt+1} error ({table}): {last}')
         time.sleep(2)
+    log(f'ws_write FAILED after 3 attempts -- NOTHING PERSISTED to {table}: {last}')
     return None
 
 def ws_query(sql):
@@ -314,6 +326,7 @@ def process_osv_vulns():
     
     vuln_count = 0
     scanned = 0
+    write_failures = 0
     
     for server in servers:
         server_id = server.get('server_id')
@@ -376,22 +389,34 @@ def process_osv_vulns():
                 evidence = f'OSV:{vuln_id} | Summary: {sanitize_for_sql(summary[:500])} | Package: {package} | Ecosystem: {ecosystem}'
                 
                 try:
-                    ws_write('mcp_threat_associations', {
+                    # ws_write signals TOTAL failure by returning None rather
+                    # than raising, so a bare try/except cannot see it. Check
+                    # the return value before claiming the row exists. (FU-190)
+                    written = ws_write('mcp_threat_associations', {
                         'server_id': server_id,
                         'threat_type': f'osv:{vuln_id}',
                         'severity': severity_level,
                         'evidence': evidence,
                         'source': 'osv',
                     })
-                    vuln_count += 1
-                    log(f'Recorded OSV vuln {vuln_id} for server {server_id} (severity: {severity_level})')
+                    if written is None:
+                        write_failures += 1
+                        log(f'NOT RECORDED: OSV vuln {vuln_id} for server {server_id} -- write_service rejected the write')
+                    else:
+                        vuln_count += 1
+                        log(f'Recorded OSV vuln {vuln_id} for server {server_id} (severity: {severity_level})')
                 except Exception as e:
+                    write_failures += 1
                     log(f'Failed to write OSV vuln for {server_id}: {e}')
         
         if scanned >= 500:
             break
     
-    log(f'OSV scan complete: scanned {scanned} servers, recorded {vuln_count} vulnerabilities')
+    if write_failures:
+        log(f'OSV scan complete: scanned {scanned} servers, recorded {vuln_count} vulnerabilities, '
+            f'{write_failures} REJECTED by write_service (NOT persisted)')
+    else:
+        log(f'OSV scan complete: scanned {scanned} servers, recorded {vuln_count} vulnerabilities')
     return vuln_count
 
 def cycle():

@@ -210,12 +210,26 @@ def insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "lo
     return pos
 
 
+def _is_wrapped_log_line(line: str) -> bool:
+    """True for a continuation line of the log bullet ABOVE it.
+
+    Log entries are `  - <dated text>` bullets whose prose routinely wraps onto
+    lines indented past the bullet marker. Those wrapped lines belong to their
+    bullet, so an append has to step over them as well as over the bullet heads
+    -- scanning only for `  - ` stops at the first wrapped line and inserts the
+    new entry INSIDE the previous one, silently re-parenting its prose.
+    """
+    return line.startswith("    ") and line.strip() != ""
+
+
 def append_log(lines: List[str], fu: FU, text: str) -> int:
     """Append a dated bullet under `- log:`, creating the key if needed."""
     bullet = "  - %s" % text
     if "log" in fu.keys:
         pos = fu.keys["log"] + 1
-        while pos < fu.end and lines[pos].startswith("  - "):
+        while pos < fu.end and (
+            lines[pos].startswith("  - ") or _is_wrapped_log_line(lines[pos])
+        ):
             pos += 1
         lines.insert(pos, bullet)
         return pos

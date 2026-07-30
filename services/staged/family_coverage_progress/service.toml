@@ -1,0 +1,7 @@
+name = "family_coverage_progress"
+import_path = "services.active.family_coverage_progress.router"
+prefix = "/api"
+tag = "family_coverage_progress"
+origin = "service"
+auth = "public"
+needs_data_layer = true

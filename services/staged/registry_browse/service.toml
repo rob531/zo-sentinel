@@ -1,0 +1,10 @@
+name = "registry_browse"
+import_path = "services.active.registry_browse.router"
+prefix = "/api"
+tag = "registry_browse"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

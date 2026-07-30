@@ -1,0 +1,7 @@
+name = "signal_trend"
+import_path = "services.active.signal_trend.router"
+prefix = "/api"
+tag = "signal_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

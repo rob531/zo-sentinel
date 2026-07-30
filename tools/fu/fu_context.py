@@ -329,6 +329,36 @@ def build_context(fu_num: str, extra_anchors: List[str], agents_dir: Path,
     return ctx
 
 
+def _harden_stdout() -> None:
+    """Make stdout able to carry the ledger's Unicode on ANY host.
+
+    The FOLLOWUPS ledger is authored with Unicode -- FU-103's own title contains
+    U+21C4 -- while the tower that runs this tool is Windows, where stdout
+    defaults to cp1252. Rendering FU-103 therefore raised UnicodeEncodeError
+    *after* every anchor had been resolved, exiting rc=1: precisely the "step 6
+    errors, so the lane falls back to grep" failure this file exists to end.
+    Linux CI encodes UTF-8 and could never observe it.
+    """
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
+
+def _emit(text: str) -> None:
+    """print() that cannot raise on a character the stream cannot encode.
+
+    Second line of defence for a stream that refuses reconfigure (a pipe wrapped
+    by a caller, a captured stream in a test). Degrades the glyph to a visible
+    escape rather than losing the whole answer.
+    """
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, "backslashreplace").decode(enc, "replace"))
+
+
 def render(ctx: Dict[str, Any]) -> str:
     out = [f"{ctx['fu']}  [{ctx['status'] or '?'}]  {ctx['title']}",
            f"  anchors ({len(ctx['anchors'])}) via {ctx['anchor_source']}"]
@@ -358,6 +388,7 @@ def render(ctx: Dict[str, Any]) -> str:
 
 
 def main(argv: List[str] | None = None) -> int:
+    _harden_stdout()
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--fu", required=True, help="FU number, e.g. 181 or 003")
     ap.add_argument("--anchors", default="",
@@ -386,7 +417,7 @@ def main(argv: List[str] | None = None) -> int:
               f"{ledger} (and no anchors supplied)", file=sys.stderr)
         return EXIT_CANNOT_EVALUATE
 
-    print(json.dumps(ctx, indent=2) if a.json else render(ctx))
+    _emit(json.dumps(ctx, indent=2) if a.json else render(ctx))
     return EXIT_OK
 
 

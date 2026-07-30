@@ -18,6 +18,7 @@ Negative control: see `--negative-control` in the docstring of the mutant runner
 below. These assertions were each observed RED against a deliberately broken
 build before being trusted.
 """
+import io
 import json
 import os
 import re
@@ -310,3 +311,58 @@ def test_direct_transport_posts_the_sql(monkeypatch):
     assert why == "ok via direct"
     assert "we''ird.py" in seen["body"]
     assert "e.relation AS rel" in seen["body"]
+
+
+def test_render_survives_a_legacy_codepage_stdout():
+    """A Unicode ledger title must not kill the render on a cp1252 stdout.
+
+    This is the tower's seat expressed as a portable assertion. FU-103's real
+    title carries U+21C4; the tower renders to cp1252; so the one command the
+    PROTEAN CHARTER tells every lane to run exited rc=1 after doing all its
+    work. The bug is invisible on Linux CI, so the test pins an explicit cp1252
+    stream instead of trusting the ambient one -- that is what lets this
+    assertion go RED where CI actually runs.
+    """
+    ctx = {
+        "fu": "FU-103",
+        "title": "Tie the ledger \u21c4 MCP memory \u21c4 graphify KL",
+        "status": "in-progress",
+        "anchor_source": "_fu_index.json",
+        "anchors": ["tools/fu/fu_context.py"],
+        "graph_commit": "deadbeefcafe",
+        "kl": "unavailable",
+        "subgraph": [],
+        "unresolved": {"in_repo_unindexed": [], "out_of_scope": []},
+    }
+    text = fu_context.render(ctx)
+    assert "\u21c4" in text
+
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+    old = sys.stdout
+    sys.stdout = stream
+    try:
+        fu_context._emit(text)   # must not raise
+        stream.flush()
+    finally:
+        sys.stdout = old
+
+    written = stream.buffer.getvalue().decode("cp1252")
+    assert "FU-103" in written
+    assert "graphify KL" in written
+
+
+def test_negative_control_bare_print_would_have_failed():
+    """Proves the guard above is not vacuous.
+
+    If a bare print() to the same cp1252 stream did NOT raise, the previous test
+    could pass against a build that never had the fix -- an assertion never seen
+    RED is not evidence (HARNESS_DOCTRINE R4).
+    """
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+    old = sys.stdout
+    sys.stdout = stream
+    try:
+        with pytest.raises(UnicodeEncodeError):
+            print("ledger \u21c4 KL")
+    finally:
+        sys.stdout = old

@@ -1,0 +1,7 @@
+name = "threat_intel_manager"
+import_path = "services.active.threat_intel_manager.router"
+prefix = "/api"
+tag = "threat_intel_manager"
+origin = "service"
+auth = "public"
+needs_data_layer = true

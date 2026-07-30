@@ -108,7 +108,16 @@ def _wire(mod, vulns):
     mod.log = lambda *a, **k: None
     mod.threat_already_recorded = lambda *a, **k: False
     mod.written = []
-    mod.ws_write = lambda table, rows: mod.written.append(rows)
+
+    def _ws_write(table, rows):
+        # MUST return a truthy response: ws_write signals TOTAL failure by
+        # returning None, and since FU-190 the caller checks that. list.append
+        # returns None, so the original stub was accidentally mimicking a
+        # rejected write -- exactly the bug FU-190 fixes.
+        mod.written.append(rows)
+        return {"ok": True}
+
+    mod.ws_write = _ws_write
     return mod
 
 

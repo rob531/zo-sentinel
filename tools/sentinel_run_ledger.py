@@ -194,13 +194,32 @@ def reconcile(
     # slot that never fired from one whose record was overwritten -- and a probe
     # that cannot evaluate is not a red. Those slots are reported as UNATTESTED
     # (advisory) and only slots at or after the first receipt can be MISSED.
+    # A slot is COVERED BY THE RUN NEAREST TO IT, not only by a run that started
+    # within `tolerance_min` of the slot's nominal minute. The scheduler does not
+    # fire on an exact phase: on 2026-07-30 the 16:47 slot's run started at
+    # 16:17:01 -- thirty minutes early, five minutes outside the tolerance -- and
+    # then ran for three hours, so that slot was continuously covered. The old
+    # test reported it as "cron came due and left no trace at all", which was
+    # false in both clauses: cron had already come, and the trace was sitting in
+    # the receipts list. Over that same 24h there were NINE receipts against
+    # EIGHT expected slots, so no coverage was lost by any counting.
+    #
+    # This does NOT weaken the guard, and the direction matters: it is more
+    # tolerant of PHASE, not of ABSENCE. A slot with no run within half a cadence
+    # still has no run nearest it and is still MISSED -- see the negative control
+    # in tests. What it removes is a hard signal that fires when nothing is
+    # wrong, which is the failure mode that teaches a reader to stop believing
+    # the signal. A MISSED SLOT is an email condition; it must mean something.
+    half_cadence = timedelta(hours=SLOT_EVERY_HOURS) / 2
+    attest = max(tol, half_cadence)
+
     attest_from = min(receipts) if receipts else None
     missed = []
     unattested = []
     for slot in expected_slots(now, window_hours):
-        if now - slot < tol:
+        if now - slot < attest:
             continue  # still in flight; not yet owed a trace
-        if any(abs((t - slot).total_seconds()) <= tol.total_seconds() for t in traces):
+        if any(abs((t - slot).total_seconds()) < attest.total_seconds() for t in traces):
             continue
         if attest_from is not None and slot >= attest_from:
             missed.append(fmt(slot))

@@ -319,3 +319,87 @@ def test_expected_slots_are_every_three_hours_on_the_47(tmp_path):
 def test_zero_window_is_error(tmp_path):
     with pytest.raises(srl.LedgerError):
         srl.expected_slots(datetime.now(timezone.utc), 0)
+
+
+def test_a_run_that_fired_early_still_attests_its_slot(tmp_path):
+    """THE LIVE CASE, 2026-07-30. The 16:47 run started at 16:17:01 -- thirty
+    minutes early, five minutes outside the 25-minute tolerance -- and then ran
+    for three hours. The old nominal-phase test called that slot MISSED, i.e.
+    "cron came due and left no trace at all", while the trace sat in the
+    receipts list it had just read. Nine receipts covered eight slots."""
+    state = write_state(
+        tmp_path,
+        "2026-07-30T19:36:53Z",
+        receipts=[
+            "2026-07-30T07:48:58Z",
+            "2026-07-30T10:49:04Z",
+            "2026-07-30T13:49:03Z",
+            "2026-07-30T16:17:01Z",
+            "2026-07-30T19:22:02Z",
+        ],
+    )
+    ev = tmp_path / "_deploy_evidence"
+    ev.mkdir()
+
+    report = srl.reconcile(
+        srl.read_state(state),
+        srl.collect_evidence(ev),
+        srl.parse_iso("2026-07-30T19:39:26Z"),
+        12,
+        25,
+    )
+    assert report["missed_slots"] == []
+    assert report["clean"] is True
+
+
+def test_negative_control_a_genuinely_skipped_slot_is_still_missed(tmp_path):
+    """The control for the test above -- without it, the fix is indistinguishable
+    from switching the check off. SAME shape, SAME slot, SAME window: only the
+    16:47 run is removed. If this ever goes green, nearest-slot attestation has
+    stopped being a measurement and has become an agreement."""
+    state = write_state(
+        tmp_path,
+        "2026-07-30T19:36:53Z",
+        receipts=[
+            "2026-07-30T07:48:58Z",
+            "2026-07-30T10:49:04Z",
+            "2026-07-30T13:49:03Z",
+            "2026-07-30T19:22:02Z",
+        ],
+    )
+    ev = tmp_path / "_deploy_evidence"
+    ev.mkdir()
+
+    report = srl.reconcile(
+        srl.read_state(state),
+        srl.collect_evidence(ev),
+        srl.parse_iso("2026-07-30T19:39:26Z"),
+        12,
+        25,
+    )
+    assert report["missed_slots"] == ["2026-07-30T16:47:00Z"]
+    assert report["clean"] is False
+
+
+def test_a_run_more_than_half_a_cadence_off_does_not_attest(tmp_path):
+    """The boundary is half a cadence, and it is a real boundary. A run 100
+    minutes from the slot is nearer to the NEXT slot than to this one, so it
+    attests that one and leaves this one missed -- rather than attesting both,
+    which would let one run cover two slots."""
+    state = write_state(
+        tmp_path,
+        "2026-07-30T18:27:00Z",
+        receipts=["2026-07-30T13:47:00Z", "2026-07-30T18:27:00Z"],
+    )
+    ev = tmp_path / "_deploy_evidence"
+    ev.mkdir()
+
+    report = srl.reconcile(
+        srl.read_state(state),
+        srl.collect_evidence(ev),
+        srl.parse_iso("2026-07-30T20:30:00Z"),
+        9,
+        25,
+    )
+    # 18:27 is 100 min after 16:47 and 80 min before 19:47 -> it attests 19:47.
+    assert "2026-07-30T16:47:00Z" in report["missed_slots"]

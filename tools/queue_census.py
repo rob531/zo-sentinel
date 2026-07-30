@@ -266,6 +266,17 @@ def collect(validate: bool = True, merged_sample: int = 200) -> dict:
 
 
 # --------------------------------------------------------------------------
+def _head_sha() -> str:
+    """The sha the decision was made ON. A halt with no basis cannot be checked for
+    staleness later -- the defect that let a 13:49Z document certify a 10:49Z sha."""
+    try:
+        r = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
+                           capture_output=True, text=True)
+        return (r.stdout or "").strip()[:12]
+    except OSError:
+        return ""
+
+
 def previous() -> dict | None:
     p = os.path.join(HISTORY_DIR, "latest.json")
     if not os.path.isfile(p):
@@ -381,6 +392,38 @@ def apply_declared(alarm_list: list, declared: dict) -> tuple[list, list]:
     return live, supp
 
 
+def emit_halts(alarm_list: list, mode: str, sha: str = "") -> list:
+    """Turn VALIDITY_COLLAPSE alarms into halt decisions.
+
+    ONLY that alarm class. UNDRAINED means the blockage is already downstream of the
+    emitter -- halting the emitter would be treating a symptom in the wrong organ.
+    LANE_SILENT means the lane has already stopped; halting a stopped lane is theatre.
+    A lane producing output its own consumer refuses is the one case where stopping
+    is the correct act.
+
+    Defaults to SHADOW at every layer. `lane_halt` writes shadow records to a
+    directory `is_halted()` never reads, so a shadow decision has no code path to
+    an effect -- not a flag that could be misread.
+    """
+    if mode == "off":
+        return []
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import lane_halt
+
+    out = []
+    for a in alarm_list:
+        if a["kind"] != "VALIDITY_COLLAPSE":
+            continue
+        out.append(lane_halt.raise_halt(
+            lane=a["lane"],
+            reason="%s -- %s" % (a["kind"], a["detail"]),
+            sha=sha,
+            source="queue_census",
+            mode=lane_halt.MODE_ARMED if mode == "armed" else lane_halt.MODE_SHADOW,
+        ))
+    return out
+
+
 def persist(snap: dict, alarm_list: list) -> str:
     os.makedirs(HISTORY_DIR, exist_ok=True)
     snap = dict(snap, alarms=alarm_list)
@@ -395,7 +438,8 @@ def persist(snap: dict, alarm_list: list) -> str:
 
 
 def render(snap: dict, prev: dict | None, alarm_list: list,
-           suppressed: list | None = None, declared: dict | None = None) -> str:
+           suppressed: list | None = None, declared: dict | None = None,
+           halts: list | None = None) -> str:
     prev_lanes = {l["name"]: l for l in (prev or {}).get("lanes", [])}
     lines = ["", "QUEUE CENSUS  %s  (%s, %d open)"
              % (snap["at"][:16].replace("T", " "), snap["repo"], snap["open_total"]), ""]
@@ -438,6 +482,13 @@ def render(snap: dict, prev: dict | None, alarm_list: list,
             for ex in a.get("examples", []):
                 lines.append("        e.g. #%s %s" % (ex["pr"], ex["why"]))
         lines.append("")
+    for h in halts or []:
+        lines.append("  %s [%s] %s%s"
+                     % ("SHADOW HALT (recorded, blocks nothing)" if h.get("shadowed")
+                        else "HALT RAISED", h["lane"], h.get("decided_on_sha") or "-",
+                        "" if h.get("raised") or h.get("shadowed") else " (already halted)"))
+    if halts:
+        lines.append("")
     lines.append("verdict: %s  (%d alarm(s) across %d lane(s))"
                  % ("ALARM" if alarm_list else "OK", len(alarm_list), len(snap["lanes"])))
     return "\n".join(lines)
@@ -450,6 +501,9 @@ def main(argv=None) -> int:
                     help="skip per-PR diff fetches (depth/rates only)")
     ap.add_argument("--quiet", action="store_true", help="verdict line + exit code only")
     ap.add_argument("--no-persist", action="store_true", help="do not write history")
+    ap.add_argument("--halt-mode", choices=("off", "shadow", "armed"),
+                    default="shadow",
+                    help="what to do with VALIDITY_COLLAPSE. shadow (default) RECORDS\nthe halt it would have raised and cannot block anything; armed actually halts\nthat lane only. Never defaults to armed -- see tools/lane_halt.py.")
     args = ap.parse_args(argv)
 
     prev = previous()
@@ -458,14 +512,15 @@ def main(argv=None) -> int:
     alarm_list, suppressed = apply_declared(alarms(snap, prev), declared)
     if not args.no_persist:
         persist(snap, alarm_list)
+    halts = emit_halts(alarm_list, args.halt_mode, _head_sha())
 
     if args.json:
         print(json.dumps(dict(snap, alarms=alarm_list,
-                              suppressed=suppressed), indent=1))
+                              suppressed=suppressed, halts=halts), indent=1))
     elif args.quiet:
         print("verdict: %s (%d alarm)" % ("ALARM" if alarm_list else "OK", len(alarm_list)))
     else:
-        print(render(snap, prev, alarm_list, suppressed, declared))
+        print(render(snap, prev, alarm_list, suppressed, declared, halts))
     return 1 if alarm_list else 0
 
 

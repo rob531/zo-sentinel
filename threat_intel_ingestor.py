@@ -208,6 +208,35 @@ def extract_package_name(url):
             return m.group(1) if pattern.startswith(r'npmjs') else m.group(0).split('/')[-1]
     return None
 
+def cvss_base_score(raw):
+    """Return a numeric CVSS base score from an OSV severity `score`, or None.
+
+    OSV reports CVSS severity as a VECTOR STRING, not a number:
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}
+    The previous expression was `float(score.split(':')[0] if ':' in score else score)`,
+    which takes the first colon-delimited segment of exactly that shape and so
+    evaluates `float('CVSS')` -- a ValueError on EVERY CVSS_V3 entry, 100% of the
+    time. It could only ever have worked on a "7.5:..." shape that OSV does not
+    emit. A vector carries no scalar base score without full CVSS arithmetic, so
+    return None and let the caller fall back to keyword severity. (FU-189)
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    # "CVSS:3.1/AV:N/..." -- a vector. No scalar available.
+    return None
+
+
 def query_osv(ecosystem, package):
     try:
         payload = {'package': {'name': package, 'ecosystem': ecosystem}, 'version': ''}
@@ -317,18 +346,32 @@ def process_osv_vulns():
                 if threat_already_recorded(server_id, f'osv:{vuln_id}', f'osv:{vuln_id}'):
                     continue
                 
-                severity_level = 'medium'
-                if severity:
-                    for s in severity:
-                        if s.get('type') == 'CVSS_V3':
-                            score = float(s.get('score', '0').split(':')[0] if ':' in s.get('score', '0') else s.get('score', '0'))
-                            if score >= 9.0:
-                                severity_level = 'critical'
-                            elif score >= 7.0:
-                                severity_level = 'high'
-                            elif score >= 4.0:
-                                severity_level = 'medium'
-                            break
+                # Default to the keyword severity this module already computes,
+                # so a vector-only severity degrades to a real signal instead of
+                # a flat 'medium' (or, before FU-189, a ValueError).
+                # compute_threat_severity returns 'unknown' (not falsy) when no
+                # keyword matches; an OSV hit means a vuln definitely EXISTS, so
+                # 'unknown' would understate it -- floor it at 'medium'.
+                severity_level = compute_threat_severity(summary)
+                if severity_level in (None, '', 'unknown'):
+                    severity_level = 'medium'
+                for s in (severity or []):
+                    if not isinstance(s, dict):
+                        continue
+                    if not str(s.get('type', '')).upper().startswith('CVSS'):
+                        continue
+                    score = cvss_base_score(s.get('score'))
+                    if score is None:
+                        continue
+                    if score >= 9.0:
+                        severity_level = 'critical'
+                    elif score >= 7.0:
+                        severity_level = 'high'
+                    elif score >= 4.0:
+                        severity_level = 'medium'
+                    else:
+                        severity_level = 'low'
+                    break
                 
                 evidence = f'OSV:{vuln_id} | Summary: {sanitize_for_sql(summary[:500])} | Package: {package} | Ecosystem: {ecosystem}'
                 

@@ -1,7 +1,23 @@
 #!/bin/zsh
-# watchdog.v3.8 - autonomous self-healer for ZOMesh
+# watchdog.v3.9 - autonomous self-healer for ZOMesh
 #
-# CHANGELOG vs v3.7 (this change):
+# CHANGELOG vs v3.8 (this change) -- FORWARD-PORTED into the committed copy
+# 2026-07-30; this fix has been LIVE on /home/workspace/zo_mesh/watchdog.sh
+# since 2026-06-14 but was never in git: PR #147 (0c05bf30, 2026-07-02) added
+# the janitor from a pre-v3.9 base and silently REGRESSED the committed copy
+# back past it. The committed artifact was therefore a REGRESSION of the
+# running artifact, and the only thing preventing the 2026-06-13/14 tick-freeze
+# outage from returning was that this path has no deploy step. Restored so
+# `diff ops/zo_mesh/watchdog.sh /home/workspace/zo_mesh/watchdog.sh` is empty.
+#   - FIX: the two service health-check curls (_svc, _bw_check) had NO timeout,
+#     so when WriteService :8772 /health wedged (its /query kept serving) the
+#     un-timed curl blocked FOREVER and froze the ENTIRE tick -> the whole
+#     watchdog hung, the promoter cohort it supervises died unrestarted, and the
+#     build pipeline went idle (2026-06-13 18:41 and 2026-06-14 07:20). Added
+#     `-m 5` (and `--connect-timeout 3`) so a wedged endpoint can never hang the
+#     tick again; a non-200/timeout just trips the existing restart branch.
+#
+# CHANGELOG vs v3.7:
 #   - ADD: build->publish pipeline janitor, invoked each tick (see the
 #     `sentinel_janitor` hook near the end + tools/sentinel_janitor.sh). It (a)
 #     sweeps the GHOST .done graveyard that makes goose_runner skip every
@@ -104,7 +120,7 @@ TRUST_PIPELINE=(
 
 _svc() {
     local script=$1 port=$2 name=$3
-    local code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
+    local code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
     code=${code:-000}
     if [[ "$code" != "200" ]]; then
         log "$name down (code=$code) -- restarting"
@@ -121,7 +137,7 @@ _svc() {
 }
 
 _bw_check() {
-    local code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8795/health 2>/dev/null)
+    local code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:8795/health 2>/dev/null)
     code=${code:-000}
     if [[ "$code" != "200" ]]; then
         log "BuildWatcher :8795 down (code=$code) -- use ZoComputer Hosting Restart button"

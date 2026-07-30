@@ -35,6 +35,18 @@ is the assertion that proves it, and it is the one test that must never be delet
 Extends the `tools/shadow_decision.py` convention (record what you WOULD have
 decided, act on nothing, reconcile later) rather than inventing a second one.
 
+WHAT ARMING DOES NOT DO (read this before trusting it)
+------------------------------------------------------
+Arming makes the census WRITE a real halt sentinel. It does not, by itself, stop
+anything: a sentinel is only enforcement once a caller consults it. That caller is
+one line --
+
+    python tools/lane_halt.py --enforce <lane> || exit 0
+
+-- and until a lane adds it, an armed halt is a loud, dated, queryable record and
+nothing more. Saying "the halt is armed" without saying that would be exactly the
+"a merge is not an arming" defect this repo keeps paying for.
+
 USAGE
     python tools/lane_halt.py --status                       # all lanes
     python tools/lane_halt.py --raise builder:manifest --reason "..." --sha abc123
@@ -190,10 +202,20 @@ def main(argv=None) -> int:
     ap.add_argument("--ttl-hours", type=float, default=DEFAULT_TTL_HOURS)
     ap.add_argument("--armed", action="store_true",
                     help="actually halt (default is shadow, which cannot block)")
+    ap.add_argument("--enforce", dest="enforce_lane",
+                    help="exit 1 if this lane is halted -- the one-line gate a\nlane calls on itself before doing work")
     ap.add_argument("--clear", dest="clear_lane")
     ap.add_argument("--who", default="")
     a = ap.parse_args(argv)
 
+    if a.enforce_lane:
+        if is_halted(a.enforce_lane):
+            rec = _read(halt_path(a.enforce_lane)) or {}
+            print("HALTED %s: %s (expires %s)"
+                  % (a.enforce_lane, rec.get("reason", ""), rec.get("expires_at")))
+            return 1
+        print("clear: %s" % a.enforce_lane)
+        return 0
     if a.clear_lane:
         print("cleared" if clear(a.clear_lane, a.who) else "no active halt")
         return 0

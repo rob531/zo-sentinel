@@ -1,0 +1,7 @@
+name = "mcp_axis_evidence_api"
+import_path = "services.active.mcp_axis_evidence_api.router"
+prefix = "/api"
+tag = "mcp_axis_evidence_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

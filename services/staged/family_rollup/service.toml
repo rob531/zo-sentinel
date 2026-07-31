@@ -1,0 +1,7 @@
+name = "family_rollup"
+import_path = "services.active.family_rollup.router"
+prefix = "/api"
+tag = "family_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true

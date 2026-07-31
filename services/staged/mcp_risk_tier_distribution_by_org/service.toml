@@ -1,0 +1,7 @@
+name = "mcp_risk_tier_distribution_by_org"
+import_path = "services.active.mcp_risk_tier_distribution_by_org.router"
+prefix = "/api"
+tag = "mcp_risk_tier_distribution_by_org"
+origin = "service"
+auth = "public"
+needs_data_layer = true

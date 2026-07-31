@@ -82,12 +82,38 @@ DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 # `cronExpression: "45 0,6,15,20 * * *"`, `jitterSeconds: 97`) after FU-207, in
 # which one 17.5h-suspended run starved five consecutive slots.
 #
-# THE CRON IS EVALUATED IN UTC, NOT LOCAL -- and that is measured, not assumed.
-# The same scheduler record reports `nextRunAt: 2026-08-01T00:46:37Z`, which is
-# 00:45 + the 97s jitter EXACTLY. Two independent fields of one record agree. The
-# previous grid read the cron as LOCAL time; had that still been true the slots
-# would sit at 04:45/10:45/19:45/00:45Z instead. Corroboration is the basis here,
-# not the cron string on its own.
+# THE CRON IS EVALUATED IN LOCAL TIME. FU-210 concluded UTC, and was wrong.
+#
+# FU-210's evidence was `nextRunAt: 2026-08-01T00:46:37Z` == 00:45 + the 97s
+# jitter, read as proof that hour 0 of the cron means 00:00Z. It is not proof of
+# anything: local 20:45 (the last slot of the local grid) IS 00:45Z. Both
+# hypotheses predict that timestamp identically, so the one field checked was the
+# single field in the day that cannot discriminate between them. A corroboration
+# that both hypotheses predict is not corroboration -- it is a coincidence that
+# reads like one, which is worse, because it closes the question.
+#
+# THE DISCRIMINATING READS, on records that differ under the two hypotheses:
+#   1. THIS TASK, PRE-CUT. cron `15 */3 * * *`, `nextRunAt 2026-07-31T22:16:37Z`
+#      = 22:15Z + 97s. Under UTC the grid is 00:15,03:15..21:15Z and 22:15Z is
+#      NOT ON IT AT ALL. Under local (UTC-4) 22:15Z is 18:15 local, and 18 is on
+#      `*/3`. Only one hypothesis can even produce the observed slot.
+#   2. A DIFFERENT TASK, so the answer cannot depend on this one's quirks.
+#      `mcplookup-nightly-db-backup`: cron `0 3 * * *`, jitter 546s,
+#      `nextRunAt 2026-08-01T07:09:06Z` = 07:00:00Z + 546s. Under UTC that record
+#      would read 03:09:06Z. It is four hours out -- exactly this box's offset.
+# Both were read from the same `list_scheduled_tasks` payload as the cron itself.
+#
+# The cost of the error was not cosmetic: three of the four daily slots would
+# have been graded at instants when no run can occur (06:45Z/15:45Z/20:45Z are
+# 02:45/11:45/16:45 local), so every one would go MISSED forever -- and MISSED is
+# an email condition. FU-210 set out to stop the grid lying and, uncaught, would
+# have converted it from stale to permanently red. A guard that can only go red
+# is as broken as one that can only go green, and it is likelier to be silenced.
+#
+# LOCAL SLOTS 00:45, 06:45, 15:45, 20:45 (America/New_York) -> UTC below.
+# These are UTC-4 conversions and are therefore WRONG BY AN HOUR after the DST
+# change on 2026-11-01; see `test_grid_is_the_local_cron_converted` for the
+# derivation that will fail loudly when it does, rather than drifting quietly.
 #
 # WHY THERE ARE TWO GRIDS. A 24h window straddling the cut contains slots from
 # BOTH cadences. Collapsing them to one grid would either invent phantom slots
@@ -95,7 +121,9 @@ DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 # between the last legacy slot that actually came due (16:15Z) and the first
 # observed post-cut receipt (19:21:41Z); no slot of either grid falls in that gap,
 # so the boundary cannot silently add or drop one.
-SLOT_UTC_HHMM = ((0, 45), (6, 45), (15, 45), (20, 45))
+SLOT_LOCAL_HHMM = ((0, 45), (6, 45), (15, 45), (20, 45))
+SLOT_TZ = "America/New_York"
+SLOT_UTC_HHMM = ((0, 45), (4, 45), (10, 45), (19, 45))
 GRID_CUT_UTC = "2026-07-31T18:00:00Z"
 
 # The pre-cut grid, kept so receipts and misses from before the cut are still

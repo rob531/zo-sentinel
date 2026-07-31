@@ -413,15 +413,62 @@ def test_a_run_more_than_half_a_cadence_off_does_not_attest(tmp_path):
     assert "2026-07-30T16:15:00Z" in report["missed_slots"]
 
 
-def test_the_slot_grid_matches_the_live_cron():
-    """The grid is a claim about the scheduled task's cron, which lives outside
-    this repo. On 2026-07-30 the task moved from :47 to `15 */3 * * *` local and
-    this constant did not, putting every slot ~32 minutes off -- more than the
-    old 25-minute tolerance, i.e. every future slot MISSED. Pinning it here at
-    least makes the claim visible to a reader diffing against the live cron."""
-    assert srl.SLOT_MINUTE == 15
-    assert srl.SLOT_EVERY_HOURS == 3
-    assert srl.SLOT_UTC_ANCHOR_HOUR == 1
+def test_grid_is_the_local_cron_converted():
+    """SLOT_UTC_HHMM must BE the local cron converted -- derived here, not retyped.
+
+    FU-210 hand-wrote the UTC grid from the assumption that the scheduler
+    evaluates cron in UTC. It does not; it evaluates in LOCAL time. That put
+    three of four daily slots at instants no run can occur, which would have
+    reported MISSED (an email condition) forever. The bug was reachable only
+    because the constant was typed rather than computed, so this test computes
+    it. If SLOT_LOCAL_HHMM, SLOT_TZ or the UTC offset ever move -- including at
+    the 2026-11-01 DST change -- this fails loudly instead of drifting.
+    """
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(srl.SLOT_TZ)
+    # A date inside US EDT, i.e. the offset the committed grid was written for.
+    day = datetime(2026, 7, 31, tzinfo=tz)
+    derived = tuple(
+        sorted(
+            (
+                datetime(day.year, day.month, day.day, hh, mm, tzinfo=tz)
+                .astimezone(timezone.utc)
+                .hour,
+                mm,
+            )
+            for hh, mm in srl.SLOT_LOCAL_HHMM
+        )
+    )
+    assert derived == srl.SLOT_UTC_HHMM, (
+        f"grid {srl.SLOT_UTC_HHMM} is not {srl.SLOT_LOCAL_HHMM} in {srl.SLOT_TZ}; "
+        f"derived {derived}"
+    )
+    # Four slots a day after the FU-207 cadence cut, not eight.
+    assert len(srl.SLOT_UTC_HHMM) == 4
+
+
+def test_a_utc_read_of_the_cron_is_refused():
+    """NEGATIVE CONTROL: the exact grid FU-210 committed must FAIL the derivation.
+
+    Without this, the test above passes trivially against any self-consistent
+    pair and proves nothing about the bug it exists to prevent. The UTC reading
+    differs from the local one at three of four slots; only 00:45 coincides,
+    which is precisely why FU-210's single spot-check could not see it.
+    """
+    utc_reading = ((0, 45), (6, 45), (15, 45), (20, 45))
+    assert utc_reading != srl.SLOT_UTC_HHMM
+    coinciding = set(utc_reading) & set(srl.SLOT_UTC_HHMM)
+    assert coinciding == {(0, 45)}, (
+        "exactly one slot may coincide between the UTC and local readings -- if "
+        "more do, the two hypotheses are no longer distinguishable here"
+    )
+
+
+def test_the_legacy_slot_grid_matches_the_pre_cut_cron():
+    """The pre-cut grid still has to be right, or FU-207's five missed slots
+    stop being visible in any 24h window that straddles the cut."""
+    assert srl.LEGACY_SLOT_UTC_HHMM == tuple((h, 15) for h in range(1, 24, 3))
 
     now = srl.parse_iso("2026-07-30T19:44:45Z")
     slots = [srl.fmt(s) for s in srl.expected_slots(now, 12)]

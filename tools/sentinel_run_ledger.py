@@ -212,12 +212,58 @@ def collect_evidence(evidence_dir: Path) -> list:
     return out
 
 
+#: Set by the most recent resolve_post_cut_grid() call so render() can publish
+#: the BASIS of the grid alongside the verdict it produced (R5).
+GRID_BASIS = "not yet resolved"
+
+
+def resolve_post_cut_grid(on_date=None):
+    """The post-cut grid, FETCHED from the scheduler mirror when possible.
+
+    FU-213. `SLOT_UTC_HHMM` below is correct today because FU-211 retyped it
+    correctly; it was also "correct today" after FU-205 and after FU-210, and
+    was wrong within a day both times. This asks the mirror -- written from the
+    live `list_scheduled_tasks` payload by the daily follow-up-triage run --
+    and falls back to the literal, ALWAYS recording which one it used.
+
+    A disagreement is reported, never silently resolved: the mirror wins
+    (it is the only party that has actually seen the scheduler) but the literal
+    it contradicts is named in the basis, because a grid that changes under a
+    reader without saying so is the whole defect being fixed.
+    """
+    global GRID_BASIS
+    try:
+        from tools import scheduler_mirror_read as smr
+    except ImportError:
+        try:
+            import scheduler_mirror_read as smr        # flat sys.path
+        except ImportError:
+            GRID_BASIS = "literal (mirror reader unavailable)"
+            return SLOT_UTC_HHMM
+
+    slots, note = smr.utc_slots_for("prod-drift-sentinel", on_date=on_date)
+    if slots is None:
+        GRID_BASIS = "literal SLOT_UTC_HHMM -- %s" % note
+        return SLOT_UTC_HHMM
+    if tuple(slots) != tuple(SLOT_UTC_HHMM):
+        GRID_BASIS = (
+            "MIRROR, and it DISAGREES with the literal in this file: "
+            "mirror=%s literal=%s (%s). The mirror wins -- it is the only "
+            "party that has read the scheduler -- but fix the literal."
+            % (" ".join("%02d:%02d" % s for s in slots),
+               " ".join("%02d:%02d" % s for s in SLOT_UTC_HHMM), note))
+        return tuple(slots)
+    GRID_BASIS = "mirror, agrees with the literal (%s)" % note
+    return tuple(slots)
+
+
 def expected_slots(now: datetime, window_hours: int) -> list:
     """Cron slots that have already come due inside the window, newest last."""
     if window_hours <= 0:
         raise LedgerError("window-hours must be positive")
     start = now - timedelta(hours=window_hours)
     cut = parse_iso(GRID_CUT_UTC)
+    post_cut = resolve_post_cut_grid(now.date())
     slots = []
     day = (start - timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0)
@@ -225,12 +271,12 @@ def expected_slots(now: datetime, window_hours: int) -> list:
     while day <= last:
         # UNION, not a per-day choice: a per-day choice cannot emit a slot that
         # exists only under the OTHER cadence, and the cut-over day needs both.
-        for hh, mm in sorted(set(LEGACY_SLOT_UTC_HHMM) | set(SLOT_UTC_HHMM)):
+        for hh, mm in sorted(set(LEGACY_SLOT_UTC_HHMM) | set(post_cut)):
             slot = day.replace(hour=hh, minute=mm)
             # Each slot is judged against the cadence in force AT THAT SLOT, not
             # the one in force at the day's start -- otherwise the cut-over day
             # reports whichever grid the loop happened to pick first.
-            in_force = LEGACY_SLOT_UTC_HHMM if slot < cut else SLOT_UTC_HHMM
+            in_force = LEGACY_SLOT_UTC_HHMM if slot < cut else post_cut
             if (hh, mm) not in in_force:
                 continue
             if start <= slot <= now:
@@ -380,6 +426,10 @@ def render(report: dict) -> str:
         f"last_check  : {report['last_check_utc']}",
         f"receipts    : {len(report['receipts'])}",
         f"evidence    : {report['evidence_count']} artifact(s)",
+        # The grid is the single input that has been wrong three times in two
+        # days (FU-205/210/211). Its provenance is printed with every verdict
+        # so a stale grid is visible in the same glance as the misses it causes.
+        f"grid basis  : {GRID_BASIS}",
         "",
     ]
     if report["orphan_evidence"]:

@@ -77,9 +77,36 @@ DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 # OLD :47-era receipts still inside the window attested. If you find them
 # disagreeing with the live cron again, fix the constant AND ask why a value
 # that must track an external schedule is still a literal.
-SLOT_MINUTE = 15
+# --- 2026-07-31: THE CADENCE WAS CUT, AND THIS CONSTANT WENT STALE A SECOND TIME.
+# The task was reduced from 8 slots/day to 4 (`list_scheduled_tasks` ->
+# `cronExpression: "45 0,6,15,20 * * *"`, `jitterSeconds: 97`) after FU-207, in
+# which one 17.5h-suspended run starved five consecutive slots.
+#
+# THE CRON IS EVALUATED IN UTC, NOT LOCAL -- and that is measured, not assumed.
+# The same scheduler record reports `nextRunAt: 2026-08-01T00:46:37Z`, which is
+# 00:45 + the 97s jitter EXACTLY. Two independent fields of one record agree. The
+# previous grid read the cron as LOCAL time; had that still been true the slots
+# would sit at 04:45/10:45/19:45/00:45Z instead. Corroboration is the basis here,
+# not the cron string on its own.
+#
+# WHY THERE ARE TWO GRIDS. A 24h window straddling the cut contains slots from
+# BOTH cadences. Collapsing them to one grid would either invent phantom slots
+# before the cut or erase the five real ones FU-207 is about. GRID_CUT_UTC is set
+# between the last legacy slot that actually came due (16:15Z) and the first
+# observed post-cut receipt (19:21:41Z); no slot of either grid falls in that gap,
+# so the boundary cannot silently add or drop one.
+SLOT_UTC_HHMM = ((0, 45), (6, 45), (15, 45), (20, 45))
+GRID_CUT_UTC = "2026-07-31T18:00:00Z"
+
+# The pre-cut grid, kept so receipts and misses from before the cut are still
+# judged against the schedule that was actually in force when they happened.
+LEGACY_SLOT_UTC_HHMM = tuple((h, 15) for h in range(1, 24, 3))
+
+# Retained for compatibility with anything importing them; the grid above is the
+# authority. Do NOT reintroduce a computation that depends on these.
+SLOT_MINUTE = 45
 SLOT_EVERY_HOURS = 3
-SLOT_UTC_ANCHOR_HOUR = 1  # 01:15Z, then every SLOT_EVERY_HOURS
+SLOT_UTC_ANCHOR_HOUR = 0
 
 NAME_TS_RE = re.compile(r"(\d{8}T\d{6}Z)")
 
@@ -162,15 +189,52 @@ def expected_slots(now: datetime, window_hours: int) -> list:
     if window_hours <= 0:
         raise LedgerError("window-hours must be positive")
     start = now - timedelta(hours=window_hours)
+    cut = parse_iso(GRID_CUT_UTC)
     slots = []
-    cursor = (start - timedelta(days=1)).replace(
-        hour=SLOT_UTC_ANCHOR_HOUR, minute=SLOT_MINUTE, second=0, microsecond=0
-    )
-    while cursor <= now:
-        if cursor >= start:
-            slots.append(cursor)
-        cursor += timedelta(hours=SLOT_EVERY_HOURS)
-    return slots
+    day = (start - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    last = now + timedelta(days=1)
+    while day <= last:
+        # UNION, not a per-day choice: a per-day choice cannot emit a slot that
+        # exists only under the OTHER cadence, and the cut-over day needs both.
+        for hh, mm in sorted(set(LEGACY_SLOT_UTC_HHMM) | set(SLOT_UTC_HHMM)):
+            slot = day.replace(hour=hh, minute=mm)
+            # Each slot is judged against the cadence in force AT THAT SLOT, not
+            # the one in force at the day's start -- otherwise the cut-over day
+            # reports whichever grid the loop happened to pick first.
+            in_force = LEGACY_SLOT_UTC_HHMM if slot < cut else SLOT_UTC_HHMM
+            if (hh, mm) not in in_force:
+                continue
+            if start <= slot <= now:
+                slots.append(slot)
+        day += timedelta(days=1)
+    return sorted(set(slots))
+
+
+def grid_phase_report(receipts: list, now: datetime, window_hours: int) -> list:
+    """How far is each in-window receipt from its NEAREST declared slot?
+
+    This is the tool doubting its own grid. A slot list is a claim about a
+    schedule that lives somewhere else, and this constant has now gone stale
+    twice (:47 -> :15 on 2026-07-30, :15 -> the 4-slot cadence on 2026-07-31).
+    Both times the symptom was identical to a real outage: a list of MISSED
+    SLOTS. The two causes are distinguishable by ONE measurement -- if the task
+    genuinely did not run, there is no receipt near the slot; if the GRID is
+    wrong, the receipts are all there and all sitting at the same wrong offset.
+    Printing the offsets puts that distinction in front of the reader instead of
+    leaving it to an audit.
+
+    Returns [(receipt, nearest_slot, delta_minutes)], newest last.
+    """
+    slots = expected_slots(now, window_hours)
+    start = now - timedelta(hours=window_hours)
+    out = []
+    for r in sorted(receipts):
+        if r < start or not slots:
+            continue
+        nearest = min(slots, key=lambda s: abs((r - s).total_seconds()))
+        out.append((r, nearest, (r - nearest).total_seconds() / 60.0))
+    return out
 
 
 def reconcile(
@@ -255,6 +319,11 @@ def reconcile(
         "evidence_count": len(evidence),
         "undatable_evidence": undatable,
         "orphan_evidence": orphans,
+        "grid_phase": [
+            (r.strftime("%Y-%m-%dT%H:%M:%SZ"),
+             sl.strftime("%Y-%m-%dT%H:%M:%SZ"), d)
+            for r, sl, d in grid_phase_report(receipts, now, window_hours)
+        ],
         "missed_slots": missed,
         "unattested_slots": unattested,
         "clean": not orphans and not missed and not undatable,
@@ -294,6 +363,17 @@ def render(report: dict) -> str:
         lines.append("MISSED SLOTS -- cron came due and left no trace at all:")
         for slot in report["missed_slots"]:
             lines.append(f"  {slot}")
+        # A MISSED list has TWO causes that are indistinguishable from here: the
+        # task did not run, or THIS FILE'S SLOT GRID IS STALE. The offsets below
+        # separate them -- a stale grid shows every receipt PRESENT and all of
+        # them sitting at the same wrong offset. Printed beside the misses on
+        # purpose, so the distinction reaches the reader instead of waiting for
+        # an audit. (This grid has gone stale twice: 2026-07-30 and 07-31.)
+        if report.get("grid_phase"):
+            lines.append("  -- receipt phase vs nearest declared slot (a UNIFORM"
+                         " non-zero offset means the GRID is wrong, not the task):")
+            for r, slot, delta in report["grid_phase"]:
+                lines.append("     %s  nearest %s  %+.0f min" % (r, slot, delta))
         lines.append("")
     if report["unattested_slots"]:
         lines.append(

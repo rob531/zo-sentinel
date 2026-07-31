@@ -476,3 +476,88 @@ def test_the_legacy_slot_grid_matches_the_pre_cut_cron():
     assert "2026-07-30T16:15:00Z" in slots
     assert "2026-07-30T19:15:00Z" in slots
     assert "2026-07-30T13:15:00Z" in slots
+
+
+# --------------------------------------------------------------------------
+# FU-213: the grid is FETCHED from the scheduler mirror, not typed.
+#
+# The three prior fixes (FU-205, FU-210, FU-211) each retyped the literal
+# correctly and left the NEXT drift undetectable. These tests assert the thing
+# that actually changed: a mirror that disagrees MOVES the grid, and says so.
+# --------------------------------------------------------------------------
+import json as _json
+
+import tools.sentinel_run_ledger as srl
+from tools import scheduler_mirror_read as smr
+
+
+def _mirror(tmp_path, local_slots, generated=None, tz="America/New_York"):
+    from datetime import datetime, timezone
+    generated = generated or datetime.now(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
+    p = tmp_path / "scheduler_mirror.json"
+    p.write_text(_json.dumps({
+        "schema": 1, "generated_at": generated, "tz": tz,
+        "tasks": {"prod-drift-sentinel": {
+            "cronExpression": "45 0,6,15,20 * * *",
+            "enabled": True,
+            "local_slots": [list(s) for s in local_slots],
+        }},
+    }), encoding="utf-8")
+    return str(p)
+
+
+def test_mirror_agreeing_with_the_literal_reproduces_todays_grid(tmp_path, monkeypatch):
+    """The live cron, converted, must equal the grid FU-211 hand-derived.
+
+    An independent derivation landing on the same four instants is the check
+    FU-210 and FU-211 each lacked.
+    """
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((0, 45), (6, 45), (15, 45), (20, 45))))
+    from datetime import date
+    got = srl.resolve_post_cut_grid(date(2026, 7, 31))
+    assert got == ((0, 45), (4, 45), (10, 45), (19, 45))
+    assert got == tuple(srl.SLOT_UTC_HHMM)
+    assert "mirror" in srl.GRID_BASIS
+
+
+def test_a_disagreeing_mirror_MOVES_the_grid_and_announces_it(tmp_path, monkeypatch):
+    """NEGATIVE CONTROL. If this passes with the literal still in force, the
+    mirror is decorative and FU-213 changed nothing."""
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((2, 30), (14, 30))))
+    from datetime import date
+    got = srl.resolve_post_cut_grid(date(2026, 7, 31))
+    assert got == ((6, 30), (18, 30))          # 02:30/14:30 local -> UTC-4
+    assert got != tuple(srl.SLOT_UTC_HHMM)     # the literal did NOT win
+    assert "DISAGREES" in srl.GRID_BASIS       # and it was not silent
+
+
+def test_a_missing_mirror_falls_back_to_the_literal_and_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(smr, "MIRROR_PATH", str(tmp_path / "nope.json"))
+    got = srl.resolve_post_cut_grid()
+    assert got == tuple(srl.SLOT_UTC_HHMM)
+    assert "literal" in srl.GRID_BASIS and "absent" in srl.GRID_BASIS
+
+
+def test_a_stale_mirror_is_refused_rather_than_trusted(tmp_path, monkeypatch):
+    """A mirror nobody has refreshed is not evidence about today's schedule."""
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((2, 30),), generated="2026-01-01T00:00:00Z"))
+    got = srl.resolve_post_cut_grid()
+    assert got == tuple(srl.SLOT_UTC_HHMM)     # literal, not the stale mirror
+    assert "STALE" in srl.GRID_BASIS
+
+
+def test_the_grid_survives_the_dst_change(tmp_path, monkeypatch):
+    """2026-11-01: the same local cron is an hour later in UTC. A literal
+    cannot notice; a date-aware conversion must."""
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((0, 45), (6, 45), (15, 45), (20, 45))))
+    from datetime import date
+    summer = srl.resolve_post_cut_grid(date(2026, 7, 31))
+    winter = srl.resolve_post_cut_grid(date(2026, 12, 1))
+    assert summer == ((0, 45), (4, 45), (10, 45), (19, 45))   # UTC-4
+    assert winter == ((1, 45), (5, 45), (11, 45), (20, 45))   # UTC-5
+    assert summer != winter

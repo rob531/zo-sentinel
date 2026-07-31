@@ -1,0 +1,237 @@
+# service.toml
+"""
+Server Search Service - zo-sentinel active service
+"""
+import tomllib
+from pathlib import Path
+from contextlib import asynccontextmanager
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import get_session
+from app.models import (
+    McpServerRegistry as ServerRegistry,
+    McpLlmAxisScore as LLM_axis_scores,
+    Org as Org,
+    User as User,
+)
+
+SERVICE_CONFIG = {
+    "name": "server_search",
+    "import_path": "services.active.server_search.router",
+    "prefix": "/api",
+    "tag": "server_search",
+    "origin": "service",
+    "auth": "public",
+    "needs_data_layer": True,
+}
+
+router = APIRouter()
+
+
+async def query_mesh_store(query: str, params: dict | None = None) -> list[dict]:
+    """Query MESH/pipeline tables via write_service endpoint."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            "http://127.0.0.1:8772/query",
+            json={"query": query, "params": params or {}}
+        )
+        response.raise_for_status()
+        return response.json().get("results", [])
+
+
+@router.get("/servers")
+async def list_servers(
+    limit: int = 50,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+):
+    """List registered MCP servers."""
+    stmt = (
+        select(ServerRegistry)
+        .order_by(ServerRegistry.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    servers = result.scalars().all()
+    return {
+        "servers": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "endpoint": s.endpoint,
+                "status": getattr(s, "status", "unknown"),
+                "metadata": getattr(s, "metadata", {}),
+            }
+            for s in servers
+        ],
+        "total": len(servers),
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/servers/{server_id}")
+async def get_server(
+    server_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get a specific server by ID."""
+    stmt = select(ServerRegistry).where(ServerRegistry.id == server_id)
+    result = await session.execute(stmt)
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return {
+        "id": server.id,
+        "name": server.name,
+        "endpoint": server.endpoint,
+        "status": getattr(server, "status", "unknown"),
+        "metadata": getattr(server, "metadata", {}),
+    }
+
+
+@router.get("/servers/search")
+async def search_servers(
+    q: str,
+    limit: int = 20,
+    session: AsyncSession = Depends(get_session),
+):
+    """Search servers by name or endpoint."""
+    pattern = f"%{q}%"
+    stmt = (
+        select(ServerRegistry)
+        .where(
+            (ServerRegistry.name.ilike(pattern)) |
+            (ServerRegistry.endpoint.ilike(pattern))
+        )
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    servers = result.scalars().all()
+    return {
+        "query": q,
+        "servers": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "endpoint": s.endpoint,
+                "status": getattr(s, "status", "unknown"),
+            }
+            for s in servers
+        ],
+        "count": len(servers),
+    }
+
+
+@router.get("/scores")
+async def list_scores(
+    server_id: int | None = None,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+):
+    """List LLM axis scores from app database."""
+    stmt = select(LLM_axis_scores)
+    if server_id:
+        stmt = stmt.where(LLM_axis_scores.server_id == server_id)
+    stmt = stmt.order_by(LLM_axis_scores.created_at.desc()).limit(limit)
+    result = await session.execute(stmt)
+    scores = result.scalars().all()
+    return {
+        "scores": [
+            {
+                "id": s.id,
+                "server_id": s.server_id,
+                "axis": getattr(s, "axis", None),
+                "score": getattr(s, "score", 0),
+                "created_at": str(s.created_at) if hasattr(s, "created_at") else None,
+            }
+            for s in scores
+        ],
+        "count": len(scores),
+    }
+
+
+@router.get("/mesh/scores")
+async def get_mesh_scores(
+    entity_id: int | None = None,
+    entity_type: str | None = None,
+):
+    """Query MESH/pipeline mcp_signal_scores table."""
+    query = "SELECT * FROM mcp_signal_scores WHERE 1=1"
+    params = {}
+    if entity_id:
+        query += " AND entity_id = :entity_id"
+        params["entity_id"] = entity_id
+    if entity_type:
+        query += " AND entity_type = :entity_type"
+        params["entity_type"] = entity_type
+    query += " ORDER BY created_at DESC LIMIT 100"
+    try:
+        results = await query_mesh_store(query, params)
+        return {"scores": results, "source": "mesh"}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Mesh query failed: {str(e)}")
+
+
+@router.get("/mesh/memory")
+async def get_mesh_memory(
+    context_id: str,
+):
+    """Query MESH/pipeline mesh_memory table."""
+    query = "SELECT * FROM mesh_memory WHERE context_id = :context_id ORDER BY created_at DESC"
+    try:
+        results = await query_mesh_store(query, {"context_id": context_id})
+        return {"memory": results, "source": "mesh"}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Mesh query failed: {str(e)}")
+
+
+@router.get("/health")
+async def health_check(session: AsyncSession = Depends(get_session)):
+    """Health check endpoint."""
+    try:
+        await session.execute(select(func.count()).select_from(Org))
+        return {"status": "healthy", "data_layer": "app_db"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Unhealthy: {str(e)}")
+
+
+if __name__ == "__main__":
+    import sys
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    print("service.toml self-test starting...")
+
+    # Mock app.db session for self-test
+    mock_session = MagicMock(spec=AsyncSession)
+    mock_result = MagicMock()
+    mock_servers = [
+        MagicMock(id=1, name="test-server", endpoint="http://localhost:8001", status="active", metadata={}),
+        MagicMock(id=2, name="dev-server", endpoint="http://localhost:8002", status="inactive", metadata={}),
+    ]
+    mock_result.scalars.return_value.all.return_value = mock_servers
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    # Test imports
+    assert SERVICE_CONFIG["name"] == "server_search"
+    assert SERVICE_CONFIG["needs_data_layer"] is True
+    assert SERVICE_CONFIG["auth"] == "public"
+
+    # Test router exists
+    assert router is not None
+    assert len(router.routes) > 0
+
+    # Test routes have expected paths
+    routes = [r.path for r in router.routes]
+    assert "/servers" in routes
+    assert "/servers/search" in routes
+    assert "/scores" in routes
+    assert "/health" in routes
+
+    print("PASS")
+    sys.exit(0)

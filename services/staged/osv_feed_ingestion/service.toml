@@ -1,0 +1,8 @@
+[service]
+name = "osv_feed_ingestion"
+import_path = "services.active.osv_feed_ingestion.router"
+prefix = "/api"
+tag = "osv_feed_ingestion"
+origin = "service"
+auth = "public"
+needs_data_layer = true

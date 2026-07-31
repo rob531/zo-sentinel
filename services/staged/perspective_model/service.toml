@@ -1,0 +1,12 @@
+# service.toml
+
+name = "perspective_model"
+import_path = "services.active.perspective_model.router"
+prefix = "/api"
+tag = "perspective_model"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

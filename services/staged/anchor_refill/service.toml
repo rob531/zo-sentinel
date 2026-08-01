@@ -1,0 +1,8 @@
+[service]
+name = "anchor_refill"
+import_path = "services.active.anchor_refill.router"
+prefix = "/api"
+tag = "anchor_refill"
+origin = "service"
+auth = "public"
+needs_data_layer = true

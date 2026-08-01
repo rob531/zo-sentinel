@@ -45,7 +45,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -167,9 +167,65 @@ def month_to_date(state: dict, month: Optional[str] = None) -> dict:
             "first_entry_balance": first["balance"],
             "credits_added": credits,
             "basis_days": basis_days,
+            "observed_days": len({e["date"] for e in entries}),
+            "missing_days": (basis_days + 1
+                             - len({e["date"] for e in entries})),
             "complete_month": first["date"].endswith("-01"),
             "basis": ("first_balance + credits - current_balance over "
                       f"{basis_days}d from {first['date']}")}
+
+
+def coverage(state: dict, month: Optional[str] = None) -> dict:
+    """Which days this lane actually OBSERVED -- and which it did not.
+
+    The daily ops audit is the only writer of ``entries[]``, so the dates
+    present in it are a record of this lane's own runs. A date between the
+    first and last entry that is ABSENT means the audit did not run that day.
+
+    SPANS THE WHOLE HISTORY BY DEFAULT, AND THAT IS THE POINT. The first
+    draft of this function was month-scoped, and it could not see the gap
+    that motivated it: the state file held 2026-07-26..2026-07-30 and then
+    2026-08-01, so July read COMPLETE, August read COMPLETE, and the missed
+    day fell in the seam between them. A guard that cannot catch what it
+    guards is worse than no guard, because it reports clean. ``month=`` is
+    available for a scoped read, but ``show`` must never pass one.
+
+    Why this is not cosmetic: ``month_to_date`` reports ``basis_days`` as the
+    CALENDAR span from first entry to last, so a window with holes publishes
+    the same basis as a fully observed one. A reader cannot tell a 30-day
+    window sampled 30 times from a 30-day window sampled twice. Publishing
+    the basis (R5) means publishing how much of it was actually looked at,
+    and an unobserved day is UNKNOWN, not zero (R6).
+
+    REPORT, NOT A GATE: nothing here changes an exit code or blocks a run.
+    A missed day is often legitimate (a paused fleet, a month boundary); the
+    value is that it becomes VISIBLE instead of being absorbed into a span.
+    """
+    dates = sorted({e["date"] for e in state.get("entries", [])
+                    if month is None or e["date"][:7] == month})
+    scope = month or "all"
+    if not dates:
+        return {"scope": scope, "observed_days": 0, "span_days": 0,
+                "missing_dates": [], "complete": None,
+                "basis": "no entries in scope -- coverage is UNKNOWN, "
+                         "not complete"}
+    first = datetime.strptime(dates[0], "%Y-%m-%d")
+    last = datetime.strptime(dates[-1], "%Y-%m-%d")
+    span = (last - first).days + 1
+    have = set(dates)
+    missing = [(first + timedelta(days=i)).strftime("%Y-%m-%d")
+               for i in range(span)
+               if (first + timedelta(days=i)).strftime("%Y-%m-%d") not in have]
+    return {"scope": scope,
+            "observed_days": len(dates),
+            "span_days": span,
+            "first_entry_date": dates[0],
+            "last_entry_date": dates[-1],
+            "missing_dates": missing,
+            "complete": not missing,
+            "basis": ("dates present in entries[] vs every date in "
+                      f"{dates[0]}..{dates[-1]}; a missing date means this "
+                      "lane did not run that day (FU-207 class)")}
 
 
 def since_funding(state: dict) -> dict:
@@ -251,6 +307,7 @@ def main(argv=None) -> int:
                       "entries": len(state.get("entries", [])),
                       "credits": len(state.get("credits", [])),
                       "mtd": month_to_date(state, a.month),
+                      "coverage": coverage(state),
                       "since_funding": since_funding(state),
                       "budget": budget_status(state)}, indent=2))
     return 0

@@ -1,0 +1,8 @@
+[service]
+name = "advisory_link_analysis"
+import_path = "services.active.advisory_link_analysis.router"
+prefix = "/api"
+tag = "advisory_link_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = true

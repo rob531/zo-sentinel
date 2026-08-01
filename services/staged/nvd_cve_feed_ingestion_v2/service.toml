@@ -1,0 +1,12 @@
+[service]
+name = "nvd_cve_feed_ingestion_v2"
+import_path = "services.active.nvd_cve_feed_ingestion_v2.router"
+prefix = "/api"
+tag = "nvd_cve_feed_ingestion_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

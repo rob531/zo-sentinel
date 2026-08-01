@@ -1,0 +1,8 @@
+[service]
+name = "advisory_alert_api"
+import_path = "services.active.advisory_alert_api.router"
+prefix = "/api"
+tag = "advisory_alert_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

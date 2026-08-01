@@ -1,6 +1,9 @@
 import sys
 sys.path.insert(0, '/home/workspace')
+import os
 import time
+import shutil
+import subprocess
 import requests
 from datetime import datetime
 
@@ -12,6 +15,80 @@ QUERY_URL = 'http://127.0.0.1:8772/query'
 EXECUTE_URL = 'http://127.0.0.1:8772/execute'
 MAX_PAGES = 500
 BATCH_SIZE = 100
+# GitHub search returns at most 1000 results (10 pages x 100) per query, and
+# answers 422 beyond that regardless of authentication. Naming it stops the
+# sweep from requesting 490 pages that cannot exist.
+GITHUB_SEARCH_MAX_PAGES = 10
+
+# --- GitHub authentication -------------------------------------------------
+# Verified live against x-ratelimit-limit (not from docs), 2026-08-01:
+# the GitHub *search* API allows 10 req/min unauthenticated, 30 req/min
+# authenticated. This daemon has run anonymous since 2026-07-11 and burned its
+# whole minute budget by page ~10, logging ~200 rate-limit 403s/day.
+#
+# IMPORTANT -- what this does NOT fix. Pages 11+ return HTTP 422 even when fully
+# authenticated with 29/30 budget remaining: GitHub caps ANY search query at
+# 1000 results (10 pages x 100). So MAX_PAGES = 500 is unreachable here by
+# construction, and authentication does NOT deepen the corpus. What it does fix
+# is that pages 1-10 now complete without exhausting the budget, and the sweep
+# then terminates cleanly on the 422 instead of thrashing on 403s. Lifting the
+# real intake ceiling requires QUERY DIVERSIFICATION (the 1000 cap is per
+# query), which is a separate change.
+#
+# This resolves an ALREADY-PROVISIONED credential; it does not create or store
+# one. Resolution order, first hit wins, and it FAILS SOFT to anonymous so
+# behaviour is never worse than before. The token value is never logged.
+_GH_TOKEN_CACHE = None
+_GH_TOKEN_RESOLVED = False
+
+
+def github_token():
+    """Resolve an existing GitHub token, or None. Never raises, never logs the value."""
+    global _GH_TOKEN_CACHE, _GH_TOKEN_RESOLVED
+    if _GH_TOKEN_RESOLVED:
+        return _GH_TOKEN_CACHE
+    _GH_TOKEN_RESOLVED = True
+
+    for var in ('GITHUB_TOKEN', 'GH_TOKEN'):
+        tok = os.environ.get(var)
+        if tok:
+            _GH_TOKEN_CACHE = tok.strip()
+            return _GH_TOKEN_CACHE
+
+    # the gh CLI credential already present on the tower
+    if shutil.which('gh'):
+        try:
+            out = subprocess.run(['gh', 'auth', 'token'], capture_output=True,
+                                 text=True, timeout=15)
+            if out.returncode == 0 and out.stdout.strip():
+                _GH_TOKEN_CACHE = out.stdout.strip()
+                return _GH_TOKEN_CACHE
+        except Exception:
+            pass
+
+    # AgentVault convention -- tower-side only; absent on the Linux box, so this
+    # is attempted last and its absence is not an error.
+    fetch_secret = os.environ.get('AGENTVAULT_FETCH_SECRET', r'D:\agentvault\fetch_secret.py')
+    if os.path.exists(fetch_secret):
+        try:
+            out = subprocess.run([sys.executable, fetch_secret, 'github'],
+                                 capture_output=True, text=True, timeout=20)
+            if out.returncode == 0 and out.stdout.strip():
+                _GH_TOKEN_CACHE = out.stdout.strip()
+                return _GH_TOKEN_CACHE
+        except Exception:
+            pass
+
+    return None
+
+
+def github_headers():
+    """Auth headers when a token is available, otherwise the anonymous path."""
+    headers = {'Accept': 'application/vnd.github+json'}
+    tok = github_token()
+    if tok:
+        headers['Authorization'] = 'Bearer ' + tok
+    return headers
 
 def check_single_instance():
     import os
@@ -156,11 +233,17 @@ def fetch_candidates_from_github():
     candidates = []
     page_count = 0
     url = 'https://api.github.com/search/repositories'
-    for page in range(1, MAX_PAGES + 1):
+    headers = github_headers()
+    log('GitHub auth: %s' % ('token' if 'Authorization' in headers else 'ANONYMOUS (10 req/min ceiling)'))
+    for page in range(1, min(MAX_PAGES, GITHUB_SEARCH_MAX_PAGES) + 1):
         page_count += 1
         params = {'q': 'mcp server MCP-client MCP-server in:name,description', 'sort': 'stars', 'per_page': 100, 'page': page}
         try:
-            resp = requests.get(url, params=params, timeout=30)
+            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            remaining = resp.headers.get('x-ratelimit-remaining')
+            if remaining is not None and remaining.isdigit() and int(remaining) <= 1:
+                log('GitHub rate budget nearly spent: remaining=%s limit=%s (page %s)'
+                    % (remaining, resp.headers.get('x-ratelimit-limit'), page))
             if resp.status_code == 404 or resp.status_code == 422:
                 break
             resp.raise_for_status()

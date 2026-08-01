@@ -40,7 +40,30 @@ def _mesh_query(
         return []
 
 
-def get_signal_scores(mesh_id: str, session: Optional[Session] = None) -> List[Dict[str, Any]]:
+# FU-220: `session: Optional[Session]` -- `Session` was NEVER IMPORTED in this
+# module. Annotations here are evaluated at def-time (no `from __future__ import
+# annotations`), so merely IMPORTING this package raised
+# `NameError: name 'Session' is not defined` on every Python version.
+#
+# WHY THAT WAS EXPENSIVE OUT OF ALL PROPORTION TO ONE WORD. This is the package
+# __init__ of services/staged, and the promoter runs each staged service's
+# liveness contract as `python -m services.staged.<name>.contract`
+# (tools/promote_staged_to_active.py::_run_contract). `-m` imports the parent
+# package first. So this NameError made the acceptance test of ALL 262 staged
+# services unrunnable -- the single gate that stands between the builder's
+# output and T2.
+#
+# It was invisible because it was BEHIND ANOTHER WALL: the promoter only runs
+# the contract `if not reasons`, and until FU-220's sibling FU-217 every service
+# already carried the "no Dockerfile COPY" reason, so the contract was never
+# reached. FU-217 recorded `contract_ok: 0 AND contract FAILED: 0` for six
+# consecutive days and read it correctly -- zero MEASUREMENT, not zero failures.
+# This is what the measurement found once it could be taken.
+#
+# The parameter is UNUSED by the body, so it is typed Optional[Any] rather than
+# deleted: removing it would break any caller that passes session= by keyword,
+# and this fix should not be able to break anything.
+def get_signal_scores(mesh_id: str, session: Optional[Any] = None) -> List[Dict[str, Any]]:
     """Fetch signal scores for a mesh_id from mcp_signal_scores table."""
     return _mesh_query("mcp_signal_scores", {"mesh_id": mesh_id})
 

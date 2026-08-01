@@ -19,6 +19,9 @@ BATCH_SIZE = 100
 # answers 422 beyond that regardless of authentication. Naming it stops the
 # sweep from requesting 490 pages that cannot exist.
 GITHUB_SEARCH_MAX_PAGES = 10
+# The write service caps an UNBOUNDED select at 200 rows and flags nothing.
+# Every read of the registry must carry an explicit LIMIT above its size.
+QUERY_ROW_LIMIT = 100000
 
 # --- GitHub authentication -------------------------------------------------
 # Verified live against x-ratelimit-limit (not from docs), 2026-08-01:
@@ -149,14 +152,45 @@ def get_reg_count():
     except:
         return -1
 
-def get_promoted_urls():
+def get_promoted_keys():
+    """Existing (server_id, url) keys. Returns (server_ids, urls, trustworthy).
+
+    The write service silently caps an unbounded SELECT at 200 rows and sets no
+    truncation flag -- it just returns `count: 200`. This function previously ran
+    `SELECT url FROM mcp_server_registry` with no LIMIT and therefore compared
+    every candidate against **198 distinct urls out of 2912**, so ~949 already-known
+    servers looked NEW on every single cycle and were re-written forever.
+
+    `server_id` is the real uniqueness key (2912 distinct / 2912 rows); `url` is
+    NOT (2501 distinct / 2912 rows). Filtering on url alone can never agree with
+    the constraint the database actually enforces.
+
+    `trustworthy` is False when we cannot prove we read the whole table. An
+    under-read must NOT be treated as "these rows do not exist" -- unknown is not
+    zero, and that confusion is the entire defect being fixed here.
+    """
+    expected = get_reg_count()
     try:
-        r = requests.post(QUERY_URL, json={'sql': 'SELECT url FROM mcp_server_registry'}, timeout=30)
-        result = r.json()
-        return {row['url'] for row in result.get('rows', []) if row.get('url')}
+        r = requests.post(QUERY_URL, json={
+            'sql': 'SELECT server_id, url FROM mcp_server_registry LIMIT %d' % QUERY_ROW_LIMIT
+        }, timeout=60)
+        rows = r.json().get('rows', [])
     except Exception as e:
-        log(f'Failed to fetch existing URLs: {e}')
-        return set()
+        log(f'Failed to fetch existing keys: {e}')
+        return set(), set(), False
+
+    server_ids = {row['server_id'] for row in rows if row.get('server_id')}
+    urls = {row['url'] for row in rows if row.get('url')}
+
+    trustworthy = True
+    if expected is not None and expected >= 0 and len(rows) < expected:
+        log(f'!! EXISTENCE FILTER TRUNCATED: read {len(rows)} of {expected} registry rows '
+            f'(QUERY_ROW_LIMIT={QUERY_ROW_LIMIT}). Treating candidates as UNKNOWN, not new.')
+        trustworthy = False
+    if len(rows) >= QUERY_ROW_LIMIT:
+        log(f'!! EXISTENCE FILTER AT LIMIT: {len(rows)} rows == QUERY_ROW_LIMIT; raise it.')
+        trustworthy = False
+    return server_ids, urls, trustworthy
 
 def upsert_servers(servers):
     if not servers:
@@ -187,9 +221,21 @@ def upsert_servers(servers):
         except Exception as e:
             log(f'Batch write error: {e}')
     count_after = get_reg_count()
+    if count_before < 0 or count_after < 0:
+        # get_reg_count() returns -1 on failure. Unknown is not zero and is not
+        # a success either -- say so rather than reporting a made-up delta.
+        log(f'INSERT batch: before={count_before}, inserted_attempted={len(servers)}, '
+            f'after={count_after}, actual_new=UNKNOWN (registry count unavailable)')
+        return None
     actual_new = count_after - count_before
-    log(f'INSERT batch: before={count_before}, inserted_attempted={len(servers)}, after={count_after}, actual_new={actual_new}')
-    return inserted
+    log(f'INSERT batch: before={count_before}, inserted_attempted={len(servers)}, '
+        f'after={count_after}, actual_new={actual_new}')
+    if actual_new == 0 and len(servers) > 0:
+        log(f'!! WRITE PATH NO-OP: attempted {len(servers)} rows, registry did not move. '
+            f'Every one was already present, or the write silently failed.')
+    # Return what ACTUALLY landed. Returning the attempt is what let this daemon
+    # claim 2,516,942 promotions against 469 real inserts since 2026-07-11.
+    return actual_new
 
 def fetch_candidates_from_npm():
     candidates = []
@@ -291,14 +337,38 @@ def run():
         if key and key not in dedup:
             dedup[key] = c
     candidates = list(dedup.values())
-    existing_urls = get_promoted_urls()
+    existing_ids, existing_urls, filter_ok = get_promoted_keys()
     before_filter = len(candidates)
-    candidates = [c for c in candidates if c.get('url') and c['url'] not in existing_urls]
-    log(f'Candidates: {before_filter} total, {before_filter - len(candidates)} skipped (existing), {len(candidates)} new')
+    if filter_ok:
+        # Filter on server_id FIRST -- it is the key the database actually
+        # enforces -- then on url as a secondary guard.
+        candidates = [c for c in candidates
+                      if c.get('url')
+                      and c.get('server_id') not in existing_ids
+                      and c['url'] not in existing_urls]
+        log(f'Candidates: {before_filter} total, '
+            f'{before_filter - len(candidates)} skipped (existing), {len(candidates)} new '
+            f'(filter read {len(existing_ids)} server_ids)')
+    else:
+        # We could not prove we read the whole registry. Writing anyway is
+        # harmless (the constraint dedups) but claiming these are NEW is not.
+        log(f'Candidates: {before_filter} total, existence filter UNTRUSTWORTHY -- '
+            f'new-count SUPPRESSED this cycle; relying on the DB constraint to dedup.')
     promoted = upsert_servers(candidates)
-    total_promoted += promoted
+    total_promoted = None if (promoted is None or total_promoted is None) else total_promoted + promoted
     reg_count_after = get_reg_count()
-    log(f'Cycle complete: {total_promoted} promoted, registry now {reg_count_after} (delta: +{reg_count_after - reg_count_before})')
+    delta = reg_count_after - reg_count_before
+    if total_promoted is None:
+        log(f'Cycle complete: promoted=UNKNOWN (registry count unavailable), '
+            f'registry now {reg_count_after}')
+    else:
+        # total_promoted is now what LANDED, not what was attempted, so it and
+        # `delta` agree by construction. If they ever diverge, something else
+        # wrote to the registry during the cycle -- worth seeing.
+        log(f'Cycle complete: {total_promoted} promoted, registry now {reg_count_after} (delta: {delta:+d})')
+        if total_promoted != delta:
+            log(f'!! ACCOUNTING MISMATCH: promoted={total_promoted} but registry delta={delta} '
+                f'-- a concurrent writer, or the count is unreliable.')
     elapsed = time.time() - start
     log(f'Cycle took {elapsed:.1f}s')
     send_heartbeat()

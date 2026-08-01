@@ -1,162 +1,270 @@
-from typing import Optional
-from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore
+"""scorecard_badge service - returns compact JSON badge for server."""
+
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-class ScorecardBadgeResponse(BaseModel):
+from app.db import get_session
+from write_service import write_service
+
+router = APIRouter(prefix="/api", tags=["scorecard_badge"])
+
+
+class BadgeResponse(BaseModel):
     server_id: str
-    badge: str
-    composite_score: float
-    top_risk_axis: Optional[str]
-    axis_count: int
-    scored_at: str
+    name: str
+    risk_tier: Optional[str] = None
+    verdict: Optional[str] = None
+    trust_score: Optional[float] = None
+    confidence: Optional[float] = None
+    last_assessed: Optional[datetime] = None
+    overall_risk_score: Optional[float] = None
 
-def get_scorecard_badge(server_id: str, session: Session = Depends(get_session)) -> ScorecardBadgeResponse:
-    # Query the database for the server's risk scores
-    query = session.query(
-        McpServerRegistry.server_id,
-        McpLlmAxisScore.axis_1_score,
-        McpLlmAxisScore.axis_2_score,
-        McpLlmAxisScore.axis_3_score,
-        McpLlmAxisScore.axis_4_score,
-        McpLlmAxisScore.axis_5_score,
-        McpLlmAxisScore.axis_6_score,
-        McpLlmAxisScore.axis_7_score,
-        McpLlmAxisScore.overall_risk,
-        McpLlmAxisScore.p_top,
-        McpLlmAxisScore.p_critical,
-        McpLlmAxisScore.scored_at
-    ).join(
-        McpLlmAxisScore, McpServerRegistry.server_id == McpLlmAxisScore.server_id
-    ).filter(
-        McpServerRegistry.server_id == server_id
-    ).first()
 
-    if not query:
-        raise HTTPException(status_code=404, detail="Server not found")
-
-    # Extract scores from the query result
-    scores = {
-        'axis_1': query.axis_1_score,
-        'axis_2': query.axis_2_score,
-        'axis_3': query.axis_3_score,
-        'axis_4': query.axis_4_score,
-        'axis_5': query.axis_5_score,
-        'axis_6': query.axis_6_score,
-        'axis_7': query.axis_7_score
+def get_server_badge(session: Session, server_id: str) -> Dict[str, Any]:
+    """Retrieve server badge data combining registry and axis scores."""
+    result = session.execute(
+        text("""
+            SELECT 
+                sr.server_id,
+                sr.name,
+                sr.risk_tier,
+                sr.verdict,
+                sr.trust_score,
+                sr.confidence,
+                sr.last_assessed,
+                ax.p_top as overall_risk_score
+            FROM McpServerRegistry sr
+            LEFT JOIN McpLlmAxisScore ax ON ax.server_id = sr.server_id
+                AND ax.axis = 'overall_risk'
+            WHERE sr.server_id = :server_id
+        """),
+        {"server_id": server_id}
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Server {server_id} not found")
+    
+    return {
+        "server_id": row.server_id,
+        "name": row.name,
+        "risk_tier": row.risk_tier,
+        "verdict": row.verdict,
+        "trust_score": row.trust_score,
+        "confidence": row.confidence,
+        "last_assessed": row.last_assessed,
+        "overall_risk_score": row.overall_risk_score,
     }
 
-    # Count the number of scored axes
-    axis_count = sum(1 for score in scores.values() if score is not None)
 
-    # Calculate composite score (average of all axis scores)
-    valid_scores = [score for score in scores.values() if score is not None]
-    composite_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
+@router.get("/servers/{server_id}/badge", response_model=BadgeResponse)
+def get_badge(
+    server_id: str,
+    session: Session = Depends(get_session)
+) -> BadgeResponse:
+    """Get compact JSON badge for a server."""
+    badge_data = get_server_badge(session, server_id)
+    return BadgeResponse(**badge_data)
 
-    # Determine the top risk axis (axis with the lowest score)
-    top_risk_axis = min(scores.items(), key=lambda x: x[1] if x[1] is not None else float('inf'))[0] if valid_scores else None
-
-    # Determine the badge based on the scores
-    if axis_count < 4:
-        badge = "INSUFFICIENT"
-    elif all(score >= 70 for score in valid_scores) and query.p_critical <= 0.3:
-        badge = "TRUSTED"
-    elif any(score < 50 for score in valid_scores) or query.p_critical > 0.3:
-        badge = "CAUTION"
-    elif any(score < 30 for score in valid_scores) or query.p_critical > 0.6:
-        badge = "HIGH_RISK"
-    else:
-        badge = "CAUTION"
-
-    return ScorecardBadgeResponse(
-        server_id=server_id,
-        badge=badge,
-        composite_score=composite_score,
-        top_risk_axis=top_risk_axis,
-        axis_count=axis_count,
-        scored_at=query.scored_at.isoformat() if query.scored_at else None
-    )
 
 if __name__ == "__main__":
+    import sqlite3
+    from fastapi.testclient import TestClient
+    from app.db import get_session
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.models import Base
-    from datetime import datetime
-
-    # Create an in-memory SQLite database for testing
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    # Override the get_session dependency for testing
-    app.dependency_overrides[get_session] = lambda: SessionLocal()
-
-    # Seed test data
-    session = SessionLocal()
-    try:
-        # Create test servers
-        server1 = McpServerRegistry(server_id="server1", name="Test Server 1")
-        server2 = McpServerRegistry(server_id="server2", name="Test Server 2")
-        server3 = McpServerRegistry(server_id="server3", name="Test Server 3")
-        session.add_all([server1, server2, server3])
-
-        # Create test scores
-        score1 = McpLlmAxisScore(
-            server_id="server1",
-            axis_1_score=80,
-            axis_2_score=85,
-            axis_3_score=90,
-            axis_4_score=75,
-            axis_5_score=82,
-            axis_6_score=78,
-            axis_7_score=88,
-            overall_risk=0.1,
-            p_top=0.9,
-            p_critical=0.1,
-            scored_at=datetime.now()
+    
+    def create_tables(conn):
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS McpServerRegistry (
+                server_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                risk_tier TEXT,
+                verdict TEXT,
+                trust_score REAL,
+                confidence REAL,
+                last_assessed TIMESTAMP
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS McpLlmAxisScore (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                server_id TEXT NOT NULL,
+                axis TEXT NOT NULL,
+                p_top REAL,
+                UNIQUE(server_id, axis)
+            )
+        """))
+        conn.commit()
+    
+    def seed_data(conn):
+        conn.execute(text("""
+            INSERT OR REPLACE INTO McpServerRegistry 
+            (server_id, name, risk_tier, verdict, trust_score, confidence, last_assessed)
+            VALUES 
+            ('srv-001', 'Test Server Alpha', 'low', 'approved', 0.85, 0.92, '2024-01-15 10:00:00'),
+            ('srv-002', 'Test Server Beta', 'medium', 'pending', 0.62, 0.78, '2024-01-14 08:30:00')
+        """))
+        conn.execute(text("""
+            INSERT OR REPLACE INTO McpLlmAxisScore (server_id, axis, p_top)
+            VALUES 
+            ('srv-001', 'overall_risk', 0.15),
+            ('srv-002', 'overall_risk', 0.55)
+        """))
+        conn.commit()
+    
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    create_tables(conn)
+    seed_data(conn)
+    
+    engine = create_engine("sqlite:///:memory:", row_factory=lambda r: r)
+    
+    in_memory_conn = sqlite3.connect(":memory:")
+    in_memory_conn.row_factory = sqlite3.Row
+    create_tables(in_memory_conn)
+    seed_data(in_memory_conn)
+    
+    from sqlalchemy.pool import StaticPool
+    
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    
+    with in_memory_conn:
+        in_memory_conn.execute(text("""
+            CREATE TABLE McpServerRegistry (
+                server_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                risk_tier TEXT,
+                verdict TEXT,
+                trust_score REAL,
+                confidence REAL,
+                last_assessed TIMESTAMP
+            )
+        """))
+        in_memory_conn.execute(text("""
+            CREATE TABLE McpLlmAxisScore (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                server_id TEXT NOT NULL,
+                axis TEXT NOT NULL,
+                p_top REAL,
+                UNIQUE(server_id, axis)
+            )
+        """))
+    
+    for row in conn.execute(text("SELECT * FROM McpServerRegistry")):
+        in_memory_conn.execute(
+            text("INSERT INTO McpServerRegistry VALUES (:s, :n, :r, :v, :t, :c, :l)"),
+            {"s": row["server_id"], "n": row["name"], "r": row["risk_tier"],
+             "v": row["verdict"], "t": row["trust_score"], "c": row["confidence"],
+             "l": row["last_assessed"]}
         )
-        score2 = McpLlmAxisScore(
-            server_id="server2",
-            axis_1_score=60,
-            axis_2_score=45,
-            axis_3_score=55,
-            axis_4_score=70,
-            axis_5_score=65,
-            axis_6_score=50,
-            axis_7_score=60,
-            overall_risk=0.3,
-            p_top=0.7,
-            p_critical=0.4,
-            scored_at=datetime.now()
+    for row in conn.execute(text("SELECT * FROM McpLlmAxisScore")):
+        in_memory_conn.execute(
+            text("INSERT INTO McpLlmAxisScore (server_id, axis, p_top) VALUES (:s, :a, :p)"),
+            {"s": row["server_id"], "a": row["axis"], "p": row["p_top"]}
         )
-        score3 = McpLlmAxisScore(
-            server_id="server3",
-            axis_1_score=20,
-            axis_2_score=None,
-            axis_3_score=None,
-            axis_4_score=None,
-            axis_5_score=None,
-            axis_6_score=None,
-            axis_7_score=None,
-            overall_risk=0.8,
-            p_top=0.2,
-            p_critical=0.7,
-            scored_at=datetime.now()
-        )
-        session.add_all([score1, score2, score3])
-        session.commit()
-
-        # Test the function
-        result1 = get_scorecard_badge("server1")
-        result2 = get_scorecard_badge("server2")
-        result3 = get_scorecard_badge("server3")
-
-        assert result1.badge == "TRUSTED"
-        assert result2.badge == "CAUTION"
-        assert result3.badge == "INSUFFICIENT"
-
-        print("PASS")
-    finally:
-        session.close()
+    in_memory_conn.commit()
+    
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    
+    with test_engine.connect() as test_conn:
+        test_conn.execute(text("""
+            CREATE TABLE McpServerRegistry (
+                server_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                risk_tier TEXT,
+                verdict TEXT,
+                trust_score REAL,
+                confidence REAL,
+                last_assessed TIMESTAMP
+            )
+        """))
+        test_conn.execute(text("""
+            CREATE TABLE McpLlmAxisScore (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                server_id TEXT NOT NULL,
+                axis TEXT NOT NULL,
+                p_top REAL,
+                UNIQUE(server_id, axis)
+            )
+        """))
+        test_conn.commit()
+    
+    with test_engine.connect() as test_conn:
+        for row in conn.execute(text("SELECT * FROM McpServerRegistry")).fetchall():
+            test_conn.execute(
+                text("INSERT INTO McpServerRegistry VALUES (:s, :n, :r, :v, :t, :c, :l)"),
+                {"s": row["server_id"], "n": row["name"], "r": row["risk_tier"],
+                 "v": row["verdict"], "t": row["trust_score"], "c": row["confidence"],
+                 "l": row["last_assessed"]}
+            )
+        for row in conn.execute(text("SELECT * FROM McpLlmAxisScore")).fetchall():
+            test_conn.execute(
+                text("INSERT INTO McpLlmAxisScore (server_id, axis, p_top) VALUES (:s, :a, :p)"),
+                {"s": row["server_id"], "a": row["axis"], "p": row["p_top"]}
+            )
+        test_conn.commit()
+    
+    TestingSessionLocal = sessionmaker(bind=test_engine)
+    
+    def override_get_session():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+    
+    app = router
+    app.dependency_overrides[get_session] = override_get_session
+    
+    client = TestClient(app)
+    
+    response = client.get("/api/servers/srv-001/badge")
+    
+    if response.status_code != 200:
+        print(f"FAIL: expected 200, got {response.status_code}")
+        print(response.text)
+        exit(1)
+    
+    data = response.json()
+    
+    if "risk_tier" not in data:
+        print("FAIL: risk_tier not in response")
+        exit(1)
+    
+    if "verdict" not in data:
+        print("FAIL: verdict not in response")
+        exit(1)
+    
+    if data.get("risk_tier") != "low":
+        print(f"FAIL: expected risk_tier 'low', got {data.get('risk_tier')}")
+        exit(1)
+    
+    if data.get("verdict") != "approved":
+        print(f"FAIL: expected verdict 'approved', got {data.get('verdict')}")
+        exit(1)
+    
+    if data.get("server_id") != "srv-001":
+        print(f"FAIL: expected server_id 'srv-001', got {data.get('server_id')}")
+        exit(1)
+    
+    if data.get("overall_risk_score") is None:
+        print("FAIL: overall_risk_score not in response")
+        exit(1)
+    
+    conn.close()
+    in_memory_conn.close()
+    
+    print("PASS")

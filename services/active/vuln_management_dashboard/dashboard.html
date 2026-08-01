@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vulnerability Management Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background:#f8f9fa; color:#212529;}
+    h1 {font-size: 1.6rem; margin:0 0 1rem; color:#1a1a2e;}
+    .card {background:#fff; padding:20px; margin-bottom:16px; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.08); border:1px solid #e9ecef;}
+    .overall-score {display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+    .score-badge {font-size:2.2rem; font-weight:700; color:#0d6efd;}
+    .verdict-badge {background:#198754; color:#fff; padding:4px 12px; border-radius:20px; font-size:0.9rem; font-weight:600;}
+    .verdict-badge.low {background:#198754;}
+    .verdict-badge.medium {background:#ffc107; color:#000;}
+    .verdict-badge.high {background:#dc3545;}
+    .verdict-badge.critical {background:#6f42c1;}
+    .axis-list {display:flex; flex-direction:column; gap:10px;}
+    .axis-row {display:grid; grid-template-columns:140px 1fr 50px; align-items:center; gap:12px;}
+    .axis-name {font-size:0.88rem; font-weight:500; color:#495057;}
+    .axis-bar-wrap {height:10px; background:#e9ecef; border-radius:5px; overflow:hidden;}
+    .axis-fill {height:100%; border-radius:5px; transition:width 0.4s ease;}
+    .axis-fill.excellent {background:linear-gradient(90deg,#28a745,#20c997);}
+    .axis-fill.good {background:linear-gradient(90deg,#20c997,#17a2b8);}
+    .axis-fill.fair {background:linear-gradient(90deg,#ffc107,#fd7e14);}
+    .axis-fill.poor {background:linear-gradient(90deg,#fd7e14,#dc3545);}
+    .axis-fill.critical {background:linear-gradient(90deg,#dc3545,#6f42c1);}
+    .axis-score {font-size:0.85rem; font-weight:600; text-align:right; color:#495057;}
+    .criteria-label {font-size:0.75rem; color:#6c757d; margin-top:16px; padding-top:12px; border-top:1px solid #e9ecef;}
+    .loading, .error, .empty {text-align:center; padding:40px 20px; color:#6c757d; font-size:1rem;}
+    .loading::before {content:''; display:inline-block; width:24px; height:24px; border:3px solid #dee2e6; border-top-color:#0d6efd; border-radius:50%; animation:spin 0.8s linear infinite; margin-right:10px; vertical-align:middle;}
+    @keyframes spin {to{transform:rotate(360deg);}}
+    .error {color:#dc3545; background:#fff5f5; border:1px solid #fcc2c2; border-radius:8px;}
+    .empty {background:#fff; border:1px dashed #dee2e6;}
+    .refresh-btn {background:#0d6efd; color:#fff; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.88rem; display:flex; align-items:center; gap:6px;}
+    .refresh-btn:hover {background:#0b5ed7;}
+    .refresh-btn:focus {outline:2px solid #0d6efd; outline-offset:2px;}
+    .refresh-btn .icon {font-size:1rem;}
+    .header-row {display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+  </style>
+</head>
+<body>
+  <h1>Vulnerability Management Dashboard</h1>
+  
+  <div id="content">
+    <div class="card">
+      <div class="loading" role="status" aria-label="Loading dashboard data" aria-live="polite">Loading data…</div>
+    </div>
+  </div>
+
+  <script>
+    // In-memory auth state only — session data kept in JS variables
+    const authState = { token: null };
+
+    // Real apps set token after login; for demo / integration with auth layer:
+    // authState.token = session.bearer_token (populated externally)
+    // Placeholder: replace with actual token acquisition mechanism
+    if (!authState.token) {
+      // Attempt to read from parent window (if embedded) or set default
+      authState.token = (window !== window.top && window.top.__ZO_AUTH__) 
+        ? window.top.__ZO_AUTH__.bearer 
+        : 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder';
+    }
+
+    const API_BASE = '/api';
+    const ENDPOINT = '/vuln_management_dashboard/summary';
+
+    // Score-to-CSS-class mapping (SSL-Labs style)
+    function scoreClass(score) {
+      if (score >= 90) return 'excellent';
+      if (score >= 70) return 'good';
+      if (score >= 50) return 'fair';
+      if (score >= 25) return 'poor';
+      return 'critical';
+    }
+
+    // Build a single risk axis row
+    function buildAxisRow(name, score) {
+      const row = document.createElement('div');
+      row.className = 'axis-row';
+      row.setAttribute('role', 'meter');
+      row.setAttribute('aria-label', `${name}: ${score} out of 100`);
+      row.setAttribute('aria-valuenow', score);
+      row.setAttribute('aria-valuemin', 0);
+      row.setAttribute('aria-valuemax', 100);
+
+      const label = document.createElement('div');
+      label.className = 'axis-name';
+      label.textContent = name;
+
+      const barWrap = document.createElement('div');
+      barWrap.className = 'axis-bar-wrap';
+      const fill = document.createElement('div');
+      fill.className = `axis-fill ${scoreClass(score)}`;
+      fill.style.width = Math.max(0, Math.min(100, score)) + '%';
+      barWrap.appendChild(fill);
+
+      const scoreEl = document.createElement('div');
+      scoreEl.className = 'axis-score';
+      scoreEl.textContent = score;
+
+      row.appendChild(label);
+      row.appendChild(barWrap);
+      row.appendChild(scoreEl);
+      return row;
+    }
+
+    // Normalise verdict tier for badge styling
+    function verdictClass(tier) {
+      if (!tier) return '';
+      const t = tier.toLowerCase();
+      if (t.includes('critical')) return 'critical';
+      if (t.includes('high')) return 'high';
+      if (t.includes('medium') || t.includes('med')) return 'medium';
+      return 'low';
+    }
+
+    // Render the full dashboard from API response
+    function renderDashboard(data) {
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+
+      // Header with refresh
+      const header = document.createElement('div');
+      header.className = 'header-row';
+
+      const title = document.createElement('h2');
+      title.textContent = 'Threat Overview';
+      title.style.cssText = 'font-size:1.1rem;margin:0;color:#495057;';
+
+      const refreshBtn = document.createElement('button');
+      refreshBtn.className = 'refresh-btn';
+      refreshBtn.setAttribute('aria-label', 'Refresh dashboard data');
+      refreshBtn.innerHTML = '<span class="icon">↻</span> Refresh';
+      refreshBtn.addEventListener('click', fetchData);
+
+      header.appendChild(title);
+      header.appendChild(refreshBtn);
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      // Overall score + verdict
+      const overallRow = document.createElement('div');
+      overallRow.className = 'overall-score';
+
+      const scoreBadge = document.createElement('div');
+      scoreBadge.className = 'score-badge';
+      scoreBadge.setAttribute('aria-label', `Overall score: ${data.overall_score ?? 'N/A'}`);
+      scoreBadge.textContent = data.overall_score ?? '—';
+
+      const verdictBadge = document.createElement('div');
+      const vClass = verdictClass(data.verdict?.tier);
+      verdictBadge.className = `verdict-badge ${vClass}`;
+      verdictBadge.setAttribute('aria-label', `Verdict tier: ${data.verdict?.tier ?? 'unknown'}`);
+      verdictBadge.textContent = data.verdict?.tier ?? 'Unknown';
+
+      overallRow.appendChild(scoreBadge);
+      overallRow.appendChild(verdictBadge);
+      card.appendChild(overallRow);
+
+      // 6 risk axes (SSL-Labs style weighted display)
+      const axesLabel = document.createElement('div');
+      axesLabel.style.cssText = 'font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#6c757d;margin-bottom:8px;';
+      axesLabel.textContent = 'Risk Axes';
+      card.appendChild(axesLabel);
+
+      const axesList = document.createElement('div');
+      axesList.className = 'axis-list';
+
+      const axes = Array.isArray(data.axes) ? data.axes : [];
+      const RISK_AXES = [
+        'Exploitability', 'Attack Surface', 'Vulnerability Prevalence',
+        'Remediation Speed', 'Asset Criticality', 'Threat Intelligence'
+      ];
+
+      axes.forEach(ax => axesList.appendChild(buildAxisRow(ax.name, Math.round(ax.score))));
+      // Pad with placeholders if fewer than 6 axes returned
+      if (axes.length < RISK_AXES.length) {
+        RISK_AXES.slice(axes.length).forEach(name => axesList.appendChild(buildAxisRow(name, 0)));
+      }
+
+      card.appendChild(axesList);
+
+      // Criteria version label
+      if (data.criteria_version) {
+        const critLabel = document.createElement('div');
+        critLabel.className = 'criteria-label';
+        critLabel.setAttribute('aria-label', `Criteria version ${data.criteria_version}`);
+        critLabel.textContent = `Criteria version: ${data.criteria_version}`;
+        card.appendChild(critLabel);
+      }
+
+      content.appendChild(header);
+      content.appendChild(card);
+    }
+
+    function showMessage(msg, cls, ariaLabel) {
+      const content = document.getElementById('content');
+      const el = document.createElement('div');
+      el.className = cls;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-label', ariaLabel || msg);
+      el.setAttribute('aria-live', 'polite');
+      el.textContent = msg;
+      content.innerHTML = '';
+      content.appendChild(el);
+    }
+
+    async function fetchData() {
+      showMessage('Loading data…', 'loading', 'Loading dashboard data');
+      try {
+        const resp = await fetch(API_BASE + ENDPOINT, {
+          method: 'GET',
+          headers: {
+            'Authorization': authState.token,
+            'Accept': 'application/json'
+          }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (!json || Object.keys(json).length === 0) {
+          showMessage('No data available at this time.', 'empty', 'No data available');
+        } else {
+          renderDashboard(json);
+        }
+      } catch (e) {
+        console.error('[vuln_management_dashboard] fetch error:', e);
+        showMessage('Unable to load dashboard data.', 'error', 'Dashboard load error');
+      }
+    }
+
+    // Self-test: ensure renderDashboard does not throw on empty / partial response
+    (function selfTest() {
+      try {
+        // 1. Empty object
+        renderDashboard({});
+        // 2. Partial data
+        renderDashboard({ overall_score: 85 });
+        // 3. All fields present
+        renderDashboard({
+          overall_score: 72,
+          verdict: { tier: 'Medium' },
+          criteria_version: 'v2.1.0',
+          axes: [
+            { name: 'Exploitability', score: 65 },
+            { name: 'Attack Surface', score: 80 },
+            { name: 'Vulnerability Prevalence', score: 55 },
+            { name: 'Remediation Speed', score: 90 },
+            { name: 'Asset Criticality', score: 70 },
+            { name: 'Threat Intelligence', score: 40 }
+          ]
+        });
+        console.info('[SELFTEST] All empty/partial render paths passed — no exceptions thrown.');
+      } catch (e) {
+        console.error('[SELFTEST] FAILED:', e);
+        throw e;
+      }
+    })();
+
+    // Kick off fetch on page load
+    fetchData();
+  </script>
+</body>
+</html>

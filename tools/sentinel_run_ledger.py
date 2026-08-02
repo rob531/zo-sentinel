@@ -185,6 +185,31 @@ def read_state(state_path: Path) -> dict:
     return data
 
 
+#: The lane this ledger speaks for. The evidence directory is SHARED by every
+#: lane that runs ops/host/verify_candidate.ps1, so "an artifact exists" and
+#: "THIS lane produced an artifact" are different facts and were being conflated.
+THIS_LANE = "prod-drift"
+
+
+def lane_of(path: Path):
+    """Which lane produced this artifact, or None if it cannot be attributed.
+
+    None is NOT "mine" and not "foreign" -- it is UNKNOWN, and unknown is not
+    zero (R6). Artifacts written before the stamp existed have no field and keep
+    the OLD behaviour deliberately: retro-attributing them would be a guess, and
+    a guess that silences an alarm is worse than an alarm that names its own
+    uncertainty.
+    """
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(blob, dict):
+        return None
+    lane = blob.get("produced_by_lane")
+    return lane if isinstance(lane, str) and lane else None
+
+
 def collect_evidence(evidence_dir: Path) -> list:
     """Every verdict artifact with the instant it was CHECKED (from content)."""
     if not evidence_dir.exists():
@@ -208,7 +233,14 @@ def collect_evidence(evidence_dir: Path) -> list:
             # Neither content nor name can date it. Do not guess from mtime.
             out.append({"path": str(path), "checked_utc": None, "source": "UNDATABLE"})
             continue
-        out.append({"path": str(path), "checked_utc": checked, "source": source})
+        out.append(
+            {
+                "path": str(path),
+                "checked_utc": checked,
+                "source": source,
+                "produced_by_lane": lane_of(path),
+            }
+        )
     return out
 
 
@@ -331,11 +363,33 @@ def reconcile(
     undatable = [e["path"] for e in evidence if e["checked_utc"] is None]
     dated = [e for e in evidence if e["checked_utc"] is not None]
 
+    # FOREIGN EVIDENCE: produced by a DIFFERENT lane out of the SHARED evidence
+    # directory. Measured 2026-08-02: a sibling lane dry-ran verify_candidate.ps1
+    # at 18:15Z on 9d365abd, and prod-drift's ledger reported it as ORPHAN
+    # EVIDENCE -- "verification ran, state never recorded it" -- on a run whose
+    # own receipts (00:47/04:46/10:47/19:47Z) show no missed slot at all. The
+    # alarm was about a lane that did nothing wrong, and a HARD signal that fires
+    # every time ANY sibling verifies is one that can never clear.
+    # Excluded from the orphan test; reported anyway on its own ADVISORY line,
+    # because an exclusion nobody can see is indistinguishable from a check that
+    # stopped running.
+    foreign = [
+        {
+            "path": e["path"],
+            "checked_utc": fmt(e["checked_utc"]),
+            "lane": e.get("produced_by_lane"),
+        }
+        for e in dated
+        if e.get("produced_by_lane") not in (None, THIS_LANE)
+    ]
+    foreign_paths = {f["path"] for f in foreign}
+
     # ORPHAN EVIDENCE: the verification ran, the record never landed.
     orphans = [
         {"path": e["path"], "checked_utc": fmt(e["checked_utc"]), "source": e["source"]}
         for e in dated
         if e["checked_utc"] > last_check
+        and e["path"] not in foreign_paths
         and not any(
             abs((e["checked_utc"] - r).total_seconds()) <= tolerance_min * 60
             for r in receipts
@@ -393,6 +447,7 @@ def reconcile(
         "evidence_count": len(evidence),
         "undatable_evidence": undatable,
         "orphan_evidence": orphans,
+        "foreign_evidence": foreign,
         "grid_phase": [
             (r.strftime("%Y-%m-%dT%H:%M:%SZ"),
              sl.strftime("%Y-%m-%dT%H:%M:%SZ"), d)
@@ -432,6 +487,17 @@ def render(report: dict) -> str:
         f"grid basis  : {GRID_BASIS}",
         "",
     ]
+    if report.get("foreign_evidence"):
+        lines.append(
+            "foreign evidence (ADVISORY, excluded from the orphan test -- another"
+            " lane's dry-run in the shared evidence dir):"
+        )
+        for item in report["foreign_evidence"]:
+            lines.append(
+                f"  {item['checked_utc']}  lane={item['lane']}  {item['path']}"
+            )
+        lines.append("")
+
     if report["orphan_evidence"]:
         lines.append("ORPHAN EVIDENCE -- verification ran, state never recorded it:")
         for orphan in report["orphan_evidence"]:

@@ -62,7 +62,7 @@ PAGE = 100
 # in a way nobody could have checked while the chairman was away. A 403 on
 # EVERY endpoint including an unauthenticated-ish one is the tell: a scope
 # problem is selective, an edge block is total.
-USER_AGENT = "zo-sentinel-reconcile/1.0 (+https://mcplookup.app)"
+USER_AGENT = "zo-sentinel-reconcile/1.0 (+https://mcprisky.io)"
 
 
 class Unknown(Exception):

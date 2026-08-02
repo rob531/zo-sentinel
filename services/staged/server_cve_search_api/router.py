@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     # Import the declarative base and the concrete models used by the logic.
     from app.db import Base, get_session as original_get_session
-    from app.models import VulnerabilityAdvisory, VulnerabilityLink
+    from app.models import VulnAdvisory, VulnLink
 
     # --------------------------------------------------------------------- #
     # Create an in‑memory SQLite database and bind a session factory to it.
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     # server 'srv-001'.
     # --------------------------------------------------------------------- #
     with SessionLocal() as db:
-        adv1 = VulnerabilityAdvisory(
+        adv1 = VulnAdvisory(
             id="CVE-1234-5678",
             feed="NVD",
             summary="Test CVE 1",
@@ -82,7 +82,7 @@ if __name__ == "__main__":
             source_url="http://example.com/1",
             published_at="2023-01-01T00:00:00Z",
         )
-        adv2 = VulnerabilityAdvisory(
+        adv2 = VulnAdvisory(
             id="CVE-8765-4321",
             feed="NVD",
             summary="Test CVE 2",
@@ -95,8 +95,8 @@ if __name__ == "__main__":
         db.add_all([adv1, adv2])
         db.flush()  # ensure IDs are persisted before linking
 
-        link1 = VulnerabilityLink(server_id="srv-001", advisory_id=adv1.id)
-        link2 = VulnerabilityLink(server_id="srv-001", advisory_id=adv2.id)
+        link1 = VulnLink(server_id="srv-001", advisory_id=adv1.id)
+        link2 = VulnLink(server_id="srv-001", advisory_id=adv2.id)
         db.add_all([link1, link2])
         db.commit()
 

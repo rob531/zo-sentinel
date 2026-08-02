@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 from typing import List, Optional
 import json
@@ -33,12 +33,12 @@ def get_disputes(db: Session = Depends(get_session)) -> List[dict]:
 
 @app.get("/orgs")
 def get_orgs(db: Session = Depends(get_session)) -> List[dict]:
-    orgs = db.query(Orgs).all()
+    orgs = db.query(Org).all()
     return [{"id": org.id, "name": org.name} for org in orgs]
 
 @app.get("/users")
 def get_users(db: Session = Depends(get_session)) -> List[dict]:
-    users = db.query(Users).all()
+    users = db.query(User).all()
     return [{"id": user.id, "name": user.name, "org_id": user.org_id} for user in users]
 
 @app.get("/mesh/scores")

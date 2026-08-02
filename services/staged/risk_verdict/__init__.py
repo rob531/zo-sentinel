@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 from pydantic import BaseModel
 
@@ -72,8 +72,8 @@ def _run_self_test():
 
     # Test data
     test_server = McpServerRegistry(id=1, name="test_server")
-    test_org = Orgs(id=1, name="test_org")
-    test_user = Users(id=1, name="test_user", org_id=1)
+    test_org = Org(id=1, name="test_org")
+    test_user = User(id=1, name="test_user", org_id=1)
 
     with SessionLocal() as db:
         db.add(test_server)

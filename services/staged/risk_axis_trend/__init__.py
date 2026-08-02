@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 
 def get_mesh_memory() -> Dict[str, Any]:
@@ -35,8 +35,8 @@ def get_app_data(session: Session = Depends(get_session)) -> Dict[str, Any]:
         "servers": session.query(McpServerRegistry).all(),
         "scores": session.query(McpLlmAxisScore).all(),
         "disputes": session.query(McpScoreDispute).all(),
-        "orgs": session.query(Orgs).all(),
-        "users": session.query(Users).all()
+        "orgs": session.query(Org).all(),
+        "users": session.query(User).all()
     }
     return data
 

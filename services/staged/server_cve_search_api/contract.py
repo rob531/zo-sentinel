@@ -7,7 +7,7 @@ from datetime import datetime
 
 # Real data layer imports (must remain unchanged for production)
 from app.db import get_session
-from app.models import VulnerabilityAdvisory, VulnerabilityLink
+from app.models import VulnAdvisory, VulnLink
 
 router = APIRouter(prefix="/api")
 
@@ -42,9 +42,9 @@ def get_server_cves(
     """
     # Join advisory -> link and filter by server_id
     advisories = (
-        db.query(VulnerabilityAdvisory)
-        .join(VulnerabilityLink, VulnerabilityAdvisory.id == VulnerabilityLink.advisory_id)
-        .filter(VulnerabilityLink.server_id == server_id)
+        db.query(VulnAdvisory)
+        .join(VulnLink, VulnAdvisory.id == VulnLink.advisory_id)
+        .filter(VulnLink.server_id == server_id)
         .all()
     )
 
@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
     # Seed data
     with TestSessionLocal() as db:
-        adv1 = VulnerabilityAdvisory(
+        adv1 = VulnAdvisory(
             id=1,
             cve_id="CVE-2023-0001",
             feed="nvd",
@@ -108,7 +108,7 @@ if __name__ == "__main__":
             source_url="https://example.com/adv1",
             published_at=datetime(2023, 1, 1, 0, 0, 0),
         )
-        adv2 = VulnerabilityAdvisory(
+        adv2 = VulnAdvisory(
             id=2,
             cve_id="CVE-2023-0002",
             feed="github",
@@ -122,12 +122,12 @@ if __name__ == "__main__":
         db.add_all([adv1, adv2])
         db.flush()  # obtain primary keys
 
-        link1 = VulnerabilityLink(
+        link1 = VulnLink(
             id=1,
             server_id="srv-001",
             advisory_id=adv1.id,
         )
-        link2 = VulnerabilityLink(
+        link2 = VulnLink(
             id=2,
             server_id="srv-001",
             advisory_id=adv2.id,

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 from uuid import UUID
 from app.db import get_session
-from app.models import McpLlmAxisScore, McpServerRegistry, PerspectiveSnapshots
+from app.models import McpLlmAxisScore, McpServerRegistry, PerspectiveSnapshot
 
 router = APIRouter(prefix="/api/perspective")
 
@@ -28,8 +28,8 @@ async def get_perspective_query(
 ) -> Dict:
     # Query the database for the perspective and server
     perspective = (
-        session.query(PerspectiveSnapshots)
-        .filter(PerspectiveSnapshots.perspective_id == perspective_id)
+        session.query(PerspectiveSnapshot)
+        .filter(PerspectiveSnapshot.perspective_id == perspective_id)
         .first()
     )
     if not perspective:

@@ -1,0 +1,11 @@
+[service]
+name = "vuln_advisory_management_v2"
+import_path = "services.active.vuln_advisory_management_v2.router"
+prefix = "/api"
+tag = "vuln_advisory_management_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

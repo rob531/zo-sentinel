@@ -2,7 +2,7 @@ from typing import List, Dict, Optional
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 
 def get_mesh_memory(server_id: int, session: Session = Depends(get_session)) -> Optional[Dict]:

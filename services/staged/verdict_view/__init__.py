@@ -26,9 +26,9 @@ from sqlalchemy.orm import Session
 # ----------------------------------------------------------------------
 from app.db import get_session  # noqa: F401
 from app.models import (  # noqa: F401
-    ServerRegistry,
-    LlmAxisScore,
-    ScoreDispute,
+    McpServerRegistry,
+    McpLlmAxisScore,
+    McpScoreDispute,
     Org,
     User,
 )
@@ -78,7 +78,7 @@ def reset_server_export_api_quarantine(
     using the canonical session. Adjust the filter criteria as
     needed by the consuming services.
     """
-    session.query(ServerRegistry).update({ServerRegistry.quarantine: False})
+    session.query(McpServerRegistry).update({McpServerRegistry.quarantine: False})
     session.commit()
     return {"status": "reset"}
 

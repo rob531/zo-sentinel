@@ -16,9 +16,9 @@ from datetime import datetime
 # ----------------------------------------------------------------------
 from app.db import get_session, Base  # get_session is the production dependency
 from app.models import (
-    ServerRegistry,
-    VulnerabilityLink,
-    VulnerabilityAdvisory,
+    McpServerRegistry,
+    VulnLink,
+    VulnAdvisory,
 )  # noqa: F401
 
 # ----------------------------------------------------------------------
@@ -61,18 +61,18 @@ def get_server_cve_exposure(
     """
     Retrieve CVE exposure information for a specific server.
     """
-    server = session.query(ServerRegistry).filter(ServerRegistry.id == server_id).first()
+    server = session.query(McpServerRegistry).filter(McpServerRegistry.id == server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Join links to advisories
     rows = (
-        session.query(VulnerabilityLink, VulnerabilityAdvisory)
+        session.query(VulnLink, VulnAdvisory)
         .join(
-            VulnerabilityAdvisory,
-            VulnerabilityLink.advisory_id == VulnerabilityAdvisory.id,
+            VulnAdvisory,
+            VulnLink.advisory_id == VulnAdvisory.id,
         )
-        .filter(VulnerabilityLink.server_id == server_id)
+        .filter(VulnLink.server_id == server_id)
         .all()
     )
 
@@ -151,12 +151,12 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     with SessionLocal() as db:
         # Servers
-        srv1 = ServerRegistry(id=1, name="alpha")
-        srv2 = ServerRegistry(id=2, name="beta")
+        srv1 = McpServerRegistry(id=1, name="alpha")
+        srv2 = McpServerRegistry(id=2, name="beta")
         db.add_all([srv1, srv2])
 
         # Advisories
-        adv1 = VulnerabilityAdvisory(
+        adv1 = VulnAdvisory(
             id=101,
             summary="Critical issue",
             severity="critical",
@@ -165,7 +165,7 @@ if __name__ == "__main__":
             source_url="http://example.com/adv1",
             published_at=datetime(2023, 1, 1, 12, 0, 0),
         )
-        adv2 = VulnerabilityAdvisory(
+        adv2 = VulnAdvisory(
             id=102,
             summary="High severity issue",
             severity="high",
@@ -174,7 +174,7 @@ if __name__ == "__main__":
             source_url="http://example.com/adv2",
             published_at=datetime(2023, 2, 1, 12, 0, 0),
         )
-        adv3 = VulnerabilityAdvisory(
+        adv3 = VulnAdvisory(
             id=103,
             summary="Medium severity issue",
             severity="medium",
@@ -186,9 +186,9 @@ if __name__ == "__main__":
         db.add_all([adv1, adv2, adv3])
 
         # Links
-        link1 = VulnerabilityLink(server_id=1, advisory_id=101)
-        link2 = VulnerabilityLink(server_id=1, advisory_id=102)
-        link3 = VulnerabilityLink(server_id=2, advisory_id=103)
+        link1 = VulnLink(server_id=1, advisory_id=101)
+        link2 = VulnLink(server_id=1, advisory_id=102)
+        link3 = VulnLink(server_id=2, advisory_id=103)
         db.add_all([link1, link2, link3])
 
         db.commit()

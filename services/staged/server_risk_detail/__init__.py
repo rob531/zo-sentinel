@@ -26,9 +26,9 @@ from app.db import get_session
 from app.models import (
     MeshMemory,          # mcp_mesh_memory table
     MeshSignalScore,    # mcp_signal_scores table
-    ServerRegistry,     # mcp_server_registry table
-    LLMAxisScore,       # mcp_llm_axis_scores table
-    ScoreDispute,       # mcp_score_disputes table
+    McpServerRegistry,     # mcp_server_registry table
+    McpLlmAxisScore,       # mcp_llm_axis_scores table
+    McpScoreDispute,       # mcp_score_disputes table
     Org,                # orgs table
     User,               # users table
 )

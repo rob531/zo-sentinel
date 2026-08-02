@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 import requests
 from fastapi import Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 def get_mesh_scores(server_id: int) -> Dict[str, Any]:
     """Fetch mesh scores for a given server ID."""

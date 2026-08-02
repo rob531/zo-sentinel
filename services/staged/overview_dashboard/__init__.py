@@ -19,9 +19,9 @@ from sqlalchemy.orm import Session
 # Application‑level dependencies – must be imported exactly as required.
 from app.db import get_session
 from app.models import (
-    ServerRegistry,          # example model; actual usage may vary
-    LlmAxisScore,           # example model
-    ScoreDispute,           # example model
+    McpServerRegistry,          # example model; actual usage may vary
+    McpLlmAxisScore,           # example model
+    McpScoreDispute,           # example model
     Org,                    # example model
     User,                   # example model
 )

@@ -1,3 +1,4 @@
+from sqlalchemy.pool import StaticPool
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
@@ -58,7 +59,7 @@ async def export_entity_report(format: str, session: Session = Depends(get_sessi
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import StaticPool, get_session
+    from app.db import get_session
     from app.models import Base
     from sqlalchemy import create_engine
 

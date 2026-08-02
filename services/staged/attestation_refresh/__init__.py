@@ -2,7 +2,7 @@
 # staged->active promotion without rewrite.
 
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScores, McpScoreDisputes, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from fastapi import Depends
 import requests
 
@@ -10,7 +10,7 @@ import requests
 
 async def get_signal_scores(server_id: int, session: Depends(get_session)):
     """Fetch signal scores for a given server."""
-    scores = session.query(McpLlmAxisScores).filter(McpLlmAxisScores.server_id == server_id).all()
+    scores = session.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).all()
     return scores
 
 async def _run_self_test():

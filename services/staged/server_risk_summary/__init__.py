@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from typing import List
 import requests
 
@@ -15,11 +15,11 @@ def get_llm_axis_scores(session=Depends(get_session)) -> List[McpLlmAxisScore]:
 def get_score_disputes(session=Depends(get_session)) -> List[McpScoreDispute]:
     return session.query(McpScoreDispute).all()
 
-def get_orgs(session=Depends(get_session)) -> List[Orgs]:
-    return session.query(Orgs).all()
+def get_orgs(session=Depends(get_session)) -> List[Org]:
+    return session.query(Org).all()
 
-def get_users(session=Depends(get_session)) -> List[Users]:
-    return session.query(Users).all()
+def get_users(session=Depends(get_session)) -> List[User]:
+    return session.query(User).all()
 
 def query_mesh_memory(endpoint: str, query: str) -> dict:
     try:
@@ -35,7 +35,7 @@ def query_mesh_memory(endpoint: str, query: str) -> dict:
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -48,8 +48,8 @@ if __name__ == "__main__":
     McpServerRegistry.__table__.create(engine)
     McpLlmAxisScore.__table__.create(engine)
     McpScoreDispute.__table__.create(engine)
-    Orgs.__table__.create(engine)
-    Users.__table__.create(engine)
+    Org.__table__.create(engine)
+    User.__table__.create(engine)
 
     # Test functions
     try:

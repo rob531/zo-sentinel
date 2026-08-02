@@ -47,6 +47,23 @@ from app.settings import settings  # noqa: E402
 CLERK_API = "https://api.clerk.com/v1/users"
 PAGE = 100
 
+# NOT cosmetic. api.clerk.com sits behind Cloudflare, which rejects urllib's
+# default `Python-urllib/3.x` signature with **403 and a body of
+# `error code: 1010`** -- a browser-signature block, not an authorisation
+# failure. Clerk's own errors are JSON; 1010 is Cloudflare's.
+#
+# Measured 2026-08-02 from inside the Fly app, the same request twice differing
+# ONLY in this header: default UA -> 403 on /v1/users, /v1/users/count and
+# /v1/instance alike; named UA -> 200 on all three, with a live production key.
+#
+# Without this the nightly job would have returned rc=2 UNKNOWN every night and
+# reported "Clerk API unreachable", and the obvious reading -- our key lacks
+# permission, someone go fix it in the Clerk console -- would have been wrong
+# in a way nobody could have checked while the chairman was away. A 403 on
+# EVERY endpoint including an unauthenticated-ish one is the tell: a scope
+# problem is selective, an edge block is total.
+USER_AGENT = "zo-sentinel-reconcile/1.0 (+https://mcplookup.app)"
+
 
 class Unknown(Exception):
     """Could not evaluate. Never a RED, never a GREEN."""
@@ -68,12 +85,27 @@ def fetch_clerk_users(secret: str, limit: int = 1000) -> list[dict]:
         req = urllib.request.Request(url, headers={
             "Authorization": f"Bearer {secret}",
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
         })
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 batch = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
-            raise Unknown(f"Clerk API HTTP {e.code}: {e.reason}")
+            # Carry the BODY, not just the status line. `403 Forbidden` alone
+            # reads as "our key is not allowed" and sends someone to the Clerk
+            # console; the body says `error code: 1010` and sends them to the
+            # User-Agent. An error that names only its status code is an
+            # invitation to guess the layer that produced it.
+            try:
+                body = e.read().decode("utf-8", "replace")[:300]
+            except Exception:
+                body = "<unreadable>"
+            hint = ""
+            if "1010" in body or "cloudflare" in body.lower():
+                hint = (" -- this is a CLOUDFLARE edge block on the client "
+                        "signature, NOT a Clerk permission problem. The key is "
+                        "fine; the request needs a named User-Agent.")
+            raise Unknown(f"Clerk API HTTP {e.code}: {e.reason}; body={body}{hint}")
         except (urllib.error.URLError, TimeoutError, ValueError) as e:
             raise Unknown(f"Clerk API unreachable: {e}")
         if not batch:
@@ -199,6 +231,20 @@ def _self_test() -> int:
         chk("during rotation, a match on the SECOND signature is accepted", True)
     except SignatureError:
         chk("during rotation, a match on the SECOND signature is accepted", False)
+
+    # The User-Agent fix needs a control or it is a one-line change nobody can
+    # prove is still there. Asserts the header is actually SENT, not merely
+    # defined -- a constant that no request references is the shape of
+    # `max_fires_per_24h` sitting unread in authority.json for four days.
+    import inspect
+    src = inspect.getsource(fetch_clerk_users)
+    chk("fetch_clerk_users actually SENDS User-Agent (not just defines it)",
+        '"User-Agent": USER_AGENT' in src)
+    chk("USER_AGENT is not the urllib default that Cloudflare 1010-blocks",
+        "python-urllib" not in USER_AGENT.lower() and len(USER_AGENT) > 10)
+    chk("a Cloudflare 1010 body is reported as an EDGE block, not a permissions "
+        "problem -- the misreading that nearly became a false escalation",
+        "CLOUDFLARE" in inspect.getsource(fetch_clerk_users))
 
     for n, c in checks:
         print(f"  {'PASS' if c else 'FAIL'}  {n}")

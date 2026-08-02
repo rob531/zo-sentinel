@@ -64,6 +64,31 @@ FORBIDDEN = (
     "terminate", "vast ", "runpod", "sky launch", "fly deploy", "flyctl deploy",
     ">>", "tee ", "chmod ", "chown ", "--force", "sudo ",
 )
+
+
+def _forbidden_matcher(tok: str):
+    """Compile the matcher for one forbidden token.
+
+    FU-158 / 2026-08-02: a BARE SUBSTRING TEST IS WRONG, and it had been wrong
+    since the list was written. `"dd "` matched inside `git worktree add
+    --detach`, so a read-only `pytest` predicate was reported E9 "unsafe --
+    contains 'dd'" on every lint run for five days. The same trap is latent in
+    `"rm "` (matches `perform `, `platform `), `"mv "`, `"kill "` and
+    `"update "`.
+
+    A checker that cries wolf on a safe predicate does not fail loudly -- it
+    gets muted, and then it is not protecting anything. So: tokens that START
+    with a word character require a word boundary in front. Tokens that start
+    with punctuation (`">>"`, `"--force"`) keep plain substring matching,
+    because a boundary rule would make THOSE weaker, not stronger, and the cost
+    of a false negative on a redirect is destroyed state.
+    """
+    if tok[:1].isalnum():
+        return re.compile(r"(?<![A-Za-z0-9_])" + re.escape(tok))
+    return re.compile(re.escape(tok))
+
+
+_FORBIDDEN_MATCHERS = tuple((tok, _forbidden_matcher(tok)) for tok in FORBIDDEN)
 # NOTE: blanket "POST" was in this list and was removed. The documented READ
 # path for this fleet is a POST to the write-service /query bus, so refusing
 # POST would refuse almost every useful database predicate. Mutation is caught
@@ -157,8 +182,8 @@ class FU:
         if not cmd:
             return None
         low = cmd.lower()
-        for tok in FORBIDDEN:
-            if tok in low:
+        for tok, pat in _FORBIDDEN_MATCHERS:
+            if pat.search(low):
                 return "contains forbidden token %r -- a verify is a read-only probe" % tok.strip()
         return None
 

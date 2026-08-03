@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_comparison_dashboard"
+import_path = "services.active.risk_tier_comparison_dashboard.router"
+prefix = "/api"
+tag = "risk_tier_comparison_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

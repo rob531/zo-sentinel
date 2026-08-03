@@ -1,0 +1,8 @@
+[service]
+name = "org_entities"
+import_path = "services.active.org_entities.router"
+prefix = "/api"
+tag = "org_entities"
+origin = "service"
+auth = "public"
+needs_data_layer = true

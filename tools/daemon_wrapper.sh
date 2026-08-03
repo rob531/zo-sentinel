@@ -9,6 +9,7 @@
 #
 # Usage:
 #   exec bash daemon_wrapper.sh <name> <python_script_abspath>
+#   exec bash daemon_wrapper.sh <name> -m <dotted.module.path>
 #
 # Behavior:
 #   - Runs the target script in a restart loop
@@ -43,7 +44,23 @@ if [[ -z "$NAME" || -z "$SCRIPT" ]]; then
   exit 2
 fi
 
-if [[ ! -f "$SCRIPT" ]]; then
+# MODULE MODE (FU-121, 2026-07-27). The SOA re-organisation is moving daemons
+# into packages -- `python3 -m zo_sentinel.promoters.proposed_to_pending_promoter`
+# is already live -- and this wrapper could only ever run a top-level FILE, so
+# those daemons run with NO supervision and no reload protocol at all. Accept a
+# module spec as the second argument, exactly as python does:
+#     bash daemon_wrapper.sh <name> -m zo_sentinel.promoters.<mod> [cwd]
+# Purely additive: a path argument behaves byte-identically to before.
+RUN_MODE="file"
+if [[ "$SCRIPT" == "-m" ]]; then
+  RUN_MODE="module"
+  MODULE="${EXTRA_ARGS[0]:-}"
+  EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+  if [[ -z "$MODULE" ]]; then
+    echo "[$NAME wrapper] ERROR: -m given with no module name" >&2
+    exit 2
+  fi
+elif [[ ! -f "$SCRIPT" ]]; then
   echo "[$NAME wrapper] ERROR: script not found: $SCRIPT" >&2
   exit 2
 fi
@@ -63,7 +80,11 @@ log() {
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [${NAME} wrapper] $*" >> "$WRAPPER_LOG"
 }
 
-log "wrapper starting for $SCRIPT (args: ${EXTRA_ARGS[*]:-none})"
+if [[ "$RUN_MODE" == "module" ]]; then
+  log "wrapper starting for module $MODULE (args: ${EXTRA_ARGS[*]:-none})"
+else
+  log "wrapper starting for $SCRIPT (args: ${EXTRA_ARGS[*]:-none})"
+fi
 
 ATTEMPT=0
 while true; do
@@ -73,7 +94,11 @@ while true; do
 
   # Run the daemon; let its own stdout/stderr go to wherever the parent
   # (nohup) is redirecting, NOT to the wrapper log.
-  python3 "$SCRIPT" "${EXTRA_ARGS[@]}"
+  if [[ "$RUN_MODE" == "module" ]]; then
+    python3 -m "$MODULE" "${EXTRA_ARGS[@]}"
+  else
+    python3 "$SCRIPT" "${EXTRA_ARGS[@]}"
+  fi
   RC=$?
   END_TS=$(date +%s)
   RAN_FOR=$((END_TS - START_TS))

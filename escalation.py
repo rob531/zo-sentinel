@@ -80,6 +80,9 @@ import os
 import sys
 import json
 import re
+import ast
+import logging
+import textwrap
 import time
 import uuid
 from collections import deque
@@ -87,6 +90,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 import rung_quota
+
+
+# FU-123 (2026-07-27): this logger did not exist, and NOTHING in this module
+# defined or imported one -- while `log.warning(...)` was called from all three
+# tool-call salvage branches of _call_openai_compatible, inside that function's
+# blanket `except Exception`. So the salvages inverted: the moment one SUCCEEDED
+# in recovering the architect's proposal, the log line raised
+# NameError: name 'log' is not defined, the handler swallowed it, and the turn
+# returned an ERROR -- which the ladder reads as a dead rung and rotates.
+# A salvage that fails is a dropped call; a salvage that fails ONLY WHEN IT
+# WORKS is a rung rotation, a NON-CONVERGENCE line, and eventually a STARVATION
+# FLOOR asking a human to extend the spec. PR #1635 shipped three working
+# parsers behind an exception that guaranteed none of them could ever deliver.
+log = logging.getLogger("escalation")
 
 
 # ---------------------------------------------------------------------------
@@ -776,6 +793,20 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
                             "with no actionable call -- failing turn for "
                             "rung rotation", spec.model_id, _nfake)
                 return None, f"hallucinated TOOL: results x{_nfake}, no actionable call", None
+        # Fenced ```python CALL BLOCK (FU-122, 4th shape): goose 1.43 rungs
+        # emit a complete, valid propose_directive(...) inside a code fence.
+        # Discarding it logged NON-CONVERGENCE and rotated the rung -- i.e.
+        # treated a harness bug as a capacity problem -- while the architect
+        # had in fact converged. Gated on the tools actually offered, so
+        # illustrative code in a fence can never execute.
+        if not tool_calls and content and "```" in content:
+            _fcalls, _fresidual = _parse_pycall_tool_calls(content, tools)
+            if _fcalls:
+                log.warning("[shim] salvaged %d fenced-python tool call(s) from "
+                            "%s (model emitted a valid call as a ```python "
+                            "block, not tool_calls)", len(_fcalls), spec.model_id)
+                tool_calls = _fcalls
+                content = _fresidual
         if not content and not tool_calls:
             return None, "empty content and no tools", None
         return (content or None), None, tool_calls
@@ -849,6 +880,173 @@ def _parse_prose_tool_calls(content):
     for s, e in sorted(spans, key=lambda p: p[0], reverse=True):
         residual = residual[:s] + residual[e:]
     return (calls or None), residual.strip(), n_fake
+
+
+# --- fenced ```python call-block salvage (FU-122 -- the FOURTH shape) --------
+# Caught live 2026-07-27 02:56:30Z / 03:06:50Z on zo-ladder-nvidia and
+# zo-ladder-groq. The three shapes above are all PARTIAL calls (a marker plus
+# some JSON). This one is different and worse: the model emits a COMPLETE,
+# syntactically valid python call inside a fenced block --
+#
+#     ```python
+#     zo_directive_bridge__propose_directive(
+#         task="build_service_risk_tier_trend",
+#         handler="build_service",
+#         description="GET /api/risk/trend?days=N ... ACCEPTANCE: ... PASS.",
+#         complexity="medium", phase=9, priority=0.90,
+#         recipe="module_from_exemplar", reads=["app/db.py"],
+#     )
+#     ```
+#
+# -- and the harness discarded it, logged ARCHITECT NON-CONVERGENCE
+# (zero_proposed), ROTATED THE RUNG (burning capacity chasing a model problem
+# that was never a model problem -- the model converged on every rung), then
+# declared STARVATION and asked for a human to extend PRODUCT_SPEC. The
+# architect was converging the whole time; the loop was refusing to eat its
+# own output.
+#
+# GATING (fail-closed by construction -- a malformed salvage must be a
+# rejection, never a silently-wrong directive):
+#   * only fences explicitly tagged ```python / ```py
+#   * only TOP-LEVEL expression statements that are a bare Call -- a call
+#     nested inside another expression was never an invocation the model meant
+#   * the callee name must be a tool the provider was ACTUALLY offered this
+#     turn (falling back to the goose `ns__tool` namespacing convention when
+#     no tool list is in scope), so illustrative code -- print(), json.loads(),
+#     a sample router -- can never be executed as a tool call
+#   * every argument must be a keyword and every value must be a python
+#     LITERAL (ast.literal_eval). One non-literal kwarg rejects the WHOLE call;
+#     we never guess at a name, an f-string or a variable
+#   * positional args, **kwargs and non-JSON-encodable values reject the call
+_PYFENCE_RX = re.compile(r"```[ \t]*(?:python|py)[ \t]*\r?\n(.*?)```", re.S | re.I)
+
+
+def _offered_tool_names(tools):
+    """Names of the tools the provider was handed this turn (may be empty)."""
+    names = set()
+    for t in tools or []:
+        if not isinstance(t, dict):
+            continue
+        n = (t.get("function") or {}).get("name") or t.get("name")
+        if isinstance(n, str) and n:
+            names.add(n)
+    return names
+
+
+def _dotted_name(node):
+    """`a.b.c` / `name` -> 'a.b.c' / 'name'; anything else -> None."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _resolve_tool_name(dotted, offered):
+    """Map a python callee onto an offered tool name, or None to reject.
+
+    goose namespaces MCP tools as `<extension>__<tool>`; models sometimes
+    write the attribute form `zo_directive_bridge.propose_directive`. Both
+    resolve to the same tool, and only to a tool that was actually offered.
+    """
+    if not dotted:
+        return None
+    candidates = [dotted, dotted.replace(".", "__")]
+    if offered:
+        for c in candidates:
+            if c in offered:
+                return c
+        # attribute form whose LAST segment names an offered tool exactly once
+        tail = dotted.rsplit(".", 1)[-1]
+        matches = [n for n in offered if n == tail or n.endswith("__" + tail)]
+        return matches[0] if len(matches) == 1 else None
+    # No tool list in scope: fall back to the namespacing convention only.
+    plain = dotted.replace(".", "__")
+    return plain if "__" in plain else None
+
+
+def _jsonable(v):
+    """Literal -> JSON-encodable, or raise. Tuples become lists; sets, bytes
+    and complex are rejected rather than coerced."""
+    if v is None or isinstance(v, (str, bool, int, float)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): _jsonable(x) for k, x in v.items()}
+    raise TypeError(type(v).__name__)
+
+
+def _calls_in_python_block(block, offered):
+    """Top-level tool calls in one fenced block. Never raises."""
+    for candidate in (block, textwrap.dedent(block)):
+        try:
+            tree = ast.parse(candidate)
+            break
+        except SyntaxError:
+            tree = None
+    if tree is None:
+        return []
+    out = []
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
+            continue
+        call = stmt.value
+        name = _resolve_tool_name(_dotted_name(call.func), offered)
+        if not name:
+            continue
+        if call.args:                      # positional -> unmappable, reject
+            continue
+        args = {}
+        ok = True
+        for kw in call.keywords:
+            if kw.arg is None:             # **kwargs -> reject
+                ok = False
+                break
+            try:
+                args[kw.arg] = _jsonable(ast.literal_eval(kw.value))
+            except Exception:              # non-literal -> reject WHOLE call
+                ok = False
+                break
+        if not ok:
+            continue
+        try:
+            encoded = json.dumps(args)
+        except Exception:
+            continue
+        out.append({
+            "id": f"call_{uuid.uuid4().hex[:24]}",
+            "type": "function",
+            "function": {"name": name, "arguments": encoded},
+        })
+    return out
+
+
+def _parse_pycall_tool_calls(content, tools=None):
+    """Salvage ```python-fenced tool calls into OpenAI tool_calls.
+
+    Returns (tool_calls | None, residual_text). Never raises: with nothing
+    salvageable it returns (None, content), so a turn with no fenced call
+    behaves exactly as before this function existed.
+    """
+    if not content or "```" not in content:
+        return None, content
+    offered = _offered_tool_names(tools)
+    calls, spans = [], []
+    for m in _PYFENCE_RX.finditer(content):
+        found = _calls_in_python_block(m.group(1), offered)
+        if found:
+            calls.extend(found)
+            spans.append((m.start(), m.end()))   # drop only fences we consumed
+    if not calls:
+        return None, content
+    residual = content
+    for a, b in sorted(spans, reverse=True):
+        residual = residual[:a] + residual[b:]
+    return calls, residual.strip()
 
 
 BACKEND_ADAPTERS = {

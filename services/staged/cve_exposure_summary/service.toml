@@ -1,0 +1,8 @@
+[service]
+name = "cve_exposure_summary"
+import_path = "services.active.cve_exposure_summary.router"
+prefix = "/api"
+tag = "cve_exposure_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -469,29 +469,58 @@ def maybe_auto_recover(now: Optional[float] = None) -> Optional[str]:
         return "half-open"
 
 
+def _default_find_fn(root: Path, filename: str) -> bool:
+    """True if <filename> exists ANYWHERE under root (any depth).
+
+    The service unit puts service.toml / __init__.py / router.py / logic.py /
+    contract.py inside services/<lane>/<name>/, so a root-only existence probe
+    reports MISSING for a file that has hundreds of copies on disk. Guarded so
+    an unreadable tree degrades to an honest False rather than raising inside a
+    recovery sweep."""
+    try:
+        return any(True for _ in Path(root).rglob(filename))
+    except Exception:
+        return False
+
+
 def release_stale_missing(exists_fn: Callable[[str], bool] = os.path.exists,
-                          root: Optional[Path] = None) -> list:
+                          root: Optional[Path] = None,
+                          find_fn: Optional[Callable[[Path, str], bool]] = None) -> list:
     """Release quarantine entries flagged 'missing_on_disk' whose file now EXISTS.
 
     Gate 8 quarantines a file as 'missing_on_disk' when it can't find the built
     artifact. If the file is later (re)built, that entry is stale -- the breaker
     never re-checks disk on its own, so false positives accumulate forever. This
     sweeps them: for each quarantined file whose reason mentions
-    'missing_on_disk', if exists_fn(<root>/<filename>) is true, release it
-    (clears quarantine + retry counter). Returns the list of released filenames.
+    'missing_on_disk', release it if the file is found EITHER at <root>/<filename>
+    OR anywhere beneath root (clears quarantine + retry counter). Returns the list
+    of released filenames.
+
+    The tree search is load-bearing, not defensive: service-unit members
+    (service.toml, __init__.py, router.py, logic.py, contract.py) only ever exist
+    at services/<lane>/<name>/<filename>, so the original root-only probe made
+    their 'missing_on_disk' entries PERMANENT -- a monitored item that can never
+    clear. Measured 2026-08-02: four such entries held while 327 copies of each
+    were on disk.
 
     exists_fn/root are injectable for hermetic tests; on the host they default to
     os.path.exists against the state file's directory (the build output dir)."""
     root = root if root is not None else _resolve_state_file().parent
+    find_fn = find_fn if find_fn is not None else _default_find_fn
     released = []
     snap = snapshot()
     for filename, meta in list(snap.get("quarantined", {}).items()):
         if "missing_on_disk" not in str(meta.get("reason", "")):
             continue
-        if exists_fn(str(Path(root) / filename)):
+        # Resolve the artifact from the TREE, not from one candidate path (R1):
+        # 'missing' must be measured. A root-only probe is structurally blind to
+        # every service-unit member and so can never release one.
+        at_root = exists_fn(str(Path(root) / filename))
+        if at_root or find_fn(Path(root), filename):
+            where = "at root" if at_root else "elsewhere under root"
             if release_quarantine(
                 filename,
-                note="auto: missing_on_disk flag stale; file present on disk",
+                note=f"auto: missing_on_disk flag stale; file present on disk ({where})",
             ):
                 released.append(filename)
     return released

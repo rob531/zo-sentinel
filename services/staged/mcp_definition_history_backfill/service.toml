@@ -1,0 +1,12 @@
+[service]
+name = "mcp_definition_history_backfill"
+import_path = "services.active.mcp_definition_history_backfill.router"
+prefix = "/api"
+tag = "mcp_definition_history_backfill"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.mcp_definition_history_backfill.router"
+expected_output = "PASS"

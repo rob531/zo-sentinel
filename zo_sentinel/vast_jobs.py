@@ -168,6 +168,40 @@ def run_checks(manifest: dict, workdir: Path, pipeline_rc: int) -> dict:
 # Vast client seam (injected; hermetic tests use a fake)
 # ---------------------------------------------------------------------------
 
+class VastApiError(RuntimeError):
+    """The vast API answered with an ERROR ENVELOPE -- not an empty result.
+
+    Exists because the `vastai` CLI reports API failures (401 invalid key,
+    rate limits) as JSON on **stderr** while exiting **0** with an EMPTY
+    stdout. Every layer below then coerced that unknown into a zero:
+    _cli returned {}, list_instances turned a non-list into [], and audit()
+    published `live_instances: 0 / alerts: [] / ok: true` -- byte-identical
+    to a genuine all-clear on the paid-GPU leak audit (FU-192, 2026-07-30).
+    Unknown is not zero.
+    """
+
+
+def api_error(text: str) -> str:
+    """Return a message if `text` carries a vast API error envelope, else "".
+
+    The envelope is a JSON object with a truthy `error`, e.g.
+    {"error": true, "status_code": 401, "msg": "Invalid user key"}.
+    Scanned line-by-line because the CLI also emits DEPRECATED notices.
+    """
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not (line.startswith("{") and line.endswith("}")):
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(obj, dict) and obj.get("error"):
+            return "status_code={} msg={}".format(
+                obj.get("status_code"), obj.get("msg") or obj.get("error"))
+    return ""
+
+
 class RealVastClient:
     """Thin wrapper over the vastai CLI (subprocess) -- present on the tower.
     Only constructed for live runs; never imported paths in tests."""
@@ -181,6 +215,12 @@ class RealVastClient:
         if out.returncode != 0:
             raise RuntimeError(f"vastai {' '.join(args[:2])} rc={out.returncode}: "
                                f"{(out.stderr or out.stdout)[:300]}")
+        # rc=0 does NOT mean the API succeeded: the CLI prints its error
+        # envelope to stderr and still exits 0 (FU-192). Check BOTH streams
+        # before treating empty stdout as an empty result.
+        err = api_error(out.stderr) or api_error(out.stdout)
+        if err:
+            raise VastApiError(f"vastai {' '.join(args[:2])}: {err}")
         return json.loads(out.stdout) if out.stdout.strip() else {}
 
     def launch(self, launch_spec: dict) -> str:
@@ -206,13 +246,32 @@ class RealVastClient:
         return {"state": "gone", "dph": 0.0}
 
     def list_instances(self) -> List[dict]:
+        # Carry label/start_date/status_msg: audit() judges wedge + burn on
+        # them, and a field dropped HERE cannot be recovered downstream --
+        # every caller then re-derives it with a raw API call of its own.
         insts = self._cli("show", "instances")
+        if not isinstance(insts, list):
+            # Refusing to report an unrecognised shape as "no instances":
+            # that silent [] is what made a 401 look like an all-clear.
+            raise VastApiError(
+                f"`show instances` returned {type(insts).__name__}, not a "
+                f"list -- shape unknown, refusing to call it zero instances")
         return [{"id": str(i.get("id")), "state": i.get("actual_status"),
-                 "dph": float(i.get("dph_total") or 0)}
-                for i in (insts if isinstance(insts, list) else [])]
+                 "dph": float(i.get("dph_total") or 0),
+                 "label": i.get("label"),
+                 "start_date": i.get("start_date"),
+                 "gpu": i.get("gpu_name"),
+                 "status_msg": i.get("status_msg")}
+                for i in insts]
 
     def destroy(self, instance_id: str) -> bool:
-        self._cli("destroy", "instance", str(instance_id))
+        # Previously `return True` unconditionally, so a destroy that 401'd
+        # was ledgered as destroyed=True while the instance kept BILLING.
+        # _cli now raises on the error envelope; an explicit success=False
+        # in the payload is honoured too.
+        res = self._cli("destroy", "instance", str(instance_id))
+        if isinstance(res, dict) and res.get("success") is False:
+            return False
         return True
 
     def scp_from(self, instance: dict, remote_glob: str, local_dir: Path) -> bool:
@@ -332,11 +391,64 @@ def run_job(manifest: dict, client, workdir: Path,
 # Audit -- the E2E hook: no run invisible, no instance unaccounted for.
 # ---------------------------------------------------------------------------
 
+# Chairman ruling 2026-07-17 (wedge scar): a paid instance still "loading"
+# past this many minutes is burning money on nothing. Encoded HERE rather
+# than in each caller's prose so every consumer applies the same threshold.
+WEDGE_LOADING_MIN = 90
+
+
+def destroy_cmd(instance_id) -> str:
+    """The command a human fires AFTER pulling forensics. audit() never runs
+    it -- forensics-before-destroy is a human/CofC gate, not an automation."""
+    return f"python tools/vast_job_runner.py destroy {instance_id}"
+
+
+def instance_facts(inst: dict, now_ts: Optional[float] = None) -> dict:
+    """Flatten one live instance into the facts an audit must judge on:
+    identity, label, price, how long it has been burning and what that has
+    cost so far.
+
+    `start_date` is a unix epoch from vast. If it is missing or unparseable
+    the uptime is None, NEVER 0 -- a 0 reads as "just started" and would
+    silently suppress the wedge guard, which is the failure mode this
+    function exists to prevent.
+    """
+    now_ts = now_ts if now_ts is not None else datetime.now(timezone.utc).timestamp()
+    dph = float(inst.get("dph") or 0)
+    try:
+        start = float(inst.get("start_date"))
+        uptime_min = round((now_ts - start) / 60.0, 1)
+        started_at = datetime.fromtimestamp(start, timezone.utc).isoformat()
+    except (TypeError, ValueError):
+        uptime_min, started_at = None, None
+    return {
+        "instance_id": str(inst.get("id")),
+        "state": inst.get("state"),
+        "label": inst.get("label"),
+        "gpu": inst.get("gpu"),
+        "dph": dph,
+        "started_at": started_at,
+        "uptime_min": uptime_min,
+        "cost_so_far_usd": (round(dph * uptime_min / 60.0, 3)
+                            if uptime_min is not None else None),
+        "wedged": bool(inst.get("state") == "loading"
+                       and uptime_min is not None
+                       and uptime_min > WEDGE_LOADING_MIN),
+    }
+
+
 def audit(client, max_age_min: int = 24 * 60) -> dict:
     """Cross-check ledger vs live instances. ALERT classes:
     - orphan_instance: live vast instance with NO open (unresolved) ledger run
     - unresolved_run:  ledger run launched > max_age_min ago with no 'resolved'
     - alive_after_ready: run resolved DESTROY_READY but instance still alive
+    - wedged_instance:  still "loading" past WEDGE_LOADING_MIN (paying for
+      nothing) -- surfaced with a destroy_cmd, NEVER auto-destroyed
+
+    Every alert carries the full instance_facts() payload (label, state,
+    uptime_min, cost_so_far_usd) so the reader can tell a legitimate score
+    wave from a leak without a second API call, and report["live"] lists
+    every live instance whether or not the ledger knows about it.
     """
     rows = ledger_rows()
     launched = {r["run_id"]: r for r in rows if r["event"] == "launched"}
@@ -347,14 +459,23 @@ def audit(client, max_age_min: int = 24 * 60) -> dict:
                        if r.get("verdict") == "DESTROY_READY" and not r.get("destroyed")}
     alerts = []
     live = client.list_instances()
-    for inst in live:
-        iid = str(inst["id"])
+    # Report EVERY live instance, ledgered or not: ScoreWave/sprint200k and
+    # moat-rescore launches write no ledger row (split-brain, 2026-07), so a
+    # ledger-only view of paid compute is structurally incomplete.
+    live_facts = [instance_facts(i) for i in live]
+    for facts in live_facts:
+        iid = facts["instance_id"]
         if iid not in open_instances and iid not in ready_instances:
-            alerts.append({"class": "orphan_instance", "instance_id": iid,
-                           "dph": inst.get("dph")})
+            alerts.append({"class": "orphan_instance", **facts,
+                           "destroy_cmd": destroy_cmd(iid)})
         if iid in ready_instances:
-            alerts.append({"class": "alive_after_ready", "instance_id": iid,
-                           "run_id": ready_instances[iid]["run_id"]})
+            alerts.append({"class": "alive_after_ready", **facts,
+                           "run_id": ready_instances[iid]["run_id"],
+                           "destroy_cmd": destroy_cmd(iid)})
+        if facts["wedged"]:
+            alerts.append({"class": "wedged_instance", **facts,
+                           "wedge_threshold_min": WEDGE_LOADING_MIN,
+                           "destroy_cmd": destroy_cmd(iid)})
     cutoff = datetime.now(timezone.utc).timestamp() - max_age_min * 60
     for rid, row in launched.items():
         if rid in resolved:
@@ -368,6 +489,8 @@ def audit(client, max_age_min: int = 24 * 60) -> dict:
                            "instance_id": row.get("instance_id")})
     report = {"at": _utcnow(), "live_instances": len(live),
               "open_runs": len(launched) - len(resolved),
+              "live": live_facts,
+              "burn_dph_total": round(sum(f["dph"] for f in live_facts), 4),
               "alerts": alerts, "ok": not alerts}
     out = state_dir() / "last_audit.json"
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,8 @@
+[service]
+name = "vuln_advisory_list"
+import_path = "services.active.vuln_advisory_list.router"
+prefix = "/api"
+tag = "vuln_advisory_list"
+origin = "service"
+auth = "public"
+needs_data_layer = true

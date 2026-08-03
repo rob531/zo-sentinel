@@ -621,3 +621,61 @@ def test_cligitops_dirty_tree_still_fails_when_stash_fails(tmp_path, monkeypatch
     res = g.publish(plan)
     assert res.ok is False
     assert "overwritten" in (res.detail or "")
+
+
+# --------------------------------------------------------------------------
+# FU-209: a path that cannot exist on Windows must never reach a commit.
+# Both directions are asserted deliberately. A guard that can ONLY go red is as
+# broken as one that can only go green, so the negative control (an ordinary
+# path must be accepted) is part of the test, not an afterthought.
+# --------------------------------------------------------------------------
+
+def test_portable_path_violation_rejects_windows_reserved_chars():
+    from zo_sentinel.publisher.gitops import _portable_path_violation
+    # the EXACT path that broke every Windows lane on 2026-07-31
+    reason = _portable_path_violation("services/staged/<service_name>/__init__.py")
+    assert reason is not None
+    assert "FU-209" in reason
+    for ch in '<>:"|?*':
+        assert _portable_path_violation("services/staged/a%sb/x.py" % ch) is not None
+
+
+def test_portable_path_violation_accepts_ordinary_paths():
+    """NEGATIVE CONTROL. Without this, a guard hard-wired to return a reason
+    would pass the test above and silently reject every artifact."""
+    from zo_sentinel.publisher.gitops import _portable_path_violation
+    for ok in ("services/staged/cve_feed_ingestion/__init__.py",
+               "zo_sentinel/publisher/gitops.py",
+               "tools/fu/fu_ledger.py",
+               "a_b-c.d/e_1.py"):
+        assert _portable_path_violation(ok) is None, ok
+
+
+def test_publisher_refuses_to_commit_unportable_path_permanently():
+    """End-to-end at the chokepoint: CliGitOps.publish must bail BEFORE writing
+    or staging, and must mark the failure permanent so the queue retires it
+    instead of head-of-line-blocking behind an unfixable artifact."""
+    import pathlib
+    import subprocess
+    from zo_sentinel.publisher.gitops import CliGitOps, PublishPlan
+
+    ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    def _fake_git(*a):
+        staged.append(a)
+        return ok
+
+    with tempfile.TemporaryDirectory() as d:
+        g = CliGitOps(clone_dir=d)
+        staged = []
+        g._git = _fake_git
+        plan = PublishPlan(branch="b", title="t", body="b",
+                           file_path="services/staged/<service_name>/__init__.py",
+                           content="x\n", dedup_key="k")
+        res = g.publish(plan)
+        assert res.ok is False
+        assert res.permanent is True
+        assert "FU-209" in res.detail
+        # bailed BEFORE the artifact touched the disk or the index
+        assert not list(pathlib.Path(d).rglob("*service_name*"))
+        assert not any(a and a[0] == "add" for a in staged)

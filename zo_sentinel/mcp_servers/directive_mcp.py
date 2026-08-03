@@ -73,7 +73,16 @@ except Exception as e:
         f"directive_mcp: failed to import mcp.server.fastmcp ({e}). "
         f"Install the same MCP SDK that builder_mcp.py uses.\n"
     )
-    sys.exit(2)
+    # Exit code 2 is the SCRIPT contract -- the architect launches this file as
+    # `python3 zo_sentinel/mcp_servers/directive_mcp.py` -- and is UNCHANGED.
+    # But sys.exit() raises SystemExit, which derives from BaseException, so an
+    # IMPORTER guarding with `except Exception` cannot catch it. Under pytest it
+    # aborts COLLECTION for the entire session (FU-158): 178 of 425 tests never
+    # ran and the summary line still read clean. Re-raise the real ImportError
+    # for importers; only the script path terminates.
+    if __name__ == "__main__":
+        sys.exit(2)
+    raise
 
 
 # ---------------------------------------------------------------------------

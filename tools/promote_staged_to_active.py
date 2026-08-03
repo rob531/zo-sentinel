@@ -50,6 +50,23 @@ import model_import_linter as _linter  # noqa: E402  FU-031 harness linter
 STAGED = os.path.join(ROOT, "services", "staged")
 ACTIVE = os.path.join(ROOT, "services", "active")
 ARTIFACT = os.path.join(ROOT, "artifacts", "staged_promotion_report.json")
+DOCKERFILE = os.path.join(ROOT, "Dockerfile")
+
+# FU-031 scar: this script is run as `python tools/promote_staged_to_active.py`,
+# so sys.path[0] is tools/, NOT the repo root -- `import tools.x` fails there.
+# Accept both invocation shapes rather than assuming one.
+try:  # repo root on sys.path (pytest, `python -m tools....`)
+    from tools.image_ship_check import would_be_shipped  # noqa: E402
+except ImportError:  # script-dir sys.path[0]
+    from image_ship_check import would_be_shipped  # noqa: E402
+
+
+def _dockerfile_text():
+    try:
+        with open(DOCKERFILE, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
 try:
     import tomllib
@@ -143,6 +160,19 @@ def evaluate(name, active_routes):
     meta = _load_toml(os.path.join(sdir, "service.toml")).get("service", {})
     if not meta.get("name") or not meta.get("import_path"):
         reasons.append("service.toml missing/invalid (need name + import_path)")
+    # IMAGE SHIPPABILITY (the FU-102 / prod-v64 class, in the ACTOR not the watcher).
+    # This script MOVES the folder without rewriting import_path, and
+    # generate_spine.py emits that import_path verbatim for import_module. If no
+    # Dockerfile COPY carries the path it names, promotion is a guaranteed prod
+    # ModuleNotFoundError -- exactly what left 7 services dead on v64. Checked
+    # WITHOUT requiring the post-move file to exist yet; see tools/image_ship_check.py.
+    _ip = meta.get("import_path")
+    if _ip and not would_be_shipped(_ip, _dockerfile_text()):
+        reasons.append(
+            "import_path %r is carried by no Dockerfile COPY directive -- it would "
+            "ModuleNotFoundError in prod on mount. Fix by pointing import_path at a "
+            "shipped module, or by adding the tree to the Dockerfile COPY-list." % _ip
+        )
     router_path = os.path.join(sdir, "router.py")
     router_src = _read(router_path)
     if not (( _APIROUTER_MARK[:-1] in router_src) or (_ROUTER_DECORATOR in router_src)):

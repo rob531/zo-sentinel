@@ -49,6 +49,10 @@ import os as _sg_os, sys as _sg_sys
 _sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.abspath(__file__)))
 from spend_guard import scaled_budget, scaled_deadline_min  # FU-090 #1784
 
+# FU-151: one shared credential path for every flyctl caller in this repo.
+_sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.dirname(_sg_os.path.abspath(__file__))))
+from fly_token import hydrate_fly_token  # noqa: E402
+
 import argparse
 import gzip
 import hashlib
@@ -198,6 +202,43 @@ def _is_abort_event(event: str) -> bool:
             and ("destroy" in event or "closed" in event))
 
 
+_ABANDON_RESULT_PREFIXES = ("killed", "abort", "abandon", "cancel")
+
+
+def _state_abandoned(rid: str, runs_root: Path) -> bool:
+    """Did the run record its OWN deliberate abandonment, and release its spend?
+
+    FU-132. A run killed BEFORE `fire` never reaches the ledger's abort vocabulary
+    (`wedge_*` / `manual_*`) -- the operator's last word lands in the run's own
+    state.json as `result: killed_*`. Runs 20260725-170556 and 20260725-181359 were
+    both killed at preflight (read-only: no export, no instance, $0) and the detector
+    called them STRANDED for 60h, so `--check-open-runs` exited 1 on every invocation
+    and would have forever. A gate that is permanently red is a gate nobody reads --
+    the decorative-gate failure the header of this section warns about, walked into
+    by the very check that warns about it.
+
+    The bar is NOT lowered. The danger `check_open_runs` exists for is a run that
+    "opened, SPENT, and never closed", so a state-recorded abandonment only counts
+    when the run carries no unreleased spend: it never got an instance, or the
+    instance is already destroyed. A fired run still holding an instance stays
+    STRANDED no matter what its state.json claims -- and the live-instance API, not
+    this function, remains the authoritative guard on that (vast ledger split-brain).
+
+    `result: "ok"` is deliberately NOT an abandonment: a successful run closes via
+    the `run_closed` ledger event, and if it did not, that IS the 7/19 shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    result = str(st.get("result") or "").lower()
+    if not result.startswith(_ABANDON_RESULT_PREFIXES):
+        return False
+    return not st.get("instance_id") or bool(st.get("destroyed"))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -206,7 +247,8 @@ def _parse_ts(ts: str) -> datetime | None:
 
 
 def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
-              include_aborted: bool = False) -> list[dict]:
+              include_aborted: bool = False,
+              runs_root: Path | None = None) -> list[dict]:
     """Return runs that opened and never reached `run_closed`, newest first.
 
     Reads the ledger as an event log rather than a success log. Each record carries
@@ -215,6 +257,10 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     because they were abandoned deliberately and alarming on them is noise.
     """
     path = LEDGER if ledger_path is None else ledger_path
+    # The ledger lives at <runs_root>/ledger.jsonl, so the run dirs sit beside it.
+    # Deriving the root from the ledger keeps the state.json reconciliation pointed
+    # at the SAME tree the caller is auditing (and keeps tests off the live tree).
+    root = path.parent if runs_root is None else runs_root
     now = datetime.now(timezone.utc) if now is None else now
     if not path.exists():
         return []
@@ -241,7 +287,8 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
                 opened[rid]["last_ts"] = ev.get("ts")
     out = []
     for rec in opened.values():
-        aborted = _is_abort_event(rec["last_event"])
+        aborted = (_is_abort_event(rec["last_event"])
+                   or _state_abandoned(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
@@ -254,10 +301,12 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     return sorted(out, key=lambda r: r.get("opened_at") or "", reverse=True)
 
 
-def check_open_runs(ledger_path: Path | None = None) -> int:
+def check_open_runs(ledger_path: Path | None = None,
+                    runs_root: Path | None = None) -> int:
     """CLI check. Exit 1 if any run has been open longer than the stale threshold."""
-    runs = open_runs(ledger_path)
-    aborted = [r for r in open_runs(ledger_path, include_aborted=True)
+    runs = open_runs(ledger_path, runs_root=runs_root)
+    aborted = [r for r in open_runs(ledger_path, include_aborted=True,
+                                    runs_root=runs_root)
                if r["outcome"] == "aborted"]
     stale = [r for r in runs if r["stale"]]
     if aborted:
@@ -296,8 +345,30 @@ def ensure_proxy() -> None:
     except OSError:
         pass
     log(f"starting fly proxy {PROXY_PORT}:5432 -a {FLY_PG_APP}")
+    # FU-151: hand flyctl the credential this project already mandates BEFORE
+    # spawning it. Measured 2026-07-28: this shell's FIRST attempt died on
+    # "fly proxy did not come up in 60s"; hydrating FLY_API_TOKEN from AgentVault
+    # made the same binary bind on the next run, same minute, same config.yml.
+    # FU-137 shipped this remedy into ONE caller and every other flyctl caller
+    # kept reading the ambient credential -- so the outage recurred the next day
+    # in a different lane. Never raises; a dead vault falls through to ambient.
+    _hydrated, _hydrate_note = hydrate_fly_token()
+    log("fly token: " + _hydrate_note)
+    # FU-133: flyctl's stderr used to go to DEVNULL and the failure surfaced as a
+    # bare "did not come up in 60s" -- which names the symptom and hides the cause.
+    # On 2026-07-28 the cause was `Error: no access token available`, from flyctl's
+    # OWN client-side 720h login timer ageing out at 730h29m; the token itself still
+    # authenticated against api.fly.io perfectly well. Recovering that one line cost
+    # a manual re-run of the exact command the harness had already run and discarded.
+    #
+    # stderr goes to a FILE, not a PIPE: on the success path the proxy lives for the
+    # whole run (hours) and nobody drains it, so a pipe would eventually fill its
+    # buffer and wedge flyctl itself -- trading a silent failure for a worse one.
+    RUNS_ROOT.mkdir(parents=True, exist_ok=True)
+    err_path = RUNS_ROOT / "_flyctl_proxy.err"
+    err_f = open(err_path, "w+", encoding="utf-8", errors="replace")
     _PROXY = subprocess.Popen(["flyctl", "proxy", f"{PROXY_PORT}:5432", "-a", FLY_PG_APP],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                              stdout=subprocess.DEVNULL, stderr=err_f)
     for _ in range(30):
         time.sleep(2)
         try:
@@ -305,8 +376,21 @@ def ensure_proxy() -> None:
             s.connect(("127.0.0.1", PROXY_PORT)); s.close()
             return
         except OSError:
-            continue
-    raise RuntimeError("fly proxy did not come up in 60s")
+            pass
+        if _PROXY.poll() is not None:
+            break            # it is already dead; waiting out the clock is theatre
+    detail = ""
+    try:
+        err_f.flush()
+        said = err_path.read_text(encoding="utf-8", errors="replace").strip()
+        if said:
+            detail = " -- flyctl said: " + said.splitlines()[-1]
+    except OSError:
+        pass
+    rc = _PROXY.poll()
+    if rc is not None:
+        detail = f" (flyctl exited {rc}){detail}"
+    raise RuntimeError(f"fly proxy did not come up in 60s{detail}")
 
 
 def pg_conn():
@@ -756,12 +840,48 @@ def _eff_deadline(run, args):
     return run.state.get("deadline_scaled", DEADLINE_MIN_DEFAULT)
 
 
+def _billed_dph(run, args) -> float:
+    """The rate we are ACTUALLY billed, not the rate we were quoted.
+
+    `fire` stamps state["dph"] from the OFFER's dph_total, which prices compute
+    only. Once the instance is rented, vast adds the allocated-storage component,
+    so the live instance's dph_total is strictly >= the offer's. Observed on run
+    20260727-105859: offer 0.296111, live 0.321111 -- an 8.4% under-count, which
+    means the COST_CAP_USD ceiling fires ~8% late and every "est $x" line we log
+    understates the bill. Same failure shape as the MTD spend guard (FU-035):
+    a guard is only as honest as the number it compares against.
+
+    Falls back to the stamped offer dph if the API is unreachable -- a watch loop
+    must never die because vast is having a moment. Returns the LARGER of the two
+    so a lookup failure can never lower the ceiling's basis.
+    """
+    quoted = float(run.state.get("dph", args.max_dph))
+    iid = run.state.get("instance_id")
+    if not iid:
+        return quoted
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        for i in (v.show_instances() or []):
+            if str(i.get("id")) == str(iid):
+                live = float(i.get("dph_total") or 0)
+                if live > quoted:
+                    log(f"watch: billed dph {live:.6f}/hr > quoted {quoted:.6f}/hr "
+                        f"(storage component); using billed for the cost ceiling")
+                    return live
+                return quoted
+    except Exception as e:
+        log(f"watch: live dph lookup failed ({e.__class__.__name__}: {e}); "
+            f"falling back to quoted ${quoted:.6f}/hr")
+    return quoted
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
     pat = secret("github")
     fired = datetime.fromisoformat(run.state["fired_at"])
-    dph = float(run.state.get("dph", args.max_dph))
+    dph = _billed_dph(run, args)
     while True:
         st = _results_state(run, pat)
         elapsed_h = (datetime.now(timezone.utc) - fired).total_seconds() / 3600
@@ -1032,6 +1152,20 @@ def ph_postcheck(run: Run, args) -> None:
         log(f"POSTCHECK DEGRADED: freshness unreadable ({freshness_error}); "
             f"closing the run anyway -- all writes were already committed")
     base = run.state.get("baseline_freshness", {})
+    # FU-132: when /freshness is unreachable the run still KNOWS its post-state --
+    # `import` stamped `scored_after` from a DIRECT DB read, which is the very number
+    # I1 is enforced against and a strictly better source than the cached endpoint.
+    # Run 20260727-105859 shipped `scored_servers.after: null` while its own
+    # state.json held 279116: the artifact a successor reads was less true than the
+    # state the run was holding. Publish the figure AND its basis -- a number without
+    # its basis is how "MTD spend" became a 24h delta (FU-035).
+    scored_after = after.get("scored_servers")
+    after_basis = "freshness" if scored_after is not None else None
+    if scored_after is None and run.state.get("scored_after") is not None:
+        scored_after = run.state["scored_after"]
+        after_basis = "db_import"
+        log(f"postcheck: freshness unreadable; scored_servers.after={scored_after} "
+            f"taken from the import phase's direct DB read (basis=db_import)")
     report = {
         "run_id": run.state["run_id"], "mode": run.state["mode"],
         "freshness_error": freshness_error,
@@ -1041,7 +1175,7 @@ def ph_postcheck(run: Run, args) -> None:
         "est_cost_usd": run.state.get("est_cost"),
         "scores_rows": {"before": base.get("scores_rows"), "after": after.get("scores_rows")},
         "scored_servers": {"before": base.get("scored_servers"),
-                           "after": after.get("scored_servers")},
+                           "after": scored_after, "after_basis": after_basis},
         "newest_scored_at": {"before": base.get("newest_scored_at"),
                              "after": after.get("newest_scored_at")},
         "destroyed": run.state.get("destroyed", False) or

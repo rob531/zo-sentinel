@@ -1,0 +1,8 @@
+[service]
+name = "vuln_alias_resolver"
+import_path = "services.active.vuln_alias_resolver.router"
+prefix = "/api"
+tag = "vuln_alias_resolver"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-container {
+            padding: 20px;
+        }
+        .chart-container {
+            height: 400px;
+            margin-bottom: 30px;
+        }
+        .severity-card {
+            margin-bottom: 15px;
+        }
+        .severity-badge {
+            font-size: 1.2rem;
+            padding: 10px 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid dashboard-container">
+        <h1 class="mb-4">Vulnerability Analysis Dashboard</h1>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Advisories by Severity</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4 severity-card">
+                                <div class="card bg-danger text-white">
+                                    <div class="card-body text-center">
+                                        <span class="severity-badge">Critical</span>
+                                        <h2 id="critical-count">0</h2>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 severity-card">
+                                <div class="card bg-warning text-dark">
+                                    <div class="card-body text-center">
+                                        <span class="severity-badge">High</span>
+                                        <h2 id="high-count">0</h2>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 severity-card">
+                                <div class="card bg-primary text-white">
+                                    <div class="card-body text-center">
+                                        <span class="severity-badge">Medium</span>
+                                        <h2 id="medium-count">0</h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Top Affected Servers</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="affectedServersChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Vulnerability Trends</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="trendsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Recent Advisories</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Title</th>
+                                        <th>Severity</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentAdvisoriesTable">
+                                    <!-- Data will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sample data for testing
+            const sampleData = {
+                severityCounts: {
+                    critical: 12,
+                    high: 25,
+                    medium: 42
+                },
+                affectedServers: [
+                    { name: 'Web Server 1', count: 15 },
+                    { name: 'DB Server 2', count: 8 },
+                    { name: 'App Server 3', count: 12 },
+                    { name: 'Cache Server 4', count: 5 },
+                    { name: 'API Server 5', count: 9 }
+                ],
+                trends: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [
+                        { label: 'Critical', data: [5, 7, 6, 8, 10, 12], backgroundColor: 'rgba(255, 99, 132, 0.2)' },
+                        { label: 'High', data: [10, 12, 15, 18, 20, 25], backgroundColor: 'rgba(255, 159, 64, 0.2)' },
+                        { label: 'Medium', data: [20, 25, 30, 35, 40, 42], backgroundColor: 'rgba(54, 162, 235, 0.2)' }
+                    ]
+                },
+                recentAdvisories: [
+                    { id: 'CVE-2023-1234', title: 'Buffer Overflow in Web Server', severity: 'Critical', date: '2023-06-15' },
+                    { id: 'CVE-2023-5678', title: 'SQL Injection in API', severity: 'High', date: '2023-06-14' },
+                    { id: 'CVE-2023-9012', title: 'XSS in Admin Panel', severity: 'Medium', date: '2023-06-13' },
+                    { id: 'CVE-2023-3456', title: 'CSRF in Authentication', severity: 'High', date: '2023-06-12' },
+                    { id: 'CVE-2023-7890', title: 'RCE in File Upload', severity: 'Critical', date: '2023-06-11' }
+                ]
+            };
+
+            // Update severity counts
+            document.getElementById('critical-count').textContent = sampleData.severityCounts.critical;
+            document.getElementById('high-count').textContent = sampleData.severityCounts.high;
+            document.getElementById('medium-count').textContent = sampleData.severityCounts.medium;
+
+            // Create affected servers chart
+            const affectedServersCtx = document.getElementById('affectedServersChart').getContext('2d');
+            new Chart(affectedServersCtx, {
+                type: 'bar',
+                data: {
+                    labels: sampleData.affectedServers.map(server => server.name),
+                    datasets: [{
+                        label: 'Number of Vulnerabilities',
+                        data: sampleData.affectedServers.map(server => server.count),
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.2)',
+                            'rgba(54, 162, 235, 0.2)',
+                            'rgba(255, 206, 86, 0.2)',
+                            'rgba(75, 192, 192, 0.2)',
+                            'rgba(153, 102, 255, 0.2)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(153, 102, 255, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Create trends chart
+            const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+            new Chart(trendsCtx, {
+                type: 'line',
+                data: sampleData.trends,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Vulnerability Counts Over Time'
+                        }
+                    }
+                }
+            });
+
+            // Populate recent advisories table
+            const tableBody = document.getElementById('recentAdvisoriesTable');
+            sampleData.recentAdvisories.forEach(advisory => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${advisory.id}</td>
+                    <td>${advisory.title}</td>
+                    <td><span class="badge ${getSeverityBadgeClass(advisory.severity)}">${advisory.severity}</span></td>
+                    <td>${advisory.date}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            function getSeverityBadgeClass(severity) {
+                switch(severity.toLowerCase()) {
+                    case 'critical':
+                        return 'bg-danger';
+                    case 'high':
+                        return 'bg-warning';
+                    case 'medium':
+                        return 'bg-primary';
+                    default:
+                        return 'bg-secondary';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

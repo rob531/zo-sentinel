@@ -1022,21 +1022,49 @@ def _selftest_gate(directive, directive_id):
         import os as _os
         # in-memory SQLite + no Clerk -> the self-test imports app.db/app.models and runs
         # WITHOUT Postgres, DuckDB or Docker (lightweight, short-lived, one at a time).
-        _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": ""}
+        # FU-031 root cause. Python sets sys.path[0] to the SCRIPT'S OWN DIRECTORY,
+        # and `cwd=` does NOT put PROJECT_DIR on sys.path. While builder output was
+        # root-level files this was invisible (script dir == repo root, so `app.*`
+        # resolved). The P2->P3 move to services/staged/<name>/*.py made sys.path[0]
+        # the SERVICE directory, and every `from app.db import ...` began raising
+        # ModuleNotFoundError -- which the branch below catches and degrades to
+        # Tier-0, NON-BLOCKING. Result: 319 degradations vs 11 PASS (~96%), i.e. the
+        # acceptance clause that makes a builder target self-verifying had not
+        # executed since 2026-07-25T22:03Z.
+        #
+        # MUST PREPEND, never assign. This daemon inherits PYTHONPATH=/pkg/:/root/
+        # from daemon_wrapper.sh (read from /proc/<pid>/environ); clobbering it would
+        # break unrelated imports inside the self-test subprocess. Verified 3 ways:
+        # cwd alone -> rc=1 regardless of PYTHONPATH; cwd + PYTHONPATH=<repo> -> PASS;
+        # cwd + the real inherited /pkg/:/root/ -> reproduces production exactly.
+        _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": "",
+                "PYTHONPATH": str(PROJECT_DIR) + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
         proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
                               text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
         return True
     combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
-    if proc.returncode == 0 and "PASS" in (proc.stdout or ""):
+    # FU-031/FU-159: three-state verdict. The old test was a substring match on an
+    # exception NAME, so "the harness could not run" and "the module is broken" got
+    # the same answer -- degrade. Measured post-#2177 (n=89): ALL 39 Tier-0
+    # degradations were real module defects, and `No module named 'app.db'` had
+    # already gone 295 -> 0. The UNKNOWN bucket was being used as a pass.
+    from tools.selftest_verdict import (PASS as _V_PASS, RED as _V_RED,
+                                        classify_selftest as _classify)
+    _verdict, _reason = _classify(proc.returncode, combined, proc.stdout or "")
+    if _verdict == _V_PASS:
         log(f"[selftest] {directive_id}: self-test PASS")
         return True
-    if proc.returncode != 0 and ("ModuleNotFoundError" in combined or "ImportError" in combined):
-        log(f"[selftest] {directive_id}: import/env failure -- degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
-        return True
-    log(f"[selftest] {directive_id}: self-test FAILED -- blocking completion :: " + combined.strip()[-400:])
-    return False
+    if _verdict == _V_RED:
+        # Distinct string per meaning: one string for two meanings is why 39 events
+        # read as one problem for nine days.
+        log(f"[selftest] {directive_id}: self-test RED ({_reason}) -- blocking completion :: "
+            + combined.strip()[-400:])
+        return False
+    log(f"[selftest] {directive_id}: self-test UNKNOWN ({_reason}) -- could not evaluate, "
+        f"degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
+    return True
 
 
 def _edit_diff_gate(directive, directive_id, pre_diff_state):

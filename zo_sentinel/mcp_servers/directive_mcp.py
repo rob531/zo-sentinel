@@ -119,7 +119,17 @@ except OSError as _e:
         f"accept proposals, so the architect will emit +0 while appearing healthy. "
         f"Set ZO_SENTINEL_DIR to a writable root.\n"
     )
-    sys.exit(2)
+    # Exit code 2 is the SCRIPT contract (the architect launches this file as
+    # `python3 zo_sentinel/mcp_servers/directive_mcp.py`) and is unchanged.
+    # But sys.exit() raises SystemExit, which derives from BaseException, so an
+    # IMPORTER guarding with `except Exception` cannot catch it and pytest
+    # aborts COLLECTION for the whole session -- that is FU-158, fixed on main
+    # for the mcp-import guard 12 lines above and re-introduced here if this
+    # branch exits unconditionally. Same discipline, same reason: only the
+    # script path terminates; importers get an ordinary OSError.
+    if __name__ == "__main__":
+        sys.exit(2)
+    raise
 
 
 _VERSION_RE = re.compile(r"(_v\d+)+$")           # trailing _v2 / _v3_v4 etc.

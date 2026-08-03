@@ -51,7 +51,7 @@ import sys
 import tempfile
 import time
 from html.parser import HTMLParser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 sys.path.insert(0, "/home/workspace/zo_sentinel/tests/gates")
@@ -74,6 +74,50 @@ GATE8_PROTECTED_FILES = {
 }
 
 QUARANTINE_DIR = Path("/home/workspace/zo_sentinel/quarantine")
+BUILD_ROOT = Path("/home/workspace/zo_sentinel")
+_BUILD_ROOT_POSIX = PurePosixPath("/home/workspace/zo_sentinel")
+
+
+def _identity_key(build: dict) -> str:
+    """The key under which a build's failures are counted.
+
+    MUST identify ONE artifact. `Path(build['file']).name` does not: the
+    service era made basenames non-unique -- every service emits the same
+    five filenames (service.toml, __init__.py, router.py, logic.py,
+    contract.py), so one service's failure incremented a counter that gated
+    EVERY service. Measured 2026-08-03: `__init__.py` at 19 attempts,
+    `service.toml` at 15, `router.py` at 5, all quarantined, while 300+
+    copies of each sat on disk. A module quarantines at 3; those counters
+    were sums over unrelated artifacts.
+
+    The same truncation corrupted cohort statistics: `_cohort_bump` and
+    `_evaluate_file` add the key to a SET, so a cohort of five services each
+    emitting `__init__.py` was recorded as size=1 -- which is how
+    `cohort_15_n1: size=1 fail=100%` was produced and how the breaker was
+    tripped on a population of one.
+
+    So: key on the path RELATIVE TO THE BUILD ROOT. Flat legacy modules keep
+    their existing basename key unchanged (relative path == basename), so no
+    historical entry is orphaned; nested service-unit members become
+    distinct. Absolute paths outside the root fall back to the full path
+    rather than the basename -- a path we cannot relativise is still an
+    identity, whereas its basename is not.
+
+    Uses PurePosixPath, not Path: `build['file']` is always written by the
+    Linux builder, and `Path('/home/workspace/...').is_absolute()` is FALSE on
+    Windows -- so a `Path`-based implementation would key differently on CI
+    than on the tower and the tests would grade a behaviour prod never runs.
+    """
+    raw = str(build.get("file") or "").strip().replace("\\", "/")
+    if not raw:
+        return ""
+    p = PurePosixPath(raw)
+    if p.is_absolute():
+        try:
+            return str(p.relative_to(_BUILD_ROOT_POSIX))
+        except ValueError:
+            return str(p)
+    return str(p)
 
 
 # ---- Tunables -------------------------------------------------------------
@@ -366,7 +410,11 @@ class Gate8NewModule(Gate):
         for cohort_idx, cohort in enumerate(cohorts, start=1):
             cohort_label = f"cohort_{cohort_idx}_n{len(cohort)}"
             for build in cohort:
-                filename = Path(build['file']).name
+                # Accounting key must IDENTIFY the artifact; the basename
+                # does not (see _identity_key). Display still uses the
+                # basename, and GATE8_PROTECTED_FILES is still matched on
+                # the basename, because that set is written in basenames.
+                filename = _identity_key(build)
                 failures_before = self.failures
                 self._evaluate_file(build, cohort_label)
                 file_failed = self.failures > failures_before
@@ -409,11 +457,14 @@ class Gate8NewModule(Gate):
     def _evaluate_file(self, build: dict, cohort_label: str):
         file_path = Path(build["file"])
         name = file_path.name
+        key = _identity_key(build)
         task = build.get("task", "?")
-        prefix = f"gate_8: {name}"
-        # Track this file in the cohort even if every check passes
+        prefix = f"gate_8: {key}"
+        # Track this file in the cohort even if every check passes.
+        # KEY, not basename: this is a SET, so keying it on a name shared by
+        # every service collapsed a cohort of N services into size=1.
         self._cohort_totals.setdefault(cohort_label,
-            {'size_files': set(), 'files_failed': set()})['size_files'].add(name)
+            {'size_files': set(), 'files_failed': set()})['size_files'].add(key)
         # Remember failures: any self.check(condition=False) in this
         # method or in _evaluate_python counts the file as failed.
         _failures_before = self.failures
@@ -562,26 +613,37 @@ class Gate8NewModule(Gate):
         snap = gqs.snapshot()
         retries = snap.get('file_retries', {})
         for filename, meta in list(retries.items()):
-            if filename in GATE8_PROTECTED_FILES:
+            # PROTECTED is a set of basenames; a key is now a relative path.
+            if Path(filename).name in GATE8_PROTECTED_FILES:
                 continue
             attempts = meta.get('attempts', 0)
             if attempts < gqs.MAX_REBUILDS:
                 continue
             if filename in snap.get('quarantined', {}):
                 continue  # already quarantined
-            src = Path('/home/workspace/zo_sentinel') / filename
+            # The key is relative to BUILD_ROOT, so this resolves nested
+            # service-unit members as well as flat modules. FU-233 gave the
+            # RELEASE sweep a tree-aware probe; this is its mirror on the
+            # WRITE side -- a root-only probe here re-manufactured the same
+            # false 'missing_on_disk' every run, which is why the released
+            # entries came back within a day with HIGHER counters.
+            src = BUILD_ROOT / filename
             if not src.exists():
                 # file was already deleted/moved externally; record state only
                 gqs.record_quarantine(filename,
                     f'missing_on_disk after {attempts} fails', attempts)
                 continue
             try:
+                # Flatten the key for the quarantine filename: a relative
+                # path would otherwise need (and silently fail to create)
+                # intermediate directories under quarantine/.
+                flat = filename.replace('/', '__')
                 QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
-                dest = QUARANTINE_DIR / filename
+                dest = QUARANTINE_DIR / flat
                 # If a previous quarantined copy exists, suffix with ts
                 if dest.exists():
                     import time as _t
-                    dest = QUARANTINE_DIR / f'{filename}.{int(_t.time())}'
+                    dest = QUARANTINE_DIR / f'{flat}.{int(_t.time())}'
                 src.rename(dest)
                 reason = meta.get('last_error', 'unknown')[:200]
                 gqs.record_quarantine(filename,

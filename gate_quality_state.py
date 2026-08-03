@@ -180,6 +180,7 @@ def get_breaker_state() -> str:
 
 
 def is_quarantined(filename: str) -> bool:
+    drop_nonidentifying_keys()
     return filename in snapshot().get("quarantined", {})
 
 
@@ -197,6 +198,10 @@ def may_rebuild(filename: str) -> tuple[bool, str]:
     (ok, reason). Reason is always populated so the generator prompt can
     include it."""
     maybe_auto_recover()
+    # Converge away keys that cannot identify an artifact BEFORE answering.
+    # Without this a poisoned pre-fix entry keeps returning False for every
+    # service-unit directive and the architect self-censors on it.
+    drop_nonidentifying_keys()
     snap = snapshot()
     if filename in snap.get("retired", {}):
         r = snap["retired"][filename]
@@ -467,6 +472,67 @@ def maybe_auto_recover(now: Optional[float] = None) -> Optional[str]:
         })
         data["notes"] = data["notes"][-50:]
         return "half-open"
+
+
+# ---- Non-identifying keys -------------------------------------------------
+
+#: Filenames every service unit emits. Under the pre-2026-08-03 keyspace the
+#: accounting key was `Path(build['file']).name`, so ALL services shared one
+#: counter for each of these -- `__init__.py` reached 19 attempts against a
+#: budget of 3 and quarantined, blocking every service at once. A key that
+#: cannot name one artifact cannot support a claim about one artifact.
+SERVICE_UNIT_MEMBERS = frozenset({
+    "service.toml", "__init__.py", "router.py", "logic.py", "contract.py",
+})
+
+
+def _is_nonidentifying(key: str) -> bool:
+    """True if `key` is a BARE service-unit member basename.
+
+    Bare == no directory component. `services/staged/foo/router.py` names one
+    artifact and is fine; `router.py` names ~345 of them and is not. Legacy
+    flat modules (`mcp_scanner.py`, `e2e_scenarios.py`, ...) are untouched --
+    they are not service-unit members.
+    """
+    if not key or "/" in key or "\\" in key:
+        return False
+    return key in SERVICE_UNIT_MEMBERS
+
+
+def drop_nonidentifying_keys() -> list:
+    """Delete quarantine + retry entries whose key cannot identify an artifact.
+
+    Idempotent and self-healing: it converges the state file to the post-fix
+    keyspace on every read, so a rollback of the gate change simply refills
+    them rather than leaving a wedge. Returns the keys dropped.
+
+    This is a REMOVAL of a false gate, not the addition of a real one (R7).
+    The entries it drops assert `missing_on_disk` about files with 300+ copies
+    on disk; the assertion was never true, so nothing is being forgiven.
+    """
+    # Cheap lockless gate for the common (already-converged) case; the write
+    # lock is taken only when there is actually something to drop.
+    snap = snapshot()
+    if not any(_is_nonidentifying(k)
+               for b in ("quarantined", "file_retries")
+               for k in snap.get(b, {})):
+        return []
+    dropped = []
+    with _LockedStateFile() as data:
+        for bucket in ("quarantined", "file_retries"):
+            for key in [k for k in data.get(bucket, {}) if _is_nonidentifying(k)]:
+                del data[bucket][key]
+                dropped.append(f"{bucket}:{key}")
+        if dropped:
+            data.setdefault("notes", []).append({
+                "at": _now(),
+                "action": "drop_nonidentifying_keys",
+                "dropped": dropped,
+                "reason": ("key is a bare service-unit member basename; it "
+                           "aggregates every service and identifies none"),
+            })
+            data["notes"] = data["notes"][-50:]
+    return dropped
 
 
 def _default_find_fn(root: Path, filename: str) -> bool:

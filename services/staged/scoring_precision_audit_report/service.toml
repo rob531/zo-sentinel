@@ -1,0 +1,8 @@
+[service]
+name = "scoring_precision_audit_report"
+import_path = "services.active.scoring_precision_audit_report.router"
+prefix = "/api"
+tag = "scoring_precision_audit_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

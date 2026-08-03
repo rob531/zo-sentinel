@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import MCPComputer, MCPSignalScore, McpScoreDispute, MCPOrg, MCPUser, MCPVersion
+from app.models import MCPComputer, MCPSignalScore, McpScoreDispute, Org, User, MCPVersion
 
 
 def _post_query(

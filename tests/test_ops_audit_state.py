@@ -96,7 +96,7 @@ def test_mtd_declares_a_partial_basis(statefile):
 
 def test_cli_round_trip(statefile, capsys):
     oas.main(["record", "--balance", "17.14", "--date", "2026-07-27",
-              "--path", str(statefile)])
+              "--path", str(statefile), "--month", "2026-07"])
     out = json.loads(capsys.readouterr().out)
     assert out["entries"] == 1 and out["mtd"]["current_balance"] == 17.14
 
@@ -177,7 +177,7 @@ def test_budget_is_judged_on_since_funding_not_the_thin_mtd_delta():
     st["entries"] = [{"date": "2026-07-28", "at": "x", "balance": 7.0},
                      {"date": "2026-07-29", "at": "x", "balance": 5.0}]
     st["credits"] = [{"date": "2026-07-17", "at": "x", "amount": 25.0, "id": 1}]
-    assert oas.month_to_date(st)["spend_usd"] == 2.0        # would read GREEN
+    assert oas.month_to_date(st, month="2026-07")["spend_usd"] == 2.0  # GREEN
     assert oas.budget_status(st)["level"] == "RED"          # the honest verdict
 
 
@@ -190,3 +190,80 @@ def test_show_actually_emits_the_budget_block(statefile, capsys):
     assert rc == 0
     assert out["budget"]["level"] == "GREEN"
     assert out["budget"]["red_at_usd"] == 20.0
+
+
+# --- observation coverage (FU-207 class) -------------------------------------
+# The audit is the only writer of entries[], so a missing date is a missed run.
+# These pin a REPORT, not a gate: no exit code or verdict depends on them.
+
+def _st(dates):
+    return {"schema": 2,
+            "entries": [{"date": d, "at": d + "T00:00:00+00:00",
+                         "balance": 10.0} for d in dates],
+            "credits": []}
+
+
+def test_coverage_names_the_day_the_lane_did_not_run():
+    c = oas.coverage(_st(["2026-07-01", "2026-07-03"]))
+    assert c["missing_dates"] == ["2026-07-02"]
+    assert c["complete"] is False
+    assert c["observed_days"] == 2
+    assert c["span_days"] == 3
+
+
+def test_coverage_catches_a_gap_in_a_MONTH_SEAM():
+    """THE CASE THE FIRST DRAFT COULD NOT SEE, pinned so it cannot regress.
+
+    The live 2026-08-01 file: 07-26..07-30 then 08-01, missing 07-31. Scoped
+    to July it is complete; scoped to August it is complete; the missed run
+    is only visible when the scan spans months. A month-scoped detector
+    reports CLEAN on the exact event it was built for.
+    """
+    real = ["2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29",
+            "2026-07-30", "2026-08-01"]
+    assert oas.coverage(_st(real), month="2026-07")["complete"] is True
+    assert oas.coverage(_st(real), month="2026-08")["complete"] is True
+    c = oas.coverage(_st(real))          # default scope = all history
+    assert c["missing_dates"] == ["2026-07-31"]
+    assert c["scope"] == "all"
+
+
+def test_coverage_is_clean_when_every_day_was_observed():
+    c = oas.coverage(_st(["2026-07-01", "2026-07-02", "2026-07-03"]))
+    assert c["missing_dates"] == []
+    assert c["complete"] is True
+    assert c["observed_days"] == c["span_days"] == 3
+
+
+def test_no_entries_is_unknown_coverage_not_complete():
+    # R6: unknown != zero. An empty history must not report itself complete.
+    c = oas.coverage(_st([]))
+    assert c["complete"] is None
+    assert c["observed_days"] == 0
+
+
+def test_mtd_carries_observed_days_beside_its_calendar_basis():
+    # The whole point: basis_days is a calendar span and can overstate how
+    # much of the window was actually looked at.
+    st = _st(["2026-07-01", "2026-07-03"])
+    m = oas.month_to_date(st, month="2026-07")
+    assert m["basis_days"] == 2          # calendar span, unchanged
+    assert m["observed_days"] == 2       # but only 2 of the 3 days were seen
+    assert m["missing_days"] == 1
+
+
+def test_show_emits_coverage_and_does_not_scope_it_to_the_month(tmp_path,
+                                                               capsys):
+    """An uncalled helper is a placebo -- and a MIS-called one is worse.
+
+    `--month` narrows the MTD read; passing it through to coverage would
+    reintroduce the seam blindness above, so show must call coverage with
+    no month even when the user asked for one.
+    """
+    p = tmp_path / "s.json"
+    oas.save(_st(["2026-07-30", "2026-08-01"]), p)
+    rc = oas.main(["show", "--month", "2026-08", "--path", str(p)])
+    assert rc == 0                       # report, not a gate
+    out = json.loads(capsys.readouterr().out)
+    assert out["coverage"]["missing_dates"] == ["2026-07-31"]
+    assert out["mtd"]["month"] == "2026-08"   # --month still honoured by mtd

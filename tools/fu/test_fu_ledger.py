@@ -95,3 +95,58 @@ def test_append_does_not_cross_into_the_next_fu():
     pos = fu_ledger.append_log(lines, fu, "2026-07-30T07:20Z me: new entry.")
     assert pos < _fu(lines, "901").start
     assert lines[pos] == "  - 2026-07-30T07:20Z me: new entry."
+
+
+# --------------------------------------------------------------------------
+# keepends: the 2026-08-02 glue bug.
+#
+# A caller that passes `splitlines(keepends=True)` used to get an inserted
+# string with NO terminator, so `"".join(lines)` ran it straight into the line
+# below. That is how an append to FU-054 swallowed its `- resolution:` key: the
+# ledger still PARSED afterwards, so no check went red. These two tests are the
+# negative control -- both FAIL against the pre-fix fu_ledger.
+# --------------------------------------------------------------------------
+
+def _kept(lines, eol="\n"):
+    """Same fixture, but terminated -- what `splitlines(keepends=True)` yields."""
+    return [ln + eol for ln in lines]
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_append_with_keepends_does_not_glue_the_following_key(eol):
+    """NEGATIVE CONTROL: the key below the log block must survive the append."""
+    lines = _kept(_ledger(WRAPPED), eol)
+    pos = fu_ledger.append_log(lines, _fu(lines), "2026-08-02T11:05Z me: new entry.")
+
+    assert lines[pos] == "  - 2026-08-02T11:05Z me: new entry." + eol
+    # the join is the thing that actually broke, so assert on the JOINED text
+    joined = "".join(lines)
+    assert "new entry." + eol + "- lesson:" in joined, "the following key was glued"
+    assert joined.count("- lesson:") == 1
+    # and the whole document still round-trips to the same line count
+    assert len(joined.splitlines()) == len(lines)
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_insert_key_with_keepends_does_not_glue(eol):
+    lines = _kept(_ledger(WRAPPED), eol)
+    fu_ledger.insert_key(lines, _fu(lines), "verify_seen_red", "NEVER", before="log")
+    joined = "".join(lines)
+    assert "- verify_seen_red: NEVER" + eol in joined
+    assert len(joined.splitlines()) == len(lines)
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_append_creates_log_key_with_keepends(eol):
+    lines = _kept(_ledger([]), eol)
+    pos = fu_ledger.append_log(lines, _fu(lines), "2026-08-02T11:05Z me: new entry.")
+    assert lines[pos - 1] == "- log:" + eol
+    assert lines[pos] == "  - 2026-08-02T11:05Z me: new entry." + eol
+    assert len("".join(lines).splitlines()) == len(lines)
+
+
+def test_line_terminator_detects_the_convention():
+    assert fu_ledger.line_terminator(["a", "b"]) == ""
+    assert fu_ledger.line_terminator(["a\n", "b\n"]) == "\n"
+    assert fu_ledger.line_terminator(["a\r\n", "b\r\n"]) == "\r\n"
+    assert fu_ledger.line_terminator([]) == ""

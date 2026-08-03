@@ -413,15 +413,62 @@ def test_a_run_more_than_half_a_cadence_off_does_not_attest(tmp_path):
     assert "2026-07-30T16:15:00Z" in report["missed_slots"]
 
 
-def test_the_slot_grid_matches_the_live_cron():
-    """The grid is a claim about the scheduled task's cron, which lives outside
-    this repo. On 2026-07-30 the task moved from :47 to `15 */3 * * *` local and
-    this constant did not, putting every slot ~32 minutes off -- more than the
-    old 25-minute tolerance, i.e. every future slot MISSED. Pinning it here at
-    least makes the claim visible to a reader diffing against the live cron."""
-    assert srl.SLOT_MINUTE == 15
-    assert srl.SLOT_EVERY_HOURS == 3
-    assert srl.SLOT_UTC_ANCHOR_HOUR == 1
+def test_grid_is_the_local_cron_converted():
+    """SLOT_UTC_HHMM must BE the local cron converted -- derived here, not retyped.
+
+    FU-210 hand-wrote the UTC grid from the assumption that the scheduler
+    evaluates cron in UTC. It does not; it evaluates in LOCAL time. That put
+    three of four daily slots at instants no run can occur, which would have
+    reported MISSED (an email condition) forever. The bug was reachable only
+    because the constant was typed rather than computed, so this test computes
+    it. If SLOT_LOCAL_HHMM, SLOT_TZ or the UTC offset ever move -- including at
+    the 2026-11-01 DST change -- this fails loudly instead of drifting.
+    """
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(srl.SLOT_TZ)
+    # A date inside US EDT, i.e. the offset the committed grid was written for.
+    day = datetime(2026, 7, 31, tzinfo=tz)
+    derived = tuple(
+        sorted(
+            (
+                datetime(day.year, day.month, day.day, hh, mm, tzinfo=tz)
+                .astimezone(timezone.utc)
+                .hour,
+                mm,
+            )
+            for hh, mm in srl.SLOT_LOCAL_HHMM
+        )
+    )
+    assert derived == srl.SLOT_UTC_HHMM, (
+        f"grid {srl.SLOT_UTC_HHMM} is not {srl.SLOT_LOCAL_HHMM} in {srl.SLOT_TZ}; "
+        f"derived {derived}"
+    )
+    # Four slots a day after the FU-207 cadence cut, not eight.
+    assert len(srl.SLOT_UTC_HHMM) == 4
+
+
+def test_a_utc_read_of_the_cron_is_refused():
+    """NEGATIVE CONTROL: the exact grid FU-210 committed must FAIL the derivation.
+
+    Without this, the test above passes trivially against any self-consistent
+    pair and proves nothing about the bug it exists to prevent. The UTC reading
+    differs from the local one at three of four slots; only 00:45 coincides,
+    which is precisely why FU-210's single spot-check could not see it.
+    """
+    utc_reading = ((0, 45), (6, 45), (15, 45), (20, 45))
+    assert utc_reading != srl.SLOT_UTC_HHMM
+    coinciding = set(utc_reading) & set(srl.SLOT_UTC_HHMM)
+    assert coinciding == {(0, 45)}, (
+        "exactly one slot may coincide between the UTC and local readings -- if "
+        "more do, the two hypotheses are no longer distinguishable here"
+    )
+
+
+def test_the_legacy_slot_grid_matches_the_pre_cut_cron():
+    """The pre-cut grid still has to be right, or FU-207's five missed slots
+    stop being visible in any 24h window that straddles the cut."""
+    assert srl.LEGACY_SLOT_UTC_HHMM == tuple((h, 15) for h in range(1, 24, 3))
 
     now = srl.parse_iso("2026-07-30T19:44:45Z")
     slots = [srl.fmt(s) for s in srl.expected_slots(now, 12)]
@@ -429,3 +476,88 @@ def test_the_slot_grid_matches_the_live_cron():
     assert "2026-07-30T16:15:00Z" in slots
     assert "2026-07-30T19:15:00Z" in slots
     assert "2026-07-30T13:15:00Z" in slots
+
+
+# --------------------------------------------------------------------------
+# FU-213: the grid is FETCHED from the scheduler mirror, not typed.
+#
+# The three prior fixes (FU-205, FU-210, FU-211) each retyped the literal
+# correctly and left the NEXT drift undetectable. These tests assert the thing
+# that actually changed: a mirror that disagrees MOVES the grid, and says so.
+# --------------------------------------------------------------------------
+import json as _json
+
+import tools.sentinel_run_ledger as srl
+from tools import scheduler_mirror_read as smr
+
+
+def _mirror(tmp_path, local_slots, generated=None, tz="America/New_York"):
+    from datetime import datetime, timezone
+    generated = generated or datetime.now(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
+    p = tmp_path / "scheduler_mirror.json"
+    p.write_text(_json.dumps({
+        "schema": 1, "generated_at": generated, "tz": tz,
+        "tasks": {"prod-drift-sentinel": {
+            "cronExpression": "45 0,6,15,20 * * *",
+            "enabled": True,
+            "local_slots": [list(s) for s in local_slots],
+        }},
+    }), encoding="utf-8")
+    return str(p)
+
+
+def test_mirror_agreeing_with_the_literal_reproduces_todays_grid(tmp_path, monkeypatch):
+    """The live cron, converted, must equal the grid FU-211 hand-derived.
+
+    An independent derivation landing on the same four instants is the check
+    FU-210 and FU-211 each lacked.
+    """
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((0, 45), (6, 45), (15, 45), (20, 45))))
+    from datetime import date
+    got = srl.resolve_post_cut_grid(date(2026, 7, 31))
+    assert got == ((0, 45), (4, 45), (10, 45), (19, 45))
+    assert got == tuple(srl.SLOT_UTC_HHMM)
+    assert "mirror" in srl.GRID_BASIS
+
+
+def test_a_disagreeing_mirror_MOVES_the_grid_and_announces_it(tmp_path, monkeypatch):
+    """NEGATIVE CONTROL. If this passes with the literal still in force, the
+    mirror is decorative and FU-213 changed nothing."""
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((2, 30), (14, 30))))
+    from datetime import date
+    got = srl.resolve_post_cut_grid(date(2026, 7, 31))
+    assert got == ((6, 30), (18, 30))          # 02:30/14:30 local -> UTC-4
+    assert got != tuple(srl.SLOT_UTC_HHMM)     # the literal did NOT win
+    assert "DISAGREES" in srl.GRID_BASIS       # and it was not silent
+
+
+def test_a_missing_mirror_falls_back_to_the_literal_and_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(smr, "MIRROR_PATH", str(tmp_path / "nope.json"))
+    got = srl.resolve_post_cut_grid()
+    assert got == tuple(srl.SLOT_UTC_HHMM)
+    assert "literal" in srl.GRID_BASIS and "absent" in srl.GRID_BASIS
+
+
+def test_a_stale_mirror_is_refused_rather_than_trusted(tmp_path, monkeypatch):
+    """A mirror nobody has refreshed is not evidence about today's schedule."""
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((2, 30),), generated="2026-01-01T00:00:00Z"))
+    got = srl.resolve_post_cut_grid()
+    assert got == tuple(srl.SLOT_UTC_HHMM)     # literal, not the stale mirror
+    assert "STALE" in srl.GRID_BASIS
+
+
+def test_the_grid_survives_the_dst_change(tmp_path, monkeypatch):
+    """2026-11-01: the same local cron is an hour later in UTC. A literal
+    cannot notice; a date-aware conversion must."""
+    monkeypatch.setattr(smr, "MIRROR_PATH",
+                        _mirror(tmp_path, ((0, 45), (6, 45), (15, 45), (20, 45))))
+    from datetime import date
+    summer = srl.resolve_post_cut_grid(date(2026, 7, 31))
+    winter = srl.resolve_post_cut_grid(date(2026, 12, 1))
+    assert summer == ((0, 45), (4, 45), (10, 45), (19, 45))   # UTC-4
+    assert winter == ((1, 45), (5, 45), (11, 45), (20, 45))   # UTC-5
+    assert summer != winter

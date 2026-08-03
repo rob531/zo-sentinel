@@ -6,7 +6,7 @@ from typing import Dict
 
 # Real data layer imports (must remain unchanged for production)
 from app.db import get_session
-from app.models import ServerRegistry, LlmAxisScore, Base
+from app.models import McpServerRegistry, McpLlmAxisScore, Base
 
 router = APIRouter()
 
@@ -40,13 +40,13 @@ def get_verdict_view(
     server_id: int, db: Session = Depends(get_session)
 ) -> VerdictResponseModel.Response:
     """Return verdict information for a given server."""
-    server = db.query(ServerRegistry).filter(ServerRegistry.server_id == server_id).first()
+    server = db.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     scores_q = (
-        db.query(LlmAxisScore)
-        .filter(LlmAxisScore.server_id == server_id)
+        db.query(McpLlmAxisScore)
+        .filter(McpLlmAxisScore.server_id == server_id)
         .all()
     )
     scores: Dict[str, VerdictResponseModel.AxisScore] = {}
@@ -87,8 +87,8 @@ if __name__ == "__main__":
 
     # Seed test data
     db: Session = SessionLocal()
-    test_server = ServerRegistry(server_id=1, verdict="allow", risk_tier="low")
-    test_score = LlmAxisScore(
+    test_server = McpServerRegistry(server_id=1, verdict="allow", risk_tier="low")
+    test_score = McpLlmAxisScore(
         server_id=1, axis="security", label="high", p_top=0.95
     )
     db.add_all([test_server, test_score])

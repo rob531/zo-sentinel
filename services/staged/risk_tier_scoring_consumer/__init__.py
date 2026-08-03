@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional
 import requests
 from fastapi import Depends, HTTPException
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from pydantic import BaseModel
 
 class SignalScore(BaseModel):

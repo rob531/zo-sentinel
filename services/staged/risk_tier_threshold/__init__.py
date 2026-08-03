@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, MCPSignalScores, MeshMemory, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, MCPSignalScores, MeshMemory, McpScoreDispute, Org, User
 from typing import List, Optional
 import requests
 import json

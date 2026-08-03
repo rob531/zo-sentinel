@@ -64,6 +64,31 @@ FORBIDDEN = (
     "terminate", "vast ", "runpod", "sky launch", "fly deploy", "flyctl deploy",
     ">>", "tee ", "chmod ", "chown ", "--force", "sudo ",
 )
+
+
+def _forbidden_matcher(tok: str):
+    """Compile the matcher for one forbidden token.
+
+    FU-158 / 2026-08-02: a BARE SUBSTRING TEST IS WRONG, and it had been wrong
+    since the list was written. `"dd "` matched inside `git worktree add
+    --detach`, so a read-only `pytest` predicate was reported E9 "unsafe --
+    contains 'dd'" on every lint run for five days. The same trap is latent in
+    `"rm "` (matches `perform `, `platform `), `"mv "`, `"kill "` and
+    `"update "`.
+
+    A checker that cries wolf on a safe predicate does not fail loudly -- it
+    gets muted, and then it is not protecting anything. So: tokens that START
+    with a word character require a word boundary in front. Tokens that start
+    with punctuation (`">>"`, `"--force"`) keep plain substring matching,
+    because a boundary rule would make THOSE weaker, not stronger, and the cost
+    of a false negative on a redirect is destroyed state.
+    """
+    if tok[:1].isalnum():
+        return re.compile(r"(?<![A-Za-z0-9_])" + re.escape(tok))
+    return re.compile(re.escape(tok))
+
+
+_FORBIDDEN_MATCHERS = tuple((tok, _forbidden_matcher(tok)) for tok in FORBIDDEN)
 # NOTE: blanket "POST" was in this list and was removed. The documented READ
 # path for this fleet is a POST to the write-service /query bus, so refusing
 # POST would refuse almost every useful database predicate. Mutation is caught
@@ -157,8 +182,8 @@ class FU:
         if not cmd:
             return None
         low = cmd.lower()
-        for tok in FORBIDDEN:
-            if tok in low:
+        for tok, pat in _FORBIDDEN_MATCHERS:
+            if pat.search(low):
                 return "contains forbidden token %r -- a verify is a read-only probe" % tok.strip()
         return None
 
@@ -191,13 +216,40 @@ def parse(lines: List[str]) -> List[FU]:
     return out
 
 
+def line_terminator(lines: List[str]) -> str:
+    """Return the terminator the caller's `lines` carry ("" if unterminated).
+
+    The writers here were all written against `text.splitlines()` -- lines with
+    NO terminator, re-joined with "\\n". A caller that instead passes
+    `splitlines(keepends=True)` used to have every inserted string GLUED to the
+    line below it, because the inserted string had no "\\n" of its own and
+    `"".join(...)` therefore ran the two together.
+
+    That is not a hypothetical: on 2026-08-02 `append_log` called with keepends
+    lines silently swallowed FU-054's `- resolution:` key into the tail of the
+    new log bullet. The ledger still *parsed*, so nothing went red -- the exact
+    "a check never observed RED is not evidence" shape from HARNESS_DOCTRINE.
+    Detect the convention rather than assume it, so BOTH callers are correct.
+    """
+    for ln in lines:
+        if ln.endswith("\r\n"):
+            return "\r\n"
+        if ln.endswith("\n"):
+            return "\n"
+    return ""
+
+
 def insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "log") -> int:
     """Insert `- key: value` into an entry, preferring a slot before `before`.
 
     Returns the index written. Callers MUST re-parse afterwards; indices in
     previously-parsed FU objects are invalidated by this call.
+
+    Accepts `lines` with or without line terminators (see `line_terminator`).
     """
+    eol = line_terminator(lines)
     line = "- %s: %s" % (key, value) if value else "- %s:" % key
+    line += eol
     if key in fu.keys:
         lines[fu.keys[key]] = line
         return fu.keys[key]
@@ -223,8 +275,12 @@ def _is_wrapped_log_line(line: str) -> bool:
 
 
 def append_log(lines: List[str], fu: FU, text: str) -> int:
-    """Append a dated bullet under `- log:`, creating the key if needed."""
-    bullet = "  - %s" % text
+    """Append a dated bullet under `- log:`, creating the key if needed.
+
+    Accepts `lines` with or without line terminators (see `line_terminator`).
+    """
+    eol = line_terminator(lines)
+    bullet = "  - %s%s" % (text, eol)
     if "log" in fu.keys:
         pos = fu.keys["log"] + 1
         while pos < fu.end and (
@@ -234,6 +290,6 @@ def append_log(lines: List[str], fu: FU, text: str) -> int:
         lines.insert(pos, bullet)
         return pos
     pos = fu.keys.get("resolution", fu.end)
-    lines.insert(pos, "- log:")
+    lines.insert(pos, "- log:" + eol)
     lines.insert(pos + 1, bullet)
     return pos + 1

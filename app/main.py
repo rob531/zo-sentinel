@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth
+from . import auth, clerk_webhook
 from .db import init_db
 from .rbac import require_role
 from .security import Principal, get_principal
@@ -57,6 +57,7 @@ def admin_ping(principal: Principal = Depends(require_role("admin"))):
 
 
 app.include_router(auth.router)
+app.include_router(clerk_webhook.router)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 

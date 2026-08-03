@@ -6,7 +6,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import get_session, Base
-from app.models import VulnerabilityLink, VulnerabilityAdvisory
+from app.models import VulnLink, VulnAdvisory
 
 from .contract import (
     CveInfo,
@@ -25,15 +25,15 @@ def get_server_cves(
     `ServerCveResponse` model.
     """
     links = (
-        db.query(VulnerabilityLink)
-        .options(joinedload(VulnerabilityLink.advisory))
-        .filter(VulnerabilityLink.server_id == server_id)
+        db.query(VulnLink)
+        .options(joinedload(VulnLink.advisory))
+        .filter(VulnLink.server_id == server_id)
         .all()
     )
 
     cve_list: List[CveInfo] = []
     for link in links:
-        adv: VulnerabilityAdvisory = link.advisory
+        adv: VulnAdvisory = link.advisory
         cve_list.append(
             CveInfo(
                 id=adv.cve_id,
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     # Seed data
     with SessionLocal() as db:
-        adv1 = VulnerabilityAdvisory(
+        adv1 = VulnAdvisory(
             id=1,
             cve_id="CVE-2021-1234",
             feed="NVD",
@@ -76,7 +76,7 @@ if __name__ == "__main__":
             source_url="http://example.com/1",
             published_at=datetime(2021, 1, 1, 0, 0, 0),
         )
-        adv2 = VulnerabilityAdvisory(
+        adv2 = VulnAdvisory(
             id=2,
             cve_id="CVE-2022-5678",
             feed="NVD",
@@ -90,12 +90,12 @@ if __name__ == "__main__":
         db.add_all([adv1, adv2])
         db.flush()  # ensure IDs are available
 
-        link1 = VulnerabilityLink(
+        link1 = VulnLink(
             id=1,
             server_id="srv-001",
             advisory_id=adv1.id,
         )
-        link2 = VulnerabilityLink(
+        link2 = VulnLink(
             id=2,
             server_id="srv-001",
             advisory_id=adv2.id,

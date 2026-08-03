@@ -1,0 +1,24 @@
+[service]
+name = "registry_growth_snapshot_rollup"
+import_path = "services.active.registry_growth_snapshot_rollup.router"
+prefix = "/api"
+tag = "registry_growth_snapshot_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+module = "services.active.registry_growth_snapshot_rollup.router"
+
+[data_access]
+app.type = "sqlalchemy"
+app.models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh.type = "http"
+mesh.endpoint = "http://127.0.0.1:8772/query"
+mesh.tables = ["mcp_signal_scores", "mesh_memory"]
+
+[dependencies]
+requires = ["app.db"]
+
+[tests]
+self_test_module = "services.active.registry_growth_snapshot_rollup"

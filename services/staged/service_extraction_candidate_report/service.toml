@@ -1,0 +1,8 @@
+[service]
+name = "service_extraction_candidate_report"
+import_path = "services.active.service_extraction_candidate_report.router"
+prefix = "/api"
+tag = "service_extraction_candidate_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

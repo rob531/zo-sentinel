@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import ThreatIntelRef, Pulse, VulnerabilityLink  # type: ignore
+from app.models import ThreatIntelRef, Pulse, VulnLink  # type: ignore
 
 
 # --------------------------------------------------------------------------- #
@@ -63,7 +63,7 @@ def _fetch_indicator_aggregates(sess: Session) -> List[IndicatorTypeAggModel]:
         it_count: int = row.cnt
 
         # Fetch recent pulses for this indicator type.
-        # We join ThreatIntelRef -> VulnerabilityLink -> Pulse.
+        # We join ThreatIntelRef -> VulnLink -> Pulse.
         pulse_stmt = (
             select(
                 Pulse.id,
@@ -71,8 +71,8 @@ def _fetch_indicator_aggregates(sess: Session) -> List[IndicatorTypeAggModel]:
                 Pulse.created_at.label("created"),
                 Pulse.source,
             )
-            .join(VulnerabilityLink, VulnerabilityLink.pulse_id == Pulse.id)
-            .join(ThreatIntelRef, ThreatIntelRef.id == VulnerabilityLink.threat_intel_ref_id)
+            .join(VulnLink, VulnLink.pulse_id == Pulse.id)
+            .join(ThreatIntelRef, ThreatIntelRef.id == VulnLink.threat_intel_ref_id)
             .where(ThreatIntelRef.indicator_type == it_type)
             .order_by(Pulse.created_at.desc())
             .limit(5)

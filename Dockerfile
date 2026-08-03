@@ -23,6 +23,26 @@ COPY entity_report_exporter.py org_api_key_manager.py org_entity_search_api.py o
 COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html server_threat_intel_view.html /srv/
 COPY migrations /srv/migrations
 COPY alembic.ini /srv/alembic.ini
+
+# FU-217: the SOA half of the FU-102 class. Every service under services/staged/
+# declares `import_path = services.active.<name>.router`, and until this line
+# there was no COPY token naming `services` at any depth -- so the promoter
+# (tools/promote_staged_to_active.py -> tools/image_ship_check.would_be_shipped)
+# correctly HELD every one of them: promoting into an image with no services/
+# tree is a guaranteed ModuleNotFoundError at mount, i.e. a repeat of v64.
+# Measured 2026-08-01T14:32Z on runtime b1c0d758: 300 candidates, 0 PROMOTE,
+# 300 HOLD, of which 267 were this bucket. There was no COPY-list ENTRY to add a
+# service to, because there was no COPY-list for services at all.
+#
+# ACTIVE ONLY, DELIBERATELY. services/staged/ is 262 dirs of code that has not
+# passed a liveness contract; shipping it into the prod image would put
+# un-gated modules one import away from a mounted app for no benefit. Promotion
+# MOVES a directory staged -> active, so the build that follows a promotion
+# carries the promoted service and nothing else. `services/__init__.py` is
+# copied on its own so that `services` is an importable package without
+# `services.staged` existing in the image.
+COPY services/__init__.py /srv/services/
+COPY services/active /srv/services/active
 # Build identity for /version (runtime_deploy_info_endpoint): pass
 #   --build-arg GIT_SHA=$(git rev-parse HEAD) --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # at deploy (flyctl deploy does this from the runbook). Defaults stay 'unknown'.

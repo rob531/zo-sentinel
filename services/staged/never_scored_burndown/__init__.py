@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import requests
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 app = FastAPI()
 
@@ -53,7 +53,7 @@ def dummy_post_endpoint(data: dict, session: Session = Depends(get_session)) -> 
 def _run_self_test() -> None:
     """Self-test for the module."""
     from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -66,8 +66,8 @@ def _run_self_test() -> None:
     McpServerRegistry.metadata.create_all(engine)
     McpLlmAxisScore.metadata.create_all(engine)
     McpScoreDispute.metadata.create_all(engine)
-    Orgs.metadata.create_all(engine)
-    Users.metadata.create_all(engine)
+    Org.metadata.create_all(engine)
+    User.metadata.create_all(engine)
 
     # Test get_mesh_memory
     test_server = McpServerRegistry(server_id=1, name="test_server")

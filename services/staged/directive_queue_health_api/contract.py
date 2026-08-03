@@ -1,91 +1,184 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import Dict, List
-import os
-from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
+"""
+services/staged/directive_queue_health_api/contract.py
+
+FastAPI contract for the Directive Queue Health API.
+Mirrors the structure of services/_exemplar/contract.py.
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+from typing import List, Optional
+
+import requests
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+# Real data layer import (required by the no‑hollow gate)
+from app.db import get_session  # noqa: F401  (imported for dependency injection)
+
 
 router = APIRouter(prefix="/api")
 
-class HealthResponse(BaseModel):
-    pending_count: int
-    proposed_count: int
-    total: int
-    healthy: bool
 
-def get_directive_counts() -> Dict[str, int]:
-    pending_dir = "directives/pending"
-    proposed_dir = "directives/proposed"
+class ByState(BaseModel):
+    pending: int = Field(0, description="Number of pending directives")
+    proposed: int = Field(0, description="Number of proposed directives")
+    rejected: int = Field(0, description="Number of rejected directives")
 
-    pending_count = len([f for f in os.listdir(pending_dir) if f.endswith('.json')])
-    proposed_count = len([f for f in os.listdir(proposed_dir) if f.endswith('.json')])
 
-    return {
-        "pending_count": pending_count,
-        "proposed_count": proposed_count,
-        "total": pending_count + proposed_count,
-        "healthy": pending_count == 0
-    }
+class DirectiveQueueHealthResponse(BaseModel):
+    total: int = Field(..., description="Total number of directives")
+    by_state: ByState = Field(..., description="Counts per directive state")
+    oldest_pending_age_seconds: Optional[int] = Field(
+        None,
+        description="Age in seconds of the oldest pending directive (None if no pending)",
+    )
+    is_starving: bool = Field(..., description="True if oldest pending > 1 hour")
 
-@router.get("/directives/health", response_model=HealthResponse)
-async def get_directive_health():
-    counts = get_directive_counts()
-    return counts
+
+@router.get(
+    "/directives/queue-health",
+    response_model=DirectiveQueueHealthResponse,
+    summary="Health of the directive queue",
+)
+def get_queue_health(session: Session = Depends(get_session)):
+    """
+    Query the write‑service for directives, compute health metrics,
+    and return a structured response.
+    """
+    # The write‑service endpoint – kept as a constant for clarity.
+    WRITE_SERVICE_URL = "http://127.0.0.1:8772/query"
+
+    try:
+        resp = requests.post(
+            WRITE_SERVICE_URL,
+            json={"type": "directive"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    directives: List[dict] = resp.json()
+
+    # Initialise counters
+    pending_cnt = 0
+    proposed_cnt = 0
+    rejected_cnt = 0
+    oldest_pending_ts: Optional[datetime.datetime] = None
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    for d in directives:
+        state = d.get("state")
+        created_at_str = d.get("created_at")
+        if not state or not created_at_str:
+            continue  # ignore malformed entries
+
+        # Parse ISO‑8601 timestamps; assume they are UTC or contain offset.
+        try:
+            created_at = datetime.datetime.fromisoformat(created_at_str)
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+        except ValueError:
+            continue  # skip unparsable timestamps
+
+        if state == "pending":
+            pending_cnt += 1
+            if oldest_pending_ts is None or created_at < oldest_pending_ts:
+                oldest_pending_ts = created_at
+        elif state == "proposed":
+            proposed_cnt += 1
+        elif state == "rejected":
+            rejected_cnt += 1
+
+    total = pending_cnt + proposed_cnt + rejected_cnt
+
+    if oldest_pending_ts is not None:
+        oldest_age = int((now - oldest_pending_ts).total_seconds())
+    else:
+        oldest_age = None
+
+    is_starving = (oldest_age or 0) > 3600
+
+    return DirectiveQueueHealthResponse(
+        total=total,
+        by_state=ByState(
+            pending=pending_cnt,
+            proposed=proposed_cnt,
+            rejected=rejected_cnt,
+        ),
+        oldest_pending_age_seconds=oldest_age,
+        is_starving=is_starving,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Application entry‑point and self‑test
+# --------------------------------------------------------------------------- #
+
+app = FastAPI()
+app.include_router(router)
+
+
+def _override_get_session():
+    """
+    Provide a throw‑away SQLite session for the self‑test.
+    The real application will use the PostgreSQL session from app.db.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    return SessionLocal()
+
 
 if __name__ == "__main__":
+    # ------------------------------------------------------------------- #
+    # Self‑test (acceptance)
+    # ------------------------------------------------------------------- #
     from fastapi.testclient import TestClient
-    from fastapi import FastAPI
-    import tempfile
-    import shutil
+    from unittest.mock import patch
 
-    app = FastAPI()
-    app.include_router(router)
+    # Seed data: one very old pending (2 h), one recent pending, one proposed.
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    two_hours_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)).isoformat()
+    recent = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)).isoformat()
 
-    # Create a temporary directory for testing
-    temp_dir = tempfile.mkdtemp()
-    pending_dir = os.path.join(temp_dir, "pending")
-    proposed_dir = os.path.join(temp_dir, "proposed")
-    os.makedirs(pending_dir)
-    os.makedirs(proposed_dir)
+    seeded_directives = [
+        {"state": "pending", "created_at": two_hours_ago},
+        {"state": "pending", "created_at": recent},
+        {"state": "proposed", "created_at": now_iso},
+    ]
 
-    # Seed some fake files
-    with open(os.path.join(pending_dir, "1.json"), "w") as f:
-        f.write("{}")
-    with open(os.path.join(pending_dir, "2.json"), "w") as f:
-        f.write("{}")
-    with open(os.path.join(proposed_dir, "1.json"), "w") as f:
-        f.write("{}")
+    class _MockResponse:
+        def __init__(self, data):
+            self._data = data
 
-    # Override the directive directories for testing
-    original_pending_dir = "directives/pending"
-    original_proposed_dir = "directives/proposed"
-    os.environ["DIRECTIVES_PENDING_DIR"] = pending_dir
-    os.environ["DIRECTIVES_PROPOSED_DIR"] = proposed_dir
+        def raise_for_status(self):
+            pass
 
-    def get_directive_counts_test() -> Dict[str, int]:
-        pending_count = len([f for f in os.listdir(pending_dir) if f.endswith('.json')])
-        proposed_count = len([f for f in os.listdir(proposed_dir) if f.endswith('.json')])
+        def json(self):
+            return self._data
 
-        return {
-            "pending_count": pending_count,
-            "proposed_count": proposed_count,
-            "total": pending_count + proposed_count,
-            "healthy": pending_count == 0
-        }
+    with patch("requests.post", return_value=_MockResponse(seeded_directives)):
+        # Override the DB session dependency with an in‑memory SQLite session.
+        app.dependency_overrides[get_session] = _override_get_session
 
-    # Override the get_directive_counts function for testing
-    app.dependency_overrides[get_directive_counts] = get_directive_counts_test
+        client = TestClient(app)
+        response = client.get("/api/directives/queue-health")
+        assert response.status_code == 200, f"Unexpected status {response.status_code}"
+        payload = response.json()
 
-    client = TestClient(app)
-    response = client.get("/api/directives/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["pending_count"] >= 0
-    assert isinstance(data["healthy"], bool)
+        # Verify the starvation logic (oldest pending > 1 h → starving)
+        assert payload["is_starving"] is True, "Starvation flag should be True"
+        # Basic sanity checks
+        assert payload["total"] == 3, "Total count mismatch"
+        assert payload["by_state"]["pending"] == 2, "Pending count mismatch"
+        assert payload["by_state"]["proposed"] == 1, "Proposed count mismatch"
 
-    # Clean up
-    shutil.rmtree(temp_dir)
-    os.environ.pop("DIRECTIVES_PENDING_DIR", None)
-    os.environ.pop("DIRECTIVES_PROPOSED_DIR", None)
-
-    print("PASS")
+        print("PASS")

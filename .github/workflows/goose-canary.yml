@@ -1,26 +1,34 @@
 name: goose-canary
 
 # Eval a CANDIDATE goose version BEFORE it touches the live tower (rule #1: don't
-# break goose). Tower goose is 1.34.1 -- too old for gemini_oauth / hooks / the
-# /goal command (all 1.36/1.37/2.0). This canary proves an upgrade is safe:
+# break goose). The live mesh is on 1.43.0 (flipped 2026-07-19, FU-017/#1652).
+# This canary proves an upgrade is safe:
 #   1. install the candidate goose,
 #   2. tool-call smoke (new goose loads a recipe + drives a model + calls a tool),
-#   3. our-recipe load check (architect.yaml / directive_architect.yaml still parse),
-#   4. full writer integration tier (real ephemeral write_service + DB round-trip),
+#   3. stdio NAMESPACING probe (scar #454 -- 1.38 renamed stdio tools and starved
+#      the architect at +0; every version bump MUST clear this),
+#   4. PreToolUse hook fire/deny parity,
+#   5. our-recipe load check (architect.yaml / directive_architect.yaml still parse),
+#   6. LONG SHELL STEP (FU-017/#10348 -- the 300s default shell kill must stay
+#      overridden by GOOSE_DEFAULT_EXTENSION_TIMEOUT),
+#   7. full writer integration tier (real ephemeral write_service + DB round-trip),
 # then report pass/fail. Manual-only; never auto-runs.
 #
-# INSTALL METHOD -- CONFIRM AGAINST THE TOWER. Assumed: the Rust block/goose CLI
-# (matches v1.34.1 + `goose run`/`goose configure`). If the tower uses the Python
-# `goose-ai` pip package (per the stale KNOWLEDGE_BASE.md), swap the install step
-# for `pipx install goose-ai==${{ inputs.goose_version }}`.
+# 2026-07-27: steps 3 and 6 were ADDED. Their recipes were committed on 2026-07-19
+# and run ad hoc during the 1.43 flip, but no workflow step ever invoked them --
+# the scar-#454 guard the upgrade doctrine requires existed as a FILE and not as a
+# GATE. That is the "proves presence, never correctness" class (Harness Engineering
+# row, GOOSE_WATCH). Also repointed the installer from block/goose to aaif-goose/goose
+# (the project moved to the Linux Foundation's AAIF; the old org only worked by
+# GitHub rename-redirect, which is not a contract).
 
 on:
   workflow_dispatch:
     inputs:
       goose_version:
-        description: "candidate goose version (e.g. 1.37.0 or 2.0.0)"
+        description: "candidate goose version (e.g. 1.44.0)"
         required: true
-        default: "1.38.0"
+        default: "1.44.0"
       smoke_rung:
         description: "cheap provider to drive the smoke (cerebras|groq)"
         default: "cerebras"
@@ -31,16 +39,16 @@ permissions:
 jobs:
   canary:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: "3.11" }
 
-      - name: Install candidate goose (Rust CLI -- CONFIRM method vs tower)
+      - name: Install candidate goose (Rust CLI, aaif-goose org)
         run: |
           set -euo pipefail
-          curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh \
+          curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh \
             | CONFIGURE=false GOOSE_VERSION="v${{ inputs.goose_version }}" bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
@@ -73,6 +81,85 @@ jobs:
             echo "SMOKE PASS: new goose loads recipe + drives model + calls a tool"
           else
             echo "SMOKE FAIL: nonce not echoed -- this goose broke our recipe/tool loop"
+            exit 1
+          fi
+
+      # The bridge needs the MCP SDK. It is NOT declared in any requirements file
+      # in this repo -- it exists only in the tower's ambient Python env, which is
+      # why the first CI run of this probe died on `No module named 'mcp'`. Pinned
+      # loose-but-bounded, same philosophy as tests/ci/requirements-ci.txt.
+      - name: Install the MCP SDK the bridge imports
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install "mcp>=1.2,<2.0"
+          python -c "from mcp.server.fastmcp import FastMCP; print('mcp SDK import OK')"
+
+      # SCAR #454 (goose 1.38): stdio tool names were namespaced away from what
+      # directive_architect.yaml hardcodes, every architect call returned
+      # "Tool not found", and the architect silently emitted +0 for days. The
+      # probe loads the REAL zo_directive_bridge stdio extension and calls the
+      # VERBATIM name the architect recipe uses. cwd MUST be the repo root so the
+      # relative extension arg resolves (goose stdio extensions resolve paths
+      # against the goose PROCESS cwd).
+      #
+      # TWO FAILURE MODES, and they are NOT the same defect (the FU-108 lesson:
+      # EXTRACTION_FAILURE != DEGENERATE -- never let one bucket absorb the other):
+      #   (a) EXTENSION_START_FAILURE -- the bridge process never initialised.
+      #       goose does NOT abort on this: it prints "continuing without it" and
+      #       runs the session with only python/bash. That is the 1.38 starvation
+      #       shape reproduced by a different cause, so it must still fail the
+      #       build -- an architect with no bridge is dead either way.
+      #   (b) genuine RENAME -- bridge started, but the verbatim tool name is gone.
+      - name: stdio namespacing probe (scar #454 -- MANDATORY for any version bump)
+        env:
+          # The bridge defaults its root to /home/workspace/zo_sentinel (the tower).
+          # A runner cannot write there, so point it at a scratch root. The DEFAULT
+          # is unchanged -- this only exercises the override.
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel
+          ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp.log
+          # DRIVE THIS STEP ON A NON-REASONING MODEL, and understand why before
+          # changing it back. This canary points goose DIRECTLY at a provider,
+          # whereas the mesh points goose at the ladder shim on :8796. On the
+          # direct path, a multi-turn tool-calling turn against a REASONING model
+          # (cerebras gpt-oss-120b) dies with:
+          #   400: messages.2.assistant.reasoning_content ... is unsupported
+          # because goose preserves reasoning_content across tool-call turns
+          # (upstream #10366) and the provider rejects the property on replay.
+          # PROVEN NOT A VERSION REGRESSION: runs 30262869986 (1.44.0) and
+          # 30262977744 (1.43.0 control) fail identically, and 1.43 is what is
+          # live today. PROVEN NOT A PRODUCTION BUG EITHER: ladder_shim.py
+          # chat_completions() reads only role+content off each message and
+          # rebuilds a fresh [system, user] payload, so reasoning_content never
+          # reaches a provider in the real path.
+          # The single-turn smoke above is unaffected -- it never replays an
+          # assistant turn. See FU-119 for the standing divergence this exposes.
+          OPENAI_BASE_URL: https://api.groq.com/openai/v1
+          OPENAI_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOSE_MODEL: llama-3.3-70b-versatile
+        run: |
+          set -euo pipefail
+          NONCE="ns-$RANDOM-$RANDOM"
+          goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
+            --params nonce="$NONCE" 2>&1 | tee /tmp/namespacing.out
+
+          if grep -qi "Failed to start extension 'zo_directive_bridge'" /tmp/namespacing.out; then
+            echo "CANARY FAIL (a): EXTENSION_START_FAILURE -- the bridge never initialised."
+            echo "This is NOT a goose namespacing regression; it is our extension being unloadable."
+            echo "Note what goose did: it warned and CONTINUED WITHOUT THE BRIDGE. A bridge that"
+            echo "fails to start on the tower therefore produces a live-looking architect with no"
+            echo "bridge tools -- i.e. +0 -- and goose will not tell you louder than a warning."
+            grep -i "Failed to start extension" -A2 /tmp/namespacing.out || true
+            exit 1
+          fi
+
+          if grep -q "NAMESPACING_OK::$NONCE" /tmp/namespacing.out; then
+            echo "NAMESPACING PASS: zo_directive_bridge__read_protected_files resolves verbatim under this goose"
+          else
+            echo "CANARY FAIL (b): the architect's hardcoded tool name did NOT resolve, and the"
+            echo "bridge DID start -- so this is a genuine rename. The 1.38 starvation shape."
+            echo "DO NOT FLIP. Tool list the agent reported:"
+            tail -40 /tmp/namespacing.out
             exit 1
           fi
 
@@ -113,6 +200,31 @@ jobs:
           done
           exit $rc
 
+      # FU-017 / upstream #10348: from 1.43 the default extension timeout applies
+      # to the builtin developer SHELL, and it is governed ONLY by
+      # GOOSE_DEFAULT_EXTENSION_TIMEOUT -- the per-extension `timeout:` field in the
+      # recipe is NOT honoured for that kill (canary-proven 2026-07-19: negative
+      # control died at exactly 300s). The tower exports 900 in zo_mesh/.zo_env;
+      # this step asserts that guard still works on the candidate version, because
+      # builder shell steps (installs, test suites) routinely exceed 300s.
+      - name: Long shell step (FU-017 -- 300s default kill must stay overridden)
+        env:
+          GOOSE_DEFAULT_EXTENSION_TIMEOUT: "900"
+        run: |
+          set -euo pipefail
+          NONCE="ls-$RANDOM-$RANDOM"
+          goose run --no-session --recipe tools/canary/long_shell_step_recipe.yaml \
+            --params nonce="$NONCE" 2>&1 | tee /tmp/long_shell.out
+          if grep -q "LONG_STEP_OK::$NONCE" /tmp/long_shell.out; then
+            echo "LONG STEP PASS: a 400s shell call survived under GOOSE_DEFAULT_EXTENSION_TIMEOUT=900"
+          else
+            echo "LONG STEP FAIL: the 400s shell call did not complete. Either the env guard"
+            echo "no longer overrides the default kill, or the resolution order changed again."
+            echo "DO NOT FLIP -- long builder shell steps would be silently truncated."
+            tail -40 /tmp/long_shell.out
+            exit 1
+          fi
+
       - name: Full writer integration tier (real ephemeral write_service)
         env:
           IT_WS_PORT: "8772"
@@ -132,4 +244,7 @@ jobs:
         if: failure()
         run: |
           echo "--- smoke ---"; cat /tmp/smoke.out 2>/dev/null || true
+          echo "--- namespacing ---"; cat /tmp/namespacing.out 2>/dev/null || true
+          echo "--- hooks ---"; cat /tmp/hook.out 2>/dev/null || true
+          echo "--- long shell ---"; cat /tmp/long_shell.out 2>/dev/null || true
           echo "--- write_service ---"; cat /tmp/it_ws.log 2>/dev/null || true

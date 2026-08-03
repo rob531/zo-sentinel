@@ -1,0 +1,29 @@
+[service]
+name = "risk_tier_change_analysis"
+import_path = "services.active.risk_tier_change_analysis.router"
+prefix = "/api"
+tag = "risk_tier_change_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[data_access]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_endpoint = "http://127.0.0.1:8772/query"
+
+[app_database]
+session_dependency = "app.db.get_session"
+models_import = "app.models"
+
+[mesh_store]
+access_method = "POST"
+endpoint = "http://127.0.0.1:8772/query"
+tables = ["mcp_signal_scores", "mesh_memory"]
+
+[routes]
+prefix = "/api"
+endpoints = ["/risk-tier-change", "/health"]
+
+[self_test]
+enabled = true
+test_data = "in_memory"

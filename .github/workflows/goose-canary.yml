@@ -26,9 +26,13 @@ on:
   workflow_dispatch:
     inputs:
       goose_version:
-        description: "candidate goose version (e.g. 1.44.0)"
+        # The default must name a version this workflow has ACTUALLY adjudicated,
+        # not merely the newest one upstream -- otherwise a bare re-run silently
+        # grades a candidate nobody has a verdict for. 1.45.0: run 30828744813,
+        # conclusion success, all steps, `goose --version` -> 1.45.0.
+        description: "candidate goose version (e.g. 1.45.0)"
         required: true
-        default: "1.44.0"
+        default: "1.45.0"
       smoke_rung:
         description: "cheap provider to drive the smoke (cerebras|groq)"
         default: "cerebras"

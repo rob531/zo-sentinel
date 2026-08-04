@@ -10,6 +10,8 @@ import sys
 import time
 import json
 import subprocess
+import threading
+import re
 import signal
 import requests
 from datetime import datetime, timezone
@@ -562,7 +564,252 @@ def _select_recipe(directive):
     return None
 
 
-def run_goose_task(directive_id, content, extra_env=None, recipe=None):
+
+# ----------------------------------------------------------------- SOA CANARY
+# CofC 2026-08-04 (3 seats + FATHER), FU-246. service_dir_from_exemplar.yaml
+# declares `service_name` and `service_spec` as requirement: required, but
+# run_goose_task only ever passed `task_description`. Consequence, measured on
+# /home/workspace/logs/goose_runner.log over 2026-08-03T09:09:26Z..2026-08-04T12:02Z
+# (22957 lines): that recipe was routed 1082 times and failed 1082 times -- 100%,
+# one identical error ("Please provide the following parameters in the command
+# line: --params service_name=your_value --params service_spec=your_value").
+# It is the SOA lane, selected for ~95% of directives, so the loop's declared
+# atomic unit -- the SERVICE -- has never once been built by goose. Nothing went
+# red because the engine fallback writes the file anyway, and the 162 tier1
+# successes from task_description-only recipes kept the AGGREGATE green. That is
+# HARNESS_DOCTRINE R3/R4/R6 failing together: a zero that was never distinguished
+# from "not exercised".
+#
+# This ships as a CANARY, not a restoration: the recipe's prompt and its
+# "OUT_OF_LANE: report and stop" lane guard have ZERO production exposure, so
+# enabling them is a first live trial. Caps are numeric with env override;
+# SOA_GOOSE_MAX_PER_DAY=0 is the kill switch and needs no revert.
+_SOA_CANARY_MARKER = "cofc-2026-08-04"
+
+
+def _soa_int_env(name, default):
+    try:
+        return max(0, int(str(os.environ.get(name, "") or default).strip()))
+    except Exception:
+        return default
+
+
+SOA_GOOSE_MAX_PER_DAY = _soa_int_env("SOA_GOOSE_MAX_PER_DAY", 8)
+SOA_GOOSE_MAX_CONCURRENT = _soa_int_env("SOA_GOOSE_MAX_CONCURRENT", 2)
+SOA_RECIPE = "service_dir_from_exemplar"
+_SOA_STATE_PATH = Path(
+    os.environ.get("SOA_GOOSE_STATE", "/home/workspace/logs/soa_goose_canary.json"))
+try:
+    _SOA_SEM = threading.BoundedSemaphore(max(1, SOA_GOOSE_MAX_CONCURRENT))
+except Exception:  # pragma: no cover - threading always present
+    _SOA_SEM = None
+
+_WIN_FORBIDDEN = '<>:"/\\|?*'
+
+
+def _sanitise_service_name(raw):
+    """FU-209: a path containing < or > makes EVERY checkout of main fail on the
+    Windows tower. Applied UNCONDITIONALLY on both the goose and the engine
+    path -- the CofC ruled this severable from the canary caps, because the
+    engine fallback is what actually writes files today."""
+    s = str(raw or "").strip()
+    for ch in _WIN_FORBIDDEN:
+        s = s.replace(ch, "_")
+    s = re.sub(r"[^0-9A-Za-z_]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_").lower()
+    return s
+
+
+def _soa_service_name(directive_id):
+    """services/staged/<name> from a directive_id, e.g.
+    build_risk_tier_dashboard_view_contract -> risk_tier_dashboard_view."""
+    s = _sanitise_service_name(directive_id)
+    for pre in ("build_", "scaffold_", "create_", "emit_"):
+        if s.startswith(pre):
+            s = s[len(pre):]
+            break
+    for suf in ("_service_toml", "_service_dir", "_contract", "_router",
+                "_logic", "_init", "_api_logic"):
+        if s.endswith(suf):
+            s = s[: -len(suf)]
+            break
+    return s or _sanitise_service_name(directive_id) or "unnamed_service"
+
+
+def _soa_schema_excerpt(directive):
+    """LIVE schema excerpt for the tables a directive names, from the same
+    app.models KL the schema-PRM gate lints against.
+
+    Returns "" when no real table resolves. The CofC ruled that passing
+    json.dumps(directive) raw as `service_spec` is NOT acceptable: it hands
+    invented columns the authority of a spec and reproduces the observed
+    failure (generated code used McpServerRegistry.id when the PK is server_id
+    and no `id` column exists -- 241 schema-prm BLOCKs on 2026-08-04 alone). It
+    also confounds the canary, because goose-wrong and spec-wrong become
+    unattributable. No resolvable table => canary-INELIGIBLE => engine.
+    """
+    try:
+        import schema_kl
+        try:
+            kl = schema_kl.build_schema_kl()
+        except Exception:
+            kl = schema_kl.load_schema_kl(
+                str(PROJECT_DIR / "graphify-out" / "schema_kl.json"))
+    except Exception:
+        return ""
+    models = ((kl or {}).get("models") or {})
+    if not models:
+        return ""
+    try:
+        blob = json.dumps(directive, default=str).lower()
+    except Exception:
+        blob = str(directive).lower()
+    hits = []
+    for name, meta in models.items():
+        meta = meta or {}
+        table = str(meta.get("table") or "")
+        if name.lower() in blob or (table and table.lower() in blob):
+            cols = [c for c in (meta.get("columns") or []) if c]
+            if not cols:
+                continue
+            hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
+    if not hits:
+        return ""
+    return ("REAL SCHEMA -- authoritative, read from the live app.models KL. Use ONLY "
+            "these columns; a column not listed here DOES NOT EXIST, and inventing one "
+            "is the single most common reason a build is rejected:\n"
+            + "\n".join(sorted(hits)[:8]))
+
+
+def _soa_service_spec(directive, content):
+    """Build the `service_spec` param, or None if the directive is ineligible."""
+    excerpt = _soa_schema_excerpt(directive)
+    if not excerpt:
+        return None
+    try:
+        intent = json.dumps(content, default=str)
+    except Exception:
+        intent = str(content)
+    return (excerpt
+            + "\n\nUNVERIFIED INTENT -- the directive as written. It may name tables or "
+              "columns that do not exist. Where it disagrees with REAL SCHEMA above, "
+              "REAL SCHEMA wins:\n" + intent)
+
+
+def _soa_day_key():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _soa_state_read():
+    try:
+        return json.loads(_SOA_STATE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _soa_state_write(state):
+    try:
+        _SOA_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _SOA_STATE_PATH.write_text(json.dumps(state, indent=2, sort_keys=True),
+                                   encoding="utf-8")
+    except Exception:
+        pass
+
+
+def recipe_counter(recipe_name, outcome):
+    """Per-RECIPE attempts/successes/failures, persisted per UTC day.
+
+    Doctrine R3: a bucket that went to zero must prove the check RAN. An
+    ATTEMPTS denominator per recipe is exactly what was missing -- it is what
+    distinguishes "this recipe never succeeds" from "this recipe was never
+    exercised", and its absence hid a 1082/1082 failure for two days behind an
+    aggregate that looked healthy. This EMITS; it blocks nothing (the doctrine
+    is explicit that adding another gate is what produced the losses).
+    """
+    day = _soa_day_key()
+    state = _soa_state_read()
+    per_day = state.setdefault("per_recipe", {}).setdefault(day, {})
+    row = per_day.setdefault(str(recipe_name), {"attempt": 0, "success": 0,
+                                                "fail": 0, "capped": 0,
+                                                "ineligible": 0})
+    if outcome in row:
+        row[outcome] += 1
+    _soa_state_write(state)
+    if outcome in ("success", "fail"):
+        log("[recipe-counter] %s %s: attempt=%d success=%d fail=%d "
+            "(capped=%d ineligible=%d) day=%s"
+            % (recipe_name, outcome, row["attempt"], row["success"], row["fail"],
+               row["capped"], row["ineligible"], day))
+    return row
+
+
+def _soa_budget_left():
+    """Remaining canary invocations for this UTC day."""
+    day = _soa_day_key()
+    used = ((_soa_state_read().get("per_recipe") or {}).get(day, {})
+            .get(SOA_RECIPE, {}).get("attempt", 0))
+    return SOA_GOOSE_MAX_PER_DAY - int(used or 0)
+
+
+def soa_params_or_none(directive_id, directive, content):
+    """Return the extra --params for the SOA recipe, or None to fall through to
+    the engine. Reasons to fall through are LOGGED, never silent."""
+    if SOA_GOOSE_MAX_PER_DAY <= 0:
+        log("[soa-cap] %s: canary disabled (SOA_GOOSE_MAX_PER_DAY=0) -> engine"
+            % directive_id)
+        return None
+    left = _soa_budget_left()
+    if left <= 0:
+        recipe_counter(SOA_RECIPE, "capped")
+        log("[soa-cap] %s: daily canary budget spent (%d/%d) -> engine"
+            % (directive_id, SOA_GOOSE_MAX_PER_DAY, SOA_GOOSE_MAX_PER_DAY))
+        return None
+    spec = _soa_service_spec(directive, content)
+    if not spec:
+        recipe_counter(SOA_RECIPE, "ineligible")
+        log("[soa-cap] %s: no real table resolved from the schema KL -> "
+            "canary-ineligible -> engine" % directive_id)
+        return None
+    name = _soa_service_name(directive_id)
+    log("[soa-canary] %s: service_name=%s spec_bytes=%d budget_left=%d"
+        % (directive_id, name, len(spec), left))
+    return {"service_name": name, "service_spec": spec}
+
+
+def recipe_required_params(recipe_path):
+    """Parse the recipe's OWN `parameters:` block for `requirement: required`.
+
+    Reading the recipe is what makes this general rather than another hardcoded
+    list: the defect was a hardcoded param list that silently disagreed with the
+    contract the recipe itself declares. Any future recipe now gets its declared
+    params, or is reported as unsatisfiable instead of failing 1082 times.
+    """
+    required = []
+    try:
+        txt = Path(recipe_path).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return required
+    in_params = False
+    cur = None
+    for line in txt.splitlines():
+        if re.match(r"^parameters:\s*$", line):
+            in_params = True
+            continue
+        if in_params and line[:1] not in ("", " ", "\t", "#"):
+            break
+        if not in_params:
+            continue
+        m = re.match(r"\s*-\s*key:\s*(\S+)", line)
+        if m:
+            cur = m.group(1).strip().strip("\"'")
+            continue
+        m = re.match(r"\s*requirement:\s*(\S+)", line)
+        if m and cur and m.group(1).strip().strip("\"'") == "required":
+            required.append(cur)
+    return required
+
+
+def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive_obj=None):
     """Execute Goose on task file with timeout.
 
     extra_env (from build_routing.build_env_for) routes the architect
@@ -593,17 +840,49 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None):
             env["XDG_STATE_HOME"] = f"{_iso}/.local/state"
         if extra_env:
             log(f"[LADDER] {directive_id} -> {extra_env.get('GOOSE_MODEL')}")
-        result = subprocess.run(
-            [GOOSE_BIN, "run", "--recipe", str(recipe_path),
-             "--params", f"task_description={task_desc}"],
-            capture_output=True,
-            text=True,
-            timeout=GOOSE_TIMEOUT,
-            cwd=str(PROJECT_DIR),
-            env=env
-        )
-        
+        # CofC 2026-08-04 / FU-246: supply the params the recipe DECLARES, not a
+        # hardcoded list. `service_dir_from_exemplar` requires service_name +
+        # service_spec and got neither -> 1082/1082 exit-1 failures. A recipe
+        # whose required params we cannot satisfy now falls to the engine with a
+        # reason, instead of burning an invocation on a certain failure.
+        _params = {"task_description": task_desc}
+        _required = recipe_required_params(recipe_path)
+        if SOA_RECIPE in recipe_path.name:
+            _soa = soa_params_or_none(directive_id, directive_obj, content)
+            if _soa is None:
+                return {"success": False, "directive_id": directive_id,
+                        "error": "soa canary not applicable -- engine fallback"}
+            _params.update(_soa)
+        _missing = [k for k in _required if k not in _params]
+        if _missing:
+            log(f"[recipe] {recipe_path.name}: cannot satisfy required params "
+                f"{_missing} -> engine fallback")
+            recipe_counter(recipe_path.stem, "ineligible")
+            return {"success": False, "directive_id": directive_id,
+                    "error": f"recipe requires unsatisfiable params {_missing}"}
+        _argv = [GOOSE_BIN, "run", "--recipe", str(recipe_path)]
+        for _k in (_required or ["task_description"]):
+            _argv += ["--params", f"{_k}={_params[_k]}"]
+        recipe_counter(recipe_path.stem, "attempt")
+        _acquired = _SOA_SEM.acquire(timeout=GOOSE_TIMEOUT) if _SOA_SEM else True
+        try:
+            result = subprocess.run(
+                _argv,
+                capture_output=True,
+                text=True,
+                timeout=GOOSE_TIMEOUT,
+                cwd=str(PROJECT_DIR),
+                env=env
+            )
+        finally:
+            if _SOA_SEM and _acquired:
+                try:
+                    _SOA_SEM.release()
+                except Exception:
+                    pass
+
         if result.returncode == 0:
+            recipe_counter(recipe_path.stem, "success")
             log(f"Goose execution succeeded for {directive_id}")
             return {
                 "success": True,
@@ -612,6 +891,7 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None):
                 "directive_id": directive_id
             }
         else:
+            recipe_counter(recipe_path.stem, "fail")
             log(f"Goose execution failed (exit {result.returncode}): {result.stderr}")
             return {
                 "success": False,
@@ -1566,7 +1846,7 @@ def run():
                 # "output_file was not produced" (chairman review 2026-07-20).
                 _failed_gate = None
                 if goose_installed:
-                    result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive))
+                    result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive), directive_obj=directive)
                     _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
                                                     bool(result.get("success")))
                     if _ok:

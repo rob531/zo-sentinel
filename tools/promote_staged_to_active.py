@@ -60,6 +60,16 @@ try:  # repo root on sys.path (pytest, `python -m tools....`)
 except ImportError:  # script-dir sys.path[0]
     from image_ship_check import would_be_shipped  # noqa: E402
 
+# FU-236 seam 4 -- the SAME rule object the other three seams use. Imported from
+# the package (not re-implemented) so a future change to the predicate cannot
+# drift between the commit path and this, the file path.
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+try:
+    from zo_sentinel.gates.hollow import hollow_service_member_scan  # noqa: E402
+except ImportError:  # pragma: no cover -- gate must exist; fail loud, never silently pass
+    raise
+
 
 def _dockerfile_text():
     try:
@@ -201,6 +211,32 @@ def evaluate(name, active_routes):
                 if _fn.endswith(".py"):
                     _res = _linter.lint_file(os.path.join(_dp, _fn), _nm, fix=True)
                     casing_fixed.update(_res.get("drift", {}))
+    # FU-236 SEAM 4 -- THIS CONSUMER'S OWN ENUMERATION.
+    # The hollow rule was armed on 2026-08-03 at goose_runner, at the publisher and
+    # at tests/ci/no_hollow_scaffold.py. All three fire when a file becomes a
+    # COMMIT. This script walks the WORKTREE (os.walk of services/staged), and on
+    # 2026-08-04 that gap admitted 2 hollow members into the PROMOTE cohort: 7 of
+    # the 12 hollow files on disk were UNTRACKED, had never been a PR, and so no
+    # armed seam had ever looked at them. This is not a fourth GATE -- it is the
+    # third seam's rule, imported, pointed at the enumeration this file actually
+    # reads. It runs BEFORE liveness deliberately: a hollow contract's exit-0 is
+    # what manufactured contract_ok=True, so it must never reach the subprocess.
+    hollow_hits = []
+    for _hdp, _hdd, _hfiles in os.walk(sdir):
+        if "__pycache__" in _hdp:
+            continue
+        for _hfn in _hfiles:
+            if not _hfn.endswith(".py"):
+                continue
+            _habs = os.path.join(_hdp, _hfn)
+            _hrel = "services/staged/%s/%s" % (
+                name, os.path.relpath(_habs, sdir).replace(os.sep, "/"))
+            _hwhy = hollow_service_member_scan(_hrel, _read(_habs))
+            if _hwhy:
+                hollow_hits.append("%s -- %s" % (_hrel, _hwhy))
+    if hollow_hits:
+        reasons.append("hollow member(s): " + "; ".join(sorted(hollow_hits)))
+
     # LIVENESS (subprocess) -- the correctness proof; only if static gates pass
     contract_ok, contract_detail = (None, "skipped (static gate failed)")
     if not reasons:

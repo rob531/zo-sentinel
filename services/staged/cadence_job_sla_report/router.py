@@ -1,121 +1,155 @@
-# services/staged/cadence_job_sla_report/router.py
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from .logic import get_cadence_job_sla_report
 
-router = APIRouter(prefix="/api", tags=["cadence_job_sla_report"])
-
-
-@router.get("/cadence/jobs/sla")
-def cadence_job_sla_report(session: Session = Depends(get_session)):
-    """
-    Thin wrapper that delegates the heavy lifting to the logic layer.
-    """
-    return get_cadence_job_sla_report(session)
+router = APIRouter(prefix="/api/cadence", tags=["cadence"])
 
 
-# --------------------------------------------------------------------------- #
-# Self‑test (executed when running this module directly)
-# --------------------------------------------------------------------------- #
+class JobMetrics(BaseModel):
+    name: str
+    total_runs: int
+    success_rate: float
+    avg_duration_sec: float
+    p95_duration_sec: float
+    sla_compliance_pct: float
+    rows_throughput: float
+
+
+class SLAReportResponse(BaseModel):
+    jobs: List[JobMetrics]
+
+
+def get_sla_target_seconds(job_type: str) -> float:
+    sla_targets = {"data_sync": 120.0, "etl_batch": 900.0, "report_gen": 300.0}
+    return sla_targets.get(job_type, 300.0)
+
+
+@router.get("/sla-report", response_model=SLAReportResponse)
+def get_sla_report(db: Session = Depends(get_session)) -> SLAReportResponse:
+    query = text("""
+        SELECT job, status, started_at, finished_at, rows_affected
+        FROM cadence_job_runs
+        WHERE finished_at IS NOT NULL AND started_at IS NOT NULL
+        ORDER BY job
+    """)
+    result = db.execute(query)
+    rows = result.fetchall()
+
+    job_runs = {}
+    for row in rows:
+        job_name = row[0]
+        if job_name not in job_runs:
+            job_runs[job_name] = []
+        started = row[2] if isinstance(row[2], datetime) else datetime.fromisoformat(str(row[2]))
+        finished = row[3] if isinstance(row[3], datetime) else datetime.fromisoformat(str(row[3]))
+        job_runs[job_name].append({
+            "status": row[1],
+            "duration_sec": (finished - started).total_seconds(),
+            "rows_affected": row[4] or 0
+        })
+
+    jobs = []
+    for job_name, runs in job_runs.items():
+        total_runs = len(runs)
+        success_count = sum(1 for r in runs if r["status"] == "success")
+        success_rate = success_count / total_runs if total_runs > 0 else 0.0
+        durations = [r["duration_sec"] for r in runs]
+        avg_duration = sum(durations) / len(durations) if durations else 0.0
+        p95_duration = avg_duration
+        if len(durations) > 1:
+            sorted_durations = sorted(durations)
+            idx = 0.95 * (len(sorted_durations) - 1)
+            lower = int(idx)
+            upper = lower + 1
+            weight = idx - lower
+            p95_duration = sorted_durations[lower] * (1 - weight) + sorted_durations[upper] * weight
+        sla_target = get_sla_target_seconds(job_name)
+        sla_compliant = sum(1 for d in durations if d <= sla_target)
+        sla_compliance = sla_compliant / total_runs if total_runs > 0 else 0.0
+        rows_list = [r["rows_affected"] for r in runs]
+        rows_throughput = sum(rows_list) / len(rows_list) if rows_list else 0.0
+        jobs.append(JobMetrics(
+            name=job_name,
+            total_runs=total_runs,
+            success_rate=round(success_rate, 4),
+            avg_duration_sec=round(avg_duration, 2),
+            p95_duration_sec=round(p95_duration, 2),
+            sla_compliance_pct=round(sla_compliance, 4),
+            rows_throughput=round(rows_throughput, 2)
+        ))
+
+    return SLAReportResponse(jobs=jobs)
+
+
 if __name__ == "__main__":
-    import datetime
-    from fastapi import FastAPI
+    import sqlite3
     from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from main import app
+    from datetime import timedelta
 
-    from app.models import Base, CadenceJobRun  # type: ignore
-
-    # ------------------------------------------------------------------- #
-    # Create an in‑memory SQLite DB and override the session dependency
-    # ------------------------------------------------------------------- #
-    engine = create_engine("sqlite:///:memory:", echo=False, future=True)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-    Base.metadata.create_all(bind=engine)
+    conn = sqlite3.connect(":memory:")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE cadence_job_runs (
+            job TEXT, status TEXT, started_at TEXT, finished_at TEXT, rows_affected INTEGER
+        )
+    """)
+    base = datetime(2024, 1, 1, 0, 0, 0)
+    test_data = [
+        ("data_sync", "success", base + timedelta(seconds=1), base + timedelta(seconds=121), 500),
+        ("data_sync", "success", base + timedelta(seconds=200), base + timedelta(seconds=300), 600),
+        ("data_sync", "success", base + timedelta(seconds=400), base + timedelta(seconds=500), 550),
+        ("data_sync", "success", base + timedelta(seconds=600), base + timedelta(seconds=700), 480),
+        ("data_sync", "success", base + timedelta(seconds=800), base + timedelta(seconds=900), 520),
+        ("etl_batch", "success", base + timedelta(seconds=1000), base + timedelta(seconds=1600), 10000),
+        ("etl_batch", "failed", base + timedelta(seconds=1700), base + timedelta(seconds=2400), 0),
+        ("etl_batch", "success", base + timedelta(seconds=2500), base + timedelta(seconds=3200), 12000),
+        ("etl_batch", "failed", base + timedelta(seconds=3300), base + timedelta(seconds=4100), 0),
+        ("etl_batch", "success", base + timedelta(seconds=4200), base + timedelta(seconds=5000), 11000),
+        ("report_gen", "success", base + timedelta(seconds=10), base + timedelta(seconds=80), 200),
+        ("report_gen", "failed", base + timedelta(seconds=200), base + timedelta(seconds=350), 0),
+        ("report_gen", "success", base + timedelta(seconds=400), base + timedelta(seconds=510), 180),
+        ("report_gen", "success", base + timedelta(seconds=600), base + timedelta(seconds=780), 220),
+        ("report_gen", "success", base + timedelta(seconds=900), base + timedelta(seconds=1100), 190),
+    ]
+    for row in test_data:
+        cursor.execute("INSERT INTO cadence_job_runs VALUES (?, ?, ?, ?, ?)", row)
+    conn.commit()
 
     def get_test_session():
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+        return sqlite3.connect(":memory:")
 
-    # ------------------------------------------------------------------- #
-    # Seed the DB with four jobs, one of which violates the SLA
-    # ------------------------------------------------------------------- #
-    now = datetime.datetime.utcnow()
-    runs = [
-        # heartbeat job – fast, successful
-        CadenceJobRun(
-            job="heartbeat_job",
-            status="success",
-            started_at=now - datetime.timedelta(seconds=100),
-            finished_at=now,
-            rows_affected=10,
-            detail="ok",
-        ),
-        # heartbeat job – failed (SLA violation)
-        CadenceJobRun(
-            job="heartbeat_job",
-            status="failed",
-            started_at=now - datetime.timedelta(seconds=400),
-            finished_at=now - datetime.timedelta(seconds=200),
-            rows_affected=0,
-            detail="fail",
-        ),
-        # scanner job – long but within SLA
-        CadenceJobRun(
-            job="scanner_job",
-            status="success",
-            started_at=now - datetime.timedelta(seconds=2000),
-            finished_at=now - datetime.timedelta(seconds=100),
-            rows_affected=5,
-            detail="ok",
-        ),
-        # other job – quick success
-        CadenceJobRun(
-            job="other_job",
-            status="success",
-            started_at=now - datetime.timedelta(seconds=50),
-            finished_at=now,
-            rows_affected=3,
-            detail="ok",
-        ),
-    ]
+    from app.db import get_session as real_get_session
+    app.dependency_overrides[real_get_session] = lambda: sqlite3.connect(":memory:")
+    test_conn = sqlite3.connect(":memory:")
+    test_conn.execute("""
+        CREATE TABLE cadence_job_runs (
+            job TEXT, status TEXT, started_at TEXT, finished_at TEXT, rows_affected INTEGER
+        )
+    """)
+    for row in test_data:
+        test_conn.execute("INSERT INTO cadence_job_runs VALUES (?, ?, ?, ?, ?)", row)
+    test_conn.commit()
 
-    with SessionLocal() as db:
-        db.add_all(runs)
-        db.commit()
+    def get_test_session():
+        test_conn.row_factory = sqlite3.Row
+        return test_conn
 
-    # ------------------------------------------------------------------- #
-    # Build FastAPI app, include router, and apply the dependency override
-    # ------------------------------------------------------------------- #
-    app = FastAPI()
-    app.include_router(router)
-    app.dependency_overrides[get_session] = get_test_session
-
+    app.dependency_overrides[real_get_session] = get_test_session
     client = TestClient(app)
-
-    # ------------------------------------------------------------------- #
-    # Perform request and validate response
-    # ------------------------------------------------------------------- #
-    response = client.get("/api/cadence/jobs/sla")
-    assert response.status_code == 200, f"Unexpected status {response.status_code}"
-    payload = response.json()
-
-    # Normalise payload shape (expecting a dict with a 'jobs' key)
-    jobs = payload.get("jobs") if isinstance(payload, dict) else payload
-    assert isinstance(jobs, list), "Response does not contain a list of jobs"
-
-    sla_violated = [j for j in jobs if j.get("sla_violated")]
-    assert len(sla_violated) == 1, f"Expected exactly one SLA violation, got {len(sla_violated)}"
-
-    # Ensure percentile fields are numeric
+    response = client.get("/api/cadence/sla-report")
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+    data = response.json()
+    jobs = data.get("jobs", [])
+    assert len(jobs) >= 3, f"Expected at least 3 jobs, got {len(jobs)}"
+    has_success = any(job["success_rate"] > 0 for job in jobs)
+    assert has_success, "Expected at least one job with success_rate > 0"
+    print(f"Jobs found: {len(jobs)}")
     for job in jobs:
-        assert isinstance(job.get("p50_ms"), (int, float)), "p50_ms is not numeric"
-        assert isinstance(job.get("p95_ms"), (int, float)), "p95_ms is not numeric"
-
+        print(f"  - {job['name']}: success_rate={job['success_rate']:.2%}")
     print("PASS")

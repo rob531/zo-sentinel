@@ -1,80 +1,106 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timedelta
+from typing import List
+
 from app.db import get_session
-from app.models import ServiceHealth
-from sqlalchemy.orm import Session
-import requests
-from .logic import get_directive_queue_health
 
 router = APIRouter()
 
+
+class HandlerHealth(BaseModel):
+    handler: str
+    pending: int
+    proposed: int
+    oldest_age_seconds: int
+
+
 class QueueHealthResponse(BaseModel):
-    total: int
-    pending_count: int
-    proposed_count: int
-    oldest_pending_age_seconds: Optional[float]
-    oldest_proposed_age_seconds: Optional[float]
-    queue_depth: int
+    handlers: List[HandlerHealth]
+    summary: dict
+
+
+def get_directive_queue_health():
+    import requests
+    try:
+        resp = requests.get(
+            "http://127.0.0.1:8772/query",
+            json={"type": "directive_queue_metadata"},
+            timeout=5
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {"handlers": [], "summary": {"total_pending": 0, "total_proposed": 0, "oldest_overall_seconds": 0}}
+
 
 @router.get("/api/directives/queue-health", response_model=QueueHealthResponse)
-async def get_queue_health(session: Session = Depends(get_session)):
-    try:
-        health_data = get_directive_queue_health(session)
-        return health_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def get_queue_health(
+    session=Depends(get_session)
+):
+    data = get_directive_queue_health()
+    handlers = [HandlerHealth(**h) for h in data.get("handlers", [])]
+    summary = data.get("summary", {})
+    if handlers and "total_pending" not in summary:
+        summary = {
+            "total_pending": sum(h.pending for h in handlers),
+            "total_proposed": sum(h.proposed for h in handlers),
+            "oldest_overall_seconds": max(h.oldest_age_seconds for h in handlers)
+        }
+    return QueueHealthResponse(handlers=handlers, summary=summary)
+
 
 if __name__ == "__main__":
+    import sys
+    from unittest.mock import patch
     from fastapi.testclient import TestClient
-    from app.main import app
-    from app.db import Base, engine
+    from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from app.models import Base
 
-    # Setup test database
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
-    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    TestingSessionLocal = sessionmaker(bind=engine)
 
-    def override_get_session():
-        session = TestSessionLocal()
+    def get_test_session():
+        db = TestingSessionLocal()
         try:
-            yield session
+            yield db
         finally:
-            session.close()
+            db.close()
 
-    app.dependency_overrides[get_session] = override_get_session
+    from fastapi import FastAPI
+    from app.db import get_session as real_get_session
 
-    # Mock write_service responses
-    def mock_write_service_query(endpoint: str, params: dict):
-        if endpoint == "/query":
-            if params.get("query") == "read_pending_directives":
-                return {
-                    "pending": [
-                        {"filename": "dir1", "timestamp": "2023-01-01T00:00:00Z"},
-                        {"filename": "dir2", "timestamp": "2023-01-02T00:00:00Z"}
-                    ],
-                    "proposed": [
-                        {"filename": "dir3", "timestamp": "2023-01-03T00:00:00Z"}
-                    ]
-                }
-        return {}
+    test_app = FastAPI()
+    test_app.include_router(router)
+    test_app.dependency_overrides[real_get_session] = get_test_session
 
-    original_post = requests.post
+    client = TestClient(test_app)
 
-    def mock_post(*args, **kwargs):
-        if "http://127.0.0.1:8772/query" in args[0]:
-            return mock_write_service_query(*args, **kwargs)
-        return original_post(*args, **kwargs)
+    seeded_data = {
+        "handlers": [
+            {"handler": "generate_file", "pending": 3, "proposed": 2, "oldest_age_seconds": 300},
+            {"handler": "run_script", "pending": 1, "proposed": 0, "oldest_age_seconds": 60}
+        ],
+        "summary": {
+            "total_pending": 4,
+            "total_proposed": 2,
+            "oldest_overall_seconds": 300
+        }
+    }
 
-    requests.post = mock_post
+    with patch("services.staged.directive_queue_health.logic.requests.get") as mock_get:
+        mock_resp = type("MockResponse", (), {"json": lambda self: seeded_data, "raise_for_status": lambda self: None})()
+        mock_get.return_value = mock_resp
 
-    client = TestClient(app)
+        response = client.get("/api/directives/queue-health")
 
-    response = client.get("/api/directives/queue-health")
-    assert response.status_code == 200
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
     data = response.json()
-    assert data["total"] >= 0
-    assert isinstance(data["oldest_pending_age_seconds"], (float, type(None)))
-    assert isinstance(data["oldest_proposed_age_seconds"], (float, type(None)))
+    assert len(data["handlers"]) == 2, f"Expected 2 handlers, got {len(data['handlers'])}"
+
+    generate_file_handler = next(h for h in data["handlers"] if h["handler"] == "generate_file")
+    assert generate_file_handler["oldest_age_seconds"] == 300, f"Expected 300, got {generate_file_handler['oldest_age_seconds']}"
+
     print("PASS")

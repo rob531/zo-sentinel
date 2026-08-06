@@ -110,6 +110,7 @@ jobs:
             tests/test_migration_graph_single_head.py \
             tests/test_fire_gate.py \
             tests/test_sha_green.py \
+            tests/test_ops_audit_state.py \
             -q \
             --junitxml=artifacts/junit.xml
 

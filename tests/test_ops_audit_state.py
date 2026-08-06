@@ -74,6 +74,67 @@ def test_credit_recording_is_idempotent_on_id(statefile):
     assert len(oas.load(statefile)["credits"]) == 1
 
 
+def test_same_invoice_recorded_as_int_then_str_is_ONE_credit(statefile):
+    """THE 2026-08-06 INCIDENT, reproduced.
+
+    The test directly above this one -- test_credit_recording_is_idempotent_on_id
+    -- passes int 3148330 BOTH times, so it exercises the one case that was
+    never broken. In production the id is written once by a Python caller (int)
+    and re-recorded every morning through argparse, which has no `type=` and
+    therefore yields str. ("id", 3148330) != ("id", "3148330"), the dedup filter
+    matched nothing, and the single $25 top-up was counted twice:
+
+        credits_ever             $25.00 -> $50.00
+        since_funding.spend_usd  $10.23 -> $35.23
+        budget.level             GREEN  -> RED
+
+    A fabricated budget overrun, on an account funded once and still holding
+    $14.77 -- and under the away window that RED emails the chairman.
+
+    The lesson is not "add a test". It is that a fixture written by the same
+    understanding that wrote the code agrees with the code: this file already
+    had a test named for idempotency, using the very invoice that broke, and it
+    could not see it. R4 -- run the case that ACTUALLY happened, in the types it
+    actually arrives in.
+    """
+    oas.record_credit(25.0, "2026-07-17", credit_id=3148330, path=statefile)
+    oas.record_credit(25.0, "2026-07-17", credit_id="3148330", path=statefile)
+    credits = oas.load(statefile)["credits"]
+    assert len(credits) == 1, credits
+    assert sum(c["amount"] for c in credits) == 25.0
+
+
+def test_same_invoice_recorded_as_str_then_int_is_ONE_credit(statefile):
+    """The reverse order too, or the fix is merely order-dependent."""
+    oas.record_credit(25.0, "2026-07-17", credit_id="3148330", path=statefile)
+    oas.record_credit(25.0, "2026-07-17", credit_id=3148330, path=statefile)
+    assert len(oas.load(statefile)["credits"]) == 1
+
+
+def test_NEGATIVE_CONTROL_distinct_invoices_are_never_collapsed(statefile):
+    """The assertion that has to be able to go RED.
+
+    A record_credit() that dropped every prior credit would satisfy all three
+    idempotency tests above while silently erasing funding history -- the same
+    $25-vs-$50 error with the sign flipped, and it would UNDER-report burn,
+    which is the direction that costs money rather than merely alarming.
+    """
+    oas.record_credit(25.0, "2026-07-17", credit_id=3148330, path=statefile)
+    oas.record_credit(25.0, "2026-08-01", credit_id=3999999, path=statefile)
+    credits = oas.load(statefile)["credits"]
+    assert len(credits) == 2, credits
+    assert sum(c["amount"] for c in credits) == 50.0
+
+
+def test_blank_id_is_absent_not_an_id_whose_value_is_empty(statefile):
+    """An empty --id from the shell must fall back to the (date, amount) key."""
+    oas.record_credit(25.0, "2026-07-17", credit_id="", path=statefile)
+    oas.record_credit(25.0, "2026-07-17", credit_id="   ", path=statefile)
+    credits = oas.load(statefile)["credits"]
+    assert len(credits) == 1, credits
+    assert credits[0]["id"] is None
+
+
 def test_credit_before_first_entry_is_not_double_counted(statefile):
     """A top-up that predates the first sample is already IN that balance."""
     oas.record_credit(25.0, "2026-07-01", credit_id=1, path=statefile)

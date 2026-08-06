@@ -328,3 +328,70 @@ def test_show_emits_coverage_and_does_not_scope_it_to_the_month(tmp_path,
     out = json.loads(capsys.readouterr().out)
     assert out["coverage"]["missing_dates"] == ["2026-07-31"]
     assert out["mtd"]["month"] == "2026-08"   # --month still honoured by mtd
+
+
+# ---------------------------------------------------------------------------
+# FU-268: an in-memory call must not persist to DEFAULT_PATH.
+#
+# On 2026-08-06 a read-only probe called record_credit(state={"credits": []})
+# with no path=. Because save() resolves `path or DEFAULT_PATH`, that partial
+# state was written over D:\zo\runs\ops_audit_state.json -- 11 balance samples
+# and schema:2 destroyed, a real top-up re-dated, a fabricated invoice appended,
+# budget.level blinded to UNKNOWN. The file had already been clobbered once, on
+# 2026-07-28, by a different lane.
+#
+# Two of these tests are POSITIVE CONTROLS. Without them a `pass` is blind: a
+# record_credit() that wrote nothing at all, ever, would satisfy the first two.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def canonical(tmp_path, monkeypatch):
+    """A populated DEFAULT_PATH standing in for the live state file."""
+    p = tmp_path / "canonical.json"
+    p.write_text(json.dumps({
+        "schema": 2,
+        "entries": [{"date": "2026-08-05", "at": "", "balance": 14.77}],
+        "credits": [{"date": "2026-07-17", "at": "", "amount": 25.0,
+                     "id": "3148330", "source": "vast_invoice"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(oas, "DEFAULT_PATH", p)
+    return p
+
+
+def test_record_credit_with_state_and_no_path_leaves_default_file_untouched(canonical):
+    before = canonical.read_bytes()
+    st = oas.record_credit(25.0, "2026-01-01", credit_id="probe",
+                           state={"credits": []})
+    assert canonical.read_bytes() == before, (
+        "an in-memory call persisted over DEFAULT_PATH -- FU-268 regression")
+    assert len(st["credits"]) == 1, "the caller must still get its state back"
+
+
+def test_record_with_state_and_no_path_leaves_default_file_untouched(canonical):
+    before = canonical.read_bytes()
+    oas.record(1.23, date="2026-01-01", state={"entries": [], "credits": []})
+    assert canonical.read_bytes() == before, (
+        "an in-memory call persisted over DEFAULT_PATH -- FU-268 regression")
+
+
+def test_control_explicit_path_still_writes_even_with_state(statefile):
+    """POSITIVE CONTROL. Naming a path is how you ask for persistence."""
+    oas.record_credit(25.0, "2026-07-17", credit_id=3148330,
+                      state={"credits": []}, path=statefile)
+    assert statefile.exists()
+    assert len(json.loads(statefile.read_text())["credits"]) == 1
+
+
+def test_control_no_state_still_persists_to_the_default_file(canonical):
+    """POSITIVE CONTROL. The ordinary CLI path -- no state= -- must still write.
+
+    Insensitive to the fix by design: this is what makes it a control rather
+    than a second positive. A fix that suppressed every write would pass the
+    two assertions above and fail here.
+    """
+    oas.record_credit(25.0, "2026-08-06", credit_id="9000001")
+    creds = json.loads(canonical.read_text())["credits"]
+    assert {c["id"] for c in creds} == {"3148330", "9000001"}
+    assert len(json.loads(canonical.read_text())["entries"]) == 1, (
+        "the pre-existing history must survive a normal write")

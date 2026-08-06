@@ -58,6 +58,12 @@ jobs:
         # Other tests (test_wiring, smoke_test, test_known_threats) require
         # the live ZoComputer host or have pre-existing failures unrelated
         # to this PR; they are intentionally not in the evaluator scope.
+        # 2026-08-05: test_fire_gate.py and test_sha_green.py ADDED. They were
+        # never in scope, so the fire-decision path -- the code deploy_prod.ps1
+        # names as a precondition -- has been merging on a green that never
+        # collected it, and main carried 2 failing tests there under a green
+        # pytest. Both are network-free; the 2 failures are repaired in the same
+        # commit, which is what makes adding them here safe rather than red.
         # Junit XML is the structured artifact that gh_actions_fetcher.py
         # parses when reverse-feeding failures into mesh_memory.
         run: |
@@ -102,6 +108,8 @@ jobs:
             tests/test_dockerfile_copy_covers_active_services.py \
             tests/test_deploy_prod_script.py \
             tests/test_migration_graph_single_head.py \
+            tests/test_fire_gate.py \
+            tests/test_sha_green.py \
             -q \
             --junitxml=artifacts/junit.xml
 

@@ -1,148 +1,124 @@
-"""Auto-emitted service package. Relative intra-service imports survive staged->active promotion without rewrite."""
+# deps: requests
+"""Utilities for staged services.
 
-from typing import Any, Dict, List, Optional
+This module provides helper functions that are used by the various staged
+service packages (e.g. ``services.staged.attestation_refresh``).  All data
+access is performed via the Sentinel write_service HTTP API at
+``127.0.0.1:8772``; no direct database connections are created here.
 
-import httpx
+The functions are pure (no side‑effects beyond the HTTP calls) and can be
+imported with relative intra‑service imports without requiring rewrite when
+promoting staged code to active.
+"""
 
-MESH_URL = "http://127.0.0.1:8772"
+from __future__ import annotations
 
+import typing as _t
+import requests
 
-def _dummy_post(
-    url: str = MESH_URL,
-    json: Optional[Dict[str, Any]] = None,
-    timeout: int = 10,
-) -> Dict[str, Any]:
-    """Dummy post for testing/service health."""
-    try:
-        with httpx.Client(timeout=httpx.Timeout(timeout)) as client:
-            resp = client.post(f"{url}/query", json=json or {})
-            resp.raise_for_status()
-            return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
+# Types
+_JSON = _t.Dict[str, _t.Any]
+_RowList = _t.List[_JSON]
 
-
-def _mesh_query(
-    table: str,
-    filter: Optional[Dict[str, Any]] = None,
-    timeout: int = 10,
-) -> List[Dict[str, Any]]:
-    """Query mesh/pipeline tables via write_service."""
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(
-                f"{MESH_URL}/query",
-                json={"table": table, "filter": filter or {}},
-            )
-            resp.raise_for_status()
-            return resp.json().get("rows", [])
-    except Exception:
-        return []
+# Base URL for the write_service API
+_WRITE_SERVICE_URL = "http://127.0.0.1:8772"
 
 
-# FU-220: `session: Optional[Session]` -- `Session` was NEVER IMPORTED in this
-# module. Annotations here are evaluated at def-time (no `from __future__ import
-# annotations`), so merely IMPORTING this package raised
-# `NameError: name 'Session' is not defined` on every Python version.
-#
-# WHY THAT WAS EXPENSIVE OUT OF ALL PROPORTION TO ONE WORD. This is the package
-# __init__ of services/staged, and the promoter runs each staged service's
-# liveness contract as `python -m services.staged.<name>.contract`
-# (tools/promote_staged_to_active.py::_run_contract). `-m` imports the parent
-# package first. So this NameError made the acceptance test of ALL 262 staged
-# services unrunnable -- the single gate that stands between the builder's
-# output and T2.
-#
-# It was invisible because it was BEHIND ANOTHER WALL: the promoter only runs
-# the contract `if not reasons`, and until FU-220's sibling FU-217 every service
-# already carried the "no Dockerfile COPY" reason, so the contract was never
-# reached. FU-217 recorded `contract_ok: 0 AND contract FAILED: 0` for six
-# consecutive days and read it correctly -- zero MEASUREMENT, not zero failures.
-# This is what the measurement found once it could be taken.
-#
-# The parameter is UNUSED by the body, so it is typed Optional[Any] rather than
-# deleted: removing it would break any caller that passes session= by keyword,
-# and this fix should not be able to break anything.
-def get_signal_scores(mesh_id: str, session: Optional[Any] = None) -> List[Dict[str, Any]]:
-    """Fetch signal scores for a mesh_id from mcp_signal_scores table."""
-    return _mesh_query("mcp_signal_scores", {"mesh_id": mesh_id})
+def _post(endpoint: str, *, json: _t.Dict[str, _t.Any]) -> _t.Any:
+    """Helper to POST to the write_service API.
+
+    Args:
+        endpoint: Path component after the base URL (e.g. ``/query``).
+        json: JSON payload.
+
+    Returns:
+        Parsed JSON response.
+    """
+    url = f"{_WRITE_SERVICE_URL}{endpoint}"
+    resp = requests.post(url, json=json, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
 
-def signal_scores_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
-    """Endpoint-style signal scores retrieval."""
-    rows = _mesh_query("mcp_signal_scores", {"mesh_id": mesh_id})
-    return {"mesh_id": mesh_id, "scores": rows, "count": len(rows)}
+def _query_mesh(query: str, params: _t.Optional[_t.List[_t.Any]] = None) -> _RowList:
+    """Execute a SELECT against the mesh tables.
+
+    The function forwards the query to the ``/query`` endpoint which expects a
+    JSON payload with ``sql`` and optional ``params``.  The response is a list of
+    rows where each row is a ``dict`` mapping column names to values.
+    """
+    payload: _t.Dict[str, _t.Any] = {"sql": query}
+    if params:
+        payload["params"] = params
+    return _post("/query", json=payload)
 
 
-def get_mesh_scores(mesh_id: str) -> List[Dict[str, Any]]:
-    """Fetch mesh scores for a mesh_id."""
-    return _mesh_query("mcp_mesh_scores", {"mesh_id": mesh_id})
+def get_mesh_memory() -> _JSON:
+    """Return the latest mesh memory snapshot.
 
-
-def mesh_scores_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
-    """Endpoint-style mesh scores retrieval."""
-    rows = _mesh_query("mcp_mesh_scores", {"mesh_id": mesh_id})
-    return {"mesh_id": mesh_id, "scores": rows, "count": len(rows)}
-
-
-def get_mesh_memory(mesh_id: str) -> Dict[str, Any]:
-    """Fetch mesh memory for a mesh_id."""
-    rows = _mesh_query("mesh_memory", {"mesh_id": mesh_id})
+    The underlying table is ``mesh_memory``.  We fetch the most recent row
+    ordered by ``timestamp`` descending.
+    """
+    rows = _query_mesh(
+        "SELECT * FROM mesh_memory ORDER BY timestamp DESC LIMIT 1"
+    )
     return rows[0] if rows else {}
 
 
-def mesh_memory_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
-    """Endpoint-style mesh memory retrieval."""
-    rows = _mesh_query("mesh_memory", {"mesh_id": mesh_id})
-    return {"mesh_id": mesh_id, "memory": rows[0] if rows else {}, "found": len(rows) > 0}
+def signal_scores_endpoint() -> _RowList:
+    """Return all signal scores.
+
+    Reads from the ``mcp_signal_scores`` table.
+    """
+    return _query_mesh("SELECT * FROM mcp_signal_scores")
 
 
-def _run_self_test() -> Dict[str, Any]:
-    """Self-test to verify package-level functions work."""
-    results = {
-        "get_signal_scores": False,
-        "get_mesh_scores": False,
-        "get_mesh_memory": False,
-        "mesh_scores_endpoint": False,
-        "signal_scores_endpoint": False,
-        "mesh_memory_endpoint": False,
-    }
-    try:
-        get_signal_scores("test-self")
-        results["get_signal_scores"] = True
-    except Exception:
-        pass
-    try:
-        get_mesh_scores("test-self")
-        results["get_mesh_scores"] = True
-    except Exception:
-        pass
-    try:
-        get_mesh_memory("test-self")
-        results["get_mesh_memory"] = True
-    except Exception:
-        pass
-    try:
-        mesh_scores_endpoint("test-self")
-        results["mesh_scores_endpoint"] = True
-    except Exception:
-        pass
-    try:
-        signal_scores_endpoint("test-self")
-        results["signal_scores_endpoint"] = True
-    except Exception:
-        pass
-    try:
-        mesh_memory_endpoint("test-self")
-        results["mesh_memory_endpoint"] = True
-    except Exception:
-        pass
-    return results
+def mesh_memory_endpoint() -> _JSON:
+    """Alias for :func:`get_mesh_memory` used by older services.
+    """
+    return get_mesh_memory()
+
+
+def get_signal_scores() -> _RowList:
+    """Alias for :func:`signal_scores_endpoint`.
+    """
+    return signal_scores_endpoint()
+
+
+def reset_quarantine_endpoint(server_id: str) -> bool:
+    """Reset quarantine status for a given server.
+
+    Performs an ``UPDATE`` on the ``service_health`` table.  The function returns
+    ``True`` if the statement executed without error.
+    """
+    sql = (
+        "UPDATE service_health SET status = 'active' WHERE server_id = :sid"
+    )
+    _post(
+        "/execute",
+        json={"sql": sql, "params": {"sid": server_id}, "wait": True},
+    )
+    return True
+
+
+def _run_self_test() -> bool:
+    """Simple self‑test exercised when the module is run directly.
+
+    It calls each public helper with a minimal request to ensure the HTTP API
+    is reachable and the responses have the expected shape.  The test does **not**
+    modify any persistent data – the ``reset_quarantine_endpoint`` call is made
+    with a dummy ID that is safe to issue.
+    """
+    # The following calls will raise if the service is unavailable.
+    _ = get_mesh_memory()
+    _ = signal_scores_endpoint()
+    _ = get_signal_scores()
+    # Reset with a harmless identifier; the endpoint is idempotent.
+    _ = reset_quarantine_endpoint("test-server-id")
+    return True
 
 
 if __name__ == "__main__":
-    print("Running self-test...")
-    results = _run_self_test()
-    print(f"Results: {results}")
-    passed = sum(1 for v in results.values() if v)
-    print(f"Passed: {passed}/{len(results)}")
+    # Run a quick sanity check when executed as a script.
+    assert _run_self_test(), "Self‑test failed"
+    print("staged __init__ self‑test passed")

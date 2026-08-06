@@ -120,15 +120,40 @@ def record(balance: float, date: Optional[str] = None,
     return state
 
 
+def _cid(v):
+    """Normalise a credit id to a comparable form.
+
+    WHY THIS EXISTS (2026-08-06, this lane, live incident): the dedup key was
+    the RAW value, so an id written as int 3148330 by a Python caller did not
+    equal the SAME invoice arriving as str "3148330" from argparse (which has
+    no type=). Vast invoice 3148330 was therefore recorded twice, credits_ever
+    went $25 -> $50, since_funding.spend_usd went $10.23 -> $35.23, and
+    budget.level flipped to a FALSE RED against a $25 budget on an account
+    that has only ever been funded once. Same class as the permission value
+    graded against one literal: a key that is compared must be NORMALISED at
+    both ends, never trusted to arrive in one type.
+    """
+    if v is None:
+        return None
+    v = str(v).strip()
+    return v or None
+
+
 def record_credit(amount: float, date: str, credit_id=None,
                   source: str = "vast_invoice", path: Optional[Path] = None,
                   state: Optional[dict] = None) -> dict:
-    """Record a top-up. Deduped on (id) when known, else (date, amount)."""
+    """Record a top-up. Deduped on (id) when known, else (date, amount).
+
+    The id is compared via _cid() so int and str spellings of the same
+    invoice collapse to one entry. Also self-heals: pre-existing duplicates
+    of the id being recorded are dropped on write.
+    """
     state = state if state is not None else load(path)
-    key = ("id", credit_id) if credit_id is not None else ("da", date, amount)
+    credit_id = _cid(credit_id)
+    key = ("id", credit_id) if credit_id is not None else ("da", date, float(amount))
     def _key(c):
-        return (("id", c["id"]) if c.get("id") is not None
-                else ("da", c["date"], c["amount"]))
+        return (("id", _cid(c.get("id"))) if _cid(c.get("id")) is not None
+                else ("da", c["date"], float(c["amount"])))
     state["credits"] = [c for c in state.get("credits", []) if _key(c) != key]
     state["credits"].append({"date": date, "at": _utcnow(),
                              "amount": float(amount), "id": credit_id,

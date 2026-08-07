@@ -207,7 +207,29 @@ def lane_of(path: Path):
     if not isinstance(blob, dict):
         return None
     lane = blob.get("produced_by_lane")
-    return lane if isinstance(lane, str) and lane else None
+    if not isinstance(lane, str) or not lane:
+        return None
+    # "unattributed" is the STAMPER'S OWN WORD FOR UNKNOWN, and it must land in
+    # the same bucket as an absent field. verify_candidate.ps1 writes it when it
+    # can resolve neither $env:ZO_LANE nor a `\_lanes\<name>` component in
+    # $PSScriptRoot -- which is exactly what happens when the script is invoked
+    # from the SHARED checkout, the path this repo's own runbook prints.
+    #
+    # Measured 2026-08-07T19:49:42Z: prod-drift ran verify_candidate.ps1 from
+    # D:\zo\zo-sentinel\zo-sentinel\ops\host\, its own verdict artifact was
+    # stamped "unattributed", and --window-hours 24 reported it as
+    #   foreign evidence (ADVISORY, excluded from the orphan test -- another
+    #   lane's dry-run in the shared evidence dir)
+    # A string meaning "I do not know who wrote this" was read as "somebody else
+    # definitely wrote this", which is the one reading that REMOVES it from the
+    # orphan test. The guard did not go red. It went QUIET, under a CLEAN verdict.
+    #
+    # That inverts the rule this function's own docstring states four lines up:
+    # unknown is not zero (R6). Absence was handled correctly; the sentinel VALUE
+    # that means the same thing was not.
+    if lane == "unattributed":
+        return None
+    return lane
 
 
 def collect_evidence(evidence_dir: Path) -> list:

@@ -1,0 +1,7 @@
+name = "risk_tier_calculator"
+import_path = "services.active.risk_tier_calculator.router"
+prefix = "/api"
+tag = "risk_tier_calculator"
+origin = "service"
+auth = "public"
+needs_data_layer = true

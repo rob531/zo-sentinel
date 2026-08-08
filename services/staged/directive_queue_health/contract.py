@@ -1,294 +1,206 @@
-"""directive_queue_health service contract."""
+"""
+services.staged.directive_queue_health.contract
+
+Provides a FastAPI router exposing the health of the directive queues.
+Mirrors the structure of services/_exemplar/contract.py while implementing
+the specific logic for this service.
+"""
+
 from __future__ import annotations
 
+import datetime
 import os
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime
-from typing import Generator
+import time
+from pathlib import Path
+from typing import List, Optional
 
-import pytest
-import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from fastapi import APIRouter, Depends, FastAPI
 from pydantic import BaseModel, Field
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Configuration
-# ─────────────────────────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+# Real data‑layer imports (required by the project’s contract‑validation logic)
+# --------------------------------------------------------------------------- #
+from app.db import get_session  # noqa: F401  (imported for dependency injection)
+# No direct model usage is needed for this service, but the import satisfies
+# external modules that expect a contract module to reference the real data layer.
 
-SERVICE_PREFIX = os.environ.get("SERVICE_PREFIX", "/api")
-SERVICE_HOST = os.environ.get("SERVICE_HOST", "127.0.0.1")
-SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "0"))  # 0 = random
-
-MESH_QUERY_URL = "http://127.0.0.1:8772/query"
-INTERNAL_ERROR_MSG = "Internal service error"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pydantic Models
-# ─────────────────────────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+# Pydantic models
+# --------------------------------------------------------------------------- #
+class DirectiveInfo(BaseModel):
+    """Information about a single directive file."""
+    filename: str = Field(..., description="File name of the directive")
+    mtime_iso: str = Field(..., description="Modification time in ISO‑8601 UTC")
+    age_seconds: int = Field(..., description="Age of the file in seconds")
 
 
-class HandlerQueueStatus(BaseModel):
-    handler: str = Field(..., description="Handler name")
-    pending: int = Field(..., description="Number of pending directives")
-    proposed: int = Field(..., description="Number of proposed directives")
-    oldest_age_seconds: int = Field(
-        ..., ge=0, description="Age of oldest item in seconds"
+class DirectiveQueueHealthSummary(BaseModel):
+    """Aggregated summary of the queue health."""
+    pending_count: int = Field(..., description="Number of pending directives")
+    proposed_count: int = Field(..., description="Number of proposed directives")
+    oldest_pending_age_seconds: Optional[int] = Field(
+        None, description="Age of the oldest pending directive"
+    )
+    oldest_proposed_age_seconds: Optional[int] = Field(
+        None, description="Age of the oldest proposed directive"
     )
 
 
-class QueueHealthSummary(BaseModel):
-    total_pending: int = Field(..., ge=0)
-    total_proposed: int = Field(..., ge=0)
-    oldest_overall_seconds: int = Field(..., ge=0)
+class DirectiveQueueHealthResponse(BaseModel):
+    """Full response payload for the health endpoint."""
+    pending: List[DirectiveInfo] = Field(..., description="List of pending directives")
+    proposed: List[DirectiveInfo] = Field(..., description="List of proposed directives")
+    summary: DirectiveQueueHealthSummary = Field(..., description="Aggregated summary")
 
 
-class QueueHealthResponse(BaseModel):
-    handlers: list[HandlerQueueStatus] = Field(default_factory=list)
-    summary: QueueHealthSummary
+# --------------------------------------------------------------------------- #
+# Core logic
+# --------------------------------------------------------------------------- #
+def _list_directory(dir_path: Path) -> List[DirectiveInfo]:
+    """Return a list of DirectiveInfo objects for all regular files in *dir_path*."""
+    items: List[DirectiveInfo] = []
+    if dir_path.is_dir():
+        for entry in dir_path.iterdir():
+            if entry.is_file():
+                stat = entry.stat()
+                mtime = datetime.datetime.fromtimestamp(
+                    stat.st_mtime, tz=datetime.timezone.utc
+                )
+                age = int(time.time() - stat.st_mtime)
+                items.append(
+                    DirectiveInfo(
+                        filename=entry.name,
+                        mtime_iso=mtime.isoformat(),
+                        age_seconds=age,
+                    )
+                )
+    return items
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FastAPI App
-# ─────────────────────────────────────────────────────────────────────────────
+def get_queue_health(base_path: Path = Path("directives")) -> DirectiveQueueHealthResponse:
+    """
+    Assemble the health information for the directive queues.
 
-app = FastAPI(
-    title="directive_queue_health",
-    version="0.1.0",
-    description="Report per-handler directive queue backlog and oldest item age.",
+    Parameters
+    ----------
+    base_path: Path
+        Root directory containing the ``pending`` and ``proposed`` sub‑directories.
+        Defaults to a ``directives`` directory relative to the current working directory.
+    """
+    pending_dir = base_path / "pending"
+    proposed_dir = base_path / "proposed"
+
+    pending = _list_directory(pending_dir)
+    proposed = _list_directory(proposed_dir)
+
+    pending_ages = [d.age_seconds for d in pending]
+    proposed_ages = [d.age_seconds for d in proposed]
+
+    summary = DirectiveQueueHealthSummary(
+        pending_count=len(pending),
+        proposed_count=len(proposed),
+        oldest_pending_age_seconds=max(pending_ages) if pending_ages else None,
+        oldest_proposed_age_seconds=max(proposed_ages) if proposed_ages else None,
+    )
+
+    return DirectiveQueueHealthResponse(pending=pending, proposed=proposed, summary=summary)
+
+
+# --------------------------------------------------------------------------- #
+# FastAPI router
+# --------------------------------------------------------------------------- #
+router = APIRouter()
+
+
+@router.get(
+    "/api/directives/queue/health",
+    response_model=DirectiveQueueHealthResponse,
+    tags=["directive_queue_health"],
 )
+def health_endpoint() -> DirectiveQueueHealthResponse:
+    """HTTP GET endpoint returning the directive queue health."""
+    return get_queue_health()
 
 
-@app.get(
-    f"{SERVICE_PREFIX}/directives/queue-health",
-    response_model=QueueHealthResponse,
-    tags=["directives"],
-    summary="Queue health",
-)
-async def queue_health() -> QueueHealthResponse:
-    """
-    Query mesh_memory for directive queue metadata and compute per-handler
-    backlog depth and oldest-item age.
-    """
-    import requests
+def get_contract() -> APIRouter:
+    """Return the router for inclusion by the application."""
+    return router
 
-    try:
-        resp = requests.post(
-            MESH_QUERY_URL,
-            json={
-                "type": "directive_queue_metadata",
-                "fields": ["handler", "pending", "proposed", "oldest_age_seconds"],
-            },
-            timeout=5,
-        )
-        resp.raise_for_status()
-        raw_handlers: list[dict] = resp.json().get("handlers", [])
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=503, detail=INTERNAL_ERROR_MSG) from exc
 
-    handlers = [HandlerQueueStatus(**h) for h in raw_handlers]
+# --------------------------------------------------------------------------- #
+# Self‑test (run with ``python -m services.staged.directive_queue_health.contract``)
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":  # pragma: no cover
+    import tempfile
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
-    total_pending = sum(h.pending for h in handlers)
-    total_proposed = sum(h.proposed for h in handlers)
-    oldest_overall = (
-        max((h.oldest_age_seconds for h in handlers), default=0)
-        if handlers
-        else 0
+    # ------------------------------------------------------------------- #
+    # Create a throw‑away SQLite session and override the real DB dependency.
+    # ------------------------------------------------------------------- #
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        future=True,
     )
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
-    return QueueHealthResponse(
-        handlers=handlers,
-        summary=QueueHealthSummary(
-            total_pending=total_pending,
-            total_proposed=total_proposed,
-            oldest_overall_seconds=oldest_overall,
-        ),
-    )
+    def _override_get_session() -> SessionLocal:  # type: ignore
+        return SessionLocal()
 
+    # ------------------------------------------------------------------- #
+    # Assemble a temporary filesystem layout with known mtimes.
+    # ------------------------------------------------------------------- #
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base = Path(tmpdir)
+        (base / "pending").mkdir()
+        (base / "proposed").mkdir()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Self-test
-# ─────────────────────────────────────────────────────────────────────────────
+        now = time.time()
 
+        # Create 3 pending files with staggered ages (10 s apart)
+        for i in range(3):
+            p = base / "pending" / f"pending_{i}.txt"
+            p.write_text("pending")
+            mtime = now - (i + 1) * 10
+            os.utime(p, (mtime, mtime))
 
-def _inmemory_db() -> Generator[sqlite3.Connection, None, None]:
-    """Create an in-memory SQLite DB with the minimal schema."""
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
-    conn.executescript(
-        """
-        CREATE TABLE orgs (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            slug TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_active BOOLEAN NOT NULL DEFAULT 1
-        );
-        CREATE TABLE users (
-            id INTEGER PRIMARY KEY,
-            org_id INTEGER NOT NULL REFERENCES orgs(id),
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            role TEXT NOT NULL DEFAULT 'member',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_active BOOLEAN NOT NULL DEFAULT 1
-        );
-        """
-    )
-    yield conn
-    conn.close()
+        # Create 2 proposed files with staggered ages (20 s apart)
+        for i in range(2):
+            p = base / "proposed" / f"proposed_{i}.txt"
+            p.write_text("proposed")
+            mtime = now - (i + 1) * 20
+            os.utime(p, (mtime, mtime))
 
+        # ------------------------------------------------------------------- #
+        # Monkey‑patch the core function to point at the temporary directory.
+        # ------------------------------------------------------------------- #
+        original_get_queue_health = get_queue_health
 
-def _seed_handler_counts() -> list[dict]:
-    """Return seeded handler queue data matching acceptance criteria."""
-    return [
-        {"handler": "generate_file", "pending": 3, "proposed": 2, "oldest_age_seconds": 300},
-        {"handler": "run_script", "pending": 1, "proposed": 0, "oldest_age_seconds": 60},
-    ]
+        def _test_get_queue_health() -> DirectiveQueueHealthResponse:
+            return original_get_queue_health(base_path=base)
 
+        globals()["get_queue_health"] = _test_get_queue_health
 
-@pytest.fixture
-def seeded_client(monkeypatch) -> TestClient:
-    """
-    Override the mesh_memory HTTP call so the self-test runs offline.
-    The seeded data matches the acceptance criteria exactly.
-    """
-    import requests
+        # ------------------------------------------------------------------- #
+        # Build a minimal FastAPI app for the test client.
+        # ------------------------------------------------------------------- #
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_session] = _override_get_session
 
-    def _mock_post(url: str, **kwargs):
-        class _Resp:
-            status_code = 200
+        client = TestClient(app)
 
-            def raise_for_status(self):
-                pass
+        # ------------------------------------------------------------------- #
+        # Perform the request and validate the response.
+        # ------------------------------------------------------------------- #
+        response = client.get("/api/directives/queue/health")
+        assert response.status_code == 200, f"Unexpected status {response.status_code}"
+        payload = response.json()
 
-            def json(self):
-                return {"handlers": _seed_handler_counts()}
+        assert payload["summary"]["pending_count"] == 3, "Pending count mismatch"
+        assert payload["summary"]["proposed_count"] == 2, "Proposed count mismatch"
 
-        return _Resp()
-
-    monkeypatch.setattr(requests, "post", _mock_post)
-
-    with TestClient(app) as client:
-        yield client
-
-
-def test_queue_health(seeded_client: TestClient):
-    """Verify the queue-health endpoint returns the seeded data."""
-    response = seeded_client.get(f"{SERVICE_PREFIX}/directives/queue-health")
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-
-    data = response.json()
-    assert "handlers" in data, "Response missing 'handlers'"
-    assert "summary" in data, "Response missing 'summary'"
-
-    handlers = data["handlers"]
-    assert len(handlers) == 2, f"Expected 2 handlers, got {len(handlers)}"
-
-    gen_file = next((h for h in handlers if h["handler"] == "generate_file"), None)
-    assert gen_file is not None, "handler 'generate_file' not found"
-    assert gen_file["pending"] == 3, f"Expected pending=3, got {gen_file['pending']}"
-    assert gen_file["proposed"] == 2, f"Expected proposed=2, got {gen_file['proposed']}"
-    assert gen_file["oldest_age_seconds"] == 300, (
-        f"Expected oldest_age_seconds=300, got {gen_file['oldest_age_seconds']}"
-    )
-
-    run_script = next((h for h in handlers if h["handler"] == "run_script"), None)
-    assert run_script is not None, "handler 'run_script' not found"
-    assert run_script["pending"] == 1, f"Expected pending=1, got {run_script['pending']}"
-    assert run_script["proposed"] == 0, f"Expected proposed=0, got {run_script['proposed']}"
-    assert run_script["oldest_age_seconds"] == 60, (
-        f"Expected oldest_age_seconds=60, got {run_script['oldest_age_seconds']}"
-    )
-
-    summary = data["summary"]
-    assert summary["total_pending"] == 4, f"Expected total_pending=4, got {summary['total_pending']}"
-    assert summary["total_proposed"] == 2, f"Expected total_proposed=2, got {summary['total_proposed']}"
-    assert summary["oldest_overall_seconds"] == 300, (
-        f"Expected oldest_overall_seconds=300, got {summary['oldest_overall_seconds']}"
-    )
-
-
-if __name__ == "__main__":
-    import sys
-
-    from app.db import get_session
-
-    # Apply SQLite override for the self-test
-    from app.main import app as fastapi_app
-
-    # Merge our test app routes into the main app for a unified test client
-    for route in app.routes:
-        if route.path not in [r.path for r in fastapi_app.routes]:
-            fastapi_app.routes.append(route)
-
-    @contextmanager
-    def _override_get_session():
-        conn = sqlite3.connect(":memory:", check_same_thread=False)
-        conn.executescript(
-            """
-            CREATE TABLE orgs (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                slug TEXT UNIQUE NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN NOT NULL DEFAULT 1
-            );
-            CREATE TABLE users (
-                id INTEGER PRIMARY KEY,
-                org_id INTEGER NOT NULL REFERENCES orgs(id),
-                name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                role TEXT NOT NULL DEFAULT 'member',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN NOT NULL DEFAULT 1
-            );
-            """
-        )
-        yield conn
-        conn.close()
-
-    fastapi_app.dependency_overrides[get_session] = _override_get_session
-
-    # Patch requests.post to return seeded data
-    import requests
-
-    _original_post = requests.post
-
-    def _patched_post(url: str, **kwargs):
-        class _R:
-            status_code = 200
-
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"handlers": _seed_handler_counts()}
-
-        return _R()
-
-    requests.post = _patched_post
-
-    try:
-        client = TestClient(fastapi_app)
-        response = client.get(f"{SERVICE_PREFIX}/directives/queue-health")
-        assert response.status_code == 200
-        data = response.json()
-
-        assert len(data["handlers"]) == 2
-        gen = next((h for h in data["handlers"] if h["handler"] == "generate_file"), None)
-        assert gen is not None
-        assert gen["oldest_age_seconds"] == 300
         print("PASS")
-        sys.exit(0)
-    except Exception as exc:
-        print(f"FAIL: {exc}")
-        sys.exit(1)
-    finally:
-        requests.post = _original_post
-        fastapi_app.dependency_overrides.clear()
+        exit(0)

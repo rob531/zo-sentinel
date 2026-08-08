@@ -1,23 +1,21 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from .logic import get_severity_rollup
-from .models import SeverityRollupResponse
+from .logic import get_cve_severity_rollup, SeverityRollupResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/api")
 
 
 @router.get(
-    "/api/cves/severity-rollup",
+    "/cve/severity-rollup",
     response_model=SeverityRollupResponse,
-    tags=["cve_severity_rollup"],
-    summary="Get CVE severity rollup across all scored servers",
+    name="cve_severity_rollup",
 )
-def severity_rollup(
-    days: Optional[int] = None,
-    session: Session = Depends(get_session),
-) -> SeverityRollupResponse:
-    return get_severity_rollup(session=session, days=days)
+def cve_severity_rollup_endpoint(session: Session = Depends(get_session)):
+    """
+    Retrieve a roll‑up of CVE severities across servers.
+
+    The heavy lifting is performed in `services.staged.cve_severity_rollup.logic`.
+    """
+    return get_cve_severity_rollup(session)

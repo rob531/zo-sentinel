@@ -152,8 +152,10 @@ jobs:
       - name: App-graph knowledge layer (REPORT-ONLY -- regenerates the app-model graph)
         # improvement-loop cycle-0031, 2026-08-09. tools/build_app_graph.py turns
         # capmap.json into the queryable app-model graph (node/edge tables + the
-        # gap_* completeness views) that tools/graph_gap_directives.py and
-        # tools/ingest_observed_edges.py read. It was built 2026-06-10 and NOTHING
+        # gap_* completeness views) that graph_gap_directives and
+        # ingest_observed_edges read (named WITHOUT their tools/ prefix on
+        # purpose: dark_tools.py counts a `tools/<stem>.py` path string as
+        # invocation-shaped, and this comment is not a caller). It was built 2026-06-10 and NOTHING
         # has ever called it: the dark-tool census scores it 8482B, "consulted by
         # NOTHING; mentioned nowhere at all".
         #

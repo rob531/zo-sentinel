@@ -1,0 +1,7 @@
+name = "signal_score_trends"
+import_path = "services.active.signal_score_trends.router"
+prefix = "/api"
+tag = "signal_score_trends"
+origin = "service"
+auth = "public"
+needs_data_layer = true

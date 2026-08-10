@@ -244,6 +244,137 @@ jobs:
           curl -sf http://127.0.0.1:8772/health || { echo "ws failed to start"; cat /tmp/it_ws.log; exit 1; }
           python -m pytest tests/integration -v
 
+
+      # ================================================================
+      # TIER 2 -- THE PRODUCTION TRANSPORT (FU-119)
+      #
+      # Every step above drives goose STRAIGHT AT A PROVIDER. The mesh never
+      # does that: the architect and the builder both drive goose at
+      # ladder_shim.py on 127.0.0.1:8796. So everything above is blind to the
+      # shim, the rung rotation, the key hydrator and the tool-call salvage --
+      # which is exactly where our scars live (scar #454, TOOL:-as-prose,
+      # key_hydrator 502s). FU-119, open since 2026-07-27.
+      #
+      # The tier stands the shim up FROM THE CHECKOUT rather than reaching the
+      # tower. A runner cannot reach :8796 on the tower, and it should not want
+      # to: booting from the checkout gates THE SHIM CODE THIS PR CHANGES,
+      # rather than whatever happens to be running elsewhere.
+      #
+      # NO SECRET IS REQUIRED, and that is deliberate. The assertion is about
+      # the REQUEST goose sends, not the RESPONSE a provider returns, so the
+      # ladder is replaced by a recorder (tools/canary/shim_tier_recorder.py).
+      # Zero tokens, zero keys. A tier gated on a secret we are not authorised
+      # to add would skip forever, and a skip that reads as a pass is the
+      # failure class this repo has paid for most.
+      #
+      # WHAT THIS TIER DOES NOT CLAIM: rung rotation, key hydration and real
+      # provider behaviour are NOT exercised here -- they need keys. Do not read
+      # this green as "the ladder works". Read it as "the shim's HTTP surface,
+      # request model and tool passthrough survive this goose version, and
+      # escalation.py still imports".
+      # ================================================================
+
+      - name: Shim tier -- boot ladder_shim.py from the checkout
+        env:
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
+        run: |
+          set -euo pipefail
+          pip install fastapi uvicorn pydantic requests
+          nohup python tools/canary/shim_tier_recorder.py \
+            --port 8796 --record /tmp/shim_tier_requests.json \
+            > /tmp/shim_tier_boot.log 2>&1 &
+          echo $! > /tmp/shim_tier.pid
+
+          # Bounded wait. A shim that never comes up must fail the step with a
+          # NAMED message -- an unbounded wait is how a boot failure becomes a
+          # timeout nobody attributes.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8796/health > /tmp/shim_health.json 2>/dev/null; then
+              echo "SHIM_TIER::health=$(cat /tmp/shim_health.json)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "SHIM TIER FAIL: ladder_shim.py never became healthy on 127.0.0.1:8796 within 30s."
+          echo "This is a BOOT failure, not a goose-version failure. Boot log:"
+          cat /tmp/shim_tier_boot.log || true
+          exit 1
+
+      - name: Shim tier -- drive the candidate goose through :8796
+        env:
+          # THE LINE THIS WHOLE TIER EXISTS FOR. FU-119's predicate asserts on it.
+          OPENAI_BASE_URL: http://127.0.0.1:8796/v1
+          # The shim does not authenticate; goose requires the var to be set.
+          OPENAI_API_KEY: shim-tier-no-auth-required
+          GOOSE_MODEL: zo-ladder-v1
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
+          ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp_shim.log
+        run: |
+          set -uo pipefail
+          NONCE="shim-$RANDOM-$RANDOM"
+          # We do NOT assert on the recipe's own output here. The recorder
+          # returns canned text, so the agent never completes a real tool call --
+          # that is the direct tier's job. This tier asserts on the REQUEST.
+          goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
+            --params nonce="$NONCE" 2>&1 | tee /tmp/shim_tier_goose.out || true
+
+          if grep -qi "Failed to start extension 'zo_directive_bridge'" /tmp/shim_tier_goose.out; then
+            echo "SHIM TIER FAIL: EXTENSION_START_FAILURE -- the bridge never initialised."
+            echo "goose warned and CONTINUED WITHOUT IT (FU-117), so the tool list is empty"
+            echo "for a reason that has nothing to do with the transport. Fix the bridge first."
+            exit 1
+          fi
+          echo "SHIM_TIER::goose_run=completed"
+
+      - name: Shim tier -- assert the namespaced tool name arrived UNTRUNCATED
+        run: |
+          set -euo pipefail
+          cat /tmp/shim_tier_requests.json
+          python tools/canary/assert_shim_tool_names.py --record /tmp/shim_tier_requests.json
+
+      # NEGATIVE CONTROL. An assertion that has never been observed failing is
+      # not evidence that the transport works; it is evidence that nothing was
+      # measured (R4). This step re-runs the recorder with --truncate-names,
+      # simulating upstream #10659, and REQUIRES the assertion above to go RED.
+      # If this step's inner assertion passes, the guard is vacuous and the
+      # build fails -- which is the correct outcome.
+      - name: Shim tier -- NEGATIVE CONTROL (truncation must turn the assertion RED)
+        env:
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
+          OPENAI_BASE_URL: http://127.0.0.1:8796/v1
+          OPENAI_API_KEY: shim-tier-no-auth-required
+          GOOSE_MODEL: zo-ladder-v1
+          ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp_neg.log
+        run: |
+          set -uo pipefail
+          kill "$(cat /tmp/shim_tier.pid)" 2>/dev/null || true
+          sleep 2
+          nohup python tools/canary/shim_tier_recorder.py \
+            --port 8796 --record /tmp/shim_tier_neg.json --truncate-names 12 \
+            > /tmp/shim_tier_neg_boot.log 2>&1 &
+          echo $! > /tmp/shim_tier_neg.pid
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8796/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
+            --params nonce="neg-control" > /tmp/shim_tier_neg_goose.out 2>&1 || true
+
+          set +e
+          python tools/canary/assert_shim_tool_names.py --record /tmp/shim_tier_neg.json
+          RC=$?
+          set -e
+          kill "$(cat /tmp/shim_tier_neg.pid)" 2>/dev/null || true
+
+          if [ "$RC" -eq 0 ]; then
+            echo "NEGATIVE CONTROL FAILED: names truncated to 12 chars and the assertion"
+            echo "still PASSED. The untruncated-name guard is vacuous -- it cannot detect"
+            echo "the thing it was written to detect. Do not trust the green above."
+            exit 1
+          fi
+          echo "SHIM_TIER_VERDICT::negative_control::PASS::assertion went RED under truncation (rc=$RC)"
+
       - name: Logs on failure
         if: failure()
         run: |

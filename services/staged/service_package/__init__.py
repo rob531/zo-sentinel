@@ -1,14 +1,15 @@
-"""Auto-emitted service package.
-Relative intra-service imports survive staged->active promotion without rewrite.
-"""
+# Auto-emitted service package.
+# Relative intra-service imports survive staged->active promotion without rewrite.
+# deps: requests
+from __future__ import annotations
 
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 # Ensure app imports work from both direct execution and staged/active promotion
@@ -16,17 +17,14 @@ _repo_root = Path(__file__).resolve().parents[2]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
-try:
-    from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
-except ImportError:
-    # Fallback for when app modules aren't available yet (e.g., during build)
-    get_session = None
-    McpServerRegistry = None
-    McpLlmAxisScore = None
-    McpScoreDispute = None
-    Org = None
-    User = None
+from app.db import get_session
+from app.models import (
+    McpLlmAxisScore,
+    McpScoreDispute,
+    McpServerRegistry,
+    Org,
+    User,
+)
 
 router = APIRouter(prefix="/api/service_package", tags=["service_package"])
 
@@ -38,11 +36,11 @@ _ZO_STORE_URL = "http://127.0.0.1:8772"
 class MeshScoreQuery(BaseModel):
     org_id: Optional[str] = None
     perspective_ids: Optional[List[str]] = None
-    time_range_days: Optional[int] = 30
+    time_range_days: int = Field(default=30, ge=1)
 
 
 class MeshScoreResponse(BaseModel):
-    scores: List[Dict[str, Any]]
+    scores: List[Dict[str, Any]] = Field(default_factory=list)
     timestamp: Optional[str] = None
 
 
@@ -50,11 +48,12 @@ class SignalScoreQuery(BaseModel):
     org_id: Optional[str] = None
     entity_ids: Optional[List[str]] = None
     signal_types: Optional[List[str]] = None
+    limit: int = Field(default=100, ge=1)
 
 
 class SignalScoreResponse(BaseModel):
-    scores: List[Dict[str, Any]]
-    total: int
+    scores: List[Dict[str, Any]] = Field(default_factory=list)
+    total: int = 0
 
 
 class MeshMemoryQuery(BaseModel):
@@ -63,7 +62,17 @@ class MeshMemoryQuery(BaseModel):
 
 
 class MeshMemoryResponse(BaseModel):
-    memory: List[Dict[str, Any]]
+    memory: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ScoreDisputeResponse(BaseModel):
+    id: int
+    server_id: str
+    proposed_overall_risk: Optional[str] = None
+    reason_category: Optional[str] = None
+    explanation: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
 
 
 class QuarantineResetRequest(BaseModel):
@@ -71,7 +80,7 @@ class QuarantineResetRequest(BaseModel):
 
 
 class SuccessResponse(BaseModel):
-    success: bool
+    success: bool = True
     message: Optional[str] = None
 
 
@@ -93,7 +102,7 @@ def _query_mesh(query: str, params: Optional[Dict[str, Any]] = None) -> List[Dic
         raise HTTPException(status_code=500, detail=f"MESH query failed: {e}")
 
 
-# --- Endpoints exposed via router ---
+# --- Router endpoints ---
 
 
 @router.post("/mesh_scores", response_model=MeshScoreResponse)
@@ -105,8 +114,6 @@ def mesh_scores_endpoint(
     params: Dict[str, Any] = {}
     if body.org_id:
         params["org_id"] = body.org_id
-    if body.perspective_ids:
-        params["perspective_ids"] = body.perspective_ids
 
     query = "SELECT * FROM mcp_signal_scores WHERE 1=1"
     if body.org_id:
@@ -128,11 +135,8 @@ def signal_scores_endpoint(
 ) -> SignalScoreResponse:
     """Fetch signal scores from app DB (McpLlmAxisScore) scoped by org."""
     query = db.query(McpLlmAxisScore)
-    if body.org_id:
-        query = query.filter(McpLlmAxisScore.server_id.in_(
-            db.query(McpServerRegistry.server_id).filter(McpServerRegistry.server_id.isnot(None))
-        ))
-    scores = query.all()
+    # Apply limit
+    scores = query.limit(body.limit).all()
     score_list = [
         {
             "id": s.id,
@@ -168,7 +172,7 @@ def mesh_memory_endpoint(
 
 
 @router.get("/mesh_memory/{memory_id}", response_model=Optional[Dict[str, Any]])
-def get_mesh_memory_endpoint(
+def get_mesh_memory_by_id(
     memory_id: str,
     db: Session = Depends(get_session),
 ) -> Optional[Dict[str, Any]]:
@@ -178,21 +182,22 @@ def get_mesh_memory_endpoint(
     return results[0] if results else None
 
 
-@router.get("/score_disputes", response_model=List[Dict[str, Any]])
-def get_score_disputes(
+@router.get("/score_disputes", response_model=List[ScoreDisputeResponse])
+def get_score_disputes_endpoint(
     db: Session = Depends(get_session),
-) -> List[Dict[str, Any]]:
+) -> List[ScoreDisputeResponse]:
     """Fetch all score disputes from app DB."""
     disputes = db.query(McpScoreDispute).all()
     return [
-        {
-            "id": d.id,
-            "server_id": d.server_id,
-            "axis_name": d.axis_name,
-            "dispute_reason": d.dispute_reason,
-            "status": d.status,
-            "created_at": d.created_at.isoformat() if d.created_at else None,
-        }
+        ScoreDisputeResponse(
+            id=d.id,
+            server_id=d.server_id,
+            proposed_overall_risk=d.proposed_overall_risk,
+            reason_category=d.reason_category,
+            explanation=d.explanation,
+            status=d.status or "pending",
+            created_at=d.created_at.isoformat() if d.created_at else None,
+        )
         for d in disputes
     ]
 
@@ -225,6 +230,13 @@ def get_mesh_memory(org_id: Optional[str] = None) -> Dict[str, Any]:
     return {"memory": results, "count": len(results)}
 
 
+def get_mesh_memory_endpoint(entity_type: str, entity_id: str) -> Dict[str, Any]:
+    """Package-level: fetch mesh memory for an entity (alias for callers)."""
+    query = "SELECT * FROM mesh_memory WHERE entity_type = :entity_type AND entity_id = :entity_id"
+    results = _query_mesh(query, {"entity_type": entity_type, "entity_id": entity_id})
+    return {"memory": results, "count": len(results)}
+
+
 def get_mesh_scores(mesh_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Package-level: fetch mesh scores by mesh_id."""
     params: Dict[str, Any] = {}
@@ -235,10 +247,14 @@ def get_mesh_scores(mesh_id: Optional[str] = None) -> List[Dict[str, Any]]:
     return _query_mesh(query, params)
 
 
+def mesh_scores(mesh_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Package-level: fetch mesh scores (alias for get_mesh_scores)."""
+    return get_mesh_scores(mesh_id)
+
+
 def get_signal_scores(org_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Package-level: fetch signal scores from app DB."""
-    if get_session is None:
-        return []
+    # Use generator-based session to match get_session() pattern
     session_gen = get_session()
     session = next(session_gen)
     try:
@@ -255,13 +271,14 @@ def get_signal_scores(org_id: Optional[str] = None) -> List[Dict[str, Any]]:
             for s in scores
         ]
     finally:
-        session.close()
+        try:
+            session.close()
+        except Exception:
+            pass
 
 
 def reset_server_export_quarantine_api(server_id: str) -> Dict[str, Any]:
     """Package-level: reset server export quarantine."""
-    if get_session is None:
-        return {"success": False, "error": "db not available"}
     session_gen = get_session()
     session = next(session_gen)
     try:
@@ -272,7 +289,10 @@ def reset_server_export_quarantine_api(server_id: str) -> Dict[str, Any]:
             return {"success": True, "server_id": server_id}
         return {"success": False, "error": "not found"}
     finally:
-        session.close()
+        try:
+            session.close()
+        except Exception:
+            pass
 
 
 def _dummy_post(endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -280,21 +300,22 @@ def _dummy_post(endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return {"endpoint": endpoint, "posted": data, "status": "ok"}
 
 
+# Re-export for callers that inherit/import these
+ScoreDisputes = McpScoreDispute
+Users = User
+
+
 def _run_self_test() -> str:
     """Self-test: verify module loads and basic functions work."""
     try:
-        # Verify imports work
-        from app.db import get_session as _get_session
-        from app.models import McpServerRegistry, McpLlmAxisScore
-
         # Verify router has expected routes
         assert hasattr(router, "routes")
         route_paths = {r.path for r in router.routes}
-        assert "/mesh_scores" in route_paths
-        assert "/signal_scores" in route_paths
-        assert "/mesh_memory" in route_paths
-        assert "/score_disputes" in route_paths
-        assert "/reset_quarantine" in route_paths
+        assert "/api/service_package/mesh_scores" in route_paths
+        assert "/api/service_package/signal_scores" in route_paths
+        assert "/api/service_package/mesh_memory" in route_paths
+        assert "/api/service_package/score_disputes" in route_paths
+        assert "/api/service_package/reset_quarantine" in route_paths
 
         # Verify Pydantic models
         MeshScoreQuery.model_validate({})
@@ -306,9 +327,17 @@ def _run_self_test() -> str:
         # Verify package-level functions exist and are callable
         assert callable(get_mesh_memory)
         assert callable(get_mesh_scores)
+        assert callable(mesh_scores)
         assert callable(get_signal_scores)
         assert callable(reset_server_export_quarantine_api)
         assert callable(_dummy_post)
+        assert callable(mesh_scores_endpoint)
+        assert callable(mesh_memory_endpoint)
+        assert callable(signal_scores_endpoint)
+        assert callable(get_score_disputes_endpoint)
+        assert callable(get_mesh_memory_by_id)
+        assert callable(get_mesh_memory_endpoint)
+        assert callable(reset_quarantine_api)
 
         return "PASS"
     except Exception as e:
@@ -316,31 +345,6 @@ def _run_self_test() -> str:
 
 
 if __name__ == "__main__":
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    # Override get_session for self-test with in-memory SQLite
-    test_engine = create_engine("sqlite:///:memory:")
-    TestSession = sessionmaker(bind=test_engine)
-
-    from app.models import Base
-    Base.metadata.create_all(test_engine)
-
-    def override_get_session():
-        session = TestSession()
-        try:
-            yield session
-        finally:
-            session.close()
-
-    # Patch the dependency
-    import app.db as app_db_module
-    original_get_session = app_db_module.get_session
-    app_db_module.get_session = override_get_session
-
-    try:
-        result = _run_self_test()
-        print(result)
-        sys.exit(0 if result == "PASS" else 1)
-    finally:
-        app_db_module.get_session = original_get_session
+    result = _run_self_test()
+    print(result)
+    sys.exit(0 if result == "PASS" else 1)

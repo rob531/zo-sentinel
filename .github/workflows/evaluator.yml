@@ -42,7 +42,11 @@ jobs:
           else
             # requests is needed by zo_sentinel.probes.duckdb_schema_uptime_probe
             # (loaded at import time by its test module). Stays cheap to install.
-            pip install pytest requests
+            # PyYAML: tests/test_graph_gap_directives_wired.py proves a CI
+            # caller from PARSED workflow structure, never from raw text
+            # (FU-305 -- a commented-out path string reads as an invocation).
+            # Pinned here rather than importorskip'd: a skip is not a pass.
+            pip install pytest requests PyYAML
           # app-tier deps so the Perspectives/Ask module self-tests run here
           pip install -r tests/ci/requirements-ci.txt
           fi
@@ -113,6 +117,7 @@ jobs:
             tests/test_ops_audit_state.py \
             tests/test_schema_truth_current.py \
             tests/test_queue_census.py \
+            tests/test_graph_gap_directives_wired.py \
             -q \
             --junitxml=artifacts/junit.xml
 

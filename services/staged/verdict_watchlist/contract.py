@@ -81,7 +81,7 @@ def get_watchlist(
             s.verdict,
             s.last_assessed
         FROM mcp_watchlist w
-        JOIN mcp_server_registry s ON w.server_id = s.id
+        JOIN McpServerRegistry s ON w.server_id = s.id
         WHERE w.org_id = :org_id
     """
     rows = db.execute(text(sql), {"org_id": org_id}).fetchall()
@@ -160,7 +160,7 @@ def get_risk_detail(
     # Axis scores
     axis_sql = """
         SELECT axis, score
-        FROM mcp_llm_axis_scores
+        FROM McpLlmAxisScore
         WHERE server_id = :server_id
     """
     axis_rows = db.execute(text(axis_sql), {"server_id": server_id}).fetchall()
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     with engine.begin() as conn:
         conn.executescript(
             """
-            CREATE TABLE mcp_server_registry (
+            CREATE TABLE McpServerRegistry (
                 id INTEGER PRIMARY KEY,
                 org_id INTEGER,
                 name TEXT,
@@ -220,7 +220,7 @@ if __name__ == "__main__":
         conn.execute(
             text(
                 """
-                INSERT INTO mcp_server_registry (id, org_id, name, risk_tier, verdict, last_assessed)
+                INSERT INTO McpServerRegistry (id, org_id, name, risk_tier, verdict, last_assessed)
                 VALUES
                     (1, 100, 'Alpha', 'high', 'malicious', '2024-01-01T00:00:00Z'),
                     (2, 100, 'Beta',  'medium', 'suspicious', '2024-01-02T00:00:00Z');

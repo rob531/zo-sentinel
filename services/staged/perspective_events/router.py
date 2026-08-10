@@ -5,9 +5,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from app.db import get_session
-from app.models import perspective_events, mcp_server_registry
+from app.models import PerspectiveEvent, McpServerRegistry
 
-router = APIRouter(prefix="/api", tags=["perspective_events"])
+router = APIRouter(prefix="/api", tags=["PerspectiveEvent"])
 
 class PerspectiveEventResponse(BaseModel):
     id: int
@@ -29,14 +29,14 @@ def get_perspective_events(db: Session, perspective_id: int, skip: int = 0, limi
     """Fetch paginated perspective events joined with server registry."""
     stmt = (
         select(
-            perspective_events,
-            mcp_server_registry.c.server_name
+            PerspectiveEvent,
+            McpServerRegistry.c.server_name
         )
         .join(
-            mcp_server_registry,
-            perspective_events.c.server_id == mcp_server_registry.c.id
+            McpServerRegistry,
+            PerspectiveEvent.c.server_id == McpServerRegistry.c.id
         )
-        .where(perspective_events.c.perspective_id == perspective_id)
+        .where(PerspectiveEvent.c.perspective_id == perspective_id)
         .offset(skip)
         .limit(limit)
     )
@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     conn = sqlite3.connect(":memory:")
     conn.executescript("""
-        CREATE TABLE mcp_server_registry (
+        CREATE TABLE McpServerRegistry (
             id INTEGER PRIMARY KEY,
             server_name TEXT NOT NULL,
             server_type TEXT,
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             created_at TIMESTAMP,
             updated_at TIMESTAMP
         );
-        CREATE TABLE perspective_events (
+        CREATE TABLE PerspectiveEvent (
             id INTEGER PRIMARY KEY,
             perspective_id INTEGER NOT NULL,
             server_id INTEGER NOT NULL,
@@ -98,12 +98,12 @@ if __name__ == "__main__":
             new_tier TEXT,
             seen BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (server_id) REFERENCES mcp_server_registry(id)
+            FOREIGN KEY (server_id) REFERENCES McpServerRegistry(id)
         );
-        INSERT INTO mcp_server_registry (id, server_name) VALUES (1, 'test-server');
-        INSERT INTO perspective_events (perspective_id, server_id, change_type, old_tier, new_tier, seen)
+        INSERT INTO McpServerRegistry (id, server_name) VALUES (1, 'test-server');
+        INSERT INTO PerspectiveEvent (perspective_id, server_id, change_type, old_tier, new_tier, seen)
         VALUES (1, 1, 'tier_change', 'low', 'high', 0);
-        INSERT INTO perspective_events (perspective_id, server_id, change_type, old_tier, new_tier, seen)
+        INSERT INTO PerspectiveEvent (perspective_id, server_id, change_type, old_tier, new_tier, seen)
         VALUES (1, 1, 'tier_change', 'medium', 'critical', 1);
     """)
     conn.row_factory = sqlite3.Row

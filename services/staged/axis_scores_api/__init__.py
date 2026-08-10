@@ -111,7 +111,7 @@ def get_server_risk_tier(server_id: int, session: Session = Depends(get_session)
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_server_registry WHERE server_id = {server_id}"}
+            json={"query": f"SELECT * FROM McpServerRegistry WHERE server_id = {server_id}"}
         )
         response.raise_for_status()
         return ServerRiskTier(**response.json()[0])
@@ -207,7 +207,7 @@ def get_risk_distribution_summary(session: Session = Depends(get_session)) -> Li
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": "SELECT risk_tier, COUNT(*) as count FROM mcp_server_registry GROUP BY risk_tier"}
+            json={"query": "SELECT risk_tier, COUNT(*) as count FROM McpServerRegistry GROUP BY risk_tier"}
         )
         response.raise_for_status()
         return [RiskDistributionSummary(**item) for item in response.json()]
@@ -219,7 +219,7 @@ def get_registry_growth_progress(session: Session = Depends(get_session)) -> Lis
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": "SELECT date, COUNT(*) as count FROM mcp_server_registry GROUP BY date"}
+            json={"query": "SELECT date, COUNT(*) as count FROM McpServerRegistry GROUP BY date"}
         )
         response.raise_for_status()
         return [RegistryGrowthProgress(**item) for item in response.json()]
@@ -243,7 +243,7 @@ def get_server_axis_scores(server_id: int, session: Session = Depends(get_sessio
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_llm_axis_scores WHERE server_id = {server_id}"}
+            json={"query": f"SELECT * FROM McpLlmAxisScore WHERE server_id = {server_id}"}
         )
         response.raise_for_status()
         return [ServerAxisScores(**item) for item in response.json()]

@@ -214,6 +214,66 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: App-graph gap directives (REPORT-ONLY -- the CONSUMER end of the capmap chain)
+        # improvement-loop cycle-0034, 2026-08-10, FU-311. The third and last
+        # unwired link of the chain FU-304 named: scan_capmap -> build_app_graph
+        # -> THIS (tool stems written without their directory prefix on purpose;
+        # dark_tools counts a prefixed path string as invocation-shaped and a
+        # comment is not a caller). #3106 wired the two PRODUCERS into this job.
+        # The CONSUMER stayed "consulted by NOTHING", which is the link that
+        # actually costs: a generated artifact with no reader is exactly how
+        # schema/app_graph.sql drifted for two months with every surface green.
+        #
+        # It reads artifacts/app_graph.sql -- the graph the step above JUST
+        # regenerated -- and deliberately NOT its own default, the committed
+        # schema/app_graph.sql. Measured on origin/main 3ba36e2f: the committed
+        # graph yields 6 "grounded" gaps of which 3 are schema_drift directives
+        # (mesh_events x2, policy_rules) for drift that the BLOCKING pull_check
+        # gate in this same job scores as ZERO, and it MISSES one real orphaned
+        # UI (dashboard.html). The regenerated graph yields 4, all orphaned-UI,
+        # 0 schema-drift. Run on its default input this tool would have fed the
+        # builder three fixes for a bug that no longer exists.
+        #
+        # PROPOSAL-ONLY is the tool's own contract ("never auto-feeds pending/").
+        # --out stays under artifacts/ so nothing here can reach graph_directives/
+        # or directives/{proposed,pending}/, and no later step sees a dirty tree.
+        #
+        # continue-on-error for the same reason the app-graph step above carries
+        # it: this is a reader, not a gate, and adding a required check is what
+        # produced the losses this repo has already paid for. The machine-checkable
+        # claim -- that this step exists, reads the regenerated graph, and writes
+        # only under artifacts/ -- lives in the ALREADY-REQUIRED pytest check
+        # (tests/test_graph_gap_directives_wired.py), with four permanent negative
+        # controls. The .txt below is written unconditionally so a "0 gaps" report
+        # can never be confused with a step that did not run.
+        if: always()
+        continue-on-error: true
+        run: |
+          python -m pip install --quiet 'duckdb>=1.5.5,<2.0'
+          mkdir -p artifacts
+          python tools/graph_gap_directives.py \
+            --graph artifacts/app_graph.sql \
+            --out artifacts/graph_directives 2>&1 \
+            | tee artifacts/graph_gap_directives.txt
+          {
+            echo "### app-graph gap directives (report-only)"
+            echo ""
+            echo '```'
+            cat artifacts/graph_gap_directives.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload app-graph gap directives
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-graph-gap-directives
+          path: |
+            artifacts/graph_gap_directives.txt
+            artifacts/graph_directives
+          if-no-files-found: warn
+          retention-days: 30
+
   static-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 6

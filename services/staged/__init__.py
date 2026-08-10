@@ -105,7 +105,7 @@ def get_score_disputes_endpoint(
         conditions.append("status = :status")
         params["status"] = status
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-    sql = f"SELECT * FROM mcp_score_disputes {where_clause} LIMIT 100"
+    sql = f"SELECT * FROM McpScoreDispute {where_clause} LIMIT 100"
     rows = _query_mesh(sql, params=params if params else None)
     return {"disputes": rows, "count": len(rows)}
 

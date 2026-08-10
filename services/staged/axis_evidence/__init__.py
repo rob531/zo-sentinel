@@ -58,9 +58,9 @@ def get_mesh_scores(server_id: int, db: Session = Depends(get_session)) -> Optio
 
 def setup_database(db: Session = Depends(get_session)) -> None:
     """Ensure database tables are created."""
-    db.execute("CREATE TABLE IF NOT EXISTS mcp_server_registry (id SERIAL PRIMARY KEY, name TEXT)")
-    db.execute("CREATE TABLE IF NOT EXISTS mcp_llm_axis_scores (id SERIAL PRIMARY KEY, server_id INTEGER, axis TEXT, score REAL)")
-    db.execute("CREATE TABLE IF NOT EXISTS mcp_score_disputes (id SERIAL PRIMARY KEY, server_id INTEGER, dispute TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS McpServerRegistry (id SERIAL PRIMARY KEY, name TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS McpLlmAxisScore (id SERIAL PRIMARY KEY, server_id INTEGER, axis TEXT, score REAL)")
+    db.execute("CREATE TABLE IF NOT EXISTS McpScoreDispute (id SERIAL PRIMARY KEY, server_id INTEGER, dispute TEXT)")
     db.execute("CREATE TABLE IF NOT EXISTS orgs (id SERIAL PRIMARY KEY, name TEXT)")
     db.execute("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, org_id INTEGER)")
 

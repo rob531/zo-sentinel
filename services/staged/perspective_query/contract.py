@@ -99,9 +99,9 @@ if __name__ == "__main__":
     # Seed the database with test data
     session = SessionLocal()
     try:
-        # Add test data for mcp_server_registry
+        # Add test data for McpServerRegistry
         session.execute(
-            "INSERT INTO mcp_server_registry (server_id, org_id, name) VALUES ('server1', 'org1', 'Server 1')"
+            "INSERT INTO McpServerRegistry (server_id, org_id, name) VALUES ('server1', 'org1', 'Server 1')"
         )
 
         # Add test data for perspective_snapshots
@@ -109,10 +109,10 @@ if __name__ == "__main__":
             "INSERT INTO perspective_snapshots (perspective_id, org_id, name) VALUES ('123e4567-e89b-12d3-a456-426614174000', 'org1', 'Perspective 1')"
         )
 
-        # Add test data for mcp_llm_axis_scores
+        # Add test data for McpLlmAxisScore
         session.execute(
             """
-            INSERT INTO mcp_llm_axis_scores (perspective_id, server_id, axis_name, label, p_top, p_critical, p_danger, score)
+            INSERT INTO McpLlmAxisScore (perspective_id, server_id, axis_name, label, p_top, p_critical, p_danger, score)
             VALUES
                 ('123e4567-e89b-12d3-a456-426614174000', 'server1', 'axis1', 'Label 1', 0.9, 0.8, 0.7, 0.85),
                 ('123e4567-e89b-12d3-a456-426614174000', 'server1', 'axis2', 'Label 2', 0.8, 0.7, 0.6, 0.75),

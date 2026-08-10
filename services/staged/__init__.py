@@ -40,12 +40,15 @@ def _post(endpoint: str, *, json: _t.Dict[str, _t.Any]) -> _t.Any:
     return resp.json()
 
 
-def _query_mesh(query: str, params: _t.Optional[_t.List[_t.Any]] = None) -> _RowList:
+def _query_mesh(query: str, params: _t.Optional[_t.Dict[str, _t.Any]] = None) -> _RowList:
     """Execute a SELECT against the mesh tables.
 
     The function forwards the query to the ``/query`` endpoint which expects a
     JSON payload with ``sql`` and optional ``params``.  The response is a list of
     rows where each row is a ``dict`` mapping column names to values.
+
+    B608 mitigation: params are passed as a dict and forwarded to write_service
+    which handles parameter binding server-side.
     """
     payload: _t.Dict[str, _t.Any] = {"sql": query}
     if params:
@@ -85,15 +88,49 @@ def get_signal_scores() -> _RowList:
     return signal_scores_endpoint()
 
 
+def get_score_disputes_endpoint(
+    server_id: _t.Optional[str] = None,
+    status: _t.Optional[str] = None,
+) -> _JSON:
+    """Return score disputes, optionally filtered by server_id and/or status.
+
+    Reads from ``mcp_signal_scores`` (disputes table in the mesh layer).
+    """
+    conditions: _t.List[str] = []
+    params: _t.Dict[str, _t.Any] = {}
+    if server_id is not None:
+        conditions.append("server_id = :server_id")
+        params["server_id"] = server_id
+    if status is not None:
+        conditions.append("status = :status")
+        params["status"] = status
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    sql = f"SELECT * FROM mcp_score_disputes {where_clause} LIMIT 100"
+    rows = _query_mesh(sql, params=params if params else None)
+    return {"disputes": rows, "count": len(rows)}
+
+
+def get_mesh_memory_endpoint(
+    entity_type: _t.Optional[str] = None,
+    entity_id: _t.Optional[str] = None,
+) -> _JSON:
+    """Alias for :func:`get_mesh_memory` with optional entity filter."""
+    if entity_type and entity_id:
+        rows = _query_mesh(
+            "SELECT * FROM mesh_memory WHERE entity_type = :entity_type AND entity_id = :entity_id ORDER BY timestamp DESC LIMIT 1",
+            params={"entity_type": entity_type, "entity_id": entity_id},
+        )
+        return rows[0] if rows else {}
+    return get_mesh_memory()
+
+
 def reset_quarantine_endpoint(server_id: str) -> bool:
     """Reset quarantine status for a given server.
 
     Performs an ``UPDATE`` on the ``service_health`` table.  The function returns
     ``True`` if the statement executed without error.
     """
-    sql = (
-        "UPDATE service_health SET status = 'active' WHERE server_id = :sid"
-    )
+    sql = "UPDATE service_health SET status = 'active' WHERE server_id = :sid"
     _post(
         "/execute",
         json={"sql": sql, "params": {"sid": server_id}, "wait": True},
@@ -109,10 +146,18 @@ def _run_self_test() -> bool:
     modify any persistent data – the ``reset_quarantine_endpoint`` call is made
     with a dummy ID that is safe to issue.
     """
+    # Verify all expected exports exist
+    from services.staged.admin_disputes import Users, ScoreDisputes
+    from app.models import User, McpScoreDispute
+    assert Users is User, "Users re-export mismatch"
+    assert ScoreDisputes is McpScoreDispute, "ScoreDisputes re-export mismatch"
+
     # The following calls will raise if the service is unavailable.
     _ = get_mesh_memory()
     _ = signal_scores_endpoint()
     _ = get_signal_scores()
+    _ = get_score_disputes_endpoint()
+    _ = get_mesh_memory_endpoint()
     # Reset with a harmless identifier; the endpoint is idempotent.
     _ = reset_quarantine_endpoint("test-server-id")
     return True

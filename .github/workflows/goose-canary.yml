@@ -382,6 +382,13 @@ jobs:
           OPENAI_BASE_URL: http://127.0.0.1:8796/v1
           # The shim does not authenticate; goose requires the var to be set.
           OPENAI_API_KEY: shim-tier-no-auth-required
+          # NOT INHERITED. `GOOSE_PROVIDER=openai` is written to $GITHUB_ENV by the
+          # `canary` job's "Map smoke rung" step; splitting this tier into its own
+          # job left it behind, and the installer runs CONFIGURE=false so there is
+          # no config file to fall back on. goose then exits in 0.03s having sent
+          # nothing -- which run 31385033251 reported, correctly, as requests=0 /
+          # TRANSPORT failure rather than as a rename.
+          GOOSE_PROVIDER: openai
           GOOSE_MODEL: zo-ladder-v1
           ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
           ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp_shim.log
@@ -404,9 +411,19 @@ jobs:
 
       - name: Shim tier -- assert the namespaced tool name arrived UNTRUNCATED
         run: |
-          set -euo pipefail
+          set -uo pipefail
           cat /tmp/shim_tier_requests.json
+          set +e
           python tools/canary/assert_shim_tool_names.py --record /tmp/shim_tier_requests.json
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            echo "---- goose transcript (the step that failed showed none) ----"
+            cat /tmp/shim_tier_goose.out || echo "(no transcript)"
+            echo "---- shim boot log ----"
+            cat /tmp/shim_tier_boot.log || echo "(no boot log)"
+            exit "$RC"
+          fi
 
       # NEGATIVE CONTROL. An assertion that has never been observed failing is
       # not evidence that the transport works; it is evidence that nothing was
@@ -419,6 +436,13 @@ jobs:
           ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
           OPENAI_BASE_URL: http://127.0.0.1:8796/v1
           OPENAI_API_KEY: shim-tier-no-auth-required
+          # NOT INHERITED. `GOOSE_PROVIDER=openai` is written to $GITHUB_ENV by the
+          # `canary` job's "Map smoke rung" step; splitting this tier into its own
+          # job left it behind, and the installer runs CONFIGURE=false so there is
+          # no config file to fall back on. goose then exits in 0.03s having sent
+          # nothing -- which run 31385033251 reported, correctly, as requests=0 /
+          # TRANSPORT failure rather than as a rename.
+          GOOSE_PROVIDER: openai
           GOOSE_MODEL: zo-ladder-v1
           ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp_neg.log
         run: |

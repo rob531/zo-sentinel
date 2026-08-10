@@ -112,8 +112,33 @@ jobs:
             tests/test_sha_green.py \
             tests/test_ops_audit_state.py \
             tests/test_schema_truth_current.py \
+            tests/test_queue_census.py \
             -q \
             --junitxml=artifacts/junit.xml
+
+      - name: Halt shadow report (REPORT-ONLY -- what the ARMED halt would do)
+        # NOT a new blocking gate. The machine-checkable claim this report carries
+        # -- "the founding case still fires" -- is asserted by
+        # tests/test_queue_census.py, which the step above now collects, so it is
+        # already blocking via an EXISTING required check. This step exists so the
+        # UPSTREAM/PRESENT/DOWNSTREAM narrative, which needs a human reader and
+        # cannot be asserted, is produced and archived on every run instead of
+        # being available only to whoever remembers the tool exists.
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          python tools/halt_shadow_report.py > artifacts/halt_shadow_report.txt 2>&1
+          cat artifacts/halt_shadow_report.txt
+
+      - name: Upload halt shadow report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: halt-shadow-report
+          path: artifacts/halt_shadow_report.txt
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload pytest results
         if: always()

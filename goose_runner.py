@@ -501,7 +501,14 @@ def _data_access_context(directive):
     files -- read via the write_service /query endpoint, never a CSV. Pre-empts the
     data-source hallucination on attempt 1 (schema-PRM only catches it reactively).
     Table list derived from the live schema KL so it stays real. Cached per process;
-    never raises."""
+    never raises.
+
+    NOTE (2026-08-11): the table list below is a HARDCODED LITERAL. An earlier
+    version of this docstring claimed it was "derived from the live schema KL
+    so it stays real"; it never was, and that sentence is why nobody looked
+    for the missing column truth for weeks. Real per-directive columns come
+    from _schema_ground_context(); this block carries table/class names and
+    the import contract only."""
     global _DATA_ACCESS_CTX
     if _DATA_ACCESS_CTX is not None:
         return _DATA_ACCESS_CTX
@@ -643,6 +650,12 @@ def _soa_service_name(directive_id):
     return s or _sanitise_service_name(directive_id) or "unnamed_service"
 
 
+_SCHEMA_HEADER = (
+    "REAL SCHEMA -- authoritative, read from the live app.models KL. Use ONLY "
+    "these columns; a column not listed here DOES NOT EXIST, and inventing one "
+    "is the single most common reason a build is rejected:\n")
+
+
 def _soa_schema_excerpt(directive):
     """LIVE schema excerpt for the tables a directive names, from the same
     app.models KL the schema-PRM gate lints against.
@@ -682,10 +695,117 @@ def _soa_schema_excerpt(directive):
             hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
     if not hits:
         return ""
-    return ("REAL SCHEMA -- authoritative, read from the live app.models KL. Use ONLY "
-            "these columns; a column not listed here DOES NOT EXIST, and inventing one "
-            "is the single most common reason a build is rejected:\n"
-            + "\n".join(sorted(hits)[:8]))
+    return _SCHEMA_HEADER + "\n".join(sorted(hits)[:8])
+
+
+_SCHEMA_KL_MEMO = {"mtime": None, "kl": None}
+
+
+def _schema_kl_cached():
+    """The schema KL, memoised on the KL file's mtime (CofC 2026-08-11 cond.3).
+
+    _soa_schema_excerpt used to rebuild the KL on every call. That was priced
+    for the SOA canary's 8 builds/day; the engine path runs ~588/day, so an
+    uncached rebuild would sit on the daemon's hot path 70x more often. Keyed
+    on mtime, not on a TTL, so a regenerated KL is picked up immediately and an
+    unchanged one is never rebuilt.
+
+    Returns (kl, klass) with klass in {"ok", "kl_error"} -- NEVER a bare None,
+    because "the KL is broken" and "the KL says nothing" are different facts
+    and this fleet has repeatedly been bitten by collapsing them (R6).
+    """
+    import schema_kl as _skl
+    path = PROJECT_DIR / "graphify-out" / "schema_kl.json"
+    try:
+        mtime = path.stat().st_mtime
+    except Exception:
+        mtime = None
+    if _SCHEMA_KL_MEMO["kl"] is not None and _SCHEMA_KL_MEMO["mtime"] == mtime:
+        return _SCHEMA_KL_MEMO["kl"], "ok"
+    try:
+        kl = _skl.build_schema_kl()
+    except Exception:
+        kl = _skl.load_schema_kl(str(path))
+    _SCHEMA_KL_MEMO["mtime"] = mtime
+    _SCHEMA_KL_MEMO["kl"] = kl
+    return kl, "ok"
+
+
+def _schema_ground_context(directive):
+    """THREE-STATE schema grounding: (text, klass) with klass one of
+    "matched" / "no_table_matched" / "kl_error".
+
+    WHY THIS EXISTS (CofC 2026-08-11, chairman review). _soa_schema_excerpt
+    inlines the real column list and has done since the SOA canary shipped --
+    but it was reachable ONLY from _soa_service_spec, i.e. only from the goose
+    canary path, which is capped at 8 builds/day. The engine path, which wrote
+    588 files on 2026-08-11 alone, never saw it. Its prompt instead told the
+    model "SYMBOL TABLE: docs/SCHEMA_TRUTH.md ... read it before writing an
+    import" -- a pointer a single-shot chat completion with no filesystem
+    CANNOT follow. So the cure existed, was correct, and was wired to the path
+    that does not run. schema-PRM blocked 775 builds on 2026-08-10 and 454 by
+    12:05 on 2026-08-11 (basis: /home/workspace/logs/goose_runner.log, which
+    ROTATED and begins 2026-08-09T20:15 -- no trend may be claimed from it, and
+    the "241 blocks on 08-04" comment below is UNKNOWN, not a baseline).
+
+    Returning a CLASS rather than "" is condition 4 of the ruling: an empty
+    string that means "no real table in this directive" and an empty string
+    that means "the KL failed to load" are indistinguishable to every caller,
+    and a change that ships as a silent no-op is the failure mode here.
+    """
+    try:
+        kl, _ = _schema_kl_cached()
+    except Exception:
+        return "", "kl_error"
+    models = ((kl or {}).get("models") or {})
+    if not models:
+        return "", "kl_error"
+    try:
+        blob = json.dumps(directive, default=str).lower()
+    except Exception:
+        blob = str(directive).lower()
+    hits = []
+    for name, meta in models.items():
+        meta = meta or {}
+        table = str(meta.get("table") or "")
+        if name.lower() in blob or (table and table.lower() in blob):
+            cols = [c for c in (meta.get("columns") or []) if c]
+            if not cols:
+                continue
+            hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
+    if not hits:
+        return "", "no_table_matched"
+    return (_SCHEMA_HEADER + "\n".join(sorted(hits)[:8])), "matched"
+
+
+# The engine path is a single chat completion with no filesystem. Telling it to
+# go read a file is worse than saying nothing: it names an authority the model
+# cannot consult, and a model sent to fetch truth it cannot reach invents it.
+# Dropped from the engine prompt whenever the REAL SCHEMA block is present.
+_SYMBOL_TABLE_POINTER = re.compile(
+    r"SYMBOL TABLE: docs/SCHEMA_TRUTH\.md.*?never invent one\. ", re.S)
+
+
+def _engine_task(task_text, directive, log=None):
+    """The engine's task text = the shared _task plus inlined REAL SCHEMA.
+
+    Scoped to the ENGINE call only (ruling condition 1): the goose path already
+    receives the excerpt via _soa_service_spec, and goose is the orchestrator --
+    its prompt is the one surface with no cheap rollback.
+    """
+    text, klass = _schema_ground_context(directive)
+    if klass != "matched":
+        if log:
+            log("[schema-ground] %s: %s -- engine prompt UNGROUNDED"
+                % (directive.get("directive_id") or directive.get("task") or "?", klass))
+        return task_text
+    grounded = _SYMBOL_TABLE_POINTER.sub("", task_text)
+    if log:
+        log("[schema-ground] %s: matched, %d model(s), %d chars -> engine"
+            % (directive.get("directive_id") or directive.get("task") or "?",
+               len([ln for ln in text.splitlines() if ln.startswith("  ")]),
+               len(text)))
+    return "%s\n\n%s" % (grounded, text)
 
 
 def _soa_service_spec(directive, content):
@@ -1881,7 +2001,8 @@ def run():
                         from zo_sentinel import engine_build as _engine
                         if _engine.enabled(DIRECTIVES_PATH):
                             fallback_result = _engine.build_with_engine(
-                                directive, _task, attempt=_attempt, log=log)
+                                directive, _engine_task(_task, directive, log),
+                                attempt=_attempt, log=log)
                             if fallback_result.get("model"):
                                 _routed_model = f"engine:{fallback_result['model']}"
                     except Exception as _ee:

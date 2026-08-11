@@ -151,6 +151,39 @@ class Run:
         ledger(f"phase_{phase}_{status}", self.state["run_id"])
 
 
+def _terminally_finished(state: dict) -> bool:
+    """Can this run EVER produce data again, however many times it is resumed?
+
+    FU-321 (2026-08-11). `open_run` asked only "is postcheck done?", which has no
+    answer for a run that FAILED. On 2026-08-11 run 20260811-061104 fired, the pod
+    FATALed fetching the transfer bundle, the instance was destroyed and import was
+    correctly skipped -- and the run then stayed, forever, "the newest unfinished
+    run". Every subsequent `--run` resumed it, aborted at import with
+    `preds.jsonl.gz missing`, and exited 1. Reproduced twice before it was found.
+
+    That is a DAM, not a stall: the next scheduled Tuesday run would have done the
+    same, spent $0, reported failure, and left the moat to go stale indefinitely --
+    the exact silent-staleness failure this lane exists to catch, committed by the
+    lane's own harness.
+
+    The deeper defect was TWO INSTRUMENTS DISAGREEING ABOUT ONE WORD. `--check-open
+    -runs` reads the LEDGER and honours an abort vocabulary (19 runs already sit in
+    that bucket); `open_run` read only the FILESYSTEM phase map and never consulted
+    it. A run could be simultaneously "deliberately closed, not stranded" and "the
+    newest unfinished run". Both readings were defensible; nothing reconciled them.
+
+    Terminal means the GPU is gone AND no predictions exist, so there is no path
+    back. `result: "ok"` is deliberately absent: a successful run closes via the
+    `run_closed` ledger event, and one that did not IS the stranded shape.
+    """
+    result = str((state or {}).get("result") or "").lower()
+    if not result:
+        return False                      # no verdict recorded = still resumable
+    if result.startswith(_ABANDON_RESULT_PREFIXES):
+        return True                       # killed_/abort_/abandon_/cancel_
+    return result.startswith("fail") and bool(state.get("destroyed"))
+
+
 def open_run(new_mode: str | None) -> Run:
     """Resume the newest unfinished run, else create one (fire phases only)."""
     RUNS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -158,6 +191,16 @@ def open_run(new_mode: str | None) -> Run:
     for d in candidates:
         r = Run(d)
         if r.state and not r.done("postcheck"):
+            if _terminally_finished(r.state):
+                # Skipped LOUDLY and counted: a run silently stepped over is how a
+                # dam becomes invisible a second time.
+                log(f"skipping terminally-finished run {r.state['run_id']} "
+                    f"(result={r.state.get('result')!r}, destroyed="
+                    f"{bool(r.state.get('destroyed'))}) -- not resumable; its "
+                    f"forensics and ledger history are untouched")
+                ledger("run_skipped_terminal", r.state["run_id"],
+                       result=r.state.get("result"))
+                continue
             log(f"resuming run {r.state['run_id']} (phases={r.state.get('phases')})")
             return r
     if new_mode is None:

@@ -180,8 +180,21 @@ def _terminally_finished(state: dict) -> bool:
     if not result:
         return False                      # no verdict recorded = still resumable
     if result.startswith(_ABANDON_RESULT_PREFIXES):
-        return True                       # killed_/abort_/abandon_/cancel_
-    return result.startswith("fail") and bool(state.get("destroyed"))
+        return True                       # killed_/abort_/abandon_/cancel_, spend released
+    if result.startswith("ok"):
+        return False                      # success closes via run_closed; if it did not,
+                                          # that IS the stranded shape and must keep alarming
+    # ANY other recorded verdict, once the instance is gone, is terminal. Deliberately NOT
+    # an enumeration of the failures seen so far. The first version of this function listed
+    # `fail`, and hours after it merged, wave 20260811-063956 returned `cost_breach` -- a
+    # verdict this file already knows about three lines away, which matched nothing here,
+    # dammed the pipeline identically, and proved that enumerating known failure names is
+    # the same defect in a new costume. `deadline` would have been the third.
+    # Every phase after `fire` needs an instance; without one the run cannot advance however
+    # often it is resumed. `destroyed` is the load-bearing half: a run still HOLDING an
+    # instance stays resumable whatever its state.json claims, because unreleased spend is
+    # exactly what `--check-open-runs` exists to catch.
+    return bool(state.get("destroyed"))
 
 
 def open_run(new_mode: str | None) -> Run:

@@ -1,0 +1,7 @@
+name = "attestation_refresher"
+import_path = "services.active.attestation_refresher.router"
+prefix = "/api"
+tag = "attestation_refresher"
+origin = "service"
+auth = "public"
+needs_data_layer = true

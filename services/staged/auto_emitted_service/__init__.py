@@ -44,26 +44,23 @@ def _post_query(table: str, filter: Optional[Dict[str, Any]] = None, timeout: in
         data = resp.json()
         return data.get("rows", [])
     except Exception:
-        # In production the caller may handle None/empty, but for the self‑test we swallow errors.
+        # In production the caller may handle None/empty; for the self‑test we swallow errors.
         return []
 
 
 def get_signal_scores(mesh_id: str) -> List[Dict[str, Any]]:
-    """Fetch signal scores for a given ``mesh_id`` from ``mcp_signal_scores``.
-    """
+    """Fetch signal scores for a given ``mesh_id`` from ``mcp_signal_scores``."""
     return _post_query("mcp_signal_scores", {"mesh_id": mesh_id})
 
 
 def signal_scores_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
-    """Endpoint‑style wrapper returning a dict with the mesh_id and its scores.
-    """
+    """Endpoint‑style wrapper returning a dict with the mesh_id and its scores."""
     rows = get_signal_scores(mesh_id)
     return {"mesh_id": mesh_id, "scores": rows, "count": len(rows)}
 
 
 def get_mesh_scores(mesh_id: str) -> List[Dict[str, Any]]:
-    """Fetch mesh scores for a given ``mesh_id`` from ``mcp_mesh_scores``.
-    """
+    """Fetch mesh scores for a given ``mesh_id`` from ``mcp_mesh_scores``."""
     return _post_query("mcp_mesh_scores", {"mesh_id": mesh_id})
 
 
@@ -98,8 +95,6 @@ def _run_self_test() -> None:
     propagates. Prints ``PASS`` on success.
     """
     dummy_id = "test-self"
-    # Each call is wrapped to ignore network errors – the test only checks that
-    # the code path executes without raising.
     try:
         get_signal_scores(dummy_id)
         get_mesh_scores(dummy_id)
@@ -109,8 +104,7 @@ def _run_self_test() -> None:
         mesh_memory_endpoint(dummy_id)
         reset_server_export_api_quarantine()
         print("PASS")
-    except Exception as exc:
-        # If anything unexpected happens, re‑raise to make the test fail.
+    except Exception:
         raise
 
 

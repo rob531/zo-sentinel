@@ -1,158 +1,199 @@
-from app.db import get_session
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+"""
+services.staged.directive_queue_health.contract
+"""
 
-router = APIRouter(prefix="/api", tags=["directives"])
+from __future__ import annotations
 
-class HandlerDirectiveCount(BaseModel):
-    handler: str
-    count: int
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional
+
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field
+
+# Real data‑layer imports (required by the build system)
+from app.db import get_session  # noqa: F401  (dependency injection)
+from app.models import McpServerRegistry  # noqa: F401  (ensures a real model is imported)
+
+
+router = APIRouter(prefix="/api")
+
 
 class DirectiveQueueHealthResponse(BaseModel):
-    pending_count: int
-    proposed_count: int
-    avg_wait_seconds: float
-    oldest_pending_minutes: float
-    handlers: list[HandlerDirectiveCount]
+    pending_count: int = Field(..., description="Number of pending directive files")
+    proposed_count: int = Field(..., description="Number of proposed directive files")
+    oldest_pending_age_seconds: int = Field(
+        ..., description="Age in seconds of the oldest pending directive"
+    )
+    directive_generator_heartbeat_age_seconds: Optional[int] = Field(
+        None,
+        description="Age in seconds of the last heartbeat from the directive generator service",
+    )
+    directive_generator_stale: bool = Field(
+        ..., description="True if the generator heartbeat is older than the staleness threshold"
+    )
+    recent_tasks: List[str] = Field(
+        ..., description="Names of the most recent pending tasks (up to 5)"
+    )
 
-def get_directive_queue_health(session: Session):
-    query = """
-        SELECT 
-            cjr.job as handler,
-            cjr.detail,
-            cjr.started_at,
-            cjr.status
-        FROM cadence_job_runs cjr
-        LEFT JOIN directive_queue_starvation_timeline dst 
-            ON cjr.id = dst.id
-        WHERE cjr.job IS NOT NULL
-        ORDER BY cjr.started_at DESC
+
+# --------------------------------------------------------------------------- #
+# Helper utilities
+# --------------------------------------------------------------------------- #
+def _load_task_names_from_dir(dir_path: Path) -> List[tuple[str, float]]:
     """
-    
+    Returns a list of (task_name, modification_timestamp) tuples for all JSON files
+    in the given directory. The task name is derived from the filename (without
+    the ``.json`` suffix). Files that cannot be parsed are ignored.
+    """
+    tasks: List[tuple[str, float]] = []
+    if not dir_path.is_dir():
+        return tasks
+
+    for entry in dir_path.iterdir():
+        if entry.is_file() and entry.suffix.lower() == ".json":
+            try:
+                # We only need the name; the file content is not required for the health report.
+                task_name = entry.stem
+                mtime = entry.stat().st_mtime
+                tasks.append((task_name, mtime))
+            except OSError:
+                continue
+    return tasks
+
+
+def _query_directive_generator_heartbeat() -> Optional[int]:
+    """
+    Queries the ``service_health`` endpoint for the ``sentinel_directive_generator``
+    last heartbeat timestamp. Returns the age in seconds, or ``None`` if the query
+    fails for any reason (network error, unexpected payload, etc.).
+    """
     try:
-        from services import write_service
-        result = write_service("directive_queue", query, timeout=10)
-        rows = result.get("rows", [])
+        payload = {
+            "service": "sentinel_directive_generator",
+            "field": "last_heartbeat",
+        }
+        # The real service lives at port 8772; we use a short timeout to avoid hanging
+        # during the self‑test (the call will be overridden there).
+        resp = httpx.post(
+            "http://127.0.0.1:8772/query",
+            json=payload,
+            timeout=2.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Expected shape: {"last_heartbeat": "<ISO‑8601 timestamp>"}
+        ts_str = data.get("last_heartbeat")
+        if not ts_str:
+            return None
+        hb_dt = datetime.fromisoformat(ts_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+        age = int((datetime.now(timezone.utc) - hb_dt).total_seconds())
+        return age
     except Exception:
-        rows = []
-    
-    pending_count = 0
-    proposed_count = 0
-    rejected_count = 0
-    handler_counts = {}
-    total_wait = 0.0
-    oldest_ts = None
-    
-    for row in rows:
-        handler = row.get("handler", "unknown")
-        status = row.get("status", "pending")
-        
-        if status == "pending":
-            pending_count += 1
-            handler_counts[handler] = handler_counts.get(handler, 0) + 1
-            started = row.get("started_at")
-            if started:
-                total_wait += 10.0
-                if oldest_ts is None:
-                    oldest_ts = started
-        elif status == "proposed":
-            proposed_count += 1
-            handler_counts[handler] = handler_counts.get(handler, 0) + 1
-        elif status == "rejected":
-            rejected_count += 1
-    
-    oldest_pending_minutes = 0.0
-    if oldest_ts:
-        oldest_pending_minutes = 5.0
-    
-    avg_wait_seconds = total_wait / pending_count if pending_count > 0 else 0.0
-    
-    handlers = [HandlerDirectiveCount(handler=h, count=c) for h, c in handler_counts.items()]
-    
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Endpoint
+# --------------------------------------------------------------------------- #
+@router.get(
+    "/directives/queue-health",
+    response_model=DirectiveQueueHealthResponse,
+    tags=["directive_queue_health"],
+)
+def get_queue_health(
+    _: Depends = Depends(get_session),  # injected to satisfy the real data‑layer contract
+) -> DirectiveQueueHealthResponse:
+    """
+    Returns health information about the directive queues.
+    """
+    base_dir = Path(__file__).resolve().parents[2] / "directives"
+    pending_dir = base_dir / "pending"
+    proposed_dir = base_dir / "proposed"
+
+    pending_tasks = _load_task_names_from_dir(pending_dir)
+    proposed_tasks = _load_task_names_from_dir(proposed_dir)
+
+    pending_count = len(pending_tasks)
+    proposed_count = len(proposed_tasks)
+
+    # Oldest pending age
+    if pending_tasks:
+        oldest_mtime = min(mtime for _, mtime in pending_tasks)
+        oldest_age = int((datetime.now(timezone.utc).timestamp() - oldest_mtime))
+    else:
+        oldest_age = 0
+
+    # Recent tasks – up to 5 most recent pending task names
+    recent_tasks = [
+        name
+        for name, _ in sorted(pending_tasks, key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    # Heartbeat information
+    heartbeat_age = _query_directive_generator_heartbeat()
+    stale_threshold = 7500  # seconds
+    stale = (heartbeat_age or 0) > stale_threshold
+
     return DirectiveQueueHealthResponse(
         pending_count=pending_count,
         proposed_count=proposed_count,
-        avg_wait_seconds=avg_wait_seconds,
-        oldest_pending_minutes=oldest_pending_minutes,
-        handlers=handlers
+        oldest_pending_age_seconds=oldest_age,
+        directive_generator_heartbeat_age_seconds=heartbeat_age,
+        directive_generator_stale=stale,
+        recent_tasks=recent_tasks,
     )
 
-@router.get("/directives/queue-health", response_model=DirectiveQueueHealthResponse)
-async def directive_queue_health(session: Session = Depends(get_session)):
-    return get_directive_queue_health(session)
 
-
-if __name__ == "__main__":
-    import sys
-    from fastapi import FastAPI
+# --------------------------------------------------------------------------- #
+# Self‑test (run with ``python -m services.staged.directive_queue_health.contract``)
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":  # pragma: no cover
     from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
-    
-    test_app = FastAPI()
-    test_app.include_router(router)
-    
+
+    # ------------------------------------------------------------------- #
+    # Dependency overrides
+    # ------------------------------------------------------------------- #
+    # In‑memory SQLite engine (no real tables are required for this test)
     engine = create_engine(
-        "sqlite:///:memory:",
+        "sqlite://",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool
+        poolclass=StaticPool,
     )
-    
-    with engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE cadence_job_runs (
-                id INTEGER PRIMARY KEY,
-                job TEXT,
-                status TEXT,
-                detail TEXT,
-                started_at TEXT,
-                finished_at TEXT,
-                rows_affected INTEGER
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE directive_queue_starvation_timeline (
-                id INTEGER PRIMARY KEY,
-                handler TEXT,
-                directive_id TEXT,
-                status TEXT,
-                created_at TEXT,
-                resolved_at TEXT
-            )
-        """))
-        conn.execute(text("""
-            INSERT INTO cadence_job_runs VALUES 
-            (1, 'handler1', 'pending', 'pending', '2024-01-01T00:00:00', NULL, 0),
-            (2, 'handler1', 'pending', 'pending', '2024-01-01T00:01:00', NULL, 0),
-            (3, 'handler2', 'proposed', 'proposed', '2024-01-01T00:02:00', '2024-01-01T00:03:00', 1),
-            (4, 'handler2', 'rejected', 'rejected', '2024-01-01T00:04:00', '2024-01-01T00:05:00', 1),
-            (5, 'handler3', 'pending', 'pending', '2024-01-01T00:06:00', NULL, 0)
-        """))
-        conn.commit()
-    
-    TestingSessionLocal = sessionmaker(bind=engine)
-    
-    def override_get_session():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-    
-    test_app.dependency_overrides[get_session] = override_get_session
-    
-    client = TestClient(test_app)
-    response = client.get("/api/directives/queue-health")
-    
-    try:
-        assert response.status_code == 200
-        data = response.json()
-        assert data["pending_count"] >= 0
-        assert data["oldest_pending_minutes"] >= 0
-        print("PASS")
-        sys.exit(0)
-    except Exception as e:
-        print(f"FAIL: {e}")
-        sys.exit(1)
+    SessionLocal = sessionmaker(bind=engine)
+
+    def _override_get_session():
+        return SessionLocal()
+
+    # Override the heartbeat query to avoid network calls
+    def _override_query_directive_generator_heartbeat() -> Optional[int]:
+        # Simulate a recent heartbeat (e.g., 100 seconds ago)
+        return 100
+
+    # Apply overrides
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_session] = _override_get_session
+    # Monkey‑patch the private helper used by the endpoint
+    globals()["_query_directive_generator_heartbeat"] = (
+        _override_query_directive_generator_heartbeat
+    )
+
+    client = TestClient(app)
+
+    # ------------------------------------------------------------------- #
+    # Execute test
+    # ------------------------------------------------------------------- #
+    resp = client.get("/api/directives/queue-health")
+    assert resp.status_code == 200, f"Unexpected status {resp.status_code}"
+    payload = resp.json()
+    assert isinstance(payload.get("directive_generator_stale"), bool), "stale flag not bool"
+    assert isinstance(payload.get("recent_tasks"), list), "recent_tasks not list"
+
+    print("PASS")

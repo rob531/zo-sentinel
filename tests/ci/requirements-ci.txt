@@ -4,7 +4,7 @@
 # a surprise major release can't silently break the gate.
 duckdb>=1.5.5,<2.0
 fastapi>=0.138.2,<1.0
-uvicorn[standard]>=0.51.0,<1.0
+uvicorn[standard]>=0.52.3,<1.0
 requests>=2.34.2,<3.0
 # httpx powers Starlette's TestClient, used by the front-end runner to drive
 # ui_server's routes in-process (tests/ci/frontend_runner.py).

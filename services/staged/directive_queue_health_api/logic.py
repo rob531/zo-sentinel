@@ -1,219 +1,125 @@
-import os
-import json
-import datetime
-from typing import List, Dict, Optional
-
+from fastapi import Depends
+from pydantic import BaseModel
+from typing import List
 import requests
-from fastapi import APIRouter, Depends, FastAPI
-from pydantic import BaseModel, Field
-from fastapi.testclient import TestClient
+from app.db import get_session
+from sqlalchemy.orm import Session
 
-# Real application data layer import (required by the build system)
-from app.db import get_session  # noqa: F401  (imported for side‑effects / contract)
+app = None
 
-router = APIRouter()
-
+class StaleDaemon(BaseModel):
+    name: str
+    age_seconds: int
 
 class DirectiveQueueHealthResponse(BaseModel):
-    pending_tasks: List[str] = Field(..., description="List of pending task identifiers")
-    proposed_tasks: List[str] = Field(..., description="List of proposed task identifiers")
-    handler_counts: Dict[str, int] = Field(..., description="Aggregated count per handler")
-    recent_failures: int = Field(..., description="Number of recent failure events")
-    last_failure_at: Optional[str] = Field(
-        None, description="ISO‑8601 timestamp of the most recent failure or null"
+    proposed_count: int
+    pending_count: int
+    generator_status: str
+    stale_daemons: List[StaleDaemon]
+    queue_capacity_pct: float
+
+def query_write_service(sql: str) -> dict:
+    response = requests.post(
+        "http://127.0.0.1:8772/query",
+        json={"sql": sql},
+        timeout=30
     )
+    response.raise_for_status()
+    return response.json()
 
-
-def _load_tasks(base_dir: str) -> Dict[str, List[str]]:
-    """
-    Scan ``pending`` and ``proposed`` sub‑directories under ``base_dir``.
-    Returns a mapping with keys ``pending`` and ``proposed`` containing the
-    ``task`` field from each JSON file.
-    """
-    result = {"pending": [], "proposed": []}
-    for category in ("pending", "proposed"):
-        dir_path = os.path.join(base_dir, "directives", category)
-        if not os.path.isdir(dir_path):
-            continue
-        for fname in os.listdir(dir_path):
-            if not fname.lower().endswith(".json"):
-                continue
-            fpath = os.path.join(dir_path, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                task = data.get("task")
-                if isinstance(task, str):
-                    result[category].append(task)
-            except Exception:
-                # Silently ignore malformed files – they are not part of health metrics
-                continue
-    return result
-
-
-def _aggregate_handler_counts(base_dir: str) -> Dict[str, int]:
-    """
-    Walk both ``pending`` and ``proposed`` directories and count occurrences of the
-    top‑level ``handler`` field.
-    """
-    counts: Dict[str, int] = {}
-    for category in ("pending", "proposed"):
-        dir_path = os.path.join(base_dir, "directives", category)
-        if not os.path.isdir(dir_path):
-            continue
-        for fname in os.listdir(dir_path):
-            if not fname.lower().endswith(".json"):
-                continue
-            fpath = os.path.join(dir_path, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                handler = data.get("handler")
-                if isinstance(handler, str):
-                    counts[handler] = counts.get(handler, 0) + 1
-            except Exception:
-                continue
-    return counts
-
-
-def _query_recent_failures() -> Dict[str, Optional[object]]:
-    """
-    Query the mesh_memory table via the write‑service for failure‑type events
-    in the last 48 hours. Returns a dict with ``count`` and ``last`` keys.
-    """
-    query_payload = {
-        "sql": """
-            SELECT
-                COUNT(*) AS cnt,
-                MAX(event_time) AS last
-            FROM mesh_memory
-            WHERE event_type IN ('build_failure', 'directive_generation')
-              AND event_time >= (NOW() - INTERVAL '48 HOURS')
-        """
+def get_directive_counts() -> dict:
+    proposed_result = query_write_service(
+        "SELECT COUNT(*) as count FROM directives WHERE status = 'proposed'"
+    )
+    pending_result = query_write_service(
+        "SELECT COUNT(*) as count FROM directives WHERE status = 'pending'"
+    )
+    return {
+        "proposed_count": proposed_result[0]["count"] if proposed_result else 0,
+        "pending_count": pending_result[0]["count"] if pending_result else 0
     }
-    try:
-        resp = requests.post(
-            "http://127.0.0.1:8772/query", json=query_payload, timeout=5
+
+def get_stale_daemons() -> List[StaleDaemon]:
+    stale_result = query_write_service(
+        "SELECT name, EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) as age_seconds "
+        "FROM service_health WHERE last_heartbeat < NOW() - INTERVAL '60 seconds'"
+    )
+    return [StaleDaemon(name=r["name"], age_seconds=int(r["age_seconds"])) for r in stale_result]
+
+def get_generator_status() -> str:
+    health_result = query_write_service(
+        "SELECT status, last_heartbeat FROM service_health WHERE service_name = 'sentinel_directive_generator'"
+    )
+    if not health_result:
+        return "unknown"
+    row = health_result[0]
+    status = row.get("status", "unknown")
+    heartbeat = row.get("last_heartbeat")
+    if heartbeat:
+        age = query_write_service(
+            "SELECT EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) as age FROM service_health WHERE service_name = 'sentinel_directive_generator'"
         )
-        resp.raise_for_status()
-        data = resp.json()
-        rows = data.get("rows", [])
-        if rows:
-            row = rows[0]
-            cnt = int(row.get("cnt", 0))
-            last = row.get("last")
-            if isinstance(last, str):
-                # Ensure ISO‑8601 format; if not, attempt conversion
-                try:
-                    datetime.datetime.fromisoformat(last)
-                except Exception:
-                    last = None
-            else:
-                last = None
-            return {"count": cnt, "last": last}
-    except Exception:
-        # On any error, fall back to zero failures and no timestamp
-        pass
-    return {"count": 0, "last": None}
+        if age and age[0]["age"] > 60:
+            return "stale"
+    return status if status else "unknown"
 
-
-@router.get(
-    "/api/internal/directive/queue-health",
-    response_model=DirectiveQueueHealthResponse,
-    tags=["internal"],
-)
-async def get_queue_health(
-    base_dir: str = Depends(lambda: os.getenv("DIRECTIVE_ROOT", ".")),
-    _session=Depends(get_session),  # kept for contract compliance; not used here
-):
-    """
-    Assemble health information for the directive queue.
-    """
-    tasks = _load_tasks(base_dir)
-    handler_counts = _aggregate_handler_counts(base_dir)
-    failures = _query_recent_failures()
-
+def health() -> DirectiveQueueHealthResponse:
+    counts = get_directive_counts()
+    generator_status = get_generator_status()
+    stale_daemons = get_stale_daemons()
+    total = counts["proposed_count"] + counts["pending_count"]
+    queue_capacity_pct = (total / 10000) * 100
     return DirectiveQueueHealthResponse(
-        pending_tasks=tasks.get("pending", []),
-        proposed_tasks=tasks.get("proposed", []),
-        handler_counts=handler_counts,
-        recent_failures=failures["count"],
-        last_failure_at=failures["last"],
+        proposed_count=counts["proposed_count"],
+        pending_count=counts["pending_count"],
+        generator_status=generator_status,
+        stale_daemons=stale_daemons,
+        queue_capacity_pct=queue_capacity_pct
     )
 
+def get_app():
+    global app
+    if app is None:
+        from fastapi import FastAPI
+        app = FastAPI()
+        @app.get("/api/internal/directive-queue/health", response_model=DirectiveQueueHealthResponse)
+        async def get_directive_queue_health():
+            return health()
+    return app
 
 if __name__ == "__main__":
-    # ----------------------------------------------------------------------
-    # Self‑test using FastAPI's TestClient and a temporary filesystem layout.
-    # ----------------------------------------------------------------------
-    import tempfile
-    from unittest.mock import patch
+    from unittest.mock import patch, MagicMock
+    from fastapi.testclient import TestClient
 
-    # Create a temporary directory structure with fake directive JSON files
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.makedirs(os.path.join(tmpdir, "directives", "pending"))
-        os.makedirs(os.path.join(tmpdir, "directives", "proposed"))
+    mock_proposed_result = [{"count": 3}]
+    mock_pending_result = [{"count": 2}]
+    mock_stale_result = [
+        {"name": "daemon1", "age_seconds": 600},
+        {"name": "daemon2", "age_seconds": 1200},
+    ]
+    mock_health_result = [{"status": "running", "last_heartbeat": "2024-01-01T00:00:00"}]
+    mock_age_result = [{"age": 120}]
 
-        # Three directive files: two pending, one proposed
-        directives = [
-            ("pending", "task1.json", {"task": "task1", "handler": "alpha"}),
-            ("pending", "task2.json", {"task": "task2", "handler": "beta"}),
-            ("proposed", "task3.json", {"task": "task3", "handler": "alpha"}),
-        ]
+    def mock_post(url, **kwargs):
+        m = MagicMock()
+        m.raise_for_status = MagicMock()
+        sql = kwargs.get("json", {}).get("sql", "")
+        if "proposed" in sql:
+            m.json.return_value = mock_proposed_result
+        elif "pending" in sql:
+            m.json.return_value = mock_pending_result
+        elif "stale" in sql.lower() or "service_health" in sql.lower():
+            m.json.return_value = mock_stale_result
+        elif "sentinel_directive_generator" in sql and "age" in sql:
+            m.json.return_value = mock_age_result
+        elif "sentinel_directive_generator" in sql:
+            m.json.return_value = mock_health_result
+        return m
 
-        for category, fname, payload in directives:
-            fpath = os.path.join(tmpdir, "directives", category, fname)
-            with open(fpath, "w", encoding="utf-8") as f:
-                json.dump(payload, f)
-
-        # Mock the external write_service query
-        mock_response = {
-            "rows": [
-                {
-                    "cnt": 7,
-                    "last": datetime.datetime.utcnow()
-                    .replace(microsecond=0)
-                    .isoformat()
-                    + "Z",
-                }
-            ]
-        }
-
-        def mock_post(*_, **kwargs):
-            class MockResp:
-                def raise_for_status(self):
-                    pass
-
-                def json(self):
-                    return mock_response
-
-            return MockResp()
-
-        # Build FastAPI app with the router
-        app = FastAPI()
-        app.include_router(router)
-
-        # Override the get_session dependency with a dummy (no DB needed)
-        def dummy_session():
-            return None
-
-        app.dependency_overrides[get_session] = dummy_session
-
-        # Set environment variable so the endpoint sees our temp directory
-        os.environ["DIRECTIVE_ROOT"] = tmpdir
-
-        with patch("requests.post", new=mock_post):
-            client = TestClient(app)
-            resp = client.get("/api/internal/directive/queue-health")
-            assert resp.status_code == 200, f"Unexpected status {resp.status_code}"
-            data = resp.json()
-
-            # Validate handler_counts sum equals total number of directives (3)
-            total_handlers = sum(data.get("handler_counts", {}).values())
-            assert total_handlers == 3, f"Handler count mismatch: {total_handlers}"
-
-            # recent_failures must be an integer
-            assert isinstance(data.get("recent_failures"), int), "recent_failures not int"
-
-            # Print PASS if all assertions succeed
-            print("PASS")
+    with patch("requests.post", mock_post):
+        client = TestClient(get_app())
+        response = client.get("/api/internal/directive-queue/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["stale_daemons"]) >= 1
+        print("PASS")

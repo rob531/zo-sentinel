@@ -1,94 +1,150 @@
+"""directive_queue_health_api router"""
 from fastapi import APIRouter, Depends
-from fastapi.testclient import TestClient
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from typing import List
+import requests
 
 from app.db import get_session
 
-router = APIRouter(prefix="/api", tags=["health"])
+router = APIRouter(prefix="/api", tags=["directive_queue_health"])
+
+
+class StaleDaemon(BaseModel):
+    name: str
+    age_seconds: int
 
 
 class DirectiveQueueHealthResponse(BaseModel):
-    queue_depth: int
-    processing_time: float
-    failure_rate: float
+    proposed_count: int
+    pending_count: int
+    generator_status: str
+    stale_daemons: List[StaleDaemon]
+    queue_capacity_pct: float
 
 
-def get_directive_queue_metrics(session: Session) -> DirectiveQueueHealthResponse:
-    result = session.execute(
-        text("""
-            SELECT 
-                COALESCE(queue_depth, 0) as queue_depth,
-                COALESCE(processing_time, 0.0) as processing_time,
-                COALESCE(failure_rate, 0.0) as failure_rate
-            FROM directive_queue_health
-            ORDER BY id DESC
-            LIMIT 1
-        """)
+def query_write_service(sql: str) -> dict:
+    """Query the write_service /query endpoint."""
+    response = requests.post(
+        "http://127.0.0.1:8772/query",
+        json={"sql": sql},
+        timeout=30
     )
-    row = result.fetchone()
-    if row:
-        return DirectiveQueueHealthResponse(
-            queue_depth=row.queue_depth,
-            processing_time=float(row.processing_time),
-            failure_rate=float(row.failure_rate)
-        )
-    return DirectiveQueueHealthResponse(queue_depth=0, processing_time=0.0, failure_rate=0.0)
+    response.raise_for_status()
+    return response.json()
 
 
-@router.get("/health/directive_queue", response_model=DirectiveQueueHealthResponse)
-def get_directive_queue_health(session: Session = Depends(get_session)):
-    return get_directive_queue_metrics(session)
+def get_directive_counts() -> tuple[int, int]:
+    """Get proposed and pending directive counts from write_service."""
+    proposed_sql = "SELECT COUNT(*) as count FROM directives/proposed"
+    pending_sql = "SELECT COUNT(*) as count FROM directives/pending"
+    
+    proposed_result = query_write_service(proposed_sql)
+    pending_result = query_write_service(pending_sql)
+    
+    proposed_count = proposed_result.get("rows", [{}])[0].get("count", 0) if proposed_result.get("rows") else 0
+    pending_count = pending_result.get("rows", [{}])[0].get("count", 0) if pending_result.get("rows") else 0
+    
+    return proposed_count, pending_count
+
+
+def get_generator_status() -> str:
+    """Get sentinel_directive_generator liveness status."""
+    health_sql = "SELECT status FROM service_health WHERE service_name = 'sentinel_directive_generator'"
+    try:
+        result = query_write_service(health_sql)
+        if result.get("rows"):
+            return result["rows"][0].get("status", "unknown")
+    except Exception:
+        pass
+    return "unknown"
+
+
+def get_stale_daemons() -> List[StaleDaemon]:
+    """Get list of stale daemons from service_health."""
+    stale_sql = """
+        SELECT name, age_seconds 
+        FROM service_health 
+        WHERE age_seconds > 300 AND service_type = 'daemon'
+    """
+    try:
+        result = query_write_service(stale_sql)
+        return [
+            StaleDaemon(name=row["name"], age_seconds=row["age_seconds"])
+            for row in result.get("rows", [])
+        ]
+    except Exception:
+        return []
+
+
+def calculate_queue_capacity(proposed: int, pending: int) -> float:
+    """Calculate queue capacity percentage (assuming max 1000)."""
+    max_capacity = 1000
+    current = proposed + pending
+    return min(100.0, round((current / max_capacity) * 100, 2))
+
+
+@router.get("/internal/directive-queue/health", response_model=DirectiveQueueHealthResponse)
+async def health():
+    """Get directive queue health metrics."""
+    proposed_count, pending_count = get_directive_counts()
+    generator_status = get_generator_status()
+    stale_daemons = get_stale_daemons()
+    queue_capacity_pct = calculate_queue_capacity(proposed_count, pending_count)
+    
+    return DirectiveQueueHealthResponse(
+        proposed_count=proposed_count,
+        pending_count=pending_count,
+        generator_status=generator_status,
+        stale_daemons=stale_daemons,
+        queue_capacity_pct=queue_capacity_pct
+    )
 
 
 if __name__ == "__main__":
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    with engine.connect() as conn:
-        conn.execute(text("""
-            CREATE TABLE directive_queue_health (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                queue_depth INTEGER NOT NULL,
-                processing_time REAL NOT NULL,
-                failure_rate REAL NOT NULL
-            )
-        """))
-        conn.execute(text("""
-            INSERT INTO directive_queue_health (queue_depth, processing_time, failure_rate)
-            VALUES 
-                (42, 1.23, 0.05),
-                (38, 0.87, 0.03),
-                (55, 2.15, 0.08)
-        """))
-        conn.commit()
-
-    def override_get_session():
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
+    import unittest.mock as mock
+    
     from fastapi import FastAPI
-    test_app = FastAPI()
-    test_app.include_router(router)
-    test_app.dependency_overrides[get_session] = override_get_session
-
-    client = TestClient(test_app)
-    response = client.get("/api/health/directive_queue")
-
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-    data = response.json()
-
-    assert data["queue_depth"] == 55, f"Expected queue_depth 55, got {data['queue_depth']}"
-    assert data["processing_time"] == 2.15, f"Expected processing_time 2.15, got {data['processing_time']}"
-    assert data["failure_rate"] == 0.08, f"Expected failure_rate 0.08, got {data['failure_rate']}"
-
-    print("PASS")
+    
+    # Mock write_service responses
+    proposed_response = {"rows": [{"count": 3}]}
+    pending_response = {"rows": [{"count": 2}]}
+    stale_daemons_response = {
+        "rows": [
+            {"name": "daemon_1", "age_seconds": 600},
+            {"name": "daemon_2", "age_seconds": 900}
+        ]
+    }
+    status_response = {"rows": [{"status": "healthy"}]}
+    
+    def mock_post(url, **kwargs):
+        mock_response = mock.MagicMock()
+        sql = kwargs.get("json", {}).get("sql", "")
+        
+        if "directives/proposed" in sql:
+            mock_response.json.return_value = proposed_response
+        elif "directives/pending" in sql:
+            mock_response.json.return_value = pending_response
+        elif "service_name = 'sentinel_directive_generator'" in sql:
+            mock_response.json.return_value = status_response
+        elif "age_seconds > 300" in sql:
+            mock_response.json.return_value = stale_daemons_response
+        else:
+            mock_response.json.return_value = {"rows": []}
+        
+        mock_response.raise_for_status = mock.MagicMock()
+        return mock_response
+    
+    with mock.patch("requests.post", side_effect=mock_post):
+        app = FastAPI()
+        app.include_router(router)
+        
+        client = app.router  # get test client
+        from fastapi.testclient import TestClient
+        with TestClient(app) as tc:
+            response = tc.get("/api/internal/directive-queue/health")
+            
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert len(data["stale_daemons"]) >= 1, f"Expected stale_daemons >= 1, got {len(data['stale_daemons'])}"
+            
+            print("PASS")

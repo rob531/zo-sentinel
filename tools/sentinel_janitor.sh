@@ -144,4 +144,23 @@ if [ -f "$REKEY" ]; then
     fi
 fi
 
+# 4. REPO-ROOT PACKAGE MARKER MUTATION (2026-08-22, daily-chairman-review).
+#    zo_sentinel/__init__.py is a bare package marker by contract. Twice now
+#    (GH #3415, 2026-08-13..16, a three-day total build outage; and again by
+#    2026-08-22) it was overwritten with an "Auto-emitted service package" body
+#    carrying ~20 `from .X import Y` lines naming modules that do not exist, so
+#    `import zo_sentinel` raises ModuleNotFoundError and EVERY
+#    `python3 -m zo_sentinel.*` entrypoint dies at package init. The running
+#    promoter survives because it holds the pre-mutation module in memory --
+#    which is exactly why nothing alarms until a restart, and then a restart
+#    loop that never yields a surviving process looks, from outside, identical
+#    to a healthy one.
+#    The WRITER is not yet identified, so this guard tests the OUTCOME (does the
+#    package import?) rather than policing a writer, and repairs from HEAD.
+#    Idempotent; exits 0 on a clean tree; snapshots the mutation before repair.
+PMG="$SENTINEL/ops/host/package_marker_guard.py"
+if [ -f "$PMG" ]; then
+    python3 "$PMG" 2>&1 | sed 's/^/  marker_guard: /' || log "package_marker_guard NONZERO -- markers still broken after repair"
+fi
+
 log "tick complete"

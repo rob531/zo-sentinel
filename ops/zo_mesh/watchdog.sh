@@ -1,5 +1,20 @@
 #!/bin/zsh
-# watchdog.v3.9 - autonomous self-healer for ZOMesh
+# watchdog.v3.10 - autonomous self-healer for ZOMesh
+#
+# CHANGELOG vs v3.9 (this change, 2026-08-22, GH #3415 prevention 1 / FU-349):
+#   - FIX: a restart was recorded as a repair the moment the relaunch command
+#     was issued. During the 2026-08-13..16 outage every restarted promoter
+#     died at package init in <3s and the watchdog faithfully 'repaired' it
+#     for three days -- from outside, a process that never starts looks
+#     identical to one that is running. Every restart this tick is now
+#     RE-OBSERVED ~10s later (_verify_restarts, one sleep for the whole
+#     batch): a daemon with no surviving process, or a service whose /health
+#     is still non-200, is logged as <name>_restart_FAILED and flips
+#     HEALTHY=false. A restart that yields no surviving process is a
+#     FAILURE, not a recovery. Census of same-shape sites in this commit:
+#     _svc, _daemon, _daemon_tp, WorldAgent, IntentEngine here, plus
+#     ops/host/restart_promoter.sh (which also gains --restart + outcome
+#     verification).
 #
 # CHANGELOG vs v3.8 (this change) -- FORWARD-PORTED into the committed copy
 # 2026-07-30; this fix has been LIVE on /home/workspace/zo_mesh/watchdog.sh
@@ -103,6 +118,7 @@
 LOGS=/home/workspace/logs; MESH=/home/workspace/zo_mesh; SENTINEL=/home/workspace/zo_sentinel
 mkdir -p $LOGS
 TS=$(date '+%Y-%m-%d %H:%M:%S'); HEALTHY=true; ACTIONS=()
+RESTART_VERIFY=(); SVC_VERIFY=()
 log() { echo "[$TS] $1"; }
 
 TRUST_PIPELINE=(
@@ -133,6 +149,7 @@ _svc() {
         esac
         sleep 3
         HEALTHY=false; ACTIONS+=("${name}_restart")
+        SVC_VERIFY+=("$port|$name")
     fi
 }
 
@@ -155,11 +172,13 @@ _daemon() {
         log "$name down -- restarting"
         eval "nohup $start_cmd >> $LOGS/$logfile 2>&1 &"
         HEALTHY=false; ACTIONS+=("${name}_restart")
+        RESTART_VERIFY+=("python.*$script|$name")
     elif [[ "$count" -gt 1 ]]; then
         log "$name duplicates ($count) -- deduplicating"
         pkill -f "python.*$script" 2>/dev/null; sleep 2
         eval "nohup $start_cmd >> $LOGS/$logfile 2>&1 &"
         HEALTHY=false; ACTIONS+=("${name}_dedup")
+        RESTART_VERIFY+=("python.*$script|$name")
     fi
 }
 
@@ -175,6 +194,7 @@ _daemon_tp() {
         log "$name down -- restarting via daemon_wrapper"
         nohup bash $MESH/daemon_wrapper.sh "$name" "$SENTINEL/$script" >> "$LOGS/$logfile" 2>&1 &
         HEALTHY=false; ACTIONS+=("${name}_restart")
+        RESTART_VERIFY+=("python.*$script|$name")
         return
     fi
 
@@ -183,6 +203,7 @@ _daemon_tp() {
         pkill -f "python.*$script" 2>/dev/null; sleep 2
         nohup bash $MESH/daemon_wrapper.sh "$name" "$SENTINEL/$script" >> "$LOGS/$logfile" 2>&1 &
         HEALTHY=false; ACTIONS+=("${name}_dedup")
+        RESTART_VERIFY+=("python.*$script|$name")
         return
     fi
 
@@ -194,6 +215,34 @@ _daemon_tp() {
         log "$name running but uptime ${etimes}s <5s -- possible crash loop, will recheck next tick"
         HEALTHY=false; ACTIONS+=("${name}_unstable")
     fi
+}
+
+# GH #3415 prevention 1 / FU-349: re-observe every restart ~10s later. A
+# restart that yields no surviving process (or a service still non-200) is
+# logged as a FAILURE, never as a repair. One sleep covers the whole batch,
+# so a healthy tick costs nothing and a repair tick costs 10s.
+_verify_restarts() {
+    [[ ${#RESTART_VERIFY[@]} -eq 0 && ${#SVC_VERIFY[@]} -eq 0 ]] && return
+    sleep 10
+    local entry pat name port count code
+    for entry in "${RESTART_VERIFY[@]}"; do
+        pat="${entry%|*}"; name="${entry##*|}"
+        count=$(pgrep -c -f "$pat" 2>/dev/null)
+        count=${count:-0}
+        if [[ "$count" -eq 0 ]]; then
+            log "$name RESTART FAILED -- no surviving process 10s after relaunch (check its log for an import traceback)"
+            HEALTHY=false; ACTIONS+=("${name}_restart_FAILED")
+        fi
+    done
+    for entry in "${SVC_VERIFY[@]}"; do
+        port="${entry%|*}"; name="${entry##*|}"
+        code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
+        code=${code:-000}
+        if [[ "$code" != "200" ]]; then
+            log "$name RESTART FAILED -- /health $code 10s after relaunch"
+            HEALTHY=false; ACTIONS+=("${name}_restart_FAILED")
+        fi
+    done
 }
 
 _compact_logs() {
@@ -266,21 +315,25 @@ if [[ "$WD" -gt 2 ]]; then
     pkill -9 -f 'python.*run.py --daemon' 2>/dev/null; sleep 3
     cd /home/workspace/world_agent && nohup python run.py --daemon >> $LOGS/world_agent.log 2>&1 &
     HEALTHY=false; ACTIONS+=("wa_dedup")
+    RESTART_VERIFY+=("python.*run.py --daemon|WorldAgent")
 elif [[ "$WD" -eq 0 ]]; then
     log "WorldAgent down -- restarting"
     cd /home/workspace/world_agent && nohup python run.py --daemon >> $LOGS/world_agent.log 2>&1 &
     HEALTHY=false; ACTIONS+=("wa_restart")
+    RESTART_VERIFY+=("python.*run.py --daemon|WorldAgent")
 fi
 
 IE=$(pgrep -c -f 'python.*intent_engine_daemon.py' 2>/dev/null)
 IE=${IE:-0}
 [[ "$IE" -gt 1 ]] && { log "IntentEngine dedup ($IE)"; pkill -f 'python.*intent_engine_daemon.py' 2>/dev/null; sleep 2
     nohup python3 /home/workspace/Skills/childofintent-intent-engine/scripts/intent_engine_daemon.py >> $LOGS/intent_engine.log 2>&1 &
-    HEALTHY=false; ACTIONS+=("ie_dedup"); }
+    HEALTHY=false; ACTIONS+=("ie_dedup")
+    RESTART_VERIFY+=("python.*intent_engine_daemon.py|IntentEngine"); }
 
 BYOK=$(grep -rl 'model_name.*byok:' /home/workspace/Skills/ --include='*.ts' --include='*.py' 2>/dev/null | grep -v '.bak.' | head -5)
 [[ -n "$BYOK" ]] && { log "BYOK ALERT: $BYOK"; HEALTHY=false; ACTIONS+=("byok_alert"); }
 
+_verify_restarts
 _compact_logs
 _self_heartbeat
 

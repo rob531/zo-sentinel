@@ -163,4 +163,20 @@ if [ -f "$PMG" ]; then
     python3 "$PMG" 2>&1 | sed 's/^/  marker_guard: /' || log "package_marker_guard NONZERO -- markers still broken after repair"
 fi
 
+# 5. PIPELINE LIVENESS ALARM (GH #3415 prevention 3, FU-349). Outcome-based:
+#    live pending work + no <id>.done.json stamped at the directives ROOT
+#    within 2h -> alarm loudly and latch $LOGS/PIPELINE_STALLED (JSON basis
+#    inside) for other lanes to read; auto-cleared when completions flow
+#    again. Read-only and report-loud: it gates and restarts NOTHING --
+#    healing is sections 1-4's job, making a stall impossible to miss is
+#    this one's. Would have caught the 08-13..16 outage the first morning,
+#    whatever the mechanism.
+PLG="$SENTINEL/ops/host/pipeline_liveness_guard.py"
+if [ -f "$PLG" ]; then
+    python3 "$PLG" 2>&1 | sed 's/^/  liveness_guard: /'
+    plg_rc=${PIPESTATUS[0]:-0}
+    [ "$plg_rc" -eq 1 ] && log "PIPELINE LIVENESS ALARM -- live pending work and no completion in 2h (basis: $LOGS/PIPELINE_STALLED)"
+    [ "$plg_rc" -eq 2 ] && log "pipeline_liveness_guard CANNOT-EVALUATE (rc=2) -- unknown is not healthy"
+fi
+
 log "tick complete"

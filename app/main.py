@@ -16,6 +16,7 @@ from .db import init_db
 from .rbac import require_role
 from .security import Principal, get_principal
 from .settings import settings
+from .ask_router import router as ask_router
 
 # Factory-built routers are no longer hand-listed here. The SOA spine
 # (services/active/ -> app/_spine_generated.py) is the source of truth; see below.
@@ -58,6 +59,7 @@ def admin_ping(principal: Principal = Depends(require_role("admin"))):
 
 app.include_router(auth.router)
 app.include_router(clerk_webhook.router)
+app.include_router(ask_router)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
@@ -65,7 +67,6 @@ import os as _os
 def _render(name: str) -> str:
     html = (_STATIC / name).read_text(encoding="utf-8")
     return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
-
 
 
 @app.get("/", response_class=HTMLResponse)

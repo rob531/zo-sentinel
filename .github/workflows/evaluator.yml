@@ -118,6 +118,7 @@ jobs:
             tests/test_schema_truth_current.py \
             tests/test_queue_census.py \
             tests/test_graph_gap_directives_wired.py \
+            tests/test_undeclared_write_guard.py \
             -q \
             --junitxml=artifacts/junit.xml
 

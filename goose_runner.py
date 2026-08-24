@@ -27,6 +27,7 @@ from zo_sentinel.build_completion import (  # noqa: E402
     park_directive,
     output_confirmed, failed_quarantined, workspace_diff_state)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
+from zo_sentinel import undeclared_write_guard  # noqa: E402  # GH #3415 fix 4
 from zo_sentinel.build_lessons import (  # noqa: E402
     record_lesson, resolve_lessons, open_lessons_for, format_lessons_context)
 
@@ -991,6 +992,19 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive
         for _k in (_required or ["task_description"]):
             _argv += ["--params", f"{_k}={_params[_k]}"]
         recipe_counter(recipe_path.stem, "attempt")
+        # GH #3415 prevention fix 4: snapshot tracked dirt BEFORE the agent runs
+        # so any tracked file that BECOMES dirty during the bracket is
+        # attributable to THIS directive (the runner is serial). None = git
+        # could not answer = no attribution basis, sweep no-ops (R6).
+        _dirty0 = undeclared_write_guard.tracked_dirty(PROJECT_DIR)
+        _decl_rel = None
+        try:
+            if directive_obj:
+                _dp = declared_output(directive_obj)
+                if _dp:
+                    _decl_rel = str(Path(_dp).resolve().relative_to(PROJECT_DIR.resolve()))
+        except Exception:
+            _decl_rel = None
         _acquired = _SOA_SEM.acquire(timeout=GOOSE_TIMEOUT) if _SOA_SEM else True
         try:
             result = subprocess.run(
@@ -1005,6 +1019,24 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive
             if _SOA_SEM and _acquired:
                 try:
                     _SOA_SEM.release()
+                except Exception:
+                    pass
+            # GH #3415 fix 4: revert tracked writes this run never declared
+            # (load-bearing markers always; anything tracked for build-class).
+            # Fail-open inside sweep(); forensics under _ghost_writes/ before
+            # any restore; verdict/flow untouched -- the declared-output gate
+            # still governs success.
+            _reverted = undeclared_write_guard.sweep(
+                PROJECT_DIR, directive_id, _dirty0,
+                declared_relpath=_decl_rel, log=log)
+            if _reverted:
+                try:
+                    record_lesson(LESSONS_DIR, directive_id, directive_id,
+                                  "undeclared_write",
+                                  f"undeclared tracked write(s) reverted: "
+                                  f"{[a['file'] for a in _reverted]} -- write ONLY "
+                                  f"the declared output path; never repo package "
+                                  f"markers or other tracked files")
                 except Exception:
                     pass
 

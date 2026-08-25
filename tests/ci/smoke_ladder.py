@@ -394,6 +394,29 @@ def tier4_spine() -> Tier:
                                 "(a router that imports-and-crashes): %r" % unexpected)
         t.checks.append(Check("spine::runtime_failures_within_allowlist", ok, detail,
                               int((time.monotonic() - start) * 1000)))
+
+        # MERGE_AUDIT_2026-08-23 G3. generate_spine --strict staleness-checks the
+        # `known` list ("a STALE static entry (now healthy) fails --strict so the
+        # list can never go decorative") but nothing applied that rule to
+        # `known_runtime`, so a runtime entry could not self-retire. One had
+        # already gone stale: server_axis_scores_summary_router was asserted to
+        # fail on a model-name casing error, and it imports and exposes a router.
+        #
+        # While a stale entry stands it is a live suppression -- it would silently
+        # absorb a GENUINE future failure of that exact service, which is the
+        # allowlist version of a check that degrades quietly.
+        #
+        # The rule is enforced HERE, not in generate_spine, because staleness of a
+        # RUNTIME entry is only decidable by importing, and generate_spine is
+        # documented as "No import -- cannot degrade". tier4 has already imported.
+        stale_runtime = sorted(s for s in allow
+                               if s not in {f.get("service") for f in failures})
+        t.checks.append(Check(
+            "spine::known_runtime_not_stale", not stale_runtime,
+            "" if not stale_runtime else
+            ("STALE known_runtime entr(ies) -- these services no longer fail at "
+             "mount, so the suppression is dead and would absorb a real future "
+             "failure. Remove from tools/spine_known_issues.json: %s" % stale_runtime)))
     except Exception as e:  # noqa: BLE001 -- import health is tier1's; warn only
         t.warnings.append(f"app.main did not import in tier4 (tier1 owns this): "
                           f"{type(e).__name__}: {e}")

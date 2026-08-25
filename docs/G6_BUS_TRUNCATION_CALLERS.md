@@ -72,7 +72,7 @@ scalar. Table row counts are live, read from the bus (paginated).
 ### A. `information_schema` enumerations with no `table_name` narrowing
 
 The case this audit hit itself: 200 rows / 25 tables reported when the truth was
-355 columns / 44 tables. **17 sites in 13 files.**
+355 columns / 44 tables. **16 sites in 13 files.**
 
 The two that matter most are instruments, not scripts:
 
@@ -94,55 +94,70 @@ the cap. The schema doc it generates is therefore built from a partial read.
 
 ### B. Unbounded row reads against tables that exceed the cap today
 
-**701 sites in 366 files across 11 tables.** These are provably partial: the
+**583 sites in 313 files across 9 tables.** These are provably partial: the
 caller receives 200 rows and is told `count: 200`.
 
 | Table | Rows | Sites | Files |
 |---|---:|---:|---:|
-| `mcp_signal_scores` | 9,611,610 | 283 | 215 |
-| `code_edges` | 428,949 | 5 | 3 |
-| `code_nodes` | 338,660 | 2 | 2 |
+| `mcp_signal_scores` | 9,611,610 | 254 | 195 |
 | `write_queue_log` | 162,570 | 1 | 1 |
-| `mesh_memory` | 120,403 | 141 | 118 |
-| `mesh_events` | 46,776 | 4 | 4 |
-| `audit_log` | 28,402 | 28 | 21 |
+| `mesh_memory` | 120,403 | 131 | 111 |
+| `mesh_events` | 46,776 | 2 | 2 |
+| `audit_log` | 28,402 | 17 | 13 |
 | `mcp_llm_axis_scores` | 13,267 | 11 | 11 |
 | `build_provenance` | 11,559 | 2 | 1 |
-| `mcp_fingerprints` | 3,275 | 6 | 6 |
-| `mcp_server_registry` | 3,203 | 218 | 151 |
+| `mcp_fingerprints` | 3,275 | 4 | 4 |
+| `mcp_server_registry` | 3,203 | 161 | 116 |
+
+`code_nodes` and `code_edges` are **not** in this table. See the correction below.
 
 Most of the 366 files are one-off diagnostic scripts whose blast radius is a
 wrong number in a report nobody reads twice. A few are not, and those are the
 ones worth naming.
 
-### The graph readers — the highest-consequence subset
+### CORRECTION — the graph readers are NOT affected
 
-`code_nodes` (338,660) and `code_edges` (428,949) are the graphify graph. Every
-site below receives **at most 200 edges** and is told that is the whole answer:
+An earlier revision of this document claimed `code_nodes` (338,660) and
+`code_edges` (428,949) were read unbounded, and singled out `goose_runner.py:453`
+as feeding a silently-capped GRAPH CONTEXT block to every build directive.
+**That was wrong**, and it is withdrawn.
 
-| Site | Reads |
+The analyser judged SQL fragment-by-fragment. These statements are assembled from
+concatenated literals with an f-string in the middle, so the parser yields the
+pieces separately and the piece carrying the bound was scored on its own. Every
+graph reader in fact sets an explicit, deliberate limit:
+
+| Site | Bound |
 |---|---|
-| `goose_runner.py:453` | `code_edges` — builds the builder's GRAPH CONTEXT block |
-| `mcp_servers/builder_mcp.py:175,180` | `code_edges` — caller/callee neighbourhoods |
-| `zo_sentinel/mcp_servers/directive_mcp.py:511` | `code_nodes` — existence probe |
-| `zo_sentinel/mcp_servers/directive_mcp.py:545,550` | `code_edges` — dependants/dependencies |
-| `tools/fu/fu_context.py:201` | `code_nodes` joined to `code_edges` |
+| `goose_runner.py:453` | `LIMIT 20` |
+| `mcp_servers/builder_mcp.py:175,180` | `LIMIT 40` |
+| `zo_sentinel/mcp_servers/directive_mcp.py:511` | `LIMIT 1` |
+| `zo_sentinel/mcp_servers/directive_mcp.py:545,550` | `LIMIT 40` |
+| `tools/fu/fu_context.py:201` | `LIMIT {limit}` (caller-supplied) |
 
-`goose_runner.py:453` is the line that produces the
-`GRAPH CONTEXT -- existing code that depends on <file> (do NOT break these
-contracts)` block handed to every build directive. That list is capped at 200
-edges with no indication, so a directive can be told it has the complete set of
-dependants when it does not. This bears directly on G4(c): the graph is the
-obvious candidate for answering "does a mount point exist for this?" at emission
-time, and it is currently read through a silent cap.
+These are chosen context budgets, not silent truncation, and the 200-row cap
+never applies to them. After fixing the analyser to reconstruct whole statements,
+the graph tables drop out of the census entirely (0 sites).
+
+The figures above are the corrected ones: section A fell from 17 to 16 sites,
+section B from 701/366/11 to **583 sites / 313 files / 9 tables**.
+
+### The instruments that ARE affected
+
+| Site | Reads | Why it matters |
+|---|---|---|
+| `zo_sentinel/probes/duckdb_schema_uptime_probe.py:106` | `information_schema.columns` | a schema-DRIFT probe, and it is on tier1's import allowlist; 355 columns exceed the cap |
+| `refresh_schema_doc.py:85` | `information_schema.columns` | generates the committed schema doc from a partial read |
+| `tests/ci/smoke_ladder.py:261` | `information_schema.tables` | latent at 44 tables |
+| `tests/gates/gate_framework.py:214` | `information_schema.tables` | latent at 44 tables |
 
 ## Recommended order
 
 1. Apply the patch and restart `write_service` — until then no caller *can*
    detect truncation.
-2. Fix the graph readers, which are few (5 sites, 3 files) and the most
-   consequential.
-3. Fix `refresh_schema_doc.py`, which is already over the cap on
-   `information_schema.columns`.
+2. Fix the two `information_schema.columns` readers that are already over the
+   cap today: `zo_sentinel/probes/duckdb_schema_uptime_probe.py:106` (a drift
+   probe on tier1's allowlist) and `refresh_schema_doc.py:85` (generates the
+   committed schema doc).
 4. Leave the long tail of diagnostic scripts; a `truncated` flag in the response
    at least makes a wrong answer detectable when one is next read.

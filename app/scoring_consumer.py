@@ -2,8 +2,6 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Row
-from fastapi import Depends
-from app.db import get_session
 from app.models import MCPLLMAxisScores, MCPServerRegistry
 from enum import Enum
 

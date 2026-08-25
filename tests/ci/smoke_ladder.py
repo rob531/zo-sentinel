@@ -380,48 +380,71 @@ def tier4_spine() -> Tier:
                 allow[e["service"]] = e.get("error_contains", "")
         except ValueError:
             pass
+    # MERGE_AUDIT_2026-08-23 G1: this used to wrap the import below in a try that,
+    # on ANY exception, appended a warning and recorded the check as PASSED with
+    # the note "skipped: app.main import owned by tier1". tier1 did not own it --
+    # its allowlist was 33 modules and, verified programmatically, ZERO of them
+    # were under the `app` package. Each tier delegated app.main to the other and
+    # neither tested it. The only reason an unimportable app.main went red at all
+    # was incidental: two root modules in tier1's allowlist happen to import
+    # app.db transitively. Coverage of `app` was an accident of allowlist
+    # membership, not a property anything asserted.
+    #
+    # The import is now its own named, FAILING check. A tier4 that cannot import
+    # app.main has verified nothing about any spine mount, and must say so.
+    # app.main is additionally in tier1's allowlist now, so ownership is real.
     start = time.monotonic()
     try:
         import app.main as _m
-        failures = list(getattr(_m.app.state, "spine_mount_failures", []))
-        unexpected = [
-            f for f in failures
-            if f.get("service") not in allow
-            or (allow[f["service"]] and allow[f["service"]] not in f.get("error", ""))
-        ]
-        ok = not unexpected
-        detail = "" if ok else ("NEW spine mount failure(s) outside the allowlist "
-                                "(a router that imports-and-crashes): %r" % unexpected)
-        t.checks.append(Check("spine::runtime_failures_within_allowlist", ok, detail,
-                              int((time.monotonic() - start) * 1000)))
-
-        # MERGE_AUDIT_2026-08-23 G3. generate_spine --strict staleness-checks the
-        # `known` list ("a STALE static entry (now healthy) fails --strict so the
-        # list can never go decorative") but nothing applied that rule to
-        # `known_runtime`, so a runtime entry could not self-retire. One had
-        # already gone stale: server_axis_scores_summary_router was asserted to
-        # fail on a model-name casing error, and it imports and exposes a router.
-        #
-        # While a stale entry stands it is a live suppression -- it would silently
-        # absorb a GENUINE future failure of that exact service, which is the
-        # allowlist version of a check that degrades quietly.
-        #
-        # The rule is enforced HERE, not in generate_spine, because staleness of a
-        # RUNTIME entry is only decidable by importing, and generate_spine is
-        # documented as "No import -- cannot degrade". tier4 has already imported.
-        stale_runtime = sorted(s for s in allow
-                               if s not in {f.get("service") for f in failures})
+    except Exception as e:  # noqa: BLE001 -- recorded as a FAILURE, never a warning
         t.checks.append(Check(
-            "spine::known_runtime_not_stale", not stale_runtime,
-            "" if not stale_runtime else
-            ("STALE known_runtime entr(ies) -- these services no longer fail at "
-             "mount, so the suppression is dead and would absorb a real future "
-             "failure. Remove from tools/spine_known_issues.json: %s" % stale_runtime)))
-    except Exception as e:  # noqa: BLE001 -- import health is tier1's; warn only
-        t.warnings.append(f"app.main did not import in tier4 (tier1 owns this): "
-                          f"{type(e).__name__}: {e}")
-        t.checks.append(Check("spine::runtime_failures_within_allowlist", True,
-                              "skipped: app.main import owned by tier1"))
+            "spine::app_main_imports", False,
+            "app.main is UNIMPORTABLE, so no spine mount could be verified: "
+            f"{type(e).__name__}: {e}\n" + traceback.format_exc(limit=5),
+            int((time.monotonic() - start) * 1000)))
+        return t
+    t.checks.append(Check("spine::app_main_imports", True, "",
+                          int((time.monotonic() - start) * 1000)))
+
+    start = time.monotonic()
+    failures = list(getattr(_m.app.state, "spine_mount_failures", []))
+    unexpected = [
+        f for f in failures
+        if f.get("service") not in allow
+        or (allow[f["service"]] and allow[f["service"]] not in f.get("error", ""))
+    ]
+    ok = not unexpected
+    detail = "" if ok else ("NEW spine mount failure(s) outside the allowlist "
+                            "(a router that imports-and-crashes): %r" % unexpected)
+    t.checks.append(Check("spine::runtime_failures_within_allowlist", ok, detail,
+                          int((time.monotonic() - start) * 1000)))
+
+    # MERGE_AUDIT_2026-08-23 G3. generate_spine --strict staleness-checks the
+    # `known` list ("a STALE static entry (now healthy) fails --strict so the
+    # list can never go decorative") but nothing applied that rule to
+    # `known_runtime`, so a runtime entry could not self-retire. One had
+    # already gone stale: server_axis_scores_summary_router was asserted to
+    # fail on a model-name casing error, and it imports and exposes a router.
+    #
+    # While a stale entry stands it is a live suppression -- it would silently
+    # absorb a GENUINE future failure of that exact service, which is the
+    # allowlist version of a check that degrades quietly.
+    #
+    # The rule is enforced HERE, not in generate_spine, because staleness of a
+    # RUNTIME entry is only decidable by importing, and generate_spine is
+    # documented as "No import -- cannot degrade". tier4 has already imported.
+    #
+    # G1 (#3986) moved the import out of a swallowing try/except, so this block
+    # is now only reachable when app.main ACTUALLY imported -- which is the
+    # precondition the staleness rule always needed and never had.
+    stale_runtime = sorted(s for s in allow
+                           if s not in {f.get("service") for f in failures})
+    t.checks.append(Check(
+        "spine::known_runtime_not_stale", not stale_runtime,
+        "" if not stale_runtime else
+        ("STALE known_runtime entr(ies) -- these services no longer fail at "
+         "mount, so the suppression is dead and would absorb a real future "
+         "failure. Remove from tools/spine_known_issues.json: %s" % stale_runtime)))
     return t
 
 

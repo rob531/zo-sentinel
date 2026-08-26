@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_session
+from app.models import McpLlmAxisScore, McpScoreDispute, McpServerRegistry
+
+router = APIRouter(prefix="/api", tags=["axis_drift_scoring_consumer"])
+
+MESH_QUERY_URL = "http://127.0.0.1:8772/query"
+
+
+def _query_mesh(sql: str, params: dict | None = None) -> list[dict[str, Any]]:
+    try:
+        with httpx.Client(timeout=5.0) as c:
+            r = c.post(MESH_QUERY_URL, json={"sql": sql, "params": params or {}})
+            if r.status_code == 200:
+                body = r.json()
+                if isinstance(body, dict):
+                    rows = body.get("rows") or body.get("result")
+                    if isinstance(rows, list):
+                        return rows
+                elif isinstance(body, list):
+                    return body
+    except Exception:
+        pass
+    return []
+
+
+@router.get("/servers")
+def list_servers(db: Session = Depends(get_session)):
+    rows = db.execute(select(McpServerRegistry)).scalars().all()
+    return [
+        {
+            "id": getattr(s, "id", None),
+            "name": getattr(s, "name", None),
+            "endpoint": getattr(s, "endpoint", None),
+        }
+        for s in rows
+    ]
+
+
+@router.get("/axis-scores")
+def list_axis_scores(
+    server_id: str | None = Query(None),
+    db: Session = Depends(get_session),
+):
+    stmt = select(McpLlmAxisScore)
+    if server_id:
+        stmt = stmt.where(McpLlmAxisScore.server_id == server_id)
+    rows = db.execute(stmt).scalars().all()
+    return [
+        {
+            "server_id": getattr(r, "server_id", None),
+            "axis_name": getattr(r, "axis_name", None),
+            "score": getattr(r, "score", None),
+            "computed_at": (
+                r.computed_at.isoformat()
+                if getattr(r, "computed_at", None)
+                else None
+            ),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/disputes")
+def list_disputes(
+    server_id: str | None = Query(None),
+    db: Session = Depends(get_session),
+):
+    stmt = select(McpScoreDispute)
+    if server_id:
+        stmt = stmt.where(McpScoreDispute.server_id == server_id)
+    rows = db.execute(stmt).scalars().all()
+    return [
+        {
+            "id": getattr(r, "id", None),
+            "server_id": getattr(r, "server_id", None),
+            "status": getattr(r, "status", None),
+            "reason": getattr(r, "reason", None),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/drift/{server_id}")
+def compute_drift(server_id: str, db: Session = Depends(get_session)):
+    llm = db.execute(
+        select(McpLlmAxisScore).where(McpLlmAxisScore.server_id == server_id)
+    ).scalars().all()
+    signals = _query_mesh(
+        "SELECT * FROM mcp_signal_scores WHERE server_id = :sid",
+        {"sid": server_id},
+    )
+    return {
+        "server_id": server_id,
+        "llm_axes": [
+            {
+                "axis_name": getattr(r, "axis_name", None),
+                "score": getattr(r, "score", None),
+            }
+            for r in llm
+        ],
+        "signal_axes": signals,
+    }
+
+
+if __name__ == "__main__":
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db import get_session
+    from app.models import Base
+
+    test_app = FastAPI()
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine)
+
+    def _override():
+        db = TestSession()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    test_app.dependency_overrides[get_session] = _override
+    test_app.include_router(router)
+
+    client = TestClient(test_app)
+    cases = [
+        "/api/servers",
+        "/api/axis-scores",
+        "/api/axis-scores?server_id=foo",
+        "/api/disputes",
+        "/api/drift/foo",
+    ]
+    ok = True
+    for path in cases:
+        try:
+            r = client.get(path)
+            if r.status_code != 200:
+                print(f"FAIL GET {path} -> {r.status_code} {r.text}")
+                ok = False
+        except Exception as e:
+            print(f"FAIL GET {path} -> {e!r}")
+            ok = False
+    if not ok:
+        raise SystemExit(1)
+    print("PASS")

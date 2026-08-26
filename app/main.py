@@ -245,3 +245,5 @@ if __name__ == "__main__":
             "Expected dashboard title not found in response"
         )
         print("PASS")
+
+# #4089 gate verification (b): touches app/ so the path scope selects this PR.

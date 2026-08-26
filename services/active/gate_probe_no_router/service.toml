@@ -1,0 +1,11 @@
+[service]
+name = "gate_probe_no_router"
+import_path = "gate_probe_no_router"
+prefix = ""
+tag = ""
+origin = "live"
+auth = "public"
+needs_data_layer = false
+
+# #4089 verification probe (b): an active service that mounts NOTHING and is
+# NOT declared in tools/spine_known_issues.json. The routes check must fail.

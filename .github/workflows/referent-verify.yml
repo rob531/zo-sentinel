@@ -1,0 +1,98 @@
+name: referent-verify
+
+# EXECUTION-BASED REFERENT VERIFICATION.
+#
+# Every other gate in this repo checks that code is WELL-FORMED. This one checks
+# that what the code REFERS TO exists: it boots the real app, mounts the real
+# router set, and resolves every table and column named in SQL against a real
+# catalog.
+#
+# It exists because audit finding B1 -- seven FU predicates querying three tables
+# that exist on no plane -- passed generate_spine.py --strict, the reachability
+# ratchet, pull_check and ruff for a month. All of those are static, and a name
+# that resolves to nothing is syntactically perfect. Only execution can tell.
+#
+# WHY ACTIONS AND NOT A HOST DAEMON
+#   A daemon can reach the live bus but runs inside the workspace it is
+#   verifying -- the B2 failure mode, where untracked files shadow the package
+#   and the same checks score 31/32+1 on the host against 32/32+0 on clean main.
+#   A clean checkout cannot be fooled that way.
+#
+#   Actions in turn cannot reach 127.0.0.1:8772, so the table catalog is read
+#   from schema/bus_catalog.json, refreshed on the host by
+#   tools/bus_catalog_snapshot.py (cron, daily).
+#
+#   That committed snapshot is the seam, so the seam is guarded: the checker
+#   FAILS with UNKNOWN when the snapshot is older than its freshness budget.
+#   If the host refresher dies -- which is exactly how the 2026-04 E2E runner
+#   died, silently, for months -- this job turns red instead of going quiet.
+#
+# REPORT-ONLY for the first cycle: the run reports, uploads its census, and
+# exits 0. See issue #4032 for the promotion criteria to blocking.
+
+on:
+  schedule:
+    - cron: "41 6 * * *"      # 06:41 UTC daily, before the 07:23 e2e-nightly
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "app/**"
+      - "services/**"
+      - "tools/**"
+      - "schema/bus_catalog.json"
+      - ".github/workflows/referent-verify.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  referents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50         # enough history for the merged-PR report
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install app-tier deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt
+
+      - name: Verify referents (REPORT-ONLY)
+        id: verify
+        run: |
+          mkdir -p artifacts
+          set +e
+          python tools/referent_verify.py \
+              --json artifacts/referent_verify.json \
+              --summary-md artifacts/referent_summary.md \
+              --since-hours 24 | tee artifacts/referent_verify.txt
+          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        # The point of this step is that nobody has to read a log, or any code,
+        # to see whether the gate is working. The Actions tab shows the verdict.
+        if: always()
+        run: |
+          if [ -f artifacts/referent_summary.md ]; then
+            cat artifacts/referent_summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Referent verification" >> "$GITHUB_STEP_SUMMARY"
+            echo "No report produced -- the checker did not run to completion." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload referent census
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: referent-verify
+          path: |
+            artifacts/referent_verify.json
+            artifacts/referent_verify.txt
+            artifacts/referent_summary.md
+          retention-days: 90

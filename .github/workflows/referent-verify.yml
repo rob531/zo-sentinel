@@ -27,8 +27,19 @@ name: referent-verify
 #   If the host refresher dies -- which is exactly how the 2026-04 E2E runner
 #   died, silently, for months -- this job turns red instead of going quiet.
 #
-# REPORT-ONLY for the first cycle: the run reports, uploads its census, and
-# exits 0. See issue #4032 for the promotion criteria to blocking.
+# PARTLY ARMED since 2026-08-26 (#4067). The ROUTES check is enforced -- a mount
+# failure, an unresolvable route, or an UNDECLARED no-router service exits 1 and
+# turns this job red. TABLES and COLUMNS remain report-only pending the
+# phantom-table backlog (#4080). An armed check that returns UNKNOWN enforces
+# exactly like FAIL; the header above says why that is deliberate.
+#
+# NOTE ON REACH: this job is NOT in branch protection's required-status-check
+# set, and its `pull_request` trigger is path-filtered, so a red verdict here
+# does not by itself stop a merge -- GitHub auto-merge waits only on required
+# contexts. Naively adding it to the required set would hang every PR that the
+# path filter skips, because a skipped workflow never reports the context at
+# all. See issue #4032 for the promotion criteria and the required-check
+# question.
 
 on:
   schedule:

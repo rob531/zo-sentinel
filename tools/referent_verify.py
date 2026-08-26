@@ -559,9 +559,9 @@ def main() -> int:
 
     if cat_unknown:
         # Cannot evaluate. NOT a pass.
-        print(f"\n[2] TABLE REFERENTS .......... UNKNOWN")
+        print("\n[2] TABLE REFERENTS .......... UNKNOWN")
         print(f"    {cat_unknown}")
-        print(f"[3] COLUMN REFERENTS ......... UNKNOWN")
+        print("[3] COLUMN REFERENTS ......... UNKNOWN")
         print(f"    {cat_unknown}")
         report["tables"] = {"verdict": "UNKNOWN", "detail": cat_unknown}
         report["columns"] = {"verdict": "UNKNOWN", "detail": cat_unknown}

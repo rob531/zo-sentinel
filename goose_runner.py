@@ -1350,7 +1350,20 @@ def _schema_prm_gate(directive, directive_id):
                 kl = schema_kl.load_schema_kl(str(PROJECT_DIR / "graphify-out" / "schema_kl.json"))
             except Exception:
                 return True
-        violations = schema_kl.lint_source(out.read_text(encoding="utf-8"), kl)
+        # The SQL-string referent pass (the :8772 blind spot). THREE-STATE, and
+        # the third state is reported, never folded into a pass:
+        #   catalog present -> bus-bound SQL is checked against every plane
+        #   catalog absent   -> the check is SKIPPED and the reason is LOGGED
+        # A missing/stale catalog must not block: an empty catalog would mark
+        # every table in every bus query as phantom and stop the whole fleet.
+        # The staleness itself is not silent -- it is exactly what
+        # referent-verify turns UNKNOWN-red on, and what the host refresher in
+        # ops/zo_mesh/bus_catalog_refresh.sh exists to prevent.
+        _sql_catalog, _cat_reason = schema_kl.load_referent_catalog()
+        if _cat_reason:
+            log(f"[schema-prm] {directive_id}: SQL referent pass SKIPPED -- {_cat_reason}")
+        violations = schema_kl.lint_source(
+            out.read_text(encoding="utf-8"), kl, sql_catalog=_sql_catalog)
         if not violations:
             return True
         obs = ("schema PRM rejected this build -- the module uses a schema not in app.models. "

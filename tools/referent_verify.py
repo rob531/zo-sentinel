@@ -477,14 +477,63 @@ def check_routes() -> dict:
     res["routes"] = len(leaves)
     res["unresolved"] = unresolved
 
-    if res["failures"] or unresolved:
+    # A service that declares no router is SKIPPED, not failed -- correct, and
+    # the reason the routes check can be armed at all. But an unbounded skip
+    # list is a hole the size of the gate: a NEW service that silently declares
+    # no router would join it and the verdict would stay green. So the skip list
+    # must be DECLARED, exactly as tools/reachability_deferred.json and the
+    # `known` list are, and an undeclared skip is a routes FAILURE.
+    #
+    # The four standing skips are classified in tools/spine_known_issues.json:
+    #   entity_report_exporter    NO_ROUTER -- real router is the unmounted
+    #                             orphan entity_report_exporter_router
+    #   org_api_key_manager       NO_ROUTER -- library module (APIKeyManager
+    #                             class); exposes no `router` attribute
+    #   overview_dashboard_api    NO_ROUTER -- declares `app = FastAPI()` and
+    #                             `@app.get`, not an APIRouter, so include_spine
+    #                             cannot mount it. INCOMPLETE, not by-design.
+    #   verdict_watchlist_service NO_ROUTER -- library module (add_watch /
+    #                             on_verdict_change); no HTTP surface
+    declared: set[str] = set()
+    ki = ROOT / "tools" / "spine_known_issues.json"
+    ki_error = None
+    if ki.exists():
+        try:
+            _k = json.loads(ki.read_text(encoding="utf-8"))
+            declared = {e["service"] for e in _k.get("known", [])
+                        if e.get("status") == "NO_ROUTER"}
+        except Exception:                      # noqa: BLE001
+            ki_error = "spine_known_issues.json is unreadable"
+    else:
+        ki_error = "tools/spine_known_issues.json is missing"
+
+    undeclared = sorted(s for s in res["skipped_no_router"] if s not in declared)
+    res["undeclared_no_router"] = undeclared
+
+    if ki_error:
+        # Cannot decide whether the skips are declared. UNKNOWN, never PASS.
+        res["verdict"] = "UNKNOWN"
+        res["detail"] = f"{ki_error} -- cannot verify the no-router skip list"
+        return res
+
+    if res["failures"] or unresolved or undeclared:
+        bits = []
+        if res["failures"]:
+            bits.append(f"{len(res['failures'])} mount failure(s)")
+        if unresolved:
+            bits.append(f"{len(unresolved)} unresolved route(s)")
+        if undeclared:
+            bits.append(f"{len(undeclared)} UNDECLARED no-router service(s): "
+                        f"{undeclared} -- declare them in "
+                        f"tools/spine_known_issues.json with a reason, or give "
+                        f"them a router")
         res["verdict"] = "FAIL"
-        res["detail"] = (f"{len(res['failures'])} mount failure(s), "
-                         f"{len(unresolved)} unresolved route(s)")
+        res["detail"] = ", ".join(bits)
     else:
         res["verdict"] = "PASS"
         res["detail"] = (f"{res['mounted']}/{res['service_count']} mounted, "
-                         f"{res['routes']} routes all resolve")
+                         f"{res['routes']} routes all resolve, "
+                         f"{len(res['skipped_no_router'])} declared no-router skip(s)")
     return res
 
 
@@ -510,7 +559,12 @@ def merged_prs(hours: int) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--enforce", action="store_true",
-                    help="exit non-zero on FAIL or UNKNOWN (default: report-only)")
+                    help="exit non-zero on FAIL or UNKNOWN in ANY check "
+                         "(default: report-only)")
+    ap.add_argument("--enforce-checks", default="",
+                    help="comma-separated checks to enforce while the rest stay "
+                         "report-only, e.g. --enforce-checks routes. A check "
+                         "named here exits non-zero on FAIL *or* UNKNOWN.")
     ap.add_argument("--json", type=Path, help="write the structured report here")
     ap.add_argument("--since-hours", type=int, default=24)
     ap.add_argument("--summary-md", type=Path,
@@ -665,16 +719,54 @@ def main() -> int:
             f"| bus snapshot age (days) | "
             f"{report.get('catalog', {}).get('bus_age_days', '?')} |",
             f"| PRs merged in window | {len(report.get('merged_prs', []))} |",
+            f"| no-router skips (declared) | "
+            f"{len(r.get('skipped_no_router', []))} |",
+            f"| no-router skips (UNDECLARED) | "
+            f"{len(r.get('undeclared_no_router', []))} |",
             "",
-            "_Report-only: this job exits 0 regardless. See issue #4032._",
+            ("**routes is ARMED** -- a FAIL or UNKNOWN there fails this job. "
+             "tables and columns are REPORT-ONLY: they are red on a backlog of "
+             "pre-2026-08-11 emissions, not on current output. See issue #4032."),
         ]
         args.summary_md.write_text("\n".join(md) + "\n")
 
-    if not args.enforce:
-        print("\nREPORT-ONLY: exiting 0 regardless "
-              f"(would have exited {code} under --enforce)")
+    if args.enforce:
+        return code
+
+    # Partial arming. The routes half of this check is SOLVED (PASS: all
+    # services mounted or declared, every route resolving); the tables/columns
+    # half is FAIL on a historical backlog of pre-gate emissions that predates
+    # the 2026-08-11 grounding fix. Waiting for that backlog means the gate is
+    # never armed at all -- which is precisely how the July mount-point fix sat
+    # correct-but-unreached until August. So the solved half is locked in now
+    # and the rest stays report-only.
+    #
+    # UNKNOWN enforces exactly like FAIL for an armed check. That is the whole
+    # design rule of this tool: "could not evaluate" is not "fine".
+    armed = [c.strip() for c in args.enforce_checks.split(",") if c.strip()]
+    if armed:
+        bad = []
+        for c in armed:
+            v = report.get(c, {}).get("verdict")
+            if v is None:
+                bad.append(f"{c} (no such check)")
+            elif v in ("FAIL", "UNKNOWN"):
+                bad.append(f"{c}={v}")
+        print("\n" + "=" * 72)
+        print(f"ARMED CHECKS: {', '.join(armed)}  "
+              f"(all others report-only)")
+        if bad:
+            print(f"ENFORCED FAILURE: {', '.join(bad)}")
+            print("=" * 72)
+            return 1
+        print("armed checks all PASS -- exiting 0 "
+              f"(unarmed checks would have exited {code} under --enforce)")
+        print("=" * 72)
         return 0
-    return code
+
+    print("\nREPORT-ONLY: exiting 0 regardless "
+          f"(would have exited {code} under --enforce)")
+    return 0
 
 
 if __name__ == "__main__":

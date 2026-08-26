@@ -63,16 +63,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tests/ci/requirements-ci.txt
 
-      - name: Verify referents (REPORT-ONLY)
+      - name: Verify referents (ROUTES ARMED; tables/columns report-only)
         id: verify
+        # ARMED 2026-08-26 on the ROUTES check only.
+        #
+        # Routes are PASS and have been: 28/32 mounted, the other 4 declared
+        # no-router in tools/spine_known_issues.json, 77 routes all resolving,
+        # 0 unresolved, 0 mount failures. Arming it locks that in -- a new
+        # service that fails to mount, an unresolvable route, or a service that
+        # quietly joins the no-router skip list without being declared now fails
+        # this job.
+        #
+        # Tables and columns stay REPORT-ONLY. They are FAIL on a backlog of
+        # pre-gate emissions: of the files referencing a phantom table, all but
+        # two predate the 2026-08-11 grounding fix (37 May, 18 June, 15 July,
+        # 2 August). That is a measure of history, not of the current emitter.
+        #
+        # Waiting for the backlog before arming anything is exactly how the
+        # July mount-point fix sat correct-and-unreached until August. The
+        # solved half goes in now; the rest follows the backlog quarantine.
         run: |
           mkdir -p artifacts
           set +e
           python tools/referent_verify.py \
+              --enforce-checks routes \
               --json artifacts/referent_verify.json \
               --summary-md artifacts/referent_summary.md \
               --since-hours 24 | tee artifacts/referent_verify.txt
-          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
 
       - name: Job summary
         # The point of this step is that nobody has to read a log, or any code,

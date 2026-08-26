@@ -106,3 +106,35 @@ def test_code_created_temp_table_is_not_phantom():
 def test_two_argument_callers_are_unaffected():
     """The SQL pass is opt-in; existing callers must not change behaviour."""
     assert lint_source(ESCAPED, KL) == []
+
+
+# --------------------------------------------------------------------------- #
+# KL freshness -- a stale committed KL must fail LOUDLY
+# --------------------------------------------------------------------------- #
+# graphify-out/schema_kl.json is a COMMITTED artifact that the PRM gates fall
+# back to when app.models cannot be imported. Built from a stale checkout it is
+# wrong in the worst direction -- it describes FEWER models than exist, so every
+# check consulting it passes things it should catch. On 2026-08-26 it knew 5 of
+# 14 models and nothing said so.
+
+def test_committed_kl_describes_this_tree():
+    import schema_kl as _sk
+    problems = _sk.assert_kl_fresh()
+    unknown = [p for p in problems if p.startswith("UNKNOWN:")]
+    if unknown:
+        return  # app.models not importable here; that is not a stale artifact
+    assert problems == [], (
+        "graphify-out/schema_kl.json is stale. Regenerate and commit with "
+        "`python schema_kl.py --write`.\n" + "\n".join(problems))
+
+
+def test_fingerprint_ignores_the_volatile_stamps():
+    """Freshness is decided on substance; a moved timestamp is not staleness."""
+    import schema_kl as _sk
+    a = {"models": {"X": {"columns": ["a"]}}, "built_at": "2026-01-01",
+         "built_at_commit": "aaaaaaa"}
+    b = {"models": {"X": {"columns": ["a"]}}, "built_at": "2026-08-26",
+         "built_at_commit": "bbbbbbb"}
+    assert _sk.kl_fingerprint(a) == _sk.kl_fingerprint(b)
+    c = {"models": {"X": {"columns": ["a", "b"]}}}
+    assert _sk.kl_fingerprint(a) != _sk.kl_fingerprint(c)

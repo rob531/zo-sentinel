@@ -47,6 +47,31 @@ def get_kl():
 
 
 def main():
+    # KL FRESHNESS -- blocking.
+    #
+    # graphify-out/schema_kl.json is a COMMITTED artifact that this gate (and
+    # goose_runner's) falls back to when app.models cannot be imported. Built
+    # from a stale checkout it is silently wrong in the worst direction: it
+    # describes FEWER models than exist, so every check consulting it passes
+    # things it should catch. On 2026-08-26 it knew 5 of 14 models -- 9 real
+    # tables were invisible to it, and nothing said so.
+    #
+    # A stale KL now fails loudly here. "app.models not importable" returns
+    # UNKNOWN rather than a stale-artifact verdict, and is reported, not
+    # silently passed.
+    stale = schema_kl.assert_kl_fresh()
+    if stale:
+        unknown = [p for p in stale if p.startswith("UNKNOWN:")]
+        if unknown:
+            print(f"[schema-prm] KL freshness UNKNOWN: {unknown[0]}", file=sys.stderr)
+        else:
+            print("SCHEMA-KL IS STALE -- the committed knowledge layer does not "
+                  "describe this tree:")
+            for p in stale:
+                print(f"  FAIL  {p}")
+            print("\nRegenerate and commit:  python schema_kl.py --write")
+            return 1
+
     kl = get_kl()
 
     # SQL-string referent pass -- REPORT-ONLY here, deliberately.

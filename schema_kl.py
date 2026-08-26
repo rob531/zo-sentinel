@@ -97,8 +97,94 @@ def build_schema_kl(models_module: str = "app.models") -> dict:
     return kl
 
 
+VOLATILE_KL_KEYS = ("built_at", "built_at_commit")
+
+
+def _git_head() -> str:
+    """Short HEAD of the repo this file lives in, or 'unknown'."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent),
+                            "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() or "unknown"
+    except Exception:                                      # noqa: BLE001
+        return "unknown"
+
+
+def kl_fingerprint(kl: dict) -> str:
+    """Content hash of a KL, EXCLUDING the volatile stamps.
+
+    Freshness has to be decided on substance. Comparing whole files would make
+    every KL look stale the moment its timestamp moved, and a check that is
+    always red is a check nobody reads.
+    """
+    import hashlib
+    body = {k: v for k, v in kl.items() if k not in VOLATILE_KL_KEYS}
+    return hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:16]
+
+
+def assert_kl_fresh(path: str = DEFAULT_KL_PATH) -> list[str]:
+    """Return problems making the committed KL a stale description of this tree.
+
+    WHY THIS EXISTS
+      graphify-out/schema_kl.json is a COMMITTED artifact that other gates fall
+      back to when app.models cannot be imported. Built from a stale checkout it
+      is silently wrong in the worst direction: it describes FEWER models than
+      exist, so every check that consults it passes things it should catch.
+      Found 2026-08-26 knowing 5 of 14 models -- 9 real tables invisible to it.
+
+      A stale KL must fail LOUDLY. Returning [] here means the committed
+      artifact genuinely describes this tree.
+    """
+    problems: list[str] = []
+    try:
+        committed = load_schema_kl(path)
+    except Exception as e:                                 # noqa: BLE001
+        return [f"committed KL at {path} is unreadable: {type(e).__name__}"]
+    try:
+        fresh = build_schema_kl()
+    except Exception as e:                                 # noqa: BLE001
+        # Cannot evaluate. NOT a pass, and NOT a failure of the artifact --
+        # say which it is rather than collapsing the two.
+        return [f"UNKNOWN: app.models is not importable here "
+                f"({type(e).__name__}), so KL freshness could not be checked"]
+
+    cm, fm = set(committed.get("models", {})), set(fresh.get("models", {}))
+    if fm - cm:
+        problems.append(
+            f"committed KL is STALE: missing {len(fm - cm)} model(s) that exist "
+            f"in app.models now: {sorted(fm - cm)}")
+    if cm - fm:
+        problems.append(
+            f"committed KL is STALE: names {len(cm - fm)} model(s) that no longer "
+            f"exist in app.models: {sorted(cm - fm)}")
+    drift = sorted(m for m in (cm & fm)
+                   if committed["models"][m].get("columns")
+                   != fresh["models"][m].get("columns"))
+    if drift:
+        problems.append(f"committed KL is STALE: column drift on {drift}")
+    if not problems and kl_fingerprint(committed) != kl_fingerprint(fresh):
+        problems.append(
+            "committed KL differs from a fresh build of this tree "
+            f"({kl_fingerprint(committed)} vs {kl_fingerprint(fresh)}) -- "
+            "regenerate with: python schema_kl.py --write")
+    if problems:
+        problems.append(
+            f"(committed KL was built at commit "
+            f"{committed.get('built_at_commit', 'UNSTAMPED')}; this tree is "
+            f"{_git_head()}). Regenerate: python schema_kl.py --write")
+    return problems
+
+
 def write_schema_kl(path: str = DEFAULT_KL_PATH, kl: dict | None = None) -> Path:
     kl = kl if kl is not None else build_schema_kl()
+    kl = dict(kl)
+    kl["built_at_commit"] = _git_head()
+    kl["built_at"] = __import__("datetime").datetime.now(
+        __import__("datetime").timezone.utc).isoformat(timespec="seconds")
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(kl, indent=2, sort_keys=True), encoding="utf-8")

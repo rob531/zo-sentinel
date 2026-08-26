@@ -106,6 +106,27 @@ Use in L6 UI smoke tests and phase checkpoint verification.
 - auth_tokens: token_id(PK), action, mcp_name, submission_id, admin_email, expires_at, used, used_at
 - service_health: service(PK), last_heartbeat
 
+## CONTROL PLACEMENT RULE (standing -- 2026-08-26)
+When you build a control, prove it sits on the path that carries the volume.
+Measure the build counts of each lane and state which lane the control covers.
+A control is not "in place" until that number is written down.
+
+- The June 2026 schema gate (#1006) was real and correct. It was wired to the
+  goose-canary lane at ~8 builds/day while the ENGINE path wrote 588 files in a
+  single day (2026-08-11). Right control, wrong path -- so it caught nothing,
+  and the phantom-table backlog it was built to prevent accumulated underneath
+  it for six weeks.
+- The same shape has appeared three more times: the promoter missing from
+  watchdog.sh, four dark lanes, and (found 2026-08-26) the schema-prm CI gate,
+  which runs on 100% of PRs but inspects ROOT-LEVEL .py only while the engine
+  emits into services/staged/** -- about 2% coverage of what it exists to check.
+- "It runs on every PR" is NOT coverage. Check what the job's own file filter
+  admits, then compare that to where the emissions actually land.
+- A lane with zero runs is a control with zero coverage. goose-canary last ran
+  2026-08-10; anything gated only there is currently gating nothing.
+
+Two numbers, every time: builds per lane, and the fraction the control sees.
+
 ## PRODUCT ROADMAP (PRD v1 — 2026-05-20)
 Zo Sentinel is evolving from a daemon+API into a production SaaS product.
 Directive generator should prioritise features from this roadmap in order.

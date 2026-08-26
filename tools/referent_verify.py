@@ -83,6 +83,11 @@ SCAN_ROOT_GLOB = "*.py"
 SKIP_PARTS = {
     ".git", "__pycache__", "node_modules", "graphify-out", "archive",
     "directives_archive", ".venv", "venv", "site-packages", "build", "dist",
+    # quarantine/ holds withdrawn emissions -- see quarantine/QUARANTINE_*.json.
+    # It is already outside SCAN_DIRS and the root glob, so this is belt-and-
+    # braces: it states the intent, and it keeps the skip true if a future
+    # change adds quarantine/ to a scan root by accident.
+    "quarantine",
 }
 
 # Catalog-ish and engine-internal names that are never user tables.

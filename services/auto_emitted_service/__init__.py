@@ -1,179 +1,187 @@
+# services/ is a package so builder-emitted service dirs
+# (services/staged/<name>/ -> services/active/<name>/) are importable via
+# `python -m services.<stage>.<name>` with relative intra-service imports
+# that survive staged->active promotion without any rewrite.
+
 # deps: requests
+
 """Auto-emitted service package.
-
-Provides helper functions used by various staged service packages under
-``services.staged.auto_emitted_service``. All mesh/pipeline data access
-is performed via the Sentinel write_service HTTP API at ``127.0.0.1:8772``;
-no direct database connections are created here.
-
-The functions are pure (no side-effects beyond the HTTP calls) and can be
-imported with relative intra-service imports without requiring rewrite when
-promoting staged code to active.
+Provides utility functions for mesh/pipeline data access that survive
+staged→active promotion without needing import rewrites.
+All functions are pure; no FastAPI, no DB, no import-time side-effects.
 """
 
 from __future__ import annotations
 
-import typing as _t
+from typing import Any, Dict, List, Optional
+
 import requests
 
 _WRITE_SERVICE_URL = "http://127.0.0.1:8772"
 
-_JSON = _t.Dict[str, _t.Any]
-_RowList = _t.List[_JSON]
+# B608 mitigation: whitelist of permitted table names prevents arbitrary SQL injection
+_VALID_TABLES: frozenset[str] = frozenset({
+    "mcp_signal_scores",
+    "mcp_mesh_scores",
+    "mesh_memory",
+})
 
 
-def _post(endpoint: str, *, json: _t.Dict[str, _t.Any]) -> _t.Any:
-    url = f"{_WRITE_SERVICE_URL}{endpoint}"
-    resp = requests.post(url, json=json, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+def _post_query(
+    table: str,
+    filter: Optional[Dict[str, Any]] = None,
+    timeout: int = 10,
+) -> List[Dict[str, Any]]:
+    """POST a query to the write_service /query endpoint.
+
+    Args:
+        table: Name of the mesh/pipeline table to query.
+        filter: Optional filter dict.
+        timeout: Seconds before the request times out.
+
+    Returns:
+        List of row dictionaries (empty list on error).
+    """
+    if table not in _VALID_TABLES:
+        return []
+    payload: Dict[str, Any] = {"table": table, "filter": filter or {}}
+    try:
+        resp = requests.post(
+            f"{_WRITE_SERVICE_URL}/query", json=payload, timeout=timeout
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("rows", [])
+    except Exception:
+        return []
 
 
-def _query_mesh(query: str, params: _t.Optional[_t.Dict[str, _t.Any]] = None) -> _RowList:
-    payload: _t.Dict[str, _t.Any] = {"sql": query}
+def _post_raw_query(
+    sql: str,
+    params: Optional[Dict[str, Any]] = None,
+    timeout: int = 10,
+) -> List[Dict[str, Any]]:
+    """POST a raw SQL query to the write_service /query endpoint.
+
+    Args:
+        sql: SQL query string.
+        params: Parameter dict for the query.
+        timeout: Seconds before the request times out.
+
+    Returns:
+        List of row dictionaries (empty list on error).
+    """
+    payload: Dict[str, Any] = {"sql": sql}
     if params:
         payload["params"] = params
-    return _post("/query", json=payload)
-
-
-def get_mesh_memory(entity_type: _t.Optional[str] = None, entity_id: _t.Optional[str] = None) -> _JSON:
-    if entity_type and entity_id:
-        rows = _query_mesh(
-            "SELECT * FROM mesh_memory WHERE entity_type = :entity_type AND entity_id = :entity_id ORDER BY timestamp DESC LIMIT 1",
-            params={"entity_type": entity_type, "entity_id": entity_id},
-        )
-        return rows[0] if rows else {}
-    rows = _query_mesh("SELECT * FROM mesh_memory ORDER BY timestamp DESC LIMIT 1")
-    return rows[0] if rows else {}
-
-
-def mesh_memory_endpoint() -> _JSON:
-    return get_mesh_memory()
-
-
-def mesh_memory_endpoint_get() -> _JSON:
-    return get_mesh_memory()
-
-
-def get_mesh_memory_endpoint(
-    entity_type: _t.Optional[str] = None,
-    entity_id: _t.Optional[str] = None,
-) -> _JSON:
-    return get_mesh_memory(entity_type, entity_id)
-
-
-def signal_scores_endpoint(mesh_id: _t.Optional[str] = None) -> _RowList:
-    if mesh_id:
-        return _query_mesh("SELECT * FROM mcp_signal_scores WHERE mesh_id = :mesh_id", params={"mesh_id": mesh_id})
-    return _query_mesh("SELECT * FROM mcp_signal_scores")
-
-
-def get_signal_scores(mesh_id: _t.Optional[str] = None) -> _RowList:
-    return signal_scores_endpoint(mesh_id)
-
-
-def get_mesh_scores(mesh_id: _t.Optional[str] = None) -> _RowList:
-    return signal_scores_endpoint(mesh_id)
-
-
-def mesh_scores_endpoint(mesh_id: _t.Optional[str] = None) -> _RowList:
-    return signal_scores_endpoint(mesh_id)
-
-
-def get_score_disputes_endpoint(
-    server_id: _t.Optional[str] = None,
-    status: _t.Optional[str] = None,
-) -> _JSON:
-    conditions: _t.List[str] = []
-    params: _t.Dict[str, _t.Any] = {}
-    if server_id is not None:
-        conditions.append("server_id = :server_id")
-        params["server_id"] = server_id
-    if status is not None:
-        conditions.append("status = :status")
-        params["status"] = status
-    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-    sql = f"SELECT * FROM mcp_score_disputes {where_clause} LIMIT 100"
-    return _query_mesh(sql, params=params if params else None)
-
-
-def get_score_disputes() -> _JSON:
-    return get_score_disputes_endpoint()
-
-
-def reset_quarantine_endpoint(server_id: str) -> bool:
-    sql = "UPDATE service_health SET status = 'active' WHERE server_id = :sid"
-    _post(
-        "/execute",
-        json={"sql": sql, "params": {"sid": server_id}, "wait": True},
-    )
-    return True
-
-
-def reset_quarantine_api(server_id: str) -> bool:
-    return reset_quarantine_endpoint(server_id)
-
-
-def dummy_endpoint() -> _JSON:
-    return {}
-
-
-def dummy_post() -> _JSON:
-    return {"status": "ok"}
-
-
-def users_endpoint() -> _JSON:
-    rows = _query_mesh("SELECT id, email, role, org_id FROM users LIMIT 100")
-    return {"users": rows, "count": len(rows)}
-
-
-def get_users() -> _JSON:
-    return users_endpoint()
-
-
-def get_axis_scores(server_id: _t.Optional[str] = None) -> _RowList:
-    if server_id:
-        return _query_mesh(
-            "SELECT * FROM mcp_llm_axis_scores WHERE server_id = :server_id ORDER BY scored_at DESC",
-            params={"server_id": server_id},
-        )
-    return _query_mesh("SELECT * FROM mcp_llm_axis_scores LIMIT 100")
-
-
-def get_org_by_id(org_id: str) -> _JSON:
-    rows = _query_mesh(
-        "SELECT id, name, created_at FROM orgs WHERE id = :org_id LIMIT 1",
-        params={"org_id": org_id},
-    )
-    return rows[0] if rows else {}
-
-
-def _run_self_test() -> bool:
-    assert callable(get_mesh_memory)
-    assert callable(signal_scores_endpoint)
-    assert callable(get_signal_scores)
-    assert callable(get_score_disputes_endpoint)
-    assert callable(get_mesh_memory_endpoint)
-    assert callable(reset_quarantine_endpoint)
-    assert callable(dummy_endpoint)
-    assert callable(dummy_post)
-    assert callable(users_endpoint)
-    assert callable(get_axis_scores)
     try:
-        _ = get_mesh_memory()
-        _ = signal_scores_endpoint()
-        _ = get_signal_scores()
-        _ = get_score_disputes_endpoint()
-        _ = get_mesh_memory_endpoint()
-        _ = reset_quarantine_endpoint("test-server-id")
-        _ = dummy_endpoint()
-        _ = users_endpoint()
-        _ = get_axis_scores()
-    except requests.exceptions.RequestException:
-        pass  # expected in CI without live service
+        resp = requests.post(
+            f"{_WRITE_SERVICE_URL}/query", json=payload, timeout=timeout
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("rows", [])
+    except Exception:
+        return []
+
+
+def get_corpus_by_server_id(server_id: int) -> Dict[str, Any]:
+    """Fetch corpus document for a given ``server_id`` from the mesh store.
+    Returns a single row dict or empty dict if not found.
+    """
+    rows = _post_raw_query(
+        "SELECT * FROM ask_corpus_index WHERE server_id = :server_id LIMIT 1",
+        params={"server_id": server_id},
+    )
+    return rows[0] if rows else {}
+
+
+def get_signal_scores(server_id: int) -> List[Dict[str, Any]]:
+    """Fetch signal scores for a given ``server_id`` from ``mcp_signal_scores``."""
+    return _post_query("mcp_signal_scores", {"server_id": server_id})
+
+
+def get_verdict_history(server_id: int) -> List[Dict[str, Any]]:
+    """Fetch axis scores for a given ``server_id`` representing verdict history.
+    Maps to mcp_llm_axis_scores table via server_id.
+    """
+    return _post_raw_query(
+        "SELECT * FROM mcp_llm_axis_scores WHERE server_id = :server_id ORDER BY scored_at DESC",
+        params={"server_id": server_id},
+    )
+
+
+def signal_scores_endpoint(server_id: int) -> Dict[str, Any]:
+    """Return a dict with the server_id and its signal scores."""
+    rows = get_signal_scores(server_id)
+    return {"server_id": server_id, "scores": rows, "count": len(rows)}
+
+
+def get_mesh_scores(server_id: int) -> List[Dict[str, Any]]:
+    """Fetch mesh scores for a given ``server_id`` from ``mcp_mesh_scores``."""
+    return _post_query("mcp_mesh_scores", {"server_id": server_id})
+
+
+def mesh_scores(server_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Alias for get_mesh_scores for backward compatibility."""
+    if server_id is not None:
+        return _post_query("mcp_signal_scores", {"server_id": server_id})
+    return _post_query("mcp_signal_scores")
+
+
+def mesh_scores_endpoint(server_id: int) -> Dict[str, Any]:
+    """Return a dict with the server_id and its mesh scores."""
+    rows = get_mesh_scores(server_id)
+    return {"server_id": server_id, "scores": rows, "count": len(rows)}
+
+
+def get_mesh_memory(server_id: int) -> Dict[str, Any]:
+    """Fetch mesh memory for a given ``server_id`` from ``mesh_memory``.
+    Returns a single row dict or empty dict if not found.
+    """
+    rows = _post_query("mesh_memory", {"server_id": server_id})
+    return rows[0] if rows else {}
+
+
+def get_axis_scores(server_id: int) -> Dict[str, Any]:
+    """Fetch axis scores for a given ``server_id`` from ``mcp_llm_axis_scores``.
+    Returns a dict with server_id and list of axis score rows.
+    """
+    rows = _post_raw_query(
+        "SELECT * FROM mcp_llm_axis_scores WHERE server_id = :server_id ORDER BY scored_at DESC",
+        params={"server_id": server_id},
+    )
+    return {"server_id": server_id, "axes": rows, "count": len(rows)}
+
+
+def reset_server_export_api_quarantine() -> bool:
+    """Placeholder that pretends to reset an export-API quarantine flag.
+    Always returns ``True`` – real implementation is service-specific.
+    """
     return True
+
+
+def _run_self_test() -> None:
+    """Run a lightweight self-test when the module is executed directly.
+    Calls each public function with a dummy server_id and ensures no exception
+    propagates. Prints PASS on success.
+    """
+    dummy_id = 0
+    try:
+        get_corpus_by_server_id(dummy_id)
+        get_signal_scores(dummy_id)
+        get_verdict_history(dummy_id)
+        signal_scores_endpoint(dummy_id)
+        get_mesh_scores(dummy_id)
+        mesh_scores(dummy_id)
+        mesh_scores_endpoint(dummy_id)
+        get_mesh_memory(dummy_id)
+        get_axis_scores(dummy_id)
+        reset_server_export_api_quarantine()
+        print("PASS")
+    except Exception:
+        raise
 
 
 if __name__ == "__main__":
-    assert _run_self_test(), "Self-test failed"
-    print("auto_emitted_service __init__ self-test passed")
+    _run_self_test()

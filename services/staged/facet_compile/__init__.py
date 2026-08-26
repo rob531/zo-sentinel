@@ -43,7 +43,7 @@ def reset_server_export_api_quarantine_endpoint(server_id: int, db: Session = De
 
 if __name__ == "__main__":
     from app.db import SessionLocal
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
 
     # Override the database session for self-test
     dependency_overrides[get_session] = lambda: SessionLocal()

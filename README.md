@@ -164,3 +164,4 @@ onboarding is a set of tool permissions granted to an autonomous system that
 can be manipulated through its own inputs.
 
 This is an attempt to work out what that practice should look like by building it, rather than waiting for a standard to arrive.
+<!-- #4089 gate verification (a): docs-only PR must get a green referent-verify context. -->

@@ -404,6 +404,38 @@ def scan_tree() -> tuple[dict, dict, list[dict], int]:
 
 
 # ------------------------------------------------------------------ routes ---
+def _walk_routes(routes, seen: set, out: list) -> None:
+    """Flatten app.routes to leaf routes, descending through containers.
+
+    Not every entry in app.routes is a route. Depending on the FastAPI version,
+    including a router can leave a WRAPPER object there -- newer versions put
+    `_IncludedRouter` in the list, which holds the real routes on an inner
+    attribute and exposes no `.endpoint` of its own.
+
+    The first version of this function assumed every entry had `.endpoint` and
+    duly reported 30 unresolved routes on a GitHub runner while reporting zero
+    on this host, purely because the two had different FastAPI versions. That is
+    a false failure of exactly the kind that gets a gate switched off, and it
+    was only ever visible by RUNNING the check in the environment that would run
+    it -- which is the whole argument of this file.
+    """
+    for r in routes:
+        if id(r) in seen:
+            continue
+        seen.add(id(r))
+        sub = getattr(r, "routes", None)
+        if sub is None:
+            for attr in ("original_router", "included_router"):
+                inner = getattr(r, attr, None)
+                if inner is not None and getattr(inner, "routes", None) is not None:
+                    sub = inner.routes
+                    break
+        if sub:
+            _walk_routes(sub, seen, out)
+            continue
+        out.append(r)
+
+
 def check_routes() -> dict:
     """Boot the real app and mount the real router set.
 
@@ -433,12 +465,16 @@ def check_routes() -> dict:
     res["mounted"] = len(getattr(st, "spine_mounted", []) or [])
     res["service_count"] = getattr(st, "spine_service_count", 0)
 
+    leaves: list = []
+    _walk_routes(app.routes, set(), leaves)
+
     unresolved = []
-    for r in app.routes:
+    for r in leaves:
         ep = getattr(r, "endpoint", None) or getattr(r, "app", None)
         if ep is None or not callable(ep):
-            unresolved.append(getattr(r, "path", repr(r)))
-    res["routes"] = len(app.routes)
+            path = getattr(r, "path", None) or type(r).__name__
+            unresolved.append(str(path)[:120])
+    res["routes"] = len(leaves)
     res["unresolved"] = unresolved
 
     if res["failures"] or unresolved:

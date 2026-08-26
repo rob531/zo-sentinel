@@ -113,8 +113,15 @@ def load_schema_kl(path: str = DEFAULT_KL_PATH) -> dict:
 # PRM linter (pure -- needs only the KL dict)
 # --------------------------------------------------------------------------- #
 
-def lint_source(src: str, kl: dict) -> list[str]:
-    """Return a list of schema-violation strings for `src` given the KL. Pure."""
+def lint_source(src: str, kl: dict, sql_catalog: set[str] | None = None) -> list[str]:
+    """Return a list of schema-violation strings for `src` given the KL. Pure.
+
+    `sql_catalog`, when supplied, is the set of table names that exist on ANY
+    plane (see load_referent_catalog()). It switches on the SQL-string referent
+    pass, which catches a phantom table named inside a SQL literal bound for the
+    :8772 bus -- invisible to every AST check below. Left as None the function
+    behaves exactly as before, so the pure self-test and any two-argument caller
+    are unaffected."""
     models = kl.get("models", {})
     if not models:
         return []
@@ -171,6 +178,16 @@ def lint_source(src: str, kl: dict) -> list[str]:
                         f"/query endpoint (POST http://127.0.0.1:8772/query, e.g. "
                         f"ws_query(\"SELECT ... FROM {_stem} ...\")), never a local CSV file.")
 
+    if sql_catalog:
+        # Union the KL's own table names (and the known-real extras above) into
+        # the plane catalog. The catalog is built from the bus snapshot +
+        # app/models + migrations; a table this module already asserts is real
+        # -- mcp_discovery_candidates is one -- must not read as phantom just
+        # because it is absent from a snapshot. For a BLOCKING check the safe
+        # direction is a strict superset of what exists.
+        violations.extend(
+            lint_sql_referents(src, set(sql_catalog) | {t for t in tables if t}, tree=tree))
+
     seen, out = set(), []
     for v in violations:
         if v not in seen:
@@ -179,8 +196,168 @@ def lint_source(src: str, kl: dict) -> list[str]:
     return out
 
 
-def lint_file(path: str, kl: dict) -> list[str]:
-    return lint_source(Path(path).read_text(encoding="utf-8"), kl)
+
+# --------------------------------------------------------------------------- #
+# SQL-string referent lint (the :8772 blind spot)
+# --------------------------------------------------------------------------- #
+#
+# WHY THIS EXISTS
+#   lint_source() above is an AST lint over PYTHON model/ORM usage against
+#   app.models. A table named inside a SQL STRING LITERAL that is POSTed to the
+#   write-service bus presents no Python schema surface at all -- no model
+#   class, no constructor kwarg, no attribute access -- so every check above
+#   sees nothing and passes it.
+#
+#   services/staged/circuit_breaker_status_api/contract.py used exactly that
+#   route on 2026-08-25, AFTER the 2026-08-11 grounding ruling, to reference
+#   `circuit_breaker_status` -- a table that exists on no plane:
+#
+#       requests.post("http://127.0.0.1:8772/query",
+#                     json={"query": "SELECT ... FROM circuit_breaker_status"})
+#
+#   That is the only live route by which a new emission can still invent a
+#   table. This closes it.
+#
+# SCOPE -- deliberately MODULE-scoped, not call-scoped
+#   A module that addresses :8772 is a bus client, and its SQL literals are bus
+#   payloads. Attributing each SQL string to the individual call that posts it
+#   would be narrower, and it would also miss the commonest shape in this tree:
+#
+#       sql = "SELECT ... FROM t"          # built here
+#       ws_query(sql)                      # posted somewhere else entirely
+#
+#   `ws_query` is not one helper -- it is copy-pasted per module (1000+ files
+#   reference :8772). Call-scoped attribution would therefore have a large
+#   false-NEGATIVE rate against precisely the shape this gate exists to catch,
+#   which is the wrong direction for a check whose whole purpose is that the
+#   last escape got through unseen.
+#
+# PRECISION
+#   The extraction is reused verbatim from tools/referent_verify.py rather than
+#   reimplemented, so there is exactly one SQL extractor in this repo and it is
+#   the one already hardened against the false positives that were found the
+#   hard way: prose docstrings beginning "Update ...", concatenated fragments,
+#   f-string interpolations, CTE names, table aliases and code-created temp
+#   tables. A second, divergent regex here would re-earn all of those bugs.
+#
+#   A table is satisfied if it exists on ANY plane (bus / app.models /
+#   migrations) -- the same union rule referent_verify uses, and the weakest
+#   form of the check. It catches the whole class B1 belongs to (referring to
+#   something that is NOWHERE) at a false-positive rate this gate can defend.
+
+_BUS_ADDR = ":8772"
+
+
+def _referent_verify():
+    """Import tools/referent_verify.py, or None. No side effects on import."""
+    try:
+        from tools import referent_verify as rv
+        return rv
+    except Exception:                                      # noqa: BLE001
+        pass
+    try:
+        import importlib.util
+        here = Path(__file__).resolve().parent / "tools" / "referent_verify.py"
+        if not here.exists():
+            return None
+        spec = importlib.util.spec_from_file_location("_rv_for_schema_kl", here)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:                                      # noqa: BLE001
+        return None
+
+
+def load_referent_catalog() -> tuple[set[str] | None, str | None]:
+    """Return (real table names across ALL planes, None) or (None, reason).
+
+    THREE-STATE, and the third state is never folded into either of the others.
+    (None, reason) means "could not evaluate" -- it is NOT an empty catalog.
+    An empty catalog here would mark every table in every bus query as missing
+    and block the entire fleet the moment the host snapshot went stale, which
+    is how a gate earns itself an off switch.
+    """
+    rv = _referent_verify()
+    if rv is None:
+        return None, "tools/referent_verify.py is not importable"
+    try:
+        tables, _meta, reason = rv.load_catalog()
+    except Exception as e:                                 # noqa: BLE001
+        return None, f"catalog load raised {type(e).__name__}"
+    if reason:
+        return None, reason
+    if not tables:
+        return None, "catalog loaded but is empty"
+    return set(tables), None
+
+
+def module_addresses_bus(tree: ast.AST) -> bool:
+    """True when this module talks to the write-service bus on :8772."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if _BUS_ADDR in node.value:
+                return True
+        elif isinstance(node, ast.JoinedStr):
+            for v in node.values:
+                if isinstance(v, ast.Constant) and isinstance(v.value, str) \
+                        and _BUS_ADDR in v.value:
+                    return True
+    return False
+
+
+def lint_sql_referents(src: str, catalog: set[str], tree: ast.AST | None = None) -> list[str]:
+    """Return violations for tables named in bus-bound SQL that exist on no plane.
+
+    PURE: `catalog` is passed in, never loaded here. Returns [] for a module
+    that does not address the bus, and [] when the module has no SQL.
+    """
+    if not catalog:
+        return []
+    rv = _referent_verify()
+    if rv is None:
+        return []
+    if tree is None:
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            return []
+    if not module_addresses_bus(tree):
+        return []
+
+    real = {t.lower() for t in catalog}
+
+    # Tables the module creates for itself (temp/staging) are real referents
+    # for the length of the statement -- collected over the WHOLE module first,
+    # exactly as referent_verify.scan_tree does, so a CREATE in one string
+    # covers a SELECT in another.
+    created: set[str] = set()
+    stmts: list[tuple[str, int]] = list(rv._iter_sql_strings(tree))
+    for sql, _ln in stmts:
+        for cm in rv.CREATED_TABLE.finditer(sql):
+            created.add(cm.group(1).lower())
+
+    missing: dict[str, int] = {}
+    for sql, lineno in stmts:
+        tabs, _cols = rv.extract_refs(sql)
+        for t in tabs:
+            if t in real or t in created:
+                continue
+            missing.setdefault(t, lineno)
+
+    out: list[str] = []
+    for t in sorted(missing):
+        out.append(
+            f"phantom table '{t}' in a SQL string bound for the write-service bus "
+            f"(:8772), line {missing[t]}: that table exists on NO plane -- it is not "
+            f"in the bus catalog, not a __tablename__ in app/models.py, and in no "
+            f"migration. Name a real table, or add a migration that creates it. "
+            f"An AST lint cannot see this because a table named in a SQL STRING has "
+            f"no Python schema surface -- which is how circuit_breaker_status got in.")
+    return out
+
+
+def lint_file(path: str, kl: dict, sql_catalog: set[str] | None = None) -> list[str]:
+    return lint_source(Path(path).read_text(encoding="utf-8"), kl, sql_catalog)
 
 
 # --------------------------------------------------------------------------- #
@@ -214,6 +391,44 @@ def _selftest() -> int:
     assert any("score" in v for v in b), b
     assert any("model_version" in v for v in b), b
     assert any("declarative_base" in v for v in b), b
+
+    # --- SQL-string referent pass (the :8772 blind spot) --------------------
+    # Reproduces services/staged/circuit_breaker_status_api/contract.py, the
+    # emission that got through on 2026-08-25 AFTER the grounding ruling.
+    catalog = {"service_health", "mcp_server_registry"}
+    escaped = (
+        "import requests\n"
+        "def q():\n"
+        "    return requests.post(\n"
+        "        'http://127.0.0.1:8772/query',\n"
+        "        json={'query': 'SELECT breaker_state FROM circuit_breaker_status LIMIT 1'},\n"
+        "        timeout=5)\n")
+    e = lint_source(escaped, kl, sql_catalog=catalog)
+    assert any("circuit_breaker_status" in v for v in e), \
+        f"the SQL-string blind spot is OPEN again: {e}"
+
+    # the same shape naming a REAL table must pass
+    fixed = escaped.replace("circuit_breaker_status", "service_health")
+    f = lint_source(fixed, kl, sql_catalog=catalog)
+    assert f == [], f"real table flagged: {f}"
+
+    # a module that does NOT address the bus is out of scope
+    offbus = escaped.replace("127.0.0.1:8772", "example.invalid")
+    assert lint_source(offbus, kl, sql_catalog=catalog) == [], "non-bus module flagged"
+
+    # THREE-STATE: no catalog means SKIPPED, never a silent pass turned into a
+    # fleet-wide block. Both of these must be [] -- and the caller logs why.
+    assert lint_source(escaped, kl, sql_catalog=None) == [], "None catalog blocked"
+    assert lint_source(escaped, kl, sql_catalog=set()) == [], "empty catalog blocked"
+
+    # a code-created temp table is a real referent, not a phantom
+    tmp = (
+        "import requests\n"
+        "URL = 'http://127.0.0.1:8772/query'\n"
+        "a = 'CREATE TEMP TABLE _stage AS SELECT 1'\n"
+        "b = 'SELECT * FROM _stage'\n")
+    assert lint_source(tmp, kl, sql_catalog=catalog) == [], "temp table flagged"
+
     print("schema_kl self-test PASS")
     return 0
 

@@ -710,9 +710,32 @@ def main() -> int:
         args.summary_md.parent.mkdir(parents=True, exist_ok=True)
         r, t, c = (report.get("routes", {}), report.get("tables", {}),
                    report.get("columns", {}))
+        # The headline must be the ARMED verdict, not the overall one.
+        #
+        # This job exits 0 while tables/columns are report-only, so a summary
+        # leading with "VERDICT: FAIL" tells a reader the gate is broken when
+        # the run is green -- and the whole point of this page is that nobody
+        # has to read code to see whether the gate is working. Lead with what
+        # decides the job's exit status; keep the full verdict below it.
+        armed_names = [c.strip() for c in (args.enforce_checks or "").split(",")
+                       if c.strip()]
+        if args.enforce:
+            headline = f"**{verdict}** -- every check is armed"
+        elif armed_names:
+            bad = [c for c in armed_names
+                   if report.get(c, {}).get("verdict") in ("FAIL", "UNKNOWN")]
+            headline = (
+                f"**ARMED CHECKS FAILING: {', '.join(bad)}** -- this job is RED"
+                if bad else
+                f"**ARMED CHECKS PASS ({', '.join(armed_names)})** -- this job is GREEN"
+            )
+        else:
+            headline = f"**REPORT-ONLY** -- this job is GREEN regardless (overall {verdict})"
+
         md = [
             "## Referent verification", "",
-            f"**VERDICT: {verdict}**", "",
+            headline, "",
+            f"<sub>full verdict across all checks, armed or not: <b>{verdict}</b></sub>", "",
             "| check | result |", "|---|---|",
             f"| routes | {r.get('verdict')} -- {r.get('detail','')} |",
             f"| tables | {t.get('verdict')} -- {len(t.get('missing', {}))} missing "

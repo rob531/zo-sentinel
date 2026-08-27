@@ -327,8 +327,73 @@ def _iter_sql_strings(tree: ast.AST):
                 yield s, getattr(node, "lineno", 0)
 
 
+# SQL COMMENTS ARE NOT REFERENTS.
+#
+# Found 2026-08-27 (#4080): `community` and `graph_table` were carried on the
+# phantom-table list for weeks. Neither is a table anybody named. Both come out
+# of tools/build_app_graph.py:118, from inside a SQL string, from lines that are
+# SQL COMMENTS:
+#
+#     --   INSTALL duckpgq FROM community; LOAD duckpgq;
+#     --   -- FROM GRAPH_TABLE (app
+#
+# TABLE_REF matched "FROM community" and "FROM GRAPH_TABLE" in commented-out
+# documentation and reported both as tables that exist on no plane. They are
+# exactly as real as the tables in a docstring, which this file already spent a
+# whole regex generation learning to exclude (see SQL_STMT above, 408 false
+# MISSING verdicts).
+#
+# This matters more now than it did while the check was report-only. A false
+# MISSING on an ARMED, REQUIRED check does not annoy somebody reading a census;
+# it blocks a merge on a referent that was never named, and that is precisely
+# how a correct gate earns itself an off switch.
+#
+# Stripping is quote-aware: a `--` or `/*` inside a string literal is data, not
+# a comment. Whitespace is substituted in place (newlines kept) so every offset
+# and line number downstream is unchanged.
+def strip_sql_comments(sql: str) -> str:
+    """Blank out -- line comments and /* */ block comments, preserving offsets."""
+    out = list(sql)
+    i, n = 0, len(sql)
+    quote = None                       # "'" or '"' while inside a literal
+    while i < n:
+        c = sql[i]
+        if quote:
+            if c == quote:
+                # doubled quote is an escaped quote, still inside the literal
+                if i + 1 < n and sql[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+            elif c == "\\" and i + 1 < n:
+                i += 2
+                continue
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            i += 1
+            continue
+        if c == "-" and i + 1 < n and sql[i + 1] == "-":
+            while i < n and sql[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and sql[i + 1] == "*":
+            j = sql.find("*/", i + 2)
+            end = n if j == -1 else j + 2
+            for k in range(i, end):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = end
+            continue
+        i += 1
+    return "".join(out)
+
+
 def extract_refs(sql: str) -> tuple[set[str], set[tuple[str, str]]]:
     """Return (tables, qualified_columns) from one reconstructed statement."""
+    sql = strip_sql_comments(sql)
     ctes = {m.group(1).lower() for m in CTE_DEF.finditer(sql)}
     aliases = {m.group(2).lower(): m.group(1).lower()
                for m in ALIAS_DEF.finditer(sql)
@@ -397,7 +462,11 @@ def scan_tree() -> tuple[dict, dict, list[dict], int]:
 
         rel = str(f.relative_to(ROOT))
         for sql, lineno in _iter_sql_strings(tree):
-            for cm in CREATED_TABLE.finditer(sql):
+            # Comment-stripped for the CREATE scan too: a commented-out CREATE
+            # does not create anything, and counting it would mark a genuinely
+            # missing table as code-created -- a false PASS, the other direction
+            # of the same bug.
+            for cm in CREATED_TABLE.finditer(strip_sql_comments(sql)):
                 created.add(cm.group(1).lower())
             tabs, cols = extract_refs(sql)
             for t in tabs:

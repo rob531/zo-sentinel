@@ -89,7 +89,24 @@ SNAPSHOT_WARN_AGE_DAYS = 7
 # Marker on the unknown_reason string that promotes it from UNKNOWN to STALE.
 STALE_PREFIX = "STALE: "
 
-SCAN_DIRS = ["app", "services/active", "services/staged", "tools"]
+# MEASURED, NOT ASSUMED (2026-08-27, #4080 part 6a).
+#
+# Over 1,568 `build:` commits in 30 days the engine touched 1,519 distinct
+# files, 672 of them .py. The old list -- app, services/active,
+# services/staged, tools -- saw 664 of those 672. Not 672.
+#
+# The eight it missed were emitted to services/<name>/ directly (neither
+# active/ nor staged/) and to two root-level packages the engine creates for
+# itself. One of them is auto_emitted_service/signal_scores.py: a module named
+# after a PHANTOM TABLE, sitting in a directory this checker did not look at.
+#
+# 98.8% is a good number for a report. It is the wrong number for a REQUIRED,
+# ARMED check, because the 1.2% is not random -- it is the newest emission
+# shapes, which is exactly where a new phantom would appear first. So the list
+# is now `services` wholesale rather than its two known children, and it names
+# the two root packages. quarantine/ stays excluded via SKIP_PARTS below.
+SCAN_DIRS = ["app", "services", "tools",
+             "auto_emitted_service", "service_package"]
 SCAN_ROOT_GLOB = "*.py"
 
 SKIP_PARTS = {

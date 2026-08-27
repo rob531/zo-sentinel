@@ -245,3 +245,6 @@ if __name__ == "__main__":
             "Expected dashboard title not found in response"
         )
         print("PASS")
+
+# #4089 gate verification (c): a clean app/ touch. The spine is untouched, so
+# the routes check must stay green and the merge must proceed.

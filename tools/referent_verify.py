@@ -71,6 +71,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUS_CATALOG = ROOT / "schema" / "bus_catalog.json"
 MODELS = ROOT / "app" / "models.py"
 MIGRATIONS = ROOT / "migrations" / "versions"
+EXTERNAL_PLANES = ROOT / "schema" / "external_planes.json"
 
 # How stale the committed catalog may be before this check refuses to render a
 # verdict on tables. The host refresher runs daily; 14 days is ~14 consecutive
@@ -315,6 +316,60 @@ def load_catalog() -> tuple[dict, dict, str | None]:
                 tables.setdefault(m.group(1), set())
                 n += 1
         meta["planes"].append(f"migrations:{n}")
+
+    # --- declared external planes -------------------------------------------
+    # Tables that are real but live on a database this checker does not read --
+    # today, the gate framework's standalone gate_errors.db.
+    #
+    # PROVENANCE, NOT PERMISSION. Every entry names the file that creates the
+    # table and the text that proves it. That claim is verified HERE, on every
+    # run. A claim that has stopped being true is reported as a FAILURE of the
+    # declaration -- the table does NOT get added -- so this file cannot rot
+    # into a silent hole the way an allowlist does. See schema/external_planes.json.
+    ext_problems: list[str] = []
+    n_ext = 0
+    if EXTERNAL_PLANES.exists():
+        try:
+            decl = json.loads(EXTERNAL_PLANES.read_text())
+        except Exception as e:                     # noqa: BLE001
+            ext_problems.append(
+                f"schema/external_planes.json is unreadable ({type(e).__name__})")
+            decl = {"planes": []}
+        for plane in decl.get("planes", []):
+            pname = plane.get("plane", "?")
+            creator = plane.get("created_by", "")
+            src_path = ROOT / creator if creator else None
+            src_txt = ""
+            if not creator:
+                ext_problems.append(f"external plane '{pname}' names no created_by")
+            elif not (src_path and src_path.exists()):
+                ext_problems.append(
+                    f"external plane '{pname}': created_by '{creator}' does not "
+                    f"exist -- the provenance for its tables is gone")
+            else:
+                try:
+                    src_txt = src_path.read_text(errors="replace")
+                except Exception:                  # noqa: BLE001
+                    ext_problems.append(
+                        f"external plane '{pname}': cannot read '{creator}'")
+            for tname, tinfo in (plane.get("tables") or {}).items():
+                proof = (tinfo or {}).get("proof", "")
+                if not proof:
+                    ext_problems.append(
+                        f"external plane '{pname}' table '{tname}' declares no proof")
+                    continue
+                if not src_txt:
+                    continue          # already reported above
+                if proof not in src_txt:
+                    ext_problems.append(
+                        f"external plane '{pname}' table '{tname}': proof "
+                        f"{proof!r} is NO LONGER in {creator} -- either the table "
+                        f"moved or this declaration is stale. Not counted as real.")
+                    continue
+                tables.setdefault(tname, set())
+                n_ext += 1
+        meta["planes"].append(f"external:{n_ext}")
+    meta["external_plane_problems"] = ext_problems
 
     meta["catalog_tables"] = len(tables)
     return tables, meta, None
@@ -754,6 +809,12 @@ def main() -> int:
         else:
             unknowns.append(f"catalog ({_detail})")
     else:
+        for _p in meta.get("external_plane_problems", []):
+            # A broken provenance claim is a FAILURE of the tables check, not a
+            # footnote. The whole reason this file is safe to have is that it
+            # cannot go stale quietly.
+            fails.append("tables")
+            print(f"\n[2] EXTERNAL PLANE DECLARATION INVALID: {_p}")
         missing_t = {t: s for t, s in sorted(table_sites.items())
                      if t not in catalog and t not in created}
         print(f"\n[2] TABLE REFERENTS .......... "

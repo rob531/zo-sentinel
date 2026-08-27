@@ -143,26 +143,61 @@ def extract_domain_fingerprint(url: str) -> Optional[str]:
         return None
 
 def get_server_tools(server_id: str) -> List[Dict[str, Any]]:
-    """Fetch tool definitions for a server. Tolerant if mcp_tool_definitions doesn't exist yet."""
+    """Fetch a server's tool definitions from the bus, one dict per tool.
+
+    THERE IS NO `mcp_tool_definitions` TABLE, and there never was.
+        This function used to select five per-tool columns from that name. It
+        exists on no plane -- not on the bus, not as a __tablename__, in no
+        migration -- so ws_query raised on every call and the docstring said so
+        out loud: "Tolerant if mcp_tool_definitions doesn't exist yet". It was
+        not going to exist later. It was invented at emission time. Refs #4080.
+
+    The bus does hold this data, on `mcp_tool_hashes`, one row per SERVER with
+    the whole tool list in `tools_raw`. So the row-per-tool shape this function
+    must return is produced HERE, by parsing that payload, rather than asked of
+    a table that does not have it.
+
+    `tools_raw` carries the MCP tool-definition shape, so `inputSchema` is
+    accepted alongside `input_schema`. NOTE: mcp_tool_hashes is currently empty
+    on the bus (0 rows), so this parse is correct-but-unexercised -- which is
+    exactly what the old code was, minus the fact that its table could never
+    hold anything at all.
+    """
     query = """
-    SELECT server_id, name, description, input_schema, annotations
-    FROM mcp_tool_definitions
+    SELECT server_id, tools_raw
+    FROM mcp_tool_hashes
     WHERE server_id = ?
-    ORDER BY name
     """
     results = ws_query(query, [server_id])
-    tools = []
+    tools: List[Dict[str, Any]] = []
     for row in results:
         try:
-            tools.append({
-                'server_id': row[0],
-                'name': row[1],
-                'description': row[2],
-                'input_schema': row[3],
-                'annotations': row[4]
-            })
+            raw = row['tools_raw'] if isinstance(row, dict) else row[1]
+            sid = row['server_id'] if isinstance(row, dict) else row[0]
         except Exception:
             continue
+        if not raw:
+            continue
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                continue
+        if isinstance(raw, dict):
+            raw = raw.get('tools', [])
+        if not isinstance(raw, list):
+            continue
+        for t in raw:
+            if not isinstance(t, dict):
+                continue
+            tools.append({
+                'server_id': sid,
+                'name': t.get('name'),
+                'description': t.get('description'),
+                'input_schema': t.get('input_schema', t.get('inputSchema')),
+                'annotations': t.get('annotations'),
+            })
+    tools.sort(key=lambda t: (t.get('name') or ''))
     return tools
 
 def extract_tool_names(tools: List[Dict[str, Any]]) -> List[str]:

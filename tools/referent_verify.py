@@ -961,9 +961,11 @@ def main() -> int:
             f"| no-router skips (UNDECLARED) | "
             f"{len(r.get('undeclared_no_router', []))} |",
             "",
-            ("**routes is ARMED** -- a FAIL or UNKNOWN there fails this job. "
-             "tables and columns are REPORT-ONLY: they are red on a backlog of "
-             "pre-2026-08-11 emissions, not on current output. See issue #4032."),
+            ("**routes and tables are ARMED** -- a FAIL, UNKNOWN or STALE in "
+             "either fails this job, and this job is a required context, so it "
+             "blocks the merge. COLUMNS is REPORT-ONLY: it is red on a backlog "
+             "of pre-2026-08-11 emissions, not on current output, and arming it "
+             "today would turn every PR on this repo red. See #4032, #4080."),
         ]
         args.summary_md.write_text("\n".join(md) + "\n")
 

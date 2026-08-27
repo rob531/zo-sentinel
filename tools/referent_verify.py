@@ -77,6 +77,17 @@ MIGRATIONS = ROOT / "migrations" / "versions"
 # misses, which is a dead daemon, not a slow one.
 SNAPSHOT_MAX_AGE_DAYS = 14
 
+# ...and how old it may be before this check starts SAYING SO while still
+# rendering a verdict. The budget above is a cliff: at 14d + 1s the tables and
+# columns checks stop resolving, and now that referent-verify is a REQUIRED
+# status check (#4089) that is not a red census -- it is every PR on the repo
+# blocked. A cliff nobody can see coming is the same shape as the 2026-04 E2E
+# runner: fine, fine, fine, dead. The warn band is the week of notice.
+SNAPSHOT_WARN_AGE_DAYS = 7
+
+# Marker on the unknown_reason string that promotes it from UNKNOWN to STALE.
+STALE_PREFIX = "STALE: "
+
 SCAN_DIRS = ["app", "services/active", "services/staged", "tools"]
 SCAN_ROOT_GLOB = "*.py"
 
@@ -209,7 +220,15 @@ def load_catalog() -> tuple[dict, dict, str | None]:
 
     # --- bus plane -----------------------------------------------------------
     if not BUS_CATALOG.exists():
-        return {}, meta, f"bus catalog missing at {BUS_CATALOG.relative_to(ROOT)}"
+        # relative_to() raises when the path is not under ROOT, which is how the
+        # "catalog is missing" branch managed to raise instead of REPORTING that
+        # the catalog was missing. Building an error message must never be able
+        # to throw -- that turns a diagnosable UNKNOWN into a traceback.
+        try:
+            _where = BUS_CATALOG.relative_to(ROOT)
+        except ValueError:
+            _where = BUS_CATALOG
+        return {}, meta, f"bus catalog missing at {_where}"
     try:
         snap = json.loads(BUS_CATALOG.read_text())
     except Exception:                              # noqa: BLE001
@@ -231,12 +250,25 @@ def load_catalog() -> tuple[dict, dict, str | None]:
 
     if age_days is None:
         return {}, meta, "bus catalog has no readable captured_at timestamp"
+    meta["bus_stale"] = age_days > SNAPSHOT_MAX_AGE_DAYS
+    meta["bus_warn"] = SNAPSHOT_WARN_AGE_DAYS < age_days <= SNAPSHOT_MAX_AGE_DAYS
     if age_days > SNAPSHOT_MAX_AGE_DAYS:
         # The daemon is dead. This is the failure mode that killed the 2026-04
         # E2E runner silently; here it is loud.
+        #
+        # STALE IS ITS OWN STATE, NOT A FLAVOUR OF UNKNOWN.
+        #   "could not evaluate" covers four different faults with four
+        #   different fixes: the snapshot is absent, unparseable, undated, or
+        #   OLD. Only the last one names a daemon that stopped, and only the
+        #   last one carries a number that says how long ago. Collapsing it
+        #   into a generic UNKNOWN throws away both. The STALE_PREFIX below is
+        #   what the renderer keys on to say STALE-RED and print the age.
         return {}, meta, (
-            f"bus catalog is {age_days:.1f} days old "
-            f"(budget {SNAPSHOT_MAX_AGE_DAYS}d) -- host refresher is not running"
+            f"{STALE_PREFIX}bus catalog is {age_days:.1f} days old "
+            f"(budget {SNAPSHOT_MAX_AGE_DAYS}d, last captured {captured}) -- the "
+            f"host refresher (tools/bus_catalog_guard.sh) is not running. "
+            f"Tables and columns CANNOT be resolved against a dead catalog, so "
+            f"this is RED, not a pass. Fix the refresher, do not raise the budget."
         )
 
     for t, cols in (snap.get("tables") or {}).items():
@@ -682,18 +714,45 @@ def main() -> int:
           f"({', '.join(SCAN_DIRS)} + root)")
     print(f"    catalog planes: {', '.join(meta.get('planes', [])) or 'NONE'}")
     if meta.get("bus_age_days") is not None:
-        print(f"    bus snapshot age: {meta['bus_age_days']}d "
-              f"(budget {SNAPSHOT_MAX_AGE_DAYS}d)")
+        _age = meta["bus_age_days"]
+        _band = "OK"
+        if meta.get("bus_stale"):
+            _band = f"STALE -- OVER THE {SNAPSHOT_MAX_AGE_DAYS}d BUDGET"
+        elif meta.get("bus_warn"):
+            _band = (f"WARN -- past {SNAPSHOT_WARN_AGE_DAYS}d, "
+                     f"{SNAPSHOT_MAX_AGE_DAYS - _age:.1f}d until this check goes "
+                     f"STALE-RED and blocks every PR")
+        print(f"    bus snapshot age: {_age}d "
+              f"(warn {SNAPSHOT_WARN_AGE_DAYS}d / budget {SNAPSHOT_MAX_AGE_DAYS}d) "
+              f"-- {_band}")
+        if meta.get("bus_warn"):
+            print(f"    ::warning:: the host refresher has not landed a snapshot "
+                  f"in {_age}d. Run tools/bus_catalog_guard.sh --force on the host.")
 
     if cat_unknown:
         # Cannot evaluate. NOT a pass.
-        print("\n[2] TABLE REFERENTS .......... UNKNOWN")
-        print(f"    {cat_unknown}")
-        print("[3] COLUMN REFERENTS ......... UNKNOWN")
-        print(f"    {cat_unknown}")
-        report["tables"] = {"verdict": "UNKNOWN", "detail": cat_unknown}
-        report["columns"] = {"verdict": "UNKNOWN", "detail": cat_unknown}
-        unknowns.append(f"catalog ({cat_unknown})")
+        #
+        # A STALE snapshot is reported as its own verdict, STALE, carrying the
+        # age. It is counted as a FAILURE, not an unknown: "the catalog is 19
+        # days old" is not a thing we could not work out, it is a thing we
+        # worked out and it is bad. UNKNOWN stays for the genuinely
+        # unevaluable -- absent, unparseable, undated.
+        _stale = cat_unknown.startswith(STALE_PREFIX)
+        _v = "STALE" if _stale else "UNKNOWN"
+        _label = "STALE-RED" if _stale else "UNKNOWN"
+        _detail = cat_unknown[len(STALE_PREFIX):] if _stale else cat_unknown
+        print(f"\n[2] TABLE REFERENTS .......... {_label}")
+        print(f"    {_detail}")
+        print(f"[3] COLUMN REFERENTS ......... {_label}")
+        print(f"    {_detail}")
+        report["tables"] = {"verdict": _v, "detail": _detail,
+                            "bus_age_days": meta.get("bus_age_days")}
+        report["columns"] = {"verdict": _v, "detail": _detail,
+                             "bus_age_days": meta.get("bus_age_days")}
+        if _stale:
+            fails.extend(["tables", "columns"])
+        else:
+            unknowns.append(f"catalog ({_detail})")
     else:
         missing_t = {t: s for t, s in sorted(table_sites.items())
                      if t not in catalog and t not in created}
@@ -792,7 +851,7 @@ def main() -> int:
             headline = f"**{verdict}** -- every check is armed"
         elif armed_names:
             bad = [c for c in armed_names
-                   if report.get(c, {}).get("verdict") in ("FAIL", "UNKNOWN")]
+                   if report.get(c, {}).get("verdict") in ("FAIL", "UNKNOWN", "STALE")]
             headline = (
                 f"**ARMED CHECKS FAILING: {', '.join(bad)}** -- this job is RED"
                 if bad else
@@ -814,7 +873,10 @@ def main() -> int:
             f"| files scanned | {report.get('scanned_files', '?')} |",
             f"| unparseable modules | {len(report.get('unparseable', []))} |",
             f"| bus snapshot age (days) | "
-            f"{report.get('catalog', {}).get('bus_age_days', '?')} |",
+            f"{report.get('catalog', {}).get('bus_age_days', '?')} "
+            f"(warn {SNAPSHOT_WARN_AGE_DAYS}d / budget {SNAPSHOT_MAX_AGE_DAYS}d)"
+            f"{' **STALE-RED**' if report.get('catalog', {}).get('bus_stale') else ''}"
+            f"{' **WARN**' if report.get('catalog', {}).get('bus_warn') else ''} |",
             f"| PRs merged in window | {len(report.get('merged_prs', []))} |",
             f"| no-router skips (declared) | "
             f"{len(r.get('skipped_no_router', []))} |",
@@ -847,7 +909,9 @@ def main() -> int:
             v = report.get(c, {}).get("verdict")
             if v is None:
                 bad.append(f"{c} (no such check)")
-            elif v in ("FAIL", "UNKNOWN"):
+            elif v in ("FAIL", "UNKNOWN", "STALE"):
+                # STALE enforces exactly like FAIL. A check cannot pass on a
+                # catalog it has already measured as dead.
                 bad.append(f"{c}={v}")
         print("\n" + "=" * 72)
         print(f"ARMED CHECKS: {', '.join(armed)}  "

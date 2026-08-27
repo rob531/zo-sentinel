@@ -22,10 +22,23 @@ name: referent-verify
 #   from schema/bus_catalog.json, refreshed on the host by
 #   tools/bus_catalog_snapshot.py (cron, daily).
 #
-#   That committed snapshot is the seam, so the seam is guarded: the checker
-#   FAILS with UNKNOWN when the snapshot is older than its freshness budget.
+#   That committed snapshot is the seam, so the seam is guarded, in three bands:
+#     age <= 7d   OK
+#     7d..14d     WARN -- reported with the days remaining, still resolving
+#     age > 14d   STALE-RED -- its own verdict, carrying the age, blocking
 #   If the host refresher dies -- which is exactly how the 2026-04 E2E runner
 #   died, silently, for months -- this job turns red instead of going quiet.
+#
+#   STALE is NOT folded into UNKNOWN. "absent", "unparseable", "undated" and
+#   "fourteen days old" have four different fixes; only the last one names a
+#   daemon that stopped and carries a number saying how long ago.
+#
+#   The WARN band exists because this is a REQUIRED check. At 14d + 1s every PR
+#   on the repo is blocked, and a cliff nobody can see coming is the same shape
+#   as the runner that died. The alarm that gives that week of notice does NOT
+#   live on the host being watched -- see .github/workflows/bus-catalog-freshness.yml,
+#   and #4080 for why: on 2026-08-27 the host had no cron daemon at all, so all
+#   three of the refresher's "redundant" triggers were inert.
 #
 # PARTLY ARMED since 2026-08-26 (#4067). The ROUTES check is enforced -- a mount
 # failure, an unresolvable route, or an UNDECLARED no-router service exits 1 and

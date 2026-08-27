@@ -834,10 +834,42 @@ def main() -> int:
             print(f"\n[2] EXTERNAL PLANE DECLARATION INVALID: {_p}")
         missing_t = {t: s for t, s in sorted(table_sites.items())
                      if t not in catalog and t not in created}
+        # HOW MUCH OF THIS PASS RESTS ON THE CODE-CREATED RULE.
+        #
+        # A referent is satisfied either by a CATALOG plane (bus / app.models /
+        # migrations / a declared external plane) or by a CREATE TABLE found
+        # somewhere in the scanned tree. The second rule is correct in spirit --
+        # a temp/staging table a module makes for itself IS a real referent --
+        # but `created` is accumulated TREE-WIDE, not per module. So a CREATE in
+        # any one of 2,328 files makes that name resolvable in all of them.
+        #
+        # Measured 2026-08-27 when TABLES was armed: 75 of 121 referents pass on
+        # that rule alone. That is not a reason to withhold the arming -- the
+        # check still catches every name that exists NOWHERE, which is the class
+        # #4032 was about -- but it IS the difference between "0 missing" and
+        # "0 missing, all of them independently declared", and the two must not
+        # read the same.
+        #
+        # So the number is printed on every run. Module-scoping `created` is the
+        # obvious next tightening and it is deliberately NOT bundled with the
+        # arming: it would surface a new batch of failures in the same change
+        # that made this check blocking. See #4080.
+        _cat_only = sum(1 for t in table_sites if t in catalog)
+        _created_only = sum(1 for t in table_sites
+                            if t not in catalog and t in created)
         print(f"\n[2] TABLE REFERENTS .......... "
               f"{'FAIL' if missing_t else 'PASS'}")
         print(f"    {len(table_sites)} distinct tables referenced, "
               f"{len(catalog)} in catalog, {len(missing_t)} MISSING")
+        print(f"    of the {len(table_sites)} referenced: {_cat_only} resolve on a "
+              f"DECLARED plane, {_created_only} only on a CREATE TABLE found "
+              f"elsewhere in the tree")
+        if _created_only:
+            print(f"    (the code-created rule is TREE-WIDE, not module-scoped -- "
+                  f"a CREATE in any of the {n_files} scanned files makes that name "
+                  f"resolvable in all of them. Correct for a module's own temp "
+                  f"table, weaker than it looks across the tree. Module-scoping "
+                  f"it is the next tightening; see #4080.)")
         for t, sites in list(missing_t.items())[:25]:
             print(f"    MISSING TABLE  {t}")
             for s in sites[:3]:
@@ -845,6 +877,8 @@ def main() -> int:
         report["tables"] = {
             "verdict": "FAIL" if missing_t else "PASS",
             "referenced": len(table_sites),
+            "declared_plane": _cat_only,
+            "code_created_only": _created_only,
             "missing": {t: s[:5] for t, s in missing_t.items()},
         }
         if missing_t:
@@ -945,7 +979,9 @@ def main() -> int:
             "| check | result |", "|---|---|",
             f"| routes | {r.get('verdict')} -- {r.get('detail','')} |",
             f"| tables | {t.get('verdict')} -- {len(t.get('missing', {}))} missing "
-            f"of {t.get('referenced', '?')} referenced |",
+            f"of {t.get('referenced', '?')} referenced "
+            f"({t.get('declared_plane', '?')} on a declared plane, "
+            f"{t.get('code_created_only', '?')} on a tree-wide CREATE) |",
             f"| columns | {c.get('verdict')} -- {len(c.get('missing', {}))} missing "
             f"of {c.get('checked', '?')} checked |",
             f"| files scanned | {report.get('scanned_files', '?')} |",
@@ -961,9 +997,11 @@ def main() -> int:
             f"| no-router skips (UNDECLARED) | "
             f"{len(r.get('undeclared_no_router', []))} |",
             "",
-            ("**routes is ARMED** -- a FAIL or UNKNOWN there fails this job. "
-             "tables and columns are REPORT-ONLY: they are red on a backlog of "
-             "pre-2026-08-11 emissions, not on current output. See issue #4032."),
+            ("**routes and tables are ARMED** -- a FAIL, UNKNOWN or STALE in "
+             "either fails this job, and this job is a required context, so it "
+             "blocks the merge. COLUMNS is REPORT-ONLY: it is red on a backlog "
+             "of pre-2026-08-11 emissions, not on current output, and arming it "
+             "today would turn every PR on this repo red. See #4032, #4080."),
         ]
         args.summary_md.write_text("\n".join(md) + "\n")
 

@@ -891,31 +891,46 @@ def _smoke_test_backoff():
 
 
 if __name__ == "__main__":
-    import signal as _sig
-
-    # Check for existing backup marker - if already patched, exit 0
-    src_path = Path(__file__)
-    if _is_backoff_applied(src_path):
-        print(f"Patch already applied (marker found), exiting 0.")
-        sys.exit(0)
-
-    # Backup original file
-    bak_path = _backup_file(src_path)
-    print(f"Backed up original to {bak_path}")
-
-    # Run smoke test
-    try:
-        success = _smoke_test_backoff()
-        if success:
-            print("Smoke tests passed. Patch applied successfully.")
+    # THIS ENTRYPOINT USED TO BE A ONE-SHOT SELF-PATCHER, NOT THE DAEMON (#4176).
+    #
+    # A build directive replaced __main__ with the smoke test for its own backoff
+    # patch. The result: `go.sh` launched this module on every boot, __main__
+    # found its own backup marker, printed "Patch already applied (marker
+    # found), exiting 0." and exited ZERO -- so daemon_wrapper.sh logged
+    # "clean exit (rc=0); wrapper stopping" and stood down.
+    #
+    # It looked exactly like a healthy daemon that had finished its work. The
+    # last real cycle this module ran was 2026-05-29; it was declared, launched,
+    # and dead for three months, and the only visible symptom was a log line
+    # that reads like success.
+    #
+    # run() -- the actual daemon, with the single-instance guard, signal
+    # handlers, rate budgets and cycle loop -- was fully intact the whole time
+    # and simply unreachable. So __main__ calls it, and the self-patch path
+    # keeps working behind an explicit flag rather than squatting on the
+    # default.
+    if "--self-patch" in sys.argv:
+        src_path = Path(__file__)
+        if _is_backoff_applied(src_path):
+            print("Patch already applied (marker found), exiting 0.")
             sys.exit(0)
-        else:
+        bak_path = _backup_file(src_path)
+        print(f"Backed up original to {bak_path}")
+        try:
+            if _smoke_test_backoff():
+                print("Smoke tests passed. Patch applied successfully.")
+                sys.exit(0)
             print("Smoke tests FAILED.")
             sys.exit(1)
-    except Exception as e:
-        print(f"Smoke test exception: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        except Exception as e:
+            print(f"Smoke test exception: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        finally:
+            remove_pid_file()
+
+    try:
+        run()
     finally:
         remove_pid_file()

@@ -53,11 +53,24 @@ DESIGN RULES, each of which exists because of a specific way this goes wrong
      used. "High risk" from a scorer that read only a package name is a
      different claim from the same words backed by a tool manifest.
 
-  5. SAME EVIDENCE AS THE INCUMBENT, deliberately. mcp_tool_hashes is EMPTY --
-     0 rows on the live bus -- so the incumbent scored 1,930 servers on registry
-     metadata alone: name, description, url, registry_source. Handing Gemini
-     more would answer a question nobody asked; the comparison would then be
-     between two evidence sets rather than two scorers.
+  5. SAME EVIDENCE AS THE INCUMBENT, deliberately. Handing Gemini more would
+     make the comparison one between two evidence sets rather than two scorers.
+     On the bus that evidence is registry metadata alone -- name, description,
+     url, registry_source -- because the tool-level tables carry nothing usable:
+     mcp_tool_hashes has 0 rows, and mcp_fingerprints, which covers all 1,930
+     scored servers, stores SHA-256("") in tool_name_hash and
+     permission_scope_hash for EVERY row. The hash of nothing, indistinguishable
+     from a real one.
+
+  6. WHICH PLANE. `mcp_server_registry` and `mcp_llm_axis_scores` exist on TWO
+     planes with IDENTICAL NAMES: the mesh bus (:8772) and the app Postgres.
+     This module reads the BUS, which holds 1,930 scored servers. The real
+     corpus is 66,565 scored servers / 465,955 score rows on the app plane
+     (PLAN_200K, prod /freshness 2026-07-15) -- ~34x larger, and NOT the same
+     shape: bus overall_risk is 38% in the top two bands, prod is 99.47%
+     (FU-058). Any percentage this tool prints is a statement about the plane it
+     read, and the report says which. Point ZO_BUS at the app plane, or set
+     DATABASE_URL, before quoting a figure as a corpus figure.
 
 Usage:
     python3 tools/axis_sense_check.py --sample 25            # pilot
@@ -328,9 +341,11 @@ def report(rep: dict) -> str:
     o.append("AXIS SENSE-CHECK -- incumbent scorer vs discrete Gemini tasks")
     o.append(f"  model {rep['model']}   {rep['sample']} servers   "
              f"{len(res)} discrete tasks   seed {rep['seed']}")
-    o.append("  SAME evidence as the incumbent (registry metadata only --")
-    o.append("  mcp_tool_hashes is empty, 0 rows). Gemini was BLIND to the")
-    o.append("  incumbent label.")
+    o.append("  SAME evidence as the incumbent (registry metadata only).")
+    o.append("  Gemini was BLIND to the incumbent label.")
+    o.append(f"  PLANE: {BUS}  -- percentages below describe THIS plane. The")
+    o.append("  app Postgres plane carries the same table names and ~34x the")
+    o.append("  rows, with a different distribution. See docs/AXIS_SENSE_CHECK.")
     o.append("=" * 78)
     o.append("")
     hdr = (f"{'axis':<20}{'agree':>7}{'inc UNK':>9}{'gem INSUF':>11}"

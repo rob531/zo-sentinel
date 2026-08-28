@@ -1,16 +1,95 @@
 # Axis sense-check — 2026-08-28
 
-Does the MCP scoring axis need refinement? Yes — but not in the way the question
-implies. The rubric is not the binding constraint.
+> **CORRECTION, same day.** The first version of this document analysed the
+> **wrong plane**. Its numbers came from the mesh bus (`:8772`), which holds
+> **3,244 registry rows and 1,930 scored servers**. The real scored corpus is
+> **66,565 servers / 465,955 score rows / 80,539 registry rows** on the app
+> Postgres (measured 2026-07-15 from prod `/freshness`, `docs/PLAN_200K.md`).
+> That is **~2.9%** of the scored corpus, and the sample is not merely small —
+> it is **unrepresentative in the opposite direction** (see §0).
+>
+> Both planes carry the same table names, which is how this went unnoticed.
+> Section 0 records what survives the correction and what is withdrawn.
 
-Method: a **second, independent scorer** (Gemini 2.5 Flash) was given **exactly
-the evidence the incumbent had**, **blind** to the incumbent's label, as **one
-discrete task per (server, axis)** — never seven axes in one prompt, so an early
-judgement cannot colour the rest. It was allowed to return
-`INSUFFICIENT_EVIDENCE` as a first-class verdict. 25 servers × 7 axes =
-175 tasks, 0 errors. Tool: `tools/axis_sense_check.py`.
+## 0. Which plane, and what that costs
 
-## Baseline — measured on the live bus, 1,928 scored servers
+`mcp_server_registry` and `mcp_llm_axis_scores` exist on **two planes with
+identical names** — the mesh bus DuckDB and the app Postgres. Everything below
+§0 was measured on the bus. The app plane is not reachable from this container:
+no `DATABASE_URL` in the environment, and the prod API (`mcprisky.io`) is
+auth-gated on every data route.
+
+| | mesh bus (measured) | app Postgres (`PLAN_200K`, 2026-07-15) |
+|---|---:|---:|
+| registry rows | 3,244 | **80,539** |
+| scored servers | 1,930 | **66,565** |
+| axis score rows | 13,498 | **465,955** |
+
+**The distributions do not transfer, and the direction matters.** `overall_risk`
+on the bus is MEDIUM 60% / HIGH 33% / CRITICAL 5% — 38% in the top two bands.
+The documented prod distribution (FU-058, `PRODUCT_SPEC.md`) is CRITICAL 65,269 /
+HIGH 106,118 / MEDIUM 854 / LOW 54 — **99.47% in the top two bands**. Opposite
+shape. So the bus is not a random sample of prod, and no percentage in §2 or §3
+should be read as a corpus figure.
+
+### What survives the correction
+
+- **Finding 1 (no ignorance token).** A property of the *label vocabulary*, not
+  of any sample. Both planes were scored by the **same model version,
+  `v3.0_40974559`** — the bus rows carry it and `PLAN_200K` names it for the
+  66,565 corpus — so the vocabulary is the same. It also *explains* the prod
+  distribution better than it explains the bus one: a scorer that cannot say
+  "insufficient evidence" has to put its mass somewhere, and on prod it went to
+  HIGH/CRITICAL.
+- **Finding 3 (no `schemas/risk_axis_mapping_v1.json`).** A repository fact.
+- **The tool.** `tools/axis_sense_check.py` is plane-agnostic; it needs a
+  connection to the app plane, not a rewrite.
+
+### What is WITHDRAWN
+
+- **The original Finding 2, "`mcp_tool_hashes` is empty (0 rows)", as a
+  corpus-wide claim.** True on the bus, unknown on prod. It is replaced by §1
+  below, which is a sharper and independently verified version of the same
+  problem.
+- **All per-axis percentages, the mutual-information figures, and the Gemini
+  agreement rates**, as statements about the corpus. They stand as statements
+  about the bus plane and as a demonstration that the method works.
+
+---
+
+## 1. The evidence layer records the hash of nothing
+
+This replaces the withdrawn Finding 2, and it is stronger because it is a
+constant rather than an absence.
+
+`mcp_fingerprints` covers **all 1,930 scored servers** (3,316 rows, 3,316
+distinct servers). It is where the tool-level evidence is supposed to live.
+Across every one of those rows:
+
+| column | distinct values over 3,316 rows |
+|---|---:|
+| `tool_name_hash` | **1** |
+| `permission_scope_hash` | **1** |
+| `domain_fingerprint` | 10 (two values cover 89%) |
+
+That single value, for both hash columns, is:
+
+```
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+```
+
+which is **`SHA-256("")` — the hash of the empty string**, verified.
+
+So the fingerprinter hashed an empty input for every server and stored the
+result as a fingerprint. `auth_strength` is 83–88% UNKNOWN not because the axis
+is badly posed but because **its input is a constant**, and a constant that
+looks exactly like a computed hash. Nothing downstream could tell.
+
+This is the same failure shape as the empty-catalog case in the SQL-string
+lint: a degenerate input that is indistinguishable from a real one, producing a
+verdict nobody can challenge.
+
+## 2. Baseline (BUS PLANE ONLY — see §0) — measured on the live bus, 1,928 scored servers
 
 | axis | dominant label | share | labels used | normalised MI with `overall_risk` |
 |---|---|---:|---:|---:|
@@ -24,7 +103,7 @@ judgement cannot colour the rest. It was allowed to return
 Two of six input axes carry almost no information about the verdict, and their
 dominant label is a **non-answer** rather than a risk level.
 
-## The pilot result
+## 3. The pilot result (BUS PLANE ONLY — see §0)
 
 | axis | agreement | incumbent UNKNOWN | Gemini INSUFFICIENT | verdict |
 |---|---:|---:|---:|---|
@@ -36,7 +115,7 @@ dominant label is a **non-answer** rather than a risk level.
 | capability_breadth | 40% | 0% | 28% | DISCRIMINATING |
 | network_egress | 52% | 8% | 40% | INCUMBENT_OVERCONFIDENT |
 
-## Three findings, in order of how much they cost
+## 4. The original findings, as written before the plane error was caught
 
 ### 1. Five of seven axes have no way to say "I cannot tell"
 
@@ -55,7 +134,8 @@ now found in the scoring layer, where it has been silently manufacturing tiers.
 It is also why `overall_risk` escalated **1,136 of 1,929** servers: escalation is
 firing on labels that mostly encode absence of evidence.
 
-### 2. `mcp_tool_hashes` is empty — 0 rows
+### 2. `mcp_tool_hashes` is empty — 0 rows  
+**WITHDRAWN as a corpus claim — see §0 and §1.**
 
 All 1,930 servers were scored on registry metadata alone: name, url,
 registry_source, and a one-line description. Four of the axes ask about *tool

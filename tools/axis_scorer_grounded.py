@@ -142,7 +142,60 @@ def latest_signals(server_ids: list[str]) -> dict[str, dict[str, dict]]:
     return out
 
 
-def band(risk: float, labels: list[str], ascends_with_risk: bool) -> str:
+#: An axis needs this much spread in its risk scores across the corpus before it
+#: can claim to separate labels. Below it, the cut points are noise.
+MIN_IQR = 5.0
+
+
+def calibrate(axis_risks: dict[str, list[float]],
+              axes: dict[str, dict]) -> dict[str, dict]:
+    """Place band cut points from the CORPUS DISTRIBUTION, not from arithmetic.
+
+    Equal-width bands on a 0-100 scale assume the scores use the scale. They do
+    not. `auth_strength` is backed only by `tls_validity`, which is 50.6 +/- 4.5
+    across the corpus, so every server landed in the same quarter and the axis
+    emitted ONE label while looking like a four-way judgement.
+
+    Two things this does, and one it deliberately refuses:
+
+      - cut points at empirical quantiles, so the labels track the data
+      - PUBLISHES the cut points and the IQR it derived them from, because a
+        threshold nobody can see is the class of defect this repo keeps finding
+
+      - it does NOT force a uniform spread. Quantile banding alone would put a
+        fixed 25% of the corpus in CRITICAL forever, which is a different way of
+        manufacturing confidence and is close to how prod reached 99.47% in the
+        top two bands. If the corpus spread cannot separate N labels
+        (IQR < MIN_IQR), the axis reports that it cannot band, and every verdict
+        on it becomes INSUFFICIENT_EVIDENCE rather than a label the data does
+        not support.
+    """
+    out: dict[str, dict] = {}
+    for axis, spec in axes.items():
+        risks = sorted(r for r in axis_risks.get(axis, []) if r is not None)
+        n_lab = len([l for l in spec["labels"] if l != INSUFFICIENT])
+        if len(risks) < 20:
+            out[axis] = {"bandable": False, "reason":
+                         f"only {len(risks)} scored servers -- too few to calibrate"}
+            continue
+        q1 = risks[len(risks) // 4]
+        q3 = risks[(3 * len(risks)) // 4]
+        iqr = q3 - q1
+        if iqr < MIN_IQR:
+            out[axis] = {"bandable": False, "iqr": round(iqr, 2), "reason":
+                         f"IQR {iqr:.2f} < {MIN_IQR} -- the backing signals do "
+                         f"not separate {n_lab} labels on this corpus"}
+            continue
+        cuts = [risks[int(len(risks) * i / n_lab)] for i in range(1, n_lab)]
+        out[axis] = {"bandable": True, "iqr": round(iqr, 2),
+                     "cuts": [round(c, 2) for c in cuts],
+                     "n": len(risks),
+                     "reason": f"quantile cuts over {len(risks)} servers, IQR {iqr:.2f}"}
+    return out
+
+
+def band(risk: float, labels: list[str], ascends_with_risk: bool,
+         cal: dict | None = None) -> str:
     """risk 0..100 (100 = worst) -> a label, honouring the axis's DIRECTION.
 
     Five of the seven label sets ascend in risk (LOW->CRITICAL, NARROW->BROAD).
@@ -159,12 +212,15 @@ def band(risk: float, labels: list[str], ascends_with_risk: bool) -> str:
     ordered = [l for l in labels if l != INSUFFICIENT]
     if not ascends_with_risk:
         ordered = list(reversed(ordered))
+    if cal and cal.get("bandable"):
+        idx = sum(1 for c in cal["cuts"] if risk >= c)
+        return ordered[min(idx, len(ordered) - 1)]
     idx = min(int(risk / (100.0 / len(ordered))), len(ordered) - 1)
     return ordered[idx]
 
 
 def score_axis(axis: str, spec: dict, sigs: dict[str, dict],
-               health: dict[str, dict]) -> dict:
+               health: dict[str, dict], cal: dict | None = None) -> dict:
     """One axis for one server. Rules 2 and 3."""
     backing = spec.get("backed_by", [])
     used, unusable, missing = [], [], []
@@ -198,7 +254,14 @@ def score_axis(axis: str, spec: dict, sigs: dict[str, dict],
         raise KeyError(
             f"axis '{axis}' does not declare labels_ascend_with_risk in the "
             f"contract; refusing to guess the direction")
-    lab = band(risk, spec["labels"], spec["labels_ascend_with_risk"])
+    if cal is not None and not cal.get("bandable", False):
+        # The axis has signals, but they do not separate its labels on this
+        # corpus. Saying so is the honest answer; picking one anyway is not.
+        return {"axis": axis, "label": INSUFFICIENT, "confidence": 0.0,
+                "risk_score": round(risk, 2), "signals_used": used,
+                "signals_unusable": unusable, "signals_missing": missing,
+                "reason": "not bandable: " + str(cal.get("reason"))}
+    lab = band(risk, spec["labels"], spec["labels_ascend_with_risk"], cal)
     # Confidence rises with how many independent signals agree, and falls when
     # they disagree. One signal is never high confidence.
     spread = (statistics.pstdev([float(u["score"]) for u in used])
@@ -244,10 +307,28 @@ def main() -> int:
                    f"WHERE server_id IN ({idl})"):
             inc[(r["server_id"], r["axis_name"])] = r["label"]
 
-    results = []
+    # PASS 1 -- risk scores only, to learn each axis's distribution.
+    axis_risks: dict[str, list[float]] = defaultdict(list)
     for sid in ids:
         for axis, spec in axes.items():
             v = score_axis(axis, spec, sigs.get(sid, {}), health)
+            if v.get("risk_score") is not None:
+                axis_risks[axis].append(v["risk_score"])
+    cal = calibrate(axis_risks, axes)
+
+    print("\nband calibration (publish the basis with the number):", file=sys.stderr)
+    for axis in axes:
+        c = cal[axis]
+        mark = "BANDABLE    " if c.get("bandable") else "NOT BANDABLE"
+        print(f"  {mark} {axis:<20} {c.get('reason')}"
+              + (f"  cuts={c.get('cuts')}" if c.get("bandable") else ""),
+              file=sys.stderr)
+
+    # PASS 2 -- label with the calibrated cuts.
+    results = []
+    for sid in ids:
+        for axis, spec in axes.items():
+            v = score_axis(axis, spec, sigs.get(sid, {}), health, cal[axis])
             v["server_id"] = sid
             v["v3_label"] = inc.get((sid, axis))
             results.append(v)
@@ -302,7 +383,8 @@ def main() -> int:
     if a.json:
         a.json.write_text(json.dumps(
             {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-             "plane": BUS, "signal_health": health, "summary": summary,
+             "plane": BUS, "signal_health": health, "calibration": cal,
+             "summary": summary,
              "results": results}, indent=2))
     return 0
 

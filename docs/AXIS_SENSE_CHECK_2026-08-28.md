@@ -287,3 +287,96 @@ told consumers to read since before it was written. Every axis declares
 
 **Still the bus plane.** These are 150 of 1,930 bus servers, not the 66,565 on
 the app plane. The rules are plane-independent; the percentages are not.
+
+---
+
+# 6. Root cause, fixed — and the bands calibrated
+
+## 6a. The empty hash traced to its source
+
+`mcp_fingerprinter.get_server_tools()` used to `SELECT` five per-tool columns
+from **`mcp_tool_definitions` — a table that exists on no plane and never did**.
+#4123 corrected which table it reads (`mcp_tool_hashes`). **It did not stop an
+empty result producing a valid-looking hash**, so the defect survived the
+repair:
+
+```python
+tool_names       = extract_tool_names(tools)          # tools == []  ->  []
+tool_name_hash   = compute_sha256_hash(','.join([]))  # -> SHA-256("")
+```
+
+The full chain, now traced end to end:
+
+```
+mcp_tool_definitions never existed
+  -> get_server_tools() returns []
+    -> hashing "" yields a well-formed 64-hex constant
+      -> all 3,316 mcp_fingerprints rows carry it in BOTH hash columns
+        -> the tool_count signal scores 91.95 +/- 1.36 for every server
+          -> capability_breadth and auth_strength have no real evidence
+            -> and v3, with no ignorance token, labels them confidently anyway
+              -> 99.47% of the prod corpus lands in the top two risk bands
+```
+
+**Fix**: `hash_or_absent()` returns `None` for empty content, and
+`is_absent_hash()` lets consumers treat the 3,316 rows already written as
+absent — **non-destructive; nothing is deleted**. A hash of nothing must be
+`None`, so that a consumer can tell the difference.
+
+## 6b. Bands calibrated against the distribution
+
+Equal-width bands assume the scores use the 0–100 scale. They do not.
+`calibrate()` places cut points at empirical quantiles and **publishes them**,
+and refuses to band at all when the corpus spread cannot separate the labels
+(IQR < 5).
+
+| axis | calibration | effect |
+|---|---|---|
+| auth_strength | **NOT BANDABLE** | `tls_validity` is 50.6 ± 4.5 — it cannot separate 4 auth levels. Was emitting one label for 23% of servers while looking like a four-way judgement; now abstains on 100%. |
+| exploit_surface | cuts [0.0, 5.0, 13.5], IQR 13.5 | **2 → 3 labels** — discrimination the flat bands had hidden |
+| overall_risk | cuts [10.0, 10.0, 22.5], IQR 12.5 | **2 → 3 labels** |
+| network_egress | cuts [20.0, 20.0, 32.5], IQR 12.5 | 3 labels; disagreement with v3 fell 99% → 50% |
+| maintainer_trust | cuts [48.5, 48.5], IQR 40.0 | 2 labels over the 34 servers with real evidence |
+
+It deliberately does **not** force a uniform spread. Pure quantile banding would
+put a fixed share in `CRITICAL` forever — a different way of manufacturing
+confidence, and close to how prod reached 99.47%.
+
+**Known limitation:** several cut lists contain duplicates (`[20.0, 20.0, 32.5]`,
+`[48.5, 48.5]`), which leaves a band empty. That is real — the underlying scores
+are coarse, taking only 4–9 distinct values — and it is reported rather than
+smoothed away. Finer scores are an upstream fix, not a banding one.
+
+## Final state
+
+| axis | v4 verdict | why |
+|---|---|---|
+| auth_strength | **abstains 100%** | no usable signal; not bandable |
+| capability_breadth | **abstains 100%** | only `tool_count` (empty-hash) and a 1% canary |
+| data_sensitivity | **abstains 100%** | same |
+| network_egress | 3 labels | `domain_trust`, `url_safety` |
+| maintainer_trust | 2 labels, abstains 77% | `github_stars`, `domain_age` |
+| exploit_surface | 3 labels | `tool_security`, `otx_threat_intel` |
+| overall_risk | 3 labels | `supply_chain`, `domain_trust` |
+
+Three axes now say "I cannot tell" instead of inventing 150 confident labels
+each. Four discriminate on evidence they carry with them.
+
+## Still open, named not parked
+
+- **`mcp_tool_hashes` is empty (0 rows)**, so the fingerprinter fix is
+  correct-but-unexercised. Nothing crawls MCP servers for their tool manifests.
+  Until something does, three axes will keep abstaining — **which is now the
+  honest output rather than a hidden one.**
+- **The enrichment lane died 2026-06-11.** All six enrichment signals stop
+  within 2 seconds of each other (12:04:14–12:04:16), so it was one process, not
+  six failures. `enrichment_dispatcher_daemon.py` is declared in **neither**
+  `go.sh` nor `watchdog.sh`, so nothing ever restarted it. It has three stacked
+  defects: it fetches from `/registry/mcp_servers` (**404** — and a 404 does not
+  raise, so it silently returns `[]` and logs "skipping cycle" forever); it posts
+  `{"records": ...}` where the write service expects `{"rows": ...}`; and it
+  dispatches 3 of its 4 declared enrichers. Not restarted — it would produce
+  nothing, and restarting a daemon whose input is a 404 is how the promoter went
+  unnoticed for ten days.
+- **A daemon declared nowhere is invisible to the drift check**, which diffs
+  declared against running. This lane is the proof case.

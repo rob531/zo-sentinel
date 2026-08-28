@@ -203,3 +203,87 @@ registry, scored HIGH as though it were a server.
   the auth_strength agreement between the two (88%/96%) is.
 
 Reproduce: `python3 tools/axis_sense_check.py --sample 25`
+
+---
+
+# 5. The fix — grounding the scorer in the signal history
+
+`mcp_signal_scores` holds **10.4M rows over 3,173 servers**, each with a score
+**and an evidence payload**. **1,874 of the 1,930 v3-scored servers have
+signals.** The evidence to grade several axes was already there and unread —
+v3 scores from a name, a URL and a one-line description, and has no evidence
+column at all.
+
+`tools/axis_scorer_grounded.py` copies the signal layer's shape exactly:
+`{score, evidence:{source, checks, raw}}`. Four rules, three of which exist
+because a draft of this fix got them wrong.
+
+**1. Degeneracy is measured every run, never assumed.** A signal earns the right
+to move a label by having spread across the corpus *today*:
+
+| rejected | why |
+|---|---|
+| `tool_count` | sd 1.36, 2 distinct scores — it reads `mcp_fingerprints.tool_count`, which is the empty-hash table from §1 |
+| `known_bad_pattern` | sd 0.68 |
+| `injection_resilience` | sd 0.25, 0.9% coverage |
+| `permission_scope`, `tool_description_safety`, `temporal_stability`, `community_signal` | 0.9–1.0% coverage — canaries, not production signals |
+
+**2. No usable backing signal → `INSUFFICIENT_EVIDENCE`.** Not a middle label,
+not the prior.
+
+**3. A derived signal is not evidence.** `reputation`'s evidence is
+`{"checks":["existing_trust:X"],"existing_trust":X}` on every row sampled — its
+only check *is* a stored trust value. `composite` is an aggregate of the others.
+Both have real spread, so the degeneracy test passes them, and both are
+circular.
+
+**4. The evidence travels with the label.**
+
+## Result, 150 servers × 7 axes
+
+| axis | v3 UNKNOWN | v4 INSUFFICIENT | v4 labels used | changed |
+|---|---:|---:|---:|---:|
+| auth_strength | 86% | 77% | 1 | 98% |
+| capability_breadth | 0% | **100%** | 0 | 100% |
+| data_sensitivity | 4% | **100%** | 0 | 100% |
+| network_egress | 7% | 0% | 3 | 99% |
+| maintainer_trust | 84% | 77% | 3 | 94% |
+| exploit_surface | 0% | 0% | 2 | 96% |
+| overall_risk | 0% | 0% | 2 | 82% |
+
+Two things changed, in opposite directions:
+
+- **`capability_breadth` and `data_sensitivity` now abstain on everything.**
+  Their only backing signals are the empty-hash `tool_count` and a 1%-coverage
+  canary. v3 emitted a confident label for all 150 servers on each.
+- **`maintainer_trust` and `network_egress` now discriminate** where evidence
+  exists. A worked case: 999 GitHub stars, domain age 1 day → `COMMUNITY`,
+  `confidence 0.465`, both signals and their raw evidence attached. **v3 called
+  it `UNKNOWN_AUTHOR`.**
+
+## Three bugs caught in this fix, recorded rather than quietly patched
+
+1. **Label direction.** Five label sets ascend in risk (`LOW`→`CRITICAL`); two
+   ascend in *goodness* (`NONE`→`STRONG`, `UNKNOWN_AUTHOR`→`ESTABLISHED`).
+   Mapping a risk score onto the second kind without reversing labels the
+   riskiest servers `ESTABLISHED`. It changed 40% of `maintainer_trust` verdicts.
+   Direction is now **required** in the contract and missing it raises — it
+   cannot be inferred from the words, because `NONE` is the safest value of
+   `network_egress` and the worst value of `auth_strength`.
+2. **Circular evidence.** Before rule 3, `maintainer_trust` abstained 0% and
+   looked like a triumph — because **110 of 150 servers were graded
+   `ESTABLISHED` on `reputation` alone, with no `github_stars` at all**. It read
+   exactly like the fix working. With `reputation` rejected, abstention is 77%,
+   which is the honest number.
+3. **Band mapping is uncalibrated** — equal-width bands on the inverted score.
+   Not yet fixed, and it is why `auth_strength` emits a single label where it
+   answers at all: `tls_validity` averages 50.6 with sd 4.5, so every server
+   lands in the same band. Calibrating against the score distribution is the
+   next pass.
+
+`schemas/risk_axis_mapping_v1.json` now exists — the contract PRODUCT_SPEC has
+told consumers to read since before it was written. Every axis declares
+`INSUFFICIENT_EVIDENCE`, its backing signals, and its direction.
+
+**Still the bus plane.** These are 150 of 1,930 bus servers, not the 66,565 on
+the app plane. The rules are plane-independent; the percentages are not.

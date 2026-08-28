@@ -382,14 +382,30 @@ def get_db_path():
     return "/tmp/zo_sentinel.duckdb"
 
 
-def ws_query(sql: str) -> list[dict]:
+class BusQueryError(RuntimeError):
+    """The bus could not answer. NOT the same as 'the answer is empty'."""
+
+
+def ws_query(sql: str, strict: bool = False) -> list[dict]:
+    """Query the bus.
+
+    `strict=True` RAISES on failure instead of returning []. Without it, a
+    malformed query is indistinguishable from a query that legitimately matched
+    nothing -- which is exactly how this module's own phantom columns stayed
+    invisible: the Binder Error was logged, [] was returned, and the caller
+    reported "No stale servers, sleeping." forever. Callers whose empty result
+    means "nothing to do" must pass strict=True.
+    """
     try:
         resp = _req.post(_QUERY_URL, json={"sql": sql}, timeout=30)
         if resp.status_code == 200:
             return resp.json().get("rows", [])
-        log(f"ws_query error {resp.status_code}: {resp.text[:200]}")
+        msg = f"ws_query error {resp.status_code}: {resp.text[:200]}"
     except Exception as e:
-        log(f"ws_query exception: {e}")
+        msg = f"ws_query exception: {e}"
+    log(msg)
+    if strict:
+        raise BusQueryError(msg)
     return []
 
 
@@ -630,18 +646,32 @@ def _fetch_metadata_for_server(server_id: str, source: str) -> dict | None:
 
 def get_stale_servers(limit: int = BATCH_SIZE) -> list[dict]:
     sql = f"""
-        SELECT r.server_id, r.source
+        -- TWO PHANTOM COLUMNS, both fixed here (#4176).
+        --   r.source     -> the column is `registry_source`; aliased back to
+        --                   `source` so cycle()'s row.get("source") is unchanged
+        --   a type mismatch on the comparison itself (TIMESTAMPTZ vs VARCHAR)
+        --   r.updated_at -> no such column. The registry's last-touched field is
+        --                   `last_seen` (first_seen/last_seen/last_scanned/
+        --                   last_assessed are the four real time columns)
+        -- Neither name exists on mcp_server_registry, so this query returned a
+        -- Binder Error on EVERY call -- and ws_query answered [] , which cycle()
+        -- reported as "No stale servers, sleeping." An error and an empty result
+        -- are not the same thing; see get_stale_servers below.
+        SELECT r.server_id, r.registry_source AS source
         FROM mcp_server_registry r
         LEFT JOIN mcp_ecosystems_metadata m ON r.server_id = m.server_id
         WHERE m.server_id IS NULL
            OR m.fetched_at IS NULL
            OR (
                m.cache_age_h > {CACHE_TTL_HOURS}
-               AND r.updated_at > m.fetched_at
+               -- fetched_at is stored VARCHAR while last_seen is TIMESTAMPTZ,
+               -- so the comparison needs an explicit cast. TRY_CAST, not CAST:
+               -- one unparseable timestamp must not take the whole queue down.
+               AND r.last_seen > TRY_CAST(m.fetched_at AS TIMESTAMP WITH TIME ZONE)
            )
         LIMIT {limit}
     """
-    return ws_query(sql)
+    return ws_query(sql, strict=True)
 
 
 def upsert_metadata(meta: dict):
@@ -672,7 +702,14 @@ def upsert_metadata(meta: dict):
 
 def cycle():
     log("Starting fetch cycle.")
-    servers = get_stale_servers(BATCH_SIZE)
+    try:
+        servers = get_stale_servers(BATCH_SIZE)
+    except BusQueryError as e:
+        # Loud, and distinguishable. "I could not ask" is not "there is nothing
+        # to do" -- run() catches this, logs it, and the heartbeat still fires,
+        # so the failure is visible rather than being mistaken for a quiet queue.
+        log(f"CYCLE FAILED -- could not read the stale-server queue: {e}")
+        raise
     if not servers:
         log("No stale servers, sleeping.")
         return

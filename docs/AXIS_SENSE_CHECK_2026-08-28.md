@@ -380,3 +380,83 @@ each. Four discriminate on evidence they carry with them.
   unnoticed for ten days.
 - **A daemon declared nowhere is invisible to the drift check**, which diffs
   declared against running. This lane is the proof case.
+
+---
+
+# 7. Correction: the "stalled enrichment lane" was never a lane
+
+§6 listed the enrichment lane as stalled since 2026-06-11 and worth un-stalling,
+on the grounds that `permission_scope` and `tool_description_safety` are the
+highest-information signals in the store (sd 33.5 and 32.2). **That was wrong,
+and the error was mine.** They are not signals. They are test fixtures.
+
+Every row of all four so-called stalled signals carries an evidence blob of this
+shape:
+
+```json
+{"signal_type": "permission_scope", "confidence": 0.92,
+ "evidence_blob": {"fixture": "mcp_scanner", "suite_id": "8e19b06b66e2",
+                   "case": "high_risk_isolated"}}
+```
+
+`fixture: mcp_scanner`, a `suite_id`, and integration-suite **case names**
+(`high_risk_isolated`, `caution_limited`). And every score sits in **0–1** while
+every real signal is **0–100** — a different scale, therefore a different
+writer.
+
+Their apparent high information content is the spread of deliberately varied
+**test cases**. Sorting signals by standard deviation put the test harness at
+the top of the table, which is exactly how it fooled me.
+
+So there was never a production producer to restart, and the 2026-06-11 cutoff
+is when a test suite last ran — not when a lane died. `signal_analyser.py`, the
+live producer, emits `url_safety`, `tool_security`, `supply_chain`,
+`reputation`, `domain_trust` and `composite`, and has never emitted any of these
+four.
+
+**The consequence for the axes is worse, not better:** `auth_strength` and
+`capability_breadth` have never had a production evidence source at all. There
+is no stalled daemon between them and an answer — there is nothing.
+
+## The guard
+
+`fixture_signals()` now rejects a signal when either holds, with the reason
+printed on every run:
+
+- more than half its rows carry `fixture` / `canary` / `suite_id` in evidence
+- every score is ≤ 1.0 while real signals are 0–100
+
+```
+REJECTED permission_scope        TEST FIXTURE -- 25/46 rows carry a test-fixture evidence blob
+REJECTED tool_description_safety TEST FIXTURE -- 25/46 rows carry a test-fixture evidence blob
+REJECTED temporal_stability      TEST FIXTURE -- 23/44 rows carry a test-fixture evidence blob
+REJECTED community_signal        TEST FIXTURE -- 23/44 rows carry a test-fixture evidence blob
+REJECTED injection_resilience    TEST FIXTURE -- 27/27 rows ...; every score <= 1.0 ...
+```
+
+The coverage floor already excluded all five at ~1%, so no verdict changes. The
+guard exists because that was the right answer for a weaker reason than the true
+one: raise the coverage floor, or let the fixture suite run corpus-wide, and
+they would have been readmitted as evidence.
+
+**`enrichment_dispatcher_daemon.py` is a separate matter and its three defects
+in §6 stand** — dead 404 endpoint, wrong write key, 3 of 4 enrichers wired. It
+writes to `mcp_signal_enrichments` (12 rows), which no axis reads. Still not
+restarted, and now for a better reason: it is not on the path to any axis.
+
+## Where the scorer actually stands
+
+| axis | verdict | basis |
+|---|---|---|
+| auth_strength | **abstains 100%** | no production evidence source has ever existed |
+| capability_breadth | **abstains 100%** | same |
+| data_sensitivity | **abstains 100%** | same |
+| network_egress | 3 labels | `domain_trust`, `url_safety` |
+| maintainer_trust | 2 labels, abstains 77% | `github_stars`, `domain_age` |
+| exploit_surface | 3 labels | `tool_security`, `otx_threat_intel` |
+| overall_risk | 3 labels | `supply_chain`, `domain_trust` |
+
+Four axes score on real evidence and carry it. Three say so when they cannot.
+The single thing that would change the three is **tool-manifest ingestion**:
+`mcp_tool_hashes` is empty, nothing crawls MCP servers for their tools, and no
+amount of rubric or scorer work substitutes for it.

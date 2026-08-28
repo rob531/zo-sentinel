@@ -76,6 +76,13 @@ MIN_DISTINCT = 3
 #: and it must actually cover enough of the corpus to be a general instrument.
 MIN_COVERAGE = 0.10
 
+#: Evidence payloads carrying any of these are TEST DATA, not observations.
+FIXTURE_MARKERS = ("fixture", "canary", "suite_id", "case")
+#: Real signals score 0-100. A signal whose scores all sit in 0..1 is on a
+#: different scale, which means a different writer -- and in every case measured
+#: so far, a test harness.
+SCALE_MAX_SUSPECT = 1.0
+
 
 def q(sql: str, timeout: int = 300) -> list[dict]:
     req = urllib.request.Request(
@@ -90,8 +97,48 @@ def q(sql: str, timeout: int = 300) -> list[dict]:
     return rows
 
 
-def signal_health(total_servers: int, derived: dict[str, str]) -> dict[str, dict]:
-    """Which signals carry information TODAY. Rules 1 and 3."""
+def fixture_signals() -> dict[str, str]:
+    """Signals whose rows are TEST DATA wearing a production shape.
+
+    Four signals -- permission_scope, tool_description_safety, community_signal,
+    temporal_stability -- look like the highest-information signals in the store
+    (sd 24-33). They are not signals at all. EVERY row carries an evidence blob
+    of the form {"fixture":"mcp_scanner","suite_id":...,"case":"high_risk_isolated"}
+    -- integration-suite case names -- and every score sits in 0..1 while every
+    real signal is 0..100. Their apparent spread is the spread of deliberately
+    varied TEST CASES.
+
+    They were never a stalled production lane, so there was nothing to restart.
+    The coverage floor already rejected them at ~1%, which was the right call
+    for a weaker reason than the true one. This makes the true one explicit, so
+    a future run that widened the coverage floor could not readmit them.
+    """
+    out: dict[str, str] = {}
+    rows = q("""SELECT signal_name,
+                       COUNT(*) AS n,
+                       SUM(CASE WHEN evidence LIKE '%fixture%'
+                                  OR evidence LIKE '%canary%'
+                                  OR evidence LIKE '%suite_id%' THEN 1 ELSE 0 END) AS fixture_rows,
+                       MAX(score) AS max_score
+                FROM mcp_signal_scores WHERE signal_name IS NOT NULL
+                GROUP BY 1""")
+    for r in rows:
+        why = []
+        n = r["n"] or 0
+        if n and (r["fixture_rows"] or 0) / n > 0.5:
+            why.append(f"{r['fixture_rows']}/{n} rows carry a test-fixture "
+                       f"evidence blob")
+        if r["max_score"] is not None and float(r["max_score"]) <= SCALE_MAX_SUSPECT:
+            why.append(f"every score <= {SCALE_MAX_SUSPECT} while real signals "
+                       f"are 0-100 -- a different writer")
+        if why:
+            out[r["signal_name"]] = "; ".join(why)
+    return out
+
+
+def signal_health(total_servers: int, derived: dict[str, str],
+                  fixtures: dict[str, str]) -> dict[str, dict]:
+    """Which signals carry information TODAY. Rules 1, 3 and the fixture guard."""
     rows = q("""WITH latest AS (
         SELECT server_id, signal_name, score,
                ROW_NUMBER() OVER (PARTITION BY server_id, signal_name
@@ -107,8 +154,11 @@ def signal_health(total_servers: int, derived: dict[str, str]) -> dict[str, dict
         cov = (r["servers"] or 0) / max(total_servers, 1)
         why = []
         is_derived = r["signal_name"] in derived
+        is_fixture = r["signal_name"] in fixtures
         usable = (sd >= MIN_SD and (r["distinct_scores"] or 0) >= MIN_DISTINCT
-                  and cov >= MIN_COVERAGE and not is_derived)
+                  and cov >= MIN_COVERAGE and not is_derived and not is_fixture)
+        if is_fixture:
+            why.append(f"TEST FIXTURE -- {fixtures[r['signal_name']]}")
         if is_derived:
             why.append(f"DERIVED -- {derived[r['signal_name']][:90]}")
         if sd < MIN_SD:
@@ -120,7 +170,7 @@ def signal_health(total_servers: int, derived: dict[str, str]) -> dict[str, dict
         out[r["signal_name"]] = {
             "servers": r["servers"], "avg": r["avg"], "sd": sd,
             "distinct": r["distinct_scores"], "coverage": round(cov, 4),
-            "usable": usable, "derived": is_derived,
+            "usable": usable, "derived": is_derived, "fixture": is_fixture,
             "why_not": "; ".join(why) or None}
     return out
 
@@ -284,7 +334,8 @@ def main() -> int:
     axes = contract["axes"]
 
     total = q("SELECT COUNT(DISTINCT server_id) AS n FROM mcp_signal_scores")[0]["n"]
-    health = signal_health(total, contract.get("derived_signals", {}))
+    fixtures = fixture_signals()
+    health = signal_health(total, contract.get("derived_signals", {}), fixtures)
 
     print(f"corpus for signal health: {total} servers on {BUS}", file=sys.stderr)
     print("signal usability (measured this run, rule 1):", file=sys.stderr)

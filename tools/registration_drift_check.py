@@ -776,6 +776,47 @@ def render(r: dict) -> str:
     return "\n".join(out)
 
 
+def status_line() -> str:
+    """ONE line, for a phone: phantom counts AND whether every declared lane runs.
+
+    Two questions that have always needed two commands. The lane half is scanned
+    live (a second or two). The phantom half is read from the newest referent
+    census on disk and is PRINTED WITH ITS AGE -- an old number that says how old
+    it is can be judged; an old number presented as current cannot.
+    """
+    r = run_cycle(allow_issues=False)
+    c = r["counts"]
+    lanes = (f"lanes {c['running']}/{c['declared']} up"
+             + (f" | MISSING {','.join(m['name'] for m in r['missing'])}"
+                if r["missing"] else "")
+             + (f" | {c['one_sided']} one-sided" if c["one_sided"] else ""))
+
+    phantom = "phantoms UNKNOWN (no local referent census)"
+    newest, newest_ts = None, 0.0
+    for cand in (SENTINEL / "artifacts" / "referent_verify.json",
+                 Path("/tmp/referent_verify.json")):
+        try:
+            if cand.exists() and cand.stat().st_mtime > newest_ts:
+                newest, newest_ts = cand, cand.stat().st_mtime
+        except OSError:
+            pass
+    if newest:
+        try:
+            j = json.loads(newest.read_text())
+            age_h = (time.time() - newest_ts) / 3600.0
+            tm = j.get("tables", {})
+            cm = j.get("columns", {})
+            n_t = len(tm.get("missing", {})) if isinstance(
+                tm.get("missing"), dict) else tm.get("missing", "?")
+            n_c = len(cm.get("missing", {})) if isinstance(
+                cm.get("missing"), dict) else cm.get("missing", "?")
+            phantom = (f"phantom tables {n_t} / columns {n_c} "
+                       f"(census {age_h:.0f}h old)")
+        except Exception:
+            phantom = "phantoms UNREADABLE (census present but unparseable)"
+    return f"{phantom} | {lanes}"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--daemon", action="store_true", help="loop forever")
@@ -784,6 +825,9 @@ def main() -> int:
     ap.add_argument("--no-issues", action="store_true",
                     help="never create or close GitHub issues")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--status", action="store_true",
+                    help="one line: phantom counts AND whether every declared "
+                         "lane is running. Exits non-zero if any lane is down.")
     a = ap.parse_args()
     # daemon_wrapper.sh does NOT forward trailing arguments to the script it
     # supervises (go.sh says so in its own comment at 12.8, which is why
@@ -792,6 +836,11 @@ def main() -> int:
     # mode is also settable by environment, which the wrapper DOES pass through.
     if os.environ.get("ZO_DAEMON") == "1":
         a.daemon = True
+
+    if a.status:
+        line = status_line()
+        print(line, flush=True)
+        return 0 if "MISSING" not in line else 1
 
     while True:
         r = run_cycle(allow_issues=not a.no_issues)

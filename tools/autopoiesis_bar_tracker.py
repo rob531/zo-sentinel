@@ -141,6 +141,19 @@ def measure() -> dict:
         if mm:
             m["orphan_effective"] = int(mm.group(1))
 
+    # 6. REFRESH THE LOCAL REFERENT CENSUS.
+    #    Not a bar metric -- it is what keeps the one-line phone status honest.
+    #    `registration_drift_check --status` reads this file for the phantom
+    #    half and prints its AGE, so a daily refresh keeps that number at most
+    #    24h old instead of however old the last manual run happened to be.
+    #    Report-only here: this daemon never arms anything.
+    art_dir = SENTINEL / "artifacts"
+    art_dir.mkdir(parents=True, exist_ok=True)
+    rc, _out = sh([sys.executable, "tools/referent_verify.py",
+                   "--json", str(art_dir / "referent_verify.json"),
+                   "--since-hours", "24"], cwd=SENTINEL, timeout=1800)
+    m["referent_census_refreshed"] = (rc == 0)
+
     # T1/T2/T3 are GRADES, not measurements. A machine row leaves them blank.
     m["T1"] = m["T2"] = m["T3"] = "NOT_GRADED"
     m["actions_taken"] = ""

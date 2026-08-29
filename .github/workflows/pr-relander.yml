@@ -1,0 +1,73 @@
+name: pr-relander
+
+# The missing half of the landing chain (LOCO_CHAIRMAN.md §13, gap GR-13).
+#
+# Chain today: builder opens auto/build/* PRs -> pr-triage labels exactly one
+# of triage:{solid,dup,scaffold,stale} -> auto-merge lands the solids. The
+# recorded failure mode (tools/pr_triage.py:179) is a BASE-branch breakage:
+# every open PR inherits the red gate, the whole cohort is labelled
+# triage:stale, and when main recovers NOTHING re-runs their checks -- no push
+# event ever arrives on those heads, so they stay stale forever and the
+# backlog compounds.
+#
+# This workflow closes that loop: whenever main moves (and on a sweep cadence),
+# update the branch of every open autonomous-build PR that is stale-but-clean
+# (gate failed, NOT conflicting). The update-branch merge commit re-fires the
+# gates against the recovered base; pr-triage relabels; auto-merge lands.
+# Conflicting PRs are deliberately left alone -- resolving or closing them is
+# a judgement call that stays with the triage digest and the operator.
+#
+# Self-limiting by construction: update-branch is a no-op error when the head
+# is already up to date with main, so a PR that fails on its OWN diff gets at
+# most one re-test per main advance, not a retry loop. RELAND_CAP bounds CI
+# fan-out per run.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "47 */6 * * *"   # sweep, offset from pr-triage's 17 */6
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-relander
+  cancel-in-progress: true
+
+jobs:
+  reland:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update stale-but-clean autonomous-build PRs against fresh main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RELAND_CAP: "10"
+        run: |
+          set -uo pipefail
+          prs=$(gh pr list -R "$REPO" --state open --label autonomous-build --label triage:stale \
+                  --json number,mergeable,isDraft \
+                  -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number') || prs=""
+          if [ -z "$prs" ]; then
+            echo "::notice::no stale-but-clean autonomous-build PRs to reland"
+            exit 0
+          fi
+          count=0
+          for pr in $prs; do
+            if [ "$count" -ge "$RELAND_CAP" ]; then
+              echo "::notice::reland cap ($RELAND_CAP) reached; remaining PRs wait for the next run"
+              break
+            fi
+            if gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
+              echo "::notice::#$pr branch updated -> gates re-run against current main"
+              count=$((count+1))
+            else
+              # "already up to date" and race losses are expected; log, never fail the sweep.
+              echo "::notice::#$pr not updated ($(tr -d '\n' < err.txt | head -c 200))"
+            fi
+          done
+          echo "::notice::relanded $count PR branch(es) this run"

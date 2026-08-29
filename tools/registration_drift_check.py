@@ -741,7 +741,7 @@ def render(r: dict) -> str:
                f"{c['launchers_excluded']}")
     out.append("")
     if r["missing"]:
-        out.append(f"[1] MISSING -- declared but no process on the canonical path")
+        out.append("[1] MISSING -- declared but no process on the canonical path")
         for m in r["missing"]:
             out.append(f"    {m['name']:<42} cycle {m.get('consecutive_cycles', 1)}"
                        + (f"  -> issue #{m['issue']}" if m.get("issue") else ""))

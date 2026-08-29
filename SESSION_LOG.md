@@ -32,3 +32,12 @@ on each relanded head via workflow_dispatch (guard-exempt); evaluator.yml
 gains the dispatch trigger; actions:write added. RELANDER_TOKEN PAT docked for
 full-fidelity native retriggering (covers no-hollow/schema-prm). GR-13 updated.
 Routes: none (CI workflows + governance docs)
+
+## 2026-08-29T18:40:00Z
+Scheduled the mission session (2026-08-30): three organs queued atop
+chairman/QUEUE.md as 0a/0b/0c — enforcement predicates (doctrine becomes
+un-ignorable), the chairman->emitter bridge (typed DIAGNOSE/EVAL/BUILD
+shape-changing tasks emitted from the register), and the S1 pivot (verdict
+vocabulary, the 82% unknown share, axis measurability). Routine created to
+spawn a fresh session for it.
+Routes: none (governance docs)

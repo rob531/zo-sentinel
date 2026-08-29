@@ -41,3 +41,11 @@ shape-changing tasks emitted from the register), and the S1 pivot (verdict
 vocabulary, the 82% unknown share, axis measurability). Routine created to
 spawn a fresh session for it.
 Routes: none (governance docs)
+
+## 2026-08-29T18:55:00Z
+RELANDER_TOKEN decision recorded: deferred by the operator (mobile-only), a
+per-doctrine "no" with a tripwire, not rot. Dispatch-mode accepted as steady
+state; Decision Dock row closed with re-raise conditions (a relanded PR
+stalling on no-hollow/schema-prm, gate-coverage questions on relanded heads,
+or a required context moving into a PR-context-only workflow).
+Routes: none (governance docs)

@@ -69,3 +69,8 @@ conservative seeds; each entry's step 1 is re-measurement.
 - grade C0 -> target C2 | class GC-4
 - first command: `grep -n "mesh_memory" CLAUDE.md`
 - evidence for move: write-through repo->bus per §11.2 implemented in the session-end protocol.
+
+## 13. GR-13 — landing chain: verify the relander drains the backlog
+- grade C2 -> target C3/C4 | class GC-13
+- first command: `gh` unavailable in-session; check https://github.com/rob531/zo-sentinel/actions/workflows/pr-relander.yml runs + open-PR count vs the 117 baseline
+- evidence for move: C3 = backlog measurably draining (open count + oldest-age down across two governance sessions); C4 = a test asserting each §13 chain link has an owner (workflow exists, label wiring intact — the #4128 disarm-hardening pattern for the landing chain).

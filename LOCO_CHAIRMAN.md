@@ -712,11 +712,66 @@ that ladder, which is why this file refuses to let one stay half-closed.
 
 ---
 
+## 13. The landing doctrine — solid PRs merge, or they are a gap
+
+A pull request is **inventory, not achievement**. Work delivers value at
+merge; an open PR is unrealized value that decays (base drift, conflicts,
+duplicate re-emissions, reviewer context loss). The 2026-08-23 audit worked
+around **117 open PRs** it could not touch; a backlog that size is not a queue,
+it is a graveyard with better lighting — the same GC-7 shape wearing a
+different label.
+
+**GC-13 · The open-PR graveyard.** Solid, wanted work parked in an open PR
+with no mechanism driving it to merge; the landing chain has a link that
+requires a human click nobody's cadence owns, or a link that silently stops
+re-evaluating. *Canonical:* the recorded 2026-07 failure in
+`tools/pr_triage.py:179` — a base-branch breakage turned the whole cohort's
+gates red, every PR was labelled `triage:stale`, auto-merge (armed only on
+`triage:solid`) never fired, and when main recovered **nothing re-ran their
+checks** — no push event ever reaches those heads, so recovery upstream left
+the backlog stale forever. *Kill:* every link in the landing chain is owned by
+a mechanism, none by an unowned click, and every "wait" state has a
+re-evaluation trigger.
+
+The landing chain, each link with its owner:
+
+| Link | Owner | Status |
+|---|---|---|
+| Emit → PR opened | builder (`auto/build/*`) | live |
+| PR judged | `pr-triage` (labels `triage:{solid,dup,scaffold,stale}`, 6h cadence) | live |
+| Solid → merged | `auto-merge` (squash on `triage:solid`, freeze-guard on scoring paths) | live |
+| **Red-from-base → re-tested after main recovers** | **`pr-relander`** (update-branch on stale-but-clean PRs on every main push + 6h sweep, capped) | **built 2026-08-29** |
+| Hand PR, wanted → merged | `land-when-green` label → `auto-merge` opt-in job + sweep | **built 2026-08-29** |
+| Conflicting / twice-relanded-still-red / dup / scaffold → closed | operator, via the triage digest | manual by design |
+
+Rules, binding on every session:
+
+1. **A green, mergeable PR you own does not wait for you to remember it.** On
+   a PR this project's flow lets you merge (CLAUDE.md pre-approves
+   squash-merging your own), merge it when gates pass; otherwise apply
+   `land-when-green` so the machinery owns the wait. "I'll merge it later" is
+   a GC-9 decision-parked-without-a-meter.
+2. **Red inherited from base is never the PR's verdict.** Before judging a
+   red PR, ask whether the same check is red on `main` (§2, interrogative 2's
+   silent-state discipline applied to CI). The relander automates the retest;
+   sessions must not label or close on an inherited red.
+3. **The backlog number is a register metric.** Open-PR count and
+   oldest-open-age get re-measured at governance sessions; a rising count
+   with green throughput means a link broke — find which link, not which PR.
+4. **Closing is honest work.** A dup, a scaffold, or a build superseded by a
+   better emission is *finished* by closing with a reason, and that is a
+   grade-move, not a failure. The graveyard forms from PRs nobody would
+   defend but nobody closed.
+5. **Never force the chain.** No merging over red required checks, no
+   stripping the freeze-hold, no closing another lane's PR to tidy a number.
+   The chain's gates are the product's honesty (§5, S0).
+
 *Register addendum, seeded with the sections above:*
 
 | ID | Gap | Class | Grade | Cap | Evidence trail | Last touched |
 |---|---|---|---|---|---|---|
 | GR-11 | Graphify graph absent in fresh clones — structural instrument errors until regenerated; no staleness budget on graph-derived claims | GC-1, GC-8 | **C0** | C4 (CI-rebuilt graph per F4 + build-time stamped claims) | `graph_stats` error measured 2026-08-29; `.gitignore:20`, `.graphifyignore` | 2026-08-29 |
 | GR-12 | Chairman state has no bus mirror — host-side daemons cannot read governance state | GC-4 | **C0** | C2 (`mesh_memory` write-through per §11.2) | §11.2; `CLAUDE.md` mesh_memory reference | 2026-08-29 |
+| GR-13 | Open-PR graveyard: stale-from-base PRs never re-tested after main recovers; hand PRs have no landing path | GC-13, GC-7 | **C2** — mechanism built (`pr-relander.yml`, `land-when-green` in `auto-merge.yml`); C3 needs the backlog observed draining, C4 needs link-ownership asserted by a test | C4 | `tools/pr_triage.py:179` (recorded failure); §13 chain table; 117 open PRs in MERGE_AUDIT | 2026-08-29 |
 
 — the chairman's locum, seeded 2026-08-29

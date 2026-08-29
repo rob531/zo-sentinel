@@ -10,6 +10,54 @@ conservative seeds; each entry's step 1 is re-measurement.
 
 ---
 
+**MISSION SESSION 2026-08-30 — the three missing organs.** Scheduled by the
+operator ("maximum thought and imagination"). These three outrank the numbered
+backlog below for that session; they are the difference between an instruction
+set and an organism (chairman assessment, 2026-08-29 EOD).
+
+## 0a. Enforcement predicates — the doctrine must be un-ignorable
+- grade C1 -> target C4 | class GC-3 (the doctrine itself is report-only today)
+- shape: FU-style machine-closeable predicates for Gap Register rows + a CI
+  step (pr-gates or its own workflow) that fails when a PR claims a gap fix
+  but moves no register grade, and greens when the register moves with
+  evidence. Harden its own disarming (#4128 pattern). Design freely: the
+  predicate schema is yours to invent — but UNKNOWN must carry an age budget
+  (GC-1) and a grade claim must be checkable from the diff + repo state alone.
+- evidence for move: injected-defect test — a synthetic "closed at C1" PR goes
+  red; a genuine grade-move with evidence goes green.
+
+## 0b. The chairman->emitter bridge — shape-changing tasks
+- grade C0 -> target C3 | the protean organ the loop is starving for
+- shape: queue/register entries become TYPED directives the pipeline consumes:
+  DIAGNOSE (emit a probe — referent_verify/census shape), EVAL (emit an
+  acceptance harness — F2 antipattern-suite shape), BUILD (emit the fix —
+  existing builder shape). A gap enters at DIAGNOSE and the task CHANGES SHAPE
+  as evidence accumulates; the dispatcher decides the next shape from the
+  register row's state. Respect SENTINEL_DIRECTIVE_SCHEMA.md and
+  directives/pending/ conventions; the bridge emits FROM the register (the
+  system's own self-description), which is the autopoietic test. Imagine
+  beyond a translator script: the bridge should also CLOSE the loop — a
+  directive's outcome writes back a grade-move proposal.
+- evidence for move: one real gap (pick from GR-3/GR-6/GR-10) driven
+  DIAGNOSE->EVAL->BUILD end to end by emitted directives, with the register
+  row moved by the outcome.
+
+## 0c. S1 pivot — the scores are the product
+- grade C0 -> target: measurable movement | stage S1 gate (GR-7 + the 82%)
+- shape: spend the session's larger half on the scoring axis, not the loop
+  that watches it. Priorities: (1) canonical verdict vocabulary declared in
+  one file + emitter migration plan (kills GC-6); (2) attack the ~82% unknown
+  share with enrichment measured against labelled ground truth, not
+  re-labelling; (3) axis sense-check follow-through (docs/AXIS_SENSE_CHECK,
+  tools/axis_sense_check.py, tools/axis_scorer_grounded.py) — make the twelve
+  canonical signal types' flow measurable. Imagination welcome: risk-curve
+  backtests (RISK_CURVE_HYPOTHESIS.md), verdict-drift surfacing, whatever
+  makes an MCP score DEFENSIBLE to a paying stranger.
+- evidence for move: a number about the scores themselves (unknown share,
+  vocabulary compliance, axis coverage) measured before and after.
+
+---
+
 ## 1. GR-8 — linter --fix corrupts SQL names (unblocks 34 downstream decisions)
 - grade C0 -> target C3 | class GC-12
 - first command: `grep -rn "def .*fix" tools/model_import_linter* 2>/dev/null || find . -name "*model_import_linter*" -not -path './.git/*'`

@@ -443,6 +443,7 @@ older than 14 days in its summary, restating the measured cost of deferral.
 | Fast-forward build workspace — 46 daemon files block ([#3998](https://github.com/rob531/zo-sentinel/issues/3998)) | 2026-08-23 | operator | Build workspace diverges from `main`; referent checks must run in a clean worktree to be honest (STATUS §1a notes exactly this) |
 | `app/scoring_consumer.py` — no callers, delete? ([#3999](https://github.com/rob531/zo-sentinel/issues/3999)) | 2026-08-23 | operator | Dead matter accrues; the janitor doctrine (`AUTOPOIESIS.md`) says retire it |
 | Triage the 63 deferrals — 12 RETIRE need approval ([#4004](https://github.com/rob531/zo-sentinel/issues/4004), [#4005](https://github.com/rob531/zo-sentinel/issues/4005)) | 2026-08-23 | operator | Cap breached by 23; every week the graveyard normalises further |
+| Add a `RELANDER_TOKEN` repo secret (fine-grained PAT, this repo only: contents rw + pull-requests rw) so `pr-relander`'s branch updates fire ALL workflows natively | 2026-08-29 | operator | Without it, relanded heads report only the five required contexts via dispatch; `no-hollow` and `schema-prm` stay unreported on relanded PRs (they need PR context and cannot be dispatched) |
 
 ---
 
@@ -772,6 +773,6 @@ Rules, binding on every session:
 |---|---|---|---|---|---|---|
 | GR-11 | Graphify graph absent in fresh clones — structural instrument errors until regenerated; no staleness budget on graph-derived claims | GC-1, GC-8 | **C0** | C4 (CI-rebuilt graph per F4 + build-time stamped claims) | `graph_stats` error measured 2026-08-29; `.gitignore:20`, `.graphifyignore` | 2026-08-29 |
 | GR-12 | Chairman state has no bus mirror — host-side daemons cannot read governance state | GC-4 | **C0** | C2 (`mesh_memory` write-through per §11.2) | §11.2; `CLAUDE.md` mesh_memory reference | 2026-08-29 |
-| GR-13 | Open-PR graveyard: stale-from-base PRs never re-tested after main recovers; hand PRs have no landing path | GC-13, GC-7 | **C2** — mechanism built (`pr-relander.yml`, `land-when-green` in `auto-merge.yml`); C3 needs the backlog observed draining, C4 needs link-ownership asserted by a test | C4 | `tools/pr_triage.py:179` (recorded failure); §13 chain table; 117 open PRs in MERGE_AUDIT | 2026-08-29 |
+| GR-13 | Open-PR graveyard: stale-from-base PRs never re-tested after main recovers; hand PRs have no landing path | GC-13, GC-7 | **C2** — mechanism built (`pr-relander.yml`, `land-when-green` in `auto-merge.yml`); relander run #1 exposed the GITHUB_TOKEN recursion guard (updates pushed, gates never fired — ghost `action_required` runs, a GC-8: the record showed runs, the referent never executed) → v2 dispatches `pr-gates`+`evaluator` (all five required contexts) per relanded head, with a `RELANDER_TOKEN` PAT docked for full fidelity. C3 needs the backlog observed draining, C4 a link-ownership test | C4 | `tools/pr_triage.py:179`; relander run 33266596401 (10 updated, 0 gates fired); §13 chain table | 2026-08-29 |
 
 — the chairman's locum, seeded 2026-08-29

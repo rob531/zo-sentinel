@@ -58,7 +58,7 @@ import os
 import statistics
 import sys
 import urllib.request
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 

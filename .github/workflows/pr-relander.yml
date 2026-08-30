@@ -21,6 +21,22 @@ name: pr-relander
 # is already up to date with main, so a PR that fails on its OWN diff gets at
 # most one re-test per main advance, not a retry loop. RELAND_CAP bounds CI
 # fan-out per run.
+#
+# RECURSION GUARD (measured on run #1, 2026-08-29): pushes made with the
+# default GITHUB_TOKEN never fire push/pull_request workflows -- the ten
+# update-branch merge commits produced only ghost "action_required" workflow
+# runs with zero jobs, so no gate re-ran and no required context reported on
+# the new heads. Two escapes, both wired below:
+#   (a) if a RELANDER_TOKEN secret (fine-grained PAT: contents rw,
+#       pull-requests rw) exists, update-branch uses it and the resulting
+#       synchronize event fires EVERY workflow natively -- full fidelity,
+#       including the PR-context-only no-hollow / schema-prm;
+#   (b) with only GITHUB_TOKEN, after each update we workflow_dispatch
+#       pr-gates.yml + evaluator.yml on the head branch (dispatch is exempt
+#       from the guard). Those two carry ALL required contexts (capmap-check,
+#       static-analysis, smoke-ladder, frontend, pytest), so branch protection
+#       and auto-merge are satisfied; non-required PR-context checks simply
+#       stay unreported on that head.
 
 on:
   push:
@@ -32,6 +48,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write   # workflow_dispatch of pr-gates/evaluator on relanded heads
 
 concurrency:
   group: pr-relander
@@ -44,7 +61,11 @@ jobs:
     steps:
       - name: Update stale-but-clean autonomous-build PRs against fresh main
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Prefer the PAT (native workflow retrigger); fall back to GITHUB_TOKEN
+          # plus explicit dispatches -- see the recursion-guard note above.
+          GH_TOKEN: ${{ secrets.RELANDER_TOKEN || github.token }}
+          HAVE_PAT: ${{ secrets.RELANDER_TOKEN != '' }}
+          DISPATCH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RELAND_CAP: "10"
         run: |
@@ -56,6 +77,7 @@ jobs:
             echo "::notice::no stale-but-clean autonomous-build PRs to reland"
             exit 0
           fi
+          [ "$HAVE_PAT" = "true" ] || echo "::notice::no RELANDER_TOKEN secret -> using GITHUB_TOKEN + explicit gate dispatches (required contexts only)"
           count=0
           for pr in $prs; do
             if [ "$count" -ge "$RELAND_CAP" ]; then
@@ -63,8 +85,16 @@ jobs:
               break
             fi
             if gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
-              echo "::notice::#$pr branch updated -> gates re-run against current main"
+              echo "::notice::#$pr branch updated"
               count=$((count+1))
+              if [ "$HAVE_PAT" != "true" ]; then
+                branch=$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName) || continue
+                for wf in pr-gates.yml evaluator.yml; do
+                  GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$wf" -R "$REPO" --ref "$branch" \
+                    && echo "::notice::#$pr dispatched $wf on $branch" \
+                    || echo "::warning::#$pr could not dispatch $wf on $branch"
+                done
+              fi
             else
               # "already up to date" and race losses are expected; log, never fail the sweep.
               echo "::notice::#$pr not updated ($(tr -d '\n' < err.txt | head -c 200))"

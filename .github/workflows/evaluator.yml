@@ -10,6 +10,11 @@ on:
   push:
     branches:
       - "**"
+  # pr-relander dispatches this on relanded PR branches: GITHUB_TOKEN pushes
+  # (its update-branch merge commits) never fire push/pull_request workflows
+  # (GitHub recursion guard), and `pytest` here is a REQUIRED context -- without
+  # a dispatch path a relanded head can never report it and never merges.
+  workflow_dispatch:
   pull_request:
 
 jobs:

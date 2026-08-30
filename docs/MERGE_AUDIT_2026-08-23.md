@@ -504,3 +504,136 @@ hole and put the 8 currently ungated `app/` modules under a real assertion.
 
 *Audit performed 2026-08-25 against `origin/main` @ `b66d3d84`. Read-only apart
 from this file. The 117 open PRs were not touched.*
+
+---
+
+# REMEDIATION — 2026-08-25
+
+Worked in the order the remediation brief set, one PR per phase so any phase can
+be reverted independently. Every fix was verified by this audit's own method:
+inject the defect into a clean export of `origin/main`, prove the gate now FAILS,
+remove it, prove it passes. Both results are reported below; nothing is recorded
+as "should catch it".
+
+All verification ran against clean `git worktree` exports of `origin/main`
+(`d9aaca9d`), never against the host build workspace — which is the point of B2.
+
+## Status by finding
+
+> ### Read this before reading the table
+>
+> **`fixed` means a PR was WRITTEN and its verification passed. It is a claim
+> about a branch, not about `main`.**
+>
+> **The `Merged` column is the only claim this document makes about `main`.** A
+> row that says `fixed` with an empty `Merged` cell describes code that does not
+> exist on `main` and is not running anywhere.
+>
+> This distinction is not pedantry. When this section was first written on
+> 2026-08-25, **every row below said `fixed` and exactly one of the ten PRs had
+> merged** — #4007, the PR that added this section. The other nine sat on
+> branches. For 22 hours this document asserted a state of `main` that was
+> false, and it was read by humans and agents as a statement of code state.
+> The cause is recorded in issue #4032 (Phase A): `auto-merge.yml` fires only on
+> PRs labelled `autonomous-build` + `triage:solid`, which is applied by the
+> build publisher — so human-authored `fix/*` branches are outside the merge
+> automation entirely and merge only if a person remembers.
+>
+> All ten have since been merged and each change was read back off `main` with
+> `git show origin/main:<path>`. The column is populated below.
+
+| Finding | PR | Verification | Status (PR written) | Merged to `main` (UTC) | Squash SHA |
+|---|---|---|---|---|---|
+| **B1** — 7 un-closeable FU predicates | [#3990](https://github.com/rob531/zo-sentinel/pull/3990) | 7/7 UNKNOWN before → 7/7 RED with the probe fix alone → 4 RED / 3 GREEN / **0 UNKNOWN** with both. Unreachable bus still UNKNOWN. | **fixed** | 2026-08-26 17:40:06Z | `0acdac63` |
+| **B2** — untracked files shadow the package | [#3985](https://github.com/rob531/zo-sentinel/pull/3985) | Workspace 31/32 mounts + 1 failure → **32/32 + 0**. Check: clean=0, +untracked=1, removed=0, rewound HEAD=1, restored=0. | **partial** — fast-forward blocked, [#3998](https://github.com/rob531/zo-sentinel/issues/3998) | 2026-08-26 18:52:29Z | `2c9238bf` |
+| **L1 / G5** — 52 staged services, no import test | [#3989](https://github.com/rob531/zo-sentinel/pull/3989) | Probe service: clean→PROMOTE, defect→HOLD, linter fix→PROMOTE; path-dependent defect→post-move FAIL + **rollback**. Sites 66→57. | **partial** — 25 still fail ([#4002](https://github.com/rob531/zo-sentinel/issues/4002)), 6 need a human ([#4001](https://github.com/rob531/zo-sentinel/issues/4001)) | 2026-08-26 18:52:47Z | `39cfd48d` |
+| **L2** — `sqlalchemy.sql.Row` | [#3991](https://github.com/rob531/zo-sentinel/pull/3991) | `ImportError` → imports OK. A second defect (FU-031 casing) sat behind the audit's one-line fix. | **fixed**; deletion proposed, [#3999](https://github.com/rob531/zo-sentinel/issues/3999) | 2026-08-26 18:53:15Z | `23157c39` |
+| **L3** — exemplar self-test import | [#3991](https://github.com/rob531/zo-sentinel/pull/3991) | `ModuleNotFoundError` → (import fixed) `TypeError` → rebuilt → **PASS** with real assertions. | **fixed** | 2026-08-26 18:53:15Z | `23157c39` |
+| **G1** — tier1/tier4 mutual delegation | [#3986](https://github.com/rob531/zo-sentinel/pull/3986) | Both audit defects. `app/db.py` shape: pre-fix tier4 **PASS** (warning only) → post-fix tier1 *and* tier4 **FAIL**, tier4 on a named check. | **fixed** | 2026-08-26 19:00:00Z | `8525431f` |
+| **G2** — blocking lint covers one tree | [#3992](https://github.com/rob531/zo-sentinel/pull/3992) | Undefined name in `app/` and in `tools/`: old gate exit **0** (misses), new gate exit **1** (catches). **22** pre-existing findings cleared -- 20 when the PR was written, plus 2 `F541` in `tools/referent_verify.py` that landed on `main` afterwards via #4036 and would have failed the gate this PR arms. | **fixed** | 2026-08-26 18:44:46Z | `87c14dc4` |
+| **G3** — stale `known_runtime` | [#3993](https://github.com/rob531/zo-sentinel/pull/3993) | Stale entry → tier4 FAIL; removed → PASS; **live** suppression still suppresses; healed-but-kept → FAIL. | **fixed** | 2026-08-26 18:53:25Z | `6757ad65` |
+| **G4** — ratchet prints its own trigger | [#3996](https://github.com/rob531/zo-sentinel/pull/3996) | 64th deferral: pre-fix exit **0**, post-fix exit **1**. Shrink → 0 + re-pin advice. | **partial** — triage [#4004](https://github.com/rob531/zo-sentinel/issues/4004), CofC ruling [#4005](https://github.com/rob531/zo-sentinel/issues/4005) | 2026-08-26 18:52:58Z | `f680b9f3` |
+| **G6** — silent truncation at `:8772` | [#3994](https://github.com/rob531/zo-sentinel/pull/3994) | Patch verified on the shipped method against a stub: 9.6M rows → `truncated=true`; caller's own LIMIT → `false`. | **needs Robin** — [#3997](https://github.com/rob531/zo-sentinel/issues/3997) | 2026-08-26 17:40:10Z | `22e62205` |
+
+All nine PRs were green when written: zero failing checks across every required context. **That was measured against `main` @ `d9aaca9d`.** By the time they merged, `main` had moved 55 commits and two of them no longer held: #3992 would have failed the very gate it arms, and #3992/#3991 and #3993/#3986 conflicted pairwise. All seven were rebased onto current `main` and re-verified before merge. A green check is a statement about the base it ran on, and branch protection here has `strict: false` -- it does not re-run.
+
+## Corrections to this audit
+
+Four claims in the original document did not survive verification. Each is
+recorded because the correction is itself a finding.
+
+1. **§B1 — "these are app-plane tables (Postgres)".** `server_scores`, `servers`
+   and `score_runs` exist on **no plane at all**: not among the 44 tables on the
+   bus, not as a `__tablename__` in `app/models.py`, and in no migration or
+   schema snapshot. There was nothing to re-target *to*, so they were mapped to
+   the real tables (`mcp_server_registry`, `mcp_llm_axis_scores`, `agent_runs`).
+
+2. **§G2 — "both are clean enough to ratchet today".** They were not.
+   `app/` carried **10** F,E9 findings and `tools/` **10**, including a genuine
+   `F821 Undefined name 'Session'` in the mounted router
+   `app/routers/ask_corpus_health_api.py:35`. All 20 were cleared in #3992
+   before the gate could be widened.
+
+3. **§L2 — "`from sqlalchemy import Row`" as a complete fix.** It is necessary
+   but not sufficient: behind it sat an FU-031 casing drift
+   (`MCPLLMAxisScores` vs `McpLlmAxisScore`) that still blocked the import. The
+   same pattern held for **L3**, where repairing the import exposed a self-test
+   that could never have passed — it overrode `get_session` with a raw `sqlite3`
+   connection while the router passes a SQLAlchemy `TextClause`.
+
+4. **§G4 — "339 orphans" read as a service backlog.** The census scans
+   **root-level `.py` only**; `services/staged/` is never walked. Of the 339,
+   **288 are dead scaffolding** with no counterpart and no importer anywhere,
+   and only **46** have a promotion path. The 930 staged services are invisible
+   to this gate entirely.
+
+A fifth correction was to my own work: the first revision of the G6 census
+claimed the `code_nodes`/`code_edges` readers were unbounded. They are not —
+every one sets an explicit `LIMIT`. Withdrawn and corrected in #3994; the
+analyser now reconstructs whole SQL statements instead of judging concatenated
+fragments separately.
+
+## What the fixes have in common
+
+The audit's own summary named the pattern — *"the instruments exist and are
+largely correct; what fails is where their output lands"*. Every fix here is the
+same move, and three of them were the identical bug in different clothes:
+
+- **G1** recorded an unimportable `app.main` as a passing check.
+- **B1** resolved a catalog error — a definite finding — into UNKNOWN.
+- **G4** printed a documented reopen trigger inside a check that exited 0.
+
+In each case the instrument was right and the verdict was discarded. The
+recurring repair is to make "I could not evaluate this" distinguishable from
+"this is fine", and to make the distinction *blocking*.
+
+Two further observations from doing the work:
+
+- **Every "trivial" fix had a second defect behind it.** L2, L3 and G2 all
+  looked like one-liners and none was. A one-line fix that has never been
+  executed is a hypothesis.
+- **The deferral arithmetic rewarded deferring.** `effective = orphans −
+  deferred` meant each new deferral *improved* the gate's headline delta.
+  `reachability_deferred.json` being the highest-churn file of the entire window
+  at 64 touches is what that incentive looks like from outside.
+
+## Open items
+
+| # | Item | Label |
+|---|---|---|
+| [#3997](https://github.com/rob531/zo-sentinel/issues/3997) | Apply the G6 truncation patch and restart `write_service` (`zo_mesh` has no remote) | `agent:code-zo`, `needs-decision` |
+| [#3998](https://github.com/rob531/zo-sentinel/issues/3998) | Fast-forward the build workspace — 46 daemon files block it | `needs-decision` |
+| [#3999](https://github.com/rob531/zo-sentinel/issues/3999) | `app/scoring_consumer.py` has no callers — delete? | `needs-decision` |
+| [#4000](https://github.com/rob531/zo-sentinel/issues/4000) | `model_import_linter --fix` corrupts SQL table names in string literals | `agent:code-zo` |
+| [#4001](https://github.com/rob531/zo-sentinel/issues/4001) | 6 `app.dependency_overrides` sites import a callable that exists nowhere | `agent:code-zo` |
+| [#4002](https://github.com/rob531/zo-sentinel/issues/4002) | 25 staged services still fail a dry-run import | `agent:code-zo` |
+| [#4003](https://github.com/rob531/zo-sentinel/issues/4003) | 16 schema enumerations + 583 row reads do not paginate | `agent:code-zo` |
+| [#4004](https://github.com/rob531/zo-sentinel/issues/4004) | Triage the 63: 12 RETIRE need approval, 34 blocked on #4000 | `agent:code-zo`, `needs-decision` |
+| [#4005](https://github.com/rob531/zo-sentinel/issues/4005) | Deferred list 63 vs the CofC cap of 40 — escalation still owed | `needs-decision` |
+
+**#4000 is the one to fix first among the actionable items** — it blocks 34 of
+the 63 triage decisions and can already fire automatically during promotion.
+
+*Remediation performed 2026-08-25 against `origin/main` @ `d9aaca9d`. The 117
+open PRs were not touched. `zo_sentinel_builder.py` was not edited (invariant 6).
+All DB access went through `:8772`, paginated.*

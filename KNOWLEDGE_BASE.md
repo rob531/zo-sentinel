@@ -102,7 +102,11 @@ Use in L6 UI smoke tests and phase checkpoint verification.
 - mcp_signal_scores: server_id, signal_name, score, evidence, scored_at  (NO auto-id -- no ON CONFLICT)
 - mcp_threat_associations: server_id, threat_type, severity, evidence, reported_at  (NO auto-id)
 - mcp_risk_register: server_id(PK), risk_tier, risk_rank, threat_count, computed_at
-- audit_log: id(PK), target_server_id, event_type, actor, detail, created_at  (column is target_server_id NOT server_id)
+- audit_log: event_id(PK), event_type, actor, action, target_server_id, details_json, outcome, timestamp, immutable
+    (target_server_id NOT server_id. details_json NOT detail. timestamp NOT created_at. event_id NOT id.
+     Corrected 2026-08-27 against the live catalog: the three names on the left were WRONG here, and this
+     file is injected into every build prompt, so it was manufacturing the phantom columns audit_log.detail
+     and audit_log.verdict that referent-verify still reports. A knowledge base is a control too.)
 - auth_tokens: token_id(PK), action, mcp_name, submission_id, admin_email, expires_at, used, used_at
 - service_health: service(PK), last_heartbeat
 
@@ -126,6 +130,93 @@ A control is not "in place" until that number is written down.
   2026-08-10; anything gated only there is currently gating nothing.
 
 Two numbers, every time: builds per lane, and the fraction the control sees.
+
+Worked example, 2026-08-27 (#4080), over 1,568 `build:` commits in 30 days --
+1,519 distinct files, 672 of them .py:
+
+  emission gate (goose_runner._schema_prm_gate)   100% of .py    BLOCKING
+  referent-verify TABLES                           98.8% -> 100% after widening
+  schema-prm CI gate                                2.4% of .py  report-only
+
+The middle number is the point of this rule. 98.8% reads as done. The 8 files
+it missed were not a random 1.2%: they were the NEWEST emission shapes --
+services/<name>/ directly, and two root packages the engine makes for itself --
+and one of them was `auto_emitted_service/signal_scores.py`, a module named
+after a phantom table sitting in a directory the checker did not look at. A
+blind spot located exactly where new output lands is not a rounding error. The
+scan list was widened BEFORE the check was armed.
+
+## A SKIPPED JOB NEVER REPORTS ITS CONTEXT (standing -- 2026-08-27)
+
+A GitHub Actions workflow that a `paths:` filter skips does not report a
+neutral status. It reports NOTHING. Branch protection is still waiting for that
+context, so the PR waits forever -- and the PR class most likely to be skipped
+is the docs-only one, which is the class that started #4032.
+
+  If a check is REQUIRED, it must run on EVERY pull request.
+  Move the path filter out of the TRIGGER and into the JOB.
+
+The job then always runs and always reports. Its first step decides whether the
+change can affect what it checks, and only then does it install anything. A
+docs-only PR gets a green context in seconds. See
+.github/workflows/referent-verify.yml, which carries no `paths:` for exactly
+this reason.
+
+The corollary is the rename trap: the JOB ID is the context name. Renaming the
+job silently un-requires the gate -- protection keeps waiting on a context
+nothing reports, and every PR hangs. If it must be renamed, change the required
+set in the same commit.
+
+## THE THREE-PROBE ARMING PATTERN (standing -- 2026-08-27)
+
+Never arm a required check on the evidence that it is green. Green proves it
+can pass. Arming is a claim about all three of its outcomes, so prove all three
+before you make it:
+
+  a) NO-OP PROBE      a docs-only PR -> reports success in SECONDS, does not
+                      hang. This is the one that catches the skipped-context
+                      trap above, and it is the probe everybody omits because
+                      "nothing changed" sounds like nothing to test.
+  b) DEFECT PROBE     a PR that deliberately introduces the exact defect the
+                      check exists to catch -> RED, and the merge actually
+                      BLOCKED. Not "the job went red" -- verify the merge is
+                      blocked, because those are different things (#4089: the
+                      job was red for a day while auto-merge sailed past it,
+                      since the context was not in branch protection).
+  c) CLEAN PROBE      a real PR doing real work in the gated paths -> green.
+                      Proves the check does not block ordinary work.
+
+Then remove the probe scaffolding. gate_probe_no_router was correctly deleted;
+anything built for (b) goes the same way. A probe left behind is a defect
+someone will one day treat as a fixture.
+
+Routes was armed this way (#4092 / #4093). Tables followed on 2026-08-27.
+
+## A ONE-LINE FIX THAT HAS NEVER BEEN EXECUTED IS A HYPOTHESIS (standing -- 2026-08-27)
+
+Correct code that has not run is not a fix. It is a plausible claim about what
+would happen. This codebase has produced the same shape at least five times:
+
+  - the 2026-04 E2E runner, activated by an untracked file, dead for months
+  - the June schema gate, wired to a lane running 8 builds/day
+  - the July mount-point fix, correct and unreached until August
+  - the grounding fix, inlined on the goose path while the engine wrote 588
+    files a day without it
+  - 2026-08-27: tools/bus_catalog_guard.sh, registered in the host crontab
+    THREE ways -- @reboot, hourly, 05:17 -- specifically so a missed slot would
+    heal itself. None of the three had ever run. There was no cron daemon on
+    the box. cron was installed and registered in /etc/init.d; the container's
+    supervisor is supervisord and nothing started it. Three triggers on one
+    dead scheduler is not redundancy, it is one scheduler wearing three hats,
+    and from the crontab it looked exactly like redundancy.
+
+So: run it, and keep the output. Then make its NEXT run visible from somewhere
+the thing being watched cannot silence -- an alarm that lives on the machine it
+is watching goes quiet with it. That is why the bus-catalog freshness alarm is
+a GitHub Actions job and not another crontab line.
+
+Ask of any fix: what would I see if this had silently stopped? If the answer is
+"the same thing I see now", it is not instrumented, and it is not done.
 
 ## PRODUCT ROADMAP (PRD v1 — 2026-05-20)
 Zo Sentinel is evolving from a daemon+API into a production SaaS product.

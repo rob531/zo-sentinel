@@ -3,7 +3,6 @@
   "known": [
     {"service": "entity_report_exporter", "status": "NO_ROUTER", "reason": "Base module exposes no router (getattr None). Real router is the unmounted orphan entity_report_exporter_router. Dead hand-list entry; mounts nothing today."},
     {"service": "org_api_key_manager", "status": "NO_ROUTER", "reason": "Module exposes no `router` attribute; mounts nothing today. Triage: locate/mount the intended router or drop the entry (Step 6)."},
-    {"service": "overview_dashboard_api", "status": "NO_ROUTER", "reason": "Base module exposes no router; route is served by the unmounted orphan mcp_risk_tier_overview_dashboard_api. Dead hand-list entry."},
     {"service": "verdict_watchlist_service", "status": "NO_ROUTER", "reason": "Module exposes no `router` attribute; mounts nothing today. Triage in Step 6."},
     {"service": "dashboard_summary_api", "status": "DUPLICATE_ROUTE", "reason": "Its only route /api/dashboard/summary is shadowed by verdict_breakdown_api (registered earlier). Serves nothing live; redundant. Step-6 decision: drop it or make it canonical."},
     {"service": "verdict_breakdown_api", "status": "DUPLICATE_ROUTE", "reason": "Canonical exemplar (module_from_exemplar's first exemplar); genuinely mounted with 8 routes. Flagged only because it co-declares /api/dashboard/summary with dashboard_summary_api. Keep mounted; the redundant side is dashboard_summary_api."}

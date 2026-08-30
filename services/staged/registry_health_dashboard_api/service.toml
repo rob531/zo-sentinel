@@ -1,0 +1,74 @@
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, relationship, Session
+from sqlalchemy.pool import StaticPool
+from app.db import get_session
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute
+
+Base = declarative_base()
+router = APIRouter()
+
+class RegistryHealthSummary(BaseModel):
+    total_servers: int
+    healthy_servers: int
+    unhealthy_servers: int
+    health_percentage: float
+
+class ServerHealthDetail(BaseModel):
+    server_id: str
+    name: str
+    status: str
+    health_score: Optional[float]
+    last_health_check: Optional[datetime]
+
+class DashboardMetrics(BaseModel):
+    summary: RegistryHealthSummary
+    server_details: List[ServerHealthDetail]
+    avg_response_time_ms: Optional[float]
+    timestamp: datetime
+
+@router.get("/health-dashboard", response_model=DashboardMetrics)
+def get_health_dashboard(db: Session = Depends(get_session)):
+    servers = db.query(McpServerRegistry).all()
+    total = len(servers)
+    healthy = sum(1 for s in servers if getattr(s, 'status', None) == 'healthy' or getattr(s, 'health_status', None) == 'healthy')
+    unhealthy = total - healthy
+    health_pct = (healthy / total * 100) if total > 0 else 0.0
+    
+    details = []
+    for s in servers:
+        score = db.query(McpLlmAxisScore).filter(
+            McpLlmAxisScore.server_id == getattr(s, 'server_id', None) or s.id
+        ).first()
+        details.append(ServerHealthDetail(
+            server_id=str(getattr(s, 'server_id', s.id)),
+            name=getattr(s, 'name', 'unknown'),
+            status=getattr(s, 'status', getattr(s, 'health_status', 'unknown')),
+            health_score=score.overall_score if score else None,
+            last_health_check=getattr(s, 'updated_at', None)
+        ))
+    
+    return DashboardMetrics(
+        summary=RegistryHealthSummary(
+            total_servers=total,
+            healthy_servers=healthy,
+            unhealthy_servers=unhealthy,
+            health_percentage=round(health_pct, 2)
+        ),
+        server_details=details,
+        avg_response_time_ms=None,
+        timestamp=datetime.utcnow()
+    )
+
+@router.get("/registry-status", response_model=dict)
+def get_registry_status(db: Session = Depends(get_session)):
+    count = db.query(McpServerRegistry).count()
+    return {
+        "registry_active": count > 0,
+        "total_entries": count,
+        "timestamp": datetime.utcnow().isoformat()
+    }

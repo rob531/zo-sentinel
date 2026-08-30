@@ -150,6 +150,43 @@ def _run_contract(name, timeout=120):
     return proc.returncode == 0, ("exit=%d %s" % (proc.returncode, tail.strip()))
 
 
+def _import_check(module, timeout=90):
+    """Attempt `importlib.import_module(module)` in a CLEAN interpreter.
+
+    MERGE_AUDIT_2026-08-23 L1 / G5. Nothing between authoring and mounting ever
+    attempted the import: the builder scaffolds into staged/, this script moves
+    the directory, and the first thing that tries to import the module is the
+    spine at mount time -- via the one gate that had a fail-open hole (G1). On
+    2026-08-25 that gap held 66 unresolved import sites across 52 staged files.
+
+    A subprocess, not an in-process import, for the same reason _run_contract is
+    one: a clean sys.modules and no side effects leaking into this process.
+    """
+    code = "import importlib, sys; importlib.import_module(sys.argv[1])"
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code, module],
+            cwd=ROOT, capture_output=True, text=True, timeout=timeout,
+            env={**os.environ, "PYTHONPATH": ROOT + os.pathsep + os.environ.get("PYTHONPATH", "")},
+        )
+    except subprocess.TimeoutExpired:
+        return False, "import TIMEOUT (%ss)" % timeout
+    except OSError as e:
+        return False, "import could not run: %r" % e
+    if proc.returncode == 0:
+        return True, "ok"
+    err = (proc.stderr or proc.stdout or "").strip().splitlines()
+    return False, (err[-1] if err else "exit=%d" % proc.returncode)[:300]
+
+
+def _staged_equivalent(import_path, name):
+    """service.toml names the POST-move path (services.active.<n>.router). The
+    same module pre-move is the services.staged.<n>. equivalent."""
+    if import_path and import_path.startswith("services.active."):
+        return "services.staged." + import_path[len("services.active."):]
+    return "services.staged.%s.router" % name
+
+
 def _casing_drift(sdir):
     """Wrong-cased app.models refs in a staged service (FU-031). Named + autofixable."""
     norm_map = _linter.build_map(_linter.canonical_models())
@@ -237,6 +274,18 @@ def evaluate(name, active_routes):
     if hollow_hits:
         reasons.append("hollow member(s): " + "; ".join(sorted(hollow_hits)))
 
+    # IMPORT (subprocess) -- L1/G5. The cheapest correctness proof there is: one
+    # import, once per promotion, not once per PR. Runs BEFORE the liveness
+    # contract because an unimportable router cannot possibly serve a request,
+    # and a module that cannot be imported must never reach the spine.
+    import_ok, import_detail = (None, "skipped (static gate failed)")
+    if not reasons:
+        import_ok, import_detail = _import_check(_staged_equivalent(_ip, name))
+        if not import_ok:
+            reasons.append(
+                "IMPORT FAILED (would ModuleNotFoundError at spine mount): %s"
+                % import_detail)
+
     # LIVENESS (subprocess) -- the correctness proof; only if static gates pass
     contract_ok, contract_detail = (None, "skipped (static gate failed)")
     if not reasons:
@@ -247,6 +296,9 @@ def evaluate(name, active_routes):
         "service": name,
         "verdict": "PROMOTE" if not reasons else "HOLD",
         "routes": cand_routes,
+        "import_path": _ip,
+        "import_ok": import_ok,
+        "import_detail": import_detail,
         "contract_ok": contract_ok,
         "contract_detail": contract_detail,
         "casing_autofixed": casing_fixed,
@@ -282,7 +334,24 @@ def main(argv=None):
                 v["verdict"] = "HOLD"
                 v["reasons"].append("deferred: per-run cap (%d) reached" % args.max_per_run)
                 continue
-            os.rename(os.path.join(STAGED, v["service"]), os.path.join(ACTIVE, v["service"]))
+            src_dir = os.path.join(STAGED, v["service"])
+            dst_dir = os.path.join(ACTIVE, v["service"])
+            os.rename(src_dir, dst_dir)
+            # POST-MOVE import, at the import_path the spine will actually use.
+            # The pre-move probe in evaluate() cannot see path-dependent breakage:
+            # a module that self-references `services.staged.<n>.<mod>` absolutely
+            # imports fine in staged/ and ModuleNotFoundErrors the instant it is
+            # active. If it fails, ROLL THE MOVE BACK -- a service that cannot be
+            # imported must never be left mounted-but-broken.
+            post_ok, post_detail = _import_check(v["import_path"])
+            v["post_move_import_ok"] = post_ok
+            v["post_move_import_detail"] = post_detail
+            if not post_ok:
+                os.rename(dst_dir, src_dir)
+                v["verdict"] = "HOLD"
+                v["reasons"].append(
+                    "POST-MOVE IMPORT FAILED, promotion rolled back: %s" % post_detail)
+                continue
             promoted.append(v["service"])
         if promoted and args.regenerate:
             subprocess.run([sys.executable, os.path.join(ROOT, "tools", "generate_spine.py"),

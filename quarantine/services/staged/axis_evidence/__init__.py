@@ -67,7 +67,7 @@ def setup_database(db: Session = Depends(get_session)) -> None:
 if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
 
     # Override the session for self-test
     engine = create_engine("sqlite:///:memory:")

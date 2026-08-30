@@ -22,16 +22,36 @@ name: referent-verify
 #   from schema/bus_catalog.json, refreshed on the host by
 #   tools/bus_catalog_snapshot.py (cron, daily).
 #
-#   That committed snapshot is the seam, so the seam is guarded: the checker
-#   FAILS with UNKNOWN when the snapshot is older than its freshness budget.
+#   That committed snapshot is the seam, so the seam is guarded, in three bands:
+#     age <= 7d   OK
+#     7d..14d     WARN -- reported with the days remaining, still resolving
+#     age > 14d   STALE-RED -- its own verdict, carrying the age, blocking
 #   If the host refresher dies -- which is exactly how the 2026-04 E2E runner
 #   died, silently, for months -- this job turns red instead of going quiet.
 #
-# PARTLY ARMED since 2026-08-26 (#4067). The ROUTES check is enforced -- a mount
-# failure, an unresolvable route, or an UNDECLARED no-router service exits 1 and
-# turns this job red. TABLES and COLUMNS remain report-only pending the
-# phantom-table backlog (#4080). An armed check that returns UNKNOWN enforces
-# exactly like FAIL; the header above says why that is deliberate.
+#   STALE is NOT folded into UNKNOWN. "absent", "unparseable", "undated" and
+#   "fourteen days old" have four different fixes; only the last one names a
+#   daemon that stopped and carries a number saying how long ago.
+#
+#   The WARN band exists because this is a REQUIRED check. At 14d + 1s every PR
+#   on the repo is blocked, and a cliff nobody can see coming is the same shape
+#   as the runner that died. The alarm that gives that week of notice does NOT
+#   live on the host being watched -- see .github/workflows/bus-catalog-freshness.yml,
+#   and #4080 for why: on 2026-08-27 the host had no cron daemon at all, so all
+#   three of the refresher's "redundant" triggers were inert.
+#
+# PARTLY ARMED since 2026-08-26 (#4067): ROUTES.
+# TABLES ARMED 2026-08-27 (#4080). A pull request that names a table existing on
+# no plane -- not on the bus, not a __tablename__, in no migration, not declared
+# in schema/external_planes.json -- exits 1 and turns this job red. Since this
+# job is a required context, that blocks the merge.
+#
+# COLUMNS remains REPORT-ONLY at 114 missing. Arming it today would turn every
+# PR on the repo red, which is not enforcement, it is an outage. It is its own
+# pass.
+#
+# An armed check that returns UNKNOWN or STALE enforces exactly like FAIL; the
+# header above says why that is deliberate.
 #
 # REQUIRED CHECK since 2026-08-26 (#4089). Arming the routes check made the JOB
 # red; it did not make the MERGE stop, because GitHub auto-merge waits only on
@@ -167,31 +187,40 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tests/ci/requirements-ci.txt
 
-      - name: Verify referents (ROUTES ARMED; tables/columns report-only)
+      - name: Verify referents (ROUTES + TABLES ARMED; columns report-only)
         id: verify
         if: steps.scope.outputs.relevant == 'true'
-        # ARMED 2026-08-26 on the ROUTES check only.
+        # ARMED 2026-08-26 on ROUTES, 2026-08-27 on TABLES.
         #
-        # Routes are PASS and have been: 28/32 mounted, the other 4 declared
-        # no-router in tools/spine_known_issues.json, 77 routes all resolving,
-        # 0 unresolved, 0 mount failures. Arming it locks that in -- a new
-        # service that fails to mount, an unresolvable route, or a service that
-        # quietly joins the no-router skip list without being declared now fails
-        # this job.
+        # Routes: 29/32 mounted, the other 3 declared no-router in
+        # tools/spine_known_issues.json, 78 routes all resolving, 0 unresolved,
+        # 0 mount failures.
         #
-        # Tables and columns stay REPORT-ONLY. They are FAIL on a backlog of
-        # pre-gate emissions: of the files referencing a phantom table, all but
-        # two predate the 2026-08-11 grounding fix (37 May, 18 June, 15 July,
-        # 2 August). That is a measure of history, not of the current emitter.
+        # Tables: 0 MISSING of 121 distinct tables referenced across 2,328
+        # scanned files. The number was 82 before #4070's quarantine, 18 after
+        # it, and 0 after #4080 traced each remaining name to its intended
+        # referent -- two of which turned out to be SQL comments and one of
+        # which turned out to be a table on a plane this checker could not see.
         #
-        # Waiting for the backlog before arming anything is exactly how the
-        # July mount-point fix sat correct-and-unreached until August. The
-        # solved half goes in now; the rest follows the backlog quarantine.
+        # THE ARMING IS THE POINT, NOT THE ZERO. A backlog cleared while the
+        # emitter can still invent new names regrows. What stops it regrowing is
+        # that a new name now fails this job, and this job is required.
+        #
+        # WHY THIS NEEDS NO BRANCH-PROTECTION CHANGE
+        #   `referent-verify` has been in the required set since #4089. Arming a
+        #   further check INSIDE that existing context extends coverage without
+        #   touching protection -- confirmed against the live required contexts
+        #   before arming, because adding a NEW context is the operation that
+        #   hangs every open PR until it reports.
+        #
+        # Columns stays REPORT-ONLY at 114 missing. Arming it today would turn
+        # every PR on this repo red. That is not enforcement, it is an outage,
+        # and it is its own pass.
         run: |
           mkdir -p artifacts
           set +e
           python tools/referent_verify.py \
-              --enforce-checks routes \
+              --enforce-checks routes,tables \
               --json artifacts/referent_verify.json \
               --summary-md artifacts/referent_summary.md \
               --since-hours 24 | tee artifacts/referent_verify.txt

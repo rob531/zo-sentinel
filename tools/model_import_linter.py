@@ -238,6 +238,79 @@ def scan_dependency_overrides(src: str):
     return rewrites, unfixable
 
 
+def _substitute_names(src: str, drift: dict[str, str]) -> str:
+    """Rename model symbols in CODE ONLY -- never inside strings or comments.
+
+    THE DEFECT THIS REPLACES (#4000)
+        The previous line was a whole-file regex:
+
+            new = re.sub(r"\\b%s\\b" % re.escape(wrong), canon, new)
+
+        `re` cannot see Python syntax, so it rewrote the name everywhere it
+        appeared -- including inside SQL string literals and docstrings. A module
+        holding `"SELECT * FROM McpServerRegistry"` as a deliberate table-name
+        string had its SQL silently rewritten by a linter whose entire remit is
+        import statements. The autofix corrupted the file it was repairing, and
+        the corruption looked exactly like the fix.
+
+        That is also how AP-005 (`module_name_used_as_table_name`) gets worse
+        rather than better: a table name and a class name that differ only in
+        casing are indistinguishable to a regex and completely distinguishable
+        to a tokenizer.
+
+    THE FIX
+        `tokenize` labels every token, so a NAME is separable from a STRING and
+        from a COMMENT. Only NAME tokens are eligible. The substitution splices
+        the source by byte offset rather than round-tripping through
+        `untokenize`, so every byte outside a replaced token -- whitespace,
+        line endings, formatting -- survives unchanged.
+
+        FAIL SAFE, NOT FAIL OPEN: if the file cannot be tokenized, the ORIGINAL
+        source is returned untouched. A linter that cannot parse a file has not
+        earned the right to rewrite it, and returning the regex result here
+        would reintroduce the defect on exactly the malformed files most likely
+        to be harmed by it.
+    """
+    import io
+    import tokenize as _tok
+
+    try:
+        toks = list(_tok.generate_tokens(io.StringIO(src).readline))
+    except (_tok.TokenError, IndentationError, SyntaxError):
+        return src
+
+    lines = src.splitlines(keepends=True)
+    starts = []
+    off = 0
+    for ln in lines:
+        starts.append(off)
+        off += len(ln)
+
+    edits = []
+    for t in toks:
+        if t.type != _tok.NAME:
+            continue
+        canon = drift.get(t.string)
+        if not canon or canon == t.string:
+            continue
+        srow, scol = t.start
+        erow, ecol = t.end
+        if srow != erow:
+            continue
+        edits.append((starts[srow - 1] + scol, starts[erow - 1] + ecol, canon))
+
+    if not edits:
+        return src
+    out = []
+    prev = 0
+    for a, b, canon in sorted(edits):
+        out.append(src[prev:a])
+        out.append(canon)
+        prev = b
+    out.append(src[prev:])
+    return "".join(out)
+
+
 def lint_file(path: str, norm_map: dict[str, str], fix: bool):
     src = _read(path)
     if not src:
@@ -257,8 +330,7 @@ def lint_file(path: str, norm_map: dict[str, str], fix: bool):
     fixed = False
     new = src
     if drift and fix:
-        for wrong, canon in drift.items():
-            new = re.sub(r"\b%s\b" % re.escape(wrong), canon, new)
+        new = _substitute_names(new, drift)
     if dep_rewrites and fix:
         for old_stmt, new_stmt in dep_rewrites:
             new = new.replace(old_stmt, new_stmt)

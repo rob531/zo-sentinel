@@ -104,6 +104,51 @@ def ws_write(table: str, rows: List[Dict[str, Any]]) -> bool:
         log.error(f"Write error: {e}")
         return False
 
+#: SHA-256 of the empty string. Not a fingerprint -- the ABSENCE of one, wearing
+#: a fingerprint's clothes.
+EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+def hash_or_absent(content: str) -> Optional[str]:
+    """Hash real content; return None for nothing.
+
+    THIS IS THE WHOLE FIX, AND IT IS ONE LINE OF LOGIC.
+
+    `compute_sha256_hash(','.join([]))` is SHA-256("") -- a perfectly
+    well-formed 64-hex-character value that is indistinguishable, to every
+    consumer, from a genuine fingerprint. Because `mcp_tool_hashes` is empty,
+    `get_server_tools` returns [] for every server, and so ALL 3,316 rows of
+    `mcp_fingerprints` carry EMPTY_SHA256 in both `tool_name_hash` and
+    `permission_scope_hash`. Measured 2026-08-28.
+
+    What that cost, traced end to end:
+      - the `tool_count` signal reads this table and scores 91.95 +/- 1.36 for
+        every server -- a constant that looks like a measurement
+      - `capability_breadth` and `auth_strength` therefore have no real evidence
+      - and the v3 scorer, having no way to say "insufficient evidence", emitted
+        a confident label anyway, for every server, on every axis
+
+    #4123 corrected WHICH table this reads. It did not stop an empty result
+    producing a valid-looking hash, so the defect survived the repair. A hash of
+    nothing must be None -- then a consumer can tell, and this codebase's own
+    rule applies: "I could not evaluate this" must be distinguishable from
+    "this is fine".
+    """
+    if not content:
+        return None
+    h = compute_sha256_hash(content)
+    return None if h == EMPTY_SHA256 else h
+
+
+def is_absent_hash(value: Optional[str]) -> bool:
+    """True when a stored hash encodes absence rather than content.
+
+    Non-destructive guard for the 3,316 rows already written with EMPTY_SHA256:
+    consumers stop reading them as data without anything being deleted.
+    """
+    return not value or value == EMPTY_SHA256
+
+
 def compute_sha256_hash(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
@@ -143,32 +188,67 @@ def extract_domain_fingerprint(url: str) -> Optional[str]:
         return None
 
 def get_server_tools(server_id: str) -> List[Dict[str, Any]]:
-    """Fetch tool definitions for a server. Tolerant if mcp_tool_definitions doesn't exist yet."""
+    """Fetch a server's tool definitions from the bus, one dict per tool.
+
+    THERE IS NO `mcp_tool_definitions` TABLE, and there never was.
+        This function used to select five per-tool columns from that name. It
+        exists on no plane -- not on the bus, not as a __tablename__, in no
+        migration -- so ws_query raised on every call and the docstring said so
+        out loud: "Tolerant if mcp_tool_definitions doesn't exist yet". It was
+        not going to exist later. It was invented at emission time. Refs #4080.
+
+    The bus does hold this data, on `mcp_tool_hashes`, one row per SERVER with
+    the whole tool list in `tools_raw`. So the row-per-tool shape this function
+    must return is produced HERE, by parsing that payload, rather than asked of
+    a table that does not have it.
+
+    `tools_raw` carries the MCP tool-definition shape, so `inputSchema` is
+    accepted alongside `input_schema`. NOTE: mcp_tool_hashes is currently empty
+    on the bus (0 rows), so this parse is correct-but-unexercised -- which is
+    exactly what the old code was, minus the fact that its table could never
+    hold anything at all.
+    """
     query = """
-    SELECT server_id, name, description, input_schema, annotations
-    FROM mcp_tool_definitions
+    SELECT server_id, tools_raw
+    FROM mcp_tool_hashes
     WHERE server_id = ?
-    ORDER BY name
     """
     results = ws_query(query, [server_id])
-    tools = []
+    tools: List[Dict[str, Any]] = []
     for row in results:
         try:
-            tools.append({
-                'server_id': row[0],
-                'name': row[1],
-                'description': row[2],
-                'input_schema': row[3],
-                'annotations': row[4]
-            })
+            raw = row['tools_raw'] if isinstance(row, dict) else row[1]
+            sid = row['server_id'] if isinstance(row, dict) else row[0]
         except Exception:
             continue
+        if not raw:
+            continue
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                continue
+        if isinstance(raw, dict):
+            raw = raw.get('tools', [])
+        if not isinstance(raw, list):
+            continue
+        for t in raw:
+            if not isinstance(t, dict):
+                continue
+            tools.append({
+                'server_id': sid,
+                'name': t.get('name'),
+                'description': t.get('description'),
+                'input_schema': t.get('input_schema', t.get('inputSchema')),
+                'annotations': t.get('annotations'),
+            })
+    tools.sort(key=lambda t: (t.get('name') or ''))
     return tools
 
 def extract_tool_names(tools: List[Dict[str, Any]]) -> List[str]:
     return sorted([t['name'] for t in tools if t.get('name')])
 
-def extract_permission_scopes(tools: List[Dict[str, Any]]) -> str:
+def extract_permission_scopes(tools: List[Dict[str, Any]]) -> Optional[str]:
     scopes = set()
     for tool in tools:
         annotations = tool.get('annotations', {})
@@ -188,7 +268,9 @@ def extract_permission_scopes(tools: List[Dict[str, Any]]) -> str:
                     elif scope_list:
                         scopes.add(str(scope_list))
     sorted_scopes = sorted(scopes)
-    return compute_sha256_hash(','.join(sorted_scopes))
+    # No declared scopes is NOT "a server whose scopes hash to X". It is no
+    # evidence about scopes at all, and auth_strength depends on the difference.
+    return hash_or_absent(','.join(sorted_scopes))
 
 def extract_combined_description(tools: List[Dict[str, Any]]) -> str:
     descriptions = []
@@ -276,7 +358,7 @@ def generate_fingerprint(server_id: str) -> Optional[Dict[str, Any]]:
         tools = get_server_tools(server_id)
 
         tool_names = extract_tool_names(tools)
-        tool_name_hash = compute_sha256_hash(','.join(tool_names))
+        tool_name_hash = hash_or_absent(','.join(tool_names))
 
         combined_desc = extract_combined_description(tools) + ' ' + server_description
         description_tokens = extract_significant_tokens(combined_desc, top_n=20)

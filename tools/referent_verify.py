@@ -71,18 +71,52 @@ ROOT = Path(__file__).resolve().parents[1]
 BUS_CATALOG = ROOT / "schema" / "bus_catalog.json"
 MODELS = ROOT / "app" / "models.py"
 MIGRATIONS = ROOT / "migrations" / "versions"
+EXTERNAL_PLANES = ROOT / "schema" / "external_planes.json"
 
 # How stale the committed catalog may be before this check refuses to render a
 # verdict on tables. The host refresher runs daily; 14 days is ~14 consecutive
 # misses, which is a dead daemon, not a slow one.
 SNAPSHOT_MAX_AGE_DAYS = 14
 
-SCAN_DIRS = ["app", "services/active", "services/staged", "tools"]
+# ...and how old it may be before this check starts SAYING SO while still
+# rendering a verdict. The budget above is a cliff: at 14d + 1s the tables and
+# columns checks stop resolving, and now that referent-verify is a REQUIRED
+# status check (#4089) that is not a red census -- it is every PR on the repo
+# blocked. A cliff nobody can see coming is the same shape as the 2026-04 E2E
+# runner: fine, fine, fine, dead. The warn band is the week of notice.
+SNAPSHOT_WARN_AGE_DAYS = 7
+
+# Marker on the unknown_reason string that promotes it from UNKNOWN to STALE.
+STALE_PREFIX = "STALE: "
+
+# MEASURED, NOT ASSUMED (2026-08-27, #4080 part 6a).
+#
+# Over 1,568 `build:` commits in 30 days the engine touched 1,519 distinct
+# files, 672 of them .py. The old list -- app, services/active,
+# services/staged, tools -- saw 664 of those 672. Not 672.
+#
+# The eight it missed were emitted to services/<name>/ directly (neither
+# active/ nor staged/) and to two root-level packages the engine creates for
+# itself. One of them is auto_emitted_service/signal_scores.py: a module named
+# after a PHANTOM TABLE, sitting in a directory this checker did not look at.
+#
+# 98.8% is a good number for a report. It is the wrong number for a REQUIRED,
+# ARMED check, because the 1.2% is not random -- it is the newest emission
+# shapes, which is exactly where a new phantom would appear first. So the list
+# is now `services` wholesale rather than its two known children, and it names
+# the two root packages. quarantine/ stays excluded via SKIP_PARTS below.
+SCAN_DIRS = ["app", "services", "tools",
+             "auto_emitted_service", "service_package"]
 SCAN_ROOT_GLOB = "*.py"
 
 SKIP_PARTS = {
     ".git", "__pycache__", "node_modules", "graphify-out", "archive",
     "directives_archive", ".venv", "venv", "site-packages", "build", "dist",
+    # quarantine/ holds withdrawn emissions -- see quarantine/QUARANTINE_*.json.
+    # It is already outside SCAN_DIRS and the root glob, so this is belt-and-
+    # braces: it states the intent, and it keeps the skip true if a future
+    # change adds quarantine/ to a scan root by accident.
+    "quarantine",
 }
 
 # Catalog-ish and engine-internal names that are never user tables.
@@ -204,7 +238,15 @@ def load_catalog() -> tuple[dict, dict, str | None]:
 
     # --- bus plane -----------------------------------------------------------
     if not BUS_CATALOG.exists():
-        return {}, meta, f"bus catalog missing at {BUS_CATALOG.relative_to(ROOT)}"
+        # relative_to() raises when the path is not under ROOT, which is how the
+        # "catalog is missing" branch managed to raise instead of REPORTING that
+        # the catalog was missing. Building an error message must never be able
+        # to throw -- that turns a diagnosable UNKNOWN into a traceback.
+        try:
+            _where = BUS_CATALOG.relative_to(ROOT)
+        except ValueError:
+            _where = BUS_CATALOG
+        return {}, meta, f"bus catalog missing at {_where}"
     try:
         snap = json.loads(BUS_CATALOG.read_text())
     except Exception:                              # noqa: BLE001
@@ -226,12 +268,25 @@ def load_catalog() -> tuple[dict, dict, str | None]:
 
     if age_days is None:
         return {}, meta, "bus catalog has no readable captured_at timestamp"
+    meta["bus_stale"] = age_days > SNAPSHOT_MAX_AGE_DAYS
+    meta["bus_warn"] = SNAPSHOT_WARN_AGE_DAYS < age_days <= SNAPSHOT_MAX_AGE_DAYS
     if age_days > SNAPSHOT_MAX_AGE_DAYS:
         # The daemon is dead. This is the failure mode that killed the 2026-04
         # E2E runner silently; here it is loud.
+        #
+        # STALE IS ITS OWN STATE, NOT A FLAVOUR OF UNKNOWN.
+        #   "could not evaluate" covers four different faults with four
+        #   different fixes: the snapshot is absent, unparseable, undated, or
+        #   OLD. Only the last one names a daemon that stopped, and only the
+        #   last one carries a number that says how long ago. Collapsing it
+        #   into a generic UNKNOWN throws away both. The STALE_PREFIX below is
+        #   what the renderer keys on to say STALE-RED and print the age.
         return {}, meta, (
-            f"bus catalog is {age_days:.1f} days old "
-            f"(budget {SNAPSHOT_MAX_AGE_DAYS}d) -- host refresher is not running"
+            f"{STALE_PREFIX}bus catalog is {age_days:.1f} days old "
+            f"(budget {SNAPSHOT_MAX_AGE_DAYS}d, last captured {captured}) -- the "
+            f"host refresher (tools/bus_catalog_guard.sh) is not running. "
+            f"Tables and columns CANNOT be resolved against a dead catalog, so "
+            f"this is RED, not a pass. Fix the refresher, do not raise the budget."
         )
 
     for t, cols in (snap.get("tables") or {}).items():
@@ -279,6 +334,60 @@ def load_catalog() -> tuple[dict, dict, str | None]:
                 n += 1
         meta["planes"].append(f"migrations:{n}")
 
+    # --- declared external planes -------------------------------------------
+    # Tables that are real but live on a database this checker does not read --
+    # today, the gate framework's standalone gate_errors.db.
+    #
+    # PROVENANCE, NOT PERMISSION. Every entry names the file that creates the
+    # table and the text that proves it. That claim is verified HERE, on every
+    # run. A claim that has stopped being true is reported as a FAILURE of the
+    # declaration -- the table does NOT get added -- so this file cannot rot
+    # into a silent hole the way an allowlist does. See schema/external_planes.json.
+    ext_problems: list[str] = []
+    n_ext = 0
+    if EXTERNAL_PLANES.exists():
+        try:
+            decl = json.loads(EXTERNAL_PLANES.read_text())
+        except Exception as e:                     # noqa: BLE001
+            ext_problems.append(
+                f"schema/external_planes.json is unreadable ({type(e).__name__})")
+            decl = {"planes": []}
+        for plane in decl.get("planes", []):
+            pname = plane.get("plane", "?")
+            creator = plane.get("created_by", "")
+            src_path = ROOT / creator if creator else None
+            src_txt = ""
+            if not creator:
+                ext_problems.append(f"external plane '{pname}' names no created_by")
+            elif not (src_path and src_path.exists()):
+                ext_problems.append(
+                    f"external plane '{pname}': created_by '{creator}' does not "
+                    f"exist -- the provenance for its tables is gone")
+            else:
+                try:
+                    src_txt = src_path.read_text(errors="replace")
+                except Exception:                  # noqa: BLE001
+                    ext_problems.append(
+                        f"external plane '{pname}': cannot read '{creator}'")
+            for tname, tinfo in (plane.get("tables") or {}).items():
+                proof = (tinfo or {}).get("proof", "")
+                if not proof:
+                    ext_problems.append(
+                        f"external plane '{pname}' table '{tname}' declares no proof")
+                    continue
+                if not src_txt:
+                    continue          # already reported above
+                if proof not in src_txt:
+                    ext_problems.append(
+                        f"external plane '{pname}' table '{tname}': proof "
+                        f"{proof!r} is NO LONGER in {creator} -- either the table "
+                        f"moved or this declaration is stale. Not counted as real.")
+                    continue
+                tables.setdefault(tname, set())
+                n_ext += 1
+        meta["planes"].append(f"external:{n_ext}")
+    meta["external_plane_problems"] = ext_problems
+
     meta["catalog_tables"] = len(tables)
     return tables, meta, None
 
@@ -322,8 +431,73 @@ def _iter_sql_strings(tree: ast.AST):
                 yield s, getattr(node, "lineno", 0)
 
 
+# SQL COMMENTS ARE NOT REFERENTS.
+#
+# Found 2026-08-27 (#4080): `community` and `graph_table` were carried on the
+# phantom-table list for weeks. Neither is a table anybody named. Both come out
+# of tools/build_app_graph.py:118, from inside a SQL string, from lines that are
+# SQL COMMENTS:
+#
+#     --   INSTALL duckpgq FROM community; LOAD duckpgq;
+#     --   -- FROM GRAPH_TABLE (app
+#
+# TABLE_REF matched "FROM community" and "FROM GRAPH_TABLE" in commented-out
+# documentation and reported both as tables that exist on no plane. They are
+# exactly as real as the tables in a docstring, which this file already spent a
+# whole regex generation learning to exclude (see SQL_STMT above, 408 false
+# MISSING verdicts).
+#
+# This matters more now than it did while the check was report-only. A false
+# MISSING on an ARMED, REQUIRED check does not annoy somebody reading a census;
+# it blocks a merge on a referent that was never named, and that is precisely
+# how a correct gate earns itself an off switch.
+#
+# Stripping is quote-aware: a `--` or `/*` inside a string literal is data, not
+# a comment. Whitespace is substituted in place (newlines kept) so every offset
+# and line number downstream is unchanged.
+def strip_sql_comments(sql: str) -> str:
+    """Blank out -- line comments and /* */ block comments, preserving offsets."""
+    out = list(sql)
+    i, n = 0, len(sql)
+    quote = None                       # "'" or '"' while inside a literal
+    while i < n:
+        c = sql[i]
+        if quote:
+            if c == quote:
+                # doubled quote is an escaped quote, still inside the literal
+                if i + 1 < n and sql[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+            elif c == "\\" and i + 1 < n:
+                i += 2
+                continue
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            i += 1
+            continue
+        if c == "-" and i + 1 < n and sql[i + 1] == "-":
+            while i < n and sql[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and sql[i + 1] == "*":
+            j = sql.find("*/", i + 2)
+            end = n if j == -1 else j + 2
+            for k in range(i, end):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = end
+            continue
+        i += 1
+    return "".join(out)
+
+
 def extract_refs(sql: str) -> tuple[set[str], set[tuple[str, str]]]:
     """Return (tables, qualified_columns) from one reconstructed statement."""
+    sql = strip_sql_comments(sql)
     ctes = {m.group(1).lower() for m in CTE_DEF.finditer(sql)}
     aliases = {m.group(2).lower(): m.group(1).lower()
                for m in ALIAS_DEF.finditer(sql)
@@ -392,7 +566,11 @@ def scan_tree() -> tuple[dict, dict, list[dict], int]:
 
         rel = str(f.relative_to(ROOT))
         for sql, lineno in _iter_sql_strings(tree):
-            for cm in CREATED_TABLE.finditer(sql):
+            # Comment-stripped for the CREATE scan too: a commented-out CREATE
+            # does not create anything, and counting it would mark a genuinely
+            # missing table as code-created -- a false PASS, the other direction
+            # of the same bug.
+            for cm in CREATED_TABLE.finditer(strip_sql_comments(sql)):
                 created.add(cm.group(1).lower())
             tabs, cols = extract_refs(sql)
             for t in tabs:
@@ -477,14 +655,63 @@ def check_routes() -> dict:
     res["routes"] = len(leaves)
     res["unresolved"] = unresolved
 
-    if res["failures"] or unresolved:
+    # A service that declares no router is SKIPPED, not failed -- correct, and
+    # the reason the routes check can be armed at all. But an unbounded skip
+    # list is a hole the size of the gate: a NEW service that silently declares
+    # no router would join it and the verdict would stay green. So the skip list
+    # must be DECLARED, exactly as tools/reachability_deferred.json and the
+    # `known` list are, and an undeclared skip is a routes FAILURE.
+    #
+    # The four standing skips are classified in tools/spine_known_issues.json:
+    #   entity_report_exporter    NO_ROUTER -- real router is the unmounted
+    #                             orphan entity_report_exporter_router
+    #   org_api_key_manager       NO_ROUTER -- library module (APIKeyManager
+    #                             class); exposes no `router` attribute
+    #   overview_dashboard_api    NO_ROUTER -- declares `app = FastAPI()` and
+    #                             `@app.get`, not an APIRouter, so include_spine
+    #                             cannot mount it. INCOMPLETE, not by-design.
+    #   verdict_watchlist_service NO_ROUTER -- library module (add_watch /
+    #                             on_verdict_change); no HTTP surface
+    declared: set[str] = set()
+    ki = ROOT / "tools" / "spine_known_issues.json"
+    ki_error = None
+    if ki.exists():
+        try:
+            _k = json.loads(ki.read_text(encoding="utf-8"))
+            declared = {e["service"] for e in _k.get("known", [])
+                        if e.get("status") == "NO_ROUTER"}
+        except Exception:                      # noqa: BLE001
+            ki_error = "spine_known_issues.json is unreadable"
+    else:
+        ki_error = "tools/spine_known_issues.json is missing"
+
+    undeclared = sorted(s for s in res["skipped_no_router"] if s not in declared)
+    res["undeclared_no_router"] = undeclared
+
+    if ki_error:
+        # Cannot decide whether the skips are declared. UNKNOWN, never PASS.
+        res["verdict"] = "UNKNOWN"
+        res["detail"] = f"{ki_error} -- cannot verify the no-router skip list"
+        return res
+
+    if res["failures"] or unresolved or undeclared:
+        bits = []
+        if res["failures"]:
+            bits.append(f"{len(res['failures'])} mount failure(s)")
+        if unresolved:
+            bits.append(f"{len(unresolved)} unresolved route(s)")
+        if undeclared:
+            bits.append(f"{len(undeclared)} UNDECLARED no-router service(s): "
+                        f"{undeclared} -- declare them in "
+                        f"tools/spine_known_issues.json with a reason, or give "
+                        f"them a router")
         res["verdict"] = "FAIL"
-        res["detail"] = (f"{len(res['failures'])} mount failure(s), "
-                         f"{len(unresolved)} unresolved route(s)")
+        res["detail"] = ", ".join(bits)
     else:
         res["verdict"] = "PASS"
         res["detail"] = (f"{res['mounted']}/{res['service_count']} mounted, "
-                         f"{res['routes']} routes all resolve")
+                         f"{res['routes']} routes all resolve, "
+                         f"{len(res['skipped_no_router'])} declared no-router skip(s)")
     return res
 
 
@@ -510,7 +737,12 @@ def merged_prs(hours: int) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--enforce", action="store_true",
-                    help="exit non-zero on FAIL or UNKNOWN (default: report-only)")
+                    help="exit non-zero on FAIL or UNKNOWN in ANY check "
+                         "(default: report-only)")
+    ap.add_argument("--enforce-checks", default="",
+                    help="comma-separated checks to enforce while the rest stay "
+                         "report-only, e.g. --enforce-checks routes. A check "
+                         "named here exits non-zero on FAIL *or* UNKNOWN.")
     ap.add_argument("--json", type=Path, help="write the structured report here")
     ap.add_argument("--since-hours", type=int, default=24)
     ap.add_argument("--summary-md", type=Path,
@@ -554,25 +786,90 @@ def main() -> int:
           f"({', '.join(SCAN_DIRS)} + root)")
     print(f"    catalog planes: {', '.join(meta.get('planes', [])) or 'NONE'}")
     if meta.get("bus_age_days") is not None:
-        print(f"    bus snapshot age: {meta['bus_age_days']}d "
-              f"(budget {SNAPSHOT_MAX_AGE_DAYS}d)")
+        _age = meta["bus_age_days"]
+        _band = "OK"
+        if meta.get("bus_stale"):
+            _band = f"STALE -- OVER THE {SNAPSHOT_MAX_AGE_DAYS}d BUDGET"
+        elif meta.get("bus_warn"):
+            _band = (f"WARN -- past {SNAPSHOT_WARN_AGE_DAYS}d, "
+                     f"{SNAPSHOT_MAX_AGE_DAYS - _age:.1f}d until this check goes "
+                     f"STALE-RED and blocks every PR")
+        print(f"    bus snapshot age: {_age}d "
+              f"(warn {SNAPSHOT_WARN_AGE_DAYS}d / budget {SNAPSHOT_MAX_AGE_DAYS}d) "
+              f"-- {_band}")
+        if meta.get("bus_warn"):
+            print(f"    ::warning:: the host refresher has not landed a snapshot "
+                  f"in {_age}d. Run tools/bus_catalog_guard.sh --force on the host.")
 
     if cat_unknown:
         # Cannot evaluate. NOT a pass.
-        print(f"\n[2] TABLE REFERENTS .......... UNKNOWN")
-        print(f"    {cat_unknown}")
-        print(f"[3] COLUMN REFERENTS ......... UNKNOWN")
-        print(f"    {cat_unknown}")
-        report["tables"] = {"verdict": "UNKNOWN", "detail": cat_unknown}
-        report["columns"] = {"verdict": "UNKNOWN", "detail": cat_unknown}
-        unknowns.append(f"catalog ({cat_unknown})")
+        #
+        # A STALE snapshot is reported as its own verdict, STALE, carrying the
+        # age. It is counted as a FAILURE, not an unknown: "the catalog is 19
+        # days old" is not a thing we could not work out, it is a thing we
+        # worked out and it is bad. UNKNOWN stays for the genuinely
+        # unevaluable -- absent, unparseable, undated.
+        _stale = cat_unknown.startswith(STALE_PREFIX)
+        _v = "STALE" if _stale else "UNKNOWN"
+        _label = "STALE-RED" if _stale else "UNKNOWN"
+        _detail = cat_unknown[len(STALE_PREFIX):] if _stale else cat_unknown
+        print(f"\n[2] TABLE REFERENTS .......... {_label}")
+        print(f"    {_detail}")
+        print(f"[3] COLUMN REFERENTS ......... {_label}")
+        print(f"    {_detail}")
+        report["tables"] = {"verdict": _v, "detail": _detail,
+                            "bus_age_days": meta.get("bus_age_days")}
+        report["columns"] = {"verdict": _v, "detail": _detail,
+                             "bus_age_days": meta.get("bus_age_days")}
+        if _stale:
+            fails.extend(["tables", "columns"])
+        else:
+            unknowns.append(f"catalog ({_detail})")
     else:
+        for _p in meta.get("external_plane_problems", []):
+            # A broken provenance claim is a FAILURE of the tables check, not a
+            # footnote. The whole reason this file is safe to have is that it
+            # cannot go stale quietly.
+            fails.append("tables")
+            print(f"\n[2] EXTERNAL PLANE DECLARATION INVALID: {_p}")
         missing_t = {t: s for t, s in sorted(table_sites.items())
                      if t not in catalog and t not in created}
+        # HOW MUCH OF THIS PASS RESTS ON THE CODE-CREATED RULE.
+        #
+        # A referent is satisfied either by a CATALOG plane (bus / app.models /
+        # migrations / a declared external plane) or by a CREATE TABLE found
+        # somewhere in the scanned tree. The second rule is correct in spirit --
+        # a temp/staging table a module makes for itself IS a real referent --
+        # but `created` is accumulated TREE-WIDE, not per module. So a CREATE in
+        # any one of 2,328 files makes that name resolvable in all of them.
+        #
+        # Measured 2026-08-27 when TABLES was armed: 75 of 121 referents pass on
+        # that rule alone. That is not a reason to withhold the arming -- the
+        # check still catches every name that exists NOWHERE, which is the class
+        # #4032 was about -- but it IS the difference between "0 missing" and
+        # "0 missing, all of them independently declared", and the two must not
+        # read the same.
+        #
+        # So the number is printed on every run. Module-scoping `created` is the
+        # obvious next tightening and it is deliberately NOT bundled with the
+        # arming: it would surface a new batch of failures in the same change
+        # that made this check blocking. See #4080.
+        _cat_only = sum(1 for t in table_sites if t in catalog)
+        _created_only = sum(1 for t in table_sites
+                            if t not in catalog and t in created)
         print(f"\n[2] TABLE REFERENTS .......... "
               f"{'FAIL' if missing_t else 'PASS'}")
         print(f"    {len(table_sites)} distinct tables referenced, "
               f"{len(catalog)} in catalog, {len(missing_t)} MISSING")
+        print(f"    of the {len(table_sites)} referenced: {_cat_only} resolve on a "
+              f"DECLARED plane, {_created_only} only on a CREATE TABLE found "
+              f"elsewhere in the tree")
+        if _created_only:
+            print(f"    (the code-created rule is TREE-WIDE, not module-scoped -- "
+                  f"a CREATE in any of the {n_files} scanned files makes that name "
+                  f"resolvable in all of them. Correct for a module's own temp "
+                  f"table, weaker than it looks across the tree. Module-scoping "
+                  f"it is the next tightening; see #4080.)")
         for t, sites in list(missing_t.items())[:25]:
             print(f"    MISSING TABLE  {t}")
             for s in sites[:3]:
@@ -580,6 +877,8 @@ def main() -> int:
         report["tables"] = {
             "verdict": "FAIL" if missing_t else "PASS",
             "referenced": len(table_sites),
+            "declared_plane": _cat_only,
+            "code_created_only": _created_only,
             "missing": {t: s[:5] for t, s in missing_t.items()},
         }
         if missing_t:
@@ -651,30 +950,100 @@ def main() -> int:
         args.summary_md.parent.mkdir(parents=True, exist_ok=True)
         r, t, c = (report.get("routes", {}), report.get("tables", {}),
                    report.get("columns", {}))
+        # The headline must be the ARMED verdict, not the overall one.
+        #
+        # This job exits 0 while tables/columns are report-only, so a summary
+        # leading with "VERDICT: FAIL" tells a reader the gate is broken when
+        # the run is green -- and the whole point of this page is that nobody
+        # has to read code to see whether the gate is working. Lead with what
+        # decides the job's exit status; keep the full verdict below it.
+        armed_names = [c.strip() for c in (args.enforce_checks or "").split(",")
+                       if c.strip()]
+        if args.enforce:
+            headline = f"**{verdict}** -- every check is armed"
+        elif armed_names:
+            bad = [c for c in armed_names
+                   if report.get(c, {}).get("verdict") in ("FAIL", "UNKNOWN", "STALE")]
+            headline = (
+                f"**ARMED CHECKS FAILING: {', '.join(bad)}** -- this job is RED"
+                if bad else
+                f"**ARMED CHECKS PASS ({', '.join(armed_names)})** -- this job is GREEN"
+            )
+        else:
+            headline = f"**REPORT-ONLY** -- this job is GREEN regardless (overall {verdict})"
+
         md = [
             "## Referent verification", "",
-            f"**VERDICT: {verdict}**", "",
+            headline, "",
+            f"<sub>full verdict across all checks, armed or not: <b>{verdict}</b></sub>", "",
             "| check | result |", "|---|---|",
             f"| routes | {r.get('verdict')} -- {r.get('detail','')} |",
             f"| tables | {t.get('verdict')} -- {len(t.get('missing', {}))} missing "
-            f"of {t.get('referenced', '?')} referenced |",
+            f"of {t.get('referenced', '?')} referenced "
+            f"({t.get('declared_plane', '?')} on a declared plane, "
+            f"{t.get('code_created_only', '?')} on a tree-wide CREATE) |",
             f"| columns | {c.get('verdict')} -- {len(c.get('missing', {}))} missing "
             f"of {c.get('checked', '?')} checked |",
             f"| files scanned | {report.get('scanned_files', '?')} |",
             f"| unparseable modules | {len(report.get('unparseable', []))} |",
             f"| bus snapshot age (days) | "
-            f"{report.get('catalog', {}).get('bus_age_days', '?')} |",
+            f"{report.get('catalog', {}).get('bus_age_days', '?')} "
+            f"(warn {SNAPSHOT_WARN_AGE_DAYS}d / budget {SNAPSHOT_MAX_AGE_DAYS}d)"
+            f"{' **STALE-RED**' if report.get('catalog', {}).get('bus_stale') else ''}"
+            f"{' **WARN**' if report.get('catalog', {}).get('bus_warn') else ''} |",
             f"| PRs merged in window | {len(report.get('merged_prs', []))} |",
+            f"| no-router skips (declared) | "
+            f"{len(r.get('skipped_no_router', []))} |",
+            f"| no-router skips (UNDECLARED) | "
+            f"{len(r.get('undeclared_no_router', []))} |",
             "",
-            "_Report-only: this job exits 0 regardless. See issue #4032._",
+            ("**routes and tables are ARMED** -- a FAIL, UNKNOWN or STALE in "
+             "either fails this job, and this job is a required context, so it "
+             "blocks the merge. COLUMNS is REPORT-ONLY: it is red on a backlog "
+             "of pre-2026-08-11 emissions, not on current output, and arming it "
+             "today would turn every PR on this repo red. See #4032, #4080."),
         ]
         args.summary_md.write_text("\n".join(md) + "\n")
 
-    if not args.enforce:
-        print("\nREPORT-ONLY: exiting 0 regardless "
-              f"(would have exited {code} under --enforce)")
+    if args.enforce:
+        return code
+
+    # Partial arming. The routes half of this check is SOLVED (PASS: all
+    # services mounted or declared, every route resolving); the tables/columns
+    # half is FAIL on a historical backlog of pre-gate emissions that predates
+    # the 2026-08-11 grounding fix. Waiting for that backlog means the gate is
+    # never armed at all -- which is precisely how the July mount-point fix sat
+    # correct-but-unreached until August. So the solved half is locked in now
+    # and the rest stays report-only.
+    #
+    # UNKNOWN enforces exactly like FAIL for an armed check. That is the whole
+    # design rule of this tool: "could not evaluate" is not "fine".
+    armed = [c.strip() for c in args.enforce_checks.split(",") if c.strip()]
+    if armed:
+        bad = []
+        for c in armed:
+            v = report.get(c, {}).get("verdict")
+            if v is None:
+                bad.append(f"{c} (no such check)")
+            elif v in ("FAIL", "UNKNOWN", "STALE"):
+                # STALE enforces exactly like FAIL. A check cannot pass on a
+                # catalog it has already measured as dead.
+                bad.append(f"{c}={v}")
+        print("\n" + "=" * 72)
+        print(f"ARMED CHECKS: {', '.join(armed)}  "
+              f"(all others report-only)")
+        if bad:
+            print(f"ENFORCED FAILURE: {', '.join(bad)}")
+            print("=" * 72)
+            return 1
+        print("armed checks all PASS -- exiting 0 "
+              f"(unarmed checks would have exited {code} under --enforce)")
+        print("=" * 72)
         return 0
-    return code
+
+    print("\nREPORT-ONLY: exiting 0 regardless "
+          f"(would have exited {code} under --enforce)")
+    return 0
 
 
 if __name__ == "__main__":

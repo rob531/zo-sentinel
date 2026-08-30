@@ -1,10 +1,10 @@
 {
-  "captured_at": "2026-08-26T02:04:06.062076+00:00",
-  "column_count": 355,
+  "captured_at": "2026-08-26T19:20:13.563425+00:00",
+  "column_count": 361,
   "columns_with_unlisted_table": 0,
   "schema_version": 1,
   "source": "write_service:information_schema",
-  "table_count": 44,
+  "table_count": 45,
   "tables": {
     "agent_outputs": {
       "agent_id": "VARCHAR",
@@ -293,6 +293,14 @@
       "risk_tier": "VARCHAR",
       "server_id": "VARCHAR",
       "staleness_days": "INTEGER",
+      "threat_count": "INTEGER"
+    },
+    "mcp_risk_timeline": {
+      "computed_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "INTEGER",
+      "risk_rank": "DOUBLE",
+      "risk_tier": "VARCHAR",
+      "server_id": "VARCHAR",
       "threat_count": "INTEGER"
     },
     "mcp_server_registry": {

@@ -34,6 +34,22 @@ deletion); or printing/transmitting a secret value (never do this). Prefer `--fo
 bare `--force`, and verify-then-proceed over ask-then-wait.
 
 > For build-pipeline / mesh work and the full hard-constraint list, see `ZO_SENTINEL_PRIMER.md`.
+
+## LOCO CHAIRMAN — mandatory governance read
+
+`LOCO_CHAIRMAN.md` is the locum of truth: the standing authority on **what
+counts as finished**. Its consultation contract is not optional:
+
+- **Session start:** read `chairman/CHECKPOINT.md` (resume any in-flight
+  capture first), then `chairman/QUEUE.md` for the next unit of work.
+- **On any new finding:** run the interrogatives (`LOCO_CHAIRMAN.md` §2) and
+  label it with a gap class (§4).
+- **Before any "done"/"fixed"/"closed" claim:** state its closure grade (§3).
+  Only C4 may be called closed.
+- **Low context / low tokens / session ending:** write, commit, and PUSH a
+  capture to `chairman/CHECKPOINT.md` per §10 before stopping.
+- **Session end:** update touched Gap Register rows (§6) — no silent drops.
+
 > For the cross-host builder self-repair daemons, see "Builder self-repair harness" below.
 
 ## Primary mission

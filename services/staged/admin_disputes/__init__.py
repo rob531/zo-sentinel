@@ -221,7 +221,7 @@ def _run_self_test():
 
     try:
         # Test the service
-        from app.dependency_overrides import get_session as override_get_session
+        from app.db import get_session as override_get_session
         from app.db import get_session as original_get_session
 
         app.dependency_overrides[original_get_session] = lambda: db

@@ -1,0 +1,3 @@
+Looking at the task, I need to create a service that reads from both app tables (via SQLAlchemy) and the bus catalog tables (via HTTP to 127.0.0.1:8772).
+
+Let me first check the SCHEMA_TRUTH.md to understand the available models and then create the complete service.

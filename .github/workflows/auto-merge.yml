@@ -49,6 +49,35 @@ jobs:
           echo "::notice::enabling squash auto-merge for #$PR"
           gh pr merge "$PR" -R "$REPO" --auto --squash
 
+  opt-in-land:
+    # Operator-directed landing for HAND-authored PRs (LOCO_CHAIRMAN.md §13):
+    # the label 'land-when-green' is the explicit "this PR is wanted; merge it
+    # the moment gates pass" signal, so reviewed/solid hand PRs stop sitting
+    # open on nothing but the absence of a click. Required checks still gate
+    # the actual merge via branch protection; the same convergence-freeze
+    # guard applies as for autonomous builds.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'land-when-green') && github.event.pull_request.draft == false
+    steps:
+      - name: Convergence-freeze guard + enable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if ! files=$(gh pr view "$PR" -R "$REPO" --json files -q '.files[].path'); then
+            echo "::warning::cannot read changed files for #$PR -> skip auto-merge (fail-closed)"; exit 0
+          fi
+          if echo "$files" | grep -Eiq 'trust_synthesiser|risk_ranker|enrichment|signal_analyser|mcp_llm_'; then
+            echo "::notice::#$PR touches FROZEN scoring/enrichment paths -> NOT auto-merging (convergence freeze)"
+            gh pr edit "$PR" -R "$REPO" --add-label freeze-hold || true
+            gh pr merge "$PR" -R "$REPO" --disable-auto || true
+            exit 0
+          fi
+          echo "::notice::#$PR labelled land-when-green -> enabling squash auto-merge"
+          gh pr merge "$PR" -R "$REPO" --auto --squash
+
   dependabot:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.draft == false
@@ -89,7 +118,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          prs=$(gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number -q '.[].number') || prs=""
+          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number -q '.[].number';
+                   gh pr list -R "$REPO" --state open --label land-when-green --json number,isDraft -q '.[] | select(.isDraft == false) | .number'; } | sort -u ) || prs=""
           for pr in $prs; do
             files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
             if echo "$files" | grep -Eiq 'trust_synthesiser|risk_ranker|enrichment|signal_analyser|mcp_llm_'; then

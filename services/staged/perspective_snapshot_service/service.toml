@@ -1,0 +1,8 @@
+[service]
+name = "perspective_snapshot_service"
+import_path = "services.active.perspective_snapshot_service.router"
+prefix = "/api"
+tag = "perspective_snapshot_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true

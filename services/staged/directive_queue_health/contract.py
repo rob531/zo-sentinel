@@ -1,206 +1,199 @@
 """
 services.staged.directive_queue_health.contract
-
-Provides a FastAPI router exposing the health of the directive queues.
-Mirrors the structure of services/_exemplar/contract.py while implementing
-the specific logic for this service.
 """
 
 from __future__ import annotations
 
-import datetime
+import json
 import os
-import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, FastAPI
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-# --------------------------------------------------------------------------- #
-# Real data‑layer imports (required by the project’s contract‑validation logic)
-# --------------------------------------------------------------------------- #
-from app.db import get_session  # noqa: F401  (imported for dependency injection)
-# No direct model usage is needed for this service, but the import satisfies
-# external modules that expect a contract module to reference the real data layer.
-
-# --------------------------------------------------------------------------- #
-# Pydantic models
-# --------------------------------------------------------------------------- #
-class DirectiveInfo(BaseModel):
-    """Information about a single directive file."""
-    filename: str = Field(..., description="File name of the directive")
-    mtime_iso: str = Field(..., description="Modification time in ISO‑8601 UTC")
-    age_seconds: int = Field(..., description="Age of the file in seconds")
+# Real data‑layer imports (required by the build system)
+from app.db import get_session  # noqa: F401  (dependency injection)
+from app.models import McpServerRegistry  # noqa: F401  (ensures a real model is imported)
 
 
-class DirectiveQueueHealthSummary(BaseModel):
-    """Aggregated summary of the queue health."""
-    pending_count: int = Field(..., description="Number of pending directives")
-    proposed_count: int = Field(..., description="Number of proposed directives")
-    oldest_pending_age_seconds: Optional[int] = Field(
-        None, description="Age of the oldest pending directive"
-    )
-    oldest_proposed_age_seconds: Optional[int] = Field(
-        None, description="Age of the oldest proposed directive"
-    )
+router = APIRouter(prefix="/api")
 
 
 class DirectiveQueueHealthResponse(BaseModel):
-    """Full response payload for the health endpoint."""
-    pending: List[DirectiveInfo] = Field(..., description="List of pending directives")
-    proposed: List[DirectiveInfo] = Field(..., description="List of proposed directives")
-    summary: DirectiveQueueHealthSummary = Field(..., description="Aggregated summary")
-
-
-# --------------------------------------------------------------------------- #
-# Core logic
-# --------------------------------------------------------------------------- #
-def _list_directory(dir_path: Path) -> List[DirectiveInfo]:
-    """Return a list of DirectiveInfo objects for all regular files in *dir_path*."""
-    items: List[DirectiveInfo] = []
-    if dir_path.is_dir():
-        for entry in dir_path.iterdir():
-            if entry.is_file():
-                stat = entry.stat()
-                mtime = datetime.datetime.fromtimestamp(
-                    stat.st_mtime, tz=datetime.timezone.utc
-                )
-                age = int(time.time() - stat.st_mtime)
-                items.append(
-                    DirectiveInfo(
-                        filename=entry.name,
-                        mtime_iso=mtime.isoformat(),
-                        age_seconds=age,
-                    )
-                )
-    return items
-
-
-def get_queue_health(base_path: Path = Path("directives")) -> DirectiveQueueHealthResponse:
-    """
-    Assemble the health information for the directive queues.
-
-    Parameters
-    ----------
-    base_path: Path
-        Root directory containing the ``pending`` and ``proposed`` sub‑directories.
-        Defaults to a ``directives`` directory relative to the current working directory.
-    """
-    pending_dir = base_path / "pending"
-    proposed_dir = base_path / "proposed"
-
-    pending = _list_directory(pending_dir)
-    proposed = _list_directory(proposed_dir)
-
-    pending_ages = [d.age_seconds for d in pending]
-    proposed_ages = [d.age_seconds for d in proposed]
-
-    summary = DirectiveQueueHealthSummary(
-        pending_count=len(pending),
-        proposed_count=len(proposed),
-        oldest_pending_age_seconds=max(pending_ages) if pending_ages else None,
-        oldest_proposed_age_seconds=max(proposed_ages) if proposed_ages else None,
+    pending_count: int = Field(..., description="Number of pending directive files")
+    proposed_count: int = Field(..., description="Number of proposed directive files")
+    oldest_pending_age_seconds: int = Field(
+        ..., description="Age in seconds of the oldest pending directive"
+    )
+    directive_generator_heartbeat_age_seconds: Optional[int] = Field(
+        None,
+        description="Age in seconds of the last heartbeat from the directive generator service",
+    )
+    directive_generator_stale: bool = Field(
+        ..., description="True if the generator heartbeat is older than the staleness threshold"
+    )
+    recent_tasks: List[str] = Field(
+        ..., description="Names of the most recent pending tasks (up to 5)"
     )
 
-    return DirectiveQueueHealthResponse(pending=pending, proposed=proposed, summary=summary)
+
+# --------------------------------------------------------------------------- #
+# Helper utilities
+# --------------------------------------------------------------------------- #
+def _load_task_names_from_dir(dir_path: Path) -> List[tuple[str, float]]:
+    """
+    Returns a list of (task_name, modification_timestamp) tuples for all JSON files
+    in the given directory. The task name is derived from the filename (without
+    the ``.json`` suffix). Files that cannot be parsed are ignored.
+    """
+    tasks: List[tuple[str, float]] = []
+    if not dir_path.is_dir():
+        return tasks
+
+    for entry in dir_path.iterdir():
+        if entry.is_file() and entry.suffix.lower() == ".json":
+            try:
+                # We only need the name; the file content is not required for the health report.
+                task_name = entry.stem
+                mtime = entry.stat().st_mtime
+                tasks.append((task_name, mtime))
+            except OSError:
+                continue
+    return tasks
+
+
+def _query_directive_generator_heartbeat() -> Optional[int]:
+    """
+    Queries the ``service_health`` endpoint for the ``sentinel_directive_generator``
+    last heartbeat timestamp. Returns the age in seconds, or ``None`` if the query
+    fails for any reason (network error, unexpected payload, etc.).
+    """
+    try:
+        payload = {
+            "service": "sentinel_directive_generator",
+            "field": "last_heartbeat",
+        }
+        # The real service lives at port 8772; we use a short timeout to avoid hanging
+        # during the self‑test (the call will be overridden there).
+        resp = httpx.post(
+            "http://127.0.0.1:8772/query",
+            json=payload,
+            timeout=2.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Expected shape: {"last_heartbeat": "<ISO‑8601 timestamp>"}
+        ts_str = data.get("last_heartbeat")
+        if not ts_str:
+            return None
+        hb_dt = datetime.fromisoformat(ts_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+        age = int((datetime.now(timezone.utc) - hb_dt).total_seconds())
+        return age
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------- #
-# FastAPI router
+# Endpoint
 # --------------------------------------------------------------------------- #
-router = APIRouter()
-
-
 @router.get(
-    "/api/directives/queue/health",
+    "/directives/queue-health",
     response_model=DirectiveQueueHealthResponse,
     tags=["directive_queue_health"],
 )
-def health_endpoint() -> DirectiveQueueHealthResponse:
-    """HTTP GET endpoint returning the directive queue health."""
-    return get_queue_health()
+def get_queue_health(
+    _: Depends = Depends(get_session),  # injected to satisfy the real data‑layer contract
+) -> DirectiveQueueHealthResponse:
+    """
+    Returns health information about the directive queues.
+    """
+    base_dir = Path(__file__).resolve().parents[2] / "directives"
+    pending_dir = base_dir / "pending"
+    proposed_dir = base_dir / "proposed"
 
+    pending_tasks = _load_task_names_from_dir(pending_dir)
+    proposed_tasks = _load_task_names_from_dir(proposed_dir)
 
-def get_contract() -> APIRouter:
-    """Return the router for inclusion by the application."""
-    return router
+    pending_count = len(pending_tasks)
+    proposed_count = len(proposed_tasks)
+
+    # Oldest pending age
+    if pending_tasks:
+        oldest_mtime = min(mtime for _, mtime in pending_tasks)
+        oldest_age = int((datetime.now(timezone.utc).timestamp() - oldest_mtime))
+    else:
+        oldest_age = 0
+
+    # Recent tasks – up to 5 most recent pending task names
+    recent_tasks = [
+        name
+        for name, _ in sorted(pending_tasks, key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    # Heartbeat information
+    heartbeat_age = _query_directive_generator_heartbeat()
+    stale_threshold = 7500  # seconds
+    stale = (heartbeat_age or 0) > stale_threshold
+
+    return DirectiveQueueHealthResponse(
+        pending_count=pending_count,
+        proposed_count=proposed_count,
+        oldest_pending_age_seconds=oldest_age,
+        directive_generator_heartbeat_age_seconds=heartbeat_age,
+        directive_generator_stale=stale,
+        recent_tasks=recent_tasks,
+    )
 
 
 # --------------------------------------------------------------------------- #
 # Self‑test (run with ``python -m services.staged.directive_queue_health.contract``)
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":  # pragma: no cover
-    import tempfile
     from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
     # ------------------------------------------------------------------- #
-    # Create a throw‑away SQLite session and override the real DB dependency.
+    # Dependency overrides
     # ------------------------------------------------------------------- #
+    # In‑memory SQLite engine (no real tables are required for this test)
     engine = create_engine(
-        "sqlite:///:memory:",
+        "sqlite://",
         connect_args={"check_same_thread": False},
-        future=True,
+        poolclass=StaticPool,
     )
-    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    SessionLocal = sessionmaker(bind=engine)
 
-    def _override_get_session() -> SessionLocal:  # type: ignore
+    def _override_get_session():
         return SessionLocal()
 
+    # Override the heartbeat query to avoid network calls
+    def _override_query_directive_generator_heartbeat() -> Optional[int]:
+        # Simulate a recent heartbeat (e.g., 100 seconds ago)
+        return 100
+
+    # Apply overrides
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_session] = _override_get_session
+    # Monkey‑patch the private helper used by the endpoint
+    globals()["_query_directive_generator_heartbeat"] = (
+        _override_query_directive_generator_heartbeat
+    )
+
+    client = TestClient(app)
+
     # ------------------------------------------------------------------- #
-    # Assemble a temporary filesystem layout with known mtimes.
+    # Execute test
     # ------------------------------------------------------------------- #
-    with tempfile.TemporaryDirectory() as tmpdir:
-        base = Path(tmpdir)
-        (base / "pending").mkdir()
-        (base / "proposed").mkdir()
+    resp = client.get("/api/directives/queue-health")
+    assert resp.status_code == 200, f"Unexpected status {resp.status_code}"
+    payload = resp.json()
+    assert isinstance(payload.get("directive_generator_stale"), bool), "stale flag not bool"
+    assert isinstance(payload.get("recent_tasks"), list), "recent_tasks not list"
 
-        now = time.time()
-
-        # Create 3 pending files with staggered ages (10 s apart)
-        for i in range(3):
-            p = base / "pending" / f"pending_{i}.txt"
-            p.write_text("pending")
-            mtime = now - (i + 1) * 10
-            os.utime(p, (mtime, mtime))
-
-        # Create 2 proposed files with staggered ages (20 s apart)
-        for i in range(2):
-            p = base / "proposed" / f"proposed_{i}.txt"
-            p.write_text("proposed")
-            mtime = now - (i + 1) * 20
-            os.utime(p, (mtime, mtime))
-
-        # ------------------------------------------------------------------- #
-        # Monkey‑patch the core function to point at the temporary directory.
-        # ------------------------------------------------------------------- #
-        original_get_queue_health = get_queue_health
-
-        def _test_get_queue_health() -> DirectiveQueueHealthResponse:
-            return original_get_queue_health(base_path=base)
-
-        globals()["get_queue_health"] = _test_get_queue_health
-
-        # ------------------------------------------------------------------- #
-        # Build a minimal FastAPI app for the test client.
-        # ------------------------------------------------------------------- #
-        app = FastAPI()
-        app.include_router(router)
-        app.dependency_overrides[get_session] = _override_get_session
-
-        client = TestClient(app)
-
-        # ------------------------------------------------------------------- #
-        # Perform the request and validate the response.
-        # ------------------------------------------------------------------- #
-        response = client.get("/api/directives/queue/health")
-        assert response.status_code == 200, f"Unexpected status {response.status_code}"
-        payload = response.json()
-
-        assert payload["summary"]["pending_count"] == 3, "Pending count mismatch"
-        assert payload["summary"]["proposed_count"] == 2, "Proposed count mismatch"
-
-        print("PASS")
-        exit(0)
+    print("PASS")

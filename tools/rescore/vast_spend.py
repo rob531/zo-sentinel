@@ -69,6 +69,8 @@ from typing import Any, Dict, List, Optional
 
 INVOICES_URL = os.environ.get(
     "VAST_INVOICES_URL", "https://console.vast.ai/api/v0/users/current/invoices/")
+ACCOUNT_INVOICES_URL = os.environ.get(
+    "VAST_ACCOUNT_INVOICES_URL", "https://console.vast.ai/api/v0/invoices/")
 FETCH_SECRET = os.environ.get("AGENTVAULT_FETCH_SECRET",
                               r"D:\agentvault\fetch_secret.py")
 SECRET_NAME = "vast"
@@ -129,6 +131,50 @@ def fetch_invoices(key: Optional[str] = None, url: str = INVOICES_URL,
             "vast invoices payload has no 'current' block; got {}".format(
                 sorted(payload)[:12] if isinstance(payload, dict)
                 else type(payload).__name__))
+    if not [i for i in (payload.get("invoices") or [])
+            if isinstance(i, dict) and i.get("type") == "payment"]:
+        # API drift observed 2026-08-30: this endpoint now returns an EMPTY
+        # invoices list; settled payments moved to /invoices/. Fall back.
+        payload = _merge_account_payments(payload, key=key, timeout=timeout)
+    return payload
+
+
+def _map_account_rows(rows: Any) -> List[dict]:
+    """Map /invoices/ rows (amount_cents, is_credit, paid_on -- shape observed
+    live 2026-08-30) into the legacy payment shape last_topup() consumes.
+    Only SETTLED credits qualify: is_credit, paid_on set, negative cents."""
+    return [
+        {"type": "payment", "id": r.get("id"),
+         "amount": (r.get("amount_cents") or 0) / 100.0,
+         "timestamp": r.get("when"), "paid_timestamp": r.get("paid_on"),
+         "failed": None, "refunded": None}
+        for r in (rows if isinstance(rows, list) else [])
+        if isinstance(r, dict) and r.get("is_credit") and r.get("paid_on")
+        and (r.get("amount_cents") or 0) < 0]
+
+
+def _merge_account_payments(payload: Dict[str, Any], key: Optional[str] = None,
+                            url: str = ACCOUNT_INVOICES_URL,
+                            timeout: int = TIMEOUT_S) -> Dict[str, Any]:
+    """Fetch the account-level /invoices/ endpoint and merge its settled
+    credits into payload["invoices"]. Raises on failure -- a missing anchor
+    must stay LOUD (FU-035), never degrade to an empty list."""
+    key = key or api_key()
+    req = urllib.request.Request(
+        url, headers={"Authorization": "Bearer " + key,
+                      "Accept": "application/json",
+                      "User-Agent": "zo-sentinel-vast-spend/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            rows = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:                     # noqa: BLE001 -- fail loud
+        raise VastSpendError(
+            "account invoices fallback unreachable ({}: {}) -- refusing to "
+            "report $0.00 (FU-035)".format(exc.__class__.__name__, exc)) from exc
+    payload = dict(payload)
+    payload["invoices"] = list(payload.get("invoices") or []) + \
+        _map_account_rows(rows)
+    payload["_payments_source"] = url
     return payload
 
 
@@ -262,6 +308,19 @@ def selftest() -> None:
                         {"type": "charge", "amount": 4.0, "timestamp": 400}]}
     assert last_topup(two["invoices"])["amount"] == -10.0
     assert spend_since_topup(two)["spent"] == 9.0
+
+    # API drift 2026-08-30: payments live at /invoices/ as amount_cents rows
+    acct = [{"id": 2831506, "when": 1778883474.18, "paid_on": 1778883474.57,
+             "amount_cents": -2500, "is_credit": True},          # the real top-up
+            {"id": 1, "when": 50.0, "paid_on": None,
+             "amount_cents": -999, "is_credit": True},           # unsettled
+            {"id": 2, "when": 60.0, "paid_on": 61.0,
+             "amount_cents": 400, "is_credit": False}]           # a charge
+    mapped = _map_account_rows(acct)
+    assert len(mapped) == 1 and mapped[0]["amount"] == -25.0, mapped
+    rep3 = spend_since_topup({"current": {"credit": 13.504}, "invoices": mapped})
+    assert rep3["spent"] == 11.5 and rep3["topup"] == 25.0, rep3
+    assert _map_account_rows("not-a-list") == []
 
     print("PASS vast_spend self-tests (live 2026-07-26 payload => $6.22 spent, "
           "where the delta method reported $0.00; every failure path raises)")

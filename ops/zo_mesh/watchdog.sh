@@ -1,7 +1,19 @@
 #!/bin/zsh
-# watchdog.v3.10 - autonomous self-healer for ZOMesh
+# watchdog.v3.11 - autonomous self-healer for ZOMesh
 #
-# CHANGELOG vs v3.9 (this change, 2026-08-22, GH #3415 prevention 1 / FU-349):
+# CHANGELOG vs v3.10 (this change, 2026-08-25, MERGE_AUDIT_2026-08-23 B2):
+#   - ADD: _workspace_hygiene, invoked each tick. Asserts the build workspace
+#     at $SENTINEL is (a) exactly origin/main and (b) free of untracked files
+#     under app/. The 2026-08-14..16 stall was an untracked app/routers/__init__.py
+#     shadowing the committed PEP-420 namespace package -- it broke the
+#     media_assets spine mount and every local `import app.*` for three days
+#     while the checkout also sat 26 commits behind. No gate caught it because
+#     no gate looked: CI tests origin/main, the builder runs here. The audit's
+#     point is that the tree DRIFTS UNOBSERVED -- a diverged workspace makes
+#     every local gate result describe a tree that exists nowhere else. Logic in
+#     tools/workspace_hygiene_check.py per the v3.8 janitor precedent.
+#
+# CHANGELOG vs v3.9 (2026-08-22, GH #3415 prevention 1 / FU-349):
 #   - FIX: a restart was recorded as a repair the moment the relaunch command
 #     was issued. During the 2026-08-13..16 outage every restarted promoter
 #     died at package init in <3s and the watchdog faithfully 'repaired' it
@@ -245,6 +257,23 @@ _verify_restarts() {
     done
 }
 
+# MERGE_AUDIT_2026-08-23 B2: the build workspace is a mutable tree that no gate
+# observes. On 2026-08-14 it was 26 commits behind main and carried an untracked
+# app/routers/__init__.py that shadowed the committed namespace package, breaking
+# the media_assets spine mount and every local `import app.*` for three days. CI
+# never saw it -- CI tests origin/main; the builder and its self-tests run HERE.
+# A diverged workspace does not just carry defects, it makes every local gate
+# result describe a tree that exists nowhere else. Observed every tick now.
+# Logic lives in tools/ (the v3.8 janitor precedent) so this file stays minimal.
+_workspace_hygiene() {
+    local out
+    out=$(cd $SENTINEL && timeout 60 python3 tools/workspace_hygiene_check.py --quiet 2>&1)
+    if [[ $? -ne 0 ]]; then
+        log "build workspace hygiene FAIL -- ${out//$'\n'/ | }"
+        HEALTHY=false; ACTIONS+=("workspace_hygiene_FAIL")
+    fi
+}
+
 _compact_logs() {
     local max_bytes=$((5 * 1024 * 1024))   # 5 MB
     local keep_lines=10000
@@ -334,6 +363,7 @@ BYOK=$(grep -rl 'model_name.*byok:' /home/workspace/Skills/ --include='*.ts' --i
 [[ -n "$BYOK" ]] && { log "BYOK ALERT: $BYOK"; HEALTHY=false; ACTIONS+=("byok_alert"); }
 
 _verify_restarts
+_workspace_hygiene
 _compact_logs
 _self_heartbeat
 

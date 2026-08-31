@@ -50,7 +50,7 @@ def reset_server_export_api_quarantine(session: Session = Depends(get_session)) 
 if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.dependency_overrides import app
+    from app.main import app
 
     # Override the session for self-test
     test_engine = create_engine("sqlite:///:memory:")

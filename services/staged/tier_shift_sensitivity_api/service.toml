@@ -1,0 +1,9 @@
+# service.toml
+[service]
+name = "tier_shift_sensitivity_api"
+import_path = "services.active.tier_shift_sensitivity_api.router"
+prefix = "/api"
+tag = "tier_shift_sensitivity_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

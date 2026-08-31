@@ -293,9 +293,23 @@ jobs:
         # Real-bug rules (F = pyflakes, E9 = syntax/runtime) over the code we
         # maintain. A new undefined name / unused import / broken f-string here
         # fails the PR.
+        #
+        # MERGE_AUDIT_2026-08-23 G2: this covered one tree out of five. The
+        # gated tree (zo_sentinel/) had ZERO unresolved imports while every
+        # finding in that audit sat in an ungated one -- which is the argument
+        # for widening rather than a coincidence. app/ and tools/ are added
+        # here; both were brought to zero F,E9 in the same commit (20 findings,
+        # including a real F821 undefined `Session` in
+        # app/routers/ask_corpus_health_api.py).
+        #
+        # Ratchet, not a sweep: services/** and the ~900 root modules stay in
+        # the report-only pass below until they are clean enough to add. Note
+        # what this does NOT buy -- pyflakes resolves names WITHIN a file, not
+        # module existence across the tree, so it would not have caught L1/L2's
+        # class unless the symbol were also used undefined.
         run: |
           ruff check --select F,E9 --output-format github \
-            zo_sentinel tests/ci tests/gates
+            zo_sentinel tests/ci tests/gates app tools
 
       - name: Ruff (report-only -- whole repo)
         # Visibility into the legacy root debt without blocking. Ratchet target.

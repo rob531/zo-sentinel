@@ -932,6 +932,74 @@ def _billed_dph(run, args) -> float:
     return quoted
 
 
+WEDGE_GRACE_MIN_DEFAULT = 25
+
+
+def _instance_probe(run) -> dict:
+    """Best-effort live status of the fired instance.
+
+    Returns {} when the API is unreachable (UNKNOWN, not absent -- R6).
+    Returns {"present": False} when the API answered and the instance is
+    genuinely missing from the list (outbid, host reclaim, manual kill).
+    Run 20260822-220319 burned its whole 212m deadline against an instance
+    nobody ever looked at; this is the look.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return {}
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        rows = v.show_instances()
+        if not rows:
+            return {}
+        for i in rows:
+            if str(i.get("id")) == str(iid):
+                return {"present": True,
+                        "actual_status": i.get("actual_status"),
+                        "status_msg": (i.get("status_msg") or "")[:200],
+                        "cur_state": i.get("cur_state")}
+        return {"present": False}
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: instance probe failed ({e.__class__.__name__}: {e}); status UNKNOWN")
+        return {}
+
+
+def _pull_instance_logs(run) -> None:
+    """SSH-free forensics BEFORE destroy, via the vast logs API.
+
+    The existing forensic path (the pod pushes a git branch) is exactly what
+    fails when the pod never boots -- 3 waves died with zero artifacts that
+    way. This path depends only on the vast API and must never raise.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return
+    coll = run.dir / "results"
+    coll.mkdir(exist_ok=True)
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        text = None
+        for call in (lambda: v.logs(INSTANCE_ID=int(iid)),
+                     lambda: v.logs(id=int(iid)),
+                     lambda: v.logs(int(iid))):
+            try:
+                text = call()
+            except TypeError:
+                continue
+            if text:
+                break
+        if text:
+            (coll / "vast_instance.log").write_text(
+                str(text)[-200_000:], encoding="utf-8")
+            log(f"forensics: saved vast instance log ({len(str(text))} chars)")
+        else:
+            log("forensics: vast logs API returned nothing")
+    except Exception as e:  # noqa: BLE001
+        log(f"forensics: vast logs fetch failed ({e.__class__.__name__}: {e})")
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
@@ -945,6 +1013,52 @@ def ph_watch_collect(run: Run, args) -> None:
         if st:
             run.mark("watch", result=st, est_cost=round(est_cost, 2))
             break
+        probe = _instance_probe(run)
+        if probe:
+            stat = (probe.get("actual_status")
+                    or ("absent" if probe.get("present") is False else "unknown"))
+            seen = run.state.setdefault("status_seen", [])
+            if not seen or seen[-1] != stat:
+                seen.append(stat)
+                run.save()
+                ledger("instance_status", run.state["run_id"], status=stat,
+                       msg=probe.get("status_msg", ""))
+            if probe.get("present") is False:
+                miss = run.state.get("absent_probes", 0) + 1
+                run.state["absent_probes"] = miss
+                run.save()
+                if miss >= 2:
+                    # Two consecutive authoritative "not in the list" answers:
+                    # waiting out the deadline can never produce a result.
+                    ledger("instance_vanished", run.state["run_id"],
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="vanished")
+                    break
+            else:
+                if run.state.get("absent_probes"):
+                    run.state["absent_probes"] = 0
+                    run.save()
+                if ("running" not in run.state.get("status_seen", [])
+                        and elapsed_h * 60 >= getattr(
+                            args, "wedge_grace_min", WEDGE_GRACE_MIN_DEFAULT)):
+                    # Never reached "running" inside the grace window: machine
+                    # wedge, not a slow job. Blocklist + fail fast.
+                    mid = run.state.get("machine_id")
+                    if mid is not None:
+                        blk = RUNS_ROOT / "wedged_machines.json"
+                        try:
+                            cur = set(json.loads(blk.read_text())) if blk.exists() else set()
+                        except Exception:  # noqa: BLE001
+                            cur = set()
+                        if mid not in cur:
+                            cur.add(mid)
+                            blk.write_text(json.dumps(sorted(cur)))
+                            log(f"wedge: machine {mid} added to blocklist")
+                    ledger("wedge_watch_destroy", run.state["run_id"],
+                           machine=mid, last_status=stat,
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="wedge")
+                    break
         if est_cost >= _eff_cost_cap(run, args):
             ledger("cost_ceiling_breach", run.state["run_id"], est=est_cost)
             run.mark("watch", "failed", result="cost_breach")
@@ -976,8 +1090,13 @@ def ph_watch_collect(run: Run, args) -> None:
             got.append("preds.jsonl.gz(reassembled from %d parts)" % len(parts))
     run.mark("collect", collected=got)
     log(f"collect: {got or 'nothing on remote (instance may still be running the job)'}")
+    if run.state.get("result") != "ok" and not got:
+        # Branch path yielded nothing: the instance's own log is the ONLY
+        # remaining evidence and destroy erases it. Pull it via the API first.
+        _pull_instance_logs(run)
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.
-    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline"):
+    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline",
+                                   "wedge", "vanished"):
         _destroy(run, run.state.get("result", "unknown"))
         run.mark("destroy")
     if run.state.get("result") != "ok":
@@ -1265,6 +1384,9 @@ def main() -> None:
     ap.add_argument("--deadline-min", type=int, default=None,
                     help="override the FU-090 size-scaled deadline (default: scaled)")
     ap.add_argument("--poll-secs", type=int, default=120)
+    ap.add_argument("--wedge-grace-min", type=int,
+                    default=WEDGE_GRACE_MIN_DEFAULT,
+                    help="fail fast if the instance never reaches 'running' within this many minutes")
     args = ap.parse_args()
     if args.check_open_runs:
         raise SystemExit(check_open_runs())

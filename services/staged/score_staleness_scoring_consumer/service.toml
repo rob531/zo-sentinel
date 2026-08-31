@@ -1,0 +1,8 @@
+[service]
+name = "score_staleness_scoring_consumer"
+import_path = "services.active.score_staleness_scoring_consumer.router"
+prefix = "/api"
+tag = "score_staleness_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

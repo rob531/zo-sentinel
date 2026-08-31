@@ -1,0 +1,8 @@
+[service]
+name = "auth_session"
+import_path = "services.active.auth_session.router"
+prefix = "/api"
+tag = "auth_session"
+origin = "service"
+auth = "public"
+needs_data_layer = true

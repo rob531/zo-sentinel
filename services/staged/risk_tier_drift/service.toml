@@ -1,0 +1,82 @@
+"""Service definition for risk_tier_drift."""
+
+import ast
+import py_compile
+import sys
+from pathlib import Path
+from typing import Any
+
+# Service metadata from service.toml
+SERVICE_NAME = "risk_tier_drift"
+IMPORT_PATH = "services.active.risk_tier_drift.router"
+PREFIX = "/api"
+TAG = "risk_tier_drift"
+ORIGIN = "service"
+AUTH = "public"
+NEEDS_DATA_LAYER = True
+
+# Data access
+from app.db import get_session
+
+
+class ServiceConfig:
+    """Service configuration container."""
+
+    name: str = SERVICE_NAME
+    import_path: str = IMPORT_PATH
+    prefix: str = PREFIX
+    tag: str = TAG
+    origin: str = ORIGIN
+    auth: str = AUTH
+    needs_data_layer: bool = NEEDS_DATA_LAYER
+
+    @classmethod
+    def from_toml(cls, path: Path | str) -> "ServiceConfig":
+        """Load from TOML file."""
+        import tomllib
+
+        with open(path, "rb") as f:
+            data: dict[str, Any] = tomllib.load(f)
+        cfg: dict[str, Any] = data.get("service", {})
+        return cls(
+            name=cfg.get("name", SERVICE_NAME),
+            import_path=cfg.get("import_path", IMPORT_PATH),
+            prefix=cfg.get("prefix", PREFIX),
+            tag=cfg.get("tag", TAG),
+            origin=cfg.get("origin", ORIGIN),
+            auth=cfg.get("auth", AUTH),
+            needs_data_layer=cfg.get("needs_data_layer", NEEDS_DATA_LAYER),
+        )
+
+
+def self_test() -> bool:
+    """Validate service configuration."""
+    cfg = ServiceConfig()
+    assert cfg.name == "risk_tier_drift", f"name mismatch: {cfg.name}"
+    assert cfg.import_path == "services.active.risk_tier_drift.router", f"import_path mismatch: {cfg.import_path}"
+    assert cfg.prefix == "/api", f"prefix mismatch: {cfg.prefix}"
+    assert cfg.tag == "risk_tier_drift", f"tag mismatch: {cfg.tag}"
+    assert cfg.origin == "service", f"origin mismatch: {cfg.origin}"
+    assert cfg.auth == "public", f"auth mismatch: {cfg.auth}"
+    assert cfg.needs_data_layer is True, f"needs_data_layer mismatch: {cfg.needs_data_layer}"
+
+    # Validate get_session import
+    assert get_session is not None, "get_session not importable"
+
+    return True
+
+
+if __name__ == "__main__":
+    src = Path(__file__).resolve()
+    try:
+        py_compile.compile(str(src), doraise=True)
+    except py_compile.PyCompileError as e:
+        print(f"FAIL: compile error - {e}")
+        sys.exit(1)
+
+    try:
+        self_test()
+        print("PASS")
+    except Exception as e:
+        print(f"FAIL: {e}")
+        sys.exit(1)

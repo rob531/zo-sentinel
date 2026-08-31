@@ -1,0 +1,8 @@
+[service]
+name = "escalation_alert_consumer"
+import_path = "services.active.escalation_alert_consumer.router"
+prefix = "/api"
+tag = "escalation_alert_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

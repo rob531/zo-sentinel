@@ -1,0 +1,9 @@
+# service.toml
+[service]
+name = "server_risk_tier_transition_check"
+import_path = "services.active.server_risk_tier_transition_check.router"
+prefix = "/api"
+tag = "server_risk_tier_transition_check"
+origin = "service"
+auth = "public"
+needs_data_layer = true

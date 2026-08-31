@@ -1,0 +1,8 @@
+[service]
+name = "axis_distribution_snapshot"
+import_path = "services.active.axis_distribution_snapshot.router"
+prefix = "/api"
+tag = "axis_distribution_snapshot"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -104,7 +104,7 @@ def reset_quarantine_endpoint(*, session: Optional[Session] = None) -> None:
     sess = session or get_session()
     # Use a safe textual SQL that references only existing columns.
     # The statement is deliberately generic to avoid schema‑binding failures.
-    sess.execute("UPDATE mcp_server_registry SET quarantine = FALSE WHERE TRUE")
+    sess.execute("UPDATE McpServerRegistry SET quarantine = FALSE WHERE TRUE")
     sess.commit()
 
 

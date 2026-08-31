@@ -12,7 +12,7 @@ except ImportError:
         
             globals()["app"] = app
             return app
-        raise AttributeError(f"module {{__name__!r}} has no attribute {{name!r}}")
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = ["app"]
@@ -29,4 +29,4 @@ def __getattr__(name):
         if _loaded_overrides is None:
             _loaded_overrides = app.dependency_overrides
         return _loaded_overrides
-    raise AttributeError(f"module {{__name__!r}} has no attribute {{name!r}}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

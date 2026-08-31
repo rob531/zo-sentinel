@@ -1,0 +1,8 @@
+[service]
+name = "cve_family_analysis"
+import_path = "services.active.cve_family_analysis.router"
+prefix = "/api"
+tag = "cve_family_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -46,7 +46,7 @@ def get_mesh_scores() -> List[Dict]:
 
 def reset_server_export_api_quarantine(db: Session = Depends(get_session)) -> None:
     try:
-        db.execute("UPDATE mcp_server_registry SET quarantine = FALSE WHERE quarantine = TRUE")
+        db.execute("UPDATE McpServerRegistry SET quarantine = FALSE WHERE quarantine = TRUE")
         db.commit()
     except Exception as e:
         db.rollback()

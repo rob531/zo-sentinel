@@ -1,0 +1,8 @@
+[service]
+name = "server_score_comparison"
+import_path = "services.active.server_score_comparison.router"
+prefix = "/api"
+tag = "server_score_comparison"
+origin = "service"
+auth = "public"
+needs_data_layer = true

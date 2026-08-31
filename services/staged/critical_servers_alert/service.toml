@@ -1,0 +1,23 @@
+[service]
+name = "critical_servers_alert"
+import_path = "services.active.critical_servers_alert.router"
+prefix = "/api"
+tag = "critical_servers_alert"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[data_sources]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[data_access]
+app_db = "postgres"
+mesh_store = "ZoComputer:8772"
+
+[router]
+module = "services.active.critical_servers_alert.router"
+class = "router"
+
+[dependencies]
+requires = ["app.db", "app.models"]

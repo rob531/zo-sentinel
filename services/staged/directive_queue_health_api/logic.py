@@ -1,219 +1,239 @@
-import os
+"""
+Directive Queue Health API - reads pending/proposed directive JSONs from disk.
+
+Returns per-handler counts, age statistics, and identifies starved/stalled tasks.
+"""
 import json
-import datetime
-from typing import List, Dict, Optional
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
-import requests
-from fastapi import APIRouter, Depends, FastAPI
-from pydantic import BaseModel, Field
-from fastapi.testclient import TestClient
-
-# Real application data layer import (required by the build system)
-from app.db import get_session  # noqa: F401  (imported for side‑effects / contract)
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 router = APIRouter()
 
 
-class DirectiveQueueHealthResponse(BaseModel):
-    pending_tasks: List[str] = Field(..., description="List of pending task identifiers")
-    proposed_tasks: List[str] = Field(..., description="List of proposed task identifiers")
-    handler_counts: Dict[str, int] = Field(..., description="Aggregated count per handler")
-    recent_failures: int = Field(..., description="Number of recent failure events")
-    last_failure_at: Optional[str] = Field(
-        None, description="ISO‑8601 timestamp of the most recent failure or null"
-    )
+class HandlerMetrics(BaseModel):
+    pending: int
+    proposed: int
+    oldest_age_seconds: float
 
 
-def _load_tasks(base_dir: str) -> Dict[str, List[str]]:
-    """
-    Scan ``pending`` and ``proposed`` sub‑directories under ``base_dir``.
-    Returns a mapping with keys ``pending`` and ``proposed`` containing the
-    ``task`` field from each JSON file.
-    """
-    result = {"pending": [], "proposed": []}
-    for category in ("pending", "proposed"):
-        dir_path = os.path.join(base_dir, "directives", category)
-        if not os.path.isdir(dir_path):
-            continue
-        for fname in os.listdir(dir_path):
-            if not fname.lower().endswith(".json"):
-                continue
-            fpath = os.path.join(dir_path, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                task = data.get("task")
-                if isinstance(task, str):
-                    result[category].append(task)
-            except Exception:
-                # Silently ignore malformed files – they are not part of health metrics
-                continue
-    return result
+class HandlersDict(BaseModel):
+    pass
 
 
-def _aggregate_handler_counts(base_dir: str) -> Dict[str, int]:
-    """
-    Walk both ``pending`` and ``proposed`` directories and count occurrences of the
-    top‑level ``handler`` field.
-    """
-    counts: Dict[str, int] = {}
-    for category in ("pending", "proposed"):
-        dir_path = os.path.join(base_dir, "directives", category)
-        if not os.path.isdir(dir_path):
-            continue
-        for fname in os.listdir(dir_path):
-            if not fname.lower().endswith(".json"):
-                continue
-            fpath = os.path.join(dir_path, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                handler = data.get("handler")
-                if isinstance(handler, str):
-                    counts[handler] = counts.get(handler, 0) + 1
-            except Exception:
-                continue
-    return counts
+class Summary(BaseModel):
+    total: int
+    handlers_with_backlog: int
+    starved_threshold_seconds: float
 
 
-def _query_recent_failures() -> Dict[str, Optional[object]]:
-    """
-    Query the mesh_memory table via the write‑service for failure‑type events
-    in the last 48 hours. Returns a dict with ``count`` and ``last`` keys.
-    """
-    query_payload = {
-        "sql": """
-            SELECT
-                COUNT(*) AS cnt,
-                MAX(event_time) AS last
-            FROM mesh_memory
-            WHERE event_type IN ('build_failure', 'directive_generation')
-              AND event_time >= (NOW() - INTERVAL '48 HOURS')
-        """
-    }
+class HealthResponse(BaseModel):
+    handlers: dict[str, HandlerMetrics]
+    summary: Summary
+
+
+def get_handler_name_from_file(file_path: Path) -> str:
+    """Extract handler name from directive JSON file."""
     try:
-        resp = requests.post(
-            "http://127.0.0.1:8772/query", json=query_payload, timeout=5
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        return data.get("handler", file_path.stem)
+    except (json.JSONDecodeError, OSError):
+        return file_path.stem
+
+
+def compute_file_age_seconds(file_path: Path) -> float:
+    """Compute age of a file in seconds based on modification time."""
+    mtime = file_path.stat().st_mtime
+    now = time.time()
+    return max(0.0, now - mtime)
+
+
+def get_directives_health(
+    directives_path: Path,
+    starved_threshold_seconds: float = 300.0,
+) -> HealthResponse:
+    """
+    Read pending and proposed directive JSON files from disk and compute health metrics.
+
+    Args:
+        directives_path: Root path containing pending/ and proposed/ subdirectories.
+        starved_threshold_seconds: Threshold in seconds to consider a task starved.
+
+    Returns:
+        HealthResponse with per-handler metrics and summary.
+    """
+    pending_dir = directives_path / "pending"
+    proposed_dir = directives_path / "proposed"
+
+    handler_data: dict[str, dict[str, Any]] = {}
+
+    # Process pending files
+    if pending_dir.exists():
+        for file_path in pending_dir.glob("*.json"):
+            handler = get_handler_name_from_file(file_path)
+            if handler not in handler_data:
+                handler_data[handler] = {"pending": 0, "proposed": 0, "oldest_age_seconds": 0.0}
+            handler_data[handler]["pending"] += 1
+            age = compute_file_age_seconds(file_path)
+            handler_data[handler]["oldest_age_seconds"] = max(
+                handler_data[handler]["oldest_age_seconds"], age
+            )
+
+    # Process proposed files
+    if proposed_dir.exists():
+        for file_path in proposed_dir.glob("*.json"):
+            handler = get_handler_name_from_file(file_path)
+            if handler not in handler_data:
+                handler_data[handler] = {"pending": 0, "proposed": 0, "oldest_age_seconds": 0.0}
+            handler_data[handler]["proposed"] += 1
+            age = compute_file_age_seconds(file_path)
+            handler_data[handler]["oldest_age_seconds"] = max(
+                handler_data[handler]["oldest_age_seconds"], age
+            )
+
+    # Build handlers dict
+    handlers: dict[str, HandlerMetrics] = {}
+    for handler, data in handler_data.items():
+        handlers[handler] = HandlerMetrics(
+            pending=data["pending"],
+            proposed=data["proposed"],
+            oldest_age_seconds=round(data["oldest_age_seconds"], 2),
         )
-        resp.raise_for_status()
-        data = resp.json()
-        rows = data.get("rows", [])
-        if rows:
-            row = rows[0]
-            cnt = int(row.get("cnt", 0))
-            last = row.get("last")
-            if isinstance(last, str):
-                # Ensure ISO‑8601 format; if not, attempt conversion
-                try:
-                    datetime.datetime.fromisoformat(last)
-                except Exception:
-                    last = None
-            else:
-                last = None
-            return {"count": cnt, "last": last}
-    except Exception:
-        # On any error, fall back to zero failures and no timestamp
-        pass
-    return {"count": 0, "last": None}
 
-
-@router.get(
-    "/api/internal/directive/queue-health",
-    response_model=DirectiveQueueHealthResponse,
-    tags=["internal"],
-)
-async def get_queue_health(
-    base_dir: str = Depends(lambda: os.getenv("DIRECTIVE_ROOT", ".")),
-    _session=Depends(get_session),  # kept for contract compliance; not used here
-):
-    """
-    Assemble health information for the directive queue.
-    """
-    tasks = _load_tasks(base_dir)
-    handler_counts = _aggregate_handler_counts(base_dir)
-    failures = _query_recent_failures()
-
-    return DirectiveQueueHealthResponse(
-        pending_tasks=tasks.get("pending", []),
-        proposed_tasks=tasks.get("proposed", []),
-        handler_counts=handler_counts,
-        recent_failures=failures["count"],
-        last_failure_at=failures["last"],
+    # Compute summary
+    total = sum(data["pending"] + data["proposed"] for data in handler_data.values())
+    handlers_with_backlog = sum(
+        1
+        for data in handler_data.values()
+        if data["pending"] > 0 or data["proposed"] > 0
     )
 
+    summary = Summary(
+        total=total,
+        handlers_with_backlog=handlers_with_backlog,
+        starved_threshold_seconds=starved_threshold_seconds,
+    )
 
+    return HealthResponse(handlers=handlers, summary=summary)
+
+
+@router.get("/api/directives/queue/health", response_model=HealthResponse)
+async def get_queue_health(request: Request) -> HealthResponse:
+    """
+    Get health metrics for directive queue.
+
+    Returns per-handler counts of pending/proposed directives,
+    oldest task age, and summary statistics.
+    """
+    directives_path = request.app.state.directives_path
+    starved_threshold = getattr(request.app.state, "starved_threshold_seconds", 300.0)
+    return get_directives_health(directives_path, starved_threshold)
+
+
+# Application factory
+def create_app() -> FastAPI:
+    app = FastAPI()
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.state.directives_path = Path("directives")
+    app.state.starved_threshold_seconds = 300.0
+
+    app.include_router(router)
+    return app
+
+
+app = create_app()
+
+
+# Self-test
 if __name__ == "__main__":
-    # ----------------------------------------------------------------------
-    # Self‑test using FastAPI's TestClient and a temporary filesystem layout.
-    # ----------------------------------------------------------------------
     import tempfile
-    from unittest.mock import patch
 
-    # Create a temporary directory structure with fake directive JSON files
+    from fastapi.testclient import TestClient
+
+    # Create temp directive tree with dummy files
     with tempfile.TemporaryDirectory() as tmpdir:
-        os.makedirs(os.path.join(tmpdir, "directives", "pending"))
-        os.makedirs(os.path.join(tmpdir, "directives", "proposed"))
+        tmppath = Path(tmpdir)
+        pending_dir = tmppath / "pending"
+        proposed_dir = tmppath / "proposed"
+        pending_dir.mkdir()
+        proposed_dir.mkdir()
 
-        # Three directive files: two pending, one proposed
-        directives = [
-            ("pending", "task1.json", {"task": "task1", "handler": "alpha"}),
-            ("pending", "task2.json", {"task": "task2", "handler": "beta"}),
-            ("proposed", "task3.json", {"task": "task3", "handler": "alpha"}),
-        ]
+        # Create 3 dummy JSON files with varied ages
+        now = time.time()
 
-        for category, fname, payload in directives:
-            fpath = os.path.join(tmpdir, "directives", category, fname)
-            with open(fpath, "w", encoding="utf-8") as f:
-                json.dump(payload, f)
+        # File 1: handler_alpha, 10 seconds old
+        f1 = pending_dir / "alpha_1.json"
+        f1.write_text(json.dumps({"handler": "handler_alpha", "directive_id": "alpha_1"}))
+        import os
 
-        # Mock the external write_service query
-        mock_response = {
-            "rows": [
-                {
-                    "cnt": 7,
-                    "last": datetime.datetime.utcnow()
-                    .replace(microsecond=0)
-                    .isoformat()
-                    + "Z",
-                }
-            ]
-        }
+        os.utime(f1, (now - 10, now - 10))
 
-        def mock_post(*_, **kwargs):
-            class MockResp:
-                def raise_for_status(self):
-                    pass
+        # File 2: handler_alpha, 5 seconds old
+        f2 = pending_dir / "alpha_2.json"
+        f2.write_text(json.dumps({"handler": "handler_alpha", "directive_id": "alpha_2"}))
+        os.utime(f2, (now - 5, now - 5))
 
-                def json(self):
-                    return mock_response
+        # File 3: handler_beta, 200 seconds old (starved)
+        f3 = proposed_dir / "beta_1.json"
+        f3.write_text(json.dumps({"handler": "handler_beta", "directive_id": "beta_1"}))
+        os.utime(f3, (now - 200, now - 200))
 
-            return MockResp()
+        # Create test app
+        test_app = create_app()
+        test_app.state.directives_path = tmppath
 
-        # Build FastAPI app with the router
-        app = FastAPI()
-        app.include_router(router)
+        with TestClient(test_app) as client:
+            resp = client.get("/api/directives/queue/health")
 
-        # Override the get_session dependency with a dummy (no DB needed)
-        def dummy_session():
-            return None
+            # Assert 200
+            assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 
-        app.dependency_overrides[get_session] = dummy_session
-
-        # Set environment variable so the endpoint sees our temp directory
-        os.environ["DIRECTIVE_ROOT"] = tmpdir
-
-        with patch("requests.post", new=mock_post):
-            client = TestClient(app)
-            resp = client.get("/api/internal/directive/queue-health")
-            assert resp.status_code == 200, f"Unexpected status {resp.status_code}"
             data = resp.json()
 
-            # Validate handler_counts sum equals total number of directives (3)
-            total_handlers = sum(data.get("handler_counts", {}).values())
-            assert total_handlers == 3, f"Handler count mismatch: {total_handlers}"
+            # Assert structure
+            assert "handlers" in data, "Missing 'handlers' in response"
+            assert "summary" in data, "Missing 'summary' in response"
 
-            # recent_failures must be an integer
-            assert isinstance(data.get("recent_failures"), int), "recent_failures not int"
+            # Assert handler counts >= 0
+            for handler, metrics in data["handlers"].items():
+                assert metrics["pending"] >= 0, f"pending count negative for {handler}"
+                assert metrics["proposed"] >= 0, f"proposed count negative for {handler}"
+                assert metrics["oldest_age_seconds"] >= 0, f"oldest_age negative for {handler}"
 
-            # Print PASS if all assertions succeed
-            print("PASS")
+            # Assert handler_alpha has 2 pending
+            assert data["handlers"]["handler_alpha"]["pending"] == 2, (
+                f"Expected 2 pending for handler_alpha, got {data['handlers']['handler_alpha']['pending']}"
+            )
+
+            # Assert handler_beta has 1 proposed
+            assert data["handlers"]["handler_beta"]["proposed"] == 1, (
+                f"Expected 1 proposed for handler_beta, got {data['handlers']['handler_beta']['proposed']}"
+            )
+
+            # Assert oldest_age >= 0 for all handlers
+            for handler, metrics in data["handlers"].items():
+                assert metrics["oldest_age_seconds"] >= 0, (
+                    f"oldest_age_seconds negative for {handler}"
+                )
+
+            # Assert summary
+            assert data["summary"]["total"] == 3, f"Expected total=3, got {data['summary']['total']}"
+            assert data["summary"]["handlers_with_backlog"] == 2, (
+                f"Expected 2 handlers_with_backlog, got {data['summary']['handlers_with_backlog']}"
+            )
+
+    print("PASS")

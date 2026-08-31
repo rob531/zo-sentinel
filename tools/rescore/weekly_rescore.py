@@ -295,6 +295,31 @@ def _state_abandoned(rid: str, runs_root: Path) -> bool:
     return not st.get("instance_id") or bool(st.get("destroyed"))
 
 
+def _state_terminal(rid: str, runs_root: Path) -> bool:
+    """Terminal by the SAME word `open_run` uses -- FU-321, mirrored (2026-08-31).
+
+    Run 20260822-220319 died at its deadline, was destroyed, and was later
+    refused by `open_run` as terminally finished (`run_skipped_terminal`) --
+    yet this detector kept calling it STRANDED forever: "deadline" is not an
+    abandonment prefix and `run_skipped_terminal` is not an abort event. Two
+    instruments disagreeing about one word, again -- this time between
+    open_run() and the very check whose header warns about that defect.
+
+    The bar is NOT lowered: _terminally_finished supplies the verdict word,
+    and the same spend clause `_state_abandoned` uses is applied on top -- a
+    run still holding an instance stays STRANDED whatever its state.json
+    claims, and `ok` without `run_closed` remains the stranded shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    return (_terminally_finished(st)
+            and (not st.get("instance_id") or bool(st.get("destroyed"))))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -344,7 +369,8 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     out = []
     for rec in opened.values():
         aborted = (_is_abort_event(rec["last_event"])
-                   or _state_abandoned(rec["run_id"], root))
+                   or _state_abandoned(rec["run_id"], root)
+                   or _state_terminal(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None

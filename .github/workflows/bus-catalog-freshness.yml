@@ -1,0 +1,133 @@
+name: bus-catalog-freshness
+
+# THE ALARM MUST NOT LIVE ON THE MACHINE IT IS WATCHING.
+#
+# schema/bus_catalog.json is refreshed on the HOST, by tools/bus_catalog_guard.sh,
+# because only the host can reach 127.0.0.1:8772. That refresher is registered in
+# the host crontab three ways -- @reboot, hourly, and 05:17 -- and #4032 Phase H
+# made it idempotent so all three can call it safely.
+#
+# On 2026-08-27 all three were found to have NEVER RUN. Not "missed a slot":
+# there was no cron daemon on the box at all. cron is installed at /usr/sbin/cron
+# and registered in /etc/init.d, but the container's supervisor is supervisord and
+# nothing starts cron, so every crontab line -- including the @reboot self-heal
+# added specifically to survive a missed slot -- was inert. The guard's own
+# heartbeat had last moved 21h earlier, from a manual run.
+#
+# That is the 2026-04 E2E runner again, exactly: the activation lived somewhere
+# nothing reported on, so its death was silent. A self-healing refresher whose
+# every trigger runs on the dead scheduler is not self-healing. It is one
+# scheduler wearing three hats.
+#
+# So the ALARM runs here instead, on GitHub's scheduler, which is not the one that
+# can die quietly on that host. It reads the age of the COMMITTED snapshot -- the
+# same field tools/referent_verify.py measures its budget against -- and goes red
+# a full week before that budget expires.
+#
+# WHY A WEEK OF NOTICE AND NOT JUST THE BUDGET
+#   referent-verify is a REQUIRED status check (#4089). When the snapshot passes
+#   14d its tables/columns checks return STALE-RED, and a required check that is
+#   red blocks EVERY pull request on this repository. That is not a stale census,
+#   it is a repo-wide outage, and it arrives as a cliff. The warn band is the week
+#   in which somebody can still fix the host without anything being blocked.
+#
+# THIS WORKFLOW IS DELIBERATELY NOT A REQUIRED CHECK.
+#   It does not run on pull_request at all. An alarm about host infrastructure
+#   must never be able to block a contributor's merge -- that is how an alarm
+#   gets deleted. It is red on the Actions tab and in the scheduled-run failure
+#   notification, and that is the whole job.
+
+on:
+  schedule:
+    - cron: "13 7,19 * * *"     # twice daily, offset from the 06:41 referent-verify
+  workflow_dispatch:
+  push:
+    paths:
+      - "schema/bus_catalog.json"
+      - ".github/workflows/bus-catalog-freshness.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Age the committed bus catalog snapshot
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          from datetime import datetime, timezone
+
+          # Thresholds are READ FROM tools/referent_verify.py, never duplicated.
+          # Two copies of a number drift, and the copy that drifts is always the
+          # one in the alarm -- so the alarm stops matching the gate it watches.
+          src = open("tools/referent_verify.py", encoding="utf-8").read()
+          def const(name, default):
+              for line in src.splitlines():
+                  if line.startswith(f"{name} = "):
+                      return int(line.split("=", 1)[1].split("#")[0].strip())
+              return default
+          WARN   = const("SNAPSHOT_WARN_AGE_DAYS", 7)
+          BUDGET = const("SNAPSHOT_MAX_AGE_DAYS", 14)
+
+          def out(md):
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                  f.write(md + "\n")
+
+          try:
+              snap = json.load(open("schema/bus_catalog.json", encoding="utf-8"))
+              captured = snap["captured_at"]
+              ts = datetime.fromisoformat(captured)
+              if ts.tzinfo is None:
+                  ts = ts.replace(tzinfo=timezone.utc)
+              age = (datetime.now(timezone.utc) - ts).total_seconds() / 86400
+          except Exception as e:
+              out("## Bus catalog freshness\n\n**UNREADABLE -- this job is RED**\n")
+              out(f"`schema/bus_catalog.json` could not be read or dated: "
+                  f"`{type(e).__name__}`.\n")
+              out("An undated snapshot cannot be aged, and a snapshot that "
+                  "cannot be aged cannot be trusted. This is not a pass.")
+              print(f"UNREADABLE: {type(e).__name__}", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"snapshot captured_at={captured}  age={age:.2f}d  "
+                f"warn={WARN}d  budget={BUDGET}d")
+          out("## Bus catalog freshness\n")
+          out(f"| | |\n|---|---|\n"
+              f"| snapshot captured | `{captured}` |\n"
+              f"| age | **{age:.2f}d** |\n"
+              f"| warn threshold | {WARN}d |\n"
+              f"| referent-verify budget | {BUDGET}d |\n"
+              f"| tables in snapshot | {len(snap.get('tables') or {})} |\n")
+
+          if age > BUDGET:
+              out(f"\n**STALE -- OVER BUDGET. This job is RED.**\n")
+              out(f"`referent-verify` is a REQUIRED status check and its tables/"
+                  f"columns checks are now **STALE-RED**. Every pull request on "
+                  f"this repository is blocked until a fresh snapshot lands.\n")
+              out("Fix the host refresher. Do not raise the budget.\n")
+              out("```\nssh host\n  pgrep cron || service cron start\n"
+                  "  bash tools/bus_catalog_guard.sh --force\n```")
+              sys.exit(1)
+
+          if age > WARN:
+              out(f"\n**WARN -- this job is RED, deliberately, "
+                  f"{BUDGET - age:.1f}d before the cliff.**\n")
+              out(f"The host refresher has not landed a snapshot in {age:.2f}d. "
+                  f"In {BUDGET - age:.1f}d `referent-verify` turns STALE-RED and "
+                  f"blocks every PR on this repo.\n")
+              out("First thing to check is whether the host has a cron daemon at "
+                  "all -- on 2026-08-27 it did not, and all three of the "
+                  "refresher's triggers were inert (#4080).\n")
+              out("```\nssh host\n  pgrep cron || service cron start\n"
+                  "  bash tools/bus_catalog_guard.sh --force\n"
+                  "  cat /home/workspace/logs/bus_catalog_heartbeat.json\n```")
+              sys.exit(1)
+
+          out(f"\n**FRESH -- {age:.2f}d old, "
+              f"{WARN - age:.1f}d of margin before the warn band.**")
+          PY

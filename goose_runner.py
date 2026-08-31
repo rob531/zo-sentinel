@@ -27,6 +27,7 @@ from zo_sentinel.build_completion import (  # noqa: E402
     park_directive,
     output_confirmed, failed_quarantined, workspace_diff_state)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
+from zo_sentinel import undeclared_write_guard  # noqa: E402  # GH #3415 fix 4
 from zo_sentinel.build_lessons import (  # noqa: E402
     record_lesson, resolve_lessons, open_lessons_for, format_lessons_context)
 
@@ -786,6 +787,91 @@ _SYMBOL_TABLE_POINTER = re.compile(
     r"SYMBOL TABLE: docs/SCHEMA_TRUTH\.md.*?never invent one\. ", re.S)
 
 
+_BUS_HEADER = (
+    "REAL BUS TABLES -- the COMPLETE list of tables on the write-service bus "
+    "(127.0.0.1:8772), read from schema/bus_catalog.json. If your SQL is posted "
+    "to :8772 then the table you name MUST be one of these. A name that is not "
+    "on this list DOES NOT EXIST -- and that is true even if a .py module in "
+    "this repo carries that name. A MODULE IS NOT A TABLE:\n")
+
+
+# Cached: this is on the per-emission path and the catalog moves once a day.
+# (timestamp, rendered_block). Empty tuple means "not looked up yet".
+_BUS_TABLES_CACHE = ()
+_BUS_TABLES_TTL_S = 3600
+
+
+def _bus_table_context():
+    """The real bus table names, or "" if the snapshot cannot be read.
+
+    WHY THIS EXISTS SEPARATELY FROM _schema_ground_context
+      That function grounds against app.models -- the SQLAlchemy plane, 14
+      tables. The write-service bus is a DIFFERENT plane with 45, and it was
+      NOT in the engine prompt at all. Worse, _engine_task returned the
+      UNGROUNDED task text whenever no app.models class matched, which is the
+      normal case for a bus-only emission. So the exact directives most likely
+      to write bus SQL were the ones that received no table names whatsoever.
+
+      That is where every phantom on the #4080 list came from. Four of them --
+      mcp_servers, signal_scores, mcp_tool_definitions, mcp_tool_schemas --
+      are one edit distance from a real bus table. Two more, known_threats and
+      approval_workflow, are the names of .py MODULES in this repo (see
+      BUILDER_ANTIPATTERNS.md AP-005), which is why the header above says so in
+      those words.
+
+      45 names is about 500 characters. The cheapest possible grounding for the
+      largest observed class of reference failure.
+
+    THREE-STATE IS PRESERVED. This returns a string or "", and it does NOT
+    participate in the matched / no_table_matched / kl_error classification of
+    _schema_ground_context. That class means "did an app.models table match
+    this directive" and it still means exactly that; collapsing a second signal
+    into it is how a change ships as a silent no-op.
+    """
+    global _BUS_TABLES_CACHE
+    now = time.time()
+    if _BUS_TABLES_CACHE and now - _BUS_TABLES_CACHE[0] < _BUS_TABLES_TTL_S:
+        return _BUS_TABLES_CACHE[1]
+
+    # READ THE SNAPSHOT AS TRACKED ON origin/main, NOT FROM THE WORKING TREE.
+    #
+    # PROJECT_DIR is the BUILD WORKSPACE. It runs behind main -- 163 commits at
+    # the time of writing -- and it does not contain schema/bus_catalog.json at
+    # all. A plain read of PROJECT_DIR/schema/bus_catalog.json therefore returns
+    # nothing, on the exact machine this code runs on, and this whole grounding
+    # block would have shipped as a silent no-op.
+    #
+    # That is audit finding B2 and it is the same trap the 2026-08-11 grounding
+    # fix fell into: a cure that is correct and wired to a path that does not
+    # run. tools/bus_catalog_guard.sh already learned this and reads
+    # `origin/main:schema/bus_catalog.json`; so does this.
+    raw = ""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(PROJECT_DIR), "show",
+             "origin/main:schema/bus_catalog.json"],
+            capture_output=True, text=True, timeout=20)
+        if r.returncode == 0:
+            raw = r.stdout
+    except Exception:                                      # noqa: BLE001
+        raw = ""
+    if not raw:
+        # Fallback for a checkout that IS current -- CI, or a clean worktree of
+        # main. Never the primary path on the host.
+        try:
+            raw = (PROJECT_DIR / "schema" / "bus_catalog.json").read_text(
+                encoding="utf-8")
+        except Exception:                                  # noqa: BLE001
+            raw = ""
+    try:
+        names = sorted(t for t in (json.loads(raw).get("tables") or {}) if t)
+    except Exception:                                      # noqa: BLE001
+        names = []
+    out = (_BUS_HEADER + "  " + ", ".join(names)) if names else ""
+    _BUS_TABLES_CACHE = (now, out)
+    return out
+
+
 def _engine_task(task_text, directive, log=None):
     """The engine's task text = the shared _task plus inlined REAL SCHEMA.
 
@@ -794,18 +880,25 @@ def _engine_task(task_text, directive, log=None):
     its prompt is the one surface with no cheap rollback.
     """
     text, klass = _schema_ground_context(directive)
+    # The bus table list is appended INDEPENDENTLY of the app.models class.
+    # A directive that matches no app.models class is precisely the one most
+    # likely to write bus SQL, and it used to receive no table names at all.
+    bus = _bus_table_context()
     if klass != "matched":
         if log:
-            log("[schema-ground] %s: %s -- engine prompt UNGROUNDED"
-                % (directive.get("directive_id") or directive.get("task") or "?", klass))
-        return task_text
+            log("[schema-ground] %s: %s -- engine prompt UNGROUNDED%s"
+                % (directive.get("directive_id") or directive.get("task") or "?",
+                   klass,
+                   " (bus table list still attached)" if bus else ""))
+        return "%s\n\n%s" % (task_text, bus) if bus else task_text
     grounded = _SYMBOL_TABLE_POINTER.sub("", task_text)
     if log:
         log("[schema-ground] %s: matched, %d model(s), %d chars -> engine"
             % (directive.get("directive_id") or directive.get("task") or "?",
                len([ln for ln in text.splitlines() if ln.startswith("  ")]),
                len(text)))
-    return "%s\n\n%s" % (grounded, text)
+    parts = [grounded, text] + ([bus] if bus else [])
+    return "\n\n".join(parts)
 
 
 def _soa_service_spec(directive, content):
@@ -991,6 +1084,19 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive
         for _k in (_required or ["task_description"]):
             _argv += ["--params", f"{_k}={_params[_k]}"]
         recipe_counter(recipe_path.stem, "attempt")
+        # GH #3415 prevention fix 4: snapshot tracked dirt BEFORE the agent runs
+        # so any tracked file that BECOMES dirty during the bracket is
+        # attributable to THIS directive (the runner is serial). None = git
+        # could not answer = no attribution basis, sweep no-ops (R6).
+        _dirty0 = undeclared_write_guard.tracked_dirty(PROJECT_DIR)
+        _decl_rel = None
+        try:
+            if directive_obj:
+                _dp = declared_output(directive_obj)
+                if _dp:
+                    _decl_rel = str(Path(_dp).resolve().relative_to(PROJECT_DIR.resolve()))
+        except Exception:
+            _decl_rel = None
         _acquired = _SOA_SEM.acquire(timeout=GOOSE_TIMEOUT) if _SOA_SEM else True
         try:
             result = subprocess.run(
@@ -1005,6 +1111,24 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive
             if _SOA_SEM and _acquired:
                 try:
                     _SOA_SEM.release()
+                except Exception:
+                    pass
+            # GH #3415 fix 4: revert tracked writes this run never declared
+            # (load-bearing markers always; anything tracked for build-class).
+            # Fail-open inside sweep(); forensics under _ghost_writes/ before
+            # any restore; verdict/flow untouched -- the declared-output gate
+            # still governs success.
+            _reverted = undeclared_write_guard.sweep(
+                PROJECT_DIR, directive_id, _dirty0,
+                declared_relpath=_decl_rel, log=log)
+            if _reverted:
+                try:
+                    record_lesson(LESSONS_DIR, directive_id, directive_id,
+                                  "undeclared_write",
+                                  f"undeclared tracked write(s) reverted: "
+                                  f"{[a['file'] for a in _reverted]} -- write ONLY "
+                                  f"the declared output path; never repo package "
+                                  f"markers or other tracked files")
                 except Exception:
                     pass
 
@@ -1318,7 +1442,20 @@ def _schema_prm_gate(directive, directive_id):
                 kl = schema_kl.load_schema_kl(str(PROJECT_DIR / "graphify-out" / "schema_kl.json"))
             except Exception:
                 return True
-        violations = schema_kl.lint_source(out.read_text(encoding="utf-8"), kl)
+        # The SQL-string referent pass (the :8772 blind spot). THREE-STATE, and
+        # the third state is reported, never folded into a pass:
+        #   catalog present -> bus-bound SQL is checked against every plane
+        #   catalog absent   -> the check is SKIPPED and the reason is LOGGED
+        # A missing/stale catalog must not block: an empty catalog would mark
+        # every table in every bus query as phantom and stop the whole fleet.
+        # The staleness itself is not silent -- it is exactly what
+        # referent-verify turns UNKNOWN-red on, and what the host refresher in
+        # ops/zo_mesh/bus_catalog_refresh.sh exists to prevent.
+        _sql_catalog, _cat_reason = schema_kl.load_referent_catalog()
+        if _cat_reason:
+            log(f"[schema-prm] {directive_id}: SQL referent pass SKIPPED -- {_cat_reason}")
+        violations = schema_kl.lint_source(
+            out.read_text(encoding="utf-8"), kl, sql_catalog=_sql_catalog)
         if not violations:
             return True
         obs = ("schema PRM rejected this build -- the module uses a schema not in app.models. "

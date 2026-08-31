@@ -1,0 +1,8 @@
+[service]
+name = "risk_overall_trend"
+import_path = "services.active.risk_overall_trend.router"
+prefix = "/api"
+tag = "risk_overall_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

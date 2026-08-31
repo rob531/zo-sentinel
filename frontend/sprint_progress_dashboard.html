@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sprint Progress Dashboard</title>
+  <style>
+    body {font-family: Arial, sans-serif; margin: 20px; background:#f5f5f5;}
+    .card {background:#fff; padding:15px; margin-bottom:10px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1);}
+    .risk-axis {display:flex; justify-content:space-between; align-items:center; margin:8px 0;}
+    .risk-bar {flex:1; height:14px; background:#e0e0e0; margin-left:12px; border-radius:7px; overflow:hidden;}
+    .risk-fill {height:100%; background:#4caf50; transition:width 0.3s;}
+    .tier {font-weight:bold; font-size:1.2em; padding:8px 0;}
+    .criteria {font-size:0.85em; color:#666; margin-top:12px; text-align:right;}
+    .loading, .error, .empty {text-align:center; padding:30px; color:#666;}
+    .error {color:#d32f2f;}
+    h2 {margin:0 0 10px 0; font-size:1.1em; color:#333;}
+    .overall-score {font-size:2em; font-weight:bold; color:#1976d2;}
+    .verdict-badge {display:inline-block; padding:8px 16px; border-radius:4px; background:#e3f2fd; color:#1976d2;}
+    .refresh-btn {background:#1976d2; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;}
+    .refresh-btn:hover {background:#1565c0;}
+    .refresh-btn:focus, .refresh-btn:active {outline:2px solid #1976d2; outline-offset:2px;}
+    .header {display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;}
+    .axis-label {min-width:120px; font-weight:500;}
+    .axis-value {min-width:40px; text-align:right; font-weight:bold;}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Sprint Progress Dashboard</h1>
+    <button id="refreshBtn" class="refresh-btn" aria-label="Refresh dashboard data">Refresh</button>
+  </div>
+  <main id="content" role="main" aria-live="polite" aria-busy="true">
+    <div class="loading" aria-label="Loading dashboard">Loading...</div>
+  </main>
+
+  <script>
+    // In-memory auth state – replace with real token handling
+    const authState = { bearer: "PLACEHOLDER_TOKEN" };
+    const API_BASE = "/api/sprint_progress_dashboard";
+    const ENDPOINT = `${API_BASE}/dashboard-summary`;
+
+    function createLoading() {
+      const div = document.createElement('div');
+      div.className = 'loading';
+      div.setAttribute('role', 'status');
+      div.setAttribute('aria-label', 'Loading dashboard data');
+      div.textContent = 'Loading...';
+      return div;
+    }
+    function createError(msg) {
+      const div = document.createElement('div');
+      div.className = 'error';
+      div.setAttribute('role', 'alert');
+      div.setAttribute('aria-label', 'Error loading dashboard');
+      div.textContent = 'Error: ' + msg;
+      return div;
+    }
+    function createEmpty() {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      div.setAttribute('role', 'status');
+      div.setAttribute('aria-label', 'No data available');
+      div.textContent = 'No data available.';
+      return div;
+    }
+
+    function getRiskColor(score) {
+      if (score >= 80) return '#d32f2f';
+      if (score >= 50) return '#ffa726';
+      return '#4caf50';
+    }
+
+    function renderDashboard(data) {
+      const fragment = document.createDocumentFragment();
+      
+      // Overall score card
+      const overallCard = document.createElement('section');
+      overallCard.className = 'card';
+      overallCard.setAttribute('aria-labelledby', 'overall-heading');
+      overallCard.innerHTML = `
+        <h2 id="overall-heading">Overall Score</h2>
+        <div class="overall-score" aria-label="Overall score ${(data.overall_score || 0).toFixed(1)} out of 100">
+          ${(data.overall_score || 0).toFixed(1)} / 100
+        </div>`;
+      fragment.appendChild(overallCard);
+
+      // Risk axes section (expect 6 axes)
+      const axesSection = document.createElement('section');
+      axesSection.className = 'card';
+      axesSection.setAttribute('aria-labelledby', 'axes-heading');
+      axesSection.innerHTML = `<h2 id="axes-heading">Risk Axes</h2>`;
+      
+      const axes = data.risk_axes || [];
+      if (axes.length === 0) {
+        axesSection.innerHTML += '<p>No risk axes data available.</p>';
+      } else {
+        axes.forEach((ax, i) => {
+          const axisRow = document.createElement('div');
+          axisRow.className = 'risk-axis';
+          const score = Math.max(0, Math.min(100, ax.score || 0));
+          const labelId = `axis-label-${i}`;
+          const barId = `axis-bar-${i}`;
+          
+          axisRow.innerHTML = `
+            <span id="${labelId}" class="axis-label">${ax.name || 'Unknown Axis'}</span>
+            <span class="axis-value" aria-label="${ax.name} score ${score.toFixed(0)}">${score.toFixed(0)}</span>
+            <div id="${barId}" class="risk-bar" role="progressbar" 
+                 aria-labelledby="${labelId}" 
+                 aria-valuenow="${score}" 
+                 aria-valuemin="0" 
+                 aria-valuemax="100">
+              <div class="risk-fill" style="width:${score}%;background:${getRiskColor(score)}"></div>
+            </div>`;
+          axesSection.appendChild(axisRow);
+        });
+      }
+      fragment.appendChild(axesSection);
+
+      // Verdict tier card
+      const tierCard = document.createElement('section');
+      tierCard.className = 'card';
+      tierCard.setAttribute('aria-labelledby', 'tier-heading');
+      tierCard.innerHTML = `
+        <h2 id="tier-heading">Verdict Tier</h2>
+        <div class="verdict-badge" aria-label="Current verdict tier: ${data.verdict_tier || 'N/A'}">
+          ${data.verdict_tier || 'N/A'}
+        </div>`;
+      fragment.appendChild(tierCard);
+
+      // Criteria version label
+      const critDiv = document.createElement('div');
+      critDiv.className = 'criteria';
+      critDiv.textContent = `Criteria version: ${data.criteria_version || 'N/A'}`;
+      fragment.appendChild(critDiv);
+
+      return fragment;
+    }
+
+    async function loadDashboard() {
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+      content.setAttribute('aria-busy', 'true');
+      content.appendChild(createLoading());
+      
+      try {
+        const resp = await fetch(ENDPOINT, {
+          headers: { 
+            'Authorization': `Bearer ${authState.bearer}`,
+            'Accept': 'application/json'
+          }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        
+        const json = await resp.json();
+        content.innerHTML = '';
+        content.setAttribute('aria-busy', 'false');
+        
+        if (!json || Object.keys(json).length === 0) {
+          content.appendChild(createEmpty());
+        } else {
+          content.appendChild(renderDashboard(json));
+        }
+      } catch (e) {
+        content.innerHTML = '';
+        content.setAttribute('aria-busy', 'false');
+        content.appendChild(createError(e.message));
+      }
+    }
+
+    // Refresh button handler
+    document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
+
+    // SELFTEST: Verify empty data handling
+    (function selfTest() {
+      try {
+        // Test empty response handling
+        const emptyData = {
+          overall_score: 0,
+          risk_axes: [],
+          verdict_tier: 'N/A',
+          criteria_version: 'test'
+        };
+        const emptyResult = renderDashboard(emptyData);
+        if (!emptyResult || emptyResult.nodeType !== 11) {
+          throw new Error('renderDashboard returned invalid DocumentFragment');
+        }
+        
+        // Test with populated axes
+        const populatedData = {
+          overall_score: 75.5,
+          risk_axes: [
+            { name: 'Confidentiality', score: 85 },
+            { name: 'Integrity', score: 70 },
+            { name: 'Availability', score: 60 },
+            { name: 'Authentication', score: 45 },
+            { name: 'Authorization', score: 90 },
+            { name: 'Audit', score: 55 }
+          ],
+          verdict_tier: 'MEDIUM',
+          criteria_version: '2.1.0'
+        };
+        const populatedResult = renderDashboard(populatedData);
+        if (!populatedResult) {
+          throw new Error('renderDashboard returned null for populated data');
+        }
+        console.log('SELFTEST PASSED: Empty and populated data handled correctly');
+      } catch (e) {
+        console.error('SELFTEST FAILED:', e);
+        throw e;
+      }
+    })();
+
+    // Kick off initial load
+    loadDashboard();
+  </script>
+</body>
+</html>

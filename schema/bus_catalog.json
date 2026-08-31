@@ -1,0 +1,461 @@
+{
+  "captured_at": "2026-08-26T19:20:13.563425+00:00",
+  "column_count": 361,
+  "columns_with_unlisted_table": 0,
+  "schema_version": 1,
+  "source": "write_service:information_schema",
+  "table_count": 45,
+  "tables": {
+    "agent_outputs": {
+      "agent_id": "VARCHAR",
+      "consumed_at": "TIMESTAMP WITH TIME ZONE",
+      "consumed_by": "VARCHAR",
+      "created_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "BIGINT",
+      "payload": "VARCHAR",
+      "payload_type": "VARCHAR",
+      "run_id": "BIGINT",
+      "status": "VARCHAR",
+      "ttl_hours": "INTEGER"
+    },
+    "agent_runs": {
+      "agent_id": "VARCHAR",
+      "completed_at": "TIMESTAMP WITH TIME ZONE",
+      "duration_ms": "INTEGER",
+      "error": "VARCHAR",
+      "gate_id": "VARCHAR",
+      "id": "BIGINT",
+      "input_tokens": "INTEGER",
+      "model_used": "VARCHAR",
+      "output_tokens": "INTEGER",
+      "started_at": "TIMESTAMP WITH TIME ZONE",
+      "status": "VARCHAR",
+      "tier": "VARCHAR"
+    },
+    "audit_log": {
+      "action": "VARCHAR",
+      "actor": "VARCHAR",
+      "details_json": "VARCHAR",
+      "event_id": "VARCHAR",
+      "event_type": "VARCHAR",
+      "immutable": "BOOLEAN",
+      "outcome": "VARCHAR",
+      "target_server_id": "VARCHAR",
+      "timestamp": "TIMESTAMP WITH TIME ZONE"
+    },
+    "auth_tokens": {
+      "action": "VARCHAR",
+      "admin_email": "VARCHAR",
+      "created_at": "TIMESTAMP WITH TIME ZONE",
+      "expires_at": "TIMESTAMP WITH TIME ZONE",
+      "mcp_name": "VARCHAR",
+      "requested_by": "VARCHAR",
+      "scope": "VARCHAR",
+      "submission_id": "VARCHAR",
+      "token_id": "VARCHAR",
+      "used": "BOOLEAN",
+      "used_at": "TIMESTAMP WITH TIME ZONE"
+    },
+    "build_churn_daily": {
+      "avg_rescues": "DOUBLE",
+      "churn_files": "HUGEINT",
+      "churn_pct": "DOUBLE",
+      "day": "DATE",
+      "glue": "HUGEINT",
+      "net_new_files": "HUGEINT",
+      "path_rework": "HUGEINT",
+      "produced_files": "BIGINT",
+      "success_pct": "DOUBLE",
+      "versioned": "HUGEINT"
+    },
+    "build_churn_trend": {
+      "churn_pct_7d": "DOUBLE",
+      "churn_pct_prev_7d": "DOUBLE",
+      "delta_pts": "DOUBLE",
+      "regime": "VARCHAR"
+    },
+    "build_provenance": {
+      "backend": "VARCHAR",
+      "build_id": "VARCHAR",
+      "built_at": "TIMESTAMP WITH TIME ZONE",
+      "complexity": "VARCHAR",
+      "directive_id": "VARCHAR",
+      "directive_type": "VARCHAR",
+      "engine": "VARCHAR",
+      "error": "VARCHAR",
+      "model": "VARCHAR",
+      "output_bytes": "INTEGER",
+      "output_path": "VARCHAR",
+      "rescue_count": "INTEGER",
+      "smoke_result": "VARCHAR",
+      "success": "BOOLEAN"
+    },
+    "bulk_assess_jobs": {
+      "completed_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "BIGINT",
+      "job_id": "VARCHAR",
+      "mcp_list": "VARCHAR",
+      "results_count": "INTEGER",
+      "status": "VARCHAR",
+      "submitted_at": "TIMESTAMP WITH TIME ZONE"
+    },
+    "bulk_imports": {
+      "id": "BIGINT",
+      "import_id": "VARCHAR",
+      "imported_at": "TIMESTAMP WITH TIME ZONE",
+      "servers_count": "INTEGER",
+      "status": "VARCHAR"
+    },
+    "code_edges": {
+      "built_at_commit": "VARCHAR",
+      "confidence": "VARCHAR",
+      "confidence_score": "DOUBLE",
+      "dst": "VARCHAR",
+      "relation": "VARCHAR",
+      "repo": "VARCHAR",
+      "source_file": "VARCHAR",
+      "source_location": "VARCHAR",
+      "src": "VARCHAR",
+      "weight": "DOUBLE"
+    },
+    "code_nodes": {
+      "built_at_commit": "VARCHAR",
+      "community": "INTEGER",
+      "file_type": "VARCHAR",
+      "id": "VARCHAR",
+      "label": "VARCHAR",
+      "norm_label": "VARCHAR",
+      "repo": "VARCHAR",
+      "source_file": "VARCHAR",
+      "source_location": "VARCHAR"
+    },
+    "corrections": {
+      "action": "VARCHAR",
+      "agent_id": "VARCHAR",
+      "cluster": "VARCHAR",
+      "event_id": "BIGINT",
+      "executed_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "BIGINT",
+      "reason": "VARCHAR",
+      "result": "VARCHAR"
+    },
+    "e2e_axis_scores": {
+      "axis_name": "VARCHAR",
+      "label": "VARCHAR",
+      "label_index": "INTEGER",
+      "model_version": "VARCHAR",
+      "p_top": "DOUBLE",
+      "server_id": "VARCHAR"
+    },
+    "e2e_servers": {
+      "composite": "DOUBLE",
+      "mcp_name": "VARCHAR",
+      "risk_tier": "VARCHAR",
+      "server_id": "VARCHAR"
+    },
+    "failure_matrix": {
+      "attempts": "BIGINT",
+      "avg_rescues": "DOUBLE",
+      "complexity": "VARCHAR",
+      "directive_type": "VARCHAR",
+      "last_error": "VARCHAR",
+      "last_seen": "TIMESTAMP WITH TIME ZONE",
+      "model": "VARCHAR",
+      "success_pct": "DOUBLE",
+      "successes": "HUGEINT"
+    },
+    "forensic_cache": {
+      "cache_key": "VARCHAR",
+      "cache_value": "VARCHAR",
+      "computed_at": "TIMESTAMP WITH TIME ZONE",
+      "server_id": "VARCHAR"
+    },
+    "github_velocity": {
+      "checked_at": "TIMESTAMP WITH TIME ZONE",
+      "commit_velocity": "FLOAT",
+      "contributor_churn": "FLOAT",
+      "last_suspicious_commit": "VARCHAR",
+      "repo_url": "VARCHAR",
+      "server_id": "VARCHAR"
+    },
+    "inference_log": {
+      "agent_id": "VARCHAR",
+      "called_at": "TIMESTAMP WITH TIME ZONE",
+      "completion_tokens": "INTEGER",
+      "error": "VARCHAR",
+      "id": "BIGINT",
+      "latency_ms": "INTEGER",
+      "model_name": "VARCHAR",
+      "model_tier": "VARCHAR",
+      "prompt_tokens": "INTEGER",
+      "success": "BOOLEAN",
+      "task_type": "VARCHAR"
+    },
+    "key_chain_status": {
+      "consumer": "VARCHAR",
+      "delivery": "VARCHAR",
+      "key_has_working_path": "BOOLEAN",
+      "key_name": "VARCHAR",
+      "ladder_rung": "VARCHAR",
+      "note": "VARCHAR",
+      "source": "VARCHAR",
+      "status": "VARCHAR"
+    },
+    "key_topology": {
+      "consumer": "VARCHAR",
+      "delivery": "VARCHAR",
+      "key_name": "VARCHAR",
+      "ladder_rung": "VARCHAR",
+      "note": "VARCHAR",
+      "source": "VARCHAR",
+      "status": "VARCHAR",
+      "updated_at": "TIMESTAMP WITH TIME ZONE"
+    },
+    "mcp_attestations": {
+      "attestation_id": "VARCHAR",
+      "attestation_text": "VARCHAR",
+      "caveats": "VARCHAR",
+      "confidence_level": "FLOAT",
+      "generated_at": "TIMESTAMP WITH TIME ZONE",
+      "risk_tier": "VARCHAR",
+      "scope": "VARCHAR",
+      "server_id": "VARCHAR",
+      "status": "VARCHAR",
+      "valid_until": "TIMESTAMP WITH TIME ZONE"
+    },
+    "mcp_decisions": {
+      "analyst_name": "VARCHAR",
+      "conditions": "VARCHAR",
+      "decided_at": "TIMESTAMP WITH TIME ZONE",
+      "decision": "VARCHAR",
+      "expires_at": "TIMESTAMP WITH TIME ZONE",
+      "expiry_days": "INTEGER",
+      "id": "BIGINT",
+      "notes": "VARCHAR",
+      "submission_id": "VARCHAR"
+    },
+    "mcp_definition_history": {
+      "captured_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "BIGINT",
+      "server_id": "VARCHAR",
+      "snapshot_hash": "VARCHAR"
+    },
+    "mcp_exemptions": {
+      "active": "BOOLEAN",
+      "conditions_json": "VARCHAR",
+      "created_at": "TIMESTAMP WITH TIME ZONE",
+      "exemption_id": "VARCHAR",
+      "expires_at": "TIMESTAMP WITH TIME ZONE",
+      "granted_by": "VARCHAR",
+      "reason": "VARCHAR",
+      "server_id": "VARCHAR"
+    },
+    "mcp_fingerprints": {
+      "computed_at": "TIMESTAMP WITH TIME ZONE",
+      "description_tokens": "VARCHAR",
+      "domain_fingerprint": "VARCHAR",
+      "permission_scope_hash": "VARCHAR",
+      "server_id": "VARCHAR",
+      "tool_name_hash": "VARCHAR",
+      "version_string": "VARCHAR"
+    },
+    "mcp_llm_axis_scores": {
+      "adapter_sha256": "VARCHAR",
+      "axis_name": "VARCHAR",
+      "decision_rule_version": "VARCHAR",
+      "escalated": "BOOLEAN",
+      "escalated_to": "VARCHAR",
+      "id": "BIGINT",
+      "label": "VARCHAR",
+      "label_index": "INTEGER",
+      "model_version": "VARCHAR",
+      "p_critical": "DOUBLE",
+      "p_danger": "DOUBLE",
+      "p_top": "DOUBLE",
+      "probs": "JSON",
+      "scored_at": "TIMESTAMP",
+      "server_id": "VARCHAR"
+    },
+    "mcp_policy_rules": {
+      "action": "VARCHAR",
+      "created_at": "TIMESTAMP WITH TIME ZONE",
+      "description": "VARCHAR",
+      "id": "BIGINT",
+      "pattern": "VARCHAR",
+      "rule_name": "VARCHAR",
+      "rule_type": "VARCHAR"
+    },
+    "mcp_risk_register": {
+      "computed_at": "TIMESTAMP WITH TIME ZONE",
+      "environment_exposure": "VARCHAR",
+      "name": "VARCHAR",
+      "risk_rank": "FLOAT",
+      "risk_tier": "VARCHAR",
+      "server_id": "VARCHAR",
+      "staleness_days": "INTEGER",
+      "threat_count": "INTEGER"
+    },
+    "mcp_risk_timeline": {
+      "computed_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "INTEGER",
+      "risk_rank": "DOUBLE",
+      "risk_tier": "VARCHAR",
+      "server_id": "VARCHAR",
+      "threat_count": "INTEGER"
+    },
+    "mcp_server_registry": {
+      "confidence": "FLOAT",
+      "description": "VARCHAR",
+      "first_seen": "TIMESTAMP WITH TIME ZONE",
+      "last_assessed": "TIMESTAMP WITH TIME ZONE",
+      "last_scanned": "TIMESTAMP WITH TIME ZONE",
+      "last_seen": "TIMESTAMP WITH TIME ZONE",
+      "metadata": "VARCHAR",
+      "name": "VARCHAR",
+      "registry_source": "VARCHAR",
+      "risk_tier": "VARCHAR",
+      "scan_count": "INTEGER",
+      "server_id": "VARCHAR",
+      "trust_score": "FLOAT",
+      "url": "VARCHAR",
+      "verdict": "VARCHAR",
+      "verdict_reasoning": "VARCHAR"
+    },
+    "mcp_signal_enrichments": {
+      "computed_at": "TIMESTAMP",
+      "dimension": "VARCHAR",
+      "evidence_blob": "JSON",
+      "expires_at": "TIMESTAMP",
+      "id": "BIGINT",
+      "score": "FLOAT",
+      "server_id": "VARCHAR",
+      "signal_type": "VARCHAR"
+    },
+    "mcp_signal_scores": {
+      "evidence": "VARCHAR",
+      "id": "BIGINT",
+      "score": "FLOAT",
+      "scored_at": "TIMESTAMP WITH TIME ZONE",
+      "server_id": "VARCHAR",
+      "signal_name": "VARCHAR"
+    },
+    "mcp_submissions": {
+      "business_purpose": "VARCHAR",
+      "description": "VARCHAR",
+      "environment": "VARCHAR",
+      "mcp_name": "VARCHAR",
+      "requested_by": "VARCHAR",
+      "server_id": "VARCHAR",
+      "status": "VARCHAR",
+      "submission_id": "VARCHAR",
+      "submitted_at": "TIMESTAMP WITH TIME ZONE",
+      "url": "VARCHAR"
+    },
+    "mcp_threat_associations": {
+      "evidence": "VARCHAR",
+      "id": "BIGINT",
+      "reported_at": "TIMESTAMP WITH TIME ZONE",
+      "server_id": "VARCHAR",
+      "severity": "VARCHAR",
+      "threat_type": "VARCHAR"
+    },
+    "mcp_tool_hashes": {
+      "change_count": "INTEGER",
+      "last_checked": "TIMESTAMP WITH TIME ZONE",
+      "server_id": "VARCHAR",
+      "tools_hash": "VARCHAR",
+      "tools_raw": "VARCHAR"
+    },
+    "mesh_events": {
+      "agent_id": "VARCHAR",
+      "consumed": "BOOLEAN",
+      "consumed_at": "TIMESTAMP WITH TIME ZONE",
+      "consumed_by": "VARCHAR",
+      "created_at": "TIMESTAMP WITH TIME ZONE",
+      "event_type": "VARCHAR",
+      "id": "BIGINT",
+      "payload": "VARCHAR",
+      "severity": "VARCHAR",
+      "tier": "VARCHAR"
+    },
+    "mesh_memory": {
+      "agent_id": "VARCHAR",
+      "content": "VARCHAR",
+      "created_at": "TIMESTAMP WITH TIME ZONE",
+      "embedding": "FLOAT[]",
+      "expires_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "BIGINT",
+      "importance": "FLOAT",
+      "memory_type": "VARCHAR",
+      "superseded_by": "BIGINT",
+      "version": "INTEGER"
+    },
+    "npm_typosquat_alerts": {
+      "flagged_at": "TIMESTAMP WITH TIME ZONE",
+      "id": "BIGINT",
+      "levenshtein_dist": "INTEGER",
+      "npm_downloads": "INTEGER",
+      "published_at": "TIMESTAMP WITH TIME ZONE",
+      "suspect_name": "VARCHAR",
+      "target_name": "VARCHAR"
+    },
+    "perf_metrics": {
+      "latency_ms": "FLOAT",
+      "recorded_at": "TIMESTAMP WITH TIME ZONE",
+      "service": "VARCHAR"
+    },
+    "service_health": {
+      "last_heartbeat": "TIMESTAMP WITH TIME ZONE",
+      "meta": "VARCHAR",
+      "service": "VARCHAR",
+      "status": "VARCHAR"
+    },
+    "shodan_results": {
+      "cves_found": "VARCHAR",
+      "exposure_score": "FLOAT",
+      "ip_address": "VARCHAR",
+      "open_ports": "VARCHAR",
+      "scanned_at": "TIMESTAMP WITH TIME ZONE",
+      "server_id": "VARCHAR"
+    },
+    "threat_intel_articles": {
+      "id": "VARCHAR",
+      "importance": "VARCHAR",
+      "processed_at": "TIMESTAMP",
+      "source": "VARCHAR",
+      "summary": "VARCHAR",
+      "title": "VARCHAR",
+      "topics": "VARCHAR",
+      "url": "VARCHAR"
+    },
+    "world_articles": {
+      "id": "BIGINT",
+      "importance": "FLOAT",
+      "processed_at": "TIMESTAMP WITH TIME ZONE",
+      "source": "VARCHAR",
+      "summary": "VARCHAR",
+      "title": "VARCHAR",
+      "topics": "VARCHAR",
+      "url": "VARCHAR",
+      "visited_at": "TIMESTAMP WITH TIME ZONE"
+    },
+    "world_topics": {
+      "importance": "FLOAT",
+      "key_facts": "VARCHAR",
+      "summary": "VARCHAR",
+      "topic": "VARCHAR",
+      "updated_at": "TIMESTAMP WITH TIME ZONE",
+      "version": "INTEGER"
+    },
+    "write_queue_log": {
+      "agent_id": "VARCHAR",
+      "enqueued_at": "TIMESTAMP WITH TIME ZONE",
+      "error": "VARCHAR",
+      "id": "BIGINT",
+      "success": "BOOLEAN",
+      "table_name": "VARCHAR",
+      "wait_ms": "INTEGER",
+      "written_at": "TIMESTAMP WITH TIME ZONE"
+    }
+  }
+}

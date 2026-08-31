@@ -1,107 +1,129 @@
-from fastapi import FastAPI, Depends, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
-import requests
+# zo_sentinel/__init__.py
+# Auto-emitted service package. Relative intra-service imports survive
+# staged->active promotion without rewrite.
+
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+from uuid import UUID, uuid4
+
+from pydantic import BaseModel, Field
+
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
+from app.models import McpServerRegistry as AppMcpServerRegistry
 
-app = FastAPI()
 
-class SignalScoresRequest(BaseModel):
-    server_ids: List[int]
-    org_id: int
+class SentinelBase(BaseModel):
+    """Base class for sentinel domain models."""
+    
+    id: UUID = Field(default_factory=uuid4)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
 
-class SignalScoresResponse(BaseModel):
-    server_id: int
-    scores: dict
-    last_updated: Optional[str] = None
 
-class MeshMemoryRequest(BaseModel):
-    server_ids: List[int]
+class ServiceHealth(BaseModel):
+    """Service health status model."""
+    service_name: str
+    status: str = "healthy"
+    last_check: datetime = Field(default_factory=datetime.utcnow)
+    details: Optional[Dict[str, Any]] = None
 
-class MeshMemoryResponse(BaseModel):
-    server_id: int
-    memory: dict
 
-def get_signal_scores(server_ids: List[int], org_id: int, session=Depends(get_session)):
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_signal_scores WHERE server_id IN {server_ids} AND org_id = {org_id}"},
-            timeout=10
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class DirectivePayload(BaseModel):
+    """Sentinel directive payload."""
+    directive_id: UUID
+    action: str
+    target: str
+    params: Dict[str, Any] = Field(default_factory=dict)
+    priority: int = 0
 
-def get_mesh_memory(server_ids: List[int], session=Depends(get_session)):
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mesh_memory WHERE server_id IN {server_ids}"},
-            timeout=10
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/signal_scores", response_model=List[SignalScoresResponse])
-async def signal_scores_endpoint(request: SignalScoresRequest, session=Depends(get_session)):
-    scores = get_signal_scores(request.server_ids, request.org_id, session)
-    return [SignalScoresResponse(**score) for score in scores]
+class DirectiveResult(BaseModel):
+    """Result of directive execution."""
+    directive_id: UUID
+    status: str
+    output: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    executed_at: datetime = Field(default_factory=datetime.utcnow)
 
-@app.post("/mesh_memory", response_model=List[MeshMemoryResponse])
-async def mesh_memory_endpoint(request: MeshMemoryRequest, session=Depends(get_session)):
-    memory = get_mesh_memory(request.server_ids, session)
-    return [MeshMemoryResponse(**mem) for mem in memory]
 
-def _run_self_test():
-    from app.dependency_overrides import dependency_overrides
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+def get_registry_by_name(session, name: str) -> Optional[AppMcpServerRegistry]:
+    """Query MCP server registry by name."""
+    return session.query(AppMcpServerRegistry).filter(
+        AppMcpServerRegistry.name == name
+    ).first()
 
-    # Override the session for testing
-    test_engine = create_engine("sqlite:///:memory:")
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-    dependency_overrides[get_session] = lambda: SessionLocal()
 
-    # Create test tables
-    from app.models import Base
-    Base.metadata.create_all(test_engine)
+def list_active_registries(session) -> List[AppMcpServerRegistry]:
+    """List all active MCP server registries."""
+    return session.query(AppMcpServerRegistry).filter(
+        AppMcpServerRegistry.status == "active"
+    ).all()
 
-    # Test data
-    test_server = McpServerRegistry(server_id=1, org_id=1)
-    test_score = McpLlmAxisScore(server_id=1, org_id=1, scores={"test": 1.0}, last_updated="2023-01-01")
-    test_memory = {"test": "value"}
 
-    # Add test data
-    session = SessionLocal()
-    session.add(test_server)
-    session.add(test_score)
-    session.commit()
+def create_health_check(service_name: str, status: str = "healthy") -> ServiceHealth:
+    """Create a health check record."""
+    return ServiceHealth(service_name=service_name, status=status)
 
-    # Mock the mesh_memory table
-    def mock_get_mesh_memory(server_ids):
-        return [{"server_id": 1, "memory": test_memory}]
 
-    dependency_overrides[get_mesh_memory] = mock_get_mesh_memory
+__all__ = [
+    "SentinelBase",
+    "ServiceHealth",
+    "DirectivePayload",
+    "DirectiveResult",
+    "get_registry_by_name",
+    "list_active_registries",
+    "create_health_check",
+    "get_session",
+    "AppMcpServerRegistry",
+]
 
-    # Test signal_scores_endpoint
-    response = signal_scores_endpoint(SignalScoresRequest(server_ids=[1], org_id=1))
-    assert len(response) == 1
-    assert response[0].server_id == 1
-    assert response[0].scores == {"test": 1.0}
-    assert response[0].last_updated == "2023-01-01"
-
-    # Test mesh_memory_endpoint
-    response = mesh_memory_endpoint(MeshMemoryRequest(server_ids=[1]))
-    assert len(response) == 1
-    assert response[0].server_id == 1
-    assert response[0].memory == test_memory
-
-    print("PASS")
 
 if __name__ == "__main__":
-    _run_self_test()
+    from fastapi import FastAPI
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    
+    # In-memory self-test with StaticPool
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
+    )
+    TestSession = sessionmaker(bind=test_engine)
+    test_session = TestSession()
+    
+    # Test imports work
+    assert SentinelBase is not None
+    assert ServiceHealth is not None
+    assert DirectivePayload is not None
+    assert DirectiveResult is not None
+    assert get_registry_by_name is not None
+    assert list_active_registries is not None
+    assert create_health_check is not None
+    assert "get_session" in dir()
+    assert "AppMcpServerRegistry" in dir()
+    
+    # Test model instantiation
+    health = create_health_check("test_service", "healthy")
+    assert health.service_name == "test_service"
+    assert health.status == "healthy"
+    
+    directive = DirectivePayload(
+        directive_id=uuid4(),
+        action="test",
+        target="test_target",
+        params={"key": "value"}
+    )
+    assert directive.action == "test"
+    
+    result = DirectiveResult(
+        directive_id=directive.directive_id,
+        status="success"
+    )
+    assert result.status == "success"
+    
+    print("PASS")

@@ -1,0 +1,8 @@
+[service]
+name = "daemon_roster_coverage"
+import_path = "services.active.daemon_roster_coverage.router"
+prefix = "/api"
+tag = "daemon_roster_coverage"
+origin = "service"
+auth = "public"
+needs_data_layer = true

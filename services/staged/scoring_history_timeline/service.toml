@@ -1,0 +1,8 @@
+[service]
+name = "scoring_history_timeline"
+import_path = "services.active.scoring_history_timeline.router"
+prefix = "/api"
+tag = "scoring_history_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true

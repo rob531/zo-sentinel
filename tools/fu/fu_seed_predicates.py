@@ -89,37 +89,67 @@ PREDICATES = {
         "a SUCCEEDING backup inside the nightly window, i.e. COPY throughput is feasible"),
 
     # ---- corpus quality / coverage --------------------------------------
+    # MERGE_AUDIT_2026-08-23 B1. These seven predicates were seeded against
+    # `server_scores`, `servers` and `score_runs`. Those three names exist on
+    # NO plane: not among the 44 tables on the bus, not as a __tablename__ in
+    # app/models.py, and in no migration or schema snapshot. They were never
+    # right -- sibling predicates in this same dict (FU-115, FU-036, FU-107)
+    # query service_health and mesh_events, which do exist.
+    #
+    # So there is no "re-target at the app database" option: there is nothing
+    # to re-target TO. They are mapped to the real tables, which carry the same
+    # names on both planes (app/models.py declares __tablename__ =
+    # "mcp_server_registry" / "mcp_llm_axis_scores"), so the mesh bus -- this
+    # harness's only read path -- is also the documented one:
+    #
+    #   server_scores -> mcp_server_registry   (it is the table that actually
+    #                    holds risk_tier AND confidence, which is what FU-093
+    #                    and FU-058 assert on)
+    #   server_scores -> mcp_llm_axis_scores   (where a per-server SCORING event
+    #                    lives, with scored_at -- FU-090, FU-108)
+    #   servers       -> mcp_server_registry
+    #   score_runs    -> agent_runs            (the only populated run ledger:
+    #                    8363 rows and a status column; bulk_assess_jobs is empty)
+    #
+    # Only the table/column names changed. Each threshold and comparison is left
+    # exactly as seeded, so a predicate's MEANING is not quietly redesigned here.
+    # Verified live: all seven now return a value and resolve GREEN or RED --
+    # none is UNKNOWN.
     "FU-093": (sql_assert(
         "SELECT ROUND(100.0*COUNT(*) FILTER (WHERE risk_tier IS NOT NULL "
-        "AND confidence IS NOT NULL)/NULLIF(COUNT(*),0),2) FROM server_scores",
+        "AND confidence IS NOT NULL)/NULLIF(COUNT(*),0),2) FROM mcp_server_registry",
         "v is not None and float(v)>50"),
         "over half the scored moat carries a defensible signal, not adapter garbage"),
     "FU-058": (sql_assert(
         "SELECT ROUND(100.0*COUNT(*) FILTER (WHERE risk_tier IN ('HIGH','CRITICAL'))"
-        "/NULLIF(COUNT(*),0),2) FROM server_scores",
+        "/NULLIF(COUNT(*),0),2) FROM mcp_server_registry",
         "v is not None and float(v)<90"),
         "HIGH+CRITICAL below 90% -- the tier carries information again"),
     "FU-090": (sql_assert(
-        "SELECT ROUND(100.0*(SELECT COUNT(DISTINCT server_id) FROM server_scores)"
-        "/NULLIF((SELECT COUNT(*) FROM servers),0),2)",
+        "SELECT ROUND(100.0*(SELECT COUNT(DISTINCT server_id) FROM mcp_llm_axis_scores)"
+        "/NULLIF((SELECT COUNT(*) FROM mcp_server_registry),0),2)",
         "v is not None and float(v)>60"),
         "assessment coverage back above 60% of the moat"),
+    # first_seen is the registry's discovery timestamp; there is no created_at.
     "FU-054": (sql_assert(
-        "SELECT COUNT(*) FROM servers WHERE created_at > now() - interval '24 hours'",
+        "SELECT COUNT(*) FROM mcp_server_registry "
+        "WHERE first_seen > now() - interval '24 hours'",
         "v is not None and int(v)>=100"),
         "discovery intake above 100 rows/day, not the ~2/day collapse"),
     "FU-108": (sql_assert(
-        "SELECT COUNT(*) FROM server_scores WHERE scored_at > '2026-07-26'",
+        "SELECT COUNT(*) FROM mcp_llm_axis_scores WHERE scored_at > '2026-07-26'",
         "v is not None and int(v)>0"),
         "the validated re-score actually landed in the table rather than stranding"),
 
     # ---- pipeline / run integrity ---------------------------------------
     "FU-104": (sql_assert(
-        "SELECT COUNT(*) FROM score_runs WHERE status IS NULL OR status=''",
+        "SELECT COUNT(*) FROM agent_runs WHERE status IS NULL OR status=''",
         "v is not None and int(v)==0"),
         "no score run is left without a terminal status -- a silent exit is recorded"),
+    # started_at is agent_runs' creation timestamp; there is no created_at.
     "FU-001": (sql_assert(
-        "SELECT COUNT(*) FROM score_runs WHERE created_at > now() - interval '14 days'",
+        "SELECT COUNT(*) FROM agent_runs "
+        "WHERE started_at > now() - interval '14 days'",
         "v is not None and int(v)>0"),
         "the wave/rescore harnesses are writing the run ledger at all"),
 

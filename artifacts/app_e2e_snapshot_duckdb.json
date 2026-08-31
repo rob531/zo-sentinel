@@ -1,0 +1,13 @@
+{
+  "app_apis": {
+    "entity_report_exporter": "importable",
+    "org_entity_search_api": "importable",
+    "overview_dashboard_api": "importable",
+    "verdict_breakdown_api": "importable"
+  },
+  "backend": "duckdb",
+  "high_risk_servers": [],
+  "servers": [],
+  "tier_distribution": [],
+  "verdict_breakdown_srv0": []
+}

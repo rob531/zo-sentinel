@@ -144,15 +144,20 @@ def query_attestation(server_id):
 def query_risk_register(server_id):
     """Query risk register for risk information."""
     try:
+        # The risk register on the bus is `mcp_risk_register`, and these are its
+        # real columns. The old shape (risk_id / risk_title / risk_level /
+        # mitigation_status / owner / review_date / related_servers /
+        # created_at) named a table and a schema that exist on no plane, so
+        # ws_query raised and this function returned [] on every call. Refs #4080.
         sql = """
-        SELECT risk_id, risk_title, risk_level, mitigation_status, owner, review_date
-        FROM risk_register
-        WHERE server_id = ? OR related_servers ILIKE ?
-        ORDER BY risk_level DESC, created_at DESC
+        SELECT server_id, name, risk_tier, risk_rank, threat_count,
+               environment_exposure, staleness_days, computed_at
+        FROM mcp_risk_register
+        WHERE server_id = ?
+        ORDER BY risk_rank ASC, computed_at DESC
         LIMIT 5
         """
-        pattern = f"%{server_id}%"
-        result = ws_query(sql, [server_id, pattern])
+        result = ws_query(sql, [server_id])
         return result.get("rows", result.get("data", []))
     except Exception:
         return []

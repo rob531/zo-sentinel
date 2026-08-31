@@ -47,7 +47,7 @@ if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.models import Base, mcp_server_registry  # type: ignore
+    from app.models import Base, McpServerRegistry  # type: ignore
 
     # ------------------------------------------------------------------- #
     # Create an in‑memory SQLite DB and seed it with two days of data
@@ -59,12 +59,12 @@ if __name__ == "__main__":
     with SessionLocal() as sess:
         sess.add_all(
             [
-                mcp_server_registry(
+                McpServerRegistry(
                     server_id="srv-1",
                     source_name="source-A",
                     registered_at=datetime.datetime.utcnow(),
                 ),
-                mcp_server_registry(
+                McpServerRegistry(
                     server_id="srv-2",
                     source_name="source-B",
                     registered_at=datetime.datetime.utcnow()

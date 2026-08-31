@@ -32,11 +32,33 @@ echo "[score-onstart] apt prereqs"
 apt-get update -qq && apt-get install -y -qq git curl >/dev/null 2>&1 || fail "apt"
 
 cd /workspace
+# FU-321 (2026-08-11): these two used to be `>/dev/null 2>&1 || fail "..."`, so a
+# transient network blip and an expired credential produced the SAME 356-byte
+# forensics log -- "FATAL: fetch bundle", no git output, nothing to act on. It cost
+# a tower-side reproduction to learn that the branch, the PAT and the bundle were
+# all fine and the machine was not. Keep git's own words, and retry: the failure
+# that bit was transient, and one retry would have cost nothing and saved the wave.
+gitretry(){  # gitretry <label> <git args...>
+  local label="$1"; shift
+  local try rc
+  for try in 1 2 3 4 5; do
+    if git "$@" 2>/tmp/git_err.txt; then
+      [ "$try" -gt 1 ] && echo "[score-onstart] $label OK on attempt $try"
+      return 0
+    fi
+    rc=$?
+    echo "[score-onstart] $label attempt $try/5 FAILED rc=$rc; git said:"
+    sed 's/^/    | /' /tmp/git_err.txt || true
+    sleep $(( try * 10 ))
+  done
+  return 1
+}
 echo "[score-onstart] clone repo (code)"
-git clone --depth 1 "$REPO_URL" repo >/dev/null 2>&1 || fail "clone"
+gitretry "clone" clone --depth 1 "$REPO_URL" repo || fail "clone (5 attempts, see git output above)"
 cd /workspace/repo
 echo "[score-onstart] fetch transfer bundle from $SCORE_BRANCH"
-git fetch --depth 1 origin "$SCORE_BRANCH" >/dev/null 2>&1 || fail "fetch bundle"
+gitretry "fetch bundle" fetch --depth 1 origin "$SCORE_BRANCH" \
+    || fail "fetch bundle (5 attempts, see git output above)"
 git checkout FETCH_HEAD -- score_transfer || fail "checkout bundle"
 ls -la score_transfer score_transfer/adapter
 gunzip -c score_transfer/inputs.jsonl.gz > /workspace/inputs.jsonl || fail "gunzip"

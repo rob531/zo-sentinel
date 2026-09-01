@@ -1,80 +1,112 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends
 from app.db import get_session
-from app.models import ServiceHealth
-from sqlalchemy.orm import Session
-import requests
-from .logic import get_directive_queue_health
+from pydantic import BaseModel
+from datetime import datetime, timezone
+from typing import List
+import json
+import tempfile
+import shutil
+from pathlib import Path
+from fastapi.testclient import TestClient
 
 router = APIRouter()
 
-class QueueHealthResponse(BaseModel):
-    total: int
-    pending_count: int
-    proposed_count: int
-    oldest_pending_age_seconds: Optional[float]
-    oldest_proposed_age_seconds: Optional[float]
-    queue_depth: int
 
-@router.get("/api/directives/queue-health", response_model=QueueHealthResponse)
-async def get_queue_health(session: Session = Depends(get_session)):
-    try:
-        health_data = get_directive_queue_health(session)
-        return health_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class DirectiveQueueHealthResponse(BaseModel):
+    total_pending: int
+    total_proposed: int
+    tasks: List[str]
+    ts: str
+
+
+def check_directive_queue_health(
+    proposed_path: str = "/home/workspace/zo_sentinel/directives/proposed/",
+    pending_path: str = "/home/workspace/zo_sentinel/directives/pending/"
+) -> DirectiveQueueHealthResponse:
+    proposed_dir = Path(proposed_path)
+    pending_dir = Path(pending_path)
+
+    proposed_files = list(proposed_dir.glob("*.json")) if proposed_dir.exists() else []
+    pending_files = list(pending_dir.glob("*.json")) if pending_dir.exists() else []
+
+    proposed_tasks = []
+    for pf in proposed_files:
+        try:
+            data = json.loads(pf.read_text())
+            if isinstance(data, dict) and "task" in data:
+                proposed_tasks.append(data["task"])
+        except Exception:
+            pass
+
+    pending_tasks = []
+    for pf in pending_files:
+        try:
+            data = json.loads(pf.read_text())
+            if isinstance(data, dict) and "task" in data:
+                pending_tasks.append(data["task"])
+        except Exception:
+            pass
+
+    all_tasks = proposed_tasks + pending_tasks
+
+    return DirectiveQueueHealthResponse(
+        total_pending=len(pending_files),
+        total_proposed=len(proposed_files),
+        tasks=all_tasks,
+        ts=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+@router.get("/api/directive-queue/health", response_model=DirectiveQueueHealthResponse)
+def directive_queue_health() -> DirectiveQueueHealthResponse:
+    return check_directive_queue_health()
+
 
 if __name__ == "__main__":
-    from fastapi.testclient import TestClient
-    from app.main import app
-    from app.db import Base, engine
-    from sqlalchemy.orm import sessionmaker
+    proposed_temp = tempfile.mkdtemp()
+    pending_temp = tempfile.mkdtemp()
 
-    # Setup test database
-    Base.metadata.create_all(engine)
-    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    (Path(proposed_temp) / "task1.json").write_text(json.dumps({"task": "alpha"}))
+    (Path(pending_temp) / "task2.json").write_text(json.dumps({"task": "beta"}))
 
-    def override_get_session():
-        session = TestSessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
+    try:
+        from app.db import get_session
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
 
-    app.dependency_overrides[get_session] = override_get_session
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    # Mock write_service responses
-    def mock_write_service_query(endpoint: str, params: dict):
-        if endpoint == "/query":
-            if params.get("query") == "read_pending_directives":
-                return {
-                    "pending": [
-                        {"filename": "dir1", "timestamp": "2023-01-01T00:00:00Z"},
-                        {"filename": "dir2", "timestamp": "2023-01-02T00:00:00Z"}
-                    ],
-                    "proposed": [
-                        {"filename": "dir3", "timestamp": "2023-01-03T00:00:00Z"}
-                    ]
-                }
-        return {}
+        def override_get_session():
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
 
-    original_post = requests.post
+        from fastapi import FastAPI
 
-    def mock_post(*args, **kwargs):
-        if "http://127.0.0.1:8772/query" in args[0]:
-            return mock_write_service_query(*args, **kwargs)
-        return original_post(*args, **kwargs)
+        app = FastAPI()
+        app.include_router(router)
 
-    requests.post = mock_post
+        app.dependency_overrides[get_session] = override_get_session
 
-    client = TestClient(app)
+        client = TestClient(app)
+        resp = client.get("/api/directive-queue/health")
+        data = resp.json()
 
-    response = client.get("/api/directives/queue-health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] >= 0
-    assert isinstance(data["oldest_pending_age_seconds"], (float, type(None)))
-    assert isinstance(data["oldest_proposed_age_seconds"], (float, type(None)))
-    print("PASS")
+        total = data["total_proposed"] + data["total_pending"]
+        assert total >= 2, f"total {total} < 2"
+        assert len(data["tasks"]) > 0, "tasks empty"
+
+        print("PASS")
+    finally:
+        shutil.rmtree(proposed_temp, ignore_errors=True)
+        shutil.rmtree(pending_temp, ignore_errors=True)
+        shutil.rmtree(proposed_temp, ignore_errors=True)
+        shutil.rmtree(pending_temp, ignore_errors=True)

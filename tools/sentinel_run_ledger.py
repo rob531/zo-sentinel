@@ -52,6 +52,35 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+
+def _commit_replace(tmp, dest):
+    """Commit `tmp` onto `dest` through FU-212's proven fallback.
+
+    WHY (measured 2026-09-01, prod-drift-sentinel 04:47Z). `os.replace` is
+    MoveFileEx(REPLACE_EXISTING) and Windows refuses it with WinError 5 when the
+    DESTINATION carries a mapped section -- while `open(dest,"r+b")` and a plain
+    `os.rename(dest, other)` both still succeed. FU-212 measured this on
+    FOLLOWUPS.md in July and wired the rename-swap cure into
+    ``tools/fu/fu_lock.py``. It was wired into exactly ONE call site. This writer
+    was not one of them, so the mandated run receipt (FU-164) failed 12/12
+    attempts over ~40s and step 0 of the lane could not complete.
+
+    A cure wired into one door of many reads as a cure (FU-343). This is another
+    door, not another cure -- the algorithm is fu_lock's, unchanged.
+
+    Imported BY FILE PATH with ``sys.modules`` seeded first: this repo has more
+    than one copy of the fu_* modules on disk and plain ``import`` picks by
+    sys.path order rather than by the tree you are running from.
+    """
+    import importlib.util
+    import sys as _sys
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fu", "fu_lock.py")
+    spec = importlib.util.spec_from_file_location("_zo_fu_lock_for_commit", p)
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules["_zo_fu_lock_for_commit"] = mod   # before exec_module, or dataclasses dies
+    spec.loader.exec_module(mod)
+    return mod.replace_with_fallback(str(tmp), str(dest))
+
 DEFAULT_STATE = Path(r"D:\zo\Zocomputer Agents\prod_deploy_state.json")
 DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 
@@ -207,7 +236,29 @@ def lane_of(path: Path):
     if not isinstance(blob, dict):
         return None
     lane = blob.get("produced_by_lane")
-    return lane if isinstance(lane, str) and lane else None
+    if not isinstance(lane, str) or not lane:
+        return None
+    # "unattributed" is the STAMPER'S OWN WORD FOR UNKNOWN, and it must land in
+    # the same bucket as an absent field. verify_candidate.ps1 writes it when it
+    # can resolve neither $env:ZO_LANE nor a `\_lanes\<name>` component in
+    # $PSScriptRoot -- which is exactly what happens when the script is invoked
+    # from the SHARED checkout, the path this repo's own runbook prints.
+    #
+    # Measured 2026-08-07T19:49:42Z: prod-drift ran verify_candidate.ps1 from
+    # D:\zo\zo-sentinel\zo-sentinel\ops\host\, its own verdict artifact was
+    # stamped "unattributed", and --window-hours 24 reported it as
+    #   foreign evidence (ADVISORY, excluded from the orphan test -- another
+    #   lane's dry-run in the shared evidence dir)
+    # A string meaning "I do not know who wrote this" was read as "somebody else
+    # definitely wrote this", which is the one reading that REMOVES it from the
+    # orphan test. The guard did not go red. It went QUIET, under a CLEAN verdict.
+    #
+    # That inverts the rule this function's own docstring states four lines up:
+    # unknown is not zero (R6). Absence was handled correctly; the sentinel VALUE
+    # that means the same thing was not.
+    if lane == "unattributed":
+        return None
+    return lane
 
 
 def collect_evidence(evidence_dir: Path) -> list:
@@ -471,7 +522,7 @@ def record_receipt(state_path: Path, now: datetime) -> dict:
     state["run_receipts"] = sorted(set(receipts))[-64:]
     tmp = state_path.with_suffix(state_path.suffix + ".tmp")
     tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    os.replace(tmp, state_path)
+    _commit_replace(tmp, state_path)
     return {"receipt": stamp, "added": added, "count": len(state["run_receipts"])}
 
 

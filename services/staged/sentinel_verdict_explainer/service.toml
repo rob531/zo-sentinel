@@ -1,0 +1,8 @@
+[service]
+name = "sentinel_verdict_explainer"
+import_path = "services.active.sentinel_verdict_explainer.router"
+prefix = "/api"
+tag = "sentinel_verdict_explainer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

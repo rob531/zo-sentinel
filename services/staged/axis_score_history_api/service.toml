@@ -1,0 +1,8 @@
+[service]
+name = "axis_score_history_api"
+import_path = "services.active.axis_score_history_api"
+prefix = "/api"
+tag = "axis_score_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

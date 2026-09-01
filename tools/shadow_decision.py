@@ -137,6 +137,35 @@ import json
 import os
 import sys
 
+
+def _commit_replace(tmp, dest):
+    """Commit `tmp` onto `dest` through FU-212's proven fallback.
+
+    WHY (measured 2026-09-01, prod-drift-sentinel 04:47Z). `os.replace` is
+    MoveFileEx(REPLACE_EXISTING) and Windows refuses it with WinError 5 when the
+    DESTINATION carries a mapped section -- while `open(dest,"r+b")` and a plain
+    `os.rename(dest, other)` both still succeed. FU-212 measured this on
+    FOLLOWUPS.md in July and wired the rename-swap cure into
+    ``tools/fu/fu_lock.py``. It was wired into exactly ONE call site. This writer
+    was not one of them, so the mandated run receipt (FU-164) failed 12/12
+    attempts over ~40s and step 0 of the lane could not complete.
+
+    A cure wired into one door of many reads as a cure (FU-343). This is another
+    door, not another cure -- the algorithm is fu_lock's, unchanged.
+
+    Imported BY FILE PATH with ``sys.modules`` seeded first: this repo has more
+    than one copy of the fu_* modules on disk and plain ``import`` picks by
+    sys.path order rather than by the tree you are running from.
+    """
+    import importlib.util
+    import sys as _sys
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fu", "fu_lock.py")
+    spec = importlib.util.spec_from_file_location("_zo_fu_lock_for_commit", p)
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules["_zo_fu_lock_for_commit"] = mod   # before exec_module, or dataclasses dies
+    spec.loader.exec_module(mod)
+    return mod.replace_with_fallback(str(tmp), str(dest))
+
 STORE = os.environ.get(
     "SHADOW_STORE",
     r"D:\zo\Zocomputer Agents\shadow_decisions.jsonl",
@@ -272,7 +301,7 @@ def _rewrite(recs: list) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         for r in recs:
             fh.write(json.dumps(r, sort_keys=True) + "\n")
-    os.replace(tmp, STORE)
+    _commit_replace(tmp, STORE)
 
 
 def _counted(rec) -> bool:

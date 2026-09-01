@@ -295,6 +295,31 @@ def _state_abandoned(rid: str, runs_root: Path) -> bool:
     return not st.get("instance_id") or bool(st.get("destroyed"))
 
 
+def _state_terminal(rid: str, runs_root: Path) -> bool:
+    """Terminal by the SAME word `open_run` uses -- FU-321, mirrored (2026-08-31).
+
+    Run 20260822-220319 died at its deadline, was destroyed, and was later
+    refused by `open_run` as terminally finished (`run_skipped_terminal`) --
+    yet this detector kept calling it STRANDED forever: "deadline" is not an
+    abandonment prefix and `run_skipped_terminal` is not an abort event. Two
+    instruments disagreeing about one word, again -- this time between
+    open_run() and the very check whose header warns about that defect.
+
+    The bar is NOT lowered: _terminally_finished supplies the verdict word,
+    and the same spend clause `_state_abandoned` uses is applied on top -- a
+    run still holding an instance stays STRANDED whatever its state.json
+    claims, and `ok` without `run_closed` remains the stranded shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    return (_terminally_finished(st)
+            and (not st.get("instance_id") or bool(st.get("destroyed"))))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -344,7 +369,8 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     out = []
     for rec in opened.values():
         aborted = (_is_abort_event(rec["last_event"])
-                   or _state_abandoned(rec["run_id"], root))
+                   or _state_abandoned(rec["run_id"], root)
+                   or _state_terminal(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
@@ -1314,6 +1340,72 @@ def ph_backfill(run: Run, args) -> None:
     log("backfill OK")
 
 
+ZERO_YIELD_RATE = 0.001            # 0.1% of the refresh half
+
+
+def refresh_yield(state: dict) -> dict | None:
+    """What did the REFRESH half of this delta cohort actually change?
+
+    Measured 2026-09-01 across every landed delta wave's own `delta_summary`,
+    the `overall_risk` axis:
+
+        20260726-014732    15,236 / 20,000    76.2 %
+        20260727-024623    97,989 / 120,000   81.6 %
+        20260727-105859   136,116 / 140,000   97.2 %
+        20260730-001738         0 / 20,000     0.0 %   <-- regime change
+        20260804-060703         0 / 20,000     0.0 %
+        20260831-033413         1 / 20,000     0.005 %
+
+    Three consecutive landed waves spent 60,000 server-slots -- the majority of
+    every delta cohort -- to move ONE server on ONE axis. Every one of those
+    numbers was already being written, to `state.json` and to the
+    `score_change_runs` table, and nothing ever read one back. So the phase was
+    dead for four weeks and about a dollar of GPU time, and the run reports that
+    a successor opens said "ok" each time, truthfully and uselessly.
+
+    THIS IS A REPORT, NOT A GATE. It cannot abort a run, change an exit code or
+    veto a wave (HARNESS_DOCTRINE R7: prefer RECOVERY over RESTRICTION; and the
+    standing rule against answering a finding with another required check). What
+    to DO about a dead refresh half -- shrink `--refresh-cap`, move the budget to
+    never-scored servers -- is cohort policy, and cohort policy goes through peer
+    review, not through a quiet edit in a reporting function.
+
+    Returns None when there is no refresh half to describe, so the loud line
+    means exactly one thing wherever it appears.
+
+    UNKNOWN IS NOT ZERO (R6). `unmeasured` and `zero_yield` are opposite facts
+    that look identical if you collapse a missing summary to 0: one says the
+    phase did nothing, the other says we never asked. A run whose import died
+    before writing the aggregates gets `unmeasured`, and a decision made on it
+    is a decision made on nothing, which is the point of saying so.
+    """
+    refresh = state.get("refresh_servers") or 0
+    if refresh <= 0:
+        return None
+
+    summary = state.get("delta_summary") or {}
+    axes = [a for a in summary.values() if isinstance(a, dict) and "changed" in a]
+    if not axes:
+        # R6: no measurement is not a measurement of nothing.
+        return {"refresh_servers": refresh, "changed": None, "rate": None,
+                "verdict": "unmeasured",
+                "basis": "delta_summary absent or empty -- the refresh half was "
+                         "NOT measured this run; this is not a reading of zero"}
+
+    # Seven axes ship. A wave that moved only `auth_strength` is productive, and
+    # keying this on `overall_risk` alone would bury it.
+    changed = max(int(a.get("changed") or 0) for a in axes)
+    rate = changed / refresh
+    return {
+        "refresh_servers": refresh,
+        "changed": changed,
+        "rate": rate,
+        "verdict": "zero_yield" if rate < ZERO_YIELD_RATE else "productive",
+        "basis": f"max(changed) over {len(axes)} axis/axes of "
+                 f"delta_summary, / refresh_servers",
+    }
+
+
 def ph_postcheck(run: Run, args) -> None:
     if run.done("postcheck"):
         return
@@ -1341,8 +1433,25 @@ def ph_postcheck(run: Run, args) -> None:
         after_basis = "db_import"
         log(f"postcheck: freshness unreadable; scored_servers.after={scored_after} "
             f"taken from the import phase's direct DB read (basis=db_import)")
+    ry = refresh_yield(run.state)
+    if ry and ry["verdict"] == "zero_yield":
+        log(f"POSTCHECK: REFRESH HALF PRODUCED NOTHING -- {ry['changed']} of "
+            f"{ry['refresh_servers']} refreshed servers changed on any axis "
+            f"({ry['rate']:.4%}). The never-scored half is where this wave's "
+            f"value came from. Three landed waves in a row have now read this "
+            f"way (07-30, 08-04, 08-31); if this is the fourth, the refresh cap "
+            f"is buying nothing and the cohort budget belongs elsewhere -- that "
+            f"is a peer-review decision, not an abort.")
+        ledger("refresh_zero_yield", run.state["run_id"], **ry)
+    elif ry and ry["verdict"] == "unmeasured":
+        log(f"POSTCHECK: refresh half UNMEASURED ({ry['basis']}). "
+            f"Not a reading of zero.")
+    elif ry:
+        log(f"postcheck: refresh half changed {ry['changed']} of "
+            f"{ry['refresh_servers']} ({ry['rate']:.2%})")
     report = {
         "run_id": run.state["run_id"], "mode": run.state["mode"],
+        "refresh_yield": ry,
         "freshness_error": freshness_error,
         "degraded_postcheck": bool(freshness_error),
         "exported": run.state.get("exported"), "imported": run.state.get("imported_servers"),

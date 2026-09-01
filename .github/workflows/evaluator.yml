@@ -77,6 +77,16 @@ jobs:
         # parses when reverse-feeding failures into mesh_memory.
         run: |
           mkdir -p artifacts
+          # 2026-09-01: the five tests/test_rescore_*.py files and the
+          # vast_spend self-test ADDED. Until today NONE of them was collected
+          # here, so every change to the weekly moat rescore -- the harness that
+          # rents paid GPUs and writes the production corpus -- merged on a
+          # green that had never run one of its tests. Caught by the count, not
+          # the colour: this check reported `577 passed` on a PR that added ten
+          # tests, which is exactly the same number it reported the day before.
+          # All six are network-free (stdlib imports at module scope; psycopg2
+          # and vastai_sdk are imported inside functions, and the one socket
+          # touched is 127.0.0.1:9, whose REFUSAL is the assertion).
           # The last three are DEPLOY-SAFETY gates: Dockerfile COPY coverage,
           # the prod deploy wrapper's invariants, and the alembic revision
           # graph. Until 2026-07-27 none of them ran on a PR -- they lived only
@@ -124,6 +134,12 @@ jobs:
             tests/test_queue_census.py \
             tests/test_graph_gap_directives_wired.py \
             tests/test_undeclared_write_guard.py \
+            tests/test_rescore_billed_dph.py \
+            tests/test_rescore_lstree_parse.py \
+            tests/test_rescore_open_run_detection.py \
+            tests/test_rescore_trust_priority.py \
+            tests/test_rescore_refresh_yield.py \
+            tests/test_vast_spend_selftest.py \
             -q \
             --junitxml=artifacts/junit.xml
 

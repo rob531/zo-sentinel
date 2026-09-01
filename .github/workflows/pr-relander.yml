@@ -109,7 +109,8 @@ jobs:
       - name: Derive required contexts and check reachability
         id: drift
         env:
-          GH_TOKEN: ${{ secrets.RELANDER_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
+          PAT: ${{ secrets.RELANDER_TOKEN }}
           HAVE_PAT: ${{ secrets.RELANDER_TOKEN != '' }}
           REPO: ${{ github.repository }}
         run: |
@@ -131,7 +132,8 @@ jobs:
           # was granted Administration:read. If it was not, we fall to the pinned
           # constant, which is the supported steady state, not an error.
           src=""
-          req=$(gh api "repos/$REPO/branches/main/protection/required_status_checks" \
+          req=$(GH_TOKEN="${PAT:-$GH_TOKEN}" gh api \
+                  "repos/$REPO/branches/main/protection/required_status_checks" \
                   --jq '.contexts[]' 2>/dev/null) && src="branch-protection (RELANDER_TOKEN)"
 
           if [ -n "$req" ]; then
@@ -186,7 +188,14 @@ jobs:
     steps:
       - name: Refresh stale-but-clean and solid-but-blocked autonomous-build PRs
         env:
-          GH_TOKEN: ${{ secrets.RELANDER_TOKEN || github.token }}
+          # READ/WRITE SPLIT. GITHUB_TOKEN has full repo read and is guaranteed
+          # to satisfy every query here; the PAT's read scopes are narrower and
+          # its label-filtered pr list returned nothing (run 33555325562,
+          # "examined ZERO triage:solid PRs"). The PAT exists solely to make
+          # MUTATIONS that must not be recursion-guarded, so it is used only
+          # for update-branch / close / reopen.
+          GH_TOKEN: ${{ github.token }}
+          PAT: ${{ secrets.RELANDER_TOKEN }}
           HAVE_PAT: ${{ needs.preflight.outputs.have_pat }}
           REQUIRED: ${{ needs.preflight.outputs.required }}
           DISPATCH_TOKEN: ${{ github.token }}
@@ -199,10 +208,15 @@ jobs:
           # NOTE: --limit is MANDATORY. gh pr list defaults to 30 rows; without
           # it this sweep was blind past row 30 and silently reported "nothing
           # to reland" while 28 eligible PRs sat outside the page.
-          stale=$(gh pr list -R "$REPO" --state open \
+          # Never swallow the error text: a failed query and an empty result
+          # are different facts and must not print the same thing.
+          if ! stale=$(gh pr list -R "$REPO" --state open \
                     --label autonomous-build --label triage:stale --limit 500 \
                     --json number,mergeable,isDraft \
-                    -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number') || stale=""
+                    -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number' 2>qerr.txt); then
+            echo "::error::cohort A query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
+            exit 1
+          fi
 
           # --- cohort B: solid but blocked on a missing required context -----
           # DO NOT filter on mergeStateStatus here. GitHub computes mergeability
@@ -228,7 +242,7 @@ jobs:
           done <<< "$(gh pr list -R "$REPO" --state open \
                         --label autonomous-build --label triage:solid --limit 500 \
                         --json number,headRefOid,isDraft \
-                        -q '.[] | "\(.number) \(.headRefOid) \(.isDraft)"')"
+                        -q '.[] | "\(.number) \(.headRefOid) \(.isDraft)"' 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
           n_solid=$(echo "$solid" | wc -w | tr -d ' ')
           # Silence must always be auditable: say what was EXAMINED, not just
           # what was selected. "0 selected" and "0 examined" are different bugs.
@@ -261,7 +275,7 @@ jobs:
             refreshed=false
             if [ "${behind:-0}" != "0" ]; then
               # Path 1: branch is behind main -> merge commit re-fires gates.
-              if gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
+              if GH_TOKEN="${PAT:-$GH_TOKEN}" gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
                 echo "::notice::#$pr branch updated (was $behind behind)"
                 refreshed=true
               else
@@ -271,7 +285,7 @@ jobs:
               # Path 2: already level with main -> update-branch is a no-op, so
               # close+reopen to emit a `reopened` pull_request event. Only the
               # PAT can do this; GITHUB_TOKEN events are recursion-guarded.
-              if gh pr close "$pr" -R "$REPO" 2>err.txt && sleep 2 && gh pr reopen "$pr" -R "$REPO" 2>>err.txt; then
+              if GH_TOKEN="$PAT" gh pr close "$pr" -R "$REPO" 2>err.txt && sleep 2 && GH_TOKEN="$PAT" gh pr reopen "$pr" -R "$REPO" 2>>err.txt; then
                 echo "::notice::#$pr level with main -> closed+reopened to re-fire PR gates"
                 refreshed=true
               else

@@ -1,0 +1,11 @@
+[service]
+name = "never_scored_backlog_api"
+import_path = "services.active.never_scored_backlog_api.router"
+prefix = "/api"
+tag = "never_scored_backlog_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

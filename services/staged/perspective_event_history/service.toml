@@ -1,0 +1,12 @@
+[service]
+name = "perspective_event_history"
+import_path = "services.active.perspective_event_history.router"
+prefix = "/api"
+tag = "perspective_event_history"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.perspective_event_history"
+expected_output = "PASS"

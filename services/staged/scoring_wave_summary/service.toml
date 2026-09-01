@@ -1,0 +1,8 @@
+[service]
+name = "scoring_wave_summary"
+import_path = "services.active.scoring_wave_summary.router"
+prefix = "/api"
+tag = "scoring_wave_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true

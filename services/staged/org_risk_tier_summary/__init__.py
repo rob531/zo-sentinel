@@ -7,9 +7,9 @@ app = FastAPI()
 def get_app_tables():
     session = Depends(get_session)
     return {
-        "mcp_server_registry": session.query(McpServerRegistry).all(),
-        "mcp_llm_axis_scores": session.query(McpLlmAxisScore).all(),
-        "mcp_score_disputes": session.query(McpScoreDispute).all(),
+        "McpServerRegistry": session.query(McpServerRegistry).all(),
+        "McpLlmAxisScore": session.query(McpLlmAxisScore).all(),
+        "McpScoreDispute": session.query(McpScoreDispute).all(),
         "orgs": session.query(Org).all(),
         "users": session.query(User).all()
     }

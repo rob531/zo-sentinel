@@ -1,0 +1,8 @@
+[service]
+name = "operational_health_dashboard"
+import_path = "services.active.operational_health_dashboard.router"
+prefix = "/api"
+tag = "operational_health_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

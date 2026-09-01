@@ -1,0 +1,34 @@
+[service]
+name = "perspective_snapshot_query_api"
+import_path = "services.active.perspective_snapshot_query_api.router"
+prefix = "/api"
+tag = "perspective_snapshot_query_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[routing]
+methods = ["GET"]
+paths = [
+    "/snapshot/{snapshot_id}",
+    "/snapshots/org/{org_id}",
+    "/snapshots/user/{user_id}",
+    "/query",
+]
+
+[dependencies]
+required = [
+    "fastapi",
+    "sqlalchemy",
+    "httpx",
+]
+
+[data_access]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+app_session = "get_session"
+mesh_endpoint = "http://127.0.0.1:8772/query"
+
+[acceptance]
+self_test = "PASS"
+description = "perspective_snapshot_query_api service exposes endpoints to query perspective snapshots with data from both app Postgres and mesh ZoComputer store"

@@ -1,10 +1,8 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import Row
-from fastapi import Depends
-from app.db import get_session
-from app.models import MCPLLMAxisScores, MCPServerRegistry
+from sqlalchemy import Row
+from app.models import McpLlmAxisScore, McpServerRegistry
 from enum import Enum
 
 class RiskTier(str, Enum):
@@ -25,9 +23,9 @@ class AxisLabel(str, Enum):
 
 def get_latest_scores_for_server(session: Session, server_id: str) -> List[Row]:
     return session.execute(
-        session.query(MCPLLMAxisScores)
-        .filter(MCPLLMAxisScores.server_id == server_id)
-        .order_by(MCPLLMAxisScores.scored_at.desc())
+        session.query(McpLlmAxisScore)
+        .filter(McpLlmAxisScore.server_id == server_id)
+        .order_by(McpLlmAxisScore.scored_at.desc())
         .limit(7)
     ).scalars().all()
 
@@ -110,7 +108,7 @@ if __name__ == "__main__":
     test_server_id = "test_server_123"
 
     test_scores = [
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="overall_risk",
             label="warning",
@@ -121,7 +119,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="auth_strength",
             label="caution",
@@ -132,7 +130,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="capability_breadth",
             label="low",
@@ -143,7 +141,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="data_sensitivity",
             label="none",
@@ -154,7 +152,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="network_egress",
             label="warning",
@@ -165,7 +163,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="maintainer_trust",
             label="caution",
@@ -176,7 +174,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="exploit_surface",
             label="low",
@@ -192,7 +190,7 @@ if __name__ == "__main__":
     test_session.add_all(test_scores)
     test_session.commit()
 
-    test_server = MCPServerRegistry(
+    test_server = McpServerRegistry(
         server_id=test_server_id,
         hostname="test.example.com",
         ip_address="192.168.1.1",

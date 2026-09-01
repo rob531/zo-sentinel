@@ -124,6 +124,76 @@ class _Txn:
         return self._dig
 
 
+# ---------------------------------------------------------------------------
+# PORTED FROM THE TOWER-LOCAL COPY 2026-09-01 (prod-drift-sentinel).
+# FU-212 measured and cured this in July, but the cure only ever existed in
+# _tools\fu_lock.py, which is not in any git repo. The repo copy -- this file,
+# the one a fresh clone and CI actually run -- never had it. Two writers were
+# wired to "the existing cure" today and failed with NameError, which is how
+# the divergence surfaced. Algorithm unchanged; only its address is new.
+# ---------------------------------------------------------------------------
+#: strategy used by the most recent successful commit -- "replace" (the plain
+#: atomic rename) or "swap" (the mapped-destination fallback below). Read by
+#: tests and by triage, so the fallback firing is OBSERVABLE and not silent.
+last_commit_strategy = None
+
+
+def _replace_with_fallback(tmp: str, path: str, attempts: int = 4) -> str:
+    """Move `tmp` onto `path`, surviving a destination that cannot be replaced.
+
+    WHY THIS EXISTS (FU-212, measured 2026-07-31, not assumed). On Windows
+    `os.replace` is MoveFileEx(REPLACE_EXISTING), and that call is refused with
+    ERROR_ACCESS_DENIED (WinError 5) when the DESTINATION carries a mapped
+    section -- even though the same file can be opened r+b AND plainly renamed.
+    The Claude desktop app (RestartManager named pid 19004) holds exactly such a
+    map on FOLLOWUPS.md, so every ledger writer -- ledger_lint, fu_verify,
+    fu_ledger.append_log -- failed 100% of the time inside a session while
+    passing every test outside one.
+
+    The three facts the fallback rests on were each observed directly:
+        replace(fresh -> fresh dest)      OK
+        replace(fresh -> NON-existent)    OK
+        rename(FOLLOWUPS.md -> other)     OK
+        replace(fresh -> FOLLOWUPS.md)    DENIED
+    So: free the destination NAME by renaming it aside, replace into the now
+    free name, and only then retire the parked copy. Nothing is deleted while
+    anything can still fail -- on any error the parked original is put back, so
+    the worst case is the pre-existing "nothing was written", never a loss.
+
+    Returns the strategy that carried the write: "replace" or "swap".
+    """
+    global last_commit_strategy
+    last = None
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            last_commit_strategy = "replace"
+            return "replace"
+        except PermissionError as exc:      # WinError 5 (denied) / 32 (sharing)
+            last = exc
+            time.sleep(0.2 * (2 ** i))      # a genuinely transient scanner hold
+
+    # Persistent. Fall back to the rename-swap.
+    parked = path + ".prev"
+    try:
+        os.replace(path, parked)            # dest name is now free
+    except OSError:
+        raise last                          # cannot even move it: report the original
+    try:
+        os.replace(tmp, path)
+    except OSError:
+        os.replace(parked, path)            # put the original back, byte for byte
+        raise last
+    last_commit_strategy = "swap"
+    return "swap"
+
+
+#: Public name. FU-212's cure sat behind a private one and was wired into a
+#: single call site; a private name is what tells the next writer not to ask
+#: (FU-343 -- a cure wired into one door of many reads as a cure).
+replace_with_fallback = _replace_with_fallback
+
+
 @contextmanager
 def ledger_txn(path: str, timeout: int = ACQUIRE_TIMEOUT_S, write: bool = True):
     """Lock, read, yield a txn, then commit atomically if unchanged."""
@@ -148,7 +218,7 @@ def ledger_txn(path: str, timeout: int = ACQUIRE_TIMEOUT_S, write: bool = True):
         tmp = path + ".tmp.%d" % os.getpid()
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write(new_text)
-        os.replace(tmp, path)
+        _replace_with_fallback(tmp, path)
         txn.committed = True
     finally:
         if lp:

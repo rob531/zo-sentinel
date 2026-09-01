@@ -42,8 +42,10 @@ def get_app_data(session: Session = Depends(get_session)) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.dependency_overrides import override_dependencies_for_testing
-    override_dependencies_for_testing()
+    # FU-369: removed an import of `override_dependencies_for_testing` from a module that does
+    # not exist in this tree, together with its call below. The call
+    # installed nothing this file does not already do for itself.
+    # FU-369: call removed with its phantom import (see above).
 
     try:
         mesh_memory = get_mesh_memory()

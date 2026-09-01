@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verdict Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .dashboard {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .axis {
+            flex: 1 1 200px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .axis-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .tier {
+            margin-top: 10px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .tier-A {
+            background-color: #d4edda;
+        }
+        .tier-B {
+            background-color: #fff3cd;
+        }
+        .tier-C {
+            background-color: #ffebee;
+        }
+        .tier-D {
+            background-color: #ffcccc;
+        }
+        .tier-F {
+            background-color: #ffcccc;
+        }
+        .criteria-version {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 10px;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px;
+        }
+        .error {
+            color: red;
+            text-align: center;
+            margin: 20px;
+        }
+        .empty {
+            text-align: center;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1 aria-label="Verdict Dashboard">Verdict Dashboard</h1>
+    <div id="loading" class="loading">Loading...</div>
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="empty" class="empty" style="display: none;">No data available.</div>
+    <div id="dashboard" class="dashboard" style="display: none;">
+        <!-- Dashboard content will be inserted here -->
+    </div>
+
+    <script>
+        const API_BASE_URL = '/api';
+        const authToken = 'YOUR_BEARER_TOKEN'; // Replace with actual token handling logic
+
+        async function fetchVerdictData() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/verdict_dashboard`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to fetch verdict data');
+                }
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        function renderDashboard(data) {
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = '';
+
+            if (!data || Object.keys(data).length === 0) {
+                document.getElementById('empty').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('empty').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            dashboard.style.display = 'flex';
+
+            for (const [axis, axisData] of Object.entries(data)) {
+                const axisDiv = document.createElement('div');
+                axisDiv.className = 'axis';
+                axisDiv.setAttribute('aria-label', `Axis: ${axis}`);
+
+                const axisHeader = document.createElement('div');
+                axisHeader.className = 'axis-header';
+                axisHeader.textContent = axis;
+                axisDiv.appendChild(axisHeader);
+
+                for (const [tier, tierData] of Object.entries(axisData.tiers)) {
+                    const tierDiv = document.createElement('div');
+                    tierDiv.className = `tier tier-${tier}`;
+                    tierDiv.setAttribute('aria-label', `Tier: ${tier}`);
+                    tierDiv.textContent = `Tier ${tier}: ${tierData.count}`;
+                    axisDiv.appendChild(tierDiv);
+                }
+
+                const criteriaVersion = document.createElement('div');
+                criteriaVersion.className = 'criteria-version';
+                criteriaVersion.textContent = `Criteria Version: ${axisData.criteria_version}`;
+                axisDiv.appendChild(criteriaVersion);
+
+                dashboard.appendChild(axisDiv);
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const data = await fetchVerdictData();
+                renderDashboard(data);
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').textContent = `Error: ${error.message}`;
+                document.getElementById('error').style.display = 'block';
+            }
+        }
+
+        // Self-check
+        function selfCheck() {
+            const html = document.documentElement.outerHTML;
+            if (!html.includes('fetch(') || !html.includes('aria-label') || html.includes('localStorage')) {
+                throw new Error('Missing required pieces');
+            }
+            console.log('STRUCT OK');
+        }
+
+        // Initialize
+        loadDashboard();
+        selfCheck();
+    </script>
+</body>
+</html>

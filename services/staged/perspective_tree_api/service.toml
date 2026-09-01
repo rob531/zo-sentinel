@@ -1,0 +1,8 @@
+[service]
+name = "perspective_tree_api"
+import_path = "services.active.perspective_tree_api.router"
+prefix = "/api"
+tag = "perspective_tree_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

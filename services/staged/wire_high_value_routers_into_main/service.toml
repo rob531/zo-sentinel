@@ -1,0 +1,8 @@
+[service]
+name = "wire_high_value_routers_into_main"
+import_path = "services.active.wire_high_value_routers_into_main.router"
+prefix = "/api"
+tag = "wire_high_value_routers_into_main"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -13,8 +13,8 @@ router = APIRouter(prefix="/api", tags=["score_history_timeline"])
 Base = declarative_base()
 
 
-class MCPServerRegistry(Base):
-    __tablename__ = "mcp_server_registry"
+class McpServerRegistry(Base):
+    __tablename__ = "McpServerRegistry"
 
     id = __tablename__
     server_id = Column(String, primary_key=True)
@@ -22,8 +22,8 @@ class MCPServerRegistry(Base):
     created_at = Column(DateTime)
 
 
-class MCPLLMAxisScore(Base):
-    __tablename__ = "mcp_llm_axis_scores"
+class McpLlmAxisScore(Base):
+    __tablename__ = "McpLlmAxisScore"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     server_id = Column(String, index=True)
@@ -66,15 +66,15 @@ def get_score_history(
 
     result = session.execute(
         select(
-            func.date(MCPLLMAxisScore.scored_at).label("date"),
-            MCPLLMAxisScore.axis_label,
-            MCPLLMAxisScore.p_top,
-            MCPLLMAxisScore.p_critical,
-            MCPLLMAxisScore.p_danger,
+            func.date(McpLlmAxisScore.scored_at).label("date"),
+            McpLlmAxisScore.axis_label,
+            McpLlmAxisScore.p_top,
+            McpLlmAxisScore.p_critical,
+            McpLlmAxisScore.p_danger,
         )
-        .where(MCPLLMAxisScore.server_id == server_id)
-        .where(func.date(MCPLLMAxisScore.scored_at) >= start_date)
-        .order_by(func.date(MCPLLMAxisScore.scored_at), MCPLLMAxisScore.axis_label)
+        .where(McpLlmAxisScore.server_id == server_id)
+        .where(func.date(McpLlmAxisScore.scored_at) >= start_date)
+        .order_by(func.date(McpLlmAxisScore.scored_at), McpLlmAxisScore.axis_label)
     )
 
     rows = result.all()
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
 
-    from app.models import MCPServerRegistry, MCPLLMAxisScore
+    from app.models import McpServerRegistry, McpLlmAxisScore
 
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(bind=engine)
@@ -111,7 +111,7 @@ if __name__ == "__main__":
 
     session.execute(
         text("""
-            CREATE TABLE IF NOT EXISTS mcp_server_registry (
+            CREATE TABLE IF NOT EXISTS McpServerRegistry (
                 id TEXT PRIMARY KEY,
                 server_id TEXT NOT NULL,
                 name TEXT,
@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     session.execute(
         text("""
-            CREATE TABLE IF NOT EXISTS mcp_llm_axis_scores (
+            CREATE TABLE IF NOT EXISTS McpLlmAxisScore (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 server_id TEXT NOT NULL,
                 scored_at TIMESTAMP NOT NULL,
@@ -135,11 +135,11 @@ if __name__ == "__main__":
     )
 
     session.execute(
-        text("INSERT INTO mcp_server_registry (id, server_id, name) VALUES (:id, :server_id, :name)"),
+        text("INSERT INTO McpServerRegistry (id, server_id, name) VALUES (:id, :server_id, :name)"),
         [{"id": "s1", "server_id": "server-1", "name": "Server One"}],
     )
     session.execute(
-        text("INSERT INTO mcp_server_registry (id, server_id, name) VALUES (:id, :server_id, :name)"),
+        text("INSERT INTO McpServerRegistry (id, server_id, name) VALUES (:id, :server_id, :name)"),
         [{"id": "s2", "server_id": "server-2", "name": "Server Two"}],
     )
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     session.execute(
         text("""
-            INSERT INTO mcp_llm_axis_scores 
+            INSERT INTO McpLlmAxisScore 
             (server_id, scored_at, axis_label, p_top, p_critical, p_danger)
             VALUES (:server_id, :scored_at, :axis_label, :p_top, :p_critical, :p_danger)
         """),

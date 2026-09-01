@@ -17,7 +17,7 @@ on:
   # recursion guard) do NOT re-fire the 'labeled' trigger above -- so after each
   # pr-triage run, sweep its fresh solids and enable auto-merge here.
   workflow_run:
-    workflows: ["pr-triage"]
+    workflows: ["pr-triage", "pr-gates", "evaluator", "no-hollow", "schema-prm", "referent-verify"]
     types: [completed]
 
 permissions:
@@ -173,3 +173,72 @@ jobs:
             echo "::notice::#$pr triage:solid -> enabling squash auto-merge"
             gh pr merge "$pr" -R "$REPO" --squash --auto || true
           done
+
+  green-sweep:
+    # LABEL-INDEPENDENT LANDING (added 2026-09-01).
+    #
+    # pr-triage evaluates a PR the moment it is opened/reopened/synchronised --
+    # which is BEFORE its gates finish. A PR refreshed by pr-relander therefore
+    # gets labelled triage:stale against incomplete checks, then goes green, and
+    # nothing ever re-triages it. Observed on #1684: mergeStateStatus=UNSTABLE
+    # (all 8 required contexts passing) but labelled triage:stale, so the
+    # triage:solid sweep skipped it and it sat unmergeable on a stale label.
+    #
+    # The triage label is a cache of a CI outcome. Branch protection is the
+    # actual authority. This job therefore ignores the label entirely and asks
+    # GitHub directly whether the required checks are satisfied.
+    #
+    # NOTE: mergeStateStatus is computed LAZILY -- it returns UNKNOWN for every
+    # row of a list query and only materialises on a single-PR read. It must be
+    # fetched per PR, never filtered in the list.
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Enable auto-merge on any green autonomous-build PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SWEEP_CAP: "60"
+        run: |
+          set -uo pipefail
+          if ! prs=$(gh pr list -R "$REPO" --state open --label autonomous-build \
+                       --limit 500 --json number,isDraft \
+                       -q '.[] | select(.isDraft == false) | .number' 2>qerr.txt); then
+            echo "::error::green-sweep query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
+            exit 1
+          fi
+          examined=0; enabled=0; held=0
+          for pr in $prs; do
+            [ "$examined" -ge "$SWEEP_CAP" ] && break
+            examined=$((examined+1))
+            # CLEAN = all required green. UNSTABLE = all REQUIRED green, some
+            # non-required check red (e.g. CodeQL); branch protection permits
+            # that merge, so we do too.
+            ms=$(gh pr view "$pr" -R "$REPO" --json mergeStateStatus -q .mergeStateStatus) || continue
+            case "$ms" in CLEAN|UNSTABLE) ;; *) continue ;; esac
+
+            files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
+            if echo "$files" | grep -Eq '^\.github/'; then
+              echo "::notice::#$pr green but touches .github/ -> ci-hold"
+              gh pr edit "$pr" -R "$REPO" --add-label ci-hold || true
+              held=$((held+1)); continue
+            fi
+            if echo "$files" | grep -Eiq 'trust_synthesiser|risk_ranker|enrichment|signal_analyser|mcp_llm_'; then
+              echo "::notice::#$pr green but touches frozen scoring paths -> freeze-hold"
+              gh pr edit "$pr" -R "$REPO" --add-label freeze-hold || true
+              held=$((held+1)); continue
+            fi
+            echo "::notice::#$pr $ms with required checks satisfied -> enabling auto-merge (label ignored)"
+            gh pr merge "$pr" -R "$REPO" --squash --auto && enabled=$((enabled+1)) || true
+          done
+          {
+            echo "### auto-merge green-sweep"
+            echo ""
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| examined | $examined |"
+            echo "| auto-merge enabled | $enabled |"
+            echo "| held (ci/freeze) | $held |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::green-sweep: examined $examined, enabled $enabled, held $held"

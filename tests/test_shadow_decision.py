@@ -605,3 +605,267 @@ def test_supersede_of_an_unknown_sha_is_not_success(monkeypatch):
     """rc 2 UNKNOWN, never 0 -- absence of a decision is not a supersede."""
     assert shadow_decision.reconcile(
         _reconcile_args(superseded_sha=SHA_OTHER)) == 2
+
+
+# --------------------------------------------------------------------------
+# FU-184: the decision field is a validated closed enum
+#
+# THE BUG THESE PIN. `record()` read the decision as
+#     (a.would_fire or "").lower() in ("yes", "true", "1")
+# so an ABSENT flag, a typo ("y"), or any unrecognised word became False --
+# indistinguishable from a deliberate HOLD. `reconcile()` grades
+# `would_fire == human_fired`, so that phantom HOLD reconciles as an AGREEMENT
+# the moment the chairman also holds, and `--status` counts it toward the 10/8
+# bar that gates auto-firing prod. A forgotten flag manufactured safety
+# evidence. `--sha` and `--class` were both validated AND tested (see
+# test_bad_sha_and_bad_class_are_refused); the primary datum of the instrument
+# was neither, across all 38 pre-existing tests, because every helper defaulted
+# would_fire="yes" and so no test ever supplied a bad value. An input that is
+# never malformed in the fixtures cannot expose a validator that does not exist
+# -- the same shape as the accept_gate fixture that omitted `mounted` entirely.
+#
+# NEGATIVE CONTROLS (R4). Five surgical mutants, each ast.parse-asserted to
+# COMPILE before running, each run against BOTH this suite and the 38
+# pre-existing tests:
+#
+#   A  `if decision not in DECISIONS and decision != ""`  -- an absent flag
+#      passes validation and lands as a hold. THE real bug.   4 FAIL / 38 base ok
+#   B  `if False and _decision(rec) == DECISION_BLOCKED`    -- blocked becomes
+#      countable in _counted().                              1 FAIL / 38 base ok
+#   C  same, in reconcile() -- a blocked decision gets GRADED as agree/disagree.
+#                                                            3 FAIL / 38 base ok
+#   D  blocked no longer has to name its precondition.       1 FAIL / 38 base ok
+#   E  `_decision()` -> `return DECISION_BLOCKED`, i.e. legacy rows silently
+#      REGRADED.                                3 FAIL / and 1 pre-existing FAIL
+#
+# E is the interesting one and it was nearly misread. It trips exactly one
+# pre-existing test -- test_amend_decounts_the_live_post_hoc_agreement, which
+# writes a legacy raw row and asserts it counted BEFORE the amend. That is not
+# vandalism: it means "history is not regraded" is CO-OWNED, already partly
+# guarded here. The distinction is one targeted base failure (co-ownership)
+# versus many (vandalism), so it has to be identified by NAME, not by count.
+#
+# A hand re-run of E initially reported the base suite fully green, which would
+# have argued E was too blunt to be a control. That reading was false: the
+# PowerShell `.Replace()` used to apply the mutant had matched nothing and
+# returned the original string, with rc 0 and no output. Re-run with the
+# mutant's presence on disk ASSERTED before pytest was invoked, E reproduces
+# 3/3. The step that verifies a control must itself fail loudly, or it will
+# hand back whichever answer you were already leaning toward.
+#
+# THE THIRD STATE. "Safe to fire" and "authorised to fire" are different
+# questions with different answers today: gates 8/8 green while FIRE_ON_GREEN's
+# `rollback staged AND PROVEN` is unmet. Recording that as `no` would bank an
+# agreement every time the chairman also held -- reaching 10/8 without the risky
+# direction ever being exercised, which is the "attended fires measure the wrong
+# artifact" defect one level down. `blocked` is excluded from BOTH counts.
+# --------------------------------------------------------------------------
+
+SHA_THIRD = "1111111111111111111111111111111111111111"
+
+
+def test_absent_would_fire_is_refused_not_read_as_a_hold(monkeypatch):
+    """THE headline. Pre-fix this wrote would_fire=False and returned 0."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(_rec_args_full(would_fire=None)) == 2
+    assert _read_store() == []
+
+
+def test_a_forgotten_flag_cannot_reach_the_c4_counter(monkeypatch, capsys):
+    """End-to-end: the refused record leaves nothing that could be reconciled."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(_rec_args_full(would_fire=None)) == 2
+    # rc 2 = no prior decision existed; a fire with no decision is not an
+    # agreement, so the counter cannot move.
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_CAND)) == 2
+    out = _status_dict(capsys)
+    assert out["reconciled_decisions"] == 0
+    assert out["counted_decisions"] == 0
+    assert out["agreements"] == 0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["", "   ", "y", "n", "Y", "nope", "maybe", "unknown", "true", "1", "0",
+     "false", "hold", "fire", "YES please"],
+)
+def test_unrecognised_decisions_are_refused(monkeypatch, bad):
+    """Includes the former aliases `true`/`1`, deliberately tightened.
+
+    An alias is a second spelling for the most consequential field in the
+    instrument, and a second spelling is a way to record a decision you did not
+    mean to make. `yes|no|blocked` and nothing else.
+    """
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(_rec_args_full(would_fire=bad)) == 2
+    assert _read_store() == []
+
+
+def test_the_refusal_names_the_field_and_the_hazard(monkeypatch, capsys):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(would_fire="y"))
+    err = capsys.readouterr().err
+    assert "--would-fire" in err
+    assert "yes|no|blocked" in err
+    assert "NOT a hold" in err
+
+
+def test_both_real_decisions_still_record(monkeypatch):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(_rec_args_full(would_fire="yes")) == 0
+    assert shadow_decision.record(
+        _rec_args_full(sha=SHA_OTHER, would_fire="no")) == 0
+    recs = _read_store()
+    assert [r["decision"] for r in recs] == ["yes", "no"]
+    assert [r["would_fire"] for r in recs] == [True, False]
+
+
+def test_surrounding_whitespace_and_case_are_tolerated(monkeypatch):
+    """Tightening the enum must not make the tool brittle for real callers."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(_rec_args_full(would_fire="  YES  ")) == 0
+    assert _read_store()[0]["decision"] == "yes"
+
+
+# ---- the `blocked` third state ------------------------------------------
+
+def test_blocked_requires_a_named_precondition(monkeypatch):
+    """The cheapest verb must not be the one that hides its reason (FU-180)."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(_rec_args_full(would_fire="blocked")) == 2
+    assert _read_store() == []
+
+
+def test_blocked_by_without_blocked_is_refused(monkeypatch):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(
+        _rec_args_full(would_fire="yes", blocked_by="rollback_unproven")) == 2
+    assert _read_store() == []
+
+
+def test_blocked_records_the_clause(monkeypatch, capsys):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    assert shadow_decision.record(
+        _rec_args_full(would_fire="blocked",
+                       blocked_by="rollback_staged_and_proven")) == 0
+    rec = _read_store()[0]
+    assert rec["decision"] == "blocked"
+    assert rec["blocked_by"] == "rollback_staged_and_proven"
+    assert rec["would_fire"] is False
+    out = capsys.readouterr().out
+    assert "BLOCKED by rollback_staged_and_proven" in out
+
+
+def test_blocked_is_in_neither_c4_count(monkeypatch, capsys):
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(
+        _rec_args_full(would_fire="blocked", blocked_by="rollback_unproven"))
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_CAND)) == 0
+    out = _status_dict(capsys)
+    assert out["reconciled_decisions"] == 0
+    assert out["counted_decisions"] == 0
+    assert out["agreements"] == 0
+    assert out["excluded_blocked_not_counted"] == 1
+    assert out["disagreements_task_would_fire_human_held"] == 0
+
+
+def test_blocked_does_not_reset_the_consecutive_run(monkeypatch, capsys):
+    """Mirrors the supersede guarantee.
+
+    If `blocked` were graded, a lane standing down on an authority precondition
+    would zero its own run on every pass -- or, worse, bank an agreement each
+    time the chairman also held and reach 10/8 having never said FIRE once.
+    """
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(sha=SHA_CAND, would_fire="yes"))
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_CAND)) == 0
+
+    shadow_decision.record(_rec_args_full(sha=SHA_OTHER, would_fire="blocked",
+                                          blocked_by="rollback_unproven"))
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_OTHER)) == 0
+
+    shadow_decision.record(_rec_args_full(sha=SHA_THIRD, would_fire="yes"))
+    assert shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_THIRD)) == 0
+
+    out = _status_dict(capsys)
+    assert out["counted_decisions"] == 2
+    assert out["agreements"] == 2
+    assert out["consecutive_agreements"] == 2
+    assert out["excluded_blocked_not_counted"] == 1
+
+
+def test_blocked_pending_is_reported_separately(monkeypatch, capsys):
+    """A lane standing down for an authority reason must be VISIBLE, not merely
+    absent -- otherwise it is indistinguishable from one that judged and held."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(
+        _rec_args_full(would_fire="blocked", blocked_by="rollback_unproven"))
+    out = _status_dict(capsys)
+    assert out["pending_blocked_not_counted"] == 1
+    assert out["pending_not_counted"] == 1
+    assert out["counted_decisions"] == 0
+
+
+def test_blocked_reconcile_prints_blocked_not_hold(monkeypatch, capsys):
+    """`_decision_label` exists so a blocked record is never narrated as a
+    judgement the task did not make."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(
+        _rec_args_full(would_fire="blocked", blocked_by="rollback_unproven"))
+    capsys.readouterr()
+    shadow_decision.reconcile(_reconcile_args(fired_sha=SHA_CAND))
+    out = capsys.readouterr().out
+    assert "BLOCKED by rollback_unproven" in out
+    assert "EXCLUDED" in out
+
+
+def test_a_restage_may_correct_the_decision_to_blocked(monkeypatch, capsys):
+    """A pending record counts for nothing, so making it more honest can only
+    REDUCE potential credit -- never create it. That is why this is allowed and
+    an `--amend` of a reconciled record still is not."""
+    _prod_serving(monkeypatch, SHA_LIVE)
+    shadow_decision.record(_rec_args_full(would_fire="yes"))
+    assert _read_store()[0]["decision"] == "yes"
+    shadow_decision.record(
+        _rec_args_full(would_fire="blocked", blocked_by="rollback_unproven"))
+    recs = _read_store()
+    assert len(recs) == 1                      # FU-168: still one decision
+    assert recs[0]["decision"] == "blocked"
+    assert recs[0]["blocked_by"] == "rollback_unproven"
+    assert recs[0]["restages"] == 2
+    out = _status_dict(capsys)
+    assert out["counted_decisions"] == 0
+    assert out["pending_blocked_not_counted"] == 1
+
+
+# ---- history is derived, never regraded ---------------------------------
+
+def test_legacy_record_without_a_decision_key_is_derived_not_regraded():
+    """Pre-FU-184 rows carry only the bool. They must keep meaning exactly what
+    they meant -- the fix must not quietly restate history in its own favour."""
+    _write_raw({"sha": SHA_LIVE, "outcome": "agreed", "would_fire": True,
+                "human_fired": True, "post_hoc": False, "restages": 1})
+    _write_raw({"sha": SHA_OTHER, "outcome": "agreed", "would_fire": False,
+                "human_fired": False, "post_hoc": False, "restages": 1})
+    recs = _read_store()
+    assert shadow_decision._decision(recs[0]) == "yes"
+    assert shadow_decision._decision(recs[1]) == "no"
+    assert shadow_decision._counted(recs[0]) is True
+    assert shadow_decision._counted(recs[1]) is True
+
+
+def test_legacy_counted_totals_are_unchanged_by_the_new_enum(capsys):
+    _write_raw({"sha": SHA_LIVE, "outcome": "agreed", "would_fire": True,
+                "human_fired": True, "post_hoc": False, "restages": 1})
+    out = _status_dict(capsys)
+    assert out["counted_decisions"] == 1
+    assert out["agreements"] == 1
+    assert out["excluded_blocked_not_counted"] == 0
+
+
+def test_an_explicit_blocked_row_is_excluded_even_when_marked_a_prediction():
+    """post_hoc False alone must not be enough to count a blocked row."""
+    _write_raw({"sha": SHA_LIVE, "outcome": "agreed", "decision": "blocked",
+                "blocked_by": "x", "would_fire": False, "human_fired": False,
+                "post_hoc": False, "restages": 1})
+    assert shadow_decision._counted(_read_store()[0]) is False

@@ -1,0 +1,8 @@
+[service]
+name = "scoring_drift_report"
+import_path = "services.active.scoring_drift_report.router"
+prefix = "/api"
+tag = "scoring_drift_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

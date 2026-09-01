@@ -1,0 +1,61 @@
+[service]
+name = "scoring_wave_progress"
+import_path = "services.active.scoring_wave_progress.router"
+prefix = "/api"
+tag = "scoring_wave_progress"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true
+
+[server]
+host = "0.0.0.0"
+port = 8000
+
+[[router_imports]]
+from = "app.db"
+import = ["get_session"]
+
+[[router_imports]]
+from = "app.models"
+import = ["McpLlmAxisScore"]
+
+[[router_imports]]
+from = "app.models"
+import = ["McpScoreDispute"]
+
+[[router_imports]]
+from = "app.models"
+import = ["McpServerRegistry"]
+
+[[router_imports]]
+from = "app.models"
+import = ["Org"]
+
+[[router_imports]]
+from = "app.models"
+import = ["User"]
+
+[[router_imports]]
+from = "fastapi"
+import = ["APIRouter", "Depends", "HTTPException"]
+
+[[router_imports]]
+from = "sqlalchemy.ext.asyncio"
+import = ["AsyncSession"]
+
+[[router_imports]]
+from = "typing"
+import = ["List", "Optional", "Dict", "Any"]
+
+[[router_imports]]
+from = "pydantic"
+import = ["BaseModel"]
+
+[[self_test]]
+module = "services.active.scoring_wave_progress"
+test_function = "run_self_test"
+expected_output = "PASS"

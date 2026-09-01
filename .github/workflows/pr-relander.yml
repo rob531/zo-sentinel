@@ -212,7 +212,18 @@ jobs:
           # permissions problem. Strip all whitespace, then PROVE the token
           # works before relying on it -- an unusable PAT must degrade to
           # fallback mode, not fail 183 mutations one at a time.
-          PAT=$(printf '%s' "${PAT:-}" | tr -d '[:space:]')
+          # Strip to the GitHub token charset, not merely to non-whitespace.
+          # Run 33556825906 still failed with "invalid header field value"
+          # AFTER whitespace stripping, so the offending byte was not space/CR/
+          # LF -- almost certainly a UTF-8 BOM (U+FEFF), which Windows shells
+          # prepend freely and which no [:space:] class matches. Go rejects any
+          # header byte outside 0x20-0x7E. GitHub tokens are [A-Za-z0-9_] only,
+          # so whitelisting that charset is both safe and total.
+          PAT_RAW_LEN=${#PAT}
+          PAT=$(printf '%s' "${PAT:-}" | tr -cd 'A-Za-z0-9_')
+          if [ -n "${PAT_RAW_LEN:-}" ] && [ "$PAT_RAW_LEN" -ne "${#PAT}" ]; then
+            echo "::warning::RELANDER_TOKEN contained $((PAT_RAW_LEN - ${#PAT})) character(s) outside [A-Za-z0-9_]; stripped. Re-set the secret via the web UI to remove them at source."
+          fi
           if [ -n "$PAT" ]; then
             if pat_login=$(GH_TOKEN="$PAT" gh api user --jq '.login' 2>pat_err.txt); then
               echo "::notice::RELANDER_TOKEN validated (authenticates as $pat_login)"

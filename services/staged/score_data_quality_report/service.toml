@@ -1,0 +1,8 @@
+[service]
+name = "score_data_quality_report"
+import_path = "services.active.score_data_quality_report.router"
+prefix = "/api"
+tag = "score_data_quality_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

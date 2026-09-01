@@ -1,117 +1,174 @@
-# services/staged/server_cve_search_api/router.py
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from typing import List
 
 from app.db import get_session
-from .logic import get_server_cves
-from .contract import ServerCveResponse
+from app.models import VulnAdvisory, VulnLink, Base
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
-router = APIRouter(prefix="/api")
-
-
-@router.get(
-    "/servers/{server_id}/cves",
-    response_model=ServerCveResponse,
-    summary="Get CVEs for a given server",
-)
-def read_server_cves(
-    server_id: str,
-    db: Session = Depends(get_session),
-) -> ServerCveResponse:
-    """
-    Retrieve CVE information for the specified server.
-    """
-    try:
-        return get_server_cves(db, server_id)
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=str(exc))
+router = APIRouter(prefix="/api", tags=["servers"])
 
 
-# --------------------------------------------------------------------------- #
-# Self‑test (executed when running this module directly)
-# --------------------------------------------------------------------------- #
+class CVESummary(BaseModel):
+    advisory_id: int
+    severity: str
+    summary: str
+    published_at: str
+    source_url: str
+
+    class Config:
+        from_attributes = True
+
+
+class ServerCVEsResponse(BaseModel):
+    server_id: str
+    cves: List[CVESummary]
+
+
+@router.get("/servers/{server_id}/cves", response_model=ServerCVEsResponse)
+def get_server_cves(server_id: str, session: Session = Depends(get_session)):
+    results = (
+        session.query(VulnAdvisory, VulnLink)
+        .join(VulnLink, VulnLink.advisory_id == VulnAdvisory.id)
+        .filter(VulnLink.server_id == server_id)
+        .order_by(desc(VulnAdvisory.severity), desc(VulnAdvisory.published_at))
+        .all()
+    )
+    cves = [
+        CVESummary(
+            advisory_id=advisory.id,
+            severity=advisory.severity,
+            summary=advisory.summary,
+            published_at=str(advisory.published_at),
+            source_url=advisory.source_url,
+        )
+        for advisory, _ in results
+    ]
+    return ServerCVEsResponse(server_id=server_id, cves=cves)
+
+
 if __name__ == "__main__":
-    import sys
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
-    # Import the declarative base and the concrete models used by the logic.
-    from app.db import Base, get_session as original_get_session
-    from app.models import VulnerabilityAdvisory, VulnerabilityLink
-
-    # --------------------------------------------------------------------- #
-    # Create an in‑memory SQLite database and bind a session factory to it.
-    # --------------------------------------------------------------------- #
-    engine = create_engine("sqlite:///:memory:", echo=False)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    # --------------------------------------------------------------------- #
-    # Dependency override that yields a SQLite session instead of the real DB.
-    # --------------------------------------------------------------------- #
     def override_get_session():
-        db = SessionLocal()
+        db = TestingSessionLocal()
         try:
             yield db
         finally:
             db.close()
 
-    # --------------------------------------------------------------------- #
-    # Build a minimal FastAPI app, inject the router, and run the test client.
-    # --------------------------------------------------------------------- #
+    from datetime import datetime
+
+    db = TestingSessionLocal()
+    db.query(VulnAdvisory).delete()
+    db.query(VulnLink).delete()
+    db.commit()
+
+    adv1 = VulnAdvisory(
+        id=1,
+        severity="CRITICAL",
+        summary="Remote code execution via buffer overflow",
+        published_at=datetime(2024, 1, 15),
+        source_url="https://example.com/cve-2024-0001",
+        affected_ranges="*",
+        aliases="CVE-2024-0001",
+        content_hash="abc",
+        ecosystem="pypi",
+        feed="nvd",
+        fetched_at=datetime.now(),
+        identities="[]",
+        package="libexample",
+    )
+    adv2 = VulnAdvisory(
+        id=2,
+        severity="HIGH",
+        summary="SQL injection in query handler",
+        published_at=datetime(2024, 2, 10),
+        source_url="https://example.com/cve-2024-0002",
+        affected_ranges="*",
+        aliases="CVE-2024-0002",
+        content_hash="def",
+        ecosystem="pypi",
+        feed="nvd",
+        fetched_at=datetime.now(),
+        identities="[]",
+        package="libexample",
+    )
+    adv3 = VulnAdvisory(
+        id=3,
+        severity="MEDIUM",
+        summary="Information disclosure via misconfigured ACL",
+        published_at=datetime(2024, 3, 5),
+        source_url="https://example.com/cve-2024-0003",
+        affected_ranges="*",
+        aliases="CVE-2024-0003",
+        content_hash="ghi",
+        ecosystem="pypi",
+        feed="nvd",
+        fetched_at=datetime.now(),
+        identities="[]",
+        package="libexample",
+    )
+    adv4 = VulnAdvisory(
+        id=4,
+        severity="CRITICAL",
+        summary="Privilege escalation via insecure default",
+        published_at=datetime(2024, 1, 20),
+        source_url="https://example.com/cve-2024-0004",
+        affected_ranges="*",
+        aliases="CVE-2024-0004",
+        content_hash="jkl",
+        ecosystem="pypi",
+        feed="nvd",
+        fetched_at=datetime.now(),
+        identities="[]",
+        package="libexample",
+    )
+    db.add_all([adv1, adv2, adv3, adv4])
+    db.commit()
+
+    link1 = VulnLink(
+        advisory_id=1, server_id="Y", linked_at=datetime.now(),
+        match_basis="package", match_confidence=0.95, match_value="libexample"
+    )
+    link2 = VulnLink(
+        advisory_id=2, server_id="Y", linked_at=datetime.now(),
+        match_basis="package", match_confidence=0.90, match_value="libexample"
+    )
+    link3 = VulnLink(
+        advisory_id=3, server_id="Y", linked_at=datetime.now(),
+        match_basis="package", match_confidence=0.85, match_value="libexample"
+    )
+    link4 = VulnLink(
+        advisory_id=4, server_id="Y", linked_at=datetime.now(),
+        match_basis="package", match_confidence=0.92, match_value="libexample"
+    )
+    db.add_all([link1, link2, link3, link4])
+    db.commit()
+    db.close()
+
     app = FastAPI()
-    app.dependency_overrides[original_get_session] = override_get_session
     app.include_router(router)
+    app.dependency_overrides[get_session] = override_get_session
 
-    client = TestClient(app)
+    client = app.test_client()
+    response = client.get("/api/servers/Y/cves")
 
-    # --------------------------------------------------------------------- #
-    # Seed the in‑memory database with two advisories and two links for
-    # server 'srv-001'.
-    # --------------------------------------------------------------------- #
-    with SessionLocal() as db:
-        adv1 = VulnerabilityAdvisory(
-            id="CVE-1234-5678",
-            feed="NVD",
-            summary="Test CVE 1",
-            severity="HIGH",
-            ecosystem="python",
-            package="pkg1",
-            source_url="http://example.com/1",
-            published_at="2023-01-01T00:00:00Z",
-        )
-        adv2 = VulnerabilityAdvisory(
-            id="CVE-8765-4321",
-            feed="NVD",
-            summary="Test CVE 2",
-            severity="MEDIUM",
-            ecosystem="go",
-            package="pkg2",
-            source_url="http://example.com/2",
-            published_at="2023-02-01T00:00:00Z",
-        )
-        db.add_all([adv1, adv2])
-        db.flush()  # ensure IDs are persisted before linking
-
-        link1 = VulnerabilityLink(server_id="srv-001", advisory_id=adv1.id)
-        link2 = VulnerabilityLink(server_id="srv-001", advisory_id=adv2.id)
-        db.add_all([link1, link2])
-        db.commit()
-
-    # --------------------------------------------------------------------- #
-    # Perform the request and validate the response.
-    # --------------------------------------------------------------------- #
-    response = client.get("/api/servers/srv-001/cves")
-    if response.status_code != 200:
-        sys.exit(f"Unexpected status code: {response.status_code}")
-
-    payload = response.json()
-    assert payload.get("server_id") == "srv-001"
-    cves = payload.get("cves", [])
-    assert isinstance(cves, list) and len(cves) >= 1
-    ids = {c.get("id") for c in cves}
-    assert "CVE-1234-5678" in ids
-
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+    data = response.json()
+    assert len(data["cves"]) == 4, f"Expected 4 cves, got {len(data['cves'])}"
+    assert data["cves"][0]["severity"] == "CRITICAL", \
+        f"Expected first CVE severity CRITICAL, got {data['cves'][0]['severity']}"
     print("PASS")

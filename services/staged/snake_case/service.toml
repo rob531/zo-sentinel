@@ -1,0 +1,8 @@
+[service]
+name = "snake_case"
+import_path = "services.active.snake_case.router"
+prefix = "/api"
+tag = "snake_case"
+origin = "service"
+auth = "public"
+needs_data_layer = true

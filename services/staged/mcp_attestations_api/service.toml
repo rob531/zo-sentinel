@@ -1,0 +1,12 @@
+[service]
+name = "mcp_attestations_api"
+import_path = "services.active.mcp_attestations_api.router"
+prefix = "/api"
+tag = "mcp_attestations_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

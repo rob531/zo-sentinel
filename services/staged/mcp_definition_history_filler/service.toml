@@ -1,0 +1,8 @@
+[service]
+name = "mcp_definition_history_filler"
+import_path = "services.active.mcp_definition_history_filler.router"
+prefix = "/api"
+tag = "mcp_definition_history_filler"
+origin = "service"
+auth = "public"
+needs_data_layer = true

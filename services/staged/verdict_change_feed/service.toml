@@ -1,0 +1,8 @@
+[service]
+name = "verdict_change_feed"
+import_path = "services.active.verdict_change_feed.router"
+prefix = "/api"
+tag = "verdict_change_feed"
+origin = "service"
+auth = "public"
+needs_data_layer = true

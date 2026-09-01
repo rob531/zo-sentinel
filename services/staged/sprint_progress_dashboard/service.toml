@@ -1,0 +1,8 @@
+[service]
+name = "sprint_progress_dashboard"
+import_path = "services.active.sprint_progress_dashboard.router"
+prefix = "/api"
+tag = "sprint_progress_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

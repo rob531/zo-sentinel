@@ -1,0 +1,18 @@
+[service]
+name = "app_router_integration"
+import_path = "services.active.app_router_integration.router"
+prefix = "/api"
+tag = "app_router_integration"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+services = []
+packages = ["fastapi", "sqlalchemy", "httpx"]
+
+[python]
+version = "3.11"
+
+[test]
+framework = "pytest"

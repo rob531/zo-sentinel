@@ -1,0 +1,11 @@
+[service]
+name = "deferred_router_triage_report"
+import_path = "services.active.deferred_router_triage_report.router"
+prefix = "/api"
+tag = "deferred_router_triage_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

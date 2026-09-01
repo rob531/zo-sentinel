@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth
+from . import auth, clerk_webhook
 from .db import init_db
 from .rbac import require_role
 from .security import Principal, get_principal
@@ -57,6 +57,7 @@ def admin_ping(principal: Principal = Depends(require_role("admin"))):
 
 
 app.include_router(auth.router)
+app.include_router(clerk_webhook.router)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
@@ -151,6 +152,12 @@ def roadmap_page():
     return _render_root("roadmap_announcement.html")
 
 
+@app.get("/dashboard/exemptions", response_class=HTMLResponse)
+def exemptions_dashboard_page():
+    """Exemptions dashboard: manage and view MCP server risk-score exemptions."""
+    return _render_root("mcp_exemptions_dashboard_view.html")
+
+
 @app.get("/explore")
 def explore_redirect():
     """Deep-link fix (treewalk 2026-07-03 gap #7): /explore as a raw URL 404'd;
@@ -216,3 +223,25 @@ async def _vanity_redirect(request, call_next):
             target += "?" + request.url.query
         return RedirectResponse(target, status_code=301)
     return await call_next(request)
+
+
+# --- Self-test ---------------------------------------------------------------
+if __name__ == "__main__":
+    from fastapi.testclient import TestClient
+    from unittest.mock import patch
+
+    # Mock auth so the dashboard route is accessible without a real session
+    with patch("app.security.get_principal") as mock_principal:
+        mock_principal.return_value = Principal(
+            user_id="test-user",
+            org_id="test-org",
+            role="admin",
+            email="test@example.com",
+        )
+        client = TestClient(app)
+        resp = client.get("/dashboard/exemptions")
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        assert "MCP Exemptions Dashboard" in resp.text, (
+            "Expected dashboard title not found in response"
+        )
+        print("PASS")

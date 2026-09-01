@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 def get_server_export_api_quarantine_status(server_id: int, session: Session = Depends(get_session)) -> bool:
     """Check if a server is in export API quarantine."""
@@ -39,7 +39,7 @@ def setup_database(session: Session = Depends(get_session)) -> None:
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -52,8 +52,8 @@ if __name__ == "__main__":
     McpServerRegistry.__table__.create(engine)
     McpLlmAxisScore.__table__.create(engine)
     McpScoreDispute.__table__.create(engine)
-    Orgs.__table__.create(engine)
-    Users.__table__.create(engine)
+    Org.__table__.create(engine)
+    User.__table__.create(engine)
 
     # Test the functions
     session = SessionLocal()

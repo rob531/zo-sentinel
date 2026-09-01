@@ -793,6 +793,49 @@ def _emit_nonconvergence(secs, delta, rc, kind: str) -> None:
         pass
 
 
+def _salvage_transcript(stdout_text) -> int:
+    """Recover directives the harness discarded, on BOTH total-loss paths.
+
+    Called from the delta<=0 branch (fenced blocks the model emitted without
+    reaching the tool call) AND from the TimeoutExpired branch (goose's own
+    rendered propose_directive calls, killed by the wall clock mid-flight).
+    Both are transcripts that were already going to be thrown away, so salvage
+    can never displace or race a converged tool call.
+
+    Returns the number of directives written into PROPOSED_DIR. Never raises:
+    a salvage failure must not take down the generator loop.
+    """
+    if not stdout_text:
+        return 0
+    try:
+        from zo_sentinel.arch_salvage import salvage
+    except Exception:
+        try:
+            from arch_salvage import salvage
+        except Exception as e:
+            log.error("SALVAGE UNAVAILABLE: cannot import arch_salvage (%s)", e)
+            return 0
+    try:
+        PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+        def _writer(fname, payload):
+            (PROPOSED_DIR / fname).write_text(
+                json.dumps(payload, indent=1), encoding="utf-8")
+
+        return salvage(
+            stdout_text,
+            queued_stems=_queued_stems(),
+            existing_files=_existing_anywhere(),
+            stamp=stamp,
+            writer=_writer,
+            log=lambda m: log.warning("%s", m),
+        )
+    except Exception as e:
+        log.error("SALVAGE FAILED: %s", e)
+        return 0
+
+
 def run_goose_cycle() -> dict:
     """Invoke goose with the directive_architect recipe. Return summary dict."""
     if not RECIPE_PATH.exists():
@@ -885,7 +928,22 @@ def run_goose_cycle() -> dict:
             if proc.stdout:
                 log.warning("goose stdout[-2200:] (non-converge transcript tail): %s",
                             proc.stdout[-2200:].replace("\n", " | "))
-            _emit_nonconvergence(_elapsed, delta, rc, "zero_proposed")
+            # The transcript is not noise: the architect routinely emits
+            # well-formed directive objects in fenced blocks and simply never
+            # reaches propose_directive. Discarding it starves the builder and
+            # makes the starvation floor report an EXHAUSTED gaps map that is
+            # not actually exhausted. Recover before declaring non-convergence.
+            _recovered = _salvage_transcript(proc.stdout)
+            if _recovered:
+                new_depth = _count_proposed()
+                delta = new_depth - depth
+                log.warning(
+                    "ARCHITECT SALVAGE: recovered %d directive(s) the harness "
+                    "would have discarded; proposed_depth now %d. The model "
+                    "CONVERGED on content and failed only the tool call.",
+                    _recovered, new_depth)
+            _emit_nonconvergence(_elapsed, delta, rc, "zero_proposed"
+                                 if not _recovered else "zero_proposed_salvaged")
         return {
             "status": "ok" if rc == 0 else "goose_nonzero",
             "rc": rc,
@@ -897,8 +955,23 @@ def run_goose_cycle() -> dict:
         if getattr(_te, "stdout", None):
             _so = _te.stdout if isinstance(_te.stdout, str) else _te.stdout.decode("utf-8","replace")
             log.warning("goose stdout[-2200:] (timeout transcript tail): %s", _so[-2200:].replace("\n"," | "))
-        _emit_nonconvergence(GOOSE_TIMEOUT, 0, None, "timeout")
-        return {"status": "timeout"}
+        # A timeout transcript is STRONGER evidence than a fenced one: goose
+        # had REACHED propose_directive and the wall clock beat it. Discarding
+        # it wholesale threw away completed tool calls (observed 12:20:53Z
+        # 2026-07-29, two of them). Salvage before declaring non-convergence.
+        _to_out = getattr(_te, "stdout", None)
+        if _to_out is not None and not isinstance(_to_out, str):
+            _to_out = _to_out.decode("utf-8", "replace")
+        _recovered = _salvage_transcript(_to_out)
+        if _recovered:
+            log.warning(
+                "ARCHITECT SALVAGE (timeout): recovered %d directive(s) from a "
+                "transcript that reached propose_directive before the %ds wall "
+                "clock. The builder is not starved by an exhausted anchor.",
+                _recovered, GOOSE_TIMEOUT)
+        _emit_nonconvergence(GOOSE_TIMEOUT, 0, None,
+                             "timeout_salvaged" if _recovered else "timeout")
+        return {"status": "timeout", "salvaged_timeout": _recovered}
     except FileNotFoundError:
         log.error("goose CLI not on PATH; daemon cannot continue")
         return {"status": "no_goose"}

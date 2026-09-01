@@ -1,0 +1,11 @@
+[service]
+name = "verdict_from_axis_scores"
+import_path = "services.active.verdict_from_axis_scores.router"
+prefix = "/api"
+tag = "verdict_from_axis_scores"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

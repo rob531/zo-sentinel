@@ -1,0 +1,8 @@
+[service]
+name = "definition_history_pipeline_status_dashboard_view"
+import_path = "services.active.definition_history_pipeline_status_dashboard_view.router"
+prefix = "/api"
+tag = "definition_history_pipeline_status_dashboard_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true

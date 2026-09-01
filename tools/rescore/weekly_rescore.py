@@ -15,9 +15,13 @@ PHASES (state.json in the run dir; every phase idempotent, rerun resumes):
 
 MODES:
   --delta (default): score (a) never-scored distinct-URL servers (the 20k-goal
-      lane) + (b) a refresh cohort of the OLDEST-scored servers, capped by
-      --refresh-cap (default 20000). Weekly delta => every server refreshed
-      <= ~4 weeks, newest_scored_at advances weekly, cost ~$0.3-0.6/run.
+      lane) + (b) a refresh cohort ordered DISTRUSTED-FIRST, then oldest-scored
+      first, capped by --refresh-cap (default 20000). Weekly delta => every
+      server refreshed <= ~4 weeks, newest_scored_at advances weekly, cost
+      ~$0.3-0.6/run. "Distrusted" is derived every run from the moat's own
+      label histogram via score_validity (see cohort_trust): known-garbage
+      cohorts are the NEWEST timestamps, so pure age-ordering would sort them
+      LAST and the cadence would never reach them.
   --full: every distinct-URL server (the 7/3 shape, ~66k, ~$1.2).
 
 NO-LOSS INVARIANTS (enforced, run aborts loudly on breach):
@@ -44,6 +48,10 @@ from __future__ import annotations
 import os as _sg_os, sys as _sg_sys
 _sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.abspath(__file__)))
 from spend_guard import scaled_budget, scaled_deadline_min  # FU-090 #1784
+
+# FU-151: one shared credential path for every flyctl caller in this repo.
+_sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.dirname(_sg_os.path.abspath(__file__))))
+from fly_token import hydrate_fly_token  # noqa: E402
 
 import argparse
 import gzip
@@ -143,6 +151,52 @@ class Run:
         ledger(f"phase_{phase}_{status}", self.state["run_id"])
 
 
+def _terminally_finished(state: dict) -> bool:
+    """Can this run EVER produce data again, however many times it is resumed?
+
+    FU-321 (2026-08-11). `open_run` asked only "is postcheck done?", which has no
+    answer for a run that FAILED. On 2026-08-11 run 20260811-061104 fired, the pod
+    FATALed fetching the transfer bundle, the instance was destroyed and import was
+    correctly skipped -- and the run then stayed, forever, "the newest unfinished
+    run". Every subsequent `--run` resumed it, aborted at import with
+    `preds.jsonl.gz missing`, and exited 1. Reproduced twice before it was found.
+
+    That is a DAM, not a stall: the next scheduled Tuesday run would have done the
+    same, spent $0, reported failure, and left the moat to go stale indefinitely --
+    the exact silent-staleness failure this lane exists to catch, committed by the
+    lane's own harness.
+
+    The deeper defect was TWO INSTRUMENTS DISAGREEING ABOUT ONE WORD. `--check-open
+    -runs` reads the LEDGER and honours an abort vocabulary (19 runs already sit in
+    that bucket); `open_run` read only the FILESYSTEM phase map and never consulted
+    it. A run could be simultaneously "deliberately closed, not stranded" and "the
+    newest unfinished run". Both readings were defensible; nothing reconciled them.
+
+    Terminal means the GPU is gone AND no predictions exist, so there is no path
+    back. `result: "ok"` is deliberately absent: a successful run closes via the
+    `run_closed` ledger event, and one that did not IS the stranded shape.
+    """
+    result = str((state or {}).get("result") or "").lower()
+    if not result:
+        return False                      # no verdict recorded = still resumable
+    if result.startswith(_ABANDON_RESULT_PREFIXES):
+        return True                       # killed_/abort_/abandon_/cancel_, spend released
+    if result.startswith("ok"):
+        return False                      # success closes via run_closed; if it did not,
+                                          # that IS the stranded shape and must keep alarming
+    # ANY other recorded verdict, once the instance is gone, is terminal. Deliberately NOT
+    # an enumeration of the failures seen so far. The first version of this function listed
+    # `fail`, and hours after it merged, wave 20260811-063956 returned `cost_breach` -- a
+    # verdict this file already knows about three lines away, which matched nothing here,
+    # dammed the pipeline identically, and proved that enumerating known failure names is
+    # the same defect in a new costume. `deadline` would have been the third.
+    # Every phase after `fire` needs an instance; without one the run cannot advance however
+    # often it is resumed. `destroyed` is the load-bearing half: a run still HOLDING an
+    # instance stays resumable whatever its state.json claims, because unreleased spend is
+    # exactly what `--check-open-runs` exists to catch.
+    return bool(state.get("destroyed"))
+
+
 def open_run(new_mode: str | None) -> Run:
     """Resume the newest unfinished run, else create one (fire phases only)."""
     RUNS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -150,6 +204,16 @@ def open_run(new_mode: str | None) -> Run:
     for d in candidates:
         r = Run(d)
         if r.state and not r.done("postcheck"):
+            if _terminally_finished(r.state):
+                # Skipped LOUDLY and counted: a run silently stepped over is how a
+                # dam becomes invisible a second time.
+                log(f"skipping terminally-finished run {r.state['run_id']} "
+                    f"(result={r.state.get('result')!r}, destroyed="
+                    f"{bool(r.state.get('destroyed'))}) -- not resumable; its "
+                    f"forensics and ledger history are untouched")
+                ledger("run_skipped_terminal", r.state["run_id"],
+                       result=r.state.get("result"))
+                continue
             log(f"resuming run {r.state['run_id']} (phases={r.state.get('phases')})")
             return r
     if new_mode is None:
@@ -194,6 +258,68 @@ def _is_abort_event(event: str) -> bool:
             and ("destroy" in event or "closed" in event))
 
 
+_ABANDON_RESULT_PREFIXES = ("killed", "abort", "abandon", "cancel")
+
+
+def _state_abandoned(rid: str, runs_root: Path) -> bool:
+    """Did the run record its OWN deliberate abandonment, and release its spend?
+
+    FU-132. A run killed BEFORE `fire` never reaches the ledger's abort vocabulary
+    (`wedge_*` / `manual_*`) -- the operator's last word lands in the run's own
+    state.json as `result: killed_*`. Runs 20260725-170556 and 20260725-181359 were
+    both killed at preflight (read-only: no export, no instance, $0) and the detector
+    called them STRANDED for 60h, so `--check-open-runs` exited 1 on every invocation
+    and would have forever. A gate that is permanently red is a gate nobody reads --
+    the decorative-gate failure the header of this section warns about, walked into
+    by the very check that warns about it.
+
+    The bar is NOT lowered. The danger `check_open_runs` exists for is a run that
+    "opened, SPENT, and never closed", so a state-recorded abandonment only counts
+    when the run carries no unreleased spend: it never got an instance, or the
+    instance is already destroyed. A fired run still holding an instance stays
+    STRANDED no matter what its state.json claims -- and the live-instance API, not
+    this function, remains the authoritative guard on that (vast ledger split-brain).
+
+    `result: "ok"` is deliberately NOT an abandonment: a successful run closes via
+    the `run_closed` ledger event, and if it did not, that IS the 7/19 shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    result = str(st.get("result") or "").lower()
+    if not result.startswith(_ABANDON_RESULT_PREFIXES):
+        return False
+    return not st.get("instance_id") or bool(st.get("destroyed"))
+
+
+def _state_terminal(rid: str, runs_root: Path) -> bool:
+    """Terminal by the SAME word `open_run` uses -- FU-321, mirrored (2026-08-31).
+
+    Run 20260822-220319 died at its deadline, was destroyed, and was later
+    refused by `open_run` as terminally finished (`run_skipped_terminal`) --
+    yet this detector kept calling it STRANDED forever: "deadline" is not an
+    abandonment prefix and `run_skipped_terminal` is not an abort event. Two
+    instruments disagreeing about one word, again -- this time between
+    open_run() and the very check whose header warns about that defect.
+
+    The bar is NOT lowered: _terminally_finished supplies the verdict word,
+    and the same spend clause `_state_abandoned` uses is applied on top -- a
+    run still holding an instance stays STRANDED whatever its state.json
+    claims, and `ok` without `run_closed` remains the stranded shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    return (_terminally_finished(st)
+            and (not st.get("instance_id") or bool(st.get("destroyed"))))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -202,7 +328,8 @@ def _parse_ts(ts: str) -> datetime | None:
 
 
 def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
-              include_aborted: bool = False) -> list[dict]:
+              include_aborted: bool = False,
+              runs_root: Path | None = None) -> list[dict]:
     """Return runs that opened and never reached `run_closed`, newest first.
 
     Reads the ledger as an event log rather than a success log. Each record carries
@@ -211,6 +338,10 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     because they were abandoned deliberately and alarming on them is noise.
     """
     path = LEDGER if ledger_path is None else ledger_path
+    # The ledger lives at <runs_root>/ledger.jsonl, so the run dirs sit beside it.
+    # Deriving the root from the ledger keeps the state.json reconciliation pointed
+    # at the SAME tree the caller is auditing (and keeps tests off the live tree).
+    root = path.parent if runs_root is None else runs_root
     now = datetime.now(timezone.utc) if now is None else now
     if not path.exists():
         return []
@@ -237,7 +368,9 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
                 opened[rid]["last_ts"] = ev.get("ts")
     out = []
     for rec in opened.values():
-        aborted = _is_abort_event(rec["last_event"])
+        aborted = (_is_abort_event(rec["last_event"])
+                   or _state_abandoned(rec["run_id"], root)
+                   or _state_terminal(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
@@ -250,10 +383,12 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     return sorted(out, key=lambda r: r.get("opened_at") or "", reverse=True)
 
 
-def check_open_runs(ledger_path: Path | None = None) -> int:
+def check_open_runs(ledger_path: Path | None = None,
+                    runs_root: Path | None = None) -> int:
     """CLI check. Exit 1 if any run has been open longer than the stale threshold."""
-    runs = open_runs(ledger_path)
-    aborted = [r for r in open_runs(ledger_path, include_aborted=True)
+    runs = open_runs(ledger_path, runs_root=runs_root)
+    aborted = [r for r in open_runs(ledger_path, include_aborted=True,
+                                    runs_root=runs_root)
                if r["outcome"] == "aborted"]
     stale = [r for r in runs if r["stale"]]
     if aborted:
@@ -292,8 +427,30 @@ def ensure_proxy() -> None:
     except OSError:
         pass
     log(f"starting fly proxy {PROXY_PORT}:5432 -a {FLY_PG_APP}")
+    # FU-151: hand flyctl the credential this project already mandates BEFORE
+    # spawning it. Measured 2026-07-28: this shell's FIRST attempt died on
+    # "fly proxy did not come up in 60s"; hydrating FLY_API_TOKEN from AgentVault
+    # made the same binary bind on the next run, same minute, same config.yml.
+    # FU-137 shipped this remedy into ONE caller and every other flyctl caller
+    # kept reading the ambient credential -- so the outage recurred the next day
+    # in a different lane. Never raises; a dead vault falls through to ambient.
+    _hydrated, _hydrate_note = hydrate_fly_token()
+    log("fly token: " + _hydrate_note)
+    # FU-133: flyctl's stderr used to go to DEVNULL and the failure surfaced as a
+    # bare "did not come up in 60s" -- which names the symptom and hides the cause.
+    # On 2026-07-28 the cause was `Error: no access token available`, from flyctl's
+    # OWN client-side 720h login timer ageing out at 730h29m; the token itself still
+    # authenticated against api.fly.io perfectly well. Recovering that one line cost
+    # a manual re-run of the exact command the harness had already run and discarded.
+    #
+    # stderr goes to a FILE, not a PIPE: on the success path the proxy lives for the
+    # whole run (hours) and nobody drains it, so a pipe would eventually fill its
+    # buffer and wedge flyctl itself -- trading a silent failure for a worse one.
+    RUNS_ROOT.mkdir(parents=True, exist_ok=True)
+    err_path = RUNS_ROOT / "_flyctl_proxy.err"
+    err_f = open(err_path, "w+", encoding="utf-8", errors="replace")
     _PROXY = subprocess.Popen(["flyctl", "proxy", f"{PROXY_PORT}:5432", "-a", FLY_PG_APP],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                              stdout=subprocess.DEVNULL, stderr=err_f)
     for _ in range(30):
         time.sleep(2)
         try:
@@ -301,8 +458,21 @@ def ensure_proxy() -> None:
             s.connect(("127.0.0.1", PROXY_PORT)); s.close()
             return
         except OSError:
-            continue
-    raise RuntimeError("fly proxy did not come up in 60s")
+            pass
+        if _PROXY.poll() is not None:
+            break            # it is already dead; waiting out the clock is theatre
+    detail = ""
+    try:
+        err_f.flush()
+        said = err_path.read_text(encoding="utf-8", errors="replace").strip()
+        if said:
+            detail = " -- flyctl said: " + said.splitlines()[-1]
+    except OSError:
+        pass
+    rc = _PROXY.poll()
+    if rc is not None:
+        detail = f" (flyctl exited {rc}){detail}"
+    raise RuntimeError(f"fly proxy did not come up in 60s{detail}")
 
 
 def pg_conn():
@@ -407,6 +577,47 @@ SELECT server_id, scored_at FROM mcp_llm_axis_scores
 WHERE model_version='{MODEL_VERSION}' AND axis_name='overall_risk'
 """
 
+# Per-cohort trust audit (FU-093 / FU-108, added 2026-07-26). ONE aggregate
+# over the whole moat -- the Fly box is 1-vCPU burstable, so this is
+# deliberately a single GROUP BY returning a few hundred rows, never a query
+# per cohort. Result set is tiny; the scan is the cost.
+SQL_COHORT_TRUST = """
+SELECT scored_at, axis_name, label, count(*)
+FROM mcp_llm_axis_scores
+WHERE model_version=%s
+GROUP BY scored_at, axis_name, label
+"""
+
+
+def cohort_trust(conn, model_version: str = MODEL_VERSION):
+    """Which scored_at cohorts already in the moat are NOT trustworthy?
+
+    Every scoring wave stamps ONE shared scored_at on every row it writes, so
+    scored_at IS the cohort key. Hand each cohort's own label histogram to the
+    SAME gate that guards the import (score_validity) and believe its verdict.
+
+    DERIVED on every run, never a hardcoded list of bad dates: a date list
+    would be correct for exactly as long as it took the next wave to go wrong,
+    and would silently keep condemning cohorts that had since been rescored.
+
+    Returns (distrusted_cohorts:set, verdicts:{scored_at -> verdict}).
+    """
+    from score_validity import (DEGENERATE, SCHEMA_VIOLATION,
+                                validate_run_from_histogram)
+    cur = conn.cursor()
+    cur.execute(SQL_COHORT_TRUST, (model_version,))
+    hist: dict = {}
+    for cohort, axis, label, n in cur.fetchall():
+        hist.setdefault(cohort, {}).setdefault(axis, {})[label] = int(n)
+    cur.close()
+    verdicts, distrusted = {}, set()
+    for cohort, axes in hist.items():
+        verdict = validate_run_from_histogram(axes)["verdict"]
+        verdicts[cohort] = verdict
+        if verdict in (DEGENERATE, SCHEMA_VIOLATION):
+            distrusted.add(cohort)
+    return distrusted, verdicts
+
 
 def ph_export(run: Run, args) -> None:
     if run.done("export"):
@@ -455,7 +666,27 @@ def ph_export(run: Run, args) -> None:
             refresh_rows.append(r)
         elif r[2]:                             # scorable (verdict unreviewed/unknown)
             new_rows.append(r)
-    refresh_rows.sort(key=lambda r: scored_at[r[0]])       # oldest scored first
+    # FU-093 trust priority (2026-07-26). A garbage score is WORSE than no
+    # score: it is served to customers as though it were real. Plain
+    # oldest-first is a trap here -- the three random-head waves carry the
+    # NEWEST scored_at values, so age-ordering sorts the known-garbage cohorts
+    # LAST and the weekly cadence would never reach them. Rank distrust ahead
+    # of age; within each group, oldest first as before.
+    distrusted: set = set()
+    try:
+        distrusted, verdicts = cohort_trust(conn)
+        bad_servers = sum(1 for r in refresh_rows if scored_at[r[0]] in distrusted)
+        log(f"export: trust audit -- {len(verdicts)} cohorts, "
+            f"{len(distrusted)} distrusted ({bad_servers} servers) "
+            f"prioritised ahead of age")
+    except Exception as exc:      # FAIL-SAFE: this must never block an export
+        distrusted = set()
+        log(f"export: trust audit FAILED ({exc.__class__.__name__}: {exc}) -- "
+            f"falling back to oldest-first ordering; FU-093 priority NOT applied")
+    # sort key = (trust_rank, scored_at): False(0) sorts before True(1), so
+    # distrusted cohorts lead, then everything else oldest-scored first.
+    refresh_rows.sort(key=lambda r: (scored_at[r[0]] not in distrusted,
+                                     scored_at[r[0]]))
     if run.state["mode"] != "full":
         refresh_rows = refresh_rows[:args.refresh_cap]
     uniq = new_rows + refresh_rows
@@ -691,12 +922,116 @@ def _eff_deadline(run, args):
     return run.state.get("deadline_scaled", DEADLINE_MIN_DEFAULT)
 
 
+def _billed_dph(run, args) -> float:
+    """The rate we are ACTUALLY billed, not the rate we were quoted.
+
+    `fire` stamps state["dph"] from the OFFER's dph_total, which prices compute
+    only. Once the instance is rented, vast adds the allocated-storage component,
+    so the live instance's dph_total is strictly >= the offer's. Observed on run
+    20260727-105859: offer 0.296111, live 0.321111 -- an 8.4% under-count, which
+    means the COST_CAP_USD ceiling fires ~8% late and every "est $x" line we log
+    understates the bill. Same failure shape as the MTD spend guard (FU-035):
+    a guard is only as honest as the number it compares against.
+
+    Falls back to the stamped offer dph if the API is unreachable -- a watch loop
+    must never die because vast is having a moment. Returns the LARGER of the two
+    so a lookup failure can never lower the ceiling's basis.
+    """
+    quoted = float(run.state.get("dph", args.max_dph))
+    iid = run.state.get("instance_id")
+    if not iid:
+        return quoted
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        for i in (v.show_instances() or []):
+            if str(i.get("id")) == str(iid):
+                live = float(i.get("dph_total") or 0)
+                if live > quoted:
+                    log(f"watch: billed dph {live:.6f}/hr > quoted {quoted:.6f}/hr "
+                        f"(storage component); using billed for the cost ceiling")
+                    return live
+                return quoted
+    except Exception as e:
+        log(f"watch: live dph lookup failed ({e.__class__.__name__}: {e}); "
+            f"falling back to quoted ${quoted:.6f}/hr")
+    return quoted
+
+
+WEDGE_GRACE_MIN_DEFAULT = 25
+
+
+def _instance_probe(run) -> dict:
+    """Best-effort live status of the fired instance.
+
+    Returns {} when the API is unreachable (UNKNOWN, not absent -- R6).
+    Returns {"present": False} when the API answered and the instance is
+    genuinely missing from the list (outbid, host reclaim, manual kill).
+    Run 20260822-220319 burned its whole 212m deadline against an instance
+    nobody ever looked at; this is the look.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return {}
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        rows = v.show_instances()
+        if not rows:
+            return {}
+        for i in rows:
+            if str(i.get("id")) == str(iid):
+                return {"present": True,
+                        "actual_status": i.get("actual_status"),
+                        "status_msg": (i.get("status_msg") or "")[:200],
+                        "cur_state": i.get("cur_state")}
+        return {"present": False}
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: instance probe failed ({e.__class__.__name__}: {e}); status UNKNOWN")
+        return {}
+
+
+def _pull_instance_logs(run) -> None:
+    """SSH-free forensics BEFORE destroy, via the vast logs API.
+
+    The existing forensic path (the pod pushes a git branch) is exactly what
+    fails when the pod never boots -- 3 waves died with zero artifacts that
+    way. This path depends only on the vast API and must never raise.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return
+    coll = run.dir / "results"
+    coll.mkdir(exist_ok=True)
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        text = None
+        for call in (lambda: v.logs(INSTANCE_ID=int(iid)),
+                     lambda: v.logs(id=int(iid)),
+                     lambda: v.logs(int(iid))):
+            try:
+                text = call()
+            except TypeError:
+                continue
+            if text:
+                break
+        if text:
+            (coll / "vast_instance.log").write_text(
+                str(text)[-200_000:], encoding="utf-8")
+            log(f"forensics: saved vast instance log ({len(str(text))} chars)")
+        else:
+            log("forensics: vast logs API returned nothing")
+    except Exception as e:  # noqa: BLE001
+        log(f"forensics: vast logs fetch failed ({e.__class__.__name__}: {e})")
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
     pat = secret("github")
     fired = datetime.fromisoformat(run.state["fired_at"])
-    dph = float(run.state.get("dph", args.max_dph))
+    dph = _billed_dph(run, args)
     while True:
         st = _results_state(run, pat)
         elapsed_h = (datetime.now(timezone.utc) - fired).total_seconds() / 3600
@@ -704,6 +1039,52 @@ def ph_watch_collect(run: Run, args) -> None:
         if st:
             run.mark("watch", result=st, est_cost=round(est_cost, 2))
             break
+        probe = _instance_probe(run)
+        if probe:
+            stat = (probe.get("actual_status")
+                    or ("absent" if probe.get("present") is False else "unknown"))
+            seen = run.state.setdefault("status_seen", [])
+            if not seen or seen[-1] != stat:
+                seen.append(stat)
+                run.save()
+                ledger("instance_status", run.state["run_id"], status=stat,
+                       msg=probe.get("status_msg", ""))
+            if probe.get("present") is False:
+                miss = run.state.get("absent_probes", 0) + 1
+                run.state["absent_probes"] = miss
+                run.save()
+                if miss >= 2:
+                    # Two consecutive authoritative "not in the list" answers:
+                    # waiting out the deadline can never produce a result.
+                    ledger("instance_vanished", run.state["run_id"],
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="vanished")
+                    break
+            else:
+                if run.state.get("absent_probes"):
+                    run.state["absent_probes"] = 0
+                    run.save()
+                if ("running" not in run.state.get("status_seen", [])
+                        and elapsed_h * 60 >= getattr(
+                            args, "wedge_grace_min", WEDGE_GRACE_MIN_DEFAULT)):
+                    # Never reached "running" inside the grace window: machine
+                    # wedge, not a slow job. Blocklist + fail fast.
+                    mid = run.state.get("machine_id")
+                    if mid is not None:
+                        blk = RUNS_ROOT / "wedged_machines.json"
+                        try:
+                            cur = set(json.loads(blk.read_text())) if blk.exists() else set()
+                        except Exception:  # noqa: BLE001
+                            cur = set()
+                        if mid not in cur:
+                            cur.add(mid)
+                            blk.write_text(json.dumps(sorted(cur)))
+                            log(f"wedge: machine {mid} added to blocklist")
+                    ledger("wedge_watch_destroy", run.state["run_id"],
+                           machine=mid, last_status=stat,
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="wedge")
+                    break
         if est_cost >= _eff_cost_cap(run, args):
             ledger("cost_ceiling_breach", run.state["run_id"], est=est_cost)
             run.mark("watch", "failed", result="cost_breach")
@@ -735,8 +1116,13 @@ def ph_watch_collect(run: Run, args) -> None:
             got.append("preds.jsonl.gz(reassembled from %d parts)" % len(parts))
     run.mark("collect", collected=got)
     log(f"collect: {got or 'nothing on remote (instance may still be running the job)'}")
+    if run.state.get("result") != "ok" and not got:
+        # Branch path yielded nothing: the instance's own log is the ONLY
+        # remaining evidence and destroy erases it. Pull it via the API first.
+        _pull_instance_logs(run)
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.
-    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline"):
+    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline",
+                                   "wedge", "vanished"):
         _destroy(run, run.state.get("result", "unknown"))
         run.mark("destroy")
     if run.state.get("result") != "ok":
@@ -954,6 +1340,72 @@ def ph_backfill(run: Run, args) -> None:
     log("backfill OK")
 
 
+ZERO_YIELD_RATE = 0.001            # 0.1% of the refresh half
+
+
+def refresh_yield(state: dict) -> dict | None:
+    """What did the REFRESH half of this delta cohort actually change?
+
+    Measured 2026-09-01 across every landed delta wave's own `delta_summary`,
+    the `overall_risk` axis:
+
+        20260726-014732    15,236 / 20,000    76.2 %
+        20260727-024623    97,989 / 120,000   81.6 %
+        20260727-105859   136,116 / 140,000   97.2 %
+        20260730-001738         0 / 20,000     0.0 %   <-- regime change
+        20260804-060703         0 / 20,000     0.0 %
+        20260831-033413         1 / 20,000     0.005 %
+
+    Three consecutive landed waves spent 60,000 server-slots -- the majority of
+    every delta cohort -- to move ONE server on ONE axis. Every one of those
+    numbers was already being written, to `state.json` and to the
+    `score_change_runs` table, and nothing ever read one back. So the phase was
+    dead for four weeks and about a dollar of GPU time, and the run reports that
+    a successor opens said "ok" each time, truthfully and uselessly.
+
+    THIS IS A REPORT, NOT A GATE. It cannot abort a run, change an exit code or
+    veto a wave (HARNESS_DOCTRINE R7: prefer RECOVERY over RESTRICTION; and the
+    standing rule against answering a finding with another required check). What
+    to DO about a dead refresh half -- shrink `--refresh-cap`, move the budget to
+    never-scored servers -- is cohort policy, and cohort policy goes through peer
+    review, not through a quiet edit in a reporting function.
+
+    Returns None when there is no refresh half to describe, so the loud line
+    means exactly one thing wherever it appears.
+
+    UNKNOWN IS NOT ZERO (R6). `unmeasured` and `zero_yield` are opposite facts
+    that look identical if you collapse a missing summary to 0: one says the
+    phase did nothing, the other says we never asked. A run whose import died
+    before writing the aggregates gets `unmeasured`, and a decision made on it
+    is a decision made on nothing, which is the point of saying so.
+    """
+    refresh = state.get("refresh_servers") or 0
+    if refresh <= 0:
+        return None
+
+    summary = state.get("delta_summary") or {}
+    axes = [a for a in summary.values() if isinstance(a, dict) and "changed" in a]
+    if not axes:
+        # R6: no measurement is not a measurement of nothing.
+        return {"refresh_servers": refresh, "changed": None, "rate": None,
+                "verdict": "unmeasured",
+                "basis": "delta_summary absent or empty -- the refresh half was "
+                         "NOT measured this run; this is not a reading of zero"}
+
+    # Seven axes ship. A wave that moved only `auth_strength` is productive, and
+    # keying this on `overall_risk` alone would bury it.
+    changed = max(int(a.get("changed") or 0) for a in axes)
+    rate = changed / refresh
+    return {
+        "refresh_servers": refresh,
+        "changed": changed,
+        "rate": rate,
+        "verdict": "zero_yield" if rate < ZERO_YIELD_RATE else "productive",
+        "basis": f"max(changed) over {len(axes)} axis/axes of "
+                 f"delta_summary, / refresh_servers",
+    }
+
+
 def ph_postcheck(run: Run, args) -> None:
     if run.done("postcheck"):
         return
@@ -967,8 +1419,39 @@ def ph_postcheck(run: Run, args) -> None:
         log(f"POSTCHECK DEGRADED: freshness unreadable ({freshness_error}); "
             f"closing the run anyway -- all writes were already committed")
     base = run.state.get("baseline_freshness", {})
+    # FU-132: when /freshness is unreachable the run still KNOWS its post-state --
+    # `import` stamped `scored_after` from a DIRECT DB read, which is the very number
+    # I1 is enforced against and a strictly better source than the cached endpoint.
+    # Run 20260727-105859 shipped `scored_servers.after: null` while its own
+    # state.json held 279116: the artifact a successor reads was less true than the
+    # state the run was holding. Publish the figure AND its basis -- a number without
+    # its basis is how "MTD spend" became a 24h delta (FU-035).
+    scored_after = after.get("scored_servers")
+    after_basis = "freshness" if scored_after is not None else None
+    if scored_after is None and run.state.get("scored_after") is not None:
+        scored_after = run.state["scored_after"]
+        after_basis = "db_import"
+        log(f"postcheck: freshness unreadable; scored_servers.after={scored_after} "
+            f"taken from the import phase's direct DB read (basis=db_import)")
+    ry = refresh_yield(run.state)
+    if ry and ry["verdict"] == "zero_yield":
+        log(f"POSTCHECK: REFRESH HALF PRODUCED NOTHING -- {ry['changed']} of "
+            f"{ry['refresh_servers']} refreshed servers changed on any axis "
+            f"({ry['rate']:.4%}). The never-scored half is where this wave's "
+            f"value came from. Three landed waves in a row have now read this "
+            f"way (07-30, 08-04, 08-31); if this is the fourth, the refresh cap "
+            f"is buying nothing and the cohort budget belongs elsewhere -- that "
+            f"is a peer-review decision, not an abort.")
+        ledger("refresh_zero_yield", run.state["run_id"], **ry)
+    elif ry and ry["verdict"] == "unmeasured":
+        log(f"POSTCHECK: refresh half UNMEASURED ({ry['basis']}). "
+            f"Not a reading of zero.")
+    elif ry:
+        log(f"postcheck: refresh half changed {ry['changed']} of "
+            f"{ry['refresh_servers']} ({ry['rate']:.2%})")
     report = {
         "run_id": run.state["run_id"], "mode": run.state["mode"],
+        "refresh_yield": ry,
         "freshness_error": freshness_error,
         "degraded_postcheck": bool(freshness_error),
         "exported": run.state.get("exported"), "imported": run.state.get("imported_servers"),
@@ -976,7 +1459,7 @@ def ph_postcheck(run: Run, args) -> None:
         "est_cost_usd": run.state.get("est_cost"),
         "scores_rows": {"before": base.get("scores_rows"), "after": after.get("scores_rows")},
         "scored_servers": {"before": base.get("scored_servers"),
-                           "after": after.get("scored_servers")},
+                           "after": scored_after, "after_basis": after_basis},
         "newest_scored_at": {"before": base.get("newest_scored_at"),
                              "after": after.get("newest_scored_at")},
         "destroyed": run.state.get("destroyed", False) or
@@ -1010,6 +1493,9 @@ def main() -> None:
     ap.add_argument("--deadline-min", type=int, default=None,
                     help="override the FU-090 size-scaled deadline (default: scaled)")
     ap.add_argument("--poll-secs", type=int, default=120)
+    ap.add_argument("--wedge-grace-min", type=int,
+                    default=WEDGE_GRACE_MIN_DEFAULT,
+                    help="fail fast if the instance never reaches 'running' within this many minutes")
     args = ap.parse_args()
     if args.check_open_runs:
         raise SystemExit(check_open_runs())

@@ -1,0 +1,1 @@
+# Read services/_exemplar/contract.py to mirror its structure

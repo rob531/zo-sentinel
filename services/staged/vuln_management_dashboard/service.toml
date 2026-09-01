@@ -1,0 +1,8 @@
+[service]
+name = "vuln_management_dashboard"
+import_path = "services.active.vuln_management_dashboard.router"
+prefix = "/api"
+tag = "vuln_management_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

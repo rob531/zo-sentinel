@@ -1,0 +1,8 @@
+[service]
+name = "registry_trust_landscape"
+import_path = "services.active.registry_trust_landscape.router"
+prefix = "/api"
+tag = "registry_trust_landscape"
+origin = "service"
+auth = "public"
+needs_data_layer = true

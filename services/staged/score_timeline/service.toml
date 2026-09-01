@@ -1,0 +1,8 @@
+[service]
+name = "score_timeline"
+import_path = "services.active.score_timeline.router"
+prefix = "/api"
+tag = "score_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true

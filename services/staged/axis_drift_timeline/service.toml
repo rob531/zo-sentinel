@@ -1,0 +1,8 @@
+[service]
+name = "axis_drift_timeline"
+import_path = "services.active.axis_drift_timeline.router"
+prefix = "/api"
+tag = "axis_drift_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true

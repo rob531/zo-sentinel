@@ -1,0 +1,8 @@
+[service]
+name = "mcp_llm_axis_scores_distribution"
+import_path = "services.active.mcp_llm_axis_scores_distribution.router"
+prefix = "/api"
+tag = "mcp_llm_axis_scores_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true

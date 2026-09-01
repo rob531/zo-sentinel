@@ -1,0 +1,8 @@
+[service]
+name = "report_generator"
+import_path = "services.active.report_generator.router"
+prefix = "/api"
+tag = "report_generator"
+origin = "service"
+auth = "public"
+needs_data_layer = true

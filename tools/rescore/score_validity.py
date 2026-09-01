@@ -63,7 +63,8 @@ import json
 import math
 import os
 from collections import Counter
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import (Any, Dict, Iterable, List, Mapping, Optional, Sequence,
+                    Tuple)
 
 # ---- the contract ------------------------------------------------------
 # VERBATIM from rob531/zomesh-sentinel-sft :: schemas/risk_axis_mapping_v1.json
@@ -262,11 +263,28 @@ def validate_axis(axis: str, labels: Sequence[str],
                   min_cohort: int = MIN_COHORT) -> dict:
     """Verdict for ONE axis over a cohort of predicted labels.
 
+    Thin facade: it counts the labels and defers to validate_axis_counts,
+    where the rules actually live.
+    """
+    return validate_axis_counts(axis, Counter(labels), min_cohort)
+
+
+def validate_axis_counts(axis: str, histogram: Mapping[str, int],
+                         min_cohort: int = MIN_COHORT) -> dict:
+    """Verdict for ONE axis from a label HISTOGRAM {label: count}.
+
     SCHEMA_VIOLATION beats every other verdict: a label outside the contract
     means we are not even looking at this classifier's output.
+
+    This is THE implementation -- there is deliberately no second copy of the
+    collapse rules. Gate and caller running different code for the same
+    question is the FU-108 defect class. Counting is also the only tractable
+    entry point at moat scale: the per-cohort trust audit in
+    weekly_rescore.ph_export judges ~1.9M stored score rows from a single
+    GROUP BY and must never expand them into a list of dicts.
     """
-    n = len(labels)
-    hist = Counter(labels)
+    hist = Counter({str(k): int(v) for k, v in histogram.items() if int(v) > 0})
+    n = sum(hist.values())
     allowed = AXIS_LABELS.get(axis)
     unknown_labels = sorted(set(hist) - set(allowed)) if allowed else []
     if allowed and unknown_labels:
@@ -320,18 +338,37 @@ def validate_axis(axis: str, labels: Sequence[str],
 def validate_run(rows: Iterable[dict], min_cohort: int = MIN_COHORT) -> dict:
     """Gate a whole scoring run. rows: {"axis_name":..., "label":...}.
 
+    Thin facade: it counts the rows and defers to validate_run_from_histogram.
+    """
+    counted: Dict[str, Counter] = {}
+    for r in rows:
+        counted.setdefault(r["axis_name"], Counter())[r["label"]] += 1
+    return validate_run_from_histogram(counted, min_cohort)
+
+
+def validate_run_from_histogram(histograms: Mapping[str, Mapping[str, int]],
+                                min_cohort: int = MIN_COHORT) -> dict:
+    """Gate a whole scoring run from {axis_name: {label: count}}.
+
     A run is IMPORTABLE only if no axis is DEGENERATE or SCHEMA_VIOLATION and
     at least one axis was actually judgeable. INSUFFICIENT never authorises an
-    import on its own. Zero rows is EXTRACTION_FAILURE, not invalidity.
+    import on its own. An empty histogram is EXTRACTION_FAILURE, not invalidity.
+
+    Takes COUNTS rather than rows so a caller holding a
+    `GROUP BY axis_name, label` result -- e.g. the per-cohort trust audit
+    weekly_rescore runs over the entire moat before choosing a refresh order --
+    reaches the same verdict through the same code without materialising
+    millions of dicts.
     """
-    by_axis: Dict[str, List[str]] = {}
-    for r in rows:
-        by_axis.setdefault(r["axis_name"], []).append(r["label"])
+    by_axis = {a: Counter({str(lb): int(c) for lb, c in h.items() if int(c) > 0})
+               for a, h in histograms.items()}
+    by_axis = {a: h for a, h in by_axis.items() if h}
     if not by_axis:
         return {"axes": [], "n_axes": 0, "n_valid": 0, "n_bad": 0,
                 "importable": False, "verdict": EXTRACTION_FAILURE,
                 "n_collapsed": 0, "random_head_signature": False}
-    axes = [validate_axis(a, lb, min_cohort) for a, lb in sorted(by_axis.items())]
+    axes = [validate_axis_counts(a, h, min_cohort)
+            for a, h in sorted(by_axis.items())]
     bad = [a for a in axes if a["verdict"] in (DEGENERATE, SCHEMA_VIOLATION)]
     judged = [a for a in axes if a["verdict"] in PASSING]
     collapsed = [a for a in axes if a.get("collapsed")]
@@ -544,6 +581,36 @@ if __name__ == "__main__":
     assert r108["random_head_signature"] is False, r108
     assert_importable(fu108)
 
+    # --- counts entry point: SAME verdicts, no rows materialised ------------
+    # This is what weekly_rescore.cohort_trust() calls, once, over the whole
+    # moat (~1.9M rows -> a few hundred GROUP BY rows), to decide which
+    # scored_at cohorts the refresh lane must revisit FIRST.
+    hist_from_rows: Dict[str, Counter] = {}
+    for _r in fu108:
+        hist_from_rows.setdefault(_r["axis_name"], Counter())[_r["label"]] += 1
+    h108 = validate_run_from_histogram(hist_from_rows)
+    assert h108 == r108, (h108, r108)
+    assert h108["verdict"] == VALID and h108["importable"] is True, h108
+    # the two paths agree axis-by-axis as well as run-wide
+    assert (validate_axis_counts("overall_risk", {"LOW": 125726, "CRITICAL": 5})
+            == validate_axis("overall_risk", labels(
+                "overall_risk", {"LOW": 125726, "CRITICAL": 5}))), "paths diverge"
+    # a real garbage cohort, judged straight from a GROUP BY-shaped histogram:
+    # DEGENERATE == distrusted == goes to the FRONT of the refresh queue
+    garbage_cohort = {"overall_risk": {"LOW": 125726, "CRITICAL": 5},
+                      "auth_strength": {"WEAK": 125723, "UNKNOWN": 8}}
+    gh = validate_run_from_histogram(garbage_cohort)
+    assert gh["verdict"] == DEGENERATE and gh["importable"] is False, gh
+    assert gh["random_head_signature"] is True and gh["n_collapsed"] == 2, gh
+    # tiny historical cohorts are INSUFFICIENT -- NOT distrusted, so they must
+    # not jump the queue ahead of provable garbage
+    assert validate_run_from_histogram(
+        {"overall_risk": {"LOW": 4, "HIGH": 3}})["verdict"] == INSUFFICIENT
+    # empty / all-zero histograms are EXTRACTION_FAILURE, never "invalid"
+    assert validate_run_from_histogram({})["verdict"] == EXTRACTION_FAILURE
+    assert validate_run_from_histogram(
+        {"overall_risk": {"LOW": 0}})["verdict"] == EXTRACTION_FAILURE
+
     # --- run-level: garbage still fails, and is DIAGNOSED as random heads ---
     bad_run = validate_run(rows("overall_risk", {"LOW": 125726, "CRITICAL": 5}))
     assert bad_run["importable"] is False and bad_run["verdict"] == DEGENERATE
@@ -567,4 +634,5 @@ if __name__ == "__main__":
 
     print("PASS score_validity self-tests "
           "(3 garbage waves REJECTED, random-head signature DIAGNOSED, "
-          "FU-108 wave ACCEPTED, extraction failure SEPARATED)")
+          "FU-108 wave ACCEPTED, extraction failure SEPARATED, "
+          "counts path AGREES with rows path)")

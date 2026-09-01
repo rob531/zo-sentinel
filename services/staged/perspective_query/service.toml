@@ -1,0 +1,8 @@
+[service]
+name = "perspective_query"
+import_path = "services.active.perspective_query.router"
+prefix = "/api"
+tag = "perspective_query"
+origin = "service"
+auth = "public"
+needs_data_layer = true

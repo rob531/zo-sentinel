@@ -1,0 +1,8 @@
+[service]
+name = "server_freshness_by_source"
+import_path = "services.active.server_freshness_by_source.router"
+prefix = "/api"
+tag = "server_freshness_by_source"
+origin = "service"
+auth = "public"
+needs_data_layer = true

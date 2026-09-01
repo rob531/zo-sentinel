@@ -69,6 +69,10 @@ on:
         description: "Max PRs to refresh this run"
         required: false
         default: "40"
+      chain_depth:
+        description: "Internal: self-chain counter. Leave blank."
+        required: false
+        default: "0"
 
 permissions:
   contents: write
@@ -160,7 +164,7 @@ jobs:
           echo "required=$req" >> "$GITHUB_OUTPUT"
 
           if [ "$HAVE_PAT" = "true" ]; then
-            echo "::notice::RELANDER_TOKEN present -> native synchronize/reopened; ALL required contexts reachable"
+            echo "::notice::RELANDER_TOKEN present (usability is verified in the reland job, not here)"
             exit 0
           fi
 
@@ -201,6 +205,8 @@ jobs:
           DISPATCH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RELAND_CAP: ${{ github.event.inputs.reland_cap || '40' }}
+          CHAIN_DEPTH: ${{ github.event.inputs.chain_depth || '0' }}
+          MAX_CHAIN: "6"
         run: |
           set -uo pipefail
 
@@ -224,6 +230,20 @@ jobs:
           if [ -n "${PAT_RAW_LEN:-}" ] && [ "$PAT_RAW_LEN" -ne "${#PAT}" ]; then
             echo "::warning::RELANDER_TOKEN contained $((PAT_RAW_LEN - ${#PAT})) character(s) outside [A-Za-z0-9_]; stripped. Re-set the secret via the web UI to remove them at source."
           fi
+          # A secret that strips to nothing is not "absent" -- it is a
+          # MIS-SET secret, and the two must not look alike. Observed
+          # 2026-09-01: RELANDER_TOKEN held a single non-alphanumeric byte, so
+          # the strip removed "1 character", the validation block never ran
+          # (empty string), and the sweep silently used GITHUB_TOKEN while the
+          # preflight still reported "RELANDER_TOKEN present". Present and
+          # usable are different facts.
+          if [ "${PAT_RAW_LEN:-0}" -gt 0 ] && [ -z "$PAT" ]; then
+            echo "::error::RELANDER_TOKEN is set but contains NO token characters (raw length $PAT_RAW_LEN, all stripped)."
+            echo "::error::The secret was almost certainly written empty or as a stray byte. Re-set it via Settings -> Secrets -> Actions in the WEB UI."
+            echo "::error::Continuing in fallback mode: no-hollow / schema-prm / referent-verify will NOT report and nothing will merge."
+            HAVE_PAT="false"
+          fi
+
           if [ -n "$PAT" ]; then
             if pat_login=$(GH_TOKEN="$PAT" gh api user --jq '.login' 2>pat_err.txt); then
               echo "::notice::RELANDER_TOKEN validated (authenticates as $pat_login)"
@@ -355,6 +375,7 @@ jobs:
             echo "| refreshed | $count |"
             echo "| unreachable this run | $remaining |"
             echo "| cap | $RELAND_CAP |"
+            echo "| chain depth | $CHAIN_DEPTH / $MAX_CHAIN |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "::notice::refreshed $count of $eligible eligible PR(s); $remaining still waiting"
@@ -365,6 +386,32 @@ jobs:
             exit 1
           fi
 
-          if [ "$remaining" -gt "$RELAND_CAP" ]; then
-            echo "::warning::backlog ($remaining) exceeds one full sweep ($RELAND_CAP) -- draining will take $(( (remaining + RELAND_CAP - 1) / RELAND_CAP )) more run(s)."
+          # --- self-chaining drain -------------------------------------------
+          # A backlog larger than one sweep previously waited for the 6h cron,
+          # so clearing 183 PRs would have taken ~30h of wall clock while the
+          # builder kept adding to it. Instead, a sweep that made progress AND
+          # still has work re-dispatches itself immediately.
+          #
+          # Bounded three ways, because a self-triggering workflow that gets
+          # this wrong is a billing incident:
+          #   - MAX_CHAIN hard-stops the chain regardless of remaining work
+          #   - progress is required: count == 0 breaks the chain (and has
+          #     already failed the run via the no-op guard above)
+          #   - the concurrency group means a chained run cancels any overlap
+          # workflow_dispatch is exempt from the GITHUB_TOKEN recursion guard,
+          # so this works without involving the PAT.
+          if [ "$remaining" -gt 0 ]; then
+            sweeps_needed=$(( (remaining + RELAND_CAP - 1) / RELAND_CAP ))
+            if [ "$count" -eq 0 ]; then
+              echo "::warning::backlog $remaining but no progress this run -- NOT chaining (would loop without draining)."
+            elif [ "$CHAIN_DEPTH" -ge "$MAX_CHAIN" ]; then
+              echo "::warning::backlog $remaining with chain depth $CHAIN_DEPTH/$MAX_CHAIN reached -- stopping. Next scheduled sweep continues."
+            else
+              next=$((CHAIN_DEPTH + 1))
+              echo "::notice::backlog $remaining (~$sweeps_needed sweep(s)) -> chaining run $next/$MAX_CHAIN immediately"
+              gh workflow run pr-relander.yml -R "$REPO" \
+                -f reland_cap="$RELAND_CAP" -f chain_depth="$next" \
+                && echo "::notice::chained sweep $next dispatched" \
+                || echo "::warning::could not dispatch chained sweep; falling back to the 6h cadence"
+            fi
           fi

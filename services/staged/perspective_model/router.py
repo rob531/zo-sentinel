@@ -1,73 +1,69 @@
-from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-
 from app.db import get_session
+from app.models import Perspective, PerspectiveSnapshot
 from .logic import (
-    get_perspectives,
     create_perspective,
+    update_perspective,
+    delete_perspective,
     get_perspective,
-    perspective_snapshot_insert,
-)
-from .contract import (
-    PerspectiveCreate,
-    PerspectiveResponse,
-    SnapshotCreate,
-    SnapshotResponse,
+    list_perspectives,
+    take_snapshot,
+    get_latest_snapshot
 )
 
-router = APIRouter(prefix="/perspectives", tags=["perspectives"])
+router = APIRouter()
 
-
-@router.get("/", response_model=List[PerspectiveResponse])
-def list_perspectives(
-    org_id: str,
-    db: Session = Depends(get_session),
+@router.post("/perspectives")
+async def create_perspective_endpoint(
+    org_id: int,
+    name: str,
+    description: str,
+    facet_filters: dict,
+    created_by: int,
+    session: Session = Depends(get_session)
 ):
-    """Return all perspectives belonging to an organisation."""
-    return get_perspectives(db=db, org_id=org_id)
+    return create_perspective(session, org_id, name, description, facet_filters, created_by)
 
-
-@router.post(
-    "/",
-    response_model=PerspectiveResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_perspective_endpoint(
-    payload: PerspectiveCreate,
-    db: Session = Depends(get_session),
+@router.put("/perspectives/{perspective_id}")
+async def update_perspective_endpoint(
+    perspective_id: int,
+    updates: dict,
+    session: Session = Depends(get_session)
 ):
-    """Create a new perspective."""
-    return create_perspective(db=db, payload=payload)
+    return update_perspective(session, perspective_id, updates)
 
-
-@router.get("/{perspective_id}", response_model=PerspectiveResponse)
-def get_perspective_endpoint(
-    perspective_id: str,
-    db: Session = Depends(get_session),
+@router.delete("/perspectives/{perspective_id}")
+async def delete_perspective_endpoint(
+    perspective_id: int,
+    session: Session = Depends(get_session)
 ):
-    """Retrieve a single perspective by its identifier."""
-    perspective = get_perspective(db=db, perspective_id=perspective_id)
-    if perspective is None:
-        raise HTTPException(status_code=404, detail="Perspective not found")
-    return perspective
+    return delete_perspective(session, perspective_id)
 
-
-@router.post(
-    "/{perspective_id}/snapshot",
-    response_model=SnapshotResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def take_snapshot_endpoint(
-    perspective_id: str,
-    payload: SnapshotCreate,
-    db: Session = Depends(get_session),
+@router.get("/perspectives/{perspective_id}")
+async def get_perspective_endpoint(
+    perspective_id: int,
+    session: Session = Depends(get_session)
 ):
-    """Take a snapshot of a perspective."""
-    return perspective_snapshot_insert(
-        db=db,
-        perspective_id=perspective_id,
-        org_id=payload.org_id,
-        membership=payload.membership,
-    )
+    return get_perspective(session, perspective_id)
+
+@router.get("/perspectives")
+async def list_perspectives_endpoint(
+    org_id: int,
+    session: Session = Depends(get_session)
+):
+    return list_perspectives(session, org_id)
+
+@router.post("/perspectives/{perspective_id}/snapshots")
+async def take_snapshot_endpoint(
+    perspective_id: int,
+    session: Session = Depends(get_session)
+):
+    return take_snapshot(session, perspective_id)
+
+@router.get("/perspectives/{perspective_id}/snapshots/latest")
+async def get_latest_snapshot_endpoint(
+    perspective_id: int,
+    session: Session = Depends(get_session)
+):
+    return get_latest_snapshot(session, perspective_id)

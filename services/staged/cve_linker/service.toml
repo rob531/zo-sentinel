@@ -1,0 +1,8 @@
+[service]
+name = "cve_linker"
+import_path = "services.active.cve_linker.router"
+prefix = "/api"
+tag = "cve_linker"
+origin = "service"
+auth = "public"
+needs_data_layer = true

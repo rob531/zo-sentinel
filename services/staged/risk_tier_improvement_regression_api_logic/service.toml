@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_improvement_regression_api_logic"
+import_path = "services.active.risk_tier_improvement_regression_api_logic.router"
+prefix = "/api"
+tag = "risk_tier_improvement_regression_api_logic"
+origin = "service"
+auth = "public"
+needs_data_layer = true

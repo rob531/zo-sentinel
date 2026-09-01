@@ -30,14 +30,14 @@ def get_server_risk_tier_summary(
     session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     result = session.execute(
-        text("SELECT name FROM mcp_server_registry WHERE server_id = :server_id"),
+        text("SELECT name FROM McpServerRegistry WHERE server_id = :server_id"),
         {"server_id": server_id}
     ).fetchone()
     
     scores_result = session.execute(
         text("""
             SELECT axis_name, label, p_top, p_critical, p_danger 
-            FROM mcp_llm_axis_scores 
+            FROM McpLlmAxisScore 
             WHERE server_id = :server_id
         """),
         {"server_id": server_id}
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     cursor = conn.cursor()
     
     cursor.execute("""
-        CREATE TABLE mcp_server_registry (
+        CREATE TABLE McpServerRegistry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             server_id TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     """)
     
     cursor.execute("""
-        CREATE TABLE mcp_llm_axis_scores (
+        CREATE TABLE McpLlmAxisScore (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             server_id TEXT NOT NULL,
             axis_name TEXT NOT NULL,
@@ -109,20 +109,20 @@ if __name__ == "__main__":
     """)
     
     cursor.execute(
-        "INSERT INTO mcp_server_registry (server_id, name, status) VALUES (?, ?, ?)",
+        "INSERT INTO McpServerRegistry (server_id, name, status) VALUES (?, ?, ?)",
         ("server-001", "Test Server", "active")
     )
     
     cursor.execute(
-        "INSERT INTO mcp_llm_axis_scores (server_id, axis_name, label, p_top, p_critical, p_danger) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO McpLlmAxisScore (server_id, axis_name, label, p_top, p_critical, p_danger) VALUES (?, ?, ?, ?, ?, ?)",
         ("server-001", "overall_risk", "Overall Risk", 0.3, 0.7, 0.0)
     )
     cursor.execute(
-        "INSERT INTO mcp_llm_axis_scores (server_id, axis_name, label, p_top, p_critical, p_danger) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO McpLlmAxisScore (server_id, axis_name, label, p_top, p_critical, p_danger) VALUES (?, ?, ?, ?, ?, ?)",
         ("server-001", "data_exposure", "Data Exposure", 0.2, 0.5, 0.3)
     )
     cursor.execute(
-        "INSERT INTO mcp_llm_axis_scores (server_id, axis_name, label, p_top, p_critical, p_danger) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO McpLlmAxisScore (server_id, axis_name, label, p_top, p_critical, p_danger) VALUES (?, ?, ?, ?, ?, ?)",
         ("server-001", "availability", "Availability", 0.6, 0.3, 0.1)
     )
     conn.commit()
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         connect_args={"check_same_thread": False}
     )
     
-    for table_name in ["mcp_server_registry", "mcp_llm_axis_scores"]:
+    for table_name in ["McpServerRegistry", "McpLlmAxisScore"]:
         cursor.execute(f"SELECT * FROM {table_name}")
         rows = cursor.fetchall()
         cursor.execute(f"PRAGMA table_info({table_name})")

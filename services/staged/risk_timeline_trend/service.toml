@@ -1,0 +1,8 @@
+[service]
+name = "risk_timeline_trend"
+import_path = "services.active.risk_timeline_trend.router"
+prefix = "/api"
+tag = "risk_timeline_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,5 +1,19 @@
 # The Autopoietic Loop — naming doctrine (chairman, 2026-07-24)
 
+> **NAME COLLISION -- READ THIS FIRST (added 2026-09-01).** There are TWO files called
+> `AUTOPOIESIS.md` in this system and they are different documents:
+>
+> - **THIS FILE** (`zo-sentinel/AUTOPOIESIS.md`, git-tracked since 2026-07-25, PR #1786)
+>   is the chairman's **NAMING DOCTRINE** for the Autopoietic Loop. This is the one that
+>   12+ scheduled-lane prompts mean when they say *"doctrine (AUTOPOIESIS.md at repo root)"*.
+> - `D:\zo\Zocomputer Agents\AUTOPOIESIS.md` (tower-only, untracked, created 2026-09-01)
+>   is the **positive SCORE LEDGER** -- per-session achievement rows on a 7-axis rubric,
+>   written only by `_tools/autop_score.py`. It is NOT doctrine and contains none.
+>
+> Cite them by PATH, never by bare filename. A lane that follows a prompt to
+> "AUTOPOIESIS.md" and resolves it tower-side gets a scoreboard and may read it as
+> doctrine. Recorded as FU-371.
+
 The E2E ladder + architect-goose + builder-goose + gates assembly now has a name
 that says what it is FOR, not what it is made of: **the Autopoietic Loop**.
 

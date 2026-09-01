@@ -204,6 +204,26 @@ jobs:
         run: |
           set -uo pipefail
 
+          # --- PAT hygiene ---------------------------------------------------
+          # A secret pasted from a Windows shell can carry CR/LF. Go's http
+          # client rejects that outright:
+          #   invalid header field value for "Authorization"
+          # which surfaces per-PR as an opaque "not updated" and looks like a
+          # permissions problem. Strip all whitespace, then PROVE the token
+          # works before relying on it -- an unusable PAT must degrade to
+          # fallback mode, not fail 183 mutations one at a time.
+          PAT=$(printf '%s' "${PAT:-}" | tr -d '[:space:]')
+          if [ -n "$PAT" ]; then
+            if pat_login=$(GH_TOKEN="$PAT" gh api user --jq '.login' 2>pat_err.txt); then
+              echo "::notice::RELANDER_TOKEN validated (authenticates as $pat_login)"
+            else
+              echo "::warning::RELANDER_TOKEN is set but UNUSABLE: $(tr -d '\n' < pat_err.txt | head -c 200)"
+              echo "::warning::degrading to GITHUB_TOKEN + dispatch fallback for this run"
+              PAT=""
+              HAVE_PAT="false"
+            fi
+          fi
+
           # --- cohort A: stale-but-clean (original failure mode) -------------
           # NOTE: --limit is MANDATORY. gh pr list defaults to 30 rows; without
           # it this sweep was blind past row 30 and silently reported "nothing

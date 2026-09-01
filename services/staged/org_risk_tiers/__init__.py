@@ -38,7 +38,7 @@ def get_mesh_scores(org_id: int, session: Session = Depends(get_session)) -> lis
     stmt = text("""
         SELECT ms.server_id, ms.score, ms.category
         FROM mcp_signal_scores ms
-        JOIN mcp_server_registry sr ON ms.server_id = sr.server_id
+        JOIN McpServerRegistry sr ON ms.server_id = sr.server_id
         WHERE sr.org_id = :org_id
     """)
     result = session.execute(stmt, {"org_id": org_id}).fetchall()
@@ -47,7 +47,7 @@ def get_mesh_scores(org_id: int, session: Session = Depends(get_session)) -> lis
 
 def reset_server_export_api_quarantine(server_id: str, session: Session = Depends(get_session)) -> bool:
     stmt = text("""
-        UPDATE mcp_server_registry
+        UPDATE McpServerRegistry
         SET export_api_quarantined = false, updated_at = NOW()
         WHERE server_id = :server_id
     """)

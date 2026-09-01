@@ -1,0 +1,8 @@
+[service]
+name = "ask_corpus_drift_guard"
+import_path = "services.active.ask_corpus_drift_guard.router"
+prefix = "/api"
+tag = "ask_corpus_drift_guard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

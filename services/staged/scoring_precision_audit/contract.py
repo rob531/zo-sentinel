@@ -26,7 +26,7 @@ def get_precision_audit(session: Session = Depends(get_session)) -> MetricsRespo
             axis_name,
             COUNT(*) as total,
             SUM(CASE WHEN ABS(score - confidence) < 0.5 THEN 1 ELSE 0 END) as correct
-        FROM mcp_llm_axis_scores
+        FROM McpLlmAxisScore
         GROUP BY axis_name
     """)
     result = session.execute(sql)

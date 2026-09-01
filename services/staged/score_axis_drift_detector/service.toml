@@ -1,0 +1,8 @@
+[service]
+name = "score_axis_drift_detector"
+import_path = "services.active.score_axis_drift_detector.router"
+prefix = "/api"
+tag = "score_axis_drift_detector"
+origin = "service"
+auth = "public"
+needs_data_layer = true

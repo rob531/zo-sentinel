@@ -10,6 +10,11 @@ on:
   push:
     branches:
       - "**"
+  # pr-relander dispatches this on relanded PR branches: GITHUB_TOKEN pushes
+  # (its update-branch merge commits) never fire push/pull_request workflows
+  # (GitHub recursion guard), and `pytest` here is a REQUIRED context -- without
+  # a dispatch path a relanded head can never report it and never merges.
+  workflow_dispatch:
   pull_request:
 
 jobs:
@@ -42,7 +47,11 @@ jobs:
           else
             # requests is needed by zo_sentinel.probes.duckdb_schema_uptime_probe
             # (loaded at import time by its test module). Stays cheap to install.
-            pip install pytest requests
+            # PyYAML: tests/test_graph_gap_directives_wired.py proves a CI
+            # caller from PARSED workflow structure, never from raw text
+            # (FU-305 -- a commented-out path string reads as an invocation).
+            # Pinned here rather than importorskip'd: a skip is not a pass.
+            pip install pytest requests PyYAML
           # app-tier deps so the Perspectives/Ask module self-tests run here
           pip install -r tests/ci/requirements-ci.txt
           fi
@@ -58,10 +67,26 @@ jobs:
         # Other tests (test_wiring, smoke_test, test_known_threats) require
         # the live ZoComputer host or have pre-existing failures unrelated
         # to this PR; they are intentionally not in the evaluator scope.
+        # 2026-08-05: test_fire_gate.py and test_sha_green.py ADDED. They were
+        # never in scope, so the fire-decision path -- the code deploy_prod.ps1
+        # names as a precondition -- has been merging on a green that never
+        # collected it, and main carried 2 failing tests there under a green
+        # pytest. Both are network-free; the 2 failures are repaired in the same
+        # commit, which is what makes adding them here safe rather than red.
         # Junit XML is the structured artifact that gh_actions_fetcher.py
         # parses when reverse-feeding failures into mesh_memory.
         run: |
           mkdir -p artifacts
+          # 2026-09-01: the five tests/test_rescore_*.py files and the
+          # vast_spend self-test ADDED. Until today NONE of them was collected
+          # here, so every change to the weekly moat rescore -- the harness that
+          # rents paid GPUs and writes the production corpus -- merged on a
+          # green that had never run one of its tests. Caught by the count, not
+          # the colour: this check reported `577 passed` on a PR that added ten
+          # tests, which is exactly the same number it reported the day before.
+          # All six are network-free (stdlib imports at module scope; psycopg2
+          # and vastai_sdk are imported inside functions, and the one socket
+          # touched is 127.0.0.1:9, whose REFUSAL is the assertion).
           # The last three are DEPLOY-SAFETY gates: Dockerfile COPY coverage,
           # the prod deploy wrapper's invariants, and the alembic revision
           # graph. Until 2026-07-27 none of them ran on a PR -- they lived only
@@ -102,8 +127,45 @@ jobs:
             tests/test_dockerfile_copy_covers_active_services.py \
             tests/test_deploy_prod_script.py \
             tests/test_migration_graph_single_head.py \
+            tests/test_fire_gate.py \
+            tests/test_sha_green.py \
+            tests/test_ops_audit_state.py \
+            tests/test_schema_truth_current.py \
+            tests/test_queue_census.py \
+            tests/test_graph_gap_directives_wired.py \
+            tests/test_undeclared_write_guard.py \
+            tests/test_rescore_billed_dph.py \
+            tests/test_rescore_lstree_parse.py \
+            tests/test_rescore_open_run_detection.py \
+            tests/test_rescore_trust_priority.py \
+            tests/test_rescore_refresh_yield.py \
+            tests/test_vast_spend_selftest.py \
             -q \
             --junitxml=artifacts/junit.xml
+
+      - name: Halt shadow report (REPORT-ONLY -- what the ARMED halt would do)
+        # NOT a new blocking gate. The machine-checkable claim this report carries
+        # -- "the founding case still fires" -- is asserted by
+        # tests/test_queue_census.py, which the step above now collects, so it is
+        # already blocking via an EXISTING required check. This step exists so the
+        # UPSTREAM/PRESENT/DOWNSTREAM narrative, which needs a human reader and
+        # cannot be asserted, is produced and archived on every run instead of
+        # being available only to whoever remembers the tool exists.
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          python tools/halt_shadow_report.py > artifacts/halt_shadow_report.txt 2>&1
+          cat artifacts/halt_shadow_report.txt
+
+      - name: Upload halt shadow report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: halt-shadow-report
+          path: artifacts/halt_shadow_report.txt
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload pytest results
         if: always()

@@ -95,7 +95,17 @@ concurrency:
 env:
   # Contexts that fallback (b) can produce, i.e. those carried by the two
   # dispatchable workflows. Keep in sync with pr-gates.yml + evaluator.yml.
-  DISPATCHABLE: "capmap-check static-analysis smoke-ladder frontend pytest"
+  # Every REQUIRED context is now reachable by workflow_dispatch: no-hollow and
+  # schema-prm gained dispatch triggers, referent-verify already had one. The
+  # PAT is consequently an OPTIMISATION (native events also fire the
+  # non-required checks) and no longer a REQUIREMENT. Nothing here depends on a
+  # human-supplied credential.
+  DISPATCHABLE: "capmap-check static-analysis smoke-ladder frontend pytest no-hollow schema-prm referent-verify"
+  GATE_WORKFLOWS: "pr-gates.yml evaluator.yml no-hollow.yml schema-prm.yml referent-verify.yml"
+  # CAVEAT worth knowing before editing this list: GitHub reads workflow_dispatch
+  # triggers from the DEFAULT BRANCH only. A newly added dispatch trigger returns
+  # HTTP 500 until it is merged to main, so a gate added here cannot be validated
+  # on its own PR -- verify it on main immediately after merge.
   # Last-resort required set, used ONLY if both token paths fail to read branch
   # protection. Staleness here is caught by the guard below, which compares this
   # against the live set whenever the live set is readable.
@@ -179,7 +189,8 @@ jobs:
           if [ -n "$unreachable" ]; then
             echo "::error::DRIFT: required context(s) unreachable in fallback mode:$unreachable"
             echo "::error::These are PR-context-only and cannot be workflow_dispatch'd. Every refreshed PR will sit at BLOCKED forever."
-            echo "::error::Fix: set the RELANDER_TOKEN secret (fine-grained PAT, Contents RW + Pull requests RW, Workflows NO ACCESS)."
+            echo "::error::A required context is not produced by any workflow this job can dispatch."
+            echo "::error::Either give that workflow a workflow_dispatch trigger, or add it to GATE_WORKFLOWS."
             exit 1
           fi
           echo "::notice::all required contexts reachable via dispatch fallback"
@@ -323,40 +334,41 @@ jobs:
             sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid) || continue
             behind=$(gh api "repos/$REPO/compare/$main_sha...$sha" --jq '.behind_by' 2>/dev/null) || behind=""
 
-            refreshed=false
+            # Rebase onto current main when behind. This is worth doing on its
+            # own merits -- a PR must be tested against the base it will land on
+            # -- but it is no longer how the gates get re-run.
             if [ "${behind:-0}" != "0" ]; then
-              # Path 1: branch is behind main -> merge commit re-fires gates.
               if GH_TOKEN="${PAT:-$GH_TOKEN}" gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
                 echo "::notice::#$pr branch updated (was $behind behind)"
-                refreshed=true
               else
                 echo "::notice::#$pr not updated ($(tr -d '\n' < err.txt | head -c 200))"
+                continue   # conflicted or racing; nothing to gate
               fi
-            elif [ "$HAVE_PAT" = "true" ]; then
-              # Path 2: already level with main -> update-branch is a no-op, so
-              # close+reopen to emit a `reopened` pull_request event. Only the
-              # PAT can do this; GITHUB_TOKEN events are recursion-guarded.
-              if GH_TOKEN="$PAT" gh pr close "$pr" -R "$REPO" 2>err.txt && sleep 2 && GH_TOKEN="$PAT" gh pr reopen "$pr" -R "$REPO" 2>>err.txt; then
-                echo "::notice::#$pr level with main -> closed+reopened to re-fire PR gates"
-                refreshed=true
-              else
-                echo "::warning::#$pr close/reopen failed ($(tr -d '\n' < err.txt | head -c 200))"
-              fi
-            else
-              echo "::warning::#$pr level with main and no RELANDER_TOKEN -> UNREACHABLE (needs PAT for close/reopen)"
             fi
 
-            if [ "$refreshed" = "true" ]; then
-              count=$((count+1))
-              if [ "$HAVE_PAT" != "true" ]; then
-                branch=$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName) || continue
-                for wf in pr-gates.yml evaluator.yml; do
-                  GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$wf" -R "$REPO" --ref "$branch" \
-                    && echo "::notice::#$pr dispatched $wf on $branch" \
-                    || echo "::warning::#$pr could not dispatch $wf on $branch"
-                done
-              fi
+            # Re-run the gates. EVERY required context is dispatchable, so this
+            # path needs no PAT, works whether or not the branch moved, and has
+            # no "unreachable" case. Previously a PR level with main could only
+            # be refreshed by close+reopen under a human identity.
+            branch=$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName) || continue
+            if [ "$HAVE_PAT" = "true" ] && [ "${behind:-0}" != "0" ]; then
+              # The merge commit already fired everything natively, including
+              # the non-required checks. Dispatching again would only duplicate.
+              echo "::notice::#$pr gates re-fired natively by the update-branch commit"
+              refreshed=true
+            else
+              refreshed=false
+              for wf in $GATE_WORKFLOWS; do
+                if GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$wf" -R "$REPO" --ref "$branch" 2>disp.txt; then
+                  refreshed=true
+                else
+                  echo "::warning::#$pr could not dispatch $wf ($(tr -d '\n' < disp.txt | head -c 160))"
+                fi
+              done
+              [ "$refreshed" = "true" ] && echo "::notice::#$pr dispatched $(echo $GATE_WORKFLOWS | wc -w) gate workflow(s) on $branch"
             fi
+
+            [ "$refreshed" = "true" ] && count=$((count+1))
           done
           # --- backlog telemetry --------------------------------------------
           # The original failure was not that the sweep broke; it exited 0 every

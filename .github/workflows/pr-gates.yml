@@ -289,6 +289,11 @@ jobs:
       - name: Install ruff
         run: python -m pip install --upgrade pip ruff
 
+      - name: Workflow permission keys (BLOCKING -- invalid keys fail runs silently)
+        run: |
+          pip install pyyaml -q
+          python3 tools/check_workflow_permissions.py
+
       - name: Ruff (BLOCKING -- maintained surface)
         # Real-bug rules (F = pyflakes, E9 = syntax/runtime) over the code we
         # maintain. A new undefined name / unused import / broken f-string here

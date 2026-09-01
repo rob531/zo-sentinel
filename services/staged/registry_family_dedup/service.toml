@@ -1,0 +1,19 @@
+[service]
+name = "registry_family_dedup"
+import_path = "services.active.registry_family_dedup.router"
+prefix = "/api"
+tag = "registry_family_dedup"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_store = true
+
+[models]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[settings]
+registry_family_dedup = true

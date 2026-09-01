@@ -30,7 +30,12 @@ permissions:
 
 concurrency:
   group: pr-triage
-  cancel-in-progress: false
+  # The sweep is a full, idempotent re-triage of EVERY open build PR, so a
+  # queued duplicate can never learn anything the run after it will not -- it
+  # only re-burns the same GraphQL quota. Bursts of build PRs used to queue
+  # N identical sweeps and exhaust the installation rate limit, which fails the
+  # job outright and leaves every PR unlabelled (a silent total gate outage).
+  cancel-in-progress: true
 
 jobs:
   triage:
@@ -39,10 +44,19 @@ jobs:
     steps:
       # Base-repo checkout (pull_request_target context); we never execute PR code.
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Triage open autonomous-build PRs (read-only -- labels + digest)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python tools/pr_triage.py
+          # Self-imposed budget, comfortably inside timeout-minutes below. A job
+          # killed by the RUNNER writes no digest and no summary; a tool that
+          # stops itself writes both. See tools/pr_triage.py DEADLINE_SEC.
+          PR_TRIAGE_DEADLINE_SEC: "390"
+        # -u is not cosmetic. stdout here is a PIPE, so it is block buffered by
+        # default, and the two 8-minute timeout kills on 2026-07-28 (06:11Z,
+        # 06:23Z) discarded every line the tool had printed -- 16 minutes of work
+        # that left no evidence of how far it got. Unbuffered, a killed run is
+        # still a readable run.
+        run: python -u tools/pr_triage.py

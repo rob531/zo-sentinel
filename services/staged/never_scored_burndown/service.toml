@@ -1,0 +1,8 @@
+[service]
+name = "never_scored_burndown"
+import_path = "services.active.never_scored_burndown.router"
+prefix = "/api"
+tag = "never_scored_burndown"
+origin = "service"
+auth = "public"
+needs_data_layer = true

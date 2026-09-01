@@ -1,0 +1,8 @@
+[service]
+name = "entity_detail"
+import_path = "services.active.entity_detail.router"
+prefix = "/api"
+tag = "entity_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = true

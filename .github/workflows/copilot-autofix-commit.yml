@@ -1,15 +1,39 @@
 name: copilot-autofix-commit
 
-# Automatically commits Copilot Autofix suggestions the moment they are
-# generated — zero human clicks. Works for both CodeQL and Bandit alerts
-# (both upload SARIF to the code scanning API, which Copilot Autofix covers).
+# Commits Copilot Autofix suggestions for a code scanning alert.
 #
-# Trigger: code_scanning_alert.appeared_in_branch fires once per alert
-# per branch; we only act on PR branches so we never silently mutate main.
+# FU-154 (2026-07-28, prod-drift-sentinel). This workflow was added on
+# 2026-06-25 (#687) with `on: code_scanning_alert`. `code_scanning_alert` is a
+# GitHub *webhook* event; it is NOT a valid GitHub Actions workflow trigger.
+# GitHub therefore could not parse the file, and every push to every branch
+# produced a startup_failure run instead:
+#
+#   1,919 runs since 2026-06-25 -- 0 successes, 0 jobs ever created.
+#
+# The runs carry `name` = the file PATH rather than `copilot-autofix-commit`,
+# which is the tell for a workflow that failed before its YAML was read. So the
+# zero-click autofix feature has never once run, and the repo has carried a
+# permanently-red workflow for 33 days -- the exact condition that teaches
+# humans and automated gates alike to discount red.
+#
+# The trigger is changed to `workflow_dispatch` so the file PARSES and the logic
+# is preserved and manually invocable against a specific alert. Restoring true
+# zero-click behaviour needs a valid trigger (e.g. a `repository_dispatch` fired
+# by a webhook receiver) and is a separate, larger change -- deliberately not
+# smuggled in here. What this PR buys is: the file becomes valid, the 1,919-run
+# red stops, and the capability stops silently claiming to exist.
 
 on:
-  code_scanning_alert:
-    types: [appeared_in_branch]
+  workflow_dispatch:
+    inputs:
+      alert:
+        description: 'Code scanning alert number to apply the autofix for'
+        required: true
+        type: string
+      target_ref:
+        description: 'Ref to commit the fix to (e.g. refs/pull/123/head)'
+        required: true
+        type: string
 
 permissions:
   contents: write        # commit the fix to the PR branch
@@ -19,30 +43,30 @@ jobs:
   commit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Only act on PR branches (not direct pushes to main)
-    if: contains(github.event.alert.most_recent_instance.ref, 'refs/pull/')
+    # Never mutate main: only act on a pull-request ref.
+    if: contains(github.event.inputs.target_ref, 'refs/pull/')
     steps:
       - name: Commit Copilot Autofix suggestion
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          ALERT: ${{ github.event.alert.number }}
-          REF: ${{ github.event.alert.most_recent_instance.ref }}
-          RULE: ${{ github.event.alert.rule.id }}
+          ALERT: ${{ github.event.inputs.alert }}
+          REF: ${{ github.event.inputs.target_ref }}
         run: |
           # Wait up to 90s for Copilot to generate the fix (it's async)
+          STATUS=pending
           for i in $(seq 1 9); do
             STATUS=$(gh api "repos/$REPO/code-scanning/alerts/$ALERT/autofix" \
               --jq '.status' 2>/dev/null || echo "pending")
-            echo "attempt $i: alert=#$ALERT rule=$RULE status=$STATUS"
+            echo "attempt $i: alert=#$ALERT status=$STATUS"
             [ "$STATUS" = "success" ] && break
-            [ "$STATUS" = "error" ]   && { echo "no autofix available for this rule"; exit 0; }
+            [ "$STATUS" = "error" ]   && { echo "no autofix available for this alert"; exit 0; }
             sleep 10
           done
-          [ "$STATUS" != "success" ] && { echo "autofix not ready after 90s — skipping"; exit 0; }
+          [ "$STATUS" != "success" ] && { echo "autofix not ready after 90s - skipping"; exit 0; }
 
           gh api --method POST "repos/$REPO/code-scanning/alerts/$ALERT/autofix/commits" \
-            -f message="fix(autofix): $RULE — alert #$ALERT" \
+            -f message="fix(autofix): alert #$ALERT" \
             -f target_ref="$REF" \
             && echo "fix committed to $REF" \
-            || echo "commit failed or already applied — ok"
+            || echo "commit failed or already applied - ok"

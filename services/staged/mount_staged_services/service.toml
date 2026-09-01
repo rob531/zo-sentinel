@@ -1,0 +1,17 @@
+[service]
+name = "mount_staged_services"
+import_path = "services.active.mount_staged_services.router"
+prefix = "/api"
+tag = "mount_staged_services"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+app.db = "get_session"
+app.models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+
+[service.test]
+self_test = true
+test_override = "app.dependency_overrides[get_session] = lambda: create_engine('sqlite:///:memory:').connect()"
+expected_output = "PASS"

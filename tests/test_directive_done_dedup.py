@@ -8,7 +8,7 @@ spec = importlib.util.spec_from_file_location(
 M = importlib.util.module_from_spec(spec)
 try:
     spec.loader.exec_module(M)
-except Exception:
+except (Exception, SystemExit):   # SystemExit is BaseException: FU-158
     pytest.skip("directive_mcp import side-effects unavailable in CI", allow_module_level=True)
 
 

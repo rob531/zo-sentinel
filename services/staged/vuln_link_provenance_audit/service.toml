@@ -1,0 +1,12 @@
+[service]
+name = "vuln_link_provenance_audit"
+import_path = "services.active.vuln_link_provenance_audit.router"
+prefix = "/api"
+tag = "vuln_link_provenance_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

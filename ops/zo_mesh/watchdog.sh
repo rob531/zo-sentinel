@@ -1,7 +1,50 @@
 #!/bin/zsh
-# watchdog.v3.8 - autonomous self-healer for ZOMesh
+# watchdog.v3.11 - autonomous self-healer for ZOMesh
 #
-# CHANGELOG vs v3.7 (this change):
+# CHANGELOG vs v3.10 (this change, 2026-08-25, MERGE_AUDIT_2026-08-23 B2):
+#   - ADD: _workspace_hygiene, invoked each tick. Asserts the build workspace
+#     at $SENTINEL is (a) exactly origin/main and (b) free of untracked files
+#     under app/. The 2026-08-14..16 stall was an untracked app/routers/__init__.py
+#     shadowing the committed PEP-420 namespace package -- it broke the
+#     media_assets spine mount and every local `import app.*` for three days
+#     while the checkout also sat 26 commits behind. No gate caught it because
+#     no gate looked: CI tests origin/main, the builder runs here. The audit's
+#     point is that the tree DRIFTS UNOBSERVED -- a diverged workspace makes
+#     every local gate result describe a tree that exists nowhere else. Logic in
+#     tools/workspace_hygiene_check.py per the v3.8 janitor precedent.
+#
+# CHANGELOG vs v3.9 (2026-08-22, GH #3415 prevention 1 / FU-349):
+#   - FIX: a restart was recorded as a repair the moment the relaunch command
+#     was issued. During the 2026-08-13..16 outage every restarted promoter
+#     died at package init in <3s and the watchdog faithfully 'repaired' it
+#     for three days -- from outside, a process that never starts looks
+#     identical to one that is running. Every restart this tick is now
+#     RE-OBSERVED ~10s later (_verify_restarts, one sleep for the whole
+#     batch): a daemon with no surviving process, or a service whose /health
+#     is still non-200, is logged as <name>_restart_FAILED and flips
+#     HEALTHY=false. A restart that yields no surviving process is a
+#     FAILURE, not a recovery. Census of same-shape sites in this commit:
+#     _svc, _daemon, _daemon_tp, WorldAgent, IntentEngine here, plus
+#     ops/host/restart_promoter.sh (which also gains --restart + outcome
+#     verification).
+#
+# CHANGELOG vs v3.8 (this change) -- FORWARD-PORTED into the committed copy
+# 2026-07-30; this fix has been LIVE on /home/workspace/zo_mesh/watchdog.sh
+# since 2026-06-14 but was never in git: PR #147 (0c05bf30, 2026-07-02) added
+# the janitor from a pre-v3.9 base and silently REGRESSED the committed copy
+# back past it. The committed artifact was therefore a REGRESSION of the
+# running artifact, and the only thing preventing the 2026-06-13/14 tick-freeze
+# outage from returning was that this path has no deploy step. Restored so
+# `diff ops/zo_mesh/watchdog.sh /home/workspace/zo_mesh/watchdog.sh` is empty.
+#   - FIX: the two service health-check curls (_svc, _bw_check) had NO timeout,
+#     so when WriteService :8772 /health wedged (its /query kept serving) the
+#     un-timed curl blocked FOREVER and froze the ENTIRE tick -> the whole
+#     watchdog hung, the promoter cohort it supervises died unrestarted, and the
+#     build pipeline went idle (2026-06-13 18:41 and 2026-06-14 07:20). Added
+#     `-m 5` (and `--connect-timeout 3`) so a wedged endpoint can never hang the
+#     tick again; a non-200/timeout just trips the existing restart branch.
+#
+# CHANGELOG vs v3.7:
 #   - ADD: build->publish pipeline janitor, invoked each tick (see the
 #     `sentinel_janitor` hook near the end + tools/sentinel_janitor.sh). It (a)
 #     sweeps the GHOST .done graveyard that makes goose_runner skip every
@@ -87,6 +130,7 @@
 LOGS=/home/workspace/logs; MESH=/home/workspace/zo_mesh; SENTINEL=/home/workspace/zo_sentinel
 mkdir -p $LOGS
 TS=$(date '+%Y-%m-%d %H:%M:%S'); HEALTHY=true; ACTIONS=()
+RESTART_VERIFY=(); SVC_VERIFY=()
 log() { echo "[$TS] $1"; }
 
 TRUST_PIPELINE=(
@@ -104,7 +148,7 @@ TRUST_PIPELINE=(
 
 _svc() {
     local script=$1 port=$2 name=$3
-    local code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
+    local code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
     code=${code:-000}
     if [[ "$code" != "200" ]]; then
         log "$name down (code=$code) -- restarting"
@@ -117,11 +161,12 @@ _svc() {
         esac
         sleep 3
         HEALTHY=false; ACTIONS+=("${name}_restart")
+        SVC_VERIFY+=("$port|$name")
     fi
 }
 
 _bw_check() {
-    local code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8795/health 2>/dev/null)
+    local code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:8795/health 2>/dev/null)
     code=${code:-000}
     if [[ "$code" != "200" ]]; then
         log "BuildWatcher :8795 down (code=$code) -- use ZoComputer Hosting Restart button"
@@ -139,11 +184,13 @@ _daemon() {
         log "$name down -- restarting"
         eval "nohup $start_cmd >> $LOGS/$logfile 2>&1 &"
         HEALTHY=false; ACTIONS+=("${name}_restart")
+        RESTART_VERIFY+=("python.*$script|$name")
     elif [[ "$count" -gt 1 ]]; then
         log "$name duplicates ($count) -- deduplicating"
         pkill -f "python.*$script" 2>/dev/null; sleep 2
         eval "nohup $start_cmd >> $LOGS/$logfile 2>&1 &"
         HEALTHY=false; ACTIONS+=("${name}_dedup")
+        RESTART_VERIFY+=("python.*$script|$name")
     fi
 }
 
@@ -159,6 +206,7 @@ _daemon_tp() {
         log "$name down -- restarting via daemon_wrapper"
         nohup bash $MESH/daemon_wrapper.sh "$name" "$SENTINEL/$script" >> "$LOGS/$logfile" 2>&1 &
         HEALTHY=false; ACTIONS+=("${name}_restart")
+        RESTART_VERIFY+=("python.*$script|$name")
         return
     fi
 
@@ -167,6 +215,7 @@ _daemon_tp() {
         pkill -f "python.*$script" 2>/dev/null; sleep 2
         nohup bash $MESH/daemon_wrapper.sh "$name" "$SENTINEL/$script" >> "$LOGS/$logfile" 2>&1 &
         HEALTHY=false; ACTIONS+=("${name}_dedup")
+        RESTART_VERIFY+=("python.*$script|$name")
         return
     fi
 
@@ -177,6 +226,51 @@ _daemon_tp() {
     if [[ "$etimes" -lt 5 ]]; then
         log "$name running but uptime ${etimes}s <5s -- possible crash loop, will recheck next tick"
         HEALTHY=false; ACTIONS+=("${name}_unstable")
+    fi
+}
+
+# GH #3415 prevention 1 / FU-349: re-observe every restart ~10s later. A
+# restart that yields no surviving process (or a service still non-200) is
+# logged as a FAILURE, never as a repair. One sleep covers the whole batch,
+# so a healthy tick costs nothing and a repair tick costs 10s.
+_verify_restarts() {
+    [[ ${#RESTART_VERIFY[@]} -eq 0 && ${#SVC_VERIFY[@]} -eq 0 ]] && return
+    sleep 10
+    local entry pat name port count code
+    for entry in "${RESTART_VERIFY[@]}"; do
+        pat="${entry%|*}"; name="${entry##*|}"
+        count=$(pgrep -c -f "$pat" 2>/dev/null)
+        count=${count:-0}
+        if [[ "$count" -eq 0 ]]; then
+            log "$name RESTART FAILED -- no surviving process 10s after relaunch (check its log for an import traceback)"
+            HEALTHY=false; ACTIONS+=("${name}_restart_FAILED")
+        fi
+    done
+    for entry in "${SVC_VERIFY[@]}"; do
+        port="${entry%|*}"; name="${entry##*|}"
+        code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
+        code=${code:-000}
+        if [[ "$code" != "200" ]]; then
+            log "$name RESTART FAILED -- /health $code 10s after relaunch"
+            HEALTHY=false; ACTIONS+=("${name}_restart_FAILED")
+        fi
+    done
+}
+
+# MERGE_AUDIT_2026-08-23 B2: the build workspace is a mutable tree that no gate
+# observes. On 2026-08-14 it was 26 commits behind main and carried an untracked
+# app/routers/__init__.py that shadowed the committed namespace package, breaking
+# the media_assets spine mount and every local `import app.*` for three days. CI
+# never saw it -- CI tests origin/main; the builder and its self-tests run HERE.
+# A diverged workspace does not just carry defects, it makes every local gate
+# result describe a tree that exists nowhere else. Observed every tick now.
+# Logic lives in tools/ (the v3.8 janitor precedent) so this file stays minimal.
+_workspace_hygiene() {
+    local out
+    out=$(cd $SENTINEL && timeout 60 python3 tools/workspace_hygiene_check.py --quiet 2>&1)
+    if [[ $? -ne 0 ]]; then
+        log "build workspace hygiene FAIL -- ${out//$'\n'/ | }"
+        HEALTHY=false; ACTIONS+=("workspace_hygiene_FAIL")
     fi
 }
 
@@ -250,21 +344,26 @@ if [[ "$WD" -gt 2 ]]; then
     pkill -9 -f 'python.*run.py --daemon' 2>/dev/null; sleep 3
     cd /home/workspace/world_agent && nohup python run.py --daemon >> $LOGS/world_agent.log 2>&1 &
     HEALTHY=false; ACTIONS+=("wa_dedup")
+    RESTART_VERIFY+=("python.*run.py --daemon|WorldAgent")
 elif [[ "$WD" -eq 0 ]]; then
     log "WorldAgent down -- restarting"
     cd /home/workspace/world_agent && nohup python run.py --daemon >> $LOGS/world_agent.log 2>&1 &
     HEALTHY=false; ACTIONS+=("wa_restart")
+    RESTART_VERIFY+=("python.*run.py --daemon|WorldAgent")
 fi
 
 IE=$(pgrep -c -f 'python.*intent_engine_daemon.py' 2>/dev/null)
 IE=${IE:-0}
 [[ "$IE" -gt 1 ]] && { log "IntentEngine dedup ($IE)"; pkill -f 'python.*intent_engine_daemon.py' 2>/dev/null; sleep 2
     nohup python3 /home/workspace/Skills/childofintent-intent-engine/scripts/intent_engine_daemon.py >> $LOGS/intent_engine.log 2>&1 &
-    HEALTHY=false; ACTIONS+=("ie_dedup"); }
+    HEALTHY=false; ACTIONS+=("ie_dedup")
+    RESTART_VERIFY+=("python.*intent_engine_daemon.py|IntentEngine"); }
 
 BYOK=$(grep -rl 'model_name.*byok:' /home/workspace/Skills/ --include='*.ts' --include='*.py' 2>/dev/null | grep -v '.bak.' | head -5)
 [[ -n "$BYOK" ]] && { log "BYOK ALERT: $BYOK"; HEALTHY=false; ACTIONS+=("byok_alert"); }
 
+_verify_restarts
+_workspace_hygiene
 _compact_logs
 _self_heartbeat
 

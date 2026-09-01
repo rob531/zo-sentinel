@@ -24,16 +24,23 @@ inform corpus improvements and 7-axis scoring refinement):
 
 Read-only; safe under THE LINE. Run tower-side via fly proxy like family_count.
 """
-import argparse, collections, itertools, json, re, socket, subprocess, sys, time
+import argparse, collections, itertools, json, os, re, sys, time
+
+# FU-151: one shared credential path for every flyctl caller in this repo.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fly_token import ensure_proxy as _ensure_fly_proxy  # noqa: E402
 
 def pg_conn(dsn_file, port=15432):
     import psycopg2
-    try:
-        s = socket.create_connection(("127.0.0.1", port), 1); s.close()
-    except Exception:
-        subprocess.Popen(["flyctl", "proxy", "%d:5432" % port, "-a", "mcplookup-db"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(8)
+    # FU-151/FU-133: this used to blind-Popen flyctl with BOTH streams at DEVNULL
+    # and sleep(8) without ever checking the port came up, so an unauthenticated
+    # flyctl produced a psycopg2 connection error naming nothing. Now the token is
+    # hydrated from AgentVault first, stderr is kept, and a failure quotes flyctl's
+    # own last line ("no access token available", the 2026-07-28 outage).
+    _ensure_fly_proxy(port, "mcplookup-db",
+                      os.path.join(os.environ.get("TEMP", "/tmp"),
+                                   "_flyctl_proxy_delta_report.err"),
+                      log=lambda m: print(m, file=sys.stderr, flush=True))
     dsn = open(dsn_file).read().strip()
     dsn = re.sub(r"@[^/:@]+(:\d+)?/", "@127.0.0.1:%d/" % port, dsn)
     dsn = re.sub(r"host=\S+", "host=127.0.0.1", dsn)

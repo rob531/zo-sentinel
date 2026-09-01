@@ -1,0 +1,40 @@
+[service]
+name = "verdict_detail"
+import_path = "services.active.verdict_detail.router"
+prefix = "/api"
+tag = "verdict_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[routing]
+routes = [
+    { path = "/verdict/{verdict_id}", method = "GET", handler = "get_verdict_detail" },
+    { path = "/verdict/{verdict_id}/breakdown", method = "GET", handler = "get_verdict_breakdown" },
+    { path = "/verdict/{verdict_id}/scores", method = "GET", handler = "get_verdict_scores" },
+    { path = "/verdict/{verdict_id}/disputes", method = "GET", handler = "get_verdict_disputes" },
+    { path = "/verdict/{verdict_id}/dispute", method = "POST", handler = "create_dispute" },
+]
+
+[dependencies]
+internal = [
+    "app.db",
+    "app.models",
+    "services.active.write_service",
+]
+
+[database]
+app_tables = [
+    "mcp_server_registry",
+    "mcp_llm_axis_scores", 
+    "mcp_score_disputes",
+    "orgs",
+    "users",
+]
+
+[external]
+zo_computer_store = "http://127.0.0.1:8772/query"
+mesh_tables = [
+    "mcp_signal_scores",
+    "mesh_memory",
+]

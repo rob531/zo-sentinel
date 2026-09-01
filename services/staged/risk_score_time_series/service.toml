@@ -1,0 +1,8 @@
+[service]
+name = "risk_score_time_series"
+import_path = "services.active.risk_score_time_series.router"
+prefix = "/api"
+tag = "risk_score_time_series"
+origin = "service"
+auth = "public"
+needs_data_layer = true

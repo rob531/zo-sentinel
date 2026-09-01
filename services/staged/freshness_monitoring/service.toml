@@ -1,0 +1,8 @@
+[service]
+name = "freshness_monitoring"
+import_path = "services.active.freshness_monitoring.router"
+prefix = "/api"
+tag = "freshness_monitoring"
+origin = "service"
+auth = "public"
+needs_data_layer = true

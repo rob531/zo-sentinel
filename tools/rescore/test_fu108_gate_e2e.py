@@ -4,11 +4,10 @@
 Exercises exactly the code path ph_import now runs, plus the contract-drift
 check against schemas/risk_axis_mapping_v1.json fetched from the SFT repo.
 """
-import gzip, json, os, sys
+import gzip, json, sys
 
 sys.path.insert(0, r"D:\zo\_wt_fu108\tools\rescore")
-from score_validity import (assert_importable, extract_axis_rows, format_report,
-                            verify_against_schema, ExtractionFailure,
+from score_validity import (assert_importable, extract_axis_rows, verify_against_schema, ExtractionFailure,
                             CANONICAL_AXIS_ORDER)
 
 PREDS = r"D:\zo\runs\weekly_rescore\20260726-014732\results\preds.jsonl.gz"

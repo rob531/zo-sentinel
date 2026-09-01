@@ -43,10 +43,35 @@ MONTHLY_ALERT    = 20.00
 DB_MIN_FREE_FRAC = 0.15      # keep >=15% of the PG volume free after ingest
 
 
+WAVE_CEILING_USD = 3.00  # authority envelope, per wave. HARD clamp (FU-342).
+MAX_DPH_CEILING = 0.45   # == weekly_rescore.MAX_DPH_DEFAULT, the offer filter
+
+
 def scaled_budget(n_rows: int, r: float = R_FLOOR) -> float:
-    """Cost cap = clamp(K*r*N, B_MIN, B_ABS). Fixed at EXPORT (n from the
-    frozen distinct-row export count) so a runaway can't inflate its budget."""
-    return min(B_ABS, max(B_MIN, K * r * max(0, n_rows)))
+    """Cost cap, DERIVED FROM THE DEADLINE so the money guard can never fire
+    before the wedge guard (FU-342).
+
+    The old form was clamp(K*r*N, B_MIN, B_ABS) -- linear through origin, no
+    startup term. But `ph_watch_collect` compares it against `elapsed_h * dph`
+    measured from `fired_at`, so the cap is ALSO a wall-clock deadline worth
+    budget/dph*60 minutes. At the observed dph it was worth 134m against a 199m
+    `scaled_deadline_min`, so the deadline could never fire and the 45-minute
+    STARTUP_MIN allowance FU-104 added -- for provisioning, image pull and the
+    6GB model load -- was unfunded. Wave 20260811-063956 was destroyed at 134m
+    with `collected: []`, 65 minutes before its own deadline allowed.
+
+    Deriving the cap from the deadline at the OFFER CEILING makes the two
+    consistent by construction rather than by two constants agreeing by luck.
+    Still fixed at EXPORT: MAX_DPH_CEILING is a constant and n_rows is frozen,
+    so a runaway still cannot inflate its own budget.
+
+    The WAVE_CEILING_USD clamp LOWERS the effective ceiling -- the previous
+    B_ABS of $10 let this function return $3.29 at N=120k, above the authority
+    envelope's $3/wave. It can no longer do that.
+    """
+    minutes = scaled_deadline_min(n_rows)
+    derived = minutes / 60.0 * MAX_DPH_CEILING
+    return min(B_ABS, WAVE_CEILING_USD, max(B_MIN, derived))
 
 
 def scaled_deadline_min(n_rows: int) -> int:

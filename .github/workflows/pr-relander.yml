@@ -164,7 +164,7 @@ jobs:
           echo "required=$req" >> "$GITHUB_OUTPUT"
 
           if [ "$HAVE_PAT" = "true" ]; then
-            echo "::notice::RELANDER_TOKEN present -> native synchronize/reopened; ALL required contexts reachable"
+            echo "::notice::RELANDER_TOKEN present (usability is verified in the reland job, not here)"
             exit 0
           fi
 
@@ -230,6 +230,20 @@ jobs:
           if [ -n "${PAT_RAW_LEN:-}" ] && [ "$PAT_RAW_LEN" -ne "${#PAT}" ]; then
             echo "::warning::RELANDER_TOKEN contained $((PAT_RAW_LEN - ${#PAT})) character(s) outside [A-Za-z0-9_]; stripped. Re-set the secret via the web UI to remove them at source."
           fi
+          # A secret that strips to nothing is not "absent" -- it is a
+          # MIS-SET secret, and the two must not look alike. Observed
+          # 2026-09-01: RELANDER_TOKEN held a single non-alphanumeric byte, so
+          # the strip removed "1 character", the validation block never ran
+          # (empty string), and the sweep silently used GITHUB_TOKEN while the
+          # preflight still reported "RELANDER_TOKEN present". Present and
+          # usable are different facts.
+          if [ "${PAT_RAW_LEN:-0}" -gt 0 ] && [ -z "$PAT" ]; then
+            echo "::error::RELANDER_TOKEN is set but contains NO token characters (raw length $PAT_RAW_LEN, all stripped)."
+            echo "::error::The secret was almost certainly written empty or as a stray byte. Re-set it via Settings -> Secrets -> Actions in the WEB UI."
+            echo "::error::Continuing in fallback mode: no-hollow / schema-prm / referent-verify will NOT report and nothing will merge."
+            HAVE_PAT="false"
+          fi
+
           if [ -n "$PAT" ]; then
             if pat_login=$(GH_TOKEN="$PAT" gh api user --jq '.login' 2>pat_err.txt); then
               echo "::notice::RELANDER_TOKEN validated (authenticates as $pat_login)"

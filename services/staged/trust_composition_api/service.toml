@@ -1,0 +1,8 @@
+[service]
+name = "trust_composition_api"
+import_path = "services.active.trust_composition_api.router"
+prefix = "/api"
+tag = "trust_composition_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

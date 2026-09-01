@@ -1,0 +1,8 @@
+[service]
+name = "scoring_pulse"
+import_path = "services.active.scoring_pulse.router"
+prefix = "/api"
+tag = "scoring_pulse"
+origin = "service"
+auth = "public"
+needs_data_layer = true

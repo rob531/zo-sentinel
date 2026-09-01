@@ -1,0 +1,11 @@
+[service]
+name = "orphan_router_census_api"
+import_path = "services.active.orphan_router_census_api.router"
+prefix = "/api"
+tag = "orphan_router_census_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

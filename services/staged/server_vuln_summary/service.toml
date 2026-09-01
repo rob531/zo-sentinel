@@ -1,0 +1,9 @@
+# service.toml - server_vuln_summary service definition
+[service]
+name = "server_vuln_summary"
+import_path = "services.active.server_vuln_summary.router"
+prefix = "/api"
+tag = "server_vuln_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.db import get_session
-from app.models import mcp_server_registry, vuln_advisories, vuln_links
+from app.models import McpServerRegistry, vuln_advisories, VulnLink
 
 from .contract import Advisory, ServerCVEResponse
 from .logic import get_server_cves
@@ -19,7 +19,7 @@ async def get_cves_for_server(
     server_id: int,
     session: Session = Depends(get_session),
 ) -> ServerCVEResponse:
-    server = session.query(mcp_server_registry).filter(mcp_server_registry.id == server_id).first()
+    server = session.query(McpServerRegistry).filter(McpServerRegistry.id == server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         session = SessionLocal()
         try:
             # Add a test server
-            test_server = mcp_server_registry(
+            test_server = McpServerRegistry(
                 id=1,
                 name="Test Server",
                 org_id=1,
@@ -98,14 +98,14 @@ if __name__ == "__main__":
             ]
             session.add_all(advisories)
 
-            # Add test vuln_links
+            # Add test VulnLink
             vuln_links_data = [
-                vuln_links(
+                VulnLink(
                     server_id=1,
                     advisory_id=1,
                     match_confidence=0.9
                 ),
-                vuln_links(
+                VulnLink(
                     server_id=1,
                     advisory_id=2,
                     match_confidence=0.8

@@ -1,106 +1,112 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
-from typing import List
-
 from app.db import get_session
+from pydantic import BaseModel
+from datetime import datetime, timezone
+from typing import List
+import json
+import tempfile
+import shutil
+from pathlib import Path
+from fastapi.testclient import TestClient
 
 router = APIRouter()
 
 
-class HandlerHealth(BaseModel):
-    handler: str
-    pending: int
-    proposed: int
-    oldest_age_seconds: int
+class DirectiveQueueHealthResponse(BaseModel):
+    total_pending: int
+    total_proposed: int
+    tasks: List[str]
+    ts: str
 
 
-class QueueHealthResponse(BaseModel):
-    handlers: List[HandlerHealth]
-    summary: dict
+def check_directive_queue_health(
+    proposed_path: str = "/home/workspace/zo_sentinel/directives/proposed/",
+    pending_path: str = "/home/workspace/zo_sentinel/directives/pending/"
+) -> DirectiveQueueHealthResponse:
+    proposed_dir = Path(proposed_path)
+    pending_dir = Path(pending_path)
+
+    proposed_files = list(proposed_dir.glob("*.json")) if proposed_dir.exists() else []
+    pending_files = list(pending_dir.glob("*.json")) if pending_dir.exists() else []
+
+    proposed_tasks = []
+    for pf in proposed_files:
+        try:
+            data = json.loads(pf.read_text())
+            if isinstance(data, dict) and "task" in data:
+                proposed_tasks.append(data["task"])
+        except Exception:
+            pass
+
+    pending_tasks = []
+    for pf in pending_files:
+        try:
+            data = json.loads(pf.read_text())
+            if isinstance(data, dict) and "task" in data:
+                pending_tasks.append(data["task"])
+        except Exception:
+            pass
+
+    all_tasks = proposed_tasks + pending_tasks
+
+    return DirectiveQueueHealthResponse(
+        total_pending=len(pending_files),
+        total_proposed=len(proposed_files),
+        tasks=all_tasks,
+        ts=datetime.now(timezone.utc).isoformat(),
+    )
 
 
-def get_directive_queue_health():
-    import requests
-    try:
-        resp = requests.get(
-            "http://127.0.0.1:8772/query",
-            json={"type": "directive_queue_metadata"},
-            timeout=5
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        return {"handlers": [], "summary": {"total_pending": 0, "total_proposed": 0, "oldest_overall_seconds": 0}}
-
-
-@router.get("/api/directives/queue-health", response_model=QueueHealthResponse)
-async def get_queue_health(
-    session=Depends(get_session)
-):
-    data = get_directive_queue_health()
-    handlers = [HandlerHealth(**h) for h in data.get("handlers", [])]
-    summary = data.get("summary", {})
-    if handlers and "total_pending" not in summary:
-        summary = {
-            "total_pending": sum(h.pending for h in handlers),
-            "total_proposed": sum(h.proposed for h in handlers),
-            "oldest_overall_seconds": max(h.oldest_age_seconds for h in handlers)
-        }
-    return QueueHealthResponse(handlers=handlers, summary=summary)
+@router.get("/api/directive-queue/health", response_model=DirectiveQueueHealthResponse)
+def directive_queue_health() -> DirectiveQueueHealthResponse:
+    return check_directive_queue_health()
 
 
 if __name__ == "__main__":
-    import sys
-    from unittest.mock import patch
-    from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from app.models import Base
+    proposed_temp = tempfile.mkdtemp()
+    pending_temp = tempfile.mkdtemp()
 
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(engine)
-    TestingSessionLocal = sessionmaker(bind=engine)
+    (Path(proposed_temp) / "task1.json").write_text(json.dumps({"task": "alpha"}))
+    (Path(pending_temp) / "task2.json").write_text(json.dumps({"task": "beta"}))
 
-    def get_test_session():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+    try:
+        from app.db import get_session
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
 
-    from fastapi import FastAPI
-    from app.db import get_session as real_get_session
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    test_app = FastAPI()
-    test_app.include_router(router)
-    test_app.dependency_overrides[real_get_session] = get_test_session
+        def override_get_session():
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
 
-    client = TestClient(test_app)
+        from fastapi import FastAPI
 
-    seeded_data = {
-        "handlers": [
-            {"handler": "generate_file", "pending": 3, "proposed": 2, "oldest_age_seconds": 300},
-            {"handler": "run_script", "pending": 1, "proposed": 0, "oldest_age_seconds": 60}
-        ],
-        "summary": {
-            "total_pending": 4,
-            "total_proposed": 2,
-            "oldest_overall_seconds": 300
-        }
-    }
+        app = FastAPI()
+        app.include_router(router)
 
-    with patch("services.staged.directive_queue_health.logic.requests.get") as mock_get:
-        mock_resp = type("MockResponse", (), {"json": lambda self: seeded_data, "raise_for_status": lambda self: None})()
-        mock_get.return_value = mock_resp
+        app.dependency_overrides[get_session] = override_get_session
 
-        response = client.get("/api/directives/queue-health")
+        client = TestClient(app)
+        resp = client.get("/api/directive-queue/health")
+        data = resp.json()
 
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        total = data["total_proposed"] + data["total_pending"]
+        assert total >= 2, f"total {total} < 2"
+        assert len(data["tasks"]) > 0, "tasks empty"
 
-    data = response.json()
-    assert len(data["handlers"]) == 2, f"Expected 2 handlers, got {len(data['handlers'])}"
-
-    generate_file_handler = next(h for h in data["handlers"] if h["handler"] == "generate_file")
-    assert generate_file_handler["oldest_age_seconds"] == 300, f"Expected 300, got {generate_file_handler['oldest_age_seconds']}"
-
-    print("PASS")
+        print("PASS")
+    finally:
+        shutil.rmtree(proposed_temp, ignore_errors=True)
+        shutil.rmtree(pending_temp, ignore_errors=True)
+        shutil.rmtree(proposed_temp, ignore_errors=True)
+        shutil.rmtree(pending_temp, ignore_errors=True)

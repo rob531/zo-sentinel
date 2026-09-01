@@ -1,0 +1,8 @@
+[service]
+name = "scoring_consumer_risk_tier_snapshot"
+import_path = "services.active.scoring_consumer_risk_tier_snapshot.router"
+prefix = "/api"
+tag = "scoring_consumer_risk_tier_snapshot"
+origin = "service"
+auth = "public"
+needs_data_layer = true

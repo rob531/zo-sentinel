@@ -170,18 +170,38 @@ def measure() -> dict:
 
 
 def write_row(m: dict) -> str:
-    """One row per date; a same-day re-run replaces, never duplicates."""
+    """One row per date; a same-day re-run replaces, never duplicates.
+
+    GRADED SUPERSEDES MACHINE (FU-353, peer decision
+    bar-csv-machine-writer-must-not-erase-graded-rows, CLEARED 2026-08-31):
+    the machine (MEASURED-ONLY) writer must never erase a same-date row a
+    grader wrote. Before this guard, `r[0] != m["date"]` dropped EVERY
+    same-date row regardless of phase, so a daemon restart between a graded
+    write and midnight silently erased the graded row (observed 2026-08-31;
+    the daemon fires cycle() immediately on restart with no initial sleep).
+    A graded (non-MEASURED-ONLY) writer still replaces anything; a machine
+    writer still replaces machine rows; one-row-per-date is preserved.
+    """
     rows, header = [], COLUMNS
     if CSV_PATH.exists():
         with CSV_PATH.open(newline="") as fh:
             rd = list(csv.reader(fh))
         if rd:
             header = rd[0]
+            same = [r for r in rd[1:] if r and r[0] == m["date"]]
+            if m.get("phase") == "MEASURED-ONLY" and any(
+                    len(r) > 1 and r[1] != "MEASURED-ONLY" for r in same):
+                # Graded row present: leave the CSV untouched, loudly.
+                print(f"write_row: graded row for {m['date']} supersedes "
+                      f"machine write; CSV left untouched", file=sys.stderr)
+                return ""
             rows = [r for r in rd[1:] if r and r[0] != m["date"]]
     row = [str(m.get(c, "")) for c in header]
     rows.append(row)
     rows.sort(key=lambda r: r[0])
-    tmp = CSV_PATH.with_suffix(".csv.tmp")
+    # Per-pid tmp name: two children racing on a fixed ".csv.tmp" produced a
+    # FileNotFoundError at 2026-08-31T03:58Z when one replaced the other's tmp.
+    tmp = CSV_PATH.with_suffix(f".csv.{os.getpid()}.tmp")
     with tmp.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(header)
@@ -196,7 +216,10 @@ def cycle() -> dict:
     LOGS.mkdir(parents=True, exist_ok=True)
     HEARTBEAT.write_text(json.dumps({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "date": m["date"], "row_written": True,
+        # bool(line): False when the graded-supersedes guard skipped the write
+        # (FU-353) -- a heartbeat asserting a write that did not happen is the
+        # green-that-carries-no-information class.
+        "date": m["date"], "row_written": bool(line),
         "phase": m["phase"],
         "degradation_rate": m["degradation_rate"],
         "orphan_raw": m["orphan_raw"], "orphan_effective": m["orphan_effective"],

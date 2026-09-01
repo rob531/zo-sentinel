@@ -1,0 +1,8 @@
+[service]
+name = "canonical_family_drift_probe"
+import_path = "services.active.canonical_family_drift_probe.router"
+prefix = "/api"
+tag = "canonical_family_drift_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

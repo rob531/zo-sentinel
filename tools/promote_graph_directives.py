@@ -79,8 +79,8 @@ if not args.approve and not args.all:
         flag = "ok " if ok else "BAD"
         print(f"  [{flag}] [{d.get('gap','?'):12}] {task}")
         print(f"        {str(d.get('description',''))[:110]}")
-    print(f"\npromote with:  python tools/promote_graph_directives.py --approve <task> [<task>...]"
-          f"\n         or:   python tools/promote_graph_directives.py --all")
+    print("\npromote with:  python tools/promote_graph_directives.py --approve <task> [<task>...]"
+          "\n         or:   python tools/promote_graph_directives.py --all")
     sys.exit(0)
 
 # promote

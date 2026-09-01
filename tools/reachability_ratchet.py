@@ -90,6 +90,7 @@ import ast
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -103,6 +104,13 @@ ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "reachability_ratchet.json")
 # >40 active deferrals = the hatch has become the new graveyard.
 # Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Do not raise this
 # number to make the warning quiet; escalate to the chairman instead.
+#
+# MERGE_AUDIT_2026-08-23 G4: this cap was ADVISORY. Being over it printed the
+# reopen trigger inside a check that exited 0, so it appeared in no PR status and
+# blocked nothing -- "an instrument reporting faithfully into a place nobody
+# reads", which is the failure mode this file's own comments keep naming. It is
+# still printed, because the ruling's escalation is still owed. What BLOCKS now
+# is the derivative: see DEFERRED NON-INCREASING below.
 DEFERRED_REVIEW_CAP = 40
 
 # A module "exposes a router" if it constructs an APIRouter or decorates one.
@@ -266,13 +274,49 @@ def load_baseline():
         return None
 
 
-def write_baseline(count, note):
+def load_deferred_baseline():
+    """Recorded size of the deferred list. None if the baseline predates it."""
+    if not os.path.exists(BASELINE_PATH):
+        return None
+    try:
+        v = json.load(open(BASELINE_PATH, encoding="utf-8")).get("deferred_count")
+        return None if v is None else int(v)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def deferred_count_at(rev):
+    """Size of the deferred list in <rev>'s COMMITTED copy, or None.
+
+    None whenever the answer cannot be known -- a shallow CI checkout has no
+    HEAD~1, and the file may not have existed yet. None is never treated as
+    zero: an unknown previous size disables this comparison rather than
+    silently asserting the list grew from nothing.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "show", "%s:tools/reachability_deferred.json" % rev],
+            cwd=ROOT, capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    try:
+        return len(_entries(json.loads(out.stdout).get("deferred", {})))
+    except ValueError:
+        return None
+
+
+def write_baseline(count, note, deferred_count=None):
+    payload = {
+        "orphan_count": count,
+        "set_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "note": note,
+    }
+    if deferred_count is not None:
+        payload["deferred_count"] = deferred_count
     with open(BASELINE_PATH, "w", encoding="utf-8") as fh:
-        json.dump({
-            "orphan_count": count,
-            "set_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "note": note,
-        }, fh, indent=2)
+        json.dump(payload, fh, indent=2)
         fh.write("\n")
 
 
@@ -301,8 +345,10 @@ def main():
         json.dump(data, fh, indent=1)
 
     if update:
-        write_baseline(count, "ratchet updated by --update-baseline")
-        print("baseline updated -> %d" % count)
+        write_baseline(count, "ratchet updated by --update-baseline",
+                       deferred_count=len(active_deferred))
+        print("baseline updated -> orphans=%d deferred=%d"
+              % (count, len(active_deferred)))
         return 0
 
     if not quiet:
@@ -369,6 +415,50 @@ def main():
               "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
               "Escalate to the chairman; do not raise the cap to make this quiet."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
+
+    # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------
+    # The absolute cap of 40 is an arbitrary threshold and, being advisory, it
+    # blocked nothing while the list grew to 63 and reachability_deferred.json
+    # became the single highest-churn file of the whole merge window at 64
+    # touches -- roughly one write per day, each one declaring an orphan rather
+    # than mounting it.
+    #
+    # The rule that actually stops accumulation is on the DERIVATIVE, exactly as
+    # the orphan ratchet already is: the deferred list MAY NOT GROW. That blocks
+    # the next write without requiring the existing 63 to be triaged first, so it
+    # does not hold up unrelated work -- the same reasoning that pinned
+    # orphan_count at its current level instead of an aspirational one.
+    #
+    # Two independent references, and the STRICTER wins: the size recorded in
+    # reachability_baseline.json, and the size in the previous commit. CI checks
+    # out shallow, so HEAD~1 is usually unavailable there and the recorded
+    # baseline carries it; locally both apply. An unknown reference is skipped,
+    # never read as zero.
+    refs = []
+    recorded = load_deferred_baseline()
+    if recorded is not None:
+        refs.append((recorded, "baseline file"))
+    prev_commit = deferred_count_at("HEAD~1")
+    if prev_commit is not None:
+        refs.append((prev_commit, "previous commit"))
+
+    if not refs:
+        print("\n  NOTE: no deferred-count reference (baseline predates the field "
+              "and no previous commit is reachable). Record one with "
+              "--update-baseline; growth is UNGATED until you do.")
+    else:
+        limit_n, src = min(refs)
+        now_n = len(active_deferred)
+        if now_n > limit_n:
+            print("\n  DEFERRED LIST GREW: %d > %d (%s). The deferral hatch is for "
+                  "not blocking a build that structurally cannot mount -- it is not "
+                  "storage. Mount the router, or retire it, or take one off the list "
+                  "to make room." % (now_n, limit_n, src))
+            failures.append("deferred list grew (%d > %d)" % (now_n, limit_n))
+        elif now_n < limit_n:
+            print("  deferred list shrank (%d -> %d vs %s); re-pin with "
+                  "--update-baseline to lock the gain in."
+                  % (limit_n, now_n, src))
 
     if effective > baseline:
         excess = effective - baseline

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, select, or_
 from sqlalchemy.orm import sessionmaker, Session
 from app.db import get_session
-from app.models import mcp_server_registry
+from app.models import McpServerRegistry
 
 app = FastAPI()
 
@@ -25,10 +25,10 @@ def search_registry(
     q: str = Query(...),
     session: Session = Depends(get_session)
 ) -> SearchResponse:
-    stmt = select(mcp_server_registry).where(
+    stmt = select(McpServerRegistry).where(
         or_(
-            mcp_server_registry.name.ilike(f"%{q}%"),
-            mcp_server_registry.description.ilike(f"%{q}%")
+            McpServerRegistry.name.ilike(f"%{q}%"),
+            McpServerRegistry.description.ilike(f"%{q}%")
         )
     )
     results = session.execute(stmt).scalars().all()
@@ -47,14 +47,14 @@ if __name__ == "__main__":
 
     engine = create_engine("sqlite:///:memory:")
     SessionLocal = sessionmaker(bind=engine)
-    Base = mcp_server_registry.__bases__[0].__bases__[0]
+    Base = McpServerRegistry.__bases__[0].__bases__[0]
 
     Base.metadata.create_all(engine)
 
     session = SessionLocal()
-    session.add(mcp_server_registry(server_id=1, name="alpha_server", description="Primary alpha", risk_tier="low", verdict="safe"))
-    session.add(mcp_server_registry(server_id=2, name="beta_server", description="Beta deployment", risk_tier="medium", verdict="caution"))
-    session.add(mcp_server_registry(server_id=3, name="gamma_server", description="Gamma production", risk_tier="high", verdict="risky"))
+    session.add(McpServerRegistry(server_id=1, name="alpha_server", description="Primary alpha", risk_tier="low", verdict="safe"))
+    session.add(McpServerRegistry(server_id=2, name="beta_server", description="Beta deployment", risk_tier="medium", verdict="caution"))
+    session.add(McpServerRegistry(server_id=3, name="gamma_server", description="Gamma production", risk_tier="high", verdict="risky"))
     session.commit()
 
     def override_get_session():

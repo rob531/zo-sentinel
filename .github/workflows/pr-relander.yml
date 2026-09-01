@@ -75,8 +75,14 @@ permissions:
   pull-requests: write
   actions: write    # workflow_dispatch of pr-gates/evaluator on relanded heads
   checks: read
-  administration: read   # branch-protection read for the drift guard (GITHUB_TOKEN only;
-                         # the PAT deliberately has no Administration scope)
+  # NOTE: there is deliberately no 'administration' key here. GITHUB_TOKEN has
+  # no such permission scope -- the valid set is actions/attestations/checks/
+  # contents/deployments/discussions/id-token/issues/models/packages/pages/
+  # pull-requests/repository-projects/security-events/statuses. Adding it makes
+  # the workflow file INVALID: GitHub fails the run instantly with zero jobs and
+  # no annotation, which looks exactly like a ghost run. (Learned the hard way,
+  # run 33553962560.) Branch protection therefore cannot be read by GITHUB_TOKEN
+  # at all; see the resolution ladder in preflight.
 
 concurrency:
   group: pr-relander
@@ -104,7 +110,6 @@ jobs:
         id: drift
         env:
           GH_TOKEN: ${{ secrets.RELANDER_TOKEN || github.token }}
-          GITHUB_TOKEN_RO: ${{ github.token }}
           HAVE_PAT: ${{ secrets.RELANDER_TOKEN != '' }}
           REPO: ${{ github.repository }}
         run: |
@@ -112,23 +117,22 @@ jobs:
           echo "have_pat=$HAVE_PAT" >> "$GITHUB_OUTPUT"
 
           # --- required-set resolution ladder -------------------------------
-          # Branch protection is admin-read. The PAT deliberately has no
-          # Administration scope, but GITHUB_TOKEN can be granted
-          # administration:read via this workflow's permissions block -- so try
-          # that FIRST, the PAT second, and a pinned constant last.
+          # Branch protection is admin-read. GITHUB_TOKEN has no administration scope
+          # at all, so the live set is readable only by a PAT explicitly granted
+          # read only by a PAT granted Administration:Read-only -- so try
+          # Administration:Read-only; otherwise we use a pinned constant.
           #
           # There is no silent-empty branch. An unresolvable required set is a
           # hard failure, because "required set unknown" previously degraded to
           # "cohort B selects nothing" and that is precisely the silent no-op
           # that let 140 PRs deadlock for four weeks.
+          # GITHUB_TOKEN cannot read branch protection (no administration scope
+          # exists for it), so the only live source is the PAT -- and only if it
+          # was granted Administration:read. If it was not, we fall to the pinned
+          # constant, which is the supported steady state, not an error.
           src=""
-          req=$(GH_TOKEN="$GITHUB_TOKEN_RO" gh api \
-                  "repos/$REPO/branches/main/protection/required_status_checks" \
-                  --jq '.contexts[]' 2>/dev/null) && src="branch-protection (GITHUB_TOKEN)"
-          if [ -z "$req" ]; then
-            req=$(gh api "repos/$REPO/branches/main/protection/required_status_checks" \
-                    --jq '.contexts[]' 2>/dev/null) && src="branch-protection (RELANDER_TOKEN)"
-          fi
+          req=$(gh api "repos/$REPO/branches/main/protection/required_status_checks" \
+                  --jq '.contexts[]' 2>/dev/null) && src="branch-protection (RELANDER_TOKEN)"
 
           if [ -n "$req" ]; then
             req=$(echo "$req" | tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//')
@@ -141,7 +145,8 @@ jobs:
             fi
           else
             req=$(echo "$REQUIRED_FALLBACK" | tr -s ' ')
-            echo "::warning::branch protection unreadable by BOTH tokens -> using pinned REQUIRED_FALLBACK: $req"
+            echo "::warning::branch protection unreadable -> using pinned REQUIRED_FALLBACK: $req"
+            echo "::warning::grant the RELANDER_TOKEN PAT 'Administration: Read-only' to restore live self-derivation."
             echo "::warning::this set cannot self-verify; confirm it still matches Settings -> Branches."
           fi
 

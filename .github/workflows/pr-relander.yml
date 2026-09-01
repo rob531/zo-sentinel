@@ -204,28 +204,45 @@ jobs:
                     --json number,mergeable,isDraft \
                     -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number') || stale=""
 
-          # --- cohort B: solid but BLOCKED on a missing required context -----
+          # --- cohort B: solid but blocked on a missing required context -----
+          # DO NOT filter on mergeStateStatus here. GitHub computes mergeability
+          # LAZILY: in a *list* query every PR comes back UNKNOWN, and only a
+          # single-PR read materialises BLOCKED. Filtering the list on
+          # == "BLOCKED" therefore matched 0 of 147 and the sweep reported
+          # "no PRs need refreshing" -- the third silent-empty filter in this
+          # workflow's history. The check-run diff below is the authoritative
+          # signal anyway; mergeStateStatus was never needed.
           solid=""
-          if [ -n "$REQUIRED" ]; then
-            while read -r pr; do
-              [ -n "$pr" ] || continue
-              sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid) || continue
-              present=$(gh api "repos/$REPO/commits/$sha/check-runs" \
-                          --jq '[.check_runs[].name] | unique | join(" ")' 2>/dev/null) || present=""
-              for c in $REQUIRED; do
-                if ! echo "$present" | grep -qw "$c"; then
-                  solid="$solid $pr"; break
-                fi
-              done
-            done <<< "$(gh pr list -R "$REPO" --state open \
-                          --label autonomous-build --label triage:solid --limit 500 \
-                          --json number,mergeStateStatus,isDraft \
-                          -q '.[] | select(.mergeStateStatus == "BLOCKED" and .isDraft == false) | .number')"
-          fi
+          population=0
+          while read -r pr sha draft; do
+            [ -n "$pr" ] || continue
+            [ "$draft" = "true" ] && continue
+            population=$((population+1))
+            present=$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100" \
+                        --jq '[.check_runs[].name] | unique | join(" ")' 2>/dev/null) || present=""
+            for c in $REQUIRED; do
+              if ! echo "$present" | grep -qw "$c"; then
+                solid="$solid $pr"; break
+              fi
+            done
+          done <<< "$(gh pr list -R "$REPO" --state open \
+                        --label autonomous-build --label triage:solid --limit 500 \
+                        --json number,headRefOid,isDraft \
+                        -q '.[] | "\(.number) \(.headRefOid) \(.isDraft)"')"
+          n_solid=$(echo "$solid" | wc -w | tr -d ' ')
+          # Silence must always be auditable: say what was EXAMINED, not just
+          # what was selected. "0 selected" and "0 examined" are different bugs.
+          echo "::notice::cohort B: examined $population triage:solid PR(s), $n_solid missing >=1 required context"
+
+          n_stale=$(echo "$stale" | wc -w | tr -d ' ')
+          echo "::notice::cohort A: $n_stale stale-but-clean PR(s)"
 
           prs=$(printf '%s\n%s\n' "$stale" "$solid" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un) || prs=""
           if [ -z "$prs" ]; then
-            echo "::notice::no PRs need refreshing"
+            if [ "$population" -eq 0 ]; then
+              echo "::warning::examined ZERO triage:solid PRs -- the label query returned nothing. That is a query bug, not an empty backlog."
+            fi
+            echo "::notice::no PRs need refreshing (examined $population solid + $n_stale stale)"
             exit 0
           fi
           echo "::notice::cohort: $(echo "$prs" | wc -l) PR(s) to refresh (cap $RELAND_CAP)"

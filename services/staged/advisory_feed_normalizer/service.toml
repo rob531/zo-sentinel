@@ -1,0 +1,8 @@
+[service]
+name = "advisory_feed_normalizer"
+import_path = "services.active.advisory_feed_normalizer.router"
+prefix = "/api"
+tag = "advisory_feed_normalizer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

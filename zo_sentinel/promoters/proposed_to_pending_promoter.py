@@ -229,6 +229,40 @@ def _resolve_directive_id(d: dict) -> str:
 # "description"/"spec": .., optional "prefix"/"tag"}. After fan-out the parent is
 # renamed .expanded (auditable, never re-scanned). Kill: ZO_SERVICE_UNIT_EXPANSION=0.
 
+# The architect has TWO emitters and they do not agree on field names. The
+# converged path calls propose_directive and writes {"service_name","spec"}.
+# The SALVAGE path -- which recovers a directive from the goose transcript when
+# the model produced good content but never reached the tool call -- writes the
+# generic directive shape {"task","description"} with handler="build_service".
+# This function is the join. Before it existed the validator accepted only
+# service_name/name, so every salvaged service directive was renamed .rejected:
+# 207 files, 195 of them failing on nothing but the key spelling, while the
+# builder logged "Total directives loaded: 0" for 471 consecutive cycles.
+#
+# "task" carries the directive name, not the service name, so it arrives
+# prefixed (build_service_risk_tier_history). Strip the prefix or the service
+# lands at services/staged/build_service_risk_tier_history/ -- the doubled-path
+# squatter shape we have already paid for once.
+_SERVICE_NAME_PREFIXES = ("build_service_", "build_")
+
+
+def _service_name_of(d: dict) -> "tuple[str, str]":
+    """Return (service_name, which_key_it_came_from). Empty name => unusable."""
+    for key in ("service_name", "name", "task"):
+        raw = str(d.get(key) or "").strip()
+        if not raw:
+            continue
+        if key == "task":
+            for pfx in _SERVICE_NAME_PREFIXES:
+                if raw.startswith(pfx):
+                    raw = raw[len(pfx):]
+                    break
+        raw = raw.strip("_")
+        if raw:
+            return raw, key
+    return "", ""
+
+
 def _expand_service_directives(proposed_dir: Path) -> int:
     if os.environ.get("ZO_SERVICE_UNIT_EXPANSION", "1") == "0":
         return 0
@@ -246,16 +280,37 @@ def _expand_service_directives(proposed_dir: Path) -> int:
             continue
         if not isinstance(d, dict) or d.get("handler") != "build_service":
             continue
-        name = str(d.get("service_name") or d.get("name") or "").strip()
+        name, name_src = _service_name_of(d)
         spec = str(d.get("spec") or d.get("description") or "").strip()
         if not name or len(spec) < 50:
-            log.warning("build_service %s: missing service_name or spec<50 chars -> .rejected", p.name)
+            # Name the FAILING condition. "missing service_name OR spec<50" is an
+            # ambiguous OR: it cost a day of reading 207 .rejected files to learn
+            # that 195 of them failed only on the name, and had a perfectly good
+            # 400-1400 char spec sitting in "description".
+            why = []
+            if not name:
+                why.append("no service_name/name/task key")
+            if len(spec) < 50:
+                why.append("spec/description is %d chars (<50)" % len(spec))
+            log.warning("build_service %s: %s -> .rejected", p.name, " AND ".join(why))
             try:
                 os.replace(p, p.with_name(p.name + ".rejected"))
             except OSError:
                 pass
             continue
-        children = decompose(name, spec, str(d.get("prefix") or "/api"), str(d.get("tag") or ""))
+        try:
+            children = decompose(name, spec, str(d.get("prefix") or "/api"), str(d.get("tag") or ""))
+        except ValueError as e:
+            # FU-349 / #3415: reserved/malformed service name (e.g. a spec-parser
+            # grabbed the concern-word "contract" as a service). Reject loudly;
+            # never fan out a service that squats on a concern-word or a
+            # load-bearing package.
+            log.warning("build_service %s: %s -> .rejected", p.name, e)
+            try:
+                os.replace(p, p.with_name(p.name + ".rejected"))
+            except OSError:
+                pass
+            continue
         for c in children:
             c["parent_service_directive"] = p.name
             stem = c["output_file"].replace("/", "_").replace(".", "_")
@@ -267,8 +322,9 @@ def _expand_service_directives(proposed_dir: Path) -> int:
         except OSError:
             pass
         expanded += 1
-        log.info("service fan-out: %s -> %d single-file directives (unit=services/staged/%s)",
-                 p.name, len(children), name)
+        log.info("service fan-out: %s -> %d single-file directives "
+                 "(unit=services/staged/%s, name from %r)",
+                 p.name, len(children), name, name_src)
     return expanded
 
 

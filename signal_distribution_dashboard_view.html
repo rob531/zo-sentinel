@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Distribution Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .chart-container {
+            margin-top: 20px;
+        }
+        .select-container {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+        select {
+            padding: 8px;
+            width: 300px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Signal Distribution Dashboard</h1>
+
+        <div class="select-container">
+            <label for="signal-type">Select Signal Type:</label>
+            <select id="signal-type">
+                <option value="overall_risk">Overall Risk</option>
+                <option value="auth_strength">Authentication Strength</option>
+                <option value="capability_breadth">Capability Breadth</option>
+                <option value="data_sensitivity">Data Sensitivity</option>
+                <option value="network_egress">Network Egress</option>
+                <option value="maintainer_trust">Maintainer Trust</option>
+                <option value="exploit_surface">Exploit Surface</option>
+            </select>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="signalChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Chart.js configuration
+        const ctx = document.getElementById('signalChart').getContext('2d');
+        let signalChart;
+
+        // Function to fetch and display data
+        async function fetchSignalData(signalType) {
+            try {
+                const response = await fetch(`/api/signals/distribution?signal=${signalType}`);
+                const data = await response.json();
+
+                if (signalChart) {
+                    signalChart.destroy();
+                }
+
+                signalChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: signalType.replace(/_/g, ' '),
+                            data: data.values,
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Risk Level'
+                                }
+                            }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `${signalType.replace(/_/g, ' ')} Distribution`,
+                                font: {
+                                    size: 18
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching signal data:', error);
+                alert('Failed to load signal data. Please try again later.');
+            }
+        }
+
+        // Initialize with default signal type
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchSignalData('overall_risk');
+
+            // Add event listener for signal type change
+            document.getElementById('signal-type').addEventListener('change', (e) => {
+                fetchSignalData(e.target.value);
+            });
+        });
+    </script>
+</body>
+</html>

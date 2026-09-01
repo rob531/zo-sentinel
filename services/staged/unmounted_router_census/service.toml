@@ -1,0 +1,26 @@
+[service]
+name = "unmounted_router_census"
+import_path = "services.active.unmounted_router_census.router"
+prefix = "/api"
+tag = "unmounted_router_census"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+class = "FastAPI"
+module = "fastapi"
+
+[database]
+app_session = true
+mesh_query_endpoint = "http://127.0.0.1:8772/query"
+
+[tables.app]
+read = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+
+[tables.mesh]
+read = ["mcp_signal_scores", "mesh_memory"]
+
+[test]
+self_test = true
+override_session = true

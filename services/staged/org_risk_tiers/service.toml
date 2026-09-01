@@ -1,0 +1,8 @@
+[service]
+name = "org_risk_tiers"
+import_path = "services.active.org_risk_tiers.router"
+prefix = "/api"
+tag = "org_risk_tiers"
+origin = "service"
+auth = "public"
+needs_data_layer = true

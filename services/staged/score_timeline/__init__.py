@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 from pydantic import BaseModel
 

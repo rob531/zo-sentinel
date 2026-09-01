@@ -13,6 +13,7 @@ import os
 import tempfile
 import random
 import types
+from datetime import datetime, timezone
 
 from zo_sentinel.ingestor.store import InMemoryMeshStore
 from zo_sentinel.publisher.gitops import (
@@ -410,32 +411,50 @@ def test_duplicate_module_same_pass_skipped():
     assert "dup.py|2026-07-10T11:00:00Z" in json.loads(pub_rows[-1]["content"])
 
 
+def _at(iso):
+    """A pinned clock. run_once() prunes `published_files` against WALL-CLOCK now
+    (retention = 10x the 3-day guard window = 30 days), while the guard itself
+    compares two ARTIFACT timestamps. With absolute fixture dates and a real
+    clock these two cross-run tests age out of their own state: on
+    2026-08-09T10:00:00Z -- exactly 30 days after the 2026-07-10T10:00:00Z
+    fixture -- the prune started emptying published_files, the guard saw nothing
+    to match, and the assertion flipped to 'published'. Pin the clock so the
+    guard, not the calendar, decides the outcome."""
+    return lambda: datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
 def test_duplicate_module_across_runs_skipped(tmp_path):
     state = str(tmp_path / "pub_state.json")
+    clock = _at("2026-07-11T12:00:00Z")
     store = InMemoryMeshStore(artifacts=[
         _artifact("dup.py", built_at="2026-07-10T10:00:00Z", task="build_dup_a"),
     ])
-    _pub(store, enabled=True, state_file=state).run_once()
+    _pub(store, enabled=True, state_file=state, clock=clock).run_once()
     store2 = InMemoryMeshStore(artifacts=[
         _artifact2("dup.py", built_at="2026-07-11T10:00:00Z", task="build_dup_b"),
     ])
     gitops2 = FakeGitOps()
-    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state).run_once()
+    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state,
+               clock=clock).run_once()
     assert res[0]["action"] == "duplicate_module"
     assert gitops2.published == []
 
 
 def test_same_file_outside_window_publishes(tmp_path):
     state = str(tmp_path / "pub_state.json")
+    clock = _at("2026-06-20T12:00:00Z")
     store = InMemoryMeshStore(artifacts=[
         _artifact("old.py", built_at="2026-05-30T00:00:00Z", task="build_old"),
     ])
-    _pub(store, enabled=True, state_file=state).run_once()
+    _pub(store, enabled=True, state_file=state, clock=clock).run_once()
     store2 = InMemoryMeshStore(artifacts=[
         _artifact2("old.py", built_at="2026-06-20T00:00:00Z", task="build_old_v2"),
     ])
     gitops2 = FakeGitOps()
-    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state).run_once()
+    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state,
+               clock=clock).run_once()
+    # published because 21 days > the 3-day guard window -- NOT because the
+    # state was pruned away (which is what made this test green for free).
     assert res[0]["action"] == "published"
     assert len(gitops2.published) == 1
 
@@ -621,3 +640,61 @@ def test_cligitops_dirty_tree_still_fails_when_stash_fails(tmp_path, monkeypatch
     res = g.publish(plan)
     assert res.ok is False
     assert "overwritten" in (res.detail or "")
+
+
+# --------------------------------------------------------------------------
+# FU-209: a path that cannot exist on Windows must never reach a commit.
+# Both directions are asserted deliberately. A guard that can ONLY go red is as
+# broken as one that can only go green, so the negative control (an ordinary
+# path must be accepted) is part of the test, not an afterthought.
+# --------------------------------------------------------------------------
+
+def test_portable_path_violation_rejects_windows_reserved_chars():
+    from zo_sentinel.publisher.gitops import _portable_path_violation
+    # the EXACT path that broke every Windows lane on 2026-07-31
+    reason = _portable_path_violation("services/staged/<service_name>/__init__.py")
+    assert reason is not None
+    assert "FU-209" in reason
+    for ch in '<>:"|?*':
+        assert _portable_path_violation("services/staged/a%sb/x.py" % ch) is not None
+
+
+def test_portable_path_violation_accepts_ordinary_paths():
+    """NEGATIVE CONTROL. Without this, a guard hard-wired to return a reason
+    would pass the test above and silently reject every artifact."""
+    from zo_sentinel.publisher.gitops import _portable_path_violation
+    for ok in ("services/staged/cve_feed_ingestion/__init__.py",
+               "zo_sentinel/publisher/gitops.py",
+               "tools/fu/fu_ledger.py",
+               "a_b-c.d/e_1.py"):
+        assert _portable_path_violation(ok) is None, ok
+
+
+def test_publisher_refuses_to_commit_unportable_path_permanently():
+    """End-to-end at the chokepoint: CliGitOps.publish must bail BEFORE writing
+    or staging, and must mark the failure permanent so the queue retires it
+    instead of head-of-line-blocking behind an unfixable artifact."""
+    import pathlib
+    import subprocess
+    from zo_sentinel.publisher.gitops import CliGitOps, PublishPlan
+
+    ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    def _fake_git(*a):
+        staged.append(a)
+        return ok
+
+    with tempfile.TemporaryDirectory() as d:
+        g = CliGitOps(clone_dir=d)
+        staged = []
+        g._git = _fake_git
+        plan = PublishPlan(branch="b", title="t", body="b",
+                           file_path="services/staged/<service_name>/__init__.py",
+                           content="x\n", dedup_key="k")
+        res = g.publish(plan)
+        assert res.ok is False
+        assert res.permanent is True
+        assert "FU-209" in res.detail
+        # bailed BEFORE the artifact touched the disk or the index
+        assert not list(pathlib.Path(d).rglob("*service_name*"))
+        assert not any(a and a[0] == "add" for a in staged)

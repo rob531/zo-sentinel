@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # Import the original dependency to be overridden
     from app.db import get_session as original_get_session
     # Import the models that the logic layer expects
-    from app.models import mcp_server_registry, mcp_llm_axis_scores, Base
+    from app.models import McpServerRegistry, McpLlmAxisScore, Base
 
     # ----------------------------------------------------------------------- #
     # Set up an in‑memory SQLite database and create the required tables
@@ -46,15 +46,15 @@ if __name__ == "__main__":
     db = SessionLocal()
     db.add_all(
         [
-            mcp_server_registry(id=1, risk_tier="low"),
-            mcp_server_registry(id=2, risk_tier="medium"),
-            mcp_server_registry(id=3, risk_tier="high"),
-            mcp_server_registry(id=4, risk_tier="low"),
+            McpServerRegistry(id=1, risk_tier="low"),
+            McpServerRegistry(id=2, risk_tier="medium"),
+            McpServerRegistry(id=3, risk_tier="high"),
+            McpServerRegistry(id=4, risk_tier="low"),
         ]
     )
     # The axis scores table is not required for this endpoint, but we create
     # at least one row to satisfy any foreign‑key constraints that may exist.
-    db.add(mcp_llm_axis_scores(id=1, server_id=1, axis_name="dummy", score=0.0))
+    db.add(McpLlmAxisScore(id=1, server_id=1, axis_name="dummy", score=0.0))
     db.commit()
     db.close()
 

@@ -15,11 +15,30 @@ across many modules shows up as ONE bucket -- FU-031(a) suspects a single shared
 import/env/seed-kwarg cause behind the bulk of the degradation.
 
 Line shapes parsed (from live goose_runner.log):
-  [selftest] <t>: import/env failure -- degrading to Tier-0 (not blocking) :: <tail>
+Line shapes parsed -- CURRENT three-state contract emitted by goose_runner.py
+(see tests/test_tier0_selftest_logging.py, which asserts the emitter's side):
   [selftest] <t>: self-test PASS
-  [selftest] <t>: self-test FAILED -- blocking completion :: <tail>
+  [selftest] <t>: self-test RED (<reason>) -- blocking completion :: <tail>
+  [selftest] <t>: self-test UNKNOWN (<reason>) -- could not evaluate,
+                  degrading to Tier-0 (not blocking) :: <tail>
+  [selftest] <t>: could not run (<Type>: <msg>) -- Tier-0 only
   [ghost-guard] <t>: goose reported success but ... rejected by gate 'selftest' ...
   [engine] repair N/M for <file>: self-test did not PASS (rc=1): <tail>
+LEGACY shapes, kept so historical logs still parse (FU-196):
+  [selftest] <t>: self-test FAILED -- blocking completion :: <tail>
+  [selftest] <t>: import/env failure -- degrading to Tier-0 (not blocking) :: <tail>
+
+FU-196 (2026-07-30): the emitter moved to the RED/UNKNOWN/PASS contract and this
+probe kept grepping `self-test FAILED` / `import/env failure -- degrading`.
+Neither string existed in the live log any more, so 448 RED events matched NO
+branch: they fell out of BOTH the numerator and the denominator and the probe
+published `degradation 0% / pass-rate 100%` over hundreds of blocking failures.
+The durable guard against a THIRD vocabulary drift is `unrecognised`: every
+`[selftest] <t>:` line that matches no branch is counted and surfaced, so the
+next drift reads as "this report cannot be trusted" instead of as good news
+(HARNESS_DOCTRINE R3 -- a bucket that went to zero must prove the check RAN;
+R6 -- unknown != zero).
+
 For each degrade/fail, the first DISTINCTIVE error line within the next few log
 lines is used as the cause-bucket key (unknown column / cannot import name /
 NameError / no such column / kwarg ...).
@@ -41,9 +60,19 @@ from datetime import datetime, timezone
 DEFAULT_LOG = os.environ.get("GOOSE_RUNNER_LOG", "/home/workspace/logs/goose_runner.log")
 
 TS = re.compile(r"^\[(\d{4}-\d{2}-\d{2}T[\d:.+-]+)\]")
-DEGRADE = re.compile(r"\[selftest\]\s+(\S+?):\s+import/env failure -- degrading to Tier-0")
+# UNKNOWN / could-not-run / legacy import-env are all "the acceptance test did not
+# EVALUATE" -- they belong in the degraded bucket, never in pass (R6: unknown != zero).
+DEGRADE = re.compile(
+    r"\[selftest\]\s+(\S+?):\s+"
+    r"(?:import/env failure -- degrading to Tier-0"           # legacy vocabulary
+    r"|self-test UNKNOWN\b[^\n]*?degrading to Tier-0"          # current three-state contract
+    r"|could not run \([^\n]*?\) -- Tier-0 only)"              # harness never started
+)
 PASS = re.compile(r"\[selftest\]\s+(\S+?):\s+self-test PASS")
-FAILED = re.compile(r"\[selftest\]\s+(\S+?):\s+self-test FAILED")
+# RED is the current word for a self-test that RAN and FAILED; FAILED is the legacy word.
+FAILED = re.compile(r"\[selftest\]\s+(\S+?):\s+self-test (?:RED|FAILED)\b")
+# any [selftest] line at all -- the drift detector's denominator
+SELFTEST_ANY = re.compile(r"\[selftest\]\s+(\S+?):\s*(.*)$")
 GHOST = re.compile(r"\[ghost-guard\]\s+(\S+?):")
 REPAIR = re.compile(r"\[engine\]\s+repair\s+\d+/\d+\s+for\s+(\S+?):")
 # distinctive root-cause signatures to bucket on
@@ -72,7 +101,7 @@ def _parse_ts(line):
 
 def analyze(lines, since=None):
     passed, degraded, failed_blocking = [], [], []
-    ghost_rejects, repairs = [], []
+    ghost_rejects, repairs, unrecognised = [], [], []
     cause_buckets = defaultdict(list)   # cause -> [targets]
     per_target = []
 
@@ -104,6 +133,14 @@ def analyze(lines, since=None):
             failed_blocking.append(m.group(1)); cause_buckets[_cause_after()].append(m.group(1))
             per_target.append({"target": m.group(1), "outcome": "failed_blocking", "ts": ts and ts.isoformat()})
             continue
+        # FU-196 drift detector: a [selftest] line that matched none of the branches
+        # above is a VOCABULARY we do not know. It must not vanish silently -- that is
+        # exactly how 448 blocking failures got published as a 0% degradation rate.
+        m = SELFTEST_ANY.search(line)
+        if m and _in_window(ts):
+            unrecognised.append({"target": m.group(1), "text": m.group(2).strip()[:120],
+                                 "ts": ts and ts.isoformat()})
+            continue
         m = GHOST.search(line)
         if m and _in_window(ts):
             ghost_rejects.append(m.group(1)); continue
@@ -134,6 +171,11 @@ def analyze(lines, since=None):
         "shared_cause_buckets": buckets,
         "distinct_causes": len(buckets),
         "per_target_tail": per_target[-25:],
+        # FU-196: >0 means the emitter speaks a vocabulary this probe does not parse,
+        # so every number above is an UNDERCOUNT and must be read as unmeasured.
+        "unrecognised_selftest_lines": len(unrecognised),
+        "unrecognised_samples": [u["text"] for u in unrecognised[:5]],
+        "trustworthy": not unrecognised,
     }
 
 
@@ -164,6 +206,13 @@ def main(argv=None):
         return 0
 
     print("=== builder self-test integrity (FU-031 probe, %s) ===" % rep["window"])
+    if not rep["trustworthy"]:
+        print("  !! UNTRUSTWORTHY: %d [selftest] line(s) matched NO known shape."
+              % rep["unrecognised_selftest_lines"])
+        print("  !! The emitter's vocabulary has drifted; every number below is an")
+        print("  !! UNDERCOUNT and must be reported as UNMEASURED, not as zero (FU-196).")
+        for s in rep["unrecognised_samples"]:
+            print("  !!   unparsed: %s" % s)
     print("  executed: %d  (pass %d / failed-blocking %d)  |  tier0-degraded: %d"
           % (rep["executed"], rep["selftest_pass"], rep["selftest_failed_blocking"], rep["tier0_degraded"]))
     print("  DEGRADATION RATE: %.0f%%   (acceptance self-test skipped, not run)"

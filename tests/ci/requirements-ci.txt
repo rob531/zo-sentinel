@@ -2,7 +2,7 @@
 # (tests/ci/run_ci_smoke.py). Deliberately minimal: the ladder must run on a
 # stock GitHub runner with no ZoComputer host. Keep pins loose-but-bounded so
 # a surprise major release can't silently break the gate.
-duckdb>=1.5.4,<2.0
+duckdb>=1.5.5,<2.0
 fastapi>=0.138.2,<1.0
 uvicorn[standard]>=0.51.0,<1.0
 requests>=2.34.2,<3.0

@@ -1,0 +1,8 @@
+[service]
+name = "cve_server_impact_api"
+import_path = "services.active.cve_server_impact_api.router"
+prefix = "/api"
+tag = "cve_server_impact_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

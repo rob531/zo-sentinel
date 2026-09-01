@@ -25,7 +25,7 @@ if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.models import Base, LlmAxisScore
+    from app.models import Base, McpLlmAxisScore
 
     # ------------------------------------------------------------------- #
     # In‑memory SQLite setup (overrides the real Postgres dependency)
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         ]
         for axis in axes:
             db.add(
-                LlmAxisScore(
+                McpLlmAxisScore(
                     server_id=1,
                     axis=axis,
                     label="CRITICAL" if axis == "confidentiality" else "LOW",
@@ -79,7 +79,7 @@ if __name__ == "__main__":
             )
         # overall risk row
         db.add(
-            LlmAxisScore(
+            McpLlmAxisScore(
                 server_id=1,
                 axis="overall",
                 label="CRITICAL",

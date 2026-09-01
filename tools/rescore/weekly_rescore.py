@@ -151,6 +151,52 @@ class Run:
         ledger(f"phase_{phase}_{status}", self.state["run_id"])
 
 
+def _terminally_finished(state: dict) -> bool:
+    """Can this run EVER produce data again, however many times it is resumed?
+
+    FU-321 (2026-08-11). `open_run` asked only "is postcheck done?", which has no
+    answer for a run that FAILED. On 2026-08-11 run 20260811-061104 fired, the pod
+    FATALed fetching the transfer bundle, the instance was destroyed and import was
+    correctly skipped -- and the run then stayed, forever, "the newest unfinished
+    run". Every subsequent `--run` resumed it, aborted at import with
+    `preds.jsonl.gz missing`, and exited 1. Reproduced twice before it was found.
+
+    That is a DAM, not a stall: the next scheduled Tuesday run would have done the
+    same, spent $0, reported failure, and left the moat to go stale indefinitely --
+    the exact silent-staleness failure this lane exists to catch, committed by the
+    lane's own harness.
+
+    The deeper defect was TWO INSTRUMENTS DISAGREEING ABOUT ONE WORD. `--check-open
+    -runs` reads the LEDGER and honours an abort vocabulary (19 runs already sit in
+    that bucket); `open_run` read only the FILESYSTEM phase map and never consulted
+    it. A run could be simultaneously "deliberately closed, not stranded" and "the
+    newest unfinished run". Both readings were defensible; nothing reconciled them.
+
+    Terminal means the GPU is gone AND no predictions exist, so there is no path
+    back. `result: "ok"` is deliberately absent: a successful run closes via the
+    `run_closed` ledger event, and one that did not IS the stranded shape.
+    """
+    result = str((state or {}).get("result") or "").lower()
+    if not result:
+        return False                      # no verdict recorded = still resumable
+    if result.startswith(_ABANDON_RESULT_PREFIXES):
+        return True                       # killed_/abort_/abandon_/cancel_, spend released
+    if result.startswith("ok"):
+        return False                      # success closes via run_closed; if it did not,
+                                          # that IS the stranded shape and must keep alarming
+    # ANY other recorded verdict, once the instance is gone, is terminal. Deliberately NOT
+    # an enumeration of the failures seen so far. The first version of this function listed
+    # `fail`, and hours after it merged, wave 20260811-063956 returned `cost_breach` -- a
+    # verdict this file already knows about three lines away, which matched nothing here,
+    # dammed the pipeline identically, and proved that enumerating known failure names is
+    # the same defect in a new costume. `deadline` would have been the third.
+    # Every phase after `fire` needs an instance; without one the run cannot advance however
+    # often it is resumed. `destroyed` is the load-bearing half: a run still HOLDING an
+    # instance stays resumable whatever its state.json claims, because unreleased spend is
+    # exactly what `--check-open-runs` exists to catch.
+    return bool(state.get("destroyed"))
+
+
 def open_run(new_mode: str | None) -> Run:
     """Resume the newest unfinished run, else create one (fire phases only)."""
     RUNS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -158,6 +204,16 @@ def open_run(new_mode: str | None) -> Run:
     for d in candidates:
         r = Run(d)
         if r.state and not r.done("postcheck"):
+            if _terminally_finished(r.state):
+                # Skipped LOUDLY and counted: a run silently stepped over is how a
+                # dam becomes invisible a second time.
+                log(f"skipping terminally-finished run {r.state['run_id']} "
+                    f"(result={r.state.get('result')!r}, destroyed="
+                    f"{bool(r.state.get('destroyed'))}) -- not resumable; its "
+                    f"forensics and ledger history are untouched")
+                ledger("run_skipped_terminal", r.state["run_id"],
+                       result=r.state.get("result"))
+                continue
             log(f"resuming run {r.state['run_id']} (phases={r.state.get('phases')})")
             return r
     if new_mode is None:
@@ -239,6 +295,31 @@ def _state_abandoned(rid: str, runs_root: Path) -> bool:
     return not st.get("instance_id") or bool(st.get("destroyed"))
 
 
+def _state_terminal(rid: str, runs_root: Path) -> bool:
+    """Terminal by the SAME word `open_run` uses -- FU-321, mirrored (2026-08-31).
+
+    Run 20260822-220319 died at its deadline, was destroyed, and was later
+    refused by `open_run` as terminally finished (`run_skipped_terminal`) --
+    yet this detector kept calling it STRANDED forever: "deadline" is not an
+    abandonment prefix and `run_skipped_terminal` is not an abort event. Two
+    instruments disagreeing about one word, again -- this time between
+    open_run() and the very check whose header warns about that defect.
+
+    The bar is NOT lowered: _terminally_finished supplies the verdict word,
+    and the same spend clause `_state_abandoned` uses is applied on top -- a
+    run still holding an instance stays STRANDED whatever its state.json
+    claims, and `ok` without `run_closed` remains the stranded shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    return (_terminally_finished(st)
+            and (not st.get("instance_id") or bool(st.get("destroyed"))))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -288,7 +369,8 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     out = []
     for rec in opened.values():
         aborted = (_is_abort_event(rec["last_event"])
-                   or _state_abandoned(rec["run_id"], root))
+                   or _state_abandoned(rec["run_id"], root)
+                   or _state_terminal(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
@@ -876,6 +958,74 @@ def _billed_dph(run, args) -> float:
     return quoted
 
 
+WEDGE_GRACE_MIN_DEFAULT = 25
+
+
+def _instance_probe(run) -> dict:
+    """Best-effort live status of the fired instance.
+
+    Returns {} when the API is unreachable (UNKNOWN, not absent -- R6).
+    Returns {"present": False} when the API answered and the instance is
+    genuinely missing from the list (outbid, host reclaim, manual kill).
+    Run 20260822-220319 burned its whole 212m deadline against an instance
+    nobody ever looked at; this is the look.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return {}
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        rows = v.show_instances()
+        if not rows:
+            return {}
+        for i in rows:
+            if str(i.get("id")) == str(iid):
+                return {"present": True,
+                        "actual_status": i.get("actual_status"),
+                        "status_msg": (i.get("status_msg") or "")[:200],
+                        "cur_state": i.get("cur_state")}
+        return {"present": False}
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: instance probe failed ({e.__class__.__name__}: {e}); status UNKNOWN")
+        return {}
+
+
+def _pull_instance_logs(run) -> None:
+    """SSH-free forensics BEFORE destroy, via the vast logs API.
+
+    The existing forensic path (the pod pushes a git branch) is exactly what
+    fails when the pod never boots -- 3 waves died with zero artifacts that
+    way. This path depends only on the vast API and must never raise.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return
+    coll = run.dir / "results"
+    coll.mkdir(exist_ok=True)
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        text = None
+        for call in (lambda: v.logs(INSTANCE_ID=int(iid)),
+                     lambda: v.logs(id=int(iid)),
+                     lambda: v.logs(int(iid))):
+            try:
+                text = call()
+            except TypeError:
+                continue
+            if text:
+                break
+        if text:
+            (coll / "vast_instance.log").write_text(
+                str(text)[-200_000:], encoding="utf-8")
+            log(f"forensics: saved vast instance log ({len(str(text))} chars)")
+        else:
+            log("forensics: vast logs API returned nothing")
+    except Exception as e:  # noqa: BLE001
+        log(f"forensics: vast logs fetch failed ({e.__class__.__name__}: {e})")
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
@@ -889,6 +1039,52 @@ def ph_watch_collect(run: Run, args) -> None:
         if st:
             run.mark("watch", result=st, est_cost=round(est_cost, 2))
             break
+        probe = _instance_probe(run)
+        if probe:
+            stat = (probe.get("actual_status")
+                    or ("absent" if probe.get("present") is False else "unknown"))
+            seen = run.state.setdefault("status_seen", [])
+            if not seen or seen[-1] != stat:
+                seen.append(stat)
+                run.save()
+                ledger("instance_status", run.state["run_id"], status=stat,
+                       msg=probe.get("status_msg", ""))
+            if probe.get("present") is False:
+                miss = run.state.get("absent_probes", 0) + 1
+                run.state["absent_probes"] = miss
+                run.save()
+                if miss >= 2:
+                    # Two consecutive authoritative "not in the list" answers:
+                    # waiting out the deadline can never produce a result.
+                    ledger("instance_vanished", run.state["run_id"],
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="vanished")
+                    break
+            else:
+                if run.state.get("absent_probes"):
+                    run.state["absent_probes"] = 0
+                    run.save()
+                if ("running" not in run.state.get("status_seen", [])
+                        and elapsed_h * 60 >= getattr(
+                            args, "wedge_grace_min", WEDGE_GRACE_MIN_DEFAULT)):
+                    # Never reached "running" inside the grace window: machine
+                    # wedge, not a slow job. Blocklist + fail fast.
+                    mid = run.state.get("machine_id")
+                    if mid is not None:
+                        blk = RUNS_ROOT / "wedged_machines.json"
+                        try:
+                            cur = set(json.loads(blk.read_text())) if blk.exists() else set()
+                        except Exception:  # noqa: BLE001
+                            cur = set()
+                        if mid not in cur:
+                            cur.add(mid)
+                            blk.write_text(json.dumps(sorted(cur)))
+                            log(f"wedge: machine {mid} added to blocklist")
+                    ledger("wedge_watch_destroy", run.state["run_id"],
+                           machine=mid, last_status=stat,
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="wedge")
+                    break
         if est_cost >= _eff_cost_cap(run, args):
             ledger("cost_ceiling_breach", run.state["run_id"], est=est_cost)
             run.mark("watch", "failed", result="cost_breach")
@@ -920,8 +1116,13 @@ def ph_watch_collect(run: Run, args) -> None:
             got.append("preds.jsonl.gz(reassembled from %d parts)" % len(parts))
     run.mark("collect", collected=got)
     log(f"collect: {got or 'nothing on remote (instance may still be running the job)'}")
+    if run.state.get("result") != "ok" and not got:
+        # Branch path yielded nothing: the instance's own log is the ONLY
+        # remaining evidence and destroy erases it. Pull it via the API first.
+        _pull_instance_logs(run)
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.
-    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline"):
+    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline",
+                                   "wedge", "vanished"):
         _destroy(run, run.state.get("result", "unknown"))
         run.mark("destroy")
     if run.state.get("result") != "ok":
@@ -1209,6 +1410,9 @@ def main() -> None:
     ap.add_argument("--deadline-min", type=int, default=None,
                     help="override the FU-090 size-scaled deadline (default: scaled)")
     ap.add_argument("--poll-secs", type=int, default=120)
+    ap.add_argument("--wedge-grace-min", type=int,
+                    default=WEDGE_GRACE_MIN_DEFAULT,
+                    help="fail fast if the instance never reaches 'running' within this many minutes")
     args = ap.parse_args()
     if args.check_open_runs:
         raise SystemExit(check_open_runs())

@@ -1,0 +1,20 @@
+[service]
+name = "scoring_history_api"
+import_path = "services.active.scoring_history_api.router"
+prefix = "/api"
+tag = "scoring_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+file = "services/active/scoring_history_api/router.py"
+
+[data_access]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[[endpoints]]
+path = "/history"
+method = "GET"
+summary = "Get scoring history"

@@ -15,7 +15,7 @@ def get_org_risk_summary(org_id: str, db: Session = Depends(get_session)):
         text(
             """
             SELECT server_id, risk_tier, verdict, confidence, last_assessed
-            FROM mcp_server_registry
+            FROM McpServerRegistry
             WHERE org_id = :org_id
             """
         ),
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         conn.execute(
             text(
                 """
-                CREATE TABLE mcp_server_registry (
+                CREATE TABLE McpServerRegistry (
                     server_id TEXT PRIMARY KEY,
                     org_id TEXT,
                     risk_tier TEXT,
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         conn.execute(
             text(
                 """
-                CREATE TABLE mcp_llm_axis_scores (
+                CREATE TABLE McpLlmAxisScore (
                     server_id TEXT,
                     axis_name TEXT,
                     p_top REAL,
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         conn.execute(
             text(
                 """
-                INSERT INTO mcp_server_registry
+                INSERT INTO McpServerRegistry
                 (server_id, org_id, risk_tier, verdict, confidence, last_assessed)
                 VALUES
                 ('srv1', 'test_org', 'HIGH_RISK_ISOLATED', 'malicious', 0.90, '2023-01-01T00:00:00Z'),

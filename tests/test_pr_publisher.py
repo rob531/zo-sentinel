@@ -13,6 +13,7 @@ import os
 import tempfile
 import random
 import types
+from datetime import datetime, timezone
 
 from zo_sentinel.ingestor.store import InMemoryMeshStore
 from zo_sentinel.publisher.gitops import (
@@ -410,32 +411,50 @@ def test_duplicate_module_same_pass_skipped():
     assert "dup.py|2026-07-10T11:00:00Z" in json.loads(pub_rows[-1]["content"])
 
 
+def _at(iso):
+    """A pinned clock. run_once() prunes `published_files` against WALL-CLOCK now
+    (retention = 10x the 3-day guard window = 30 days), while the guard itself
+    compares two ARTIFACT timestamps. With absolute fixture dates and a real
+    clock these two cross-run tests age out of their own state: on
+    2026-08-09T10:00:00Z -- exactly 30 days after the 2026-07-10T10:00:00Z
+    fixture -- the prune started emptying published_files, the guard saw nothing
+    to match, and the assertion flipped to 'published'. Pin the clock so the
+    guard, not the calendar, decides the outcome."""
+    return lambda: datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
 def test_duplicate_module_across_runs_skipped(tmp_path):
     state = str(tmp_path / "pub_state.json")
+    clock = _at("2026-07-11T12:00:00Z")
     store = InMemoryMeshStore(artifacts=[
         _artifact("dup.py", built_at="2026-07-10T10:00:00Z", task="build_dup_a"),
     ])
-    _pub(store, enabled=True, state_file=state).run_once()
+    _pub(store, enabled=True, state_file=state, clock=clock).run_once()
     store2 = InMemoryMeshStore(artifacts=[
         _artifact2("dup.py", built_at="2026-07-11T10:00:00Z", task="build_dup_b"),
     ])
     gitops2 = FakeGitOps()
-    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state).run_once()
+    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state,
+               clock=clock).run_once()
     assert res[0]["action"] == "duplicate_module"
     assert gitops2.published == []
 
 
 def test_same_file_outside_window_publishes(tmp_path):
     state = str(tmp_path / "pub_state.json")
+    clock = _at("2026-06-20T12:00:00Z")
     store = InMemoryMeshStore(artifacts=[
         _artifact("old.py", built_at="2026-05-30T00:00:00Z", task="build_old"),
     ])
-    _pub(store, enabled=True, state_file=state).run_once()
+    _pub(store, enabled=True, state_file=state, clock=clock).run_once()
     store2 = InMemoryMeshStore(artifacts=[
         _artifact2("old.py", built_at="2026-06-20T00:00:00Z", task="build_old_v2"),
     ])
     gitops2 = FakeGitOps()
-    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state).run_once()
+    res = _pub(store2, enabled=True, gitops=gitops2, state_file=state,
+               clock=clock).run_once()
+    # published because 21 days > the 3-day guard window -- NOT because the
+    # state was pruned away (which is what made this test green for free).
     assert res[0]["action"] == "published"
     assert len(gitops2.published) == 1
 

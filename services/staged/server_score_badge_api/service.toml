@@ -1,0 +1,14 @@
+[service]
+name = "server_score_badge_api"
+import_path = "services.active.server_score_badge_api.router"
+prefix = "/api"
+tag = "server_score_badge_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { version = "0.1.0" }
+
+[test]
+requires_mock_db = true

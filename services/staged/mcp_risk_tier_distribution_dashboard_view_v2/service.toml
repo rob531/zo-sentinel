@@ -1,0 +1,11 @@
+[service]
+name = "mcp_risk_tier_distribution_dashboard_view_v2"
+import_path = "services.active.mcp_risk_tier_distribution_dashboard_view_v2.router"
+prefix = "/api"
+tag = "mcp_risk_tier_distribution_dashboard_view_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

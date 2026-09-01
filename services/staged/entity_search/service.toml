@@ -1,0 +1,8 @@
+[service]
+name = "entity_search"
+import_path = "services.active.entity_search.router"
+prefix = "/api"
+tag = "entity_search"
+origin = "service"
+auth = "public"
+needs_data_layer = true

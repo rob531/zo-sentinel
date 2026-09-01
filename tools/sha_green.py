@@ -25,8 +25,17 @@ concluded "main not shippable" and stalled the stage forever, on a gate whose
 only honest verb was EXCLUDED -- a gate that can never go green. That is the 51%
 class again: the artifact you inspected is not the artifact that answers.
 
-THREE THINGS THIS TOOL DOES THAT THE AD-HOC LOOP DID NOT
+FOUR THINGS THIS TOOL DOES THAT THE AD-HOC LOOP DID NOT
 --------------------------------------------------------
+0. THE REQUIRED SET IS READ FROM BRANCH PROTECTION, NOT FROM A LITERAL IN THIS
+   FILE (FU-206). Branch protection is edited in the GitHub UI, outside this
+   repo, so a hard-coded tuple can be silently wrong in the one direction that
+   matters: a newly-required context that this tool never checks, on a sha it
+   then calls GREEN. The literal survives only as a fallback for when the
+   protection read FAILS, and the verdict always names which of the two it used.
+   An EMPTY context list is refused rather than adopted -- zero required
+   contexts would make every sha trivially green.
+
 1. LOUD ON EMPTY. If the evidence source returns zero check-runs, that is rc=2
    UNKNOWN -- not "no failures, therefore green", and not "all absent,
    therefore red". An empty answer is the shape both a healthy skip and a
@@ -62,10 +71,19 @@ import sys
 
 REPO = "rob531/zo-sentinel"
 
-# The 7 contexts that actually gate a merge. Hand-maintained, and that is a
-# known limit: a context added to branch protection but not added here is
-# UNMEASURED, and unmeasured is not passing.
-REQUIRED = (
+# The contexts that actually gate a merge are DERIVED FROM BRANCH PROTECTION at
+# runtime (see resolve_required). This tuple is the FALLBACK used only when that
+# read fails, and it is the LAST KNOWN GOOD value, not the authority.
+#
+# WHY THIS CHANGED (FU-206). The first cut of this tool hard-coded these seven
+# and documented the weakness in a comment: "a context added to branch protection
+# but not added here is UNMEASURED, and unmeasured is not passing." That comment
+# was true and the code did nothing about it. A required context added by a human
+# in the GitHub UI -- which is where branch protection is edited, not in this
+# repo -- would never appear here, so this tool would report GREEN on a sha that
+# could not merge. It is the 51% class in its purest form: the artifact this tool
+# inspected (a literal in its own source) was not the artifact that decides.
+REQUIRED_FALLBACK = (
     "capmap-check",
     "static-analysis",
     "smoke-ladder",
@@ -73,7 +91,13 @@ REQUIRED = (
     "pytest",
     "no-hollow",
     "schema-prm",
+    "referent-verify",
 )
+
+# Resolved once per process by resolve_required(); every read goes through the
+# module global so `_judge`, `render` and `judge` cannot disagree about the set.
+REQUIRED = REQUIRED_FALLBACK
+REQUIRED_SOURCE = {"source": "unresolved", "detail": "resolve_required() not yet called"}
 
 # Removed check (FU-084) -- present in old branch-protection lore, never rerun.
 IGNORED = ("treewalk-smoke",)
@@ -96,6 +120,62 @@ def _gh(path: str):
         return json.loads(out.stdout)
     except ValueError:
         return None
+
+
+def classify_protection(payload, fallback=REQUIRED_FALLBACK):
+    """PURE. Given the branch-protection payload (or None), decide the required set.
+
+    Separated from the network call so the negative controls below can drive it
+    with the shapes that matter -- including the one that is dangerous.
+
+    THE DANGEROUS SHAPE IS AN EMPTY `contexts` LIST. Read naively, "zero required
+    contexts" makes every sha trivially GREEN: no context can be absent, none can
+    fail, so the tool becomes a gate that can only go green (the mirror of the
+    FU-186 gate that could only go red). An empty list is indistinguishable from
+    a permissions-scoped token, a renamed branch or protection being briefly off,
+    so it may NEVER be adopted as a verdict. It falls back and SAYS SO.
+    """
+    if payload is None:
+        return tuple(fallback), {
+            "source": "fallback_literal",
+            "detail": "branch-protection read FAILED (no JSON) -- using the last known "
+                      "good literal. The set may be STALE; a context added since is "
+                      "UNMEASURED, and unmeasured is not passing (R6).",
+            "trusted": False,
+        }
+    ctx = payload.get("contexts")
+    if not isinstance(ctx, list) or not ctx:
+        return tuple(fallback), {
+            "source": "fallback_literal",
+            "detail": "branch-protection returned NO contexts. An empty required set "
+                      "would make every sha trivially GREEN, so it is refused outright "
+                      "and the literal is used instead.",
+            "trusted": False,
+        }
+    live = tuple(str(c) for c in ctx)
+    added = [c for c in live if c not in fallback]
+    dropped = [c for c in fallback if c not in live]
+    info = {
+        "source": "branch_protection",
+        "detail": f"resolved {len(live)} required contexts from "
+                  f"branches/main/protection/required_status_checks",
+        "trusted": True,
+        "drift_vs_literal": {"added": added, "dropped": dropped},
+    }
+    if added or dropped:
+        info["detail"] += (
+            f" -- DRIFT vs this file's literal: added={added or 'none'} "
+            f"dropped={dropped or 'none'}. The LIVE set governs; the literal is "
+            f"stale and should be updated in a follow-up PR.")
+    return live, info
+
+
+def resolve_required(repo: str, branch: str = "main"):
+    """Set the module-level REQUIRED from live branch protection. Idempotent."""
+    global REQUIRED, REQUIRED_SOURCE
+    payload = _gh(f"repos/{repo}/branches/{branch}/protection/required_status_checks")
+    REQUIRED, REQUIRED_SOURCE = classify_protection(payload)
+    return REQUIRED
 
 
 def fetch_check_runs(repo: str, sha: str):
@@ -227,6 +307,7 @@ def judge(repo: str, sha: str):
                             f"repos/{repo}/commits/<sha>/check-runs (NOT /status)")
     res["ignored_contexts"] = list(IGNORED)
     res["required"] = list(REQUIRED)
+    res["required_source"] = dict(REQUIRED_SOURCE)
     return res
 
 
@@ -235,6 +316,7 @@ def render(res: dict) -> str:
         f"repo     : {REPO}",
         f"sha      : {res['sha']}",
         f"basis    : {res['basis']}",
+        f"required : {res['required_source']['source']} -- {res['required_source']['detail']}",
         f"runs     : {res['total_runs']} check-runs on the answering sha",
     ]
     for name in REQUIRED:
@@ -243,12 +325,74 @@ def render(res: dict) -> str:
     return "\n".join(lines)
 
 
+def protection_controls() -> int:
+    """R4 for the REQUIRED resolver: drive classify_protection with every shape,
+    including the ones that would silently break the verdict.
+
+    `--self-test` alone would only ever exercise the happy path, because live
+    branch protection is healthy today. An assertion never seen fail is unproven.
+    """
+    live_ok = {"contexts": ["capmap-check", "static-analysis", "smoke-ladder",
+                            "frontend", "pytest", "no-hollow", "schema-prm", "referent-verify"]}
+    cases = [
+        ("live protection, matching the literal",
+         live_ok, "branch_protection", True,
+         lambda s, i: len(s) == 8 and not i["drift_vs_literal"]["added"]
+                      and not i["drift_vs_literal"]["dropped"]),
+
+        ("protection gained a context the literal never had -- THE BUG THIS FIXES",
+         {"contexts": live_ok["contexts"] + ["licence-scan"]}, "branch_protection", True,
+         lambda s, i: "licence-scan" in s and i["drift_vs_literal"]["added"] == ["licence-scan"]),
+
+        ("protection dropped a context the literal still lists",
+         {"contexts": [c for c in live_ok["contexts"] if c != "frontend"]},
+         "branch_protection", True,
+         lambda s, i: "frontend" not in s and i["drift_vs_literal"]["dropped"] == ["frontend"]),
+
+        ("EMPTY contexts -- must NOT become a gate that can only go green",
+         {"contexts": []}, "fallback_literal", False,
+         lambda s, i: s == REQUIRED_FALLBACK),
+
+        ("contexts key absent entirely",
+         {"strict": False}, "fallback_literal", False,
+         lambda s, i: s == REQUIRED_FALLBACK),
+
+        ("API call failed (None) -- fall back, and say the set may be stale",
+         None, "fallback_literal", False,
+         lambda s, i: s == REQUIRED_FALLBACK and "UNMEASURED" in i["detail"]),
+    ]
+    bad = 0
+    for why, payload, want_source, want_trusted, predicate in cases:
+        got_set, info = classify_protection(payload)
+        ok = (info["source"] == want_source
+              and info["trusted"] is want_trusted
+              and predicate(got_set, info))
+        bad += 0 if ok else 1
+        print(f"[{'ok  ' if ok else 'FAIL'}] {info['source']:<18} trusted={str(info['trusted']):<5} {why}")
+        if not ok:
+            print(f"        got set={got_set}")
+            print(f"        got info={info}")
+    print(f"protection controls: {len(cases) - bad}/{len(cases)} -- the EMPTY and FAILED "
+          f"shapes are the ones that matter; both must refuse to become a verdict.")
+    return 0 if bad == 0 else 1
+
+
 def self_test(repo: str) -> int:
     """R4: prove each verdict on a REAL sha in this repo, including a red one.
     An assertion never seen RED is unproven, not passing."""
+    rc_controls = protection_controls()
+    print()
+    resolve_required(repo)
+    print(f"live REQUIRED: {REQUIRED_SOURCE['source']} -- {list(REQUIRED)}\n")
     cases = [
-        ("GREEN", "de06856006e06890d1634d182ff6f9a9b93af13e",
-         "PR #2418 head -- all 7 required contexts success"),
+        # 2026-08-31: was ("GREEN", ...) -- the fixture aged out when branch
+        # protection gained `referent-verify`; that context does not exist on this
+        # 2026-era sha, and absent is not green, so the live set correctly answers
+        # cannot-evaluate. GREEN-via-PR-head-redirect is still exercised by the
+        # origin/main tip case below.
+        ("UNKNOWN", "de06856006e06890d1634d182ff6f9a9b93af13e",
+         "PR #2418 head -- 7 of the NOW-8 required contexts success; "
+         "referent-verify absent by era"),
         ("RED", "faaf7c00660f5d2c11dca4448773ccd51865a138",
          "static-analysis concluded failure (and carries 3 `pytest` re-runs, "
          "so it also exercises latest-per-name)"),
@@ -280,7 +424,7 @@ def self_test(repo: str) -> int:
             print("        " + got["detail"])
     print(f"\nself-test: {len(cases) - bad}/{len(cases)} verdicts as expected"
           + ("" if bad else " -- GREEN, RED and UNKNOWN each demonstrated on real data"))
-    return 0 if bad == 0 else 1
+    return 0 if (bad == 0 and rc_controls == 0) else 1
 
 
 def main() -> int:
@@ -288,6 +432,8 @@ def main() -> int:
     ap.add_argument("--sha")
     ap.add_argument("--repo", default=REPO)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--branch", default="main",
+                    help="branch whose protection defines the required set")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
 
@@ -296,6 +442,7 @@ def main() -> int:
     if not a.sha:
         ap.error("--sha is required (or use --self-test)")
 
+    resolve_required(a.repo, a.branch)
     res = judge(a.repo, a.sha)
     print(json.dumps(res, indent=2) if a.json else render(res))
     return res["rc"]

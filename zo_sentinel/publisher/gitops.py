@@ -39,6 +39,37 @@ def _repo_relative(file_path: str) -> str:
         rel = os.path.basename(file_path)
     return rel.replace("\\", "/")   # git wants forward slashes on every OS
 
+# Characters that are RESERVED in Windows filenames. A path containing any of
+# them is legal on ubuntu (where CI runs) and IMPOSSIBLE to materialise on the
+# tower -- `git checkout` and `git worktree add` both fatal with "invalid path",
+# so a single such file makes the WHOLE BRANCH un-checkout-able for every lane on
+# the box. That is FU-209, measured 2026-07-31: one scaffold `__init__.py` under a
+# literal `<service_name>/` directory broke step 0 of every Windows lane and the
+# prod dry-run gate, with all seven required checks green and no way for them to
+# be otherwise.
+#
+# The guard lives HERE, at the publisher's single commit chokepoint, rather than
+# in CI, because CI cannot see this class by construction (ubuntu-latest accepts
+# the name) and because HARNESS DOCTRINE forbids answering a finding with another
+# required check. Rejecting at emit time is also the only point where the artifact
+# can still be discarded cheaply.
+_WINDOWS_RESERVED_CHARS = '<>:"|?*'
+
+
+def _portable_path_violation(rel_path: str) -> Optional[str]:
+    """Return a human-readable reason if `rel_path` cannot exist on Windows, else
+    None. Drive-letter colons are already gone by this point: _repo_relative()
+    runs first and coerces absolute paths, so any surviving ':' is genuinely
+    inside a component name."""
+    bad = sorted({c for c in rel_path if c in _WINDOWS_RESERVED_CHARS})
+    if not bad:
+        return None
+    return ("path %r contains Windows-reserved character(s) %s; it would make "
+            "every checkout of the branch fail on the tower (FU-209). Refusing "
+            "to commit it. This is almost always an UNSUBSTITUTED template "
+            "placeholder in an emitted path." % (rel_path, " ".join(bad)))
+
+
 # Substrings GitHub emits when it throttles content creation (push / pr create).
 # Hitting these means back off and retry, NOT give up -- a burst of PRs trips the
 # secondary (abuse) rate limit even while the primary 5000/hr budget is healthy.
@@ -264,6 +295,18 @@ class CliGitOps:
         # Coerce to repo-relative FIRST: an absolute path escapes the clone and
         # fatals git-add 'outside repository' (deterministic -> permanent).
         rel_path = _repo_relative(plan.file_path)
+
+        # ...then refuse a path that cannot exist on Windows. permanent=True on
+        # purpose: this artifact is malformed at its root and no retry fixes it,
+        # so the queue retires it and keeps moving rather than stalling behind it.
+        # Do NOT "helpfully" sanitise the name -- an unsubstituted placeholder
+        # renamed to something legal would commit a wrongly-named service, which
+        # is a quieter failure than the one being prevented.
+        _violation = _portable_path_violation(rel_path)
+        if _violation is not None:
+            return PublishResult(ok=False, branch=plan.branch, permanent=True,
+                                 detail=_violation[:300])
+
         target = self.clone_dir / rel_path
         try:
             target.parent.mkdir(parents=True, exist_ok=True)

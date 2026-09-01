@@ -27,9 +27,31 @@
        promotion is gated on a count of clean staged->fired deploys; a runbook
        that cannot report its own failure cannot be counted.
 
-  AUTHORITY: this script is fired by a human (the chairman). prod-drift-sentinel
-  is Phase 1 and MUST NOT invoke it without -DryRun -- it stages the command, it
-  does not push. Nothing here grants an agent deploy authority.
+  AUTHORITY: READ D:\zo\Zocomputer Agents\authority.json AT RUN TIME. DO NOT TRUST
+  THIS COMMENT AS A GRANT OR A DENIAL -- a docstring cannot be revoked, and this one
+  was wrong for three days.
+
+    Until 2026-08-02 this block read: "this script is fired by a human (the
+    chairman). prod-drift-sentinel is Phase 1 and MUST NOT invoke it without
+    -DryRun." That was the 2026-07-25 CofC Phase 1 rule, and the chairman's
+    2026-07-29 grant retired it BY NAME AND BY LANE:
+      authority.json.supersedes_prose[1] =
+        "prod_drift_sentinel CofC Phase 1 'stage, never fire' (2026-07-25) ..."
+      authority.json.delegated.prod_deploy_fire =
+        { granted: true, mode: FIRE_ON_GREEN, phase: 2 }
+    Nobody updated the prose. The lane kept obeying an instruction its principal
+    had already withdrawn: 20 stages, 0 fires, prod drift 218 -> 402 -> 423 -> 452
+    commits, every stage correctly computed and not one of them actionable. That is
+    a correctly raised alarm with no subscriber. The fix is not another gate; it is
+    that permission lives in ONE machine-readable file and nowhere else.
+
+  So: an agent MAY fire this script when authority.json grants prod_deploy_fire AND
+  all five preconditions hold -- 8/8 gates PASS, fire_gate SAFE rc=0, restore-verified
+  backup < 24h, rollback anchor staged AND PROVEN PULLABLE BEFORE the fire, and
+  accept_gate rc=0 after. Class B (migrations tree object differs between the running
+  sha and the candidate, per `git rev-parse <sha>:migrations`) is ATTENDED-ONLY
+  PERMANENTLY regardless of gates, because of the IRREVERSIBLE EDGE below.
+  First lane-fired release: v66, sha d5cb1d0f, 2026-08-02, accept_gate ACCEPT rc=0.
 
   IRREVERSIBLE EDGE: fly.toml carries `release_command = "alembic upgrade head"`,
   which runs against the prod moat Postgres on every release. There is no true
@@ -38,6 +60,9 @@
 
 .PARAMETER Sha
   Full 40-char commit SHA to deploy. Must be a CI-green origin/main commit.
+  This is no longer prose alone: tools/fire_gate.py consults tools/sha_green.py on
+  the target sha and returns RESTAGE (rc=1) if it is CI-RED. A CI-UNKNOWN target
+  leaves the verdict unchanged and says so -- unknown is not red.
 
 .PARAMETER RollbackImage
   Current prod release image, recorded before the deploy as the rollback anchor

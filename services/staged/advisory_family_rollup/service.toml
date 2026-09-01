@@ -1,0 +1,8 @@
+[service]
+name = "advisory_family_rollup"
+import_path = "services.active.advisory_family_rollup.router"
+prefix = "/api"
+tag = "advisory_family_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true

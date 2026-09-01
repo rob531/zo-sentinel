@@ -1,0 +1,8 @@
+[service]
+name = "recent_assessments"
+import_path = "services.active.recent_assessments.router"
+prefix = "/api"
+tag = "recent_assessments"
+origin = "service"
+auth = "public"
+needs_data_layer = true

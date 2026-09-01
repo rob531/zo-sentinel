@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import get_session
-from app.models import McpServerRegistry, VulnAdvisories, VulnLinks
+from app.models import McpServerRegistry, VulnAdvisory, VulnLink
 
 app = FastAPI(title="cve_risk_summary", version="1.0.0")
 
@@ -14,34 +14,34 @@ app = FastAPI(title="cve_risk_summary", version="1.0.0")
 @app.get("/api/cve/risk-summary")
 def get_cve_risk_summary(session: Session = Depends(get_session)) -> dict[str, Any]:
     """
-    Aggregate CVE risk summary from vuln_advisories joined to vuln_links to mcp_server_registry.
+    Aggregate CVE risk summary from vuln_advisories joined to vuln_links to McpServerRegistry.
     Returns severity counts per server and overall ecosystem distribution.
     """
     # Subquery to join advisories -> links -> servers
     advisory_server_join = (
         select(
-            VulnAdvisories.cve_id,
-            VulnAdvisories.severity,
+            VulnAdvisory.cve_id,
+            VulnAdvisory.severity,
             McpServerRegistry.server_id,
             McpServerRegistry.name,
             McpServerRegistry.ecosystem,
         )
-        .join(VulnLinks, VulnLinks.cve_id == VulnAdvisories.cve_id)
-        .join(McpServerRegistry, McpServerRegistry.server_id == VulnLinks.server_id)
+        .join(VulnLink, VulnLink.cve_id == VulnAdvisory.cve_id)
+        .join(McpServerRegistry, McpServerRegistry.server_id == VulnLink.server_id)
     ).subquery()
 
     # Total advisories
     total_advisories = session.execute(
-        select(func.count(VulnAdvisories.cve_id)).select_from(VulnAdvisories)
+        select(func.count(VulnAdvisory.cve_id)).select_from(VulnAdvisory)
     ).scalar() or 0
 
     # By severity counts
     severity_counts = {}
     for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]:
         count = session.execute(
-            select(func.count(VulnAdvisories.cve_id))
-            .select_from(VulnAdvisories)
-            .where(VulnAdvisories.severity == severity)
+            select(func.count(VulnAdvisory.cve_id))
+            .select_from(VulnAdvisory)
+            .where(VulnAdvisory.severity == severity)
         ).scalar() or 0
         severity_counts[severity] = count
 
@@ -114,18 +114,18 @@ def _seed_data(session: Session):
     session.flush()
 
     # Advisories with varying severities
-    adv1 = VulnAdvisories(cve_id="CVE-2024-0001", severity="CRITICAL", title="Critical vuln", description="desc")
-    adv2 = VulnAdvisories(cve_id="CVE-2024-0002", severity="HIGH", title="High vuln", description="desc")
-    adv3 = VulnAdvisories(cve_id="CVE-2024-0003", severity="MEDIUM", title="Medium vuln", description="desc")
-    adv4 = VulnAdvisories(cve_id="CVE-2024-0004", severity="LOW", title="Low vuln", description="desc")
+    adv1 = VulnAdvisory(cve_id="CVE-2024-0001", severity="CRITICAL", title="Critical vuln", description="desc")
+    adv2 = VulnAdvisory(cve_id="CVE-2024-0002", severity="HIGH", title="High vuln", description="desc")
+    adv3 = VulnAdvisory(cve_id="CVE-2024-0003", severity="MEDIUM", title="Medium vuln", description="desc")
+    adv4 = VulnAdvisory(cve_id="CVE-2024-0004", severity="LOW", title="Low vuln", description="desc")
     session.add_all([adv1, adv2, adv3, adv4])
     session.flush()
 
     # Links: distribute across servers
-    link1 = VulnLinks(cve_id="CVE-2024-0001", server_id="srv-001")
-    link2 = VulnLinks(cve_id="CVE-2024-0002", server_id="srv-001")
-    link3 = VulnLinks(cve_id="CVE-2024-0003", server_id="srv-002")
-    link4 = VulnLinks(cve_id="CVE-2024-0004", server_id="srv-003")
+    link1 = VulnLink(cve_id="CVE-2024-0001", server_id="srv-001")
+    link2 = VulnLink(cve_id="CVE-2024-0002", server_id="srv-001")
+    link3 = VulnLink(cve_id="CVE-2024-0003", server_id="srv-002")
+    link4 = VulnLink(cve_id="CVE-2024-0004", server_id="srv-003")
     session.add_all([link1, link2, link3, link4])
     session.commit()
 

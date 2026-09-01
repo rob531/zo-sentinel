@@ -1,0 +1,8 @@
+[service]
+name = "threat_intel_dashboard"
+import_path = "services.active.threat_intel_dashboard.router"
+prefix = "/api"
+tag = "threat_intel_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

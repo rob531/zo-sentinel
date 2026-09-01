@@ -1,0 +1,11 @@
+[service]
+name = "server_risk_axis_comparison"
+import_path = "services.active.server_risk_axis_comparison.router"
+prefix = "/api"
+tag = "server_risk_axis_comparison"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

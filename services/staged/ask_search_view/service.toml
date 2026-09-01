@@ -1,0 +1,8 @@
+[service]
+name = "ask_search_view"
+import_path = "services.active.ask_search_view.router"
+prefix = "/api"
+tag = "ask_search_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true

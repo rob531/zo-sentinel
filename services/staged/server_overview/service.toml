@@ -1,0 +1,29 @@
+[service]
+name = "server_overview"
+import_path = "services.active.server_overview.router"
+prefix = "/api"
+tag = "server_overview"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_store = true
+
+[data_access]
+app_tables = [
+    "McpServerRegistry",
+    "McpLlmAxisScore",
+    "McpScoreDispute",
+    "orgs",
+    "users"
+]
+mesh_tables = [
+    "mcp_signal_scores",
+    "mesh_memory"
+]
+
+[api]
+methods = ["GET", "POST"]
+cors_enabled = true

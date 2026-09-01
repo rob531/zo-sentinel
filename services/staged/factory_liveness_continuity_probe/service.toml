@@ -1,0 +1,11 @@
+[service]
+name = "factory_liveness_continuity_probe"
+import_path = "services.active.factory_liveness_continuity_probe.router"
+prefix = "/api"
+tag = "factory_liveness_continuity_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

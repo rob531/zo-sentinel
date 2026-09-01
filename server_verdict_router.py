@@ -1,130 +1,204 @@
-from fastapi import APIRouter, Depends, HTTPException
+"""Server verdict router -- endpoints for MCP server risk assessment results.
+
+Backed by the app.db session and the McpServerRegistry model.
+"""
+from __future__ import annotations
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from typing import Dict, List
-import requests
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.db import get_session
-from app.models import MCPLLMAxisScore
+from app.models import McpServerRegistry
+from app.rbac import require_role
+from app.security import Principal, get_principal
 
-router = APIRouter()
+router = APIRouter(prefix="/servers", tags=["verdicts"])
 
-class AxisScore(BaseModel):
-    label: str
-    p_top: float
-    p_critical: float
-    p_danger: float
+class ServerVerdictResponse(BaseModel):
+    """Server verdict response model"""
+    server_id: str
+    name: Optional[str]
+    url: Optional[str]
+    verdict: Optional[str]
+    verdict_reasoning: Optional[str]
+    confidence: Optional[float]
+    risk_tier: Optional[str]
+    last_assessed: Optional[str]
+    trust_score: Optional[float]
 
-class ServerVerdict(BaseModel):
-    axes: Dict[str, AxisScore]
-    overall_risk: float
+class UpdateVerdictRequest(BaseModel):
+    """Request model for updating a server's verdict"""
+    verdict: str
+    verdict_reasoning: str
+    confidence: float
     risk_tier: str
-    criteria_version: str
+    trust_score: Optional[float]
 
-AXES = [
-    "security",
-    "privacy",
-    "reliability",
-    "performance",
-    "compliance",
-    "maintainability",
-    "scalability"
-]
+@router.get("/{server_id}/verdict", response_model=ServerVerdictResponse)
+def get_server_verdict(
+    server_id: str,
+    sess: Session = Depends(get_session),
+    principal: Principal = Depends(get_principal)
+):
+    """Get verdict details for a specific server"""
+    server = sess.execute(
+        select(McpServerRegistry).where(McpServerRegistry.server_id == server_id)
+    ).scalar_one_or_none()
 
-def get_server_verdict(server_id: str) -> ServerVerdict:
-    # Query write_service for axis scores
-    response = requests.post(
-        "http://127.0.0.1:8772/query",
-        json={
-            "query": f"SELECT * FROM mcp_llm_axis_scores WHERE server_id = '{server_id}' AND axis_name IN {AXES}"
-        }
-    )
-    if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Failed to fetch axis scores")
+    if not server:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
-    axis_scores = response.json()
-
-    # Process axis scores
-    axes = {}
-    for axis in AXES:
-        axis_data = next((item for item in axis_scores if item["axis_name"] == axis), None)
-        if axis_data:
-            axes[axis] = AxisScore(
-                label=axis_data["label"],
-                p_top=axis_data["p_top"],
-                p_critical=axis_data["p_critical"],
-                p_danger=axis_data["p_danger"]
-            )
-        else:
-            axes[axis] = AxisScore(
-                label="unknown",
-                p_top=0.0,
-                p_critical=0.0,
-                p_danger=0.0
-            )
-
-    # Calculate overall risk (average of p_critical)
-    overall_risk = sum(axis.p_critical for axis in axes.values()) / len(axes)
-
-    # Determine risk tier
-    high_risk = any(axis.p_critical > 0.8 for axis in axes.values())
-    risk_tier = "HIGH_RISK_ISOLATED" if high_risk else "LOW_RISK"
-
-    # Get criteria version (mock for now)
-    criteria_version = "v1.0"
-
-    return ServerVerdict(
-        axes=axes,
-        overall_risk=overall_risk,
-        risk_tier=risk_tier,
-        criteria_version=criteria_version
+    return ServerVerdictResponse(
+        server_id=server.server_id,
+        name=server.name,
+        url=server.url,
+        verdict=server.verdict,
+        verdict_reasoning=server.verdict_reasoning,
+        confidence=server.confidence,
+        risk_tier=server.risk_tier,
+        last_assessed=str(server.last_assessed) if server.last_assessed else None,
+        trust_score=server.trust_score
     )
 
-@router.get("/servers/{server_id}/verdict", response_model=ServerVerdict)
-async def server_verdict(server_id: str):
-    return get_server_verdict(server_id)
+@router.get("/verdicts", response_model=list[ServerVerdictResponse])
+def list_server_verdicts(
+    limit: int = 100,
+    offset: int = 0,
+    sess: Session = Depends(get_session),
+    principal: Principal = Depends(get_principal)
+):
+    """List server verdicts with pagination"""
+    servers = sess.execute(
+        select(McpServerRegistry)
+        .limit(limit)
+        .offset(offset)
+    ).scalars().all()
+
+    return [
+        ServerVerdictResponse(
+            server_id=server.server_id,
+            name=server.name,
+            url=server.url,
+            verdict=server.verdict,
+            verdict_reasoning=server.verdict_reasoning,
+            confidence=server.confidence,
+            risk_tier=server.risk_tier,
+            last_assessed=str(server.last_assessed) if server.last_assessed else None,
+            trust_score=server.trust_score
+        )
+        for server in servers
+    ]
+
+@router.put("/{server_id}/verdict", response_model=ServerVerdictResponse)
+def update_server_verdict(
+    server_id: str,
+    request: UpdateVerdictRequest,
+    sess: Session = Depends(get_session),
+    principal: Principal = Depends(require_role("admin"))
+):
+    """Update a server's verdict (admin-only)"""
+    server = sess.execute(
+        select(McpServerRegistry).where(McpServerRegistry.server_id == server_id)
+    ).scalar_one_or_none()
+
+    if not server:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
+    server.verdict = request.verdict
+    server.verdict_reasoning = request.verdict_reasoning
+    server.confidence = request.confidence
+    server.risk_tier = request.risk_tier
+    if request.trust_score is not None:
+        server.trust_score = request.trust_score
+
+    sess.commit()
+
+    return ServerVerdictResponse(
+        server_id=server.server_id,
+        name=server.name,
+        url=server.url,
+        verdict=server.verdict,
+        verdict_reasoning=server.verdict_reasoning,
+        confidence=server.confidence,
+        risk_tier=server.risk_tier,
+        last_assessed=str(server.last_assessed) if server.last_assessed else None,
+        trust_score=server.trust_score
+    )
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.main import app
-    import requests
+    from sqlalchemy.pool import StaticPool
+    from app.db import get_session, engine, Base
 
-    # Monkey-patch requests.post for testing
-    def mock_post(*args, **kwargs):
-        if "http://127.0.0.1:8772/query" in args[0]:
-            return type('Response', (), {
-                'status_code': 200,
-                'json': lambda: [
-                    {
-                        "server_id": "test-server",
-                        "axis_name": "security",
-                        "label": "high",
-                        "p_top": 0.9,
-                        "p_critical": 0.85,
-                        "p_danger": 0.1
-                    },
-                    {
-                        "server_id": "test-server",
-                        "axis_name": "privacy",
-                        "label": "medium",
-                        "p_top": 0.7,
-                        "p_critical": 0.3,
-                        "p_danger": 0.05
-                    }
-                ]
-            })()
-        raise Exception("Unexpected request")
+    # Test setup
+    app.dependency_overrides[get_session] = lambda: get_session().get_bind().connect()
 
-    requests.post = mock_post
+    # Create test database
+    Base.metadata.create_all(engine)
 
-    # Test the endpoint
+    # Test data
+    test_server = McpServerRegistry(
+        server_id="test-server-1",
+        name="Test Server",
+        url="https://test.example.com",
+        verdict="SAFE",
+        verdict_reasoning="Test reasoning",
+        confidence=0.95,
+        risk_tier="LOW",
+        trust_score=0.8,
+        last_assessed=None
+    )
+
+    # Insert test data
+    with engine.connect() as conn:
+        conn.execute(test_server.__table__.insert(), [test_server.__dict__])
+        conn.commit()
+
     client = TestClient(app)
-    response = client.get("/servers/test-server/verdict")
-    assert response.status_code == 200
-    data = response.json()
 
-    # Verify all axes are present
-    assert set(data["axes"].keys()) == set(AXES)
+    # Test get single verdict
+    resp = client.get("/servers/test-server-1/verdict")
+    assert resp.status_code == 200
+    assert resp.json()["server_id"] == "test-server-1"
+    assert resp.json()["verdict"] == "SAFE"
 
-    # Verify risk tier based on test condition
-    assert data["risk_tier"] == "HIGH_RISK_ISOLATED"
+    # Test list verdicts
+    resp = client.get("/servers/verdicts")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+    # Test update verdict (requires admin role)
+    with patch("app.security.get_principal") as mock_principal:
+        mock_principal.return_value = Principal(
+            user_id="test-admin",
+            org_id="test-org",
+            role="admin",
+            email="admin@example.com"
+        )
+        update_data = {
+            "verdict": "HIGH",
+            "verdict_reasoning": "Updated reasoning",
+            "confidence": 0.9,
+            "risk_tier": "HIGH",
+            "trust_score": 0.7
+        }
+        resp = client.put("/servers/test-server-1/verdict", json=update_data)
+        assert resp.status_code == 200
+        assert resp.json()["verdict"] == "HIGH"
+
+    # Test unauthorized update
+    with patch("app.security.get_principal") as mock_principal:
+        mock_principal.return_value = Principal(
+            user_id="test-user",
+            org_id="test-org",
+            role="member",
+            email="user@example.com"
+        )
+        resp = client.put("/servers/test-server-1/verdict", json=update_data)
+        assert resp.status_code == 403
 
     print("PASS")

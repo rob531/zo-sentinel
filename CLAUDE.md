@@ -298,7 +298,7 @@ Directives go in `directives/` (timestamped, flat) or `directives/pending/` (que
 - Re-run `treewalk.py` after every set of changes.
 - Append every improvement to `SESSION_LOG.md`.
 - Emit a directive for anything needing ZoComputer-side changes.
-- Stubs are acceptable — keep moving, don't block on live data.
+- Stubs are acceptable — keep moving, don't block on live data. EXCEPT where a stub would shadow an existing implementation — see "Import-boundary incident (2026-08-16)", constraint 3.
 - No permission prompts. No confirmation pauses. Keep iterating.
 
 ## Builder self-repair harness (ZoComputer-side)
@@ -343,3 +343,32 @@ Ollama fallback loops; nothing alerted on any of it.
 In scope: discovery, signal collection, trust synthesis surfacing, threat ingest, verdict generation, audit logging, analyst workflows, the dashboard.
 
 Out of scope (handled externally — don't add): HTTP gateway/proxy, network-layer blocking, runtime security (WAF/IDS/RASP), user auth/RBAC, secret/vault management, firewall rules, container orchestration.
+
+## Import-boundary incident (2026-08-16)
+
+Three-day total build outage. A directive mutated `zo_sentinel/__init__.py` — a file whose own
+docstring says it must stay a bare package marker — into an eager import hub pulling in `app.db`.
+A second edit added `from app.routers import api_router` to `app/__init__.py`, pointing at an
+untracked `app/routers/` indexing ~35 modules that were never written. Every
+`python3 -m zo_sentinel.*` entrypoint then died at package init. Neither edit was ever committed.
+
+Hard constraints from this postmortem:
+
+1. **`zo_sentinel/__init__.py` imports nothing.** It is a package marker only — it exists to pin
+   resolution to the local checkout. Never add imports to it.
+2. **Nothing under `zo_sentinel/` may import `app`.** The build pipeline must not depend on the
+   deployed FastAPI package. A broken route must never be able to starve the builder.
+3. **Do not stub missing router modules.** `app/routers/__init__.py` indexes an
+   `app/router_<name>.py` convention that does not match disk; the real implementations live in
+   `app/api/<name>.py` and `services/staged/<name>/router.py`. Empty routers would shadow working
+   code and fail silently — strictly worse than the crash. This overrides "stubs are acceptable".
+4. **A restart is not a recovery.** Any supervisor that restarts a daemon must verify it is still
+   alive ~10s later. The watchdog restarted the promoter for three days while it died at import
+   every time.
+5. **Leave no uncommitted edits to tracked files.** Modifications outside a directive's declared
+   target set are a gate failure. Both files here sat modified-but-uncommitted for three days.
+
+Open follow-ups: reconcile `app/routers/` against the real layout (there is also an `app/routers.py`
+shadowed by the package); wire `tests/test_promotion_blocks_unshippable_import_path.py` into the
+pre-merge gates and extend it to assert constraints 1 and 2; alarm when `pending/` is non-empty and
+no `.done.json` has been written for >2h.

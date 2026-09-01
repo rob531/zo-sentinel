@@ -283,3 +283,55 @@ def test_an_unreadable_diff_is_invalid_not_valid(monkeypatch):
     monkeypatch.setattr(m, "_added_lines", lambda n: "")
     assert not m._v_service_manifest(1, ["services/staged/foo/service.toml"])[0]
     assert not m._v_python_syntax(1, ["services/staged/foo/router.py"])[0]
+
+
+# --------------------------------------------------------------------------
+# the ARMED halt's founding case -- cycle-0032
+#
+# `queue_census --halt-mode` has defaulted to ARMED since 2026-07-30, and it was
+# armed on the strength of tools/halt_shadow_report.py showing the 2026-07-29
+# incident still reproducing. That report then had NO CALLER of any kind: nothing
+# re-asked the question after the actuator went hot, so a later loosening of
+# VALIDITY_FLOOR or MIN_COHORT would have silently un-armed the halt against the
+# only incident it is known to catch, and every surface would have stayed green.
+#
+# The report's own docstring says that if the thresholds ever move past this
+# incident "THIS REPORT GOES QUIET and that is the signal". These tests are the
+# receiver for that signal. They run the REAL alarm code through the report's own
+# retrospect(), so a loosened threshold and an edited fixture both surface here.
+# --------------------------------------------------------------------------
+SHADOW = os.path.join(ROOT, "tools", "halt_shadow_report.py")
+
+
+def _load_shadow():
+    spec = importlib.util.spec_from_file_location("halt_shadow_report", SHADOW)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["halt_shadow_report"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_armed_halt_still_fires_on_its_founding_case():
+    m = _load()
+    fired = _load_shadow().retrospect(m)
+    assert [a["kind"] for a in fired] == ["VALIDITY_COLLAPSE"]
+    assert fired[0]["lane"] == "builder:manifest"
+
+
+def test_the_founding_case_is_bound_to_the_live_validity_floor(monkeypatch):
+    """NEGATIVE CONTROL, kept permanently rather than run once.
+
+    Drop VALIDITY_FLOOR to 0 and the founding case must STOP firing. If this test
+    cannot be made to fail, the one above is asserting nothing.
+    """
+    m = _load()
+    monkeypatch.setattr(m, "VALIDITY_FLOOR", 0.0)
+    assert _load_shadow().retrospect(m) == []
+
+
+def test_the_founding_case_is_bound_to_the_live_min_cohort(monkeypatch):
+    """The second way to silently un-arm the halt: raise the cohort floor above the
+    incident's own cohort (36) and the collapse becomes unjudgeable, not absent."""
+    m = _load()
+    monkeypatch.setattr(m, "MIN_COHORT", 50)
+    assert _load_shadow().retrospect(m) == []

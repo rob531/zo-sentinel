@@ -1,0 +1,276 @@
+name: referent-verify
+
+# EXECUTION-BASED REFERENT VERIFICATION.
+#
+# Every other gate in this repo checks that code is WELL-FORMED. This one checks
+# that what the code REFERS TO exists: it boots the real app, mounts the real
+# router set, and resolves every table and column named in SQL against a real
+# catalog.
+#
+# It exists because audit finding B1 -- seven FU predicates querying three tables
+# that exist on no plane -- passed generate_spine.py --strict, the reachability
+# ratchet, pull_check and ruff for a month. All of those are static, and a name
+# that resolves to nothing is syntactically perfect. Only execution can tell.
+#
+# WHY ACTIONS AND NOT A HOST DAEMON
+#   A daemon can reach the live bus but runs inside the workspace it is
+#   verifying -- the B2 failure mode, where untracked files shadow the package
+#   and the same checks score 31/32+1 on the host against 32/32+0 on clean main.
+#   A clean checkout cannot be fooled that way.
+#
+#   Actions in turn cannot reach 127.0.0.1:8772, so the table catalog is read
+#   from schema/bus_catalog.json, refreshed on the host by
+#   tools/bus_catalog_snapshot.py (cron, daily).
+#
+#   That committed snapshot is the seam, so the seam is guarded, in three bands:
+#     age <= 7d   OK
+#     7d..14d     WARN -- reported with the days remaining, still resolving
+#     age > 14d   STALE-RED -- its own verdict, carrying the age, blocking
+#   If the host refresher dies -- which is exactly how the 2026-04 E2E runner
+#   died, silently, for months -- this job turns red instead of going quiet.
+#
+#   STALE is NOT folded into UNKNOWN. "absent", "unparseable", "undated" and
+#   "fourteen days old" have four different fixes; only the last one names a
+#   daemon that stopped and carries a number saying how long ago.
+#
+#   The WARN band exists because this is a REQUIRED check. At 14d + 1s every PR
+#   on the repo is blocked, and a cliff nobody can see coming is the same shape
+#   as the runner that died. The alarm that gives that week of notice does NOT
+#   live on the host being watched -- see .github/workflows/bus-catalog-freshness.yml,
+#   and #4080 for why: on 2026-08-27 the host had no cron daemon at all, so all
+#   three of the refresher's "redundant" triggers were inert.
+#
+# PARTLY ARMED since 2026-08-26 (#4067): ROUTES.
+# TABLES ARMED 2026-08-27 (#4080). A pull request that names a table existing on
+# no plane -- not on the bus, not a __tablename__, in no migration, not declared
+# in schema/external_planes.json -- exits 1 and turns this job red. Since this
+# job is a required context, that blocks the merge.
+#
+# COLUMNS remains REPORT-ONLY at 114 missing. Arming it today would turn every
+# PR on the repo red, which is not enforcement, it is an outage. It is its own
+# pass.
+#
+# An armed check that returns UNKNOWN or STALE enforces exactly like FAIL; the
+# header above says why that is deliberate.
+#
+# REQUIRED CHECK since 2026-08-26 (#4089). Arming the routes check made the JOB
+# red; it did not make the MERGE stop, because GitHub auto-merge waits only on
+# branch protection's required contexts and `referent-verify` was not one of
+# them. It is now.
+#
+# THAT PROMOTION IS WHY THIS WORKFLOW HAS NO `paths:` FILTER ANY MORE.
+#   A workflow skipped by a path filter never reports its context at all, and a
+#   required context that never reports leaves the PR waiting forever. Adding
+#   the old path-filtered job to the required set would therefore have hung
+#   every docs-only PR -- the exact PR class that started #4032.
+#
+#   So the filter moved from the TRIGGER into the JOB. The job always runs and
+#   therefore always reports. Its first step decides whether any referent-
+#   bearing path was touched, and only then does it install deps and boot the
+#   app. A docs-only PR gets a green context in seconds; a PR touching app/,
+#   services/, tools/, the bus catalog or this file gets the full check.
+#
+# FAIL CLOSED. Three ways this job can go wrong and what each does:
+#   - the changed-file set cannot be determined  -> run the FULL check anyway
+#   - deps fail to install / the app fails to boot -> the step fails -> RED
+#   - the checker returns UNKNOWN on an armed check -> exit 1 -> RED
+# There is no `continue-on-error` and no `|| true` on any path that decides the
+# verdict. "Could not evaluate" is never "fine" -- that distinction is the whole
+# design rule of tools/referent_verify.py, and it is the one #3990 had to repair
+# in the FU probes. Do not reintroduce a skip-as-success path here.
+
+on:
+  schedule:
+    - cron: "41 6 * * *"      # 06:41 UTC daily, before the 07:23 e2e-nightly
+  workflow_dispatch:
+  pull_request:
+    # NO paths: filter. See "THAT PROMOTION IS WHY" above -- this job is a
+    # required status check, so it must report on EVERY pull request. The path
+    # scoping lives in the "Determine referent scope" step below.
+
+permissions:
+  contents: read
+
+jobs:
+  referent-verify:
+    # The job id IS the status-check context name in branch protection.
+    # Renaming this job silently un-requires the gate: branch protection would
+    # keep waiting on a context nothing reports, and every PR would hang. If
+    # this ever needs a new name, change the required set in the SAME change.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50         # enough history for the merged-PR report,
+                                  # and for HEAD^1..HEAD^2 on the merge ref
+
+      - name: Determine referent scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+
+          # The paths that can change what this checker resolves. This list is
+          # the former `on.pull_request.paths:` block, moved here verbatim.
+          GATED_RE='^(app/|services/|tools/|schema/bus_catalog\.json$|\.github/workflows/referent-verify\.yml$)'
+
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "event=$EVENT (not a PR) -> full check"
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "reason=scheduled or manual run" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # On a pull_request event actions/checkout lands on refs/pull/N/merge,
+          # whose first parent is the base tip and second parent is the PR head.
+          # That is the diff, with no extra fetch. The base-sha branch below is
+          # the fallback for a checkout that is not a merge commit.
+          files=""
+          got_diff=0
+          if git rev-parse -q --verify "HEAD^2" >/dev/null 2>&1; then
+            if files=$(git diff --name-only "HEAD^1" "HEAD^2" 2>/dev/null); then
+              got_diff=1
+              echo "diff source: merge-ref parents (HEAD^1..HEAD^2)"
+            fi
+          fi
+          if [ "$got_diff" -ne 1 ] && [ -n "${BASE_SHA:-}" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" >/dev/null 2>&1 || true
+            if files=$(git diff --name-only "$BASE_SHA" "HEAD" 2>/dev/null); then
+              got_diff=1
+              echo "diff source: pull_request.base.sha"
+            fi
+          fi
+
+          if [ "$got_diff" -ne 1 ]; then
+            # FAIL CLOSED. Not knowing what changed is not evidence that nothing
+            # relevant changed. Run the whole check.
+            echo "::warning::could not determine the changed-file set -> running the FULL check (fail closed)"
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "reason=changed-file set undeterminable -- fail closed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          n_total=$(printf '%s\n' "$files" | grep -c . || true)
+          hits=$(printf '%s\n' "$files" | grep -E "$GATED_RE" || true)
+          n_hits=$(printf '%s\n' "$hits" | grep -c . || true)
+
+          echo "changed files: $n_total"
+          echo "referent-bearing: $n_hits"
+          if [ -n "$hits" ]; then
+            printf '%s\n' "$hits" | sed 's/^/  + /'
+          fi
+
+          {
+            echo "n_total=$n_total"
+            echo "n_hits=$n_hits"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$n_hits" -gt 0 ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "reason=$n_hits of $n_total changed file(s) are referent-bearing" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "reason=none of $n_total changed file(s) touch app/, services/, tools/, schema/bus_catalog.json or this workflow" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v7
+        if: steps.scope.outputs.relevant == 'true'
+        with:
+          python-version: "3.11"
+
+      - name: Install app-tier deps
+        if: steps.scope.outputs.relevant == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/ci/requirements-ci.txt
+
+      - name: Verify referents (ROUTES + TABLES ARMED; columns report-only)
+        id: verify
+        if: steps.scope.outputs.relevant == 'true'
+        # ARMED 2026-08-26 on ROUTES, 2026-08-27 on TABLES.
+        #
+        # Routes: 29/32 mounted, the other 3 declared no-router in
+        # tools/spine_known_issues.json, 78 routes all resolving, 0 unresolved,
+        # 0 mount failures.
+        #
+        # Tables: 0 MISSING of 121 distinct tables referenced across 2,328
+        # scanned files. The number was 82 before #4070's quarantine, 18 after
+        # it, and 0 after #4080 traced each remaining name to its intended
+        # referent -- two of which turned out to be SQL comments and one of
+        # which turned out to be a table on a plane this checker could not see.
+        #
+        # THE ARMING IS THE POINT, NOT THE ZERO. A backlog cleared while the
+        # emitter can still invent new names regrows. What stops it regrowing is
+        # that a new name now fails this job, and this job is required.
+        #
+        # WHY THIS NEEDS NO BRANCH-PROTECTION CHANGE
+        #   `referent-verify` has been in the required set since #4089. Arming a
+        #   further check INSIDE that existing context extends coverage without
+        #   touching protection -- confirmed against the live required contexts
+        #   before arming, because adding a NEW context is the operation that
+        #   hangs every open PR until it reports.
+        #
+        # Columns stays REPORT-ONLY at 114 missing. Arming it today would turn
+        # every PR on this repo red. That is not enforcement, it is an outage,
+        # and it is its own pass.
+        run: |
+          mkdir -p artifacts
+          set +e
+          python tools/referent_verify.py \
+              --enforce-checks routes,tables \
+              --json artifacts/referent_verify.json \
+              --summary-md artifacts/referent_summary.md \
+              --since-hours 24 | tee artifacts/referent_verify.txt
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Job summary
+        # The point of this step is that nobody has to read a log, or any code,
+        # to see whether the gate is working. The Actions tab shows the verdict.
+        if: always()
+        env:
+          RELEVANT: ${{ steps.scope.outputs.relevant }}
+          REASON: ${{ steps.scope.outputs.reason }}
+        run: |
+          if [ "$RELEVANT" != "true" ]; then
+            {
+              echo "## Referent verification"
+              echo
+              echo "**NOT APPLICABLE -- this job is GREEN**"
+              echo
+              echo "$REASON."
+              echo
+              echo "This job carries no \`paths:\` filter because it is a required"
+              echo "status check: a path-filtered workflow never reports its context,"
+              echo "and a required context that never reports blocks the PR forever."
+              echo "So it always runs and always reports. When the change cannot"
+              echo "affect what the checker resolves, it reports success here"
+              echo "instead of booting the app. See issue #4089."
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f artifacts/referent_summary.md ]; then
+            cat artifacts/referent_summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Referent verification"
+              echo
+              echo "**NO REPORT PRODUCED -- this job is RED**"
+              echo
+              echo "The checker did not run to completion ($REASON)."
+              echo "A check that could not be evaluated is not a check that passed."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload referent census
+        if: always() && steps.scope.outputs.relevant == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: referent-verify
+          path: |
+            artifacts/referent_verify.json
+            artifacts/referent_verify.txt
+            artifacts/referent_summary.md
+          retention-days: 90

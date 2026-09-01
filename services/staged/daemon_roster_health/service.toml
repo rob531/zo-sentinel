@@ -1,0 +1,8 @@
+[service]
+name = "daemon_roster_health"
+import_path = "services.active.daemon_roster_health.router"
+prefix = "/api"
+tag = "daemon_roster_health"
+origin = "service"
+auth = "public"
+needs_data_layer = true

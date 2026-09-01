@@ -1,0 +1,12 @@
+[service]
+name = "scoring_wave_cost_ledger_api"
+import_path = "services.active.scoring_wave_cost_ledger_api.router"
+prefix = "/api"
+tag = "scoring_wave_cost_ledger_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.scoring_wave_cost_ledger_api"
+expected_output = "PASS"

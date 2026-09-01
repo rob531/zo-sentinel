@@ -1,0 +1,12 @@
+[service]
+name = "score_results_rollup"
+import_path = "services.active.score_results_rollup.router"
+prefix = "/api"
+tag = "score_results_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.test]
+command = "python -m services.active.score_results_rollup"
+expected_output = "PASS"

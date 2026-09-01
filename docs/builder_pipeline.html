@@ -1,0 +1,881 @@
+<title>ZO-Sentinel Builder Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  /* Dark-first: the project's own BASE_CONTEXT_HTML declares #0d0f14 / #00e5ff / monospace.
+     Bare :root carries that committed dark palette; light is the redefinition. */
+  :root {
+    --ground:   #0d0f14;
+    --surface:  #151922;
+    --raised:   #1c2230;
+    --line:     #262e3c;
+    --line-soft:#1e2531;
+    --ink:      #e0e0e0;
+    --ink-dim:  #98a3b4;
+    --ink-faint:#6b7688;
+    --accent:   #00e5ff;
+    --accent-dim: #0a7f8f;
+    --accent-wash: rgba(0,229,255,.09);
+    --pass:     #3ddc97;
+    --warn:     #ffb347;
+    --fail:     #ff5c6c;
+    --shadow:   0 1px 0 rgba(255,255,255,.03) inset;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground:   #f2f5f7;
+      --surface:  #ffffff;
+      --raised:   #eaeff3;
+      --line:     #d3dae2;
+      --line-soft:#e3e9ee;
+      --ink:      #10141b;
+      --ink-dim:  #4d5866;
+      --ink-faint:#77828f;
+      --accent:   #00707f;
+      --accent-dim: #93c9d1;
+      --accent-wash: rgba(0,112,127,.08);
+      --pass:     #16794f;
+      --warn:     #8a5a00;
+      --fail:     #b3202f;
+      --shadow:   0 1px 2px rgba(16,20,27,.05);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:   #f2f5f7;
+    --surface:  #ffffff;
+    --raised:   #eaeff3;
+    --line:     #d3dae2;
+    --line-soft:#e3e9ee;
+    --ink:      #10141b;
+    --ink-dim:  #4d5866;
+    --ink-faint:#77828f;
+    --accent:   #00707f;
+    --accent-dim: #93c9d1;
+    --accent-wash: rgba(0,112,127,.08);
+    --pass:     #16794f;
+    --warn:     #8a5a00;
+    --fail:     #b3202f;
+    --shadow:   0 1px 2px rgba(16,20,27,.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .col  { max-width: 68ch; }
+
+  h1, h2, h3 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---- masthead ---- */
+  header { padding: 64px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+  h1 { font-size: clamp(38px, 6vw, 60px); line-height: 1.02; }
+  h1 .thin { color: var(--ink-faint); font-weight: 600; }
+  .standfirst {
+    font-size: 18.5px; line-height: 1.55; color: var(--ink-dim);
+    margin: 20px 0 0; max-width: 60ch;
+  }
+
+  .facts {
+    display: grid; gap: 1px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    margin-top: 40px;
+  }
+  .fact { background: var(--ground); padding: 14px 16px; }
+  .fact dt {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 5px;
+  }
+  .fact dd {
+    margin: 0; font-family: "IBM Plex Mono", monospace;
+    font-size: 19px; font-weight: 500; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .fact dd small { font-size: 12px; color: var(--ink-dim); font-weight: 400; }
+
+  /* ---- sections ---- */
+  section { padding-top: 60px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-num {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--accent); letter-spacing: .08em;
+  }
+  h2 { font-size: 28px; }
+  .lede { color: var(--ink-dim); margin: 10px 0 30px; max-width: 66ch; }
+
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+
+  code, .m {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .88em;
+  }
+  p code, li code, td code, .m {
+    background: var(--accent-wash);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  /* ---- stage rail ---- */
+  .stages { display: flex; flex-direction: column; gap: 1px; background: var(--line-soft); border-block: 1px solid var(--line-soft); }
+  .stage {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 0 20px;
+    background: var(--ground);
+    padding: 20px 0;
+  }
+  .stage-n {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; font-weight: 600; color: var(--accent);
+    padding-top: 3px; letter-spacing: .05em;
+  }
+  .stage h3 { font-size: 18.5px; margin-bottom: 4px; }
+  .stage h3 .fn {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px;
+    font-weight: 400; color: var(--ink-faint); margin-left: 8px;
+  }
+  .stage p { margin: 0; color: var(--ink-dim); font-size: 15.2px; max-width: 64ch; }
+  .stage p + p { margin-top: 10px; }
+  .stage strong { color: var(--ink); font-weight: 600; }
+
+  /* ---- figures ---- */
+  figure { margin: 34px 0; }
+  .fig-frame {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    padding: 22px;
+    overflow-x: auto;
+  }
+  figure svg { display: block; max-width: 100%; height: auto; color: var(--ink); }
+  figcaption {
+    font-size: 13.5px; color: var(--ink-faint); margin-top: 12px;
+    max-width: 68ch; line-height: 1.5;
+  }
+  figcaption b { color: var(--ink-dim); font-weight: 600; }
+
+  /* ---- tables ---- */
+  .t-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.6px; }
+  th, td {
+    text-align: left; padding: 9px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top; white-space: nowrap;
+  }
+  th {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 500;
+    background: var(--raised); position: sticky; top: 0;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono, .num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  td.wrap-ok { white-space: normal; min-width: 20ch; }
+
+  .pill {
+    display: inline-block; font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; font-weight: 500; letter-spacing: .06em;
+    padding: 2px 7px; border-radius: 2px; text-transform: uppercase;
+    border: 1px solid currentColor;
+  }
+  .p-free { color: var(--pass); }
+  .p-paid { color: var(--warn); }
+  .p-off  { color: var(--ink-faint); }
+  .p-optin{ color: var(--accent); }
+  tr.is-off td { opacity: .48; }
+  tr.is-win td { background: var(--accent-wash); }
+
+  /* ---- callouts ---- */
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--surface);
+    padding: 16px 20px; margin: 26px 0;
+  }
+  .note h3 { font-size: 15px; margin-bottom: 6px; }
+  .note p { margin: 0; color: var(--ink-dim); font-size: 14.6px; }
+  .note p + p { margin-top: 9px; }
+
+  .drift { display: flex; flex-direction: column; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); }
+  .drift-item { background: var(--surface); padding: 18px 20px; }
+  .drift-item h3 { font-size: 16px; margin-bottom: 6px; }
+  .drift-item .where {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+    color: var(--ink-faint); margin-bottom: 8px;
+  }
+  .drift-item p { margin: 0; color: var(--ink-dim); font-size: 14.8px; max-width: 66ch; }
+
+  ul.tight { margin: 0 0 16px; padding-left: 20px; color: var(--ink-dim); }
+  ul.tight li { margin-bottom: 5px; }
+
+  footer {
+    margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line);
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+    color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 8px 22px;
+  }
+
+  @media (max-width: 620px) {
+    body { padding: 0 18px 72px; }
+    .stage { grid-template-columns: 40px 1fr; gap: 0 12px; }
+    th, td { white-space: normal; }
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">zo_sentinel_builder.py &nbsp;·&nbsp; v2.0.0 &nbsp;·&nbsp; ladder migration</p>
+  <h1>How one directive<br>becomes <span class="thin">a built file</span></h1>
+  <p class="standfirst">
+    An autonomous build daemon that polls for JSON directives, generates code through a
+    21-rung model escalation ladder, and refuses to keep anything that will not import.
+  </p>
+
+  <dl class="facts">
+    <div class="fact"><dt>Poll interval</dt><dd>300<small>s</small></dd></div>
+    <div class="fact"><dt>Ladder rungs</dt><dd>21<small> / 19 live</small></dd></div>
+    <div class="fact"><dt>Call hard cap</dt><dd>10<small> per ask()</small></dd></div>
+    <div class="fact"><dt>Min valid output</dt><dd>300<small>b</small></dd></div>
+    <div class="fact"><dt>Smoke timeout</dt><dd>15<small>s</small></dd></div>
+    <div class="fact"><dt>Generation attempts</dt><dd>2<small> + rescue</small></dd></div>
+  </dl>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>The shape of it</h2></div>
+  <div class="col">
+    <p>
+      Two files carry the whole system. <code>zo_mesh/zo_sentinel_builder.py</code> (1,245 lines) is
+      the daemon: directive intake, prompt assembly, validation, and every side effect that outlives
+      the process. <code>zo_sentinel/escalation.py</code> (1,235 lines) is the router: a cost-ordered
+      ladder of models with rate limiting, quota parking, and a daily spend cap.
+    </p>
+    <p>
+      The builder never names a model. It calls <code>escalation.ask("generate", …)</code> and gets
+      back whichever rung answered. Everything specific to a provider — auth, payload shape,
+      reasoning-tag stripping, tool-call parsing — lives behind the adapter boundary.
+    </p>
+    <p>
+      The governing assumption is that <strong>generation is unreliable and cheap, and verification
+      is reliable and cheaper still</strong>. So the builder generates optimistically, then spends
+      most of its code deciding whether to keep the result.
+    </p>
+  </div>
+
+  <figure>
+    <div class="fig-frame">
+      <svg viewBox="0 0 620 596" role="img" aria-label="A single directive flows down through eight stages: load and normalize, idempotency gate, prompt assembly, generation via the ladder, content validation, atomic write, smoke test, and record. The idempotency gate and validation exit left on failure; a failed smoke test loops right back into generation once as a rescue pass, and fails terminally the second time.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+          </marker>
+          <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"/>
+          </marker>
+          <marker id="ar-f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--fail)"/>
+          </marker>
+        </defs>
+
+        <!-- main column boxes -->
+        <g fill="var(--raised)" stroke="var(--line)">
+          <rect x="150" y="16"  width="250" height="46" rx="2"/>
+          <rect x="150" y="88"  width="250" height="46" rx="2"/>
+          <rect x="150" y="160" width="250" height="46" rx="2"/>
+          <rect x="150" y="304" width="250" height="46" rx="2"/>
+          <rect x="150" y="376" width="250" height="46" rx="2"/>
+          <rect x="150" y="520" width="250" height="46" rx="2"/>
+        </g>
+        <!-- generate + smoke: emphasized -->
+        <rect x="150" y="232" width="250" height="46" rx="2" fill="var(--accent-wash)" stroke="var(--accent)"/>
+        <rect x="150" y="448" width="250" height="46" rx="2" fill="var(--accent-wash)" stroke="var(--accent)"/>
+
+        <g font-family="IBM Plex Mono, monospace" font-size="12.5" fill="currentColor" text-anchor="middle">
+          <text x="275" y="44">load + normalize</text>
+          <text x="275" y="116">idempotency gate</text>
+          <text x="275" y="188">prompt assembly</text>
+          <text x="275" y="260" fill="var(--accent)">generate via ladder</text>
+          <text x="275" y="332">content_is_valid</text>
+          <text x="275" y="404">atomic write</text>
+          <text x="275" y="476" fill="var(--accent)">smoke test</text>
+          <text x="275" y="548">record + chain</text>
+        </g>
+
+        <!-- vertical arrows -->
+        <g stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)">
+          <line x1="275" y1="62"  x2="275" y2="84"/>
+          <line x1="275" y1="134" x2="275" y2="156"/>
+          <line x1="275" y1="206" x2="275" y2="228"/>
+          <line x1="275" y1="278" x2="275" y2="300"/>
+          <line x1="275" y1="350" x2="275" y2="372"/>
+          <line x1="275" y1="422" x2="275" y2="444"/>
+          <line x1="275" y1="494" x2="275" y2="516"/>
+        </g>
+
+        <!-- left exits -->
+        <g stroke="var(--fail)" stroke-width="1.2" marker-end="url(#ar-f)">
+          <line x1="150" y1="111" x2="96" y2="111"/>
+          <line x1="150" y1="327" x2="96" y2="327"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--fail)" text-anchor="end">
+          <text x="92" y="108">hit &#8594; SKIP</text>
+          <text x="92" y="324">&#60;300b / err sig</text>
+          <text x="92" y="338">&#8594; FAILED</text>
+        </g>
+
+        <!-- right rescue loop: smoke -> generate -->
+        <g stroke="var(--accent)" stroke-width="1.4" fill="none">
+          <path d="M 400 465 L 500 465 L 500 255 L 404 255" marker-end="url(#ar-a)"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)">
+          <text x="510" y="352">1st fail &#8594;</text>
+          <text x="510" y="366">rescue</text>
+          <text x="510" y="380">T=0.2</text>
+        </g>
+
+        <!-- second failure terminal -->
+        <g stroke="var(--fail)" stroke-width="1.2" marker-end="url(#ar-f)">
+          <line x1="275" y1="494" x2="275" y2="516" opacity="0"/>
+          <path d="M 150 483 L 96 483" fill="none"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--fail)" text-anchor="end">
+          <text x="92" y="480">2nd fail &#8594;</text>
+          <text x="92" y="494">rescue smoke</text>
+        </g>
+
+        <!-- pass label -->
+        <text x="286" y="510" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--pass)">pass</text>
+
+        <!-- rail annotations -->
+        <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">
+          <text x="415" y="44">3 schemas</text>
+          <text x="415" y="116">md5 + smoke</text>
+          <text x="415" y="188">rich | compact</text>
+          <text x="415" y="404">tmp &#8594; move</text>
+          <text x="415" y="548">5 destinations</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      <b>One directive, one pass.</b> Generation is entered at most twice: once optimistically, once
+      as a rescue that is handed the previous smoke failure verbatim. The rescue result re-enters the
+      same write-and-verify path, so a rescued file is held to an identical standard — there is no
+      "good enough on the second try" branch.
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>Stage by stage</h2></div>
+  <p class="lede">
+    The twelve steps a cycle actually executes, in order. Function names are the live symbols
+    in <code>zo_sentinel_builder.py</code>.
+  </p>
+
+  <div class="stages">
+
+    <div class="stage">
+      <div class="stage-n">00</div>
+      <div>
+        <h3>Boot <span class="fn">run()</span></h3>
+        <p>Reads <code>KNOWLEDGE_BASE.md</code> into the module-global <code>KNOWLEDGE</code>, logs whether
+        the escalation ladder imported and whether a legacy MiniMax key is present, then runs
+        <strong>auto-restore</strong> before the first cycle.</p>
+        <p>Auto-restore walks <code>directives/*.done.json</code> and quietly smoke-tests each declared output.
+        A directive whose artifact is missing or now broken is renamed back to <code>.json</code> and rebuilt —
+        capped at <code>MAX_AUTO_RESTORES = 3</code> per task so a permanently unbuildable directive cannot
+        loop forever.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">01</div>
+      <div>
+        <h3>Heartbeat <span class="fn">mesh_heartbeat()</span></h3>
+        <p>Each cycle opens and closes with a row into <code>service_health</code> on the write service at
+        <code>:8772</code>. Liveness is a side effect of doing work, not a separate timer — a wedged cycle
+        stops the heartbeat.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">02</div>
+      <div>
+        <h3>Intake <span class="fn">load_file_directives() + load_mesh_directives()</span></h3>
+        <p>Two sources, concatenated. <strong>Files:</strong> <code>directives/*.json</code>, skipping anything
+        containing <code>.done.</code>, <code>.bak.</code>, or <code>.ghost.</code>, plus any directive whose status
+        is already done — then sorted by <code>priority</code> descending, defaulting to 0.5.</p>
+        <p><strong>Mesh:</strong> a SQL read against <code>mesh_memory</code> for
+        <code>agent_id='zo_sentinel.directive'</code> and <code>memory_type='build_directive'</code>, ordered by
+        importance, capped at 10. A malformed file directive with no task identity is logged and dropped
+        rather than guessed at.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">03</div>
+      <div>
+        <h3>Normalize <span class="fn">normalize_directive()</span></h3>
+        <p>Three directive schemas converge on one internal shape of task / description / output_file.
+        Schema&nbsp;2 maps <code>directive_id → task</code> and <code>goal → description</code>, folding
+        <code>constraints</code> and <code>success_criteria</code> into the description as labelled blocks.
+        Schema&nbsp;3 maps <code>key → task</code> and <code>spec → description</code>, and where no output path
+        was given it <strong>regex-extracts one from the spec prose</strong> — first a
+        <code>zo_sentinel/…​.py</code> path, then a <code>logs/…​.py</code> fallback. Defaults land at
+        <code>handler=generate_file</code>, <code>complexity=high</code>.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">04</div>
+      <div>
+        <h3>Dispatch <span class="fn">process_directive()</span></h3>
+        <p>Looks up one of three handlers — <code>generate_file</code>, <code>write_raw</code>,
+        <code>run_script</code> — and clears <code>_LAST_GEN_META</code> so provenance cannot leak between
+        directives. The whole call is wrapped so that <code>mark_directive_done()</code> runs in a
+        <strong><code>finally</code> block</strong>: a directive that raises is still retired, which is what
+        stops a poison directive from being retried every 300 seconds forever.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">05</div>
+      <div>
+        <h3>Pre-flight guards <span class="fn">build_task_generate_file()</span></h3>
+        <p>Rejects an <code>output_file</code> that resolves to a directory, creates parent directories, then
+        checks idempotency. The key is <code>md5(task:output_file:description[:100])[:16]</code>, and a
+        registry hit alone is not enough — the file must <strong>still exist and still pass a quiet smoke
+        test</strong>. A previously-built file that has since broken is rebuilt, not skipped.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">06</div>
+      <div>
+        <h3>Prompt assembly <span class="fn">build_rich_prompt() / build_compact_prompt()</span></h3>
+        <p>Two prompts are built every time. The <strong>rich</strong> prompt carries the base context, the
+        knowledge base, the running build state, and the first 60 lines of each declared dependency. The
+        <strong>compact</strong> prompt carries a hard-coded rules digest plus truncated slices — build state
+        to 300 chars, deps to 400, description to 350.</p>
+        <p>Base context forks on file type: Python files get "output only raw Python", <code>.html</code> files
+        get a stricter contract that also fixes the visual style. House conventions from
+        <code>builder_conventions.json</code> are appended to both base contexts <strong>at import time</strong>,
+        so adding a learned rule to that file changes every future build with no code edit.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">07</div>
+      <div>
+        <h3>Generate <span class="fn">smart_generate()</span></h3>
+        <p>Complexity picks the prompt — <code>high</code> and <code>medium</code> get rich, <code>low</code> gets
+        compact — and the call goes out as <code>escalation.ask("generate", …)</code> at
+        <code>max_tokens=8192</code>, <code>temperature=0.3</code>, <code>max_attempts=4</code>.</p>
+        <p>Returned text is stripped of reasoning preambles a second time at the builder boundary and
+        validity-checked before it is accepted. <strong>Any failure here — exception, empty text, or invalid
+        content — returns an empty string</strong>, which drops <code>smart_generate</code> into the preserved
+        v1.9.5 MiniMax&nbsp;→&nbsp;Ollama cascade.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">08</div>
+      <div>
+        <h3>Validate and write <span class="fn">content_is_valid() → atomic_write()</span></h3>
+        <p>Content must clear 300 bytes and contain none of the nine error signatures — provider error
+        strings like <code>credit balance is too low</code> and <code>Error code: 402</code> that would
+        otherwise be written to disk as source code. Markdown fences are stripped after validation, not
+        before.</p>
+        <p><code>wiring_check()</code> scans for four house anti-patterns and warns without blocking. The write
+        itself goes to a dotfile temp in the same directory and is moved into place, so a reader never sees
+        a partial file.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">09</div>
+      <div>
+        <h3>Smoke test <span class="fn">smoke_test_file()</span></h3>
+        <p>For Python outputs, a dependency pre-flight runs first — <code>auto_dependency_resolver.py</code>
+        is loaded by file path and may install missing imports. Then the file is checked by suffix, and
+        Python files that survive the static gates are <strong>actually executed</strong> in a subprocess with
+        <code>time.sleep</code> stubbed out and a 15-second timeout.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">10</div>
+      <div>
+        <h3>Rescue <span class="fn">smart_generate_with_rescue()</span></h3>
+        <p>On a smoke failure the traceback is fed back into a fresh prompt as
+        <code>PREVIOUS FAILURE:</code>, at <code>temperature=0.2</code>. The result is re-validated,
+        re-written, dependency-resolved, and re-smoked. A second failure is terminal: a
+        <code>build_failed</code> mesh event at ERROR severity, a manifest row, and a registry entry of
+        <code>smoke_fail</code>.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">11</div>
+      <div>
+        <h3>Record <span class="fn">five destinations</span></h3>
+        <p>A success writes to all of: <code>BUILD_STATE.md</code> (upserted by output file, so a rebuild
+        replaces rather than appends), <code>BUILD_MANIFEST.md</code>, a <code>build_complete</code> mesh event,
+        a <code>build_artifact</code> mesh memory at importance 0.78, and the local
+        <code>.build_registry.json</code>.</p>
+        <p>Then two forward moves: <code>inject_next_directive()</code> writes any chained follow-up as a new
+        directive file at slightly lower priority, and if every file a phase expects is now present,
+        <code>run_phase_checkpoint()</code> re-smokes the whole phase and records the result.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">12</div>
+      <div>
+        <h3>Close <span class="fn">evict_ollama()</span></h3>
+        <p>Every cycle ends by posting <code>keep_alive: 0</code> for all three local Ollama models, releasing
+        their weights from memory before the daemon sleeps. On a box that also runs the mesh services,
+        holding three model weights across a five-minute idle is the expensive default.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>The escalation ladder</h2></div>
+  <p class="lede">
+    Twenty-one rungs ordered by cost, then by capability. The builder's request enters at rung 0 and
+    walks a computed order — not the declaration order.
+  </p>
+
+  <figure>
+    <div class="fig-frame">
+      <svg viewBox="0 0 952 322" role="img" aria-label="The ladder as declared has 21 rungs: rungs 0 to 2 form the start window, rungs 3 and 5 are disabled, rungs 13 to 16 are paid and cost-gated off, and rungs 17 to 20 are OpenAI-compatible providers appended last. The actual try order for the builder is rungs 0,1,2 first, then 17 to 20 hoisted ahead of the rest, then the remaining free rungs, with a hard cap after ten calls.">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"/>
+          </marker>
+        </defs>
+
+        <text x="8" y="18" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-faint)">LADDER as declared</text>
+
+        <!-- row 1: 21 cells, pitch 44, w 40 -->
+        <g font-family="IBM Plex Mono, monospace" font-size="12" text-anchor="middle">
+          <!-- window 0,1,2 -->
+          <g fill="var(--accent-wash)" stroke="var(--accent)">
+            <rect x="8" y="30" width="40" height="34" rx="2"/>
+            <rect x="52" y="30" width="40" height="34" rx="2"/>
+            <rect x="96" y="30" width="40" height="34" rx="2"/>
+          </g>
+          <text x="28" y="52" fill="var(--accent)">0</text>
+          <text x="72" y="52" fill="var(--accent)">1</text>
+          <text x="116" y="52" fill="var(--accent)">2</text>
+
+          <!-- disabled 3 -->
+          <rect x="140" y="30" width="40" height="34" rx="2" fill="none" stroke="var(--ink-faint)" stroke-dasharray="3 3"/>
+          <text x="160" y="52" fill="var(--ink-faint)">3</text>
+
+          <!-- free 4 -->
+          <rect x="184" y="30" width="40" height="34" rx="2" fill="var(--raised)" stroke="var(--line)"/>
+          <text x="204" y="52" fill="currentColor">4</text>
+
+          <!-- disabled 5 -->
+          <rect x="228" y="30" width="40" height="34" rx="2" fill="none" stroke="var(--ink-faint)" stroke-dasharray="3 3"/>
+          <text x="248" y="52" fill="var(--ink-faint)">5</text>
+
+          <!-- free 6..12 -->
+          <g fill="var(--raised)" stroke="var(--line)">
+            <rect x="272" y="30" width="40" height="34" rx="2"/>
+            <rect x="316" y="30" width="40" height="34" rx="2"/>
+            <rect x="360" y="30" width="40" height="34" rx="2"/>
+            <rect x="404" y="30" width="40" height="34" rx="2"/>
+            <rect x="448" y="30" width="40" height="34" rx="2"/>
+            <rect x="492" y="30" width="40" height="34" rx="2"/>
+            <rect x="536" y="30" width="40" height="34" rx="2"/>
+          </g>
+          <g fill="currentColor">
+            <text x="292" y="52">6</text><text x="336" y="52">7</text><text x="380" y="52">8</text>
+            <text x="424" y="52">9</text><text x="468" y="52">10</text><text x="512" y="52">11</text>
+            <text x="556" y="52">12</text>
+          </g>
+
+          <!-- paid 13..16 -->
+          <g fill="none" stroke="var(--warn)">
+            <rect x="580" y="30" width="40" height="34" rx="2"/>
+            <rect x="624" y="30" width="40" height="34" rx="2"/>
+            <rect x="668" y="30" width="40" height="34" rx="2"/>
+            <rect x="712" y="30" width="40" height="34" rx="2"/>
+          </g>
+          <g fill="var(--warn)">
+            <text x="600" y="52">13</text><text x="644" y="52">14</text>
+            <text x="688" y="52">15</text><text x="732" y="52">16</text>
+          </g>
+
+          <!-- oai-compatible 17..20 -->
+          <g fill="var(--raised)" stroke="var(--pass)">
+            <rect x="756" y="30" width="40" height="34" rx="2"/>
+            <rect x="800" y="30" width="40" height="34" rx="2"/>
+            <rect x="844" y="30" width="40" height="34" rx="2"/>
+            <rect x="888" y="30" width="40" height="34" rx="2"/>
+          </g>
+          <g fill="var(--pass)">
+            <text x="776" y="52">17</text><text x="820" y="52">18</text>
+            <text x="864" y="52">19</text><text x="908" y="52">20</text>
+          </g>
+        </g>
+
+        <!-- row 1 annotations -->
+        <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">
+          <text x="8" y="80" fill="var(--accent)">start window</text>
+          <text x="140" y="80">enabled=False</text>
+          <text x="580" y="80" fill="var(--warn)">paid &#8212; cost-gated off</text>
+          <text x="756" y="80" fill="var(--pass)">OpenAI-compat</text>
+        </g>
+
+        <!-- reorder arrows -->
+        <g stroke="var(--accent)" stroke-width="1.2" fill="none" opacity=".85" marker-end="url(#ar2)">
+          <path d="M 28 96 L 28 168"/>
+          <path d="M 776 96 L 776 130 L 172 130 L 172 168"/>
+          <path d="M 204 96 L 204 148 L 348 148 L 348 168"/>
+        </g>
+
+        <text x="8" y="200" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-faint)">actual try order &#8212; task_type &#8220;generate&#8221;</text>
+
+        <!-- row 2: 15 cells -->
+        <g font-family="IBM Plex Mono, monospace" font-size="12" text-anchor="middle">
+          <g fill="var(--accent-wash)" stroke="var(--accent)">
+            <rect x="8" y="212" width="40" height="34" rx="2"/>
+            <rect x="52" y="212" width="40" height="34" rx="2"/>
+            <rect x="96" y="212" width="40" height="34" rx="2"/>
+          </g>
+          <g fill="var(--accent)"><text x="28" y="234">0</text><text x="72" y="234">1</text><text x="116" y="234">2</text></g>
+
+          <g fill="var(--raised)" stroke="var(--pass)">
+            <rect x="140" y="212" width="40" height="34" rx="2"/>
+            <rect x="184" y="212" width="40" height="34" rx="2"/>
+            <rect x="228" y="212" width="40" height="34" rx="2"/>
+            <rect x="272" y="212" width="40" height="34" rx="2"/>
+          </g>
+          <g fill="var(--pass)">
+            <text x="160" y="234">17</text><text x="204" y="234">18</text>
+            <text x="248" y="234">19</text><text x="292" y="234">20</text>
+          </g>
+
+          <g fill="var(--raised)" stroke="var(--line)">
+            <rect x="316" y="212" width="40" height="34" rx="2"/>
+            <rect x="360" y="212" width="40" height="34" rx="2"/>
+            <rect x="404" y="212" width="40" height="34" rx="2"/>
+            <rect x="448" y="212" width="40" height="34" rx="2"/>
+            <rect x="492" y="212" width="40" height="34" rx="2"/>
+            <rect x="536" y="212" width="40" height="34" rx="2"/>
+            <rect x="580" y="212" width="40" height="34" rx="2"/>
+            <rect x="624" y="212" width="40" height="34" rx="2"/>
+          </g>
+          <g fill="currentColor">
+            <text x="336" y="234">4</text><text x="380" y="234">6</text><text x="424" y="234">7</text>
+            <text x="468" y="234">8</text><text x="512" y="234">9</text><text x="556" y="234">10</text>
+            <text x="600" y="234">11</text><text x="644" y="234">12</text>
+          </g>
+        </g>
+
+        <!-- hard cap cut after 10th cell (x=448..488 is 10th) -->
+        <line x1="490" y1="204" x2="490" y2="256" stroke="var(--fail)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <text x="496" y="270" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--fail)">hard cap: 10 calls &#8212; rungs beyond here are unreachable in one ask()</text>
+
+        <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">
+          <text x="8" y="290" fill="var(--accent)">window</text>
+          <text x="140" y="290" fill="var(--pass)">tool-capable tail hoisted first</text>
+          <text x="404" y="290">remaining free rungs</text>
+          <text x="8" y="310">exponential backoff between rungs &#183; 0.4s base, 5s cap &#183; a 429 parks the rung until its bucket resets</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      <b>Declaration order is not try order.</b> <code>ask()</code> builds its window from
+      <code>start_idx</code> to <code>start_idx + max_attempts</code>, drops disabled rungs, then appends every
+      other free rung as a failover tail — re-sorted so the OpenAI-compatible providers come first, because
+      they are fast and tool-capable. For the builder that hoists rungs 17–20 from last place to fourth.
+      The paid rungs are never in the order at all.
+    </figcaption>
+  </figure>
+
+  <div class="t-scroll">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Backend</th><th>Model</th><th>Ctx</th><th>RPM</th><th>Cost</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr class="is-win"><td class="num">0</td><td class="mono">minimax_direct</td><td class="mono">MiniMax-M2.7</td><td class="num">205K</td><td class="num">60</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr class="is-win"><td class="num">1</td><td class="mono">minimax_direct</td><td class="mono">MiniMax-M3</td><td class="num">205K</td><td class="num">200</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr class="is-win"><td class="num">2</td><td class="mono">gemini_direct</td><td class="mono">gemini-2.5-flash-lite</td><td class="num">1M</td><td class="num">10</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr class="is-off"><td class="num">3</td><td class="mono">gemini_direct</td><td class="mono">gemini-2.0-flash-lite</td><td class="num">1M</td><td class="num">30</td><td class="num">0.0</td><td><span class="pill p-off">EOL / 429</span></td></tr>
+        <tr><td class="num">4</td><td class="mono">gemini_direct</td><td class="mono">gemini-2.5-flash</td><td class="num">1M</td><td class="num">10</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr class="is-off"><td class="num">5</td><td class="mono">gemini_direct</td><td class="mono">gemini-2.0-flash</td><td class="num">1M</td><td class="num">15</td><td class="num">0.0</td><td><span class="pill p-off">EOL / 429</span></td></tr>
+        <tr><td class="num">6</td><td class="mono">gemini_direct</td><td class="mono">gemini-3.1-flash-lite-preview</td><td class="num">1M</td><td class="num">15</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr><td class="num">7</td><td class="mono">gemini_direct</td><td class="mono">gemini-3-flash-preview</td><td class="num">1M</td><td class="num">5</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr><td class="num">8</td><td class="mono">gemini_direct</td><td class="mono">gemma-3-12b-it</td><td class="num">128K</td><td class="num">15</td><td class="num">0.0</td><td><span class="pill p-free">no tools</span></td></tr>
+        <tr><td class="num">9</td><td class="mono">gemini_direct</td><td class="mono">gemma-3-4b-it</td><td class="num">128K</td><td class="num">15</td><td class="num">0.0</td><td><span class="pill p-free">no tools</span></td></tr>
+        <tr><td class="num">10</td><td class="mono">gemini_direct</td><td class="mono">gemma-3-27b-it</td><td class="num">128K</td><td class="num">15</td><td class="num">0.0</td><td><span class="pill p-free">no tools</span></td></tr>
+        <tr><td class="num">11</td><td class="mono">zo_routed</td><td class="mono">zo:openai/gpt-5.4-mini</td><td class="num">400K</td><td class="num">60</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr><td class="num">12</td><td class="mono">zo_routed</td><td class="mono">zo:zai/glm-5</td><td class="num">203K</td><td class="num">60</td><td class="num">0.0</td><td><span class="pill p-free">free</span></td></tr>
+        <tr><td class="num">13</td><td class="mono">zo_routed</td><td class="mono">zo:google/gemini-3.1-pro-preview</td><td class="num">1M</td><td class="num">60</td><td class="num">1.0</td><td><span class="pill p-paid">paid</span></td></tr>
+        <tr><td class="num">14</td><td class="mono">zo_routed</td><td class="mono">zo:openai/gpt-5.4</td><td class="num">1M</td><td class="num">60</td><td class="num">1.1</td><td><span class="pill p-paid">paid</span></td></tr>
+        <tr><td class="num">15</td><td class="mono">zo_routed</td><td class="mono">zo:anthropic/claude-sonnet-4-5</td><td class="num">1M</td><td class="num">60</td><td class="num">2.1</td><td><span class="pill p-paid">paid</span></td></tr>
+        <tr><td class="num">16</td><td class="mono">zo_routed</td><td class="mono">zo:anthropic/claude-opus-4-7</td><td class="num">1M</td><td class="num">60</td><td class="num">3.0</td><td><span class="pill p-paid">paid</span></td></tr>
+        <tr><td class="num">17</td><td class="mono">openai_compatible</td><td class="mono">mistral-nemotron <span style="color:var(--ink-faint)">(NVIDIA)</span></td><td class="num">131K</td><td class="num">40</td><td class="num">0.0</td><td><span class="pill p-optin">opt-in</span></td></tr>
+        <tr><td class="num">18</td><td class="mono">openai_compatible</td><td class="mono">gpt-oss-120b <span style="color:var(--ink-faint)">(Cerebras)</span></td><td class="num">131K</td><td class="num">30</td><td class="num">0.0</td><td><span class="pill p-optin">opt-in</span></td></tr>
+        <tr><td class="num">19</td><td class="mono">openai_compatible</td><td class="mono">codestral-latest <span style="color:var(--ink-faint)">(Mistral)</span></td><td class="num">256K</td><td class="num">30</td><td class="num">0.0</td><td><span class="pill p-optin">opt-in</span></td></tr>
+        <tr><td class="num">20</td><td class="mono">openai_compatible</td><td class="mono">llama-3.3-70b <span style="color:var(--ink-faint)">(Groq)</span></td><td class="num">131K</td><td class="num">30</td><td class="num">0.0</td><td><span class="pill p-optin">opt-in</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <h3>Four gates before any rung is called</h3>
+    <p>
+      <strong>Tool capability</strong> — a text-only rung is skipped when the caller passed tools.
+      <strong>Rate limit</strong> — a sliding 60-second window per model id.
+      <strong>Quota</strong> — a rung near its wall, or parked after a 429, is skipped proactively and
+      recovers when its bucket resets.
+      <strong>Cost</strong> — a paid rung is blocked outright unless the task type is in
+      <code>PAID_OK_TASKS</code>, and then still has to fit under the 5.0/day priority budget.
+    </p>
+    <p>
+      <code>PAID_OK_TASKS</code> defaults to <code>builder_critical</code> alone. Every other task type is
+      hard-capped to free rungs — it exhausts and lets the caller fall back rather than cascading into
+      Sonnet or Opus on a routine build.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>What counts as working</h2></div>
+  <p class="lede">
+    The smoke test is the only thing standing between a plausible-looking generation and a file that
+    ships. It branches on suffix.
+  </p>
+
+  <div class="t-scroll">
+    <table>
+      <thead><tr><th>Suffix</th><th>Check</th><th>Executed?</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">.html</td><td class="wrap-ok">Parsed with <code>html.parser</code>; parse errors fail</td><td>no</td></tr>
+        <tr><td class="mono">.sh</td><td class="wrap-ok">Must open with a shebang</td><td>no</td></tr>
+        <tr><td class="mono">.sql</td><td class="wrap-ok">Must open with SELECT / WITH / INSERT / UPDATE / DELETE / CREATE / ALTER / DROP</td><td>no</td></tr>
+        <tr><td class="mono">.md .txt .json .yaml .conf .jsx .tsx</td><td class="wrap-ok">Length and error-signature gates only</td><td>no</td></tr>
+        <tr><td class="mono">.py <span style="color:var(--ink-faint)">(uvicorn)</span></td><td class="wrap-ok">Anti-patterns + <code>ast.parse</code>; execution deliberately skipped for daemons that would bind a port</td><td>no</td></tr>
+        <tr class="is-win"><td class="mono">.py</td><td class="wrap-ok">Six wiring anti-patterns, then <code>ast.parse</code>, then <strong>real import in a subprocess</strong> with <code>time.sleep</code> stubbed and <code>PYTHONPATH</code> set</td><td><strong>yes</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col" style="margin-top:26px">
+    <p>
+      The six anti-patterns are house-specific and encode past outages: calling <code>write_service()</code>
+      as a function instead of POSTing to <code>:8772</code>, sending <code>'row'</code> where the service
+      expects <code>'rows'</code>, DuckDB calls that do not exist (<code>executescript</code>,
+      <code>INSERT OR IGNORE</code>), and direct <code>duckdb.connect()</code> that bypasses the write service
+      entirely. A file can be perfectly valid Python and still fail here.
+    </p>
+    <p>
+      Catching <code>SystemExit</code> as a pass is deliberate — a module that parses args and exits is
+      working correctly, not broken.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>Worth knowing before you touch it</h2></div>
+  <p class="lede">
+    Four things the code does that the comments around it no longer describe accurately.
+  </p>
+
+  <div class="drift">
+
+    <div class="drift-item">
+      <h3>Directive complexity does not select a ladder tier</h3>
+      <p class="where">zo_sentinel_builder.py:657 &nbsp;·&nbsp; escalation.py:242</p>
+      <p>
+        <code>escalation.py</code> defines a complexity-routed map — <code>builder_low</code> at rung 0 through
+        <code>builder_critical</code> at rung 15 — but the builder always passes the literal task type
+        <code>"generate"</code>, which starts at rung 0 regardless. Inside the builder, complexity only chooses
+        rich versus compact prompt and shapes the legacy fallback. The tiered entry points are reachable
+        only through the goose_runner / ladder_shim path via <code>GOOSE_MODEL</code>, and a "critical"
+        directive submitted as a file gets the same rung-0 start as a trivial one.
+      </p>
+    </div>
+
+    <div class="drift-item">
+      <h3>The ladder docstring predates the ladder</h3>
+      <p class="where">zo_sentinel_builder.py:636–639</p>
+      <p>
+        It documents "rungs 1–6 Gemini, rungs 7–8 Zo free, rungs 9–12 Zo paid". The live ladder has Gemini
+        and Gemma at 2–10, Zo free at 11–12, and Zo paid at 13–16 — the MiniMax-M3 and Gemma rungs were
+        inserted after the comment was written. The code is correct; the map in the docstring is off by
+        several rungs and will mislead anyone reading it to reason about routing.
+      </p>
+    </div>
+
+    <div class="drift-item">
+      <h3>An invalid ladder response triggers the entire legacy cascade</h3>
+      <p class="where">zo_sentinel_builder.py:710–715</p>
+      <p>
+        <code>_smart_generate_via_ladder</code> returns an empty string for three different situations — the
+        call raised, the text came back empty, or the content failed validation. All three look identical to
+        <code>smart_generate</code>, which then runs the full v1.9.5 MiniMax&nbsp;→&nbsp;Ollama path. So a
+        ladder response that was merely 40 bytes short of <code>MIN_VALID_BYTES</code> costs a second full
+        generation attempt on local models, after up to ten ladder calls have already been made.
+      </p>
+    </div>
+
+    <div class="drift-item">
+      <h3>Two write-service payload shapes are in use</h3>
+      <p class="where">zo_sentinel_builder.py:802 &nbsp;·&nbsp; escalation.py:1065</p>
+      <p>
+        The builder's <code>ws_write</code> sends <code>"rows"</code> as a bare dict, matching the house rule
+        it injects into every prompt. The ladder's telemetry writer sends <code>"rows"</code> as a list of one
+        dict. Both target <code>:8772/write</code> and both are presumably accepted, but the builder also
+        smoke-fails any generated file containing <code>'row':</code> — so the convention it enforces on its
+        output is stricter than the one its own dependency follows.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <span>zo_mesh/zo_sentinel_builder.py &#183; 1,245 lines &#183; v2.0.0</span>
+  <span>zo_sentinel/escalation.py &#183; 1,235 lines</span>
+  <span>write_service :8772 &#183; inference :8773 &#183; ollama :11434</span>
+</footer>
+
+</div>

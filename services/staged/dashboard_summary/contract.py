@@ -5,7 +5,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.db import get_session, Base
-from app.models import mcp_server_registry, mcp_llm_axis_scores
+from app.models import McpServerRegistry, McpLlmAxisScore
 
 router = APIRouter(prefix="/api", tags=["dashboard_summary"])
 
@@ -28,18 +28,18 @@ def get_dashboard_summary(db: Session = Depends(get_session)):
     # Join server registry with axis scores and aggregate per risk tier
     stmt = (
         select(
-            mcp_server_registry.c.risk_tier,
-            func.count(mcp_server_registry.c.id).label("cnt"),
-            func.avg(mcp_llm_axis_scores.c.score).label("avg_score"),
+            McpServerRegistry.c.risk_tier,
+            func.count(McpServerRegistry.c.id).label("cnt"),
+            func.avg(McpLlmAxisScore.c.score).label("avg_score"),
         )
         .select_from(
-            mcp_server_registry.join(
-                mcp_llm_axis_scores,
-                mcp_server_registry.c.id == mcp_llm_axis_scores.c.server_id,
+            McpServerRegistry.join(
+                McpLlmAxisScore,
+                McpServerRegistry.c.id == McpLlmAxisScore.c.server_id,
                 isouter=True,
             )
         )
-        .group_by(mcp_server_registry.c.risk_tier)
+        .group_by(McpServerRegistry.c.risk_tier)
     )
     result = db.execute(stmt).all()
 
@@ -92,7 +92,7 @@ if __name__ == "__main__":
             {"id": 4, "risk_tier": "high"},
             {"id": 5, "risk_tier": "critical"},
         ]
-        sess.execute(mcp_server_registry.insert(), servers)
+        sess.execute(McpServerRegistry.insert(), servers)
 
         # Insert axis scores (one per server)
         scores = [
@@ -102,7 +102,7 @@ if __name__ == "__main__":
             {"id": 4, "server_id": 4, "score": 40.0},
             {"id": 5, "server_id": 5, "score": 50.0},
         ]
-        sess.execute(mcp_llm_axis_scores.insert(), scores)
+        sess.execute(McpLlmAxisScore.insert(), scores)
         sess.commit()
 
     client = TestClient(app)

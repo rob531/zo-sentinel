@@ -1,0 +1,8 @@
+[service]
+name = "signal_distribution_dashboard"
+import_path = "services.active.signal_distribution_dashboard.router"
+prefix = "/api"
+tag = "signal_distribution_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

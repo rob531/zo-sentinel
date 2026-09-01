@@ -8,7 +8,7 @@ from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import mcp_llm_axis_scores, mcp_server_registry, Base
+from app.models import McpLlmAxisScore, McpServerRegistry, Base
 
 router = APIRouter()
 
@@ -31,18 +31,18 @@ def _fetch_timeline(session: Session, server_id: str, days: int) -> List[dict]:
 
     q = (
         session.query(
-            func.date(mcp_llm_axis_scores.scored_at).label("date"),
-            mcp_server_registry.risk_tier.label("tier"),
+            func.date(McpLlmAxisScore.scored_at).label("date"),
+            McpServerRegistry.risk_tier.label("tier"),
             func.count().label("count"),
         )
         .join(
-            mcp_server_registry,
-            mcp_server_registry.server_id == mcp_llm_axis_scores.server_id,
+            McpServerRegistry,
+            McpServerRegistry.server_id == McpLlmAxisScore.server_id,
         )
         .filter(
-            mcp_llm_axis_scores.server_id == server_id,
-            mcp_llm_axis_scores.axis_name == "overall_risk",
-            mcp_llm_axis_scores.scored_at >= cutoff,
+            McpLlmAxisScore.server_id == server_id,
+            McpLlmAxisScore.axis_name == "overall_risk",
+            McpLlmAxisScore.scored_at >= cutoff,
         )
         .group_by("date", "tier")
         .order_by("date")
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     # Insert sample data
     with SessionLocal() as db:
         # server registry entry
-        db.add(mcp_server_registry(server_id="srv1", risk_tier="high"))
+        db.add(McpServerRegistry(server_id="srv1", risk_tier="high"))
         # three days of scores, one per day
         base_dt = datetime.utcnow().replace(
             hour=12, minute=0, second=0, microsecond=0
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         for i in range(3):
             day_dt = base_dt - timedelta(days=i)
             db.add(
-                mcp_llm_axis_scores(
+                McpLlmAxisScore(
                     server_id="srv1",
                     axis_name="overall_risk",
                     scored_at=day_dt,

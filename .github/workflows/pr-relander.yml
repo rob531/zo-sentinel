@@ -3,40 +3,60 @@ name: pr-relander
 # The missing half of the landing chain (LOCO_CHAIRMAN.md §13, gap GR-13).
 #
 # Chain today: builder opens auto/build/* PRs -> pr-triage labels exactly one
-# of triage:{solid,dup,scaffold,stale} -> auto-merge lands the solids. The
-# recorded failure mode (tools/pr_triage.py:179) is a BASE-branch breakage:
-# every open PR inherits the red gate, the whole cohort is labelled
-# triage:stale, and when main recovers NOTHING re-runs their checks -- no push
-# event ever arrives on those heads, so they stay stale forever and the
-# backlog compounds.
+# of triage:{solid,dup,scaffold,stale} -> auto-merge lands the solids. Two
+# recorded failure modes, BOTH handled here:
 #
-# This workflow closes that loop: whenever main moves (and on a sweep cadence),
-# update the branch of every open autonomous-build PR that is stale-but-clean
-# (gate failed, NOT conflicting). The update-branch merge commit re-fires the
-# gates against the recovered base; pr-triage relabels; auto-merge lands.
-# Conflicting PRs are deliberately left alone -- resolving or closing them is
-# a judgement call that stays with the triage digest and the operator.
+#   (1) BASE-branch breakage (tools/pr_triage.py:179): every open PR inherits
+#       the red gate, the cohort is labelled triage:stale, and when main
+#       recovers NOTHING re-runs their checks -- no push event ever arrives on
+#       those heads, so they stay stale forever.
 #
-# Self-limiting by construction: update-branch is a no-op error when the head
-# is already up to date with main, so a PR that fails on its OWN diff gets at
-# most one re-test per main advance, not a retry loop. RELAND_CAP bounds CI
-# fan-out per run.
+#   (2) MISSING-CONTEXT deadlock (found 2026-09-01, 140 PRs): a PR labelled
+#       triage:solid whose head is missing a REQUIRED status context sits at
+#       mergeStateStatus=BLOCKED permanently. Branch protection treats an
+#       unreported required context as "Expected -- waiting for status", which
+#       never resolves. These PRs are NOT stale, so failure-mode-(1) handling
+#       never looked at them and they accumulated silently.
 #
-# RECURSION GUARD (measured on run #1, 2026-08-29): pushes made with the
-# default GITHUB_TOKEN never fire push/pull_request workflows -- the ten
+# This workflow closes both loops: whenever main moves (and on a sweep
+# cadence), refresh every open autonomous-build PR that is either
+# stale-but-clean OR solid-but-missing-required-contexts.
+#
+# REFRESH MECHANISM -- two paths, chosen per PR:
+#   * behind_by > 0  -> `gh pr update-branch`. The merge commit re-fires gates.
+#   * behind_by == 0 -> update-branch is a no-op error ("already up to date"),
+#     so instead close+reopen the PR. The `reopened` activity type re-fires
+#     every `on: pull_request` workflow. Measured 2026-09-01: ~12% of the
+#     solid-BLOCKED cohort is already level with main and is reachable ONLY
+#     this way. Requires the PAT -- see the recursion guard below.
+#
+# RECURSION GUARD (measured on run #1, 2026-08-29): pushes and PR events made
+# with the default GITHUB_TOKEN never fire push/pull_request workflows -- the
 # update-branch merge commits produced only ghost "action_required" workflow
-# runs with zero jobs, so no gate re-ran and no required context reported on
-# the new heads. Two escapes, both wired below:
-#   (a) if a RELANDER_TOKEN secret (fine-grained PAT: contents rw,
-#       pull-requests rw) exists, update-branch uses it and the resulting
-#       synchronize event fires EVERY workflow natively -- full fidelity,
-#       including the PR-context-only no-hollow / schema-prm;
+# runs with zero jobs. Two escapes:
+#   (a) if a RELANDER_TOKEN secret (fine-grained PAT: Contents RW,
+#       Pull requests RW, Workflows NO ACCESS) exists, refreshes use it and the
+#       resulting synchronize/reopened event fires EVERY workflow natively --
+#       full fidelity, including the PR-context-only no-hollow / schema-prm /
+#       referent-verify.
 #   (b) with only GITHUB_TOKEN, after each update we workflow_dispatch
 #       pr-gates.yml + evaluator.yml on the head branch (dispatch is exempt
-#       from the guard). Those two carry ALL required contexts (capmap-check,
-#       static-analysis, smoke-ladder, frontend, pytest), so branch protection
-#       and auto-merge are satisfied; non-required PR-context checks simply
-#       stay unreported on that head.
+#       from the guard).
+#
+# ---------------------------------------------------------------------------
+# DRIFT GUARD (gap that caused failure mode 2)
+# ---------------------------------------------------------------------------
+# Fallback (b) can only produce the contexts carried by pr-gates + evaluator.
+# On 2026-08-29 that was the complete required set, and this file said so in a
+# comment. Branch protection later gained no-hollow, schema-prm and
+# referent-verify as required -- none of them dispatchable -- and the comment
+# silently became false. Nothing detected the drift; 140 PRs deadlocked.
+#
+# The preflight job below now DERIVES the required set from branch protection
+# at run time and fails loudly when it is not a subset of what this workflow
+# can actually produce in its current mode. A comment cannot go stale if the
+# machine re-derives it every run.
+# ---------------------------------------------------------------------------
 
 on:
   push:
@@ -44,48 +64,258 @@ on:
   schedule:
     - cron: "47 */6 * * *"   # sweep, offset from pr-triage's 17 */6
   workflow_dispatch:
+    inputs:
+      reland_cap:
+        description: "Max PRs to refresh this run"
+        required: false
+        default: "40"
 
 permissions:
   contents: write
   pull-requests: write
-  actions: write   # workflow_dispatch of pr-gates/evaluator on relanded heads
+  actions: write    # workflow_dispatch of pr-gates/evaluator on relanded heads
+  checks: read
+  # NOTE: there is deliberately no 'administration' key here. GITHUB_TOKEN has
+  # no such permission scope -- the valid set is actions/attestations/checks/
+  # contents/deployments/discussions/id-token/issues/models/packages/pages/
+  # pull-requests/repository-projects/security-events/statuses. Adding it makes
+  # the workflow file INVALID: GitHub fails the run instantly with zero jobs and
+  # no annotation, which looks exactly like a ghost run. (Learned the hard way,
+  # run 33553962560.) Branch protection therefore cannot be read by GITHUB_TOKEN
+  # at all; see the resolution ladder in preflight.
 
 concurrency:
   group: pr-relander
   cancel-in-progress: true
 
+env:
+  # Contexts that fallback (b) can produce, i.e. those carried by the two
+  # dispatchable workflows. Keep in sync with pr-gates.yml + evaluator.yml.
+  DISPATCHABLE: "capmap-check static-analysis smoke-ladder frontend pytest"
+  # Last-resort required set, used ONLY if both token paths fail to read branch
+  # protection. Staleness here is caught by the guard below, which compares this
+  # against the live set whenever the live set is readable.
+  REQUIRED_FALLBACK: "capmap-check static-analysis smoke-ladder frontend pytest no-hollow schema-prm referent-verify"
+
 jobs:
-  reland:
+  preflight:
+    name: Required-context drift guard
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
+    outputs:
+      required: ${{ steps.drift.outputs.required }}
+      have_pat: ${{ steps.drift.outputs.have_pat }}
     steps:
-      - name: Update stale-but-clean autonomous-build PRs against fresh main
+      - name: Derive required contexts and check reachability
+        id: drift
         env:
-          # Prefer the PAT (native workflow retrigger); fall back to GITHUB_TOKEN
-          # plus explicit dispatches -- see the recursion-guard note above.
-          GH_TOKEN: ${{ secrets.RELANDER_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
+          PAT: ${{ secrets.RELANDER_TOKEN }}
           HAVE_PAT: ${{ secrets.RELANDER_TOKEN != '' }}
-          DISPATCH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RELAND_CAP: "10"
         run: |
           set -uo pipefail
-          prs=$(gh pr list -R "$REPO" --state open --label autonomous-build --label triage:stale \
-                  --json number,mergeable,isDraft \
-                  -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number') || prs=""
-          if [ -z "$prs" ]; then
-            echo "::notice::no stale-but-clean autonomous-build PRs to reland"
+          echo "have_pat=$HAVE_PAT" >> "$GITHUB_OUTPUT"
+
+          # --- required-set resolution ladder -------------------------------
+          # Branch protection is admin-read. GITHUB_TOKEN has no administration scope
+          # at all, so the live set is readable only by a PAT explicitly granted
+          # read only by a PAT granted Administration:Read-only -- so try
+          # Administration:Read-only; otherwise we use a pinned constant.
+          #
+          # There is no silent-empty branch. An unresolvable required set is a
+          # hard failure, because "required set unknown" previously degraded to
+          # "cohort B selects nothing" and that is precisely the silent no-op
+          # that let 140 PRs deadlock for four weeks.
+          # GITHUB_TOKEN cannot read branch protection (no administration scope
+          # exists for it), so the only live source is the PAT -- and only if it
+          # was granted Administration:read. If it was not, we fall to the pinned
+          # constant, which is the supported steady state, not an error.
+          src=""
+          req=$(GH_TOKEN="${PAT:-$GH_TOKEN}" gh api \
+                  "repos/$REPO/branches/main/protection/required_status_checks" \
+                  --jq '.contexts[]' 2>/dev/null) && src="branch-protection (RELANDER_TOKEN)"
+
+          if [ -n "$req" ]; then
+            req=$(echo "$req" | tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//')
+            echo "::notice::required contexts via $src: $req"
+            # Guard the constant against the live set so it cannot rot unnoticed.
+            fb=$(echo "$REQUIRED_FALLBACK" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            lv=$(echo "$req" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            if [ "$fb" != "$lv" ]; then
+              echo "::warning::REQUIRED_FALLBACK is stale. live=[$lv] pinned=[$fb] -- update the constant in this file."
+            fi
+          else
+            req=$(echo "$REQUIRED_FALLBACK" | tr -s ' ')
+            echo "::warning::branch protection unreadable -> using pinned REQUIRED_FALLBACK: $req"
+            echo "::warning::grant the RELANDER_TOKEN PAT 'Administration: Read-only' to restore live self-derivation."
+            echo "::warning::this set cannot self-verify; confirm it still matches Settings -> Branches."
+          fi
+
+          if [ -z "$req" ]; then
+            echo "::error::required-context set could not be resolved by any path."
+            echo "::error::Refusing to sweep: cohort B would select nothing and the run would falsely report success."
+            exit 1
+          fi
+          echo "required=$req" >> "$GITHUB_OUTPUT"
+
+          if [ "$HAVE_PAT" = "true" ]; then
+            echo "::notice::RELANDER_TOKEN present -> native synchronize/reopened; ALL required contexts reachable"
             exit 0
           fi
-          [ "$HAVE_PAT" = "true" ] || echo "::notice::no RELANDER_TOKEN secret -> using GITHUB_TOKEN + explicit gate dispatches (required contexts only)"
+
+          echo "::warning::no RELANDER_TOKEN secret -> fallback mode (GITHUB_TOKEN + explicit gate dispatches)"
+          [ -n "$req" ] || exit 0
+
+          unreachable=""
+          for c in $req; do
+            echo "$DISPATCHABLE" | grep -qw "$c" || unreachable="$unreachable $c"
+          done
+
+          if [ -n "$unreachable" ]; then
+            echo "::error::DRIFT: required context(s) unreachable in fallback mode:$unreachable"
+            echo "::error::These are PR-context-only and cannot be workflow_dispatch'd. Every refreshed PR will sit at BLOCKED forever."
+            echo "::error::Fix: set the RELANDER_TOKEN secret (fine-grained PAT, Contents RW + Pull requests RW, Workflows NO ACCESS)."
+            exit 1
+          fi
+          echo "::notice::all required contexts reachable via dispatch fallback"
+
+  reland:
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Refresh stale-but-clean and solid-but-blocked autonomous-build PRs
+        env:
+          # READ/WRITE SPLIT. GITHUB_TOKEN has full repo read and is guaranteed
+          # to satisfy every query here; the PAT's read scopes are narrower and
+          # its label-filtered pr list returned nothing (run 33555325562,
+          # "examined ZERO triage:solid PRs"). The PAT exists solely to make
+          # MUTATIONS that must not be recursion-guarded, so it is used only
+          # for update-branch / close / reopen.
+          GH_TOKEN: ${{ github.token }}
+          PAT: ${{ secrets.RELANDER_TOKEN }}
+          HAVE_PAT: ${{ needs.preflight.outputs.have_pat }}
+          REQUIRED: ${{ needs.preflight.outputs.required }}
+          DISPATCH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RELAND_CAP: ${{ github.event.inputs.reland_cap || '40' }}
+        run: |
+          set -uo pipefail
+
+          # --- PAT hygiene ---------------------------------------------------
+          # A secret pasted from a Windows shell can carry CR/LF. Go's http
+          # client rejects that outright:
+          #   invalid header field value for "Authorization"
+          # which surfaces per-PR as an opaque "not updated" and looks like a
+          # permissions problem. Strip all whitespace, then PROVE the token
+          # works before relying on it -- an unusable PAT must degrade to
+          # fallback mode, not fail 183 mutations one at a time.
+          PAT=$(printf '%s' "${PAT:-}" | tr -d '[:space:]')
+          if [ -n "$PAT" ]; then
+            if pat_login=$(GH_TOKEN="$PAT" gh api user --jq '.login' 2>pat_err.txt); then
+              echo "::notice::RELANDER_TOKEN validated (authenticates as $pat_login)"
+            else
+              echo "::warning::RELANDER_TOKEN is set but UNUSABLE: $(tr -d '\n' < pat_err.txt | head -c 200)"
+              echo "::warning::degrading to GITHUB_TOKEN + dispatch fallback for this run"
+              PAT=""
+              HAVE_PAT="false"
+            fi
+          fi
+
+          # --- cohort A: stale-but-clean (original failure mode) -------------
+          # NOTE: --limit is MANDATORY. gh pr list defaults to 30 rows; without
+          # it this sweep was blind past row 30 and silently reported "nothing
+          # to reland" while 28 eligible PRs sat outside the page.
+          # Never swallow the error text: a failed query and an empty result
+          # are different facts and must not print the same thing.
+          if ! stale=$(gh pr list -R "$REPO" --state open \
+                    --label autonomous-build --label triage:stale --limit 500 \
+                    --json number,mergeable,isDraft \
+                    -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number' 2>qerr.txt); then
+            echo "::error::cohort A query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
+            exit 1
+          fi
+
+          # --- cohort B: solid but blocked on a missing required context -----
+          # DO NOT filter on mergeStateStatus here. GitHub computes mergeability
+          # LAZILY: in a *list* query every PR comes back UNKNOWN, and only a
+          # single-PR read materialises BLOCKED. Filtering the list on
+          # == "BLOCKED" therefore matched 0 of 147 and the sweep reported
+          # "no PRs need refreshing" -- the third silent-empty filter in this
+          # workflow's history. The check-run diff below is the authoritative
+          # signal anyway; mergeStateStatus was never needed.
+          solid=""
+          population=0
+          while read -r pr sha draft; do
+            [ -n "$pr" ] || continue
+            [ "$draft" = "true" ] && continue
+            population=$((population+1))
+            present=$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100" \
+                        --jq '[.check_runs[].name] | unique | join(" ")' 2>/dev/null) || present=""
+            for c in $REQUIRED; do
+              if ! echo "$present" | grep -qw "$c"; then
+                solid="$solid $pr"; break
+              fi
+            done
+          done <<< "$(gh pr list -R "$REPO" --state open \
+                        --label autonomous-build --label triage:solid --limit 500 \
+                        --json number,headRefOid,isDraft \
+                        -q '.[] | "\(.number) \(.headRefOid) \(.isDraft)"' 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
+          n_solid=$(echo "$solid" | wc -w | tr -d ' ')
+          # Silence must always be auditable: say what was EXAMINED, not just
+          # what was selected. "0 selected" and "0 examined" are different bugs.
+          echo "::notice::cohort B: examined $population triage:solid PR(s), $n_solid missing >=1 required context"
+
+          n_stale=$(echo "$stale" | wc -w | tr -d ' ')
+          echo "::notice::cohort A: $n_stale stale-but-clean PR(s)"
+
+          prs=$(printf '%s\n%s\n' "$stale" "$solid" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un) || prs=""
+          if [ -z "$prs" ]; then
+            if [ "$population" -eq 0 ]; then
+              echo "::warning::examined ZERO triage:solid PRs -- the label query returned nothing. That is a query bug, not an empty backlog."
+            fi
+            echo "::notice::no PRs need refreshing (examined $population solid + $n_stale stale)"
+            exit 0
+          fi
+          echo "::notice::cohort: $(echo "$prs" | wc -l) PR(s) to refresh (cap $RELAND_CAP)"
+
+          main_sha=$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')
           count=0
           for pr in $prs; do
             if [ "$count" -ge "$RELAND_CAP" ]; then
-              echo "::notice::reland cap ($RELAND_CAP) reached; remaining PRs wait for the next run"
+              echo "::notice::reland cap ($RELAND_CAP) reached; remainder waits for the next run"
               break
             fi
-            if gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
-              echo "::notice::#$pr branch updated"
+
+            sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid) || continue
+            behind=$(gh api "repos/$REPO/compare/$main_sha...$sha" --jq '.behind_by' 2>/dev/null) || behind=""
+
+            refreshed=false
+            if [ "${behind:-0}" != "0" ]; then
+              # Path 1: branch is behind main -> merge commit re-fires gates.
+              if GH_TOKEN="${PAT:-$GH_TOKEN}" gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
+                echo "::notice::#$pr branch updated (was $behind behind)"
+                refreshed=true
+              else
+                echo "::notice::#$pr not updated ($(tr -d '\n' < err.txt | head -c 200))"
+              fi
+            elif [ "$HAVE_PAT" = "true" ]; then
+              # Path 2: already level with main -> update-branch is a no-op, so
+              # close+reopen to emit a `reopened` pull_request event. Only the
+              # PAT can do this; GITHUB_TOKEN events are recursion-guarded.
+              if GH_TOKEN="$PAT" gh pr close "$pr" -R "$REPO" 2>err.txt && sleep 2 && GH_TOKEN="$PAT" gh pr reopen "$pr" -R "$REPO" 2>>err.txt; then
+                echo "::notice::#$pr level with main -> closed+reopened to re-fire PR gates"
+                refreshed=true
+              else
+                echo "::warning::#$pr close/reopen failed ($(tr -d '\n' < err.txt | head -c 200))"
+              fi
+            else
+              echo "::warning::#$pr level with main and no RELANDER_TOKEN -> UNREACHABLE (needs PAT for close/reopen)"
+            fi
+
+            if [ "$refreshed" = "true" ]; then
               count=$((count+1))
               if [ "$HAVE_PAT" != "true" ]; then
                 branch=$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName) || continue
@@ -95,9 +325,35 @@ jobs:
                     || echo "::warning::#$pr could not dispatch $wf on $branch"
                 done
               fi
-            else
-              # "already up to date" and race losses are expected; log, never fail the sweep.
-              echo "::notice::#$pr not updated ($(tr -d '\n' < err.txt | head -c 200))"
             fi
           done
-          echo "::notice::relanded $count PR branch(es) this run"
+          # --- backlog telemetry --------------------------------------------
+          # The original failure was not that the sweep broke; it exited 0 every
+          # six hours while doing nothing. A run that refreshes N of M PRs must
+          # publish M-N, so a backlog that never falls is visible as a number
+          # rather than inferable only by reading logs nobody reads.
+          eligible=$(echo "$prs" | wc -l | tr -d ' ')
+          remaining=$((eligible - count))
+          {
+            echo "### pr-relander"
+            echo ""
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| mode | $([ "$HAVE_PAT" = "true" ] && echo "PAT (native events)" || echo "GITHUB_TOKEN (dispatch fallback)") |"
+            echo "| eligible | $eligible |"
+            echo "| refreshed | $count |"
+            echo "| unreachable this run | $remaining |"
+            echo "| cap | $RELAND_CAP |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::notice::refreshed $count of $eligible eligible PR(s); $remaining still waiting"
+
+          if [ "$remaining" -gt 0 ] && [ "$count" -eq 0 ]; then
+            echo "::error::$eligible PR(s) eligible but ZERO refreshed -- the sweep is running but accomplishing nothing."
+            echo "::error::This is the exact silent-no-op signature that hid the 140-PR deadlock. Investigate before the next cadence."
+            exit 1
+          fi
+
+          if [ "$remaining" -gt "$RELAND_CAP" ]; then
+            echo "::warning::backlog ($remaining) exceeds one full sweep ($RELAND_CAP) -- draining will take $(( (remaining + RELAND_CAP - 1) / RELAND_CAP )) more run(s)."
+          fi

@@ -59,7 +59,8 @@ def expand_query(query: str, session: Session = Depends(get_session), es: Elasti
 
 if __name__ == "__main__":
     from fastapi import FastAPI
-    from app.dependency_overrides import override_get_session
+    # FU-369: removed an import of `override_get_session` from a module that does not
+    # exist in this tree. The name was never used in this file.
 
     app = FastAPI()
     app.include_router(router)

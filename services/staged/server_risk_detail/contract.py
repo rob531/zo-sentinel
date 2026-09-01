@@ -53,7 +53,7 @@ def get_server_risk_detail(
     """
     Retrieve risk information for a given server.
 
-    The underlying table `mcp_llm_axis_scores` contains one row per risk axis
+    The underlying table `McpLlmAxisScore` contains one row per risk axis
     (including an overall row).  The response aggregates those rows into the
     required structure and applies a rule‑override: if any axis has the label
     ``CRITICAL`` the resulting ``risk_tier`` is forced to ``CRITICAL``.

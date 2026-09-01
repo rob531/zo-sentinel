@@ -1,0 +1,12 @@
+[service]
+name = "high_risk_alert_consumer"
+import_path = "services.active.high_risk_alert_consumer.router"
+prefix = "/api"
+tag = "high_risk_alert_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

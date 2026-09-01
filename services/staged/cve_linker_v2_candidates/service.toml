@@ -1,0 +1,8 @@
+[service]
+name = "cve_linker_v2_candidates"
+import_path = "services.active.cve_linker_v2_candidates.router"
+prefix = "/api"
+tag = "cve_linker_v2_candidates"
+origin = "service"
+auth = "public"
+needs_data_layer = true

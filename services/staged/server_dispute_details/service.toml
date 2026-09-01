@@ -1,0 +1,11 @@
+[service]
+name = "server_dispute_details"
+import_path = "services.active.server_dispute_details.router"
+prefix = "/api"
+tag = "server_dispute_details"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

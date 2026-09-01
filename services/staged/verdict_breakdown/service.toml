@@ -1,0 +1,8 @@
+[service]
+name = "verdict_breakdown"
+import_path = "services.active.verdict_breakdown.router"
+prefix = "/api"
+tag = "verdict_breakdown"
+origin = "service"
+auth = "public"
+needs_data_layer = true

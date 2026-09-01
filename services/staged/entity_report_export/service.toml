@@ -1,0 +1,8 @@
+[service]
+name = "entity_report_export"
+import_path = "services.active.entity_report_export.router"
+prefix = "/api"
+tag = "entity_report_export"
+origin = "service"
+auth = "public"
+needs_data_layer = true

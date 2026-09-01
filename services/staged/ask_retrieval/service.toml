@@ -1,0 +1,8 @@
+[service]
+name = "ask_retrieval"
+import_path = "services.active.ask_retrieval.router"
+prefix = "/api"
+tag = "ask_retrieval"
+origin = "service"
+auth = "public"
+needs_data_layer = true

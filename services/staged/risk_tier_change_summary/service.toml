@@ -1,0 +1,12 @@
+[service]
+name = "risk_tier_change_summary"
+import_path = "services.active.risk_tier_change_summary.router"
+prefix = "/api"
+tag = "risk_tier_change_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+app.db = "get_session"
+app.models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]

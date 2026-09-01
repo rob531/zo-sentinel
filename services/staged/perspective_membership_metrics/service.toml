@@ -1,0 +1,8 @@
+[service]
+name = "perspective_membership_metrics"
+import_path = "services.active.perspective_membership_metrics.router"
+prefix = "/api"
+tag = "perspective_membership_metrics"
+origin = "service"
+auth = "public"
+needs_data_layer = true

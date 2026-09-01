@@ -1,0 +1,8 @@
+[service]
+name = "org_api_keys"
+import_path = "services.active.org_api_keys.router"
+prefix = "/api"
+tag = "org_api_keys"
+origin = "service"
+auth = "public"
+needs_data_layer = true

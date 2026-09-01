@@ -131,21 +131,29 @@ def ensure_tables():
 
 
 def get_pending_snow_resolutions() -> List[Dict[str, Any]]:
+    """Submissions parked awaiting a ServiceNow resolution.
+
+    `approval_workflow` IS NOT A TABLE. approval_workflow.py is the approval
+    SERVICE (port 8780, see app_routes.py); a module name was read as a table
+    name. That service writes `mcp_submissions` and `mcp_decisions` -- the
+    submission row, with its own `status` and `submitted_at`, is the referent
+    this query wanted. It also joined `mcp_server_registry` on `submission_id`,
+    a column that table does not have; the submission carries both the id and
+    the server. `review_token` existed on no table and was never read. Refs #4080.
+    """
     sql = """
-    SELECT 
+    SELECT
         s.server_id,
-        s.name,
+        s.mcp_name AS name,
         s.submission_id,
-        a.approval_status,
-        a.review_token,
+        s.status AS approval_status,
         sa.snow_ticket_id,
         sa.snow_state,
         sa.snow_state_updated_at
-    FROM mcp_server_registry s
-    INNER JOIN approval_workflow a ON s.submission_id = a.submission_id
+    FROM mcp_submissions s
     LEFT JOIN snow_approval_status sa ON s.submission_id = sa.submission_id
-    WHERE a.approval_status IN ('pending_snow', 'awaiting_snow_resolution')
-    ORDER BY a.created_at ASC
+    WHERE s.status IN ('pending_snow', 'awaiting_snow_resolution')
+    ORDER BY s.submitted_at ASC
     """
     try:
         result = ws_query(sql)
@@ -178,13 +186,17 @@ def get_snow_ticket_state(ticket_id: str) -> Optional[Dict[str, Any]]:
 
 def update_approval_workflow_state(submission_id: str, new_status: str, snow_ticket_id: str, detail: str):
     now = get_utc_now_iso()
-    sql = f"""
-    UPDATE approval_workflow
-    SET approval_status = ?, updated_at = ?
+    # The submission's own status is the approval state. See the note on
+    # get_pending_snow_resolutions: there is no `approval_workflow` table, and
+    # mcp_submissions has no updated_at column -- the timestamp lives on the
+    # snow_approval_status row this module owns and records below.
+    sql = """
+    UPDATE mcp_submissions
+    SET status = ?
     WHERE submission_id = ?
     """
     try:
-        ws_execute(sql, [new_status, now, submission_id])
+        ws_execute(sql, [new_status, submission_id])
         log(f"Updated approval_workflow for {submission_id} to status={new_status}")
         
         audit_rows = [{
@@ -268,25 +280,30 @@ def process_snow_resolution(pending: Dict[str, Any]):
 
 
 def check_for_new_snow_tickets():
-    sql = """
-    SELECT 
-        s.submission_id,
-        a.snow_ticket_id
-    FROM approval_workflow a
-    INNER JOIN mcp_server_registry s ON s.submission_id = a.submission_id
-    WHERE a.approval_status = 'pending_snow'
-    AND a.snow_ticket_id IS NOT NULL
-    AND NOT EXISTS (
-        SELECT 1 FROM snow_approval_status sa 
-        WHERE sa.submission_id = a.submission_id
-    )
+    """UNRESOLVED REFERENT -- there is no source for an untracked ticket id.
+
+    This asked `approval_workflow` (not a table -- see
+    get_pending_snow_resolutions) for a `snow_ticket_id` on submissions that,
+    by its own NOT EXISTS clause, have no row in `snow_approval_status`. But
+    `snow_approval_status` -- created by ensure_tables() in this very module --
+    is the ONLY place on any plane where a snow_ticket_id is stored. The query
+    asks for a ticket id from everywhere it is not.
+
+    That is not a naming defect and no rename repairs it. Unlike the other two
+    statements in this file, whose intended referent is recoverable from
+    approval_workflow.py's own writes, this one has no assignment of real
+    tables that makes it true.
+
+    It has therefore ALWAYS returned [] -- ws_query raised on the missing
+    table and the handler swallowed it -- so returning [] here changes nothing
+    that ever happened. What it does change is that the module no longer names
+    a table that does not exist.
+
+    TO REBUILD: the SNOW connector needs a ticket id recorded at the moment the
+    ticket is opened, on a table that is not the one used to decide the ticket
+    is untracked. Until that exists, this discovery path cannot work. Refs #4080.
     """
-    try:
-        result = ws_query(sql)
-        return result.get("rows", [])
-    except Exception as e:
-        log(f"Failed to check new SNOW tickets: {e}")
-        return []
+    return []
 
 
 def discover_and_track_new_tickets():

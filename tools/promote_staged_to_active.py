@@ -70,6 +70,74 @@ try:
 except ImportError:  # pragma: no cover -- gate must exist; fail loud, never silently pass
     raise
 
+# FU-231 / FU-142 cure surface, wired here 2026-09-02 (improvement-loop cycle-0062).
+# `tools/repair_staged_model_names.py` was built 2026-08-06 to repair the family that
+# holds the MOST staged services -- `ImportError: cannot import name X from
+# app.models|app.db` -- and then sat consulted by NOTHING for 27 days, mentioned only
+# in prose. A cure nobody can reach from the surface that was bitten is not a cure
+# (memory: "NO CURE REACHABLE FROM A PROMPT"). The promoter IS that surface: it is
+# where a HOLD on this family is produced, so it is where the available cure has to
+# be named.
+#
+# This is a REPORT field, not a gate. It changes no verdict, moves no file, and
+# cannot turn a PROMOTE into a HOLD. R7: prefer RECOVERY over RESTRICTION.
+# Both invocation shapes, for the FU-031 reason recorded ten lines up.
+try:  # repo root on sys.path
+    from tools import repair_staged_model_names as _repair  # noqa: E402
+except ImportError:  # script-dir sys.path[0]
+    try:
+        import repair_staged_model_names as _repair  # noqa: E402
+    except ImportError:  # pragma: no cover
+        _repair = None
+
+
+def model_name_repair_summary(repo=None):
+    """DRY-RUN classification of the model-name-drift family across staged/.
+
+    Returns the two populations `repair_staged_model_names` distinguishes:
+      family A -- casing/plural/prefix drift onto a model that REALLY EXISTS.
+                  Deterministically repairable: `--apply` fixes these.
+      family B -- no referent at all. Needs a model + migration, or the service is
+                  unbuildable as specified. No rename can fix these.
+
+    R6 -- UNKNOWN IS NOT ZERO. If the repair module is absent or raises, this
+    returns status "unavailable" WITH the detail, and emits NO counts at all.
+    Emitting `family_a_repairable_sites: 0` for a module that never ran would read
+    as "nothing to repair", which is the exact inversion this codebase keeps
+    paying for; a reader must be able to tell a measured zero from an unmeasured
+    one.
+
+    NEVER mutates. `run(..., apply=False)` is the dry-run path by construction --
+    `apply_file()` is only reached under `if apply and ...`. A tool that repairs in
+    order to measure throws the repair away and lies about the state it measured;
+    `tests/test_promoter_repair_wiring.py` asserts the tree is byte-identical
+    across a call.
+    """
+    if _repair is None:
+        return {"status": "unavailable",
+                "detail": "tools/repair_staged_model_names.py not importable"}
+    try:
+        res = _repair.run(repo or ROOT, apply=False)
+    except Exception as exc:  # pragma: no cover -- reported, never swallowed to 0
+        return {"status": "unavailable", "detail": "%s: %s" % (type(exc).__name__, exc)}
+    if res.get("error"):
+        return {"status": "unavailable", "detail": res["error"]}
+    if res.get("changed_files"):  # pragma: no cover -- dry run must change nothing
+        return {"status": "unavailable",
+                "detail": "dry run reported %d changed file(s); refusing to publish"
+                          % len(res["changed_files"])}
+    return {
+        "status": "measured",
+        "staged_services": res.get("staged_services"),
+        "family_a_repairable_sites": res.get("family_a_repairable_sites"),
+        "family_a_services": res.get("family_a_services"),
+        "family_b_unmapped_sites": res.get("family_b_unmapped_sites"),
+        "family_b_services": res.get("family_b_services"),
+        "family_b_distinct": res.get("family_b_distinct"),
+        "unparseable_files": res.get("unparseable_files"),
+        "cure": "python tools/repair_staged_model_names.py --apply",
+    }
+
 
 def _dockerfile_text():
     try:
@@ -365,6 +433,10 @@ def main(argv=None):
         "hold_count": sum(1 for v in verdicts if v["verdict"] == "HOLD"),
         "promoted": promoted,
         "verdicts": verdicts,
+        # cycle-0062. Attached to EVERY run, observe and enforce alike: the
+        # question "how many of these HOLDs are one mechanical rename away from
+        # promotable" had an answer on disk since 2026-08-06 and no reader.
+        "model_name_repair": model_name_repair_summary(),
     }
     os.makedirs(os.path.dirname(ARTIFACT), exist_ok=True)
     with open(ARTIFACT, "w", encoding="utf-8") as fh:
@@ -378,6 +450,18 @@ def main(argv=None):
         for v in verdicts:
             print("  [%s] %s%s" % (v["verdict"], v["service"],
                                    "" if not v["reasons"] else "  -- " + "; ".join(v["reasons"])))
+        mr = report["model_name_repair"]
+        if mr["status"] == "measured":
+            print("  model-name drift: %d repairable site(s) across %d service(s) "
+                  "-- cure: %s" % (mr["family_a_repairable_sites"],
+                                   mr["family_a_services"], mr["cure"]))
+            print("                    %d site(s) across %d service(s) have NO referent "
+                  "(%d distinct) -- these need a model + migration, not a rename"
+                  % (mr["family_b_unmapped_sites"], mr["family_b_services"],
+                     mr["family_b_distinct"]))
+        else:
+            # R6: say UNKNOWN out loud rather than printing a zero nobody measured.
+            print("  model-name drift: UNKNOWN (%s)" % mr["detail"])
         if not args.enforce and report["promote_count"]:
             print("  observe mode: nothing moved. Re-run with --enforce --max-per-run N to promote.")
     return 0

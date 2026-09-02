@@ -1,6 +1,6 @@
 # GOALS AND STANDING DOCTRINE
 
-Built 2026-09-02T19:53:48+00:00. Verbatim copies; nothing summarised.
+Built 2026-09-02T21:50:58+00:00. Verbatim copies; nothing summarised.
 
 
 
@@ -767,3 +767,16 @@ writer's docstring. Scores >=4 on any axis carry evidence or the writer refuses.
   - evidence[persistence]: FU-381 carries a REACHABILITY predicate that stays RED until deploy-runtime-from-main carries the merge (R2: a merge is not an arming); verify_seen_red records both REDs and says which one is the weak stamp
   - evidence[autonomy]: acted on a chairman comment that left part (a) open; escalated nothing; part (b) trigger change left proposed
   - evidence[boundary]: declined to close #4077, declined the trigger change, and reported the memory_reindex tie as UNCONFIRMED rather than done
+
+## 2026-09-02T20:03:35Z | prod-drift-sentinel 2026-09-02 20:45 slot
+- composite **80%** | DGM 80% | autopoiesis 73% | protean 90%
+- achieved:
+  - Staged a Class-B candidate with all five fire preconditions otherwise MET and did not fire. Measured live prod schema read-only and proved migration 0012 inert there. Logged FU-235 as half-verified. Reproduced FU-295 on myself, fixed my own call site, then ran the verify which corrected my predicted 12/14 to a measured 10/14 and logged the correction.
+- axes: self_diagnosis=5 self_repair=4 self_modification=4 persistence=3 autonomy=4 generativity=3 boundary=5
+  - evidence[self_diagnosis]: Reproduced FU-295 ON MYSELF and noticed it: 3 of 4 friction rows came back UNKEYED, and one of the three was `sanctioned-writer-api-shape`, a family reading x5/5 lanes in the SAME run's loop_health output I was reading at the time.
+  - evidence[self_repair]: Fixed my own FU-295 call site: prompt exemplar now shows sig= plus the reason and the --hazards door. Verified by probe_friction_sig_callsites_20260809.py: this lane is absent from the UNKEYED list, 10/14 remain. 4 not 5 because 10 other lanes are still broken and one call site of thirteen is not the fix.
+  - evidence[self_modification]: task_edit --set-prompt, 98689 B byte-verified, backup _task_backups/prod-drift-sentinel.20260902T200139Z.SKILL.md, revert is --restore. Backup asserted by SIZE and empty stderr, not by 'the command returned'.
+  - evidence[persistence]: Held the candidate at the vetted sha a3fff7dc when main moved 2 commits mid-run rather than silently renaming it to the tip; shadow decision left PENDING, not held/superseded.
+  - evidence[autonomy]: Acted throughout without escalating: staged, probed live prod read-only, wrote two ledger entries, self-edited. Emailed only the one thing that is genuinely the chairman's: an attended Class-B fire and FU-235's privilege decision.
+  - evidence[generativity]: New fact for the fleet: FU-235's verify predicate is half-met (0011 landed, users 4) and half-not (ownership unchanged) -- option (C) appears to have been taken, and nobody had recorded that.
+  - evidence[boundary]: Class B is ATTENDED ONLY and I did not fire, despite --may ALLOWED, rate ceiling CLEAR at 63.6h, 8/8 gates, dry-run 8/0, fresh restore-verified backup, AND having measured that migration 0012 is inert on prod. Offered that measurement as evidence for the attended decision and explicitly not as grounds to auto-fire.

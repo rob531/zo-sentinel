@@ -1,9 +1,9 @@
 {
   "pack": "zo-sentinel ultra plan pack",
-  "built_at": "2026-09-02T19:53:48+00:00",
+  "built_at": "2026-09-02T21:50:58+00:00",
   "builder": "D:\\zo\\Zocomputer Agents\\_ultraplan\\build_pack.py",
   "ledger_source": "D:\\zo\\Zocomputer Agents\\FOLLOWUPS.md",
-  "ledger_mtime": "2026-09-02T18:43:04+00:00",
+  "ledger_mtime": "2026-09-02T20:02:44+00:00",
   "rebuild_command": "python \"D:\\zo\\Zocomputer Agents\\_ultraplan\\build_pack.py\"",
   "staleness_rule": "If built_at is more than 24h before the ultra plan run, REBUILD. Every count in this pack is a measurement, not a constant.",
   "counts": {
@@ -22,20 +22,20 @@
   "files": [
     {
       "file": "10_open_p0p1_full.md",
-      "bytes": 647547,
-      "sha256": "df8984a046954fb3",
-      "est_tokens": 161886
+      "bytes": 650244,
+      "sha256": "baf493d139d86fc8",
+      "est_tokens": 162561
     },
     {
       "file": "11_all_fus.jsonl",
       "bytes": 522787,
-      "sha256": "4b37f3bf055ed928",
+      "sha256": "b690fd978bb93dbc",
       "est_tokens": 130696
     },
     {
       "file": "12_themes.md",
       "bytes": 92193,
-      "sha256": "26a0ed4582fdeedc",
+      "sha256": "b720d532c48b362b",
       "est_tokens": 23048
     },
     {
@@ -47,46 +47,46 @@
     {
       "file": "14_open_p2p3_digest.md",
       "bytes": 74123,
-      "sha256": "97982c76ab5d36a2",
+      "sha256": "3e45ad8c4ab30f4c",
       "est_tokens": 18530
     },
     {
       "file": "15_no_status.md",
       "bytes": 353051,
-      "sha256": "7e07bc8a018241db",
+      "sha256": "19ecb46b7ee98f79",
       "est_tokens": 88262
     },
     {
       "file": "20_lanes.md",
-      "bytes": 118776,
-      "sha256": "d2178d55cbb522fa",
-      "est_tokens": 29694
+      "bytes": 120648,
+      "sha256": "131584c92b47665a",
+      "est_tokens": 30162
     },
     {
       "file": "21_goals.md",
-      "bytes": 76753,
-      "sha256": "5f2509ee5ca9a993",
-      "est_tokens": 19188
+      "bytes": 79221,
+      "sha256": "cb26c6792f7fcbc9",
+      "est_tokens": 19805
     },
     {
       "file": "22_hazards.md",
       "bytes": 362699,
-      "sha256": "54502cea595209df",
+      "sha256": "0e76ade8ed8bfdf4",
       "est_tokens": 90674
     },
     {
       "file": "30_prod_state.json",
-      "bytes": 62102,
-      "sha256": "9beb72fb085ab39b",
-      "est_tokens": 15525
+      "bytes": 62944,
+      "sha256": "b03f45aac8e8426e",
+      "est_tokens": 15736
     },
     {
       "file": "31_ledger_stats.json",
       "bytes": 19413,
-      "sha256": "4b91c7d1df232fec",
+      "sha256": "00ab5ee303f38805",
       "est_tokens": 4853
     }
   ],
-  "total_bytes": 2404630,
-  "total_est_tokens": 601152
+  "total_bytes": 2412509,
+  "total_est_tokens": 603123
 }

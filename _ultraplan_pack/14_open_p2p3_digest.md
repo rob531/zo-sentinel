@@ -1,6 +1,6 @@
 # TIER 2 -- OPEN, BELOW P1, ONE PARAGRAPH EACH
 
-Built 2026-09-02T19:53:48+00:00. 114 entries: 82 P2, 21 P3, 11 with NO priority field.
+Built 2026-09-02T21:50:58+00:00. 114 entries: 82 P2, 21 P3, 11 with NO priority field.
 
 The last group is not P3. An entry with no priority was never triaged, and calling this file 'P2/P3' would have hidden them inside a rank nobody assigned.
 
@@ -408,7 +408,7 @@ filed 2026-07-21 (43d) · last touch 2026-08-10 (23d) · source cadence-jobs-dai
 cites: FU-004, FU-027, FU-033, FU-053
 
 ### FU-295 [P2/open] The recurrence fix landed in the WRITER and the defect lives in the 14 PROMPTS that call it -- 13 of 14 lanes are invoking the unkeyed form the fleet documents
-filed None (Noned) · last touch 2026-08-10 (23d) · source unspecified · logs 7 · verify yes
+filed None (Noned) · last touch 2026-08-10 (23d) · source unspecified · logs 9 · verify yes
 **THE ROW THAT PROVES IT IS MY OWN, AND record() BEHAVED PERFECTLY.** I hit `ps-command-nested-quotes` twice tonight (PowerShell strips embedded double quotes from a native-command argument, so `flyctl ssh -C` re-split the remote command: `unknown shorthand flag: '4' in -40;`, then `malformed resolve command` once a `python -c` was nested inside). `record()` printed the UNKEYED warning AND the ful
 cites: FU-195, FU-201, FU-264, FU-271
 

@@ -1,6 +1,6 @@
 # HAZARD CORPUS -- what this system has already learned the hard way
 
-Built 2026-09-02T19:53:48+00:00.
+Built 2026-09-02T21:50:58+00:00.
 
 READ THIS BEFORE PROPOSING ANYTHING. Every entry below is a move that
 was tried and bit. The single highest-value thing a fresh plan can do

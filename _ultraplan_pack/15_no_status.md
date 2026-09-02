@@ -1,6 +1,6 @@
 # UNDETERMINED -- entries carrying NO status field
 
-Built 2026-09-02T19:53:48+00:00. 43 of 375 entries.
+Built 2026-09-02T21:50:58+00:00. 43 of 375 entries.
 
 **These are neither open nor closed.** The triage lane is the only writer
 of `status:` lines and it sweeps on that key, so an entry that never got

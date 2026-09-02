@@ -1,7 +1,7 @@
 {
-  "measured_at": "2026-09-02T19:53:48+00:00",
-  "ledger_bytes": 3018991,
-  "ledger_mtime": "2026-09-02T18:43:04+00:00",
+  "measured_at": "2026-09-02T21:50:58+00:00",
+  "ledger_bytes": 3025272,
+  "ledger_mtime": "2026-09-02T20:02:44+00:00",
   "total_entries": 375,
   "max_fu_id": 382,
   "id_gaps": [

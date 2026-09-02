@@ -1,35 +1,76 @@
 {
-  "built_at": "2026-09-02T19:53:48+00:00",
+  "built_at": "2026-09-02T21:50:58+00:00",
   "enabled": true,
   "origin_main": {
     "state": "MEASURED",
-    "value": "0231bf778cd0f6476b9441a0a218c9dc84cd349a",
+    "value": "a2353dccba7b37ef705033c913d888e4321a6b29",
     "source": "git ls-remote origin main",
-    "measured_at": "2026-09-02T19:53:48+00:00"
+    "measured_at": "2026-09-02T21:50:58+00:00"
   },
   "repo_worktree": {
     "state": "MEASURED",
     "value": "goose/fu119-shim-canary-tier",
     "source": "git rev-parse HEAD",
-    "measured_at": "2026-09-02T19:53:48+00:00"
+    "measured_at": "2026-09-02T21:50:58+00:00"
   },
   "pr_queue": {
     "state": "MEASURED",
     "value": {
-      "open_count": 276,
+      "open_count": 282,
       "draft_count": 0,
       "mergeable_histogram": {
-        "MERGEABLE": 253,
-        "CONFLICTING": 22,
-        "UNKNOWN": 1
+        "MERGEABLE": 60,
+        "UNKNOWN": 222
       },
       "mergeable_is_lazily_computed": "UNKNOWN means GitHub has not finished checking; it is not a synonym for MERGEABLE.",
       "oldest": "2026-07-19T12:56:39Z",
       "items": [
         {
-          "n": 4481,
-          "t": "build: scaffold_axis_score_summary_service_toml",
-          "created": "2026-09-02T19:51:03Z",
+          "n": 4491,
+          "t": "build: scaffold_org_user_roster_api_service_toml",
+          "created": "2026-09-02T21:46:41Z",
+          "draft": false,
+          "mergeable": "MERGEABLE"
+        },
+        {
+          "n": 4490,
+          "t": "build: scaffold_registry_growth_dashboard_view_service_toml",
+          "created": "2026-09-02T21:22:05Z",
+          "draft": false,
+          "mergeable": "MERGEABLE"
+        },
+        {
+          "n": 4489,
+          "t": "build: scaffold_registry_growth_dashboard_view_init",
+          "created": "2026-09-02T21:11:50Z",
+          "draft": false,
+          "mergeable": "MERGEABLE"
+        },
+        {
+          "n": 4487,
+          "t": "build: scaffold_write_service_staleness_probe_service_toml",
+          "created": "2026-09-02T21:06:13Z",
+          "draft": false,
+          "mergeable": "UNKNOWN"
+        },
+        {
+          "n": 4486,
+          "t": "build: scaffold_mcp_threat_analysis_dashboard_view_service_toml",
+          "created": "2026-09-02T21:01:35Z",
+          "draft": false,
+          "mergeable": "MERGEABLE"
+        },
+        {
+          "n": 4485,
+          "t": "build: scaffold_verdict_transition_tracker_service_toml",
+          "created": "2026-09-02T20:35:59Z",
+          "draft": false,
+          "mergeable": "MERGEABLE"
+        },
+        {
+          "n": 4484,
+          "t": "build: scaffold_mcp_llm_axis_scores_time_series_view_service_toml",
+          "created": "2026-09-02T20:31:19Z",
           "draft": false,
           "mergeable": "MERGEABLE"
         },
@@ -157,14 +198,14 @@
           "t": "build: scaffold_community_signal_enrichment_wiring_service_toml",
           "created": "2026-09-02T03:44:43Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4399,
           "t": "build(deps): update pydantic requirement from <3.0,>=2.13.4 to >=2.13.5,<3.0 in /tests/ci",
           "created": "2026-09-01T23:50:21Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4396,
@@ -276,49 +317,49 @@
           "t": "build: scaffold_server_score_timeline_api_init",
           "created": "2026-08-30T00:18:31Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4258,
           "t": "build: scaffold_risk_tier_registry_aggregator_service_toml",
           "created": "2026-08-29T23:17:42Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4257,
           "t": "build: scaffold_risk_tier_forecast_api_service_toml",
           "created": "2026-08-29T23:07:25Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4251,
           "t": "build: build_axis_drift_scoring_consumer_router",
           "created": "2026-08-29T21:28:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4246,
           "t": "build: scaffold_risk_tier_distribution_by_axis_api_service_toml",
           "created": "2026-08-29T19:07:13Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4240,
           "t": "build: scaffold_risk_tier_verdict_endpoint_service_toml",
           "created": "2026-08-29T17:36:27Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4236,
           "t": "build: build_axis_probability_summary_router",
           "created": "2026-08-29T16:15:43Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4234,
@@ -444,7 +485,7 @@
           "t": "build: scaffold_perspective_snapshot_rollup_api_service_toml",
           "created": "2026-08-28T23:22:07Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4195,
@@ -486,1064 +527,1064 @@
           "t": "build: build_server_risk_comparison_api_contract",
           "created": "2026-08-28T21:35:35Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4187,
           "t": "build: scaffold_server_risk_axis_timeline_service_toml",
           "created": "2026-08-28T21:35:22Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4186,
           "t": "build: scaffold_server_risk_axis_timeline_init",
           "created": "2026-08-28T21:05:04Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4185,
           "t": "build: build_circuit_breaker_health_api_logic",
           "created": "2026-08-28T21:04:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4184,
           "t": "build: scaffold_scoring_frequency_api_service_toml",
           "created": "2026-08-28T20:54:36Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4183,
           "t": "build: build_circuit_breaker_health_api_contract",
           "created": "2026-08-28T20:54:21Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4182,
           "t": "build: scaffold_server_risk_comparison_api_service_toml",
           "created": "2026-08-28T20:54:07Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4181,
           "t": "build: scaffold_server_risk_comparison_api_init",
           "created": "2026-08-28T20:33:51Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4180,
           "t": "build: scaffold_scoring_frequency_scoring_consumer_service_toml",
           "created": "2026-08-28T20:03:35Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4179,
           "t": "build: scaffold_risk_tier_trend_dashboard_api_service_toml",
           "created": "2026-08-28T18:53:18Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4178,
           "t": "build: scaffold_server_axis_score_timeline_api_service_toml",
           "created": "2026-08-28T18:42:59Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4177,
           "t": "build: scaffold_server_axis_score_timeline_api_service_toml",
           "created": "2026-08-28T18:42:46Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4174,
           "t": "build: scaffold_server_registry_csv_export_service_toml",
           "created": "2026-08-28T16:22:10Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4170,
           "t": "build: scaffold_scoring_wave_status_api_service_toml",
           "created": "2026-08-28T14:51:06Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4167,
           "t": "build: scaffold_integrate_staged_routers_into_main_service_toml",
           "created": "2026-08-28T14:10:20Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4145,
           "t": "build: scaffold_score_change_timeline_scoring_consumer_service_toml",
           "created": "2026-08-28T01:07:25Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4134,
           "t": "build: scaffold_axis_volatility_scoring_consumer_init",
           "created": "2026-08-27T21:10:35Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4118,
           "t": "build: scaffold_server_freshness_metadata_api_service_toml",
           "created": "2026-08-27T15:48:14Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4117,
           "t": "build: scaffold_server_freshness_metadata_api_service_toml",
           "created": "2026-08-27T15:47:59Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4115,
           "t": "build: scaffold_risk_trajectory_api_service_toml",
           "created": "2026-08-27T15:27:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4099,
           "t": "build: scaffold_risk_tier_dashboard_api_service_toml",
           "created": "2026-08-27T03:23:40Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4097,
           "t": "build: build_risk_tier_scoring_consumer_contract",
           "created": "2026-08-27T00:26:51Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4094,
           "t": "[#4089 verify c] clean app/ touch — referent-verify must run and stay GREEN",
           "created": "2026-08-26T23:34:21Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4084,
           "t": "build: build_server_axis_probability_summary_view_router",
           "created": "2026-08-26T21:55:23Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4083,
           "t": "build: build_server_axis_probability_summary_api_logic",
           "created": "2026-08-26T21:35:08Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4061,
           "t": "build: build_axis_drift_scoring_consumer_router",
           "created": "2026-08-26T15:43:08Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4060,
           "t": "build: build_axis_disagreement_scoring_consumer_logic",
           "created": "2026-08-26T15:32:53Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4059,
           "t": "build: scaffold_server_freshness_heatmap_api_service_toml",
           "created": "2026-08-26T15:12:39Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4056,
           "t": "build: scaffold_axis_drift_scoring_consumer_service_toml",
           "created": "2026-08-26T13:21:51Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4038,
           "t": "build: scaffold_dispute_resolution_api_service_toml",
           "created": "2026-08-26T03:09:56Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4031,
           "t": "build: build_risk_tier_transitions_api_logic",
           "created": "2026-08-26T01:40:58Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4030,
           "t": "build: build_perspective_summary_api_router",
           "created": "2026-08-26T01:30:41Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4026,
           "t": "build: build_risk_tier_transitions_logic",
           "created": "2026-08-26T00:19:27Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4024,
           "t": "build(deps): update uvicorn requirement from <1.0,>=0.51.0 to >=0.52.4,<1.0 in /tests/ci",
           "created": "2026-08-25T23:43:55Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 4020,
           "t": "build: scaffold_server_axis_probability_summary_api_init",
           "created": "2026-08-25T21:57:39Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3982,
           "t": "build: scaffold_import_row_delta_service_toml",
           "created": "2026-08-25T16:11:40Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3980,
           "t": "build: build_quarantine_keyspace_collision_probe_router",
           "created": "2026-08-25T14:51:04Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3974,
           "t": "build: scaffold_risk_tier_distribution_by_tool_type_router_service_toml",
           "created": "2026-08-25T12:09:18Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3973,
           "t": "build: build_circuit_breaker_status_api_logic",
           "created": "2026-08-25T11:59:02Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3971,
           "t": "build: scaffold_service_unit_promotion_readiness_init",
           "created": "2026-08-25T11:38:31Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3949,
           "t": "build: build_cve_axis_freshness_api_router",
           "created": "2026-08-25T01:43:56Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3947,
           "t": "build: build_verdict_watchlist_service_router",
           "created": "2026-08-25T01:13:32Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3946,
           "t": "build: build_risk_tier_comparison_api_contract",
           "created": "2026-08-25T01:03:20Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3936,
           "t": "build: build_server_trust_summary_contract",
           "created": "2026-08-24T23:41:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3927,
           "t": "build: build_verdict_history_api_logic",
           "created": "2026-08-24T20:59:36Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3923,
           "t": "build: scaffold_entity_search_api_service_toml",
           "created": "2026-08-24T19:48:41Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3922,
           "t": "build: build_trust_composition_api_router",
           "created": "2026-08-24T15:58:18Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3902,
           "t": "build: build_cve_server_detail_api_router",
           "created": "2026-08-24T01:30:33Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3897,
           "t": "build: build_server_registry_source_distribution_dashboard_view_router",
           "created": "2026-08-24T00:09:33Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3889,
           "t": "build: build_score_run_ledger_writer_logic",
           "created": "2026-08-23T21:47:36Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3887,
           "t": "build: scaffold_dashboard_summary_api_init",
           "created": "2026-08-23T21:27:07Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3881,
           "t": "build: scaffold_wisdom_synthesiser_health_service_toml",
           "created": "2026-08-23T18:55:32Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3839,
           "t": "build: build_risk_tier_threshold_calibration_api_router",
           "created": "2026-08-23T05:16:23Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3838,
           "t": "build: build_risk_tier_threshold_calibration_api_logic",
           "created": "2026-08-23T05:16:12Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3836,
           "t": "build: build_risk_tier_distribution_by_source_router",
           "created": "2026-08-23T05:15:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3835,
           "t": "build: build_signal_scores_distribution_router",
           "created": "2026-08-23T05:15:39Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3833,
           "t": "build: build_server_registry_source_distribution_router",
           "created": "2026-08-23T05:15:18Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3832,
           "t": "build: build_risk_tier_overview_router",
           "created": "2026-08-23T05:05:08Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3831,
           "t": "build: build_definition_history_pipeline_status_router",
           "created": "2026-08-23T05:04:57Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3830,
           "t": "build: build_risk_tier_trend_dashboard_view_router",
           "created": "2026-08-23T05:04:47Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3828,
           "t": "build: build_perspective_email_digest_router",
           "created": "2026-08-23T05:04:25Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3827,
           "t": "build: build_server_cve_search_api_router",
           "created": "2026-08-23T05:04:13Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3826,
           "t": "build: build_server_cve_search_api_logic",
           "created": "2026-08-23T05:04:01Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3825,
           "t": "build: build_perspective_query_api_router",
           "created": "2026-08-23T05:03:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3823,
           "t": "build: build_server_risk_tier_trend_dashboard_view_router",
           "created": "2026-08-23T05:03:27Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3822,
           "t": "build: build_server_risk_tier_trend_dashboard_view_logic",
           "created": "2026-08-23T05:03:16Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3821,
           "t": "build: build_score_badge_api_router",
           "created": "2026-08-23T05:03:05Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3820,
           "t": "build: build_score_badge_api_logic",
           "created": "2026-08-23T05:02:55Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3819,
           "t": "build: build_admin_exemptions_api_logic",
           "created": "2026-08-23T05:02:45Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3815,
           "t": "build: build_perspective_snapshot_api_logic",
           "created": "2026-08-23T05:02:00Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3813,
           "t": "build: build_api_key_manager_logic",
           "created": "2026-08-23T04:51:39Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3811,
           "t": "build: build_verdict_watchlist_api_logic",
           "created": "2026-08-23T04:51:17Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3810,
           "t": "build: build_axis_evidence_api_logic",
           "created": "2026-08-23T04:51:06Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3802,
           "t": "build: build_server_scoring_timeline_router",
           "created": "2026-08-23T04:49:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3796,
           "t": "build: scaffold_risk_tier_threshold_calibration_probe_init",
           "created": "2026-08-23T04:38:20Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3784,
           "t": "build: scaffold_mcp_llm_axis_scores_distribution_dashboard_view_service_toml",
           "created": "2026-08-23T04:36:07Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3765,
           "t": "build: wire_verdict_breakdown_into_app",
           "created": "2026-08-22T09:00:59Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3763,
           "t": "build: scaffold_threat_intel_init",
           "created": "2026-08-22T06:40:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3749,
           "t": "build: scaffold_daemon_heartbeat_alerts_service_toml",
           "created": "2026-08-22T03:35:07Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3746,
           "t": "build: scaffold_risk_tier_analysis_api_service_toml",
           "created": "2026-08-22T03:34:30Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3693,
           "t": "build: scaffold_server_detail_risk_profile_init",
           "created": "2026-08-21T20:19:47Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3681,
           "t": "build: scaffold_risk_axis_breakdown_service_toml",
           "created": "2026-08-20T12:12:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3674,
           "t": "build: scaffold_risk_tier_alert_consumer_service_toml",
           "created": "2026-08-20T09:40:53Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3645,
           "t": "build: scaffold_cve_detail_view_init",
           "created": "2026-08-20T03:10:02Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3642,
           "t": "build: scaffold_server_cve_analysis_service_toml",
           "created": "2026-08-20T02:58:58Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3624,
           "t": "build: scaffold_risk_recommendation_api_service_toml",
           "created": "2026-08-20T02:41:44Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3616,
           "t": "build: scaffold_score_precision_audit_report_service_toml",
           "created": "2026-08-20T02:38:44Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3567,
           "t": "build: scaffold_score_axis_drift_detector_service_toml",
           "created": "2026-08-20T01:18:11Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3565,
           "t": "build: scaffold_risk_axis_time_series_service_toml",
           "created": "2026-08-20T01:17:20Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3561,
           "t": "build: scaffold_ask_search_api_service_toml",
           "created": "2026-08-20T01:05:38Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3559,
           "t": "build: build_daemon_roster_coverage_report_router",
           "created": "2026-08-20T00:54:58Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3555,
           "t": "build: build_server_cve_exposure_api_router",
           "created": "2026-08-20T00:53:29Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3551,
           "t": "build: scaffold_critical_servers_alert_service_toml",
           "created": "2026-08-20T00:42:02Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3537,
           "t": "build: scaffold_circuit_breaker_status_api_init",
           "created": "2026-08-17T18:06:27Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3532,
           "t": "build: scaffold_scoring_run_summary_init",
           "created": "2026-08-17T16:08:18Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3530,
           "t": "build: build_perspective_event_stream_api_contract",
           "created": "2026-08-17T15:47:52Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3525,
           "t": "build: scaffold_scoring_pulse_api_service_toml",
           "created": "2026-08-17T12:36:21Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3522,
           "t": "build: scaffold_adjudication_workflow_init",
           "created": "2026-08-17T11:05:41Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3521,
           "t": "build: scaffold_scoring_wave_progress_service_toml",
           "created": "2026-08-17T10:55:27Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3513,
           "t": "build: scaffold_server_risk_ranking_service_toml",
           "created": "2026-08-17T07:57:58Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3509,
           "t": "build: scaffold_scoring_delta_api_init",
           "created": "2026-08-17T05:47:00Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3502,
           "t": "build: scaffold_cve_facet_compile_service_service_toml",
           "created": "2026-08-17T04:15:26Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3481,
           "t": "build: build_servers_list_api_contract",
           "created": "2026-08-17T00:30:59Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3480,
           "t": "build: scaffold_server_submission_api_service_toml",
           "created": "2026-08-17T00:10:44Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3472,
           "t": "build: scaffold_registry_family_dedup_service_toml",
           "created": "2026-08-16T21:45:53Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3469,
           "t": "build: scaffold_verdict_timeline_api_service_toml",
           "created": "2026-08-16T19:55:13Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3403,
           "t": "build: scaffold_scoring_run_statistics_init",
           "created": "2026-08-14T01:25:09Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3398,
           "t": "build: scaffold_attestation_refresher_service_toml",
           "created": "2026-08-13T23:54:00Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3392,
           "t": "build: scaffold_scoring_delta_service_toml",
           "created": "2026-08-13T22:12:37Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3389,
           "t": "build: scaffold_mcp_score_disputes_service_toml",
           "created": "2026-08-13T21:52:00Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3381,
           "t": "build: scaffold_vuln_advisory_feed_v2_init",
           "created": "2026-08-13T19:39:52Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3380,
           "t": "build: scaffold_verdict_distribution_timeline_init",
           "created": "2026-08-13T19:19:39Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3375,
           "t": "build: scaffold_orphan_router_census_service_toml",
           "created": "2026-08-13T15:58:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3373,
           "t": "build: scaffold_mcp_score_disputes_service_toml",
           "created": "2026-08-13T15:38:01Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3370,
           "t": "build: scaffold_daemon_roster_coverage_service_toml",
           "created": "2026-08-13T14:27:20Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3369,
           "t": "build: scaffold_verdict_distribution_service_toml",
           "created": "2026-08-13T12:11:59Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3368,
           "t": "build: scaffold_verdict_distribution_service_toml",
           "created": "2026-08-13T12:11:47Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3366,
           "t": "build: scaffold_scoring_anomaly_probe_service_toml",
           "created": "2026-08-13T11:11:19Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3365,
           "t": "build: scaffold_risk_tier_transition_summary_service_toml",
           "created": "2026-08-13T10:30:53Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3363,
           "t": "build: scaffold_mcp_score_dispute_analytics_service_toml",
           "created": "2026-08-13T08:50:25Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3360,
           "t": "build: scaffold_server_vuln_summary_service_toml",
           "created": "2026-08-13T07:39:35Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3356,
           "t": "build: scaffold_score_staleness_probe_service_toml",
           "created": "2026-08-13T06:48:32Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3353,
           "t": "build: scaffold_orphan_router_census_service_toml",
           "created": "2026-08-13T06:07:53Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3348,
           "t": "build: scaffold_scoring_coverage_api_service_toml",
           "created": "2026-08-13T03:29:06Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3347,
           "t": "build: scaffold_risk_server_history_service_toml",
           "created": "2026-08-13T03:08:52Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3344,
           "t": "build: scaffold_scoring_health_api_service_toml",
           "created": "2026-08-13T02:28:12Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3338,
           "t": "build: scaffold_scoring_stats_service_toml",
           "created": "2026-08-12T23:46:47Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3331,
           "t": "build: scaffold_server_attestation_init",
           "created": "2026-08-12T21:34:43Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3311,
           "t": "build: scaffold_server_score_summary_init",
           "created": "2026-08-12T12:47:06Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3306,
           "t": "build: scaffold_server_timeline_api_service_toml",
           "created": "2026-08-12T11:30:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3277,
           "t": "build(deps): update alembic requirement from <2.0,>=1.18.5 to >=1.19.1,<2.0 in /tests/ci",
           "created": "2026-08-11T23:43:54Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3253,
           "t": "build: scaffold_mcp_server_registry_source_distribution_view_service_toml",
           "created": "2026-08-11T14:50:30Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3252,
           "t": "build: scaffold_mcp_risk_tier_summary_view_service_toml",
           "created": "2026-08-11T14:30:15Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3249,
           "t": "build: scaffold_mcp_risk_tier_comparison_view_init",
           "created": "2026-08-11T14:09:33Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3173,
           "t": "build: scaffold_risk_tier_by_server_service_toml",
           "created": "2026-08-10T14:47:02Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3134,
           "t": "build: scaffold_vulnerability_analysis_dashboard_service_toml",
           "created": "2026-08-10T02:34:12Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3130,
           "t": "build: scaffold_nvd_cve_feed_ingestor_service_toml",
           "created": "2026-08-10T01:43:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3125,
           "t": "build: build_vuln_analysis_router",
           "created": "2026-08-10T01:02:32Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3117,
           "t": "build: scaffold_risk_history_service_toml",
           "created": "2026-08-09T20:08:40Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3115,
           "t": "build: scaffold_api_key_manager_service_toml",
           "created": "2026-08-09T19:58:13Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3089,
           "t": "build: scaffold_signal_score_trends_service_toml",
           "created": "2026-08-09T12:23:03Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3088,
           "t": "build: build_risk_tier_trend_v2_router",
           "created": "2026-08-09T11:32:50Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3082,
           "t": "build: build_dashboard_summary_logic",
           "created": "2026-08-09T10:21:37Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3046,
           "t": "build: scaffold_score_dispute_audit_service_toml",
           "created": "2026-08-08T20:13:09Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3035,
           "t": "build: scaffold_cve_exposure_rank_service_toml",
           "created": "2026-08-08T15:46:40Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3028,
           "t": "build: scaffold_risk_tier_by_axis_service_toml",
           "created": "2026-08-08T12:23:48Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 3010,
           "t": "build: scaffold_axis_change_probe_service_toml",
           "created": "2026-08-08T01:52:14Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2998,
           "t": "build: scaffold_risk_trends_dashboard_service_toml",
           "created": "2026-08-07T21:29:32Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2997,
           "t": "build: scaffold_mcp_server_details_service_toml",
           "created": "2026-08-07T21:09:17Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2991,
           "t": "build: scaffold_risk_tier_calculator_service_toml",
           "created": "2026-08-07T16:05:32Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2981,
           "t": "build: scaffold_signal_distribution_service_toml",
           "created": "2026-08-07T09:12:55Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2948,
           "t": "build: scaffold_axis_scores_risk_tier_consumer_service_toml",
           "created": "2026-08-06T20:14:19Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2946,
@@ -1557,411 +1598,411 @@
           "t": "build: build_api_usage_guide",
           "created": "2026-08-06T16:55:45Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2936,
           "t": "build: build_risk_tier_aggregator",
           "created": "2026-08-06T13:25:14Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2920,
           "t": "build: scaffold_gate_health_probe_service_toml",
           "created": "2026-08-06T10:42:11Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2912,
           "t": "build: scaffold_server_scoring_comparison_service_toml",
           "created": "2026-08-06T06:24:26Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2911,
           "t": "build: scaffold_server_scoring_comparison_service_toml",
           "created": "2026-08-06T06:24:16Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2848,
           "t": "build: scaffold_cve_axis_freshness_report_service_toml",
           "created": "2026-08-05T03:27:05Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2839,
           "t": "build: scaffold_vulnerability_impact_service_toml",
           "created": "2026-08-04T23:55:06Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2838,
           "t": "build: scaffold_vulnerability_impact_service_toml",
           "created": "2026-08-04T23:54:56Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2836,
           "t": "build(deps): bump shundor/python-bandit-scan from ab1d87dfccc5a0ffab88be3aaac6ffe35c10d6cd to 9955228c1cbdc5aeb5e511e0fa",
           "created": "2026-08-04T23:43:43Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2828,
           "t": "build: scaffold_risk_tier_trend_service_service_toml",
           "created": "2026-08-04T20:53:19Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2818,
           "t": "build: build_risk_tier_test_suite",
           "created": "2026-08-04T14:21:08Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2797,
           "t": "build: scaffold_server_detail_service_toml",
           "created": "2026-08-04T04:43:35Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2789,
           "t": "build: build_risk_tier_consumer_contract",
           "created": "2026-08-04T02:31:41Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2779,
           "t": "fix(runbook): read release_command from fly.toml instead of restating it",
           "created": "2026-08-04T00:29:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2771,
           "t": "build: build_scoring_precision_audit_report_contract",
           "created": "2026-08-03T20:52:59Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2766,
           "t": "build: build_server_details_logic",
           "created": "2026-08-03T18:50:00Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2725,
           "t": "build: scaffold_cve_analysis_dashboard_service_toml",
           "created": "2026-08-03T03:26:58Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2694,
           "t": "build: build_test_suite_mcp_server_risk_export",
           "created": "2026-08-02T15:21:43Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2574,
           "t": "build: scaffold_risk_tier_overview_dashboard_service_toml",
           "created": "2026-08-01T01:12:45Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2547,
           "t": "build: scaffold_cve_exposure_summary_service_toml",
           "created": "2026-08-01T00:16:51Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2540,
           "t": "build: scaffold_vuln_management_dashboard_service_toml",
           "created": "2026-08-01T00:15:25Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2503,
           "t": "build: build_directive_queue_health_api_logic",
           "created": "2026-07-31T07:26:50Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2477,
           "t": "build: scaffold_vuln_management_dashboard_view_service_toml",
           "created": "2026-07-31T00:53:22Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2460,
           "t": "build: scaffold_vuln_advisory_management_service_toml",
           "created": "2026-07-31T00:29:28Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2448,
           "t": "build: scaffold_server_search_service_toml",
           "created": "2026-07-31T00:26:56Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2447,
           "t": "build: scaffold_risk_tier_summary_by_perspective_service_toml",
           "created": "2026-07-31T00:26:43Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2446,
           "t": "build: scaffold_perspective_model_service_toml",
           "created": "2026-07-31T00:26:29Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2436,
           "t": "build: scaffold_family_rollup_service_toml",
           "created": "2026-07-31T00:14:03Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2426,
           "t": "build: scaffold_perspective_membership_analysis_service_toml",
           "created": "2026-07-31T00:07:55Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2424,
           "t": "build: scaffold_mcp_risk_tier_distribution_by_org_service_toml",
           "created": "2026-07-31T00:07:30Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2387,
           "t": "build: build_risk_trend_logic",
           "created": "2026-07-30T01:01:41Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2370,
           "t": "build: build_entity_detail_view_router",
           "created": "2026-07-30T00:48:11Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2369,
           "t": "build: build_entity_detail_view_contract",
           "created": "2026-07-30T00:47:58Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2345,
           "t": "build: build_vulnerability_advisory_manager_router",
           "created": "2026-07-30T00:33:01Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2330,
           "t": "build: build_dead_organ_report",
           "created": "2026-07-30T00:19:46Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2329,
           "t": "build: build_authority_log_report",
           "created": "2026-07-30T00:19:33Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2268,
           "t": "build: scaffold_scoring_wave_cost_ledger_init",
           "created": "2026-07-29T01:03:26Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2178,
           "t": "fix: healing the ops-audit state file must not destroy the evidence",
           "created": "2026-07-28T12:17:31Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2169,
           "t": "build: scaffold_risk_tier_comparison_init",
           "created": "2026-07-28T01:18:45Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 2115,
           "t": "build: scaffold_perspective_events_init",
           "created": "2026-07-28T00:37:05Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1998,
           "t": "build: risk_tier_daily_aggregator",
           "created": "2026-07-27T00:34:40Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1815,
           "t": "build: server_axis_score_api",
           "created": "2026-07-25T17:24:00Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1810,
           "t": "build: build_risk_tier_change_alert_service",
           "created": "2026-07-25T10:22:57Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1795,
           "t": "build: build_app_router_registry_collector",
           "created": "2026-07-24T21:31:16Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1771,
           "t": "build: axis_score_history_api",
           "created": "2026-07-24T01:17:06Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1767,
           "t": "build: wire_risk_tier_summary_router_into_main",
           "created": "2026-07-23T22:56:17Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1760,
           "t": "build: build_server_risk_report_api",
           "created": "2026-07-23T16:28:56Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1741,
           "t": "build: server_attestation_registry_api",
           "created": "2026-07-22T15:25:30Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1727,
           "t": "build: build_ask_answer_api_v2",
           "created": "2026-07-22T00:00:07Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1725,
           "t": "build: scoring_pipeline_health_api",
           "created": "2026-07-21T22:59:53Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1721,
           "t": "build: server_scorecard_badge_api",
           "created": "2026-07-21T18:59:11Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1719,
           "t": "build: server_risk_criteria_audit_api",
           "created": "2026-07-21T16:46:23Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1715,
           "t": "build: server_registry_csv_export",
           "created": "2026-07-21T15:55:46Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1713,
           "t": "build: server_cve_exposure_report",
           "created": "2026-07-21T14:25:21Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1712,
           "t": "build: scoring_ingestion_status_api",
           "created": "2026-07-21T14:25:10Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1684,
           "t": "build: gate_attribution_report_builder",
           "created": "2026-07-20T17:12:04Z",
           "draft": false,
-          "mergeable": "MERGEABLE"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1641,
           "t": "build: axis_score_summary_router",
           "created": "2026-07-19T18:50:36Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         },
         {
           "n": 1628,
           "t": "build: build_import_row_delta_audit",
           "created": "2026-07-19T12:56:39Z",
           "draft": false,
-          "mergeable": "CONFLICTING"
+          "mergeable": "UNKNOWN"
         }
       ]
     },
-    "source": "gh pr list rob531/zo-sentinel --limit 1000 (returned 276, under cap, so this IS a count)",
-    "measured_at": "2026-09-02T19:53:48+00:00"
+    "source": "gh pr list rob531/zo-sentinel --limit 1000 (returned 282, under cap, so this IS a count)",
+    "measured_at": "2026-09-02T21:50:58+00:00"
   },
   "freshness": {
     "state": "MEASURED",
@@ -1972,12 +2013,12 @@
       "never_scored": 204836,
       "newest_scored_at": "2026-08-31T04:51:59.483170",
       "oldest_scored_at": "2026-06-24T15:46:24.527410",
-      "computed_at": "2026-09-02T19:53:51.966847+00:00",
+      "computed_at": "2026-09-02T21:51:13.681407+00:00",
       "cache_age_seconds": 0.0,
       "cache_ttl_seconds": 600
     },
     "source": "https://mcprisky.io/freshness",
-    "measured_at": "2026-09-02T19:53:48+00:00"
+    "measured_at": "2026-09-02T21:50:58+00:00"
   },
   "derived": {
     "state": "MEASURED",
@@ -1991,6 +2032,6 @@
       "note": "coverage = scored_servers / registry_rows from the SAME /freshness payload, so numerator and denominator share one computed_at. never_scored is NOT a backlog. oldest_score_age_days is the corpus FLOOR -- if it has not moved between two builds of this pack, the refresh half of the cohort is not moving it."
     },
     "source": "derived from /freshness in this same call",
-    "measured_at": "2026-09-02T19:53:48+00:00"
+    "measured_at": "2026-09-02T21:50:58+00:00"
   }
 }

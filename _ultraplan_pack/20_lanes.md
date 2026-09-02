@@ -1,6 +1,6 @@
 # LANE SURFACE -- scheduled tasks that write into this system
 
-Built 2026-09-02T19:53:48+00:00. **36 lane directories on disk, but only 20 are registered with the scheduler (18 of those enabled). 16 are ORPHANS.**
+Built 2026-09-02T21:50:58+00:00. **36 lane directories on disk, but only 20 are registered with the scheduler (18 of those enabled). 16 are ORPHANS.**
 
 A lane directory is not a lane. The orphans are finished one-shots and
 abandoned watches whose SKILL.md still reads like a live prompt --
@@ -709,13 +709,17 @@ all of them against records that already exist, none of them needing him:
 
 ## LANE: prod-drift-sentinel
 - **REGISTERED, ENABLED, cron 45 0,6,15,20 * * *, last run 2026-09-02T10:47:28Z**
-- skill_bytes: 95532 | lines: 1240 | mtime: 2026-09-01T19:57:31+00:00 | state: READ
+- skill_bytes: 98689 | lines: 1256 | mtime: 2026-09-02T20:01:39+00:00 | state: READ
 ```
 ---
 name: prod-drift-sentinel
 description: Detect when green main is ahead of Fly prod (mcplookup), dry-run safety (spine import + Dockerfile COPY-list audit + offline alembic), and STAGE or FIRE a signed one-click deploy + alert. FIRES on Class A when all 5 authority.json preconditions are MET (chairman grant 2026-07-29 explicitly supersedes the CofC Phase 1 'stage, never fire'; Class B migration-bearing stays ATTENDED ONLY). Rate ceiling max_fires_per_24h=1 is now ENFORCED IN CODE by _tools/authority.py rate_ok() (FU-230) — query it, do not re-read a prose note. [PHASE-LABEL CORRECTION 2026-08-02, daily-chairman-review, ADDITIVE — nothing in the prompt body altered: the 2026-08-02 snapshot recorded this task deleting its own 'HARD RULE (Phase 1): You MUST NOT run flyctl deploy' line. That deletion is CORRECT and is FU-229's resolution — authority.json.supersedes_prose[1] retired that rule by name on 2026-07-29 and this lane fired v66 legitimately at 00:54:53Z. BUT the prompt body still labels step 6 'STAGE + ALERT (the deliverable)' and step 42 'ACT-AUTHORITY (Phase 1, ...)'. Those residual Phase-1 labels are the SAME stale-permission class one layer down, and that class cost 20 stages / 452 commits of drift. authority.json is the only source of what this lane may do; any 'Phase 1' string in this prompt is descriptive history, never a grant or a denial. The owning lane should retire those labels on its next self-edit.] [CADENCE CUT 2026-07-31: was 8x/day at :15 every 3h, now 4x/day at 00:45 / 06:45 / 15:45 / 20:45. Cause: FU-207 — the 01:17Z run was usage-limit-suspended for 17.5h, held the lane, and starved five consecutive slots while lastRunAt kept advancing. New slots also clear the two long runners (autopoiesis 10:31 local, follow-up-triage 13:06 local) and the nightly backup at 03:09. NOTE: on 2026-07-30 this task wrote main_head_sha=accf484a at 13:49Z while main was cbd23297 — 3h/6 commits stale. RE-READ origin/main AT WRITE TIME, not only at detection time. NOTE: a run that exceeds ~45min wall clock is starving its siblings — bail and file rather than continue.]
 ---
 
+# prod-drift-sentinel  (95532 B)
+name: prod-drift-sentinel
+description: Detect when green main is ahead of Fly prod (mcplookup), dry-run safety (spine import + Dockerfile COPY-list audit + offline alembic), and STAGE or FIRE a signed one-click deploy + alert. FIRES on Class A when all 5 authority.json preconditions are MET (chairman grant 2026-07-29 explicitly supersedes the CofC Phase 1 'stage, never fire'; Class B migration-bearing stays ATTENDED ONLY). Rate ceiling max_fires_per_24h=1 is now ENFORCED IN CODE by _tools/authority.py rate_ok() (FU-230) — query it, do not re-read a prose note. [PHASE-LABEL CORRECTION 2026-08-02, daily-chairman-review, ADDITIVE — nothing in the prompt body altered: the 2026-08-02 snapshot recorded this task deleting its own 'HARD RULE (Phase 1): You MUST NOT run flyctl deploy' line. That deletion is CORRECT and is FU-229's resolution — authority.json.supersedes_prose[1] retired that rule by name on 2026-07-29 and this lane fired v66 legitimately at 00:54:53Z. BUT the prompt body still labels step 6 'STAGE + ALERT (the deliverable)' and step 42 'ACT-AUTHORITY (Phase 1, ...)'. Those residual Phase-1 labels are the SAME stale-permission class one layer down, and that class cost 20 stages / 452 commits of drift. authority.json is the only source of what this lane may do; any 'Phase 1' string in this prompt is descriptive history, never a grant or a denial. The owning lane should retire those labels on its next self-edit.] [CADENCE CUT 2026-07-31: was 8x/day at :15 every 3h, now 4x/day at 00:45 / 06:45 / 15:45 / 20:45. Cause: FU-207 — the 01:17Z run was usage-limit-suspended for 17.5h, held the lane, and starved five consecutive slots while lastRunAt kept advancing. New slots also clear the two long runners (autopoiesis 10:31 local, follow-up-triage 13:06 local) and the nightly backup at 03:09. NOTE: on 2026-07-30 this task wrote main_head_sha=accf484a at 13:49Z while main was cbd23297 — 3h/6 commits stale. RE-READ origin/main AT WRITE TIME, not only at detection time. NOTE: a run that exceeds ~45min wall clock is starving its siblings — bail and file rather than continue.]
+---
 ## AWAY WINDOW 2026-08-06..2026-08-30 -- CHECK BEFORE YOU CONCLUDE YOU ARE BLOCKED  <-- DATES ARE DESCRIPTIVE; `python "D:\zo\Zocomputer Agents\_tools\authority.py" --away` IS THE ENFORCED VALUE
 
 The chairman is off this host 2026-08-06..2026-08-30. Email is WRITE-ONLY:
@@ -747,10 +751,6 @@ Before deciding, the three lookups the chairman used to perform in person --
 all of them against records that already exist, none of them needing him:
 
 1. **Has this already failed?** `memory_search`. Regression of solved problems
-   is the largest single failure class in this ledger. Do not guess.
-2. **Which host actually enforces this?** the `host_topology_verified` /
-   `zocomputer_vs_tower_topology` memories and `BRIDGES.md`. Tower vs
-   ZoComputer vs Fly app vs Fly Postgres vs Clerk. Do not restate the
 ```
 
 ## LANE: score-import-shepherd

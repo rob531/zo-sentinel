@@ -1,0 +1,8 @@
+[service]
+name = "unscored_servers"
+import_path = "services.active.unscored_servers.router"
+prefix = "/api"
+tag = "unscored_servers"
+origin = "service"
+auth = "public"
+needs_data_layer = true

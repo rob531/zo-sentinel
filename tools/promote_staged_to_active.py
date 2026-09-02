@@ -60,6 +60,84 @@ try:  # repo root on sys.path (pytest, `python -m tools....`)
 except ImportError:  # script-dir sys.path[0]
     from image_ship_check import would_be_shipped  # noqa: E402
 
+# FU-236 seam 4 -- the SAME rule object the other three seams use. Imported from
+# the package (not re-implemented) so a future change to the predicate cannot
+# drift between the commit path and this, the file path.
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+try:
+    from zo_sentinel.gates.hollow import hollow_service_member_scan  # noqa: E402
+except ImportError:  # pragma: no cover -- gate must exist; fail loud, never silently pass
+    raise
+
+# FU-231 / FU-142 cure surface, wired here 2026-09-02 (improvement-loop cycle-0062).
+# `tools/repair_staged_model_names.py` was built 2026-08-06 to repair the family that
+# holds the MOST staged services -- `ImportError: cannot import name X from
+# app.models|app.db` -- and then sat consulted by NOTHING for 27 days, mentioned only
+# in prose. A cure nobody can reach from the surface that was bitten is not a cure
+# (memory: "NO CURE REACHABLE FROM A PROMPT"). The promoter IS that surface: it is
+# where a HOLD on this family is produced, so it is where the available cure has to
+# be named.
+#
+# This is a REPORT field, not a gate. It changes no verdict, moves no file, and
+# cannot turn a PROMOTE into a HOLD. R7: prefer RECOVERY over RESTRICTION.
+# Both invocation shapes, for the FU-031 reason recorded ten lines up.
+try:  # repo root on sys.path
+    from tools import repair_staged_model_names as _repair  # noqa: E402
+except ImportError:  # script-dir sys.path[0]
+    try:
+        import repair_staged_model_names as _repair  # noqa: E402
+    except ImportError:  # pragma: no cover
+        _repair = None
+
+
+def model_name_repair_summary(repo=None):
+    """DRY-RUN classification of the model-name-drift family across staged/.
+
+    Returns the two populations `repair_staged_model_names` distinguishes:
+      family A -- casing/plural/prefix drift onto a model that REALLY EXISTS.
+                  Deterministically repairable: `--apply` fixes these.
+      family B -- no referent at all. Needs a model + migration, or the service is
+                  unbuildable as specified. No rename can fix these.
+
+    R6 -- UNKNOWN IS NOT ZERO. If the repair module is absent or raises, this
+    returns status "unavailable" WITH the detail, and emits NO counts at all.
+    Emitting `family_a_repairable_sites: 0` for a module that never ran would read
+    as "nothing to repair", which is the exact inversion this codebase keeps
+    paying for; a reader must be able to tell a measured zero from an unmeasured
+    one.
+
+    NEVER mutates. `run(..., apply=False)` is the dry-run path by construction --
+    `apply_file()` is only reached under `if apply and ...`. A tool that repairs in
+    order to measure throws the repair away and lies about the state it measured;
+    `tests/test_promoter_repair_wiring.py` asserts the tree is byte-identical
+    across a call.
+    """
+    if _repair is None:
+        return {"status": "unavailable",
+                "detail": "tools/repair_staged_model_names.py not importable"}
+    try:
+        res = _repair.run(repo or ROOT, apply=False)
+    except Exception as exc:  # pragma: no cover -- reported, never swallowed to 0
+        return {"status": "unavailable", "detail": "%s: %s" % (type(exc).__name__, exc)}
+    if res.get("error"):
+        return {"status": "unavailable", "detail": res["error"]}
+    if res.get("changed_files"):  # pragma: no cover -- dry run must change nothing
+        return {"status": "unavailable",
+                "detail": "dry run reported %d changed file(s); refusing to publish"
+                          % len(res["changed_files"])}
+    return {
+        "status": "measured",
+        "staged_services": res.get("staged_services"),
+        "family_a_repairable_sites": res.get("family_a_repairable_sites"),
+        "family_a_services": res.get("family_a_services"),
+        "family_b_unmapped_sites": res.get("family_b_unmapped_sites"),
+        "family_b_services": res.get("family_b_services"),
+        "family_b_distinct": res.get("family_b_distinct"),
+        "unparseable_files": res.get("unparseable_files"),
+        "cure": "python tools/repair_staged_model_names.py --apply",
+    }
+
 
 def _dockerfile_text():
     try:
@@ -140,6 +218,43 @@ def _run_contract(name, timeout=120):
     return proc.returncode == 0, ("exit=%d %s" % (proc.returncode, tail.strip()))
 
 
+def _import_check(module, timeout=90):
+    """Attempt `importlib.import_module(module)` in a CLEAN interpreter.
+
+    MERGE_AUDIT_2026-08-23 L1 / G5. Nothing between authoring and mounting ever
+    attempted the import: the builder scaffolds into staged/, this script moves
+    the directory, and the first thing that tries to import the module is the
+    spine at mount time -- via the one gate that had a fail-open hole (G1). On
+    2026-08-25 that gap held 66 unresolved import sites across 52 staged files.
+
+    A subprocess, not an in-process import, for the same reason _run_contract is
+    one: a clean sys.modules and no side effects leaking into this process.
+    """
+    code = "import importlib, sys; importlib.import_module(sys.argv[1])"
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code, module],
+            cwd=ROOT, capture_output=True, text=True, timeout=timeout,
+            env={**os.environ, "PYTHONPATH": ROOT + os.pathsep + os.environ.get("PYTHONPATH", "")},
+        )
+    except subprocess.TimeoutExpired:
+        return False, "import TIMEOUT (%ss)" % timeout
+    except OSError as e:
+        return False, "import could not run: %r" % e
+    if proc.returncode == 0:
+        return True, "ok"
+    err = (proc.stderr or proc.stdout or "").strip().splitlines()
+    return False, (err[-1] if err else "exit=%d" % proc.returncode)[:300]
+
+
+def _staged_equivalent(import_path, name):
+    """service.toml names the POST-move path (services.active.<n>.router). The
+    same module pre-move is the services.staged.<n>. equivalent."""
+    if import_path and import_path.startswith("services.active."):
+        return "services.staged." + import_path[len("services.active."):]
+    return "services.staged.%s.router" % name
+
+
 def _casing_drift(sdir):
     """Wrong-cased app.models refs in a staged service (FU-031). Named + autofixable."""
     norm_map = _linter.build_map(_linter.canonical_models())
@@ -201,6 +316,44 @@ def evaluate(name, active_routes):
                 if _fn.endswith(".py"):
                     _res = _linter.lint_file(os.path.join(_dp, _fn), _nm, fix=True)
                     casing_fixed.update(_res.get("drift", {}))
+    # FU-236 SEAM 4 -- THIS CONSUMER'S OWN ENUMERATION.
+    # The hollow rule was armed on 2026-08-03 at goose_runner, at the publisher and
+    # at tests/ci/no_hollow_scaffold.py. All three fire when a file becomes a
+    # COMMIT. This script walks the WORKTREE (os.walk of services/staged), and on
+    # 2026-08-04 that gap admitted 2 hollow members into the PROMOTE cohort: 7 of
+    # the 12 hollow files on disk were UNTRACKED, had never been a PR, and so no
+    # armed seam had ever looked at them. This is not a fourth GATE -- it is the
+    # third seam's rule, imported, pointed at the enumeration this file actually
+    # reads. It runs BEFORE liveness deliberately: a hollow contract's exit-0 is
+    # what manufactured contract_ok=True, so it must never reach the subprocess.
+    hollow_hits = []
+    for _hdp, _hdd, _hfiles in os.walk(sdir):
+        if "__pycache__" in _hdp:
+            continue
+        for _hfn in _hfiles:
+            if not _hfn.endswith(".py"):
+                continue
+            _habs = os.path.join(_hdp, _hfn)
+            _hrel = "services/staged/%s/%s" % (
+                name, os.path.relpath(_habs, sdir).replace(os.sep, "/"))
+            _hwhy = hollow_service_member_scan(_hrel, _read(_habs))
+            if _hwhy:
+                hollow_hits.append("%s -- %s" % (_hrel, _hwhy))
+    if hollow_hits:
+        reasons.append("hollow member(s): " + "; ".join(sorted(hollow_hits)))
+
+    # IMPORT (subprocess) -- L1/G5. The cheapest correctness proof there is: one
+    # import, once per promotion, not once per PR. Runs BEFORE the liveness
+    # contract because an unimportable router cannot possibly serve a request,
+    # and a module that cannot be imported must never reach the spine.
+    import_ok, import_detail = (None, "skipped (static gate failed)")
+    if not reasons:
+        import_ok, import_detail = _import_check(_staged_equivalent(_ip, name))
+        if not import_ok:
+            reasons.append(
+                "IMPORT FAILED (would ModuleNotFoundError at spine mount): %s"
+                % import_detail)
+
     # LIVENESS (subprocess) -- the correctness proof; only if static gates pass
     contract_ok, contract_detail = (None, "skipped (static gate failed)")
     if not reasons:
@@ -211,6 +364,9 @@ def evaluate(name, active_routes):
         "service": name,
         "verdict": "PROMOTE" if not reasons else "HOLD",
         "routes": cand_routes,
+        "import_path": _ip,
+        "import_ok": import_ok,
+        "import_detail": import_detail,
         "contract_ok": contract_ok,
         "contract_detail": contract_detail,
         "casing_autofixed": casing_fixed,
@@ -246,7 +402,24 @@ def main(argv=None):
                 v["verdict"] = "HOLD"
                 v["reasons"].append("deferred: per-run cap (%d) reached" % args.max_per_run)
                 continue
-            os.rename(os.path.join(STAGED, v["service"]), os.path.join(ACTIVE, v["service"]))
+            src_dir = os.path.join(STAGED, v["service"])
+            dst_dir = os.path.join(ACTIVE, v["service"])
+            os.rename(src_dir, dst_dir)
+            # POST-MOVE import, at the import_path the spine will actually use.
+            # The pre-move probe in evaluate() cannot see path-dependent breakage:
+            # a module that self-references `services.staged.<n>.<mod>` absolutely
+            # imports fine in staged/ and ModuleNotFoundErrors the instant it is
+            # active. If it fails, ROLL THE MOVE BACK -- a service that cannot be
+            # imported must never be left mounted-but-broken.
+            post_ok, post_detail = _import_check(v["import_path"])
+            v["post_move_import_ok"] = post_ok
+            v["post_move_import_detail"] = post_detail
+            if not post_ok:
+                os.rename(dst_dir, src_dir)
+                v["verdict"] = "HOLD"
+                v["reasons"].append(
+                    "POST-MOVE IMPORT FAILED, promotion rolled back: %s" % post_detail)
+                continue
             promoted.append(v["service"])
         if promoted and args.regenerate:
             subprocess.run([sys.executable, os.path.join(ROOT, "tools", "generate_spine.py"),
@@ -260,6 +433,10 @@ def main(argv=None):
         "hold_count": sum(1 for v in verdicts if v["verdict"] == "HOLD"),
         "promoted": promoted,
         "verdicts": verdicts,
+        # cycle-0062. Attached to EVERY run, observe and enforce alike: the
+        # question "how many of these HOLDs are one mechanical rename away from
+        # promotable" had an answer on disk since 2026-08-06 and no reader.
+        "model_name_repair": model_name_repair_summary(),
     }
     os.makedirs(os.path.dirname(ARTIFACT), exist_ok=True)
     with open(ARTIFACT, "w", encoding="utf-8") as fh:
@@ -273,6 +450,18 @@ def main(argv=None):
         for v in verdicts:
             print("  [%s] %s%s" % (v["verdict"], v["service"],
                                    "" if not v["reasons"] else "  -- " + "; ".join(v["reasons"])))
+        mr = report["model_name_repair"]
+        if mr["status"] == "measured":
+            print("  model-name drift: %d repairable site(s) across %d service(s) "
+                  "-- cure: %s" % (mr["family_a_repairable_sites"],
+                                   mr["family_a_services"], mr["cure"]))
+            print("                    %d site(s) across %d service(s) have NO referent "
+                  "(%d distinct) -- these need a model + migration, not a rename"
+                  % (mr["family_b_unmapped_sites"], mr["family_b_services"],
+                     mr["family_b_distinct"]))
+        else:
+            # R6: say UNKNOWN out loud rather than printing a zero nobody measured.
+            print("  model-name drift: UNKNOWN (%s)" % mr["detail"])
         if not args.enforce and report["promote_count"]:
             print("  observe mode: nothing moved. Re-run with --enforce --max-per-run N to promote.")
     return 0

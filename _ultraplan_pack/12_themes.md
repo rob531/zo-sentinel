@@ -1,0 +1,690 @@
+# TIER 3 -- THEMES AND CITATION HUBS
+
+Built 2026-09-02T19:53:48+00:00.
+
+Connected components over [[FU-nnn]] were computed and DISCARDED: the largest held 265 of 375 entries. Do not re-derive them and call it a family structure.
+
+Themes below use the same taxonomy as the operator's MEMORY.md index, so
+a plan reading this pack sorts the world the way the standing hazard
+index already does. An entry can appear in more than one theme; that
+overlap is signal, not sloppiness.
+
+CAUTION: a theme is a LABEL. It hides the call sites it is made of.
+Before treating a theme as one problem, regroup its open members by the
+actual mechanism -- that move has previously split a 12-row 'family'
+into three unrelated things, one of which was the cure working.
+
+---
+
+## product_surface -- 116 actionable of 206 (37 at P0/P1, 16 with no status field)
+
+- FU-093 [P0/open] stale 37d -- CRITICAL: adapter never reached the pod -- 99.6% of the scored moat is garbage (root cause + fix shipped)
+- FU-235 [P0/open] stale 0d -- The prod schema has TWO owners, and alembic runs as the one that owns neither `users` nor `orgs` -- so the migration lane could only ever migrate the 
+- FU-001 [P1/in-progress] stale 44d -- Make wave/rescore harnesses write the run ledger
+- FU-036 [P1/open] stale 44d -- goose_runner was DEAD for 61.6 hours and nothing detected it
+- FU-065 [P1/open] stale 42d -- The runtime checkout is chronically behind main, and the deploy task's own description contradicts its cron
+- FU-075 [P1/open] stale 42d -- COMPETITIVE THREAT: conduid.com is a direct MCP-trust-scoring rival with a better shopfront and a two-sided flywheel we lack
+- FU-076 [P1/in-progress] stale 40d -- Adopt a legible multi-axis scorecard (deterministic signals) — conduid parity AND the fix for FU-058
+- FU-024 [P1/open] stale 39d -- Nightly moat backup has no retry window or staleness alarm when the Fly control plane is down
+- FU-072 [P1/open] stale 39d -- STEER: files → services (SOA). The smaller mount/KL follow-ups are sub-tasks of one program, not independent edits
+- FU-101 [P1/in-progress] stale 39d -- SHEPHERD ROLE: follow-up-triage cross-pollinates all scheduled tasks; break the internal walls
+- FU-107 [P1/open] stale 38d -- Nightly moat backup INFEASIBLE at current table size — COPY ~68 rows/s => ~8h
+- FU-027 [P1/open] stale 37d -- /freshness cold path still ~55s (the 48s->4s fix only covered the warm path)
+- FU-124 [P1/open] stale 37d -- The app is invisible to crawlers — an indexability gap FU-075..079 never captured, and the one axis where conduid is unambiguously ahead
+- FU-115 [P1/open] stale 37d -- Daemon liveness read from log files is UNRELIABLE — healthy daemons appear dead for hours
+- FU-117 [P1/open] stale 37d -- goose does NOT fail when a stdio extension fails to start — a dead bridge yields a live-looking architect at +0
+- FU-109 [P1/open] stale 34d -- All 21 staged services HOLD on the liveness gate — merged unverified (FU-031 100% degradation), promoter is the first real correctness check
+- FU-210 [P1/open] stale 33d -- The run-ledger's slot grid described a cadence that was cut this morning, and was about to page the chairman about slots that no longer exist
+- FU-116 [P1/pr-open] stale 30d -- The goose-canary's two most important guards were committed as FILES and never wired as GATES
+- FU-149 [P1/open] stale 30d -- flyctl on the tower has lost its access token — every lane that tunnels to prod PG is blocked
+- FU-238 [P1/open] stale 29d -- `CLERK_WEBHOOK_SECRET` is STAGED and has never been deployed, so the webhook FU-235 is blocking would 503 on every delivery the moment FU-235 is unblo
+- FU-159 [P1/open] stale 28d -- Directive quality does NOT bypass the Tier-0 merge path: a controlled 2-directive test
+- FU-226 [P1/open] stale 28d -- prod-drift-sentinel obeyed a rule its principal retired three days earlier, and staged 19 times into a subscriber that had been told to stand down
+- FU-251 [P1/open] stale 27d -- 23 of 34 lanes drive the desktop through Windows-MCP and not one names Desktop Commander -- and the ledger already records Windows-MCP silently failin
+- FU-265 [P1/NO-STATUS] stale 27d -- `PEER_CLEARABLE` was a permission value no code path could read, so the 2026-08-04 ruling was never executable in `authority.py`
+- FU-272 [P1/open] stale 27d -- The builder emits one service as two PRs into two incompatible lifecycle directories
+- FU-268 [P1/NO-STATUS] stale 27d -- `record_credit(state=...)` with no `path=` still writes the canonical state file -- the DESTRUCTIVE path is the DEFAULT and the safe one is opt-in
+- FU-269 [P1/NO-STATUS] stale 27d -- The dashboard's headline card calls 474,689 servers "scored" when 191,273 of them carry risk_tier='unassessed'
+- FU-255 [P1/open] stale 25d -- CODE STEERS, PROSE DOES NOT -- every durable fix this session was a function; every failure was a paragraph
+- FU-119 [P1/open] stale 23d -- The goose-canary tests a TRANSPORT the mesh does not use — it drives goose straight at a provider, production drives it through the ladder shim
+- FU-245 [P1/open] stale 3d -- The Clerk webhook has delivered 0 of 3 signups since 2026-06-27, and tonight's backfill is what makes tomorrow's run GREEN without anything being fixe
+- FU-254 [P1/open] stale 2d -- Every knowledge surface we own is PULL and enumerated from the wrong end -- 15 of 88 tools are built, paid for and consulted by nothing
+- FU-134 [P1/open] stale 2d -- flyctl's own 720h re-login timer aged out and took the whole Fly-dependent fleet with it
+- FU-207 [P1/open] stale 2d -- A scheduled task's `lastRunAt` advanced for five consecutive slots that did no work and left no trace
+- FU-350 [P1/open] stale 2d -- The tower scheduler was dead for 7 days and every instrument that would have said so was itself a scheduled task
+- FU-364 [P1/open] stale 0d -- This lane's ENTIRE remit is an action `authority.json` has never named: `--may registry_insert` has returned UNKNOWN ACTION for 8+ consecutive days
+- FU-090 [P1/open] stale -43d -- Discovery doubled the moat but assessment coverage HALVED (74%->37%) - 230K new servers are unscored, needs a cost-capped rescore wave
+- FU-108 [P1/open] stale -54d -- Validated 2026-07-26 re-score is stranded UNIMPORTED — weekly_rescore has no import phase
+- FU-022 [P2/open] stale 45d -- rug_pull_monitor snapshots silently failing (write_service 500s)
+- FU-040 [P2/in-progress] stale 44d -- Gaps map harvests EXEMPLAR filenames as build targets, and 3 of the 6 PHASE 9 lanes name dangling/quarantined exemplars
+- FU-042 [P2/open] stale 44d -- Hollow gate matches inbound-only, so 87.3% of orphans pass it
+- FU-043 [P2/open] stale 44d -- ui-smoke's path filter skips 67% of builder PRs
+- FU-044 [P2/open] stale 44d -- app/main.py's mount loop swallows every mount failure
+- FU-046 [P2/open] stale 44d -- The builder has never written a surviving test
+- FU-038 [P2/open] stale 43d -- capmap-check has blocked two agent PRs for a day on pre-existing schema drift
+- FU-059 [P2/open] stale 43d -- A delta rescore changed exactly 32,545 servers on six of seven axes — identical counts, independent axes
+- FU-066 [P2/open] stale 43d -- The builder ladder's tier-1 rung produced hollow scaffolds on 2 of 2 attempts and nothing reports it
+- FU-067 [P2/open] stale 43d -- The local zo-sentinel clone at D:\zo\zo-sentinel\zo-sentinel is 157 entries dirty and unsafe to commit from
+- FU-073 [P2/open] stale 42d -- Runtime app/main.py keeps accruing uncommitted local wiring that safe_ff stashes and silently discards each deploy
+- FU-077 [P2/open] stale 42d -- Rebuild the mcprisky.io landing for conversion (live ticker, credit-score frame, scorecard hero)
+- FU-078 [P2/open] stale 42d -- Evaluate a builder-side flywheel (claim / verify ownership / analytics / monetize) — conduid has one, we have none
+- FU-039 [P2/watch] stale 41d -- CofC 2026-07-20: wire/mount lane DEFERRED to post-census — ruling recorded, triggers set
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-006 [P2/watch] stale 40d -- Architect nvidia-rung non-convergence (~1 in 3 cycles)
+- FU-074 [P2/open] stale 40d -- Daily queue exhaustion refilled (report-only PHASE 11); the deferred graveyard is auto-growing 5→11/day toward the 40 trigger
+- FU-081 [P2/open] stale 40d -- Nightly backup runs inline in one MCP PowerShell call, but the ~170s dump outlives the ~60-90s MCP transport timeout — step 4 returns a false TIMEOUT 
+- FU-086 [P2/open] stale 40d -- Nightly backup rides a pre-existing/orphaned flyctl proxy - its own Start-Process proxy silently fails to bind and bind-success is never verified
+- FU-089 [P2/open] stale 40d -- Harden ask-corpus reindex guard + honestly flag unassessed discovery (deferred from FU-088 CofC)
+- FU-098 [P2/open] stale 40d -- Size-scaled vast spend guard shipped; wire into run loop + fix resume-from-zero (deferred)
+- FU-096 [P2/in-progress] stale 38d -- autopoiesis-bar-tracker produces no scoreboard CSV (daily grade is blind)
+- FU-114 [P2/open] stale 37d -- 4 active services will read HEALTHY in prod while serving nothing
+- FU-118 [P2/pr-open] stale 37d -- The MCP SDK the bridges import was declared in NO requirements file, and directive_mcp did an import-time mkdir on a hardcoded absolute path
+- FU-091 [P2/open] stale 36d -- Auto-merge did not fire on a clean, green PR (#1744 sat 2 days) - merge automation has no detector for its own non-firing
+- FU-152 [P2/open] stale 36d -- Four copies of goose_runner.py on the box, and the one every deploy-check instinct points at is a DECOY
+- FU-153 [P2/pr-open] stale 36d -- The FU-138 fix was written to a path outside the repo, so the next run could not find it
+- FU-160 [P2/open] stale 35d -- 171 goose entrypoint copies on ZoComputer; 3 are live, and the raw-hash/mtime test for "which one runs" is WRONG
+- FU-161 [P2/open] stale 35d -- `fire_gate` named the 100th commit as the target head, and would have accepted a truncated 300-file compare as a complete image surface
+- FU-169 [P2/open] stale 35d -- a directory listing is not a queue depth
+- FU-069 [P2/open] stale 34d -- Dedup keys on filename, so the same endpoint gets built three, four and five times
+- FU-085 [P2/open] stale 34d -- Builder's goose session store corrupts and silently blocks EVERY build — no detector; the architect store is degrading the same way
+- FU-193 [P2/open] stale 31d -- Five open P1s carry `verify: NONE`, and the task-snapshot guard detector now emits 13 known-false alarms every run
+- FU-194 [P2/open] stale 31d -- A sibling's prompt condensation silently dropped three hard-won R5 measurement-basis lines from autopoiesis-bar-tracker
+- FU-244 [P2/open] stale 29d -- The test the charter orders every harness change to run did not exist -- and an empty result set is indistinguishable from a broken psql
+- FU-261 [P2/open] stale 28d -- A `pgrep` predicate sent across the zo_call bridge COUNTS ITS OWN TRANSPORT, so every process-liveness probe reads exactly one too many
+- FU-274 [P2/open] stale 27d -- `rule_echo._live_occurrences` uses a bare +/-220 char window, so a citation can silence a live restatement two lines away
+- FU-252 [P2/open] stale 26d -- CHAIRMAN RULING: the emergency hatch grades an ABORTED deploy as a FALSE EMERGENCY, so the counter that keeps the hatch honest punishes the one case w
+- FU-282 [P2/open] stale 26d -- A SECOND peer_review decision store exists, holds ZERO decisions, and is invisible to every search because its directory name is not encodable (was FU
+- FU-277 [P2/NO-STATUS] stale 26d -- The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch every run, and the 2026-08-06 co
+- FU-057 [P2/open] stale 24d -- A leaked flyctl proxy holds an open tunnel to prod PG, and the nightly's own liveness check cannot tell whose tunnel it is
+- FU-177 [P2/open] stale 24d -- the Phase 2 gate measures attended fires, which never exercise the thing Phase 2 would add
+- FU-055 [P2/open] stale 23d -- Scoring is not stalled — it is SATURATED; the 200K metric measures the wrong thing
+- FU-062 [P2/open] stale 23d -- drift-check's "cheap inline" precheck takes 38s idle and blocks the trigger POST past the caller's timeout
+- FU-308 [P2/open] stale 23d -- The retired-prose detector enumerates SKILL files only, so an approval gate living in a LEDGER is invisible to it
+- FU-325 [P2/open] stale 22d -- A task prompt grants, in prose, an action authority.json holds forever
+- FU-327 [P2/open] stale 22d -- A cost_breach teardown is forensics-blind by construction, so I3 cannot be satisfied on that path
+- FU-330 [P2/open] stale 22d -- the anti-orphan constructor could report NEVER LAUNCHED for a perfectly healthy launch, because it gave two different questions the same clock
+- FU-237 [P2/open] stale 15d -- The freshness SLA and the scoring cadence are BOTH 7 days, so `newest_scored_at` hits the breach threshold in the same minute the next wave lands -- t
+- FU-356 [P2/in-progress] stale 2d -- inline-interpreter-source had no stdin-to-DETACH entry; --pysrc --detach added (cycle-0056)
+- FU-110 [P2/open] stale 0d -- graphify-KL daily refresh now reconciles open-FU code-anchors against the fresh graph (drift monitor + subgraph cache)
+- FU-195 [P2/open] stale 0d -- An EMPTY directory appeared in services/active during a build, and it is the exact shape that would fake the T2 milestone
+- FU-018 [P3/open] stale 45d -- Two sibling gaps found while wiring has_known_cve
+- FU-019 [P3/open] stale 45d -- Decide whether the runtime clone should ever be fully clean
+- FU-051 [P3/open] stale 44d -- Institutionalize the adversarial verification pass on the daily briefing
+- FU-070 [P3/open] stale 43d -- The architect prompt contradicts itself on whether wiring is in scope
+- FU-020 [P3/open] stale 42d -- Residual harness cleanups from the FU-011/FU-015 fixes
+- FU-071 [P3/open] stale 42d -- The KL-artifact pattern was built once, for DB schema, and never for the other four surfaces
+- FU-008 [P3/watch] stale 41d -- PR dedup gate let a same-name pair through
+- FU-049 [P3/open] stale 40d -- The mcplookup.app health check never exercises mcplookup.app
+- FU-084 [P3/open] stale 39d -- Sweep-close the stale-branch RED PR backlog (failing a since-removed `treewalk-smoke` check)
+- FU-033 [P3/open] stale 38d -- Concurrent cadence trigger records a `failed` run instead of `skipped`
+- FU-079 [P3/watch] stale 37d -- WATCH: track conduid growth, methodology and funding as recurring competitive intel
+- FU-171 [P3/open] stale 35d -- 15 spent one-shot tasks still fire, and they inflate every adoption denominator
+- FU-034 [P3/open] stale 23d -- Send the #10348 shell-timeout finding upstream to aaif-goose/goose
+- FU-320 [P3/open] stale 22d -- A near-miss clause NAME is priced as a wall, and during the away window that is an FU round-trip for a typo
+- FU-298 [Punspecified/NO-STATUS] stale 24d -- THE ARCHITECT SALVAGED A DIRECTIVE AND THEN LOGGED THAT IT HAD PROPOSED NOTHING
+- FU-304 [Punspecified/NO-STATUS] stale 24d -- SEVEN DARK TOOLS WERE ONE DEAD CHAIN, AND ITS SILENCE LET A COMMITTED ARTIFACT LOSE TWO THIRDS OF THE APP
+- FU-305 [Punspecified/NO-STATUS] stale 23d -- THE HALT WAS ARMED ON A REPORT THAT NOTHING EVER RAN AGAIN, AND ITS 26 ALARM TESTS WERE NEVER COLLECTED
+- FU-309 [Punspecified/NO-STATUS] stale 23d -- SIXTEEN PRs WERE BORN UNMERGEABLE BY LANDING CODE IN THE REGISTRY DIRECTORY, AND CLOSING THEM WOULD HAVE DESTROYED 3,500 UNIQUE LINES
+- FU-311 [Punspecified/NO-STATUS] stale 23d -- THE CHAIN'S CONSUMER WAS DARK, AND ITS DEFAULT INPUT WAS THE STALE ARTIFACT
+- FU-313 [Punspecified/NO-STATUS] stale 23d -- 2026-08-10 | autopoiesis-bar-tracker | A DECISION READ `ACTED` AND SWEPT GREEN TWICE WHILE ITS ARTIFACT WAS NEVER CREATED — AND THE VERIFY WAS BUILT S
+- FU-314 [Punspecified/NO-STATUS] stale 23d -- 2026-08-10 | autopoiesis-bar-tracker | THE CLEARED ACTION AND THE COMMAND THAT IMPLEMENTS IT CAME APART OVERNIGHT, BECAUSE THE SELECTION IS POSITIONAL
+- FU-318 [Punspecified/NO-STATUS] stale 22d -- 2026-08-10 | improvement-loop | THE FLEET WAS NOT IGNORING THE CONSTRUCTOR -- SEVEN SKILL.md PROMPTS HANDED IT THE UNSAFE FORM AS A COPY-AND-RUN EXEMP
+- FU-341 [Punspecified/NO-STATUS] stale 20d -- The scratchpad guard was blind to its own subject, disarmed by a stray token, and fired on its own documentation -- while the call path built to make 
+- FU-343 [Punspecified/NO-STATUS] stale 20d -- a classifier wired into the ONE door it was bitten at, and seven it was not
+- FU-342 [Punspecified/NO-STATUS] stale 9d -- the money guard is tighter than the wedge guard it sits behind, so the startup allowance FU-104 added is unfunded
+- FU-363 [Punspecified/open] stale 1d -- 2026-09-01 | mcplookup-nightly-db-backup | THE REPAIR THE ERROR MESSAGE INVITED WAS THE REGRESSION, AND `REVERT_FAILED` HAS NO DOOR OUT
+- FU-377 [Punspecified/NO-STATUS] stale 0d -- the last of three known-slow fleet tools never got the constructor built to save it
+
+## loop_lanes_and_builder -- 102 actionable of 171 (32 at P0/P1, 18 with no status field)
+
+- FU-235 [P0/open] stale 0d -- The prod schema has TWO owners, and alembic runs as the one that owns neither `users` nor `orgs` -- so the migration lane could only ever migrate the 
+- FU-001 [P1/in-progress] stale 44d -- Make wave/rescore harnesses write the run ledger
+- FU-036 [P1/open] stale 44d -- goose_runner was DEAD for 61.6 hours and nothing detected it
+- FU-065 [P1/open] stale 42d -- The runtime checkout is chronically behind main, and the deploy task's own description contradicts its cron
+- FU-024 [P1/open] stale 39d -- Nightly moat backup has no retry window or staleness alarm when the Fly control plane is down
+- FU-072 [P1/open] stale 39d -- STEER: files → services (SOA). The smaller mount/KL follow-ups are sub-tasks of one program, not independent edits
+- FU-101 [P1/in-progress] stale 39d -- SHEPHERD ROLE: follow-up-triage cross-pollinates all scheduled tasks; break the internal walls
+- FU-115 [P1/open] stale 37d -- Daemon liveness read from log files is UNRELIABLE — healthy daemons appear dead for hours
+- FU-117 [P1/open] stale 37d -- goose does NOT fail when a stdio extension fails to start — a dead bridge yields a live-looking architect at +0
+- FU-109 [P1/open] stale 34d -- All 21 staged services HOLD on the liveness gate — merged unverified (FU-031 100% degradation), promoter is the first real correctness check
+- FU-210 [P1/open] stale 33d -- The run-ledger's slot grid described a cadence that was cut this morning, and was about to page the chairman about slots that no longer exist
+- FU-099 [P1/open] stale 32d -- KEYSTONE #1786 merged (chairman) — learning: drive the spine-unblocking PR, and never rationalize a red check as cosmetic
+- FU-228 [P1/open] stale 32d -- The write service silently caps EVERY unbounded SELECT at 200 rows with no truncation flag -- [[FU-224]] was one caller of a SHARED defect, and a seco
+- FU-232 [P1/open] stale 31d -- The four tools this lane RUNS have all diverged from the four the repo TESTS, and the bigger half is the untracked one
+- FU-116 [P1/pr-open] stale 30d -- The goose-canary's two most important guards were committed as FILES and never wired as GATES
+- FU-149 [P1/open] stale 30d -- flyctl on the tower has lost its access token — every lane that tunnels to prod PG is blocked
+- FU-253 [P1/open] stale 29d -- The lane halt has been ARMED and UNCONSULTED for 5 days: the census writes a real sentinel, no lane reads it, and the census that would write it does 
+- FU-159 [P1/open] stale 28d -- Directive quality does NOT bypass the Tier-0 merge path: a controlled 2-directive test
+- FU-226 [P1/open] stale 28d -- prod-drift-sentinel obeyed a rule its principal retired three days earlier, and staged 19 times into a subscriber that had been told to stand down
+- FU-251 [P1/open] stale 27d -- 23 of 34 lanes drive the desktop through Windows-MCP and not one names Desktop Commander -- and the ledger already records Windows-MCP silently failin
+- FU-265 [P1/NO-STATUS] stale 27d -- `PEER_CLEARABLE` was a permission value no code path could read, so the 2026-08-04 ruling was never executable in `authority.py`
+- FU-267 [P1/NO-STATUS] stale 27d -- The credit-ledger dedup compared an int id to argparse's str, so ONE $25 top-up counted twice and the budget published a FALSE RED
+- FU-272 [P1/open] stale 27d -- The builder emits one service as two PRs into two incompatible lifecycle directories
+- FU-268 [P1/NO-STATUS] stale 27d -- `record_credit(state=...)` with no `path=` still writes the canonical state file -- the DESTRUCTIVE path is the DEFAULT and the safe one is opt-in
+- FU-255 [P1/open] stale 25d -- CODE STEERS, PROSE DOES NOT -- every durable fix this session was a function; every failure was a paragraph
+- FU-119 [P1/open] stale 23d -- The goose-canary tests a TRANSPORT the mesh does not use — it drives goose straight at a provider, production drives it through the ladder shim
+- FU-248 [P1/open] stale 22d -- The loop measured its product and never itself -- so it spent a day fixing the SECOND-biggest source of stalls
+- FU-254 [P1/open] stale 2d -- Every knowledge surface we own is PULL and enumerated from the wrong end -- 15 of 88 tools are built, paid for and consulted by nothing
+- FU-207 [P1/open] stale 2d -- A scheduled task's `lastRunAt` advanced for five consecutive slots that did no work and left no trace
+- FU-350 [P1/open] stale 2d -- The tower scheduler was dead for 7 days and every instrument that would have said so was itself a scheduled task
+- FU-302 [P1/in-progress] stale 1d -- AN UNREVERTABLE PEER DECISION ALARMED IN 16 LANES FOR 48h AND NO VERB EXISTED TO END IT
+- FU-364 [P1/open] stale 0d -- This lane's ENTIRE remit is an action `authority.json` has never named: `--may registry_insert` has returned UNKNOWN ACTION for 8+ consecutive days
+- FU-040 [P2/in-progress] stale 44d -- Gaps map harvests EXEMPLAR filenames as build targets, and 3 of the 6 PHASE 9 lanes name dangling/quarantined exemplars
+- FU-043 [P2/open] stale 44d -- ui-smoke's path filter skips 67% of builder PRs
+- FU-044 [P2/open] stale 44d -- app/main.py's mount loop swallows every mount failure
+- FU-046 [P2/open] stale 44d -- The builder has never written a surviving test
+- FU-048 [P2/open] stale 44d -- The 1.43 plan's pre-flip verifications were never run, and the flip has shipped
+- FU-060 [P2/open] stale 43d -- "did NOT reach propose_directive" is asserted, not measured — the bridge's return value is logged nowhere
+- FU-066 [P2/open] stale 43d -- The builder ladder's tier-1 rung produced hollow scaffolds on 2 of 2 attempts and nothing reports it
+- FU-067 [P2/open] stale 43d -- The local zo-sentinel clone at D:\zo\zo-sentinel\zo-sentinel is 157 entries dirty and unsafe to commit from
+- FU-078 [P2/open] stale 42d -- Evaluate a builder-side flywheel (claim / verify ownership / analytics / monetize) — conduid has one, we have none
+- FU-039 [P2/watch] stale 41d -- CofC 2026-07-20: wire/mount lane DEFERRED to post-census — ruling recorded, triggers set
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-006 [P2/watch] stale 40d -- Architect nvidia-rung non-convergence (~1 in 3 cycles)
+- FU-074 [P2/open] stale 40d -- Daily queue exhaustion refilled (report-only PHASE 11); the deferred graveyard is auto-growing 5→11/day toward the 40 trigger
+- FU-089 [P2/open] stale 40d -- Harden ask-corpus reindex guard + honestly flag unassessed discovery (deferred from FU-088 CofC)
+- FU-098 [P2/open] stale 40d -- Size-scaled vast spend guard shipped; wire into run loop + fix resume-from-zero (deferred)
+- FU-092 [P2/open] stale 40d -- CVE-axis strengthening queued (family propagation + linker v2) -- autopoietic, loop-set thresholds
+- FU-096 [P2/in-progress] stale 38d -- autopoiesis-bar-tracker produces no scoreboard CSV (daily grade is blind)
+- FU-118 [P2/pr-open] stale 37d -- The MCP SDK the bridges import was declared in NO requirements file, and directive_mcp did an import-time mkdir on a hardcoded absolute path
+- FU-021 [P2/open] stale 36d -- rug_pull_monitor: not in go.sh roster; heartbeat cadence is a lie
+- FU-150 [P2/open] stale 36d -- The npm discovery lane has written into a table that does not exist since 2026-06-16 — 3,438 silent failures
+- FU-152 [P2/open] stale 36d -- Four copies of goose_runner.py on the box, and the one every deploy-check instinct points at is a DECOY
+- FU-160 [P2/open] stale 35d -- 171 goose entrypoint copies on ZoComputer; 3 are live, and the raw-hash/mtime test for "which one runs" is WRONG
+- FU-169 [P2/open] stale 35d -- a directory listing is not a queue depth
+- FU-069 [P2/open] stale 34d -- Dedup keys on filename, so the same endpoint gets built three, four and five times
+- FU-085 [P2/open] stale 34d -- Builder's goose session store corrupts and silently blocks EVERY build — no detector; the architect store is degrading the same way
+- FU-200 [P2/open] stale 32d -- The casing-repair series was never cumulative: goose_runner.log's coverage window moved under a 5-day trend line
+- FU-274 [P2/open] stale 27d -- `rule_echo._live_occurrences` uses a bare +/-220 char window, so a citation can silence a live restatement two lines away
+- FU-282 [P2/open] stale 26d -- A SECOND peer_review decision store exists, holds ZERO decisions, and is invisible to every search because its directory name is not encodable (was FU
+- FU-277 [P2/NO-STATUS] stale 26d -- The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch every run, and the 2026-08-06 co
+- FU-062 [P2/open] stale 23d -- drift-check's "cheap inline" precheck takes 38s idle and blocks the trigger POST past the caller's timeout
+- FU-295 [P2/open] stale 23d -- The recurrence fix landed in the WRITER and the defect lives in the 14 PROMPTS that call it -- 13 of 14 lanes are invoking the unkeyed form the fleet 
+- FU-308 [P2/open] stale 23d -- The retired-prose detector enumerates SKILL files only, so an approval gate living in a LEDGER is invisible to it
+- FU-325 [P2/open] stale 22d -- A task prompt grants, in prose, an action authority.json holds forever
+- FU-316 [P2/open] stale 21d -- BOTH friction RUNNERS HAND THE LINE TO cmd.exe, AND NOTHING SAID SO -- A POWERSHELL PROLOGUE BECAME A LAUNCH THAT LOOKED LIKE A COMPLETED RUN
+- FU-340 [P2/open] stale 21d -- a PROPOSED peer decision carries a verify_cmd that measures a DIFFERENT artifact than its action changes
+- FU-237 [P2/open] stale 15d -- The freshness SLA and the scoring cadence are BOTH 7 days, so `newest_scored_at` hits the breach threshold in the same minute the next wave lands -- t
+- FU-347 [P2/open] stale 10d -- a lane can RUN daily and still not check in -- the scheduler proves liveness, and liveness is not obligation
+- FU-356 [P2/in-progress] stale 2d -- inline-interpreter-source had no stdin-to-DETACH entry; --pysrc --detach added (cycle-0056)
+- FU-374 [P2/open] stale 1d -- loop_health's stall trend splits on OBSERVED days, so a 6-day scheduler dormancy reads as a RISING stall rate
+- FU-110 [P2/open] stale 0d -- graphify-KL daily refresh now reconciles open-FU code-anchors against the fresh graph (drift monitor + subgraph cache)
+- FU-019 [P3/open] stale 45d -- Decide whether the runtime clone should ever be fully clean
+- FU-047 [P3/open] stale 44d -- Directive schema fields reads[], complexity and exemplar are dead weight
+- FU-050 [P3/open] stale 44d -- The architect's log inode keeps being deleted mid-run
+- FU-070 [P3/open] stale 43d -- The architect prompt contradicts itself on whether wiring is in scope
+- FU-020 [P3/open] stale 42d -- Residual harness cleanups from the FU-011/FU-015 fixes
+- FU-071 [P3/open] stale 42d -- The KL-artifact pattern was built once, for DB schema, and never for the other four surfaces
+- FU-033 [P3/open] stale 38d -- Concurrent cadence trigger records a `failed` run instead of `skipped`
+- FU-079 [P3/watch] stale 37d -- WATCH: track conduid growth, methodology and funding as recurring competitive intel
+- FU-162 [P3/open] stale 28d -- 529 runtime `.done.json` sentinels are TRACKED in git, so every deploy's auto-stash RESURRECTS the 39 the runtime deleted
+- FU-188 [P3/open] stale 28d -- The watchdog's restart branch cannot see a supervisor that already exists, so a crash-loop is amplified into a supervisor leak
+- FU-034 [P3/open] stale 23d -- Send the #10348 shell-timeout finding upstream to aaif-goose/goose
+- FU-280 [Punspecified/open] stale 26d -- the `--enforce` halt has outlived its condition -- DECIDE_AND_LOG is available, and condition 5 (NOT THE FILER) is why this lane must not self-clear i
+- FU-290 [Punspecified/NO-STATUS] stale 25d -- — A FALSIFICATION PROBE THAT INLINES ITS SUBJECT FREEZES ITS VERDICT FOREVER
+- FU-284 [Punspecified/open] stale 24d -- one file, one word, two thresholds: the trajectory header printed "silent_lanes 0 FLAT" on the run that ranked a silent lane at 85
+- FU-298 [Punspecified/NO-STATUS] stale 24d -- THE ARCHITECT SALVAGED A DIRECTIVE AND THEN LOGGED THAT IT HAD PROPOSED NOTHING
+- FU-299 [Punspecified/open] stale 24d -- A MODULE-SCOPE CHANGE IN MY OWN CLASSIFIER WOULD HAVE PUBLISHED A 21-SITE IMPROVEMENT THAT DID NOT HAPPEN
+- FU-304 [Punspecified/NO-STATUS] stale 24d -- SEVEN DARK TOOLS WERE ONE DEAD CHAIN, AND ITS SILENCE LET A COMMITTED ARTIFACT LOSE TWO THIRDS OF THE APP
+- FU-311 [Punspecified/NO-STATUS] stale 23d -- THE CHAIN'S CONSUMER WAS DARK, AND ITS DEFAULT INPUT WAS THE STALE ARTIFACT
+- FU-318 [Punspecified/NO-STATUS] stale 22d -- 2026-08-10 | improvement-loop | THE FLEET WAS NOT IGNORING THE CONSTRUCTOR -- SEVEN SKILL.md PROMPTS HANDED IT THE UNSAFE FORM AS A COPY-AND-RUN EXEMP
+- FU-334 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0040 | THE SELECTOR'S HEADLINE COUNTED A DIFFERENT POPULATION THAN ITS OWN PREDICATE GRADED, AND MANUFACTURED A 
+- FU-335 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0041 | CURING THE LONG CHILD MOVED THE ORPHAN TO THE POLL: EVERY DETACH PATH HANDED BACK A WAIT THAT WAS ITSELF 
+- FU-287 [Punspecified/open] stale 20d -- zo-sentinel-pipeline-watch carries the lane_start line and skipped it two days running
+- FU-345 [Punspecified/NO-STATUS] stale 20d -- a RUNNING verdict that is byte-identical at second 2 and at minute 16
+- FU-343 [Punspecified/NO-STATUS] stale 20d -- a classifier wired into the ONE door it was bitten at, and seven it was not
+- FU-348 [Punspecified/open] stale 20d -- `tee-floods-mcp-result` was armed on the WRITE half; 4 of its 5 bites came through the READ
+- FU-351 [Punspecified/NO-STATUS] stale 3d -- a receipt confirmed in print was erased by a sibling that never saw it (lane_receipts lost-update)
+- FU-262 [Punspecified/NO-STATUS] stale 2d -- The floor probe that polices "the artifact you inspected is not the artifact that runs" was itself grading a hand-written fixture, and it announced th
+- FU-352 [Punspecified/NO-STATUS] stale 2d -- lane_check_in double-detach: the mandated check-in scored UNKNOWN on every improve_loop cycle (2026-08-24, cycle-0054)
+- FU-376 [Punspecified/NO-STATUS] stale 1d -- a ten-day-TTL roster with no writer anywhere silently collapsed every lane's cadence window
+- FU-353 [Punspecified/NO-STATUS] stale 0d -- the bar CSV changed owner and basis during the standdown; and a detached child is not reboot-proof
+
+## gates_and_predicates -- 86 actionable of 169 (24 at P0/P1, 16 with no status field)
+
+- FU-024 [P1/open] stale 39d -- Nightly moat backup has no retry window or staleness alarm when the Fly control plane is down
+- FU-104 [P1/open] stale 39d -- Score run 45843424 exited SILENT
+- FU-107 [P1/open] stale 38d -- Nightly moat backup INFEASIBLE at current table size — COPY ~68 rows/s => ~8h
+- FU-027 [P1/open] stale 37d -- /freshness cold path still ~55s (the 48s->4s fix only covered the warm path)
+- FU-109 [P1/open] stale 34d -- All 21 staged services HOLD on the liveness gate — merged unverified (FU-031 100% degradation), promoter is the first real correctness check
+- FU-099 [P1/open] stale 32d -- KEYSTONE #1786 merged (chairman) — learning: drive the spine-unblocking PR, and never rationalize a red check as cosmetic
+- FU-232 [P1/open] stale 31d -- The four tools this lane RUNS have all diverged from the four the repo TESTS, and the bigger half is the untracked one
+- FU-167 [P1/open] stale 31d -- a gate PASSES rc=0 while printing its own escalation trigger, suppressed 17 times
+- FU-116 [P1/pr-open] stale 30d -- The goose-canary's two most important guards were committed as FILES and never wired as GATES
+- FU-159 [P1/open] stale 28d -- Directive quality does NOT bypass the Tier-0 merge path: a controlled 2-directive test
+- FU-226 [P1/open] stale 28d -- prod-drift-sentinel obeyed a rule its principal retired three days earlier, and staged 19 times into a subscriber that had been told to stand down
+- FU-236 [P1/open] stale 28d -- The liveness contract passes a 75-byte comment, `no-hollow` passes a 32-byte stub, and both were green and mergeable -- the promotion gate proves a fi
+- FU-028 [P1/open] stale 27d -- Container runtime drift has no alarm and no scheduled refresh
+- FU-265 [P1/NO-STATUS] stale 27d -- `PEER_CLEARABLE` was a permission value no code path could read, so the 2026-08-04 ruling was never executable in `authority.py`
+- FU-268 [P1/NO-STATUS] stale 27d -- `record_credit(state=...)` with no `path=` still writes the canonical state file -- the DESTRUCTIVE path is the DEFAULT and the safe one is opt-in
+- FU-242 [P1/open] stale 26d -- Nine FU predicates query a catalog that has no such tables -- `score_runs`, `servers` and `server_scores` do not exist at the `:8772` bus, so those en
+- FU-119 [P1/open] stale 23d -- The goose-canary tests a TRANSPORT the mesh does not use — it drives goose straight at a provider, production drives it through the ladder shim
+- FU-248 [P1/open] stale 22d -- The loop measured its product and never itself -- so it spent a day fixing the SECOND-biggest source of stalls
+- FU-054 [P1/open] stale 21d -- Discovery has collapsed to ~2 rows/day — this, not scoring, is what gates 200K
+- FU-239 [P1/open] stale 3d -- The nightly Clerk reconcile has no host it can run on -- `tools/` is not COPYed into the image and the Clerk key is not on the tower, so the away-wind
+- FU-245 [P1/open] stale 3d -- The Clerk webhook has delivered 0 of 3 signups since 2026-06-27, and tonight's backfill is what makes tomorrow's run GREEN without anything being fixe
+- FU-354 [P1/in-progress] stale 2d -- e2e-nightly app-e2e-parity gate RED 4 nights -- duckdb-vs-postgres cutover parity diverged
+- FU-303 [P1/open] stale 1d -- fu_verify HANGS ON WINDOWS FOR THE REASON peer_review ALREADY FIXED, SO PHASE 2a PRODUCED NO DATA
+- FU-346 [P1/open] stale 1d -- heading FORM, not heading LEVEL, is what makes an FU invisible to fu_verify -- and level-only was tested, failed, and left the cause reading UNKNOWN
+- FU-040 [P2/in-progress] stale 44d -- Gaps map harvests EXEMPLAR filenames as build targets, and 3 of the 6 PHASE 9 lanes name dangling/quarantined exemplars
+- FU-042 [P2/open] stale 44d -- Hollow gate matches inbound-only, so 87.3% of orphans pass it
+- FU-045 [P2/open] stale 44d -- Retire merge/survival rate for load-bearing yield; treat a never-failing gate as an alarm
+- FU-038 [P2/open] stale 43d -- capmap-check has blocked two agent PRs for a day on pre-existing schema drift
+- FU-060 [P2/open] stale 43d -- "did NOT reach propose_directive" is asserted, not measured — the bridge's return value is logged nowhere
+- FU-066 [P2/open] stale 43d -- The builder ladder's tier-1 rung produced hollow scaffolds on 2 of 2 attempts and nothing reports it
+- FU-067 [P2/open] stale 43d -- The local zo-sentinel clone at D:\zo\zo-sentinel\zo-sentinel is 157 entries dirty and unsafe to commit from
+- FU-078 [P2/open] stale 42d -- Evaluate a builder-side flywheel (claim / verify ownership / analytics / monetize) — conduid has one, we have none
+- FU-089 [P2/open] stale 40d -- Harden ask-corpus reindex guard + honestly flag unassessed discovery (deferred from FU-088 CofC)
+- FU-098 [P2/open] stale 40d -- Size-scaled vast spend guard shipped; wire into run loop + fix resume-from-zero (deferred)
+- FU-064 [P2/watch] stale 37d -- Arming the ratchet: what actually shipped, and the three things it deliberately did NOT decide
+- FU-118 [P2/pr-open] stale 37d -- The MCP SDK the bridges import was declared in NO requirements file, and directive_mcp did an import-time mkdir on a hardcoded absolute path
+- FU-091 [P2/open] stale 36d -- Auto-merge did not fire on a clean, green PR (#1744 sat 2 days) - merge automation has no detector for its own non-firing
+- FU-135 [P2/open] stale 36d -- the obvious place to launch a paid rescore from is 48 commits stale
+- FU-152 [P2/open] stale 36d -- Four copies of goose_runner.py on the box, and the one every deploy-check instinct points at is a DECOY
+- FU-153 [P2/pr-open] stale 36d -- The FU-138 fix was written to a path outside the repo, so the next run could not find it
+- FU-161 [P2/open] stale 35d -- `fire_gate` named the 100th commit as the target head, and would have accepted a truncated 300-file compare as a complete image surface
+- FU-164 [P2/open] stale 35d -- A sentinel run ran all eight gates and left NO record, and nothing reconciled evidence against state
+- FU-125 [P2/open] stale 31d -- FOLLOWUPS.md has grown 17x in 7 days and is outgrowing the context that reads it — the ledger governing autopoiesis is becoming unreadable
+- FU-142 [P2/open] stale 31d -- 44 staged self-tests fail as "relative import with no known parent package" -- a package run as a script
+- FU-193 [P2/open] stale 31d -- Five open P1s carry `verify: NONE`, and the task-snapshot guard detector now emits 13 known-false alarms every run
+- FU-172 [P2/open] stale 30d -- five ledger entries parsed with NO status, so the verifier could not see them -- and nothing flagged it
+- FU-030 [P2/open] stale 29d -- Two consecutive days of exactly zero score-row delta
+- FU-244 [P2/open] stale 29d -- The test the charter orders every harness change to run did not exist -- and an empty result set is indistinguishable from a broken psql
+- FU-261 [P2/open] stale 28d -- A `pgrep` predicate sent across the zo_call bridge COUNTS ITS OWN TRANSPORT, so every process-liveness probe reads exactly one too many
+- FU-252 [P2/open] stale 26d -- CHAIRMAN RULING: the emergency hatch grades an ABORTED deploy as a FALSE EMERGENCY, so the counter that keeps the hatch honest punishes the one case w
+- FU-282 [P2/open] stale 26d -- A SECOND peer_review decision store exists, holds ZERO decisions, and is invisible to every search because its directory name is not encodable (was FU
+- FU-277 [P2/NO-STATUS] stale 26d -- The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch every run, and the 2026-08-06 co
+- FU-177 [P2/open] stale 24d -- the Phase 2 gate measures attended fires, which never exercise the thing Phase 2 would add
+- FU-308 [P2/open] stale 23d -- The retired-prose detector enumerates SKILL files only, so an approval gate living in a LEDGER is invisible to it
+- FU-325 [P2/open] stale 22d -- A task prompt grants, in prose, an action authority.json holds forever
+- FU-331 [P2/NO-STATUS] stale 22d -- the stranded-wave scan reported 0 with a passing control on the one day two waves died, because the harness parked them in a sibling directory the sca
+- FU-340 [P2/open] stale 21d -- a PROPOSED peer decision carries a verify_cmd that measures a DIFFERENT artifact than its action changes
+- FU-237 [P2/open] stale 15d -- The freshness SLA and the scoring cadence are BOTH 7 days, so `newest_scored_at` hits the breach threshold in the same minute the next wave lands -- t
+- FU-035 [P2/open] stale 1d -- The $25 budget guard's MTD half is fail-open, and its threshold is a lagging indicator
+- FU-168 [P2/open] stale 0d -- seven "independent" verdicts are ONE confirmation counted seven times
+- FU-020 [P3/open] stale 42d -- Residual harness cleanups from the FU-011/FU-015 fixes
+- FU-071 [P3/open] stale 42d -- The KL-artifact pattern was built once, for DB schema, and never for the other four surfaces
+- FU-008 [P3/watch] stale 41d -- PR dedup gate let a same-name pair through
+- FU-049 [P3/open] stale 40d -- The mcplookup.app health check never exercises mcplookup.app
+- FU-084 [P3/open] stale 39d -- Sweep-close the stale-branch RED PR backlog (failing a since-removed `treewalk-smoke` check)
+- FU-128 [P3/open] stale 36d -- The shared checkout has no ops/host/ scripts on disk — every run re-derives the workaround
+- FU-171 [P3/open] stale 35d -- 15 spent one-shot tasks still fire, and they inflate every adoption denominator
+- FU-178 [P3/watch] stale 35d -- release pinning + a real upgrade cycle -- the work rollback is actually waiting on
+- FU-280 [Punspecified/open] stale 26d -- the `--enforce` halt has outlived its condition -- DECIDE_AND_LOG is available, and condition 5 (NOT THE FILER) is why this lane must not self-clear i
+- FU-289 [Punspecified/NO-STATUS] stale 25d -- — A GUARD AGAINST A DEFECT WAS DEFEATED BY THAT DEFECT'S OWN RESIDUE
+- FU-290 [Punspecified/NO-STATUS] stale 25d -- — A FALSIFICATION PROBE THAT INLINES ITS SUBJECT FREEZES ITS VERDICT FOREVER
+- FU-300 [Punspecified/open] stale 24d -- EIGHT OF TEN FALSIFICATIONS NEVER RAN A CONTROL, AND THE FLAG THAT WOULD HAVE SAID SO IS TRUE BY CONSTRUCTION
+- FU-301 [Punspecified/open] stale 24d -- A REVERT_CHECK THAT RUNS ON HOST A CANNOT DEMONSTRATE REVERSIBILITY OF AN ACTION ON HOST B
+- FU-309 [Punspecified/NO-STATUS] stale 23d -- SIXTEEN PRs WERE BORN UNMERGEABLE BY LANDING CODE IN THE REGISTRY DIRECTORY, AND CLOSING THEM WOULD HAVE DESTROYED 3,500 UNIQUE LINES
+- FU-313 [Punspecified/NO-STATUS] stale 23d -- 2026-08-10 | autopoiesis-bar-tracker | A DECISION READ `ACTED` AND SWEPT GREEN TWICE WHILE ITS ARTIFACT WAS NEVER CREATED — AND THE VERIFY WAS BUILT S
+- FU-334 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0040 | THE SELECTOR'S HEADLINE COUNTED A DIFFERENT POPULATION THAN ITS OWN PREDICATE GRADED, AND MANUFACTURED A 
+- FU-338 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | autopoiesis-bar-tracker | 14:33 slot | A REVERT THAT UNDID THE DATA AND NOT THE CODE RETURNED rc=0, RE-ARMED A DESTRUCTIVE REVERT AGAINST
+- FU-341 [Punspecified/NO-STATUS] stale 20d -- The scratchpad guard was blind to its own subject, disarmed by a stray token, and fired on its own documentation -- while the call path built to make 
+- FU-348 [Punspecified/open] stale 20d -- `tee-floods-mcp-result` was armed on the WRITE half; 4 of its 5 bites came through the READ
+- FU-342 [Punspecified/NO-STATUS] stale 9d -- the money guard is tighter than the wedge guard it sits behind, so the startup allowance FU-104 added is unfunded
+- FU-262 [Punspecified/NO-STATUS] stale 2d -- The floor probe that polices "the artifact you inspected is not the artifact that runs" was itself grading a hand-written fixture, and it announced th
+- FU-352 [Punspecified/NO-STATUS] stale 2d -- lane_check_in double-detach: the mandated check-in scored UNKNOWN on every improve_loop cycle (2026-08-24, cycle-0054)
+- FU-365 [Punspecified/open] stale 1d -- A paid GPU instance whose launcher printed `LEFT ALIVE` bills forever, and the audit's wedge guard is keyed on a state it can never be in
+- FU-367 [Punspecified/open] stale 1d -- The reachability ratchet's baseline went stale, converting a derivative gate into a level gate that fails 25 of 45 open PRs on inherited debt
+- FU-379 [Punspecified/NO-STATUS] stale Noned -- the paired control a metric's own comment prescribes was written by a different module
+- FU-382 [Punspecified/NO-STATUS] stale Noned -- A floor probe diffed a SHARED directory and threw away the one thing that could explain its red
+
+## deploy_and_infra -- 84 actionable of 156 (32 at P0/P1, 6 with no status field)
+
+- FU-235 [P0/open] stale 0d -- The prod schema has TWO owners, and alembic runs as the one that owns neither `users` nor `orgs` -- so the migration lane could only ever migrate the 
+- FU-036 [P1/open] stale 44d -- goose_runner was DEAD for 61.6 hours and nothing detected it
+- FU-065 [P1/open] stale 42d -- The runtime checkout is chronically behind main, and the deploy task's own description contradicts its cron
+- FU-075 [P1/open] stale 42d -- COMPETITIVE THREAT: conduid.com is a direct MCP-trust-scoring rival with a better shopfront and a two-sided flywheel we lack
+- FU-076 [P1/in-progress] stale 40d -- Adopt a legible multi-axis scorecard (deterministic signals) — conduid parity AND the fix for FU-058
+- FU-024 [P1/open] stale 39d -- Nightly moat backup has no retry window or staleness alarm when the Fly control plane is down
+- FU-101 [P1/in-progress] stale 39d -- SHEPHERD ROLE: follow-up-triage cross-pollinates all scheduled tasks; break the internal walls
+- FU-104 [P1/open] stale 39d -- Score run 45843424 exited SILENT
+- FU-107 [P1/open] stale 38d -- Nightly moat backup INFEASIBLE at current table size — COPY ~68 rows/s => ~8h
+- FU-115 [P1/open] stale 37d -- Daemon liveness read from log files is UNRELIABLE — healthy daemons appear dead for hours
+- FU-109 [P1/open] stale 34d -- All 21 staged services HOLD on the liveness gate — merged unverified (FU-031 100% degradation), promoter is the first real correctness check
+- FU-190 [P1/open] stale 34d -- 18,560 log lines said "Recorded OSV vuln"; the table holds ZERO of them, because ws_write fails by RETURNING None
+- FU-210 [P1/open] stale 33d -- The run-ledger's slot grid described a cadence that was cut this morning, and was about to page the chairman about slots that no longer exist
+- FU-167 [P1/open] stale 31d -- a gate PASSES rc=0 while printing its own escalation trigger, suppressed 17 times
+- FU-149 [P1/open] stale 30d -- flyctl on the tower has lost its access token — every lane that tunnels to prod PG is blocked
+- FU-238 [P1/open] stale 29d -- `CLERK_WEBHOOK_SECRET` is STAGED and has never been deployed, so the webhook FU-235 is blocking would 503 on every delivery the moment FU-235 is unblo
+- FU-226 [P1/open] stale 28d -- prod-drift-sentinel obeyed a rule its principal retired three days earlier, and staged 19 times into a subscriber that had been told to stand down
+- FU-236 [P1/open] stale 28d -- The liveness contract passes a 75-byte comment, `no-hollow` passes a 32-byte stub, and both were green and mergeable -- the promotion gate proves a fi
+- FU-028 [P1/open] stale 27d -- Container runtime drift has no alarm and no scheduled refresh
+- FU-269 [P1/NO-STATUS] stale 27d -- The dashboard's headline card calls 474,689 servers "scored" when 191,273 of them carry risk_tier='unassessed'
+- FU-119 [P1/open] stale 23d -- The goose-canary tests a TRANSPORT the mesh does not use — it drives goose straight at a provider, production drives it through the ladder shim
+- FU-248 [P1/open] stale 22d -- The loop measured its product and never itself -- so it spent a day fixing the SECOND-biggest source of stalls
+- FU-054 [P1/open] stale 21d -- Discovery has collapsed to ~2 rows/day — this, not scoring, is what gates 200K
+- FU-239 [P1/open] stale 3d -- The nightly Clerk reconcile has no host it can run on -- `tools/` is not COPYed into the image and the Clerk key is not on the tower, so the away-wind
+- FU-245 [P1/open] stale 3d -- The Clerk webhook has delivered 0 of 3 signups since 2026-06-27, and tonight's backfill is what makes tomorrow's run GREEN without anything being fixe
+- FU-254 [P1/open] stale 2d -- Every knowledge surface we own is PULL and enumerated from the wrong end -- 15 of 88 tools are built, paid for and consulted by nothing
+- FU-134 [P1/open] stale 2d -- flyctl's own 720h re-login timer aged out and took the whole Fly-dependent fleet with it
+- FU-207 [P1/open] stale 2d -- A scheduled task's `lastRunAt` advanced for five consecutive slots that did no work and left no trace
+- FU-350 [P1/open] stale 2d -- The tower scheduler was dead for 7 days and every instrument that would have said so was itself a scheduled task
+- FU-354 [P1/in-progress] stale 2d -- e2e-nightly app-e2e-parity gate RED 4 nights -- duckdb-vs-postgres cutover parity diverged
+- FU-303 [P1/open] stale 1d -- fu_verify HANGS ON WINDOWS FOR THE REASON peer_review ALREADY FIXED, SO PHASE 2a PRODUCED NO DATA
+- FU-364 [P1/open] stale 0d -- This lane's ENTIRE remit is an action `authority.json` has never named: `--may registry_insert` has returned UNKNOWN ACTION for 8+ consecutive days
+- FU-023 [P2/open] stale 45d -- Shared backup dir is a clobber hazard between agents
+- FU-040 [P2/in-progress] stale 44d -- Gaps map harvests EXEMPLAR filenames as build targets, and 3 of the 6 PHASE 9 lanes name dangling/quarantined exemplars
+- FU-045 [P2/open] stale 44d -- Retire merge/survival rate for load-bearing yield; treat a never-failing gate as an alarm
+- FU-046 [P2/open] stale 44d -- The builder has never written a surviving test
+- FU-066 [P2/open] stale 43d -- The builder ladder's tier-1 rung produced hollow scaffolds on 2 of 2 attempts and nothing reports it
+- FU-067 [P2/open] stale 43d -- The local zo-sentinel clone at D:\zo\zo-sentinel\zo-sentinel is 157 entries dirty and unsafe to commit from
+- FU-073 [P2/open] stale 42d -- Runtime app/main.py keeps accruing uncommitted local wiring that safe_ff stashes and silently discards each deploy
+- FU-077 [P2/open] stale 42d -- Rebuild the mcprisky.io landing for conversion (live ticker, credit-score frame, scorecard hero)
+- FU-078 [P2/open] stale 42d -- Evaluate a builder-side flywheel (claim / verify ownership / analytics / monetize) — conduid has one, we have none
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-074 [P2/open] stale 40d -- Daily queue exhaustion refilled (report-only PHASE 11); the deferred graveyard is auto-growing 5→11/day toward the 40 trigger
+- FU-081 [P2/open] stale 40d -- Nightly backup runs inline in one MCP PowerShell call, but the ~170s dump outlives the ~60-90s MCP transport timeout — step 4 returns a false TIMEOUT 
+- FU-086 [P2/open] stale 40d -- Nightly backup rides a pre-existing/orphaned flyctl proxy - its own Start-Process proxy silently fails to bind and bind-success is never verified
+- FU-092 [P2/open] stale 40d -- CVE-axis strengthening queued (family propagation + linker v2) -- autopoietic, loop-set thresholds
+- FU-100 [P2/open] stale 39d -- weekly_rescore export streams the whole ~463K registry client-side over the Fly proxy (~78 rows/s) before the GPU fires
+- FU-096 [P2/in-progress] stale 38d -- autopoiesis-bar-tracker produces no scoreboard CSV (daily grade is blind)
+- FU-083 [P2/open] stale 37d -- Tower PRIMARY clone carries a ~156-file pre-staged index — `git add <one file>` mis-scopes the commit
+- FU-114 [P2/open] stale 37d -- 4 active services will read HEALTHY in prod while serving nothing
+- FU-021 [P2/open] stale 36d -- rug_pull_monitor: not in go.sh roster; heartbeat cadence is a lie
+- FU-139 [P2/open] stale 36d -- perspective_snapshots runtime is UNBOUNDED — 64min+ with no co-residency and +0.19% data
+- FU-150 [P2/open] stale 36d -- The npm discovery lane has written into a table that does not exist since 2026-06-16 — 3,438 silent failures
+- FU-152 [P2/open] stale 36d -- Four copies of goose_runner.py on the box, and the one every deploy-check instinct points at is a DECOY
+- FU-153 [P2/pr-open] stale 36d -- The FU-138 fix was written to a path outside the repo, so the next run could not find it
+- FU-154 [P2/pr-open] stale 36d -- The copilot-autofix workflow has startup-failed 1,919 times and has never once run
+- FU-161 [P2/open] stale 35d -- `fire_gate` named the 100th commit as the target head, and would have accepted a truncated 300-file compare as a complete image surface
+- FU-164 [P2/open] stale 35d -- A sentinel run ran all eight gates and left NO record, and nothing reconciled evidence against state
+- FU-085 [P2/open] stale 34d -- Builder's goose session store corrupts and silently blocks EVERY build — no detector; the architect store is degrading the same way
+- FU-125 [P2/open] stale 31d -- FOLLOWUPS.md has grown 17x in 7 days and is outgrowing the context that reads it — the ledger governing autopoiesis is becoming unreadable
+- FU-030 [P2/open] stale 29d -- Two consecutive days of exactly zero score-row delta
+- FU-244 [P2/open] stale 29d -- The test the charter orders every harness change to run did not exist -- and an empty result set is indistinguishable from a broken psql
+- FU-261 [P2/open] stale 28d -- A `pgrep` predicate sent across the zo_call bridge COUNTS ITS OWN TRANSPORT, so every process-liveness probe reads exactly one too many
+- FU-252 [P2/open] stale 26d -- CHAIRMAN RULING: the emergency hatch grades an ABORTED deploy as a FALSE EMERGENCY, so the counter that keeps the hatch honest punishes the one case w
+- FU-277 [P2/NO-STATUS] stale 26d -- The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch every run, and the 2026-08-06 co
+- FU-057 [P2/open] stale 24d -- A leaked flyctl proxy holds an open tunnel to prod PG, and the nightly's own liveness check cannot tell whose tunnel it is
+- FU-177 [P2/open] stale 24d -- the Phase 2 gate measures attended fires, which never exercise the thing Phase 2 would add
+- FU-055 [P2/open] stale 23d -- Scoring is not stalled — it is SATURATED; the 200K metric measures the wrong thing
+- FU-295 [P2/open] stale 23d -- The recurrence fix landed in the WRITER and the defect lives in the 14 PROMPTS that call it -- 13 of 14 lanes are invoking the unkeyed form the fleet 
+- FU-325 [P2/open] stale 22d -- A task prompt grants, in prose, an action authority.json holds forever
+- FU-355 [P2/open] stale 2d -- tools/reload_daemon.sh cold-relaunch passes '-m' as a script path and cannot revive a daemon it just killed
+- FU-356 [P2/in-progress] stale 2d -- inline-interpreter-source had no stdin-to-DETACH entry; --pysrc --detach added (cycle-0056)
+- FU-168 [P2/open] stale 0d -- seven "independent" verdicts are ONE confirmation counted seven times
+- FU-019 [P3/open] stale 45d -- Decide whether the runtime clone should ever be fully clean
+- FU-041 [P3/watch] stale 41d -- 200K LinkedIn campaign is at ~zero engagement — do not renew the daily-repost pattern after the 07-22 window close
+- FU-128 [P3/open] stale 36d -- The shared checkout has no ops/host/ scripts on disk — every run re-derives the workaround
+- FU-162 [P3/open] stale 28d -- 529 runtime `.done.json` sentinels are TRACKED in git, so every deploy's auto-stash RESURRECTS the 39 the runtime deleted
+- FU-188 [P3/open] stale 28d -- The watchdog's restart branch cannot see a supervisor that already exists, so a crash-loop is amplified into a supervisor leak
+- FU-034 [P3/open] stale 23d -- Send the #10348 shell-timeout finding upstream to aaif-goose/goose
+- FU-304 [Punspecified/NO-STATUS] stale 24d -- SEVEN DARK TOOLS WERE ONE DEAD CHAIN, AND ITS SILENCE LET A COMMITTED ARTIFACT LOSE TWO THIRDS OF THE APP
+- FU-311 [Punspecified/NO-STATUS] stale 23d -- THE CHAIN'S CONSUMER WAS DARK, AND ITS DEFAULT INPUT WAS THE STALE ARTIFACT
+- FU-312 [Punspecified/NO-STATUS] stale 2d -- rollback selector consumed an ERROR STRING as a row count
+- FU-363 [Punspecified/open] stale 1d -- 2026-09-01 | mcplookup-nightly-db-backup | THE REPAIR THE ERROR MESSAGE INVITED WAS THE REGRESSION, AND `REVERT_FAILED` HAS NO DOOR OUT
+- FU-263 [Punspecified/NO-STATUS] stale Noned -- A 20KB tool sat at zero callers because the question it answers lived in a docstring -- and the docstring was on the prod firing path
+
+## moat_and_scoring -- 77 actionable of 114 (31 at P0/P1, 14 with no status field)
+
+- FU-093 [P0/open] stale 37d -- CRITICAL: adapter never reached the pod -- 99.6% of the scored moat is garbage (root cause + fix shipped)
+- FU-235 [P0/open] stale 0d -- The prod schema has TWO owners, and alembic runs as the one that owns neither `users` nor `orgs` -- so the migration lane could only ever migrate the 
+- FU-001 [P1/in-progress] stale 44d -- Make wave/rescore harnesses write the run ledger
+- FU-058 [P1/open] stale 43d -- 99.5% of the scored corpus is HIGH or CRITICAL — the risk tier carries almost no information
+- FU-075 [P1/open] stale 42d -- COMPETITIVE THREAT: conduid.com is a direct MCP-trust-scoring rival with a better shopfront and a two-sided flywheel we lack
+- FU-076 [P1/in-progress] stale 40d -- Adopt a legible multi-axis scorecard (deterministic signals) — conduid parity AND the fix for FU-058
+- FU-024 [P1/open] stale 39d -- Nightly moat backup has no retry window or staleness alarm when the Fly control plane is down
+- FU-072 [P1/open] stale 39d -- STEER: files → services (SOA). The smaller mount/KL follow-ups are sub-tasks of one program, not independent edits
+- FU-104 [P1/open] stale 39d -- Score run 45843424 exited SILENT
+- FU-107 [P1/open] stale 38d -- Nightly moat backup INFEASIBLE at current table size — COPY ~68 rows/s => ~8h
+- FU-027 [P1/open] stale 37d -- /freshness cold path still ~55s (the 48s->4s fix only covered the warm path)
+- FU-124 [P1/open] stale 37d -- The app is invisible to crawlers — an indexability gap FU-075..079 never captured, and the one axis where conduid is unambiguously ahead
+- FU-109 [P1/open] stale 34d -- All 21 staged services HOLD on the liveness gate — merged unverified (FU-031 100% degradation), promoter is the first real correctness check
+- FU-190 [P1/open] stale 34d -- 18,560 log lines said "Recorded OSV vuln"; the table holds ZERO of them, because ws_write fails by RETURNING None
+- FU-236 [P1/open] stale 28d -- The liveness contract passes a 75-byte comment, `no-hollow` passes a 32-byte stub, and both were green and mergeable -- the promotion gate proves a fi
+- FU-251 [P1/open] stale 27d -- 23 of 34 lanes drive the desktop through Windows-MCP and not one names Desktop Commander -- and the ledger already records Windows-MCP silently failin
+- FU-267 [P1/NO-STATUS] stale 27d -- The credit-ledger dedup compared an int id to argparse's str, so ONE $25 top-up counted twice and the budget published a FALSE RED
+- FU-272 [P1/open] stale 27d -- The builder emits one service as two PRs into two incompatible lifecycle directories
+- FU-268 [P1/NO-STATUS] stale 27d -- `record_credit(state=...)` with no `path=` still writes the canonical state file -- the DESTRUCTIVE path is the DEFAULT and the safe one is opt-in
+- FU-269 [P1/NO-STATUS] stale 27d -- The dashboard's headline card calls 474,689 servers "scored" when 191,273 of them carry risk_tier='unassessed'
+- FU-242 [P1/open] stale 26d -- Nine FU predicates query a catalog that has no such tables -- `score_runs`, `servers` and `server_scores` do not exist at the `:8772` bus, so those en
+- FU-326 [P1/pr-open] stale 22d -- The fix for the dam enumerated failure NAMES, and the next wave returned a name it did not list
+- FU-054 [P1/open] stale 21d -- Discovery has collapsed to ~2 rows/day — this, not scoring, is what gates 200K
+- FU-134 [P1/open] stale 2d -- flyctl's own 720h re-login timer aged out and took the whole Fly-dependent fleet with it
+- FU-321 [P1/pr-open] stale 2d -- A failed wave became "the newest unfinished run" forever, damming every future rescore
+- FU-350 [P1/open] stale 2d -- The tower scheduler was dead for 7 days and every instrument that would have said so was itself a scheduled task
+- FU-354 [P1/in-progress] stale 2d -- e2e-nightly app-e2e-parity gate RED 4 nights -- duckdb-vs-postgres cutover parity diverged
+- FU-361 [P1/NO-STATUS] stale 1d -- `oldest_scored_at` has not moved since at least 2026-07-19 across 385,000 refresh slots -- the refresh half cannot move the corpus floor, and the SLA 
+- FU-364 [P1/open] stale 0d -- This lane's ENTIRE remit is an action `authority.json` has never named: `--may registry_insert` has returned UNKNOWN ACTION for 8+ consecutive days
+- FU-090 [P1/open] stale -43d -- Discovery doubled the moat but assessment coverage HALVED (74%->37%) - 230K new servers are unscored, needs a cost-capped rescore wave
+- FU-108 [P1/open] stale -54d -- Validated 2026-07-26 re-score is stranded UNIMPORTED — weekly_rescore has no import phase
+- FU-040 [P2/in-progress] stale 44d -- Gaps map harvests EXEMPLAR filenames as build targets, and 3 of the 6 PHASE 9 lanes name dangling/quarantined exemplars
+- FU-038 [P2/open] stale 43d -- capmap-check has blocked two agent PRs for a day on pre-existing schema drift
+- FU-059 [P2/open] stale 43d -- A delta rescore changed exactly 32,545 servers on six of seven axes — identical counts, independent axes
+- FU-077 [P2/open] stale 42d -- Rebuild the mcprisky.io landing for conversion (live ticker, credit-score frame, scorecard hero)
+- FU-078 [P2/open] stale 42d -- Evaluate a builder-side flywheel (claim / verify ownership / analytics / monetize) — conduid has one, we have none
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-089 [P2/open] stale 40d -- Harden ask-corpus reindex guard + honestly flag unassessed discovery (deferred from FU-088 CofC)
+- FU-098 [P2/open] stale 40d -- Size-scaled vast spend guard shipped; wire into run loop + fix resume-from-zero (deferred)
+- FU-092 [P2/open] stale 40d -- CVE-axis strengthening queued (family propagation + linker v2) -- autopoietic, loop-set thresholds
+- FU-100 [P2/open] stale 39d -- weekly_rescore export streams the whole ~463K registry client-side over the Fly proxy (~78 rows/s) before the GPU fires
+- FU-096 [P2/in-progress] stale 38d -- autopoiesis-bar-tracker produces no scoreboard CSV (daily grade is blind)
+- FU-135 [P2/open] stale 36d -- the obvious place to launch a paid rescore from is 48 commits stale
+- FU-139 [P2/open] stale 36d -- perspective_snapshots runtime is UNBOUNDED — 64min+ with no co-residency and +0.19% data
+- FU-150 [P2/open] stale 36d -- The npm discovery lane has written into a table that does not exist since 2026-06-16 — 3,438 silent failures
+- FU-069 [P2/open] stale 34d -- Dedup keys on filename, so the same endpoint gets built three, four and five times
+- FU-085 [P2/open] stale 34d -- Builder's goose session store corrupts and silently blocks EVERY build — no detector; the architect store is degrading the same way
+- FU-030 [P2/open] stale 29d -- Two consecutive days of exactly zero score-row delta
+- FU-274 [P2/open] stale 27d -- `rule_echo._live_occurrences` uses a bare +/-220 char window, so a citation can silence a live restatement two lines away
+- FU-277 [P2/NO-STATUS] stale 26d -- The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch every run, and the 2026-08-06 co
+- FU-055 [P2/open] stale 23d -- Scoring is not stalled — it is SATURATED; the 200K metric measures the wrong thing
+- FU-322 [P2/pr-open] stale 22d -- The forensics log could not tell a transient network blip from an expired credential
+- FU-327 [P2/open] stale 22d -- A cost_breach teardown is forensics-blind by construction, so I3 cannot be satisfied on that path
+- FU-331 [P2/NO-STATUS] stale 22d -- the stranded-wave scan reported 0 with a passing control on the one day two waves died, because the harness parked them in a sibling directory the sca
+- FU-237 [P2/open] stale 15d -- The freshness SLA and the scoring cadence are BOTH 7 days, so `newest_scored_at` hits the breach threshold in the same minute the next wave lands -- t
+- FU-356 [P2/in-progress] stale 2d -- inline-interpreter-source had no stdin-to-DETACH entry; --pysrc --detach added (cycle-0056)
+- FU-035 [P2/open] stale 1d -- The $25 budget guard's MTD half is fail-open, and its threshold is a lagging indicator
+- FU-018 [P3/open] stale 45d -- Two sibling gaps found while wiring has_known_cve
+- FU-019 [P3/open] stale 45d -- Decide whether the runtime clone should ever be fully clean
+- FU-051 [P3/open] stale 44d -- Institutionalize the adversarial verification pass on the daily briefing
+- FU-008 [P3/watch] stale 41d -- PR dedup gate let a same-name pair through
+- FU-079 [P3/watch] stale 37d -- WATCH: track conduid growth, methodology and funding as recurring competitive intel
+- FU-171 [P3/open] stale 35d -- 15 spent one-shot tasks still fire, and they inflate every adoption denominator
+- FU-188 [P3/open] stale 28d -- The watchdog's restart branch cannot see a supervisor that already exists, so a crash-loop is amplified into a supervisor leak
+- FU-320 [P3/open] stale 22d -- A near-miss clause NAME is priced as a wall, and during the away window that is an FU round-trip for a typo
+- FU-279 [Punspecified/open] stale 26d -- FAMILY A REGRESSED FROM 0 TO 6 SITES, and only the explicit lookup could see it -- it never entered any top-N list
+- FU-280 [Punspecified/open] stale 26d -- the `--enforce` halt has outlived its condition -- DECIDE_AND_LOG is available, and condition 5 (NOT THE FILER) is why this lane must not self-clear i
+- FU-290 [Punspecified/NO-STATUS] stale 25d -- — A FALSIFICATION PROBE THAT INLINES ITS SUBJECT FREEZES ITS VERDICT FOREVER
+- FU-301 [Punspecified/open] stale 24d -- A REVERT_CHECK THAT RUNS ON HOST A CANNOT DEMONSTRATE REVERSIBILITY OF AN ACTION ON HOST B
+- FU-309 [Punspecified/NO-STATUS] stale 23d -- SIXTEEN PRs WERE BORN UNMERGEABLE BY LANDING CODE IN THE REGISTRY DIRECTORY, AND CLOSING THEM WOULD HAVE DESTROYED 3,500 UNIQUE LINES
+- FU-313 [Punspecified/NO-STATUS] stale 23d -- 2026-08-10 | autopoiesis-bar-tracker | A DECISION READ `ACTED` AND SWEPT GREEN TWICE WHILE ITS ARTIFACT WAS NEVER CREATED — AND THE VERIFY WAS BUILT S
+- FU-314 [Punspecified/NO-STATUS] stale 23d -- 2026-08-10 | autopoiesis-bar-tracker | THE CLEARED ACTION AND THE COMMAND THAT IMPLEMENTS IT CAME APART OVERNIGHT, BECAUSE THE SELECTION IS POSITIONAL
+- FU-315 [Punspecified/NO-STATUS] stale 23d -- 2026-08-10 | autopoiesis-bar-tracker | A REVERT APPARATUS THAT WAS PROVEN YESTERDAY IS UNPROPOSABLE TODAY, BECAUSE THE PROOF NOW TAKES LONGER THAN THE
+- FU-335 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0041 | CURING THE LONG CHILD MOVED THE ORPHAN TO THE POLL: EVERY DETACH PATH HANDED BACK A WAIT THAT WAS ITSELF 
+- FU-342 [Punspecified/NO-STATUS] stale 9d -- the money guard is tighter than the wedge guard it sits behind, so the startup allowance FU-104 added is unfunded
+- FU-352 [Punspecified/NO-STATUS] stale 2d -- lane_check_in double-detach: the mandated check-in scored UNKNOWN on every improve_loop cycle (2026-08-24, cycle-0054)
+- FU-365 [Punspecified/open] stale 1d -- A paid GPU instance whose launcher printed `LEFT ALIVE` bills forever, and the audit's wedge guard is keyed on a state it can never be in
+
+## counters_and_censuses -- 54 actionable of 81 (11 at P0/P1, 11 with no status field)
+
+- FU-235 [P0/open] stale 0d -- The prod schema has TWO owners, and alembic runs as the one that owns neither `users` nor `orgs` -- so the migration lane could only ever migrate the 
+- FU-036 [P1/open] stale 44d -- goose_runner was DEAD for 61.6 hours and nothing detected it
+- FU-075 [P1/open] stale 42d -- COMPETITIVE THREAT: conduid.com is a direct MCP-trust-scoring rival with a better shopfront and a two-sided flywheel we lack
+- FU-107 [P1/open] stale 38d -- Nightly moat backup INFEASIBLE at current table size — COPY ~68 rows/s => ~8h
+- FU-099 [P1/open] stale 32d -- KEYSTONE #1786 merged (chairman) — learning: drive the spine-unblocking PR, and never rationalize a red check as cosmetic
+- FU-228 [P1/open] stale 32d -- The write service silently caps EVERY unbounded SELECT at 200 rows with no truncation flag -- [[FU-224]] was one caller of a SHARED defect, and a seco
+- FU-253 [P1/open] stale 29d -- The lane halt has been ARMED and UNCONSULTED for 5 days: the census writes a real sentinel, no lane reads it, and the census that would write it does 
+- FU-236 [P1/open] stale 28d -- The liveness contract passes a 75-byte comment, `no-hollow` passes a 32-byte stub, and both were green and mergeable -- the promotion gate proves a fi
+- FU-267 [P1/NO-STATUS] stale 27d -- The credit-ledger dedup compared an int id to argparse's str, so ONE $25 top-up counted twice and the budget published a FALSE RED
+- FU-254 [P1/open] stale 2d -- Every knowledge surface we own is PULL and enumerated from the wrong end -- 15 of 88 tools are built, paid for and consulted by nothing
+- FU-090 [P1/open] stale -43d -- Discovery doubled the moat but assessment coverage HALVED (74%->37%) - 230K new servers are unscored, needs a cost-capped rescore wave
+- FU-022 [P2/open] stale 45d -- rug_pull_monitor snapshots silently failing (write_service 500s)
+- FU-059 [P2/open] stale 43d -- A delta rescore changed exactly 32,545 servers on six of seven axes — identical counts, independent axes
+- FU-060 [P2/open] stale 43d -- "did NOT reach propose_directive" is asserted, not measured — the bridge's return value is logged nowhere
+- FU-077 [P2/open] stale 42d -- Rebuild the mcprisky.io landing for conversion (live ticker, credit-score frame, scorecard hero)
+- FU-039 [P2/watch] stale 41d -- CofC 2026-07-20: wire/mount lane DEFERRED to post-census — ruling recorded, triggers set
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-006 [P2/watch] stale 40d -- Architect nvidia-rung non-convergence (~1 in 3 cycles)
+- FU-096 [P2/in-progress] stale 38d -- autopoiesis-bar-tracker produces no scoreboard CSV (daily grade is blind)
+- FU-064 [P2/watch] stale 37d -- Arming the ratchet: what actually shipped, and the three things it deliberately did NOT decide
+- FU-114 [P2/open] stale 37d -- 4 active services will read HEALTHY in prod while serving nothing
+- FU-091 [P2/open] stale 36d -- Auto-merge did not fire on a clean, green PR (#1744 sat 2 days) - merge automation has no detector for its own non-firing
+- FU-135 [P2/open] stale 36d -- the obvious place to launch a paid rescore from is 48 commits stale
+- FU-139 [P2/open] stale 36d -- perspective_snapshots runtime is UNBOUNDED — 64min+ with no co-residency and +0.19% data
+- FU-169 [P2/open] stale 35d -- a directory listing is not a queue depth
+- FU-069 [P2/open] stale 34d -- Dedup keys on filename, so the same endpoint gets built three, four and five times
+- FU-200 [P2/open] stale 32d -- The casing-repair series was never cumulative: goose_runner.log's coverage window moved under a 5-day trend line
+- FU-261 [P2/open] stale 28d -- A `pgrep` predicate sent across the zo_call bridge COUNTS ITS OWN TRANSPORT, so every process-liveness probe reads exactly one too many
+- FU-252 [P2/open] stale 26d -- CHAIRMAN RULING: the emergency hatch grades an ABORTED deploy as a FALSE EMERGENCY, so the counter that keeps the hatch honest punishes the one case w
+- FU-177 [P2/open] stale 24d -- the Phase 2 gate measures attended fires, which never exercise the thing Phase 2 would add
+- FU-331 [P2/NO-STATUS] stale 22d -- the stranded-wave scan reported 0 with a passing control on the one day two waves died, because the harness parked them in a sibling directory the sca
+- FU-356 [P2/in-progress] stale 2d -- inline-interpreter-source had no stdin-to-DETACH entry; --pysrc --detach added (cycle-0056)
+- FU-372 [P2/open] stale 1d -- the phantom `app.dependency_overrides` family is 36 sites, not 6 and not 14 -- both censuses scoped on the NAME they arrived with, and the thing that 
+- FU-374 [P2/open] stale 1d -- loop_health's stall trend splits on OBSERVED days, so a 6-day scheduler dormancy reads as a RISING stall rate
+- FU-168 [P2/open] stale 0d -- seven "independent" verdicts are ONE confirmation counted seven times
+- FU-051 [P3/open] stale 44d -- Institutionalize the adversarial verification pass on the daily briefing
+- FU-041 [P3/watch] stale 41d -- 200K LinkedIn campaign is at ~zero engagement — do not renew the daily-repost pattern after the 07-22 window close
+- FU-084 [P3/open] stale 39d -- Sweep-close the stale-branch RED PR backlog (failing a since-removed `treewalk-smoke` check)
+- FU-079 [P3/watch] stale 37d -- WATCH: track conduid growth, methodology and funding as recurring competitive intel
+- FU-171 [P3/open] stale 35d -- 15 spent one-shot tasks still fire, and they inflate every adoption denominator
+- FU-188 [P3/open] stale 28d -- The watchdog's restart branch cannot see a supervisor that already exists, so a crash-loop is amplified into a supervisor leak
+- FU-279 [Punspecified/open] stale 26d -- FAMILY A REGRESSED FROM 0 TO 6 SITES, and only the explicit lookup could see it -- it never entered any top-N list
+- FU-284 [Punspecified/open] stale 24d -- one file, one word, two thresholds: the trajectory header printed "silent_lanes 0 FLAT" on the run that ranked a silent lane at 85
+- FU-299 [Punspecified/open] stale 24d -- A MODULE-SCOPE CHANGE IN MY OWN CLASSIFIER WOULD HAVE PUBLISHED A 21-SITE IMPROVEMENT THAT DID NOT HAPPEN
+- FU-304 [Punspecified/NO-STATUS] stale 24d -- SEVEN DARK TOOLS WERE ONE DEAD CHAIN, AND ITS SILENCE LET A COMMITTED ARTIFACT LOSE TWO THIRDS OF THE APP
+- FU-305 [Punspecified/NO-STATUS] stale 23d -- THE HALT WAS ARMED ON A REPORT THAT NOTHING EVER RAN AGAIN, AND ITS 26 ALARM TESTS WERE NEVER COLLECTED
+- FU-311 [Punspecified/NO-STATUS] stale 23d -- THE CHAIN'S CONSUMER WAS DARK, AND ITS DEFAULT INPUT WAS THE STALE ARTIFACT
+- FU-334 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0040 | THE SELECTOR'S HEADLINE COUNTED A DIFFERENT POPULATION THAN ITS OWN PREDICATE GRADED, AND MANUFACTURED A 
+- FU-264 [Punspecified/NO-STATUS] stale 9d -- The fleet's worst hazard read x3 because the recurrence counter was keyed on FREE TEXT -- and every one of the twelve rows already named the family in
+- FU-351 [Punspecified/NO-STATUS] stale 3d -- a receipt confirmed in print was erased by a sibling that never saw it (lane_receipts lost-update)
+- FU-312 [Punspecified/NO-STATUS] stale 2d -- rollback selector consumed an ERROR STRING as a row count
+- FU-367 [Punspecified/open] stale 1d -- The reachability ratchet's baseline went stale, converting a derivative gate into a level gate that fails 25 of 45 open PRs on inherited debt
+- FU-371 [Punspecified/NO-STATUS] stale 0d -- A COMPONENT IS NOT LANDED WHEN IT WORKS -- IT IS LANDED WHEN A CENSUS CAN TELL USED FROM UNUSED
+- FU-380 [Punspecified/NO-STATUS] stale Noned -- a failure leaderboard that ranks message LENGTH, and the cure my own prompt prescribed is impossible
+
+## governance_and_authority -- 50 actionable of 95 (17 at P0/P1, 6 with no status field)
+
+- FU-076 [P1/in-progress] stale 40d -- Adopt a legible multi-axis scorecard (deterministic signals) — conduid parity AND the fix for FU-058
+- FU-101 [P1/in-progress] stale 39d -- SHEPHERD ROLE: follow-up-triage cross-pollinates all scheduled tasks; break the internal walls
+- FU-124 [P1/open] stale 37d -- The app is invisible to crawlers — an indexability gap FU-075..079 never captured, and the one axis where conduid is unambiguously ahead
+- FU-210 [P1/open] stale 33d -- The run-ledger's slot grid described a cadence that was cut this morning, and was about to page the chairman about slots that no longer exist
+- FU-099 [P1/open] stale 32d -- KEYSTONE #1786 merged (chairman) — learning: drive the spine-unblocking PR, and never rationalize a red check as cosmetic
+- FU-167 [P1/open] stale 31d -- a gate PASSES rc=0 while printing its own escalation trigger, suppressed 17 times
+- FU-253 [P1/open] stale 29d -- The lane halt has been ARMED and UNCONSULTED for 5 days: the census writes a real sentinel, no lane reads it, and the census that would write it does 
+- FU-159 [P1/open] stale 28d -- Directive quality does NOT bypass the Tier-0 merge path: a controlled 2-directive test
+- FU-226 [P1/open] stale 28d -- prod-drift-sentinel obeyed a rule its principal retired three days earlier, and staged 19 times into a subscriber that had been told to stand down
+- FU-251 [P1/open] stale 27d -- 23 of 34 lanes drive the desktop through Windows-MCP and not one names Desktop Commander -- and the ledger already records Windows-MCP silently failin
+- FU-265 [P1/NO-STATUS] stale 27d -- `PEER_CLEARABLE` was a permission value no code path could read, so the 2026-08-04 ruling was never executable in `authority.py`
+- FU-255 [P1/open] stale 25d -- CODE STEERS, PROSE DOES NOT -- every durable fix this session was a function; every failure was a paragraph
+- FU-248 [P1/open] stale 22d -- The loop measured its product and never itself -- so it spent a day fixing the SECOND-biggest source of stalls
+- FU-326 [P1/pr-open] stale 22d -- The fix for the dam enumerated failure NAMES, and the next wave returned a name it did not list
+- FU-254 [P1/open] stale 2d -- Every knowledge surface we own is PULL and enumerated from the wrong end -- 15 of 88 tools are built, paid for and consulted by nothing
+- FU-364 [P1/open] stale 0d -- This lane's ENTIRE remit is an action `authority.json` has never named: `--may registry_insert` has returned UNKNOWN ACTION for 8+ consecutive days
+- FU-090 [P1/open] stale -43d -- Discovery doubled the moat but assessment coverage HALVED (74%->37%) - 230K new servers are unscored, needs a cost-capped rescore wave
+- FU-039 [P2/watch] stale 41d -- CofC 2026-07-20: wire/mount lane DEFERRED to post-census — ruling recorded, triggers set
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-089 [P2/open] stale 40d -- Harden ask-corpus reindex guard + honestly flag unassessed discovery (deferred from FU-088 CofC)
+- FU-098 [P2/open] stale 40d -- Size-scaled vast spend guard shipped; wire into run loop + fix resume-from-zero (deferred)
+- FU-092 [P2/open] stale 40d -- CVE-axis strengthening queued (family propagation + linker v2) -- autopoietic, loop-set thresholds
+- FU-064 [P2/watch] stale 37d -- Arming the ratchet: what actually shipped, and the three things it deliberately did NOT decide
+- FU-083 [P2/open] stale 37d -- Tower PRIMARY clone carries a ~156-file pre-staged index — `git add <one file>` mis-scopes the commit
+- FU-135 [P2/open] stale 36d -- the obvious place to launch a paid rescore from is 48 commits stale
+- FU-139 [P2/open] stale 36d -- perspective_snapshots runtime is UNBOUNDED — 64min+ with no co-residency and +0.19% data
+- FU-160 [P2/open] stale 35d -- 171 goose entrypoint copies on ZoComputer; 3 are live, and the raw-hash/mtime test for "which one runs" is WRONG
+- FU-161 [P2/open] stale 35d -- `fire_gate` named the 100th commit as the target head, and would have accepted a truncated 300-file compare as a complete image surface
+- FU-103 [P2/in-progress] stale 34d -- Tie the ledger ⇄ MCP memory ⇄ graphify KL into one FU-keyed context graph
+- FU-218 [P2/open] stale 32d -- The link auditor written to stop namespace-conflation from manufacturing false reds was itself omitting a namespace, and 6 of its 9 reds were its own 
+- FU-125 [P2/open] stale 31d -- FOLLOWUPS.md has grown 17x in 7 days and is outgrowing the context that reads it — the ledger governing autopoiesis is becoming unreadable
+- FU-274 [P2/open] stale 27d -- `rule_echo._live_occurrences` uses a bare +/-220 char window, so a citation can silence a live restatement two lines away
+- FU-252 [P2/open] stale 26d -- CHAIRMAN RULING: the emergency hatch grades an ABORTED deploy as a FALSE EMERGENCY, so the counter that keeps the hatch honest punishes the one case w
+- FU-177 [P2/open] stale 24d -- the Phase 2 gate measures attended fires, which never exercise the thing Phase 2 would add
+- FU-062 [P2/open] stale 23d -- drift-check's "cheap inline" precheck takes 38s idle and blocks the trigger POST past the caller's timeout
+- FU-308 [P2/open] stale 23d -- The retired-prose detector enumerates SKILL files only, so an approval gate living in a LEDGER is invisible to it
+- FU-325 [P2/open] stale 22d -- A task prompt grants, in prose, an action authority.json holds forever
+- FU-340 [P2/open] stale 21d -- a PROPOSED peer decision carries a verify_cmd that measures a DIFFERENT artifact than its action changes
+- FU-110 [P2/open] stale 0d -- graphify-KL daily refresh now reconciles open-FU code-anchors against the fresh graph (drift monitor + subgraph cache)
+- FU-168 [P2/open] stale 0d -- seven "independent" verdicts are ONE confirmation counted seven times
+- FU-019 [P3/open] stale 45d -- Decide whether the runtime clone should ever be fully clean
+- FU-171 [P3/open] stale 35d -- 15 spent one-shot tasks still fire, and they inflate every adoption denominator
+- FU-178 [P3/watch] stale 35d -- release pinning + a real upgrade cycle -- the work rollback is actually waiting on
+- FU-320 [P3/open] stale 22d -- A near-miss clause NAME is priced as a wall, and during the away window that is an FU round-trip for a typo
+- FU-280 [Punspecified/open] stale 26d -- the `--enforce` halt has outlived its condition -- DECIDE_AND_LOG is available, and condition 5 (NOT THE FILER) is why this lane must not self-clear i
+- FU-305 [Punspecified/NO-STATUS] stale 23d -- THE HALT WAS ARMED ON A REPORT THAT NOTHING EVER RAN AGAIN, AND ITS 26 ALARM TESTS WERE NEVER COLLECTED
+- FU-335 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0041 | CURING THE LONG CHILD MOVED THE ORPHAN TO THE POLL: EVERY DETACH PATH HANDED BACK A WAIT THAT WAS ITSELF 
+- FU-351 [Punspecified/NO-STATUS] stale 3d -- a receipt confirmed in print was erased by a sibling that never saw it (lane_receipts lost-update)
+- FU-370 [Punspecified/NO-STATUS] stale 1d -- A PROPOSAL PROPOSED THE EXACT MOVE ITS OWN TARGET ARTIFACT FORBIDS BY NAME, WITH THE SAME NUMBERS
+- FU-353 [Punspecified/NO-STATUS] stale 0d -- the bar CSV changed owner and basis during the standdown; and a detached child is not reboot-proof
+
+## mechanical_and_transport -- 44 actionable of 92 (11 at P0/P1, 12 with no status field)
+
+- FU-101 [P1/in-progress] stale 39d -- SHEPHERD ROLE: follow-up-triage cross-pollinates all scheduled tasks; break the internal walls
+- FU-107 [P1/open] stale 38d -- Nightly moat backup INFEASIBLE at current table size — COPY ~68 rows/s => ~8h
+- FU-116 [P1/pr-open] stale 30d -- The goose-canary's two most important guards were committed as FILES and never wired as GATES
+- FU-149 [P1/open] stale 30d -- flyctl on the tower has lost its access token — every lane that tunnels to prod PG is blocked
+- FU-272 [P1/open] stale 27d -- The builder emits one service as two PRs into two incompatible lifecycle directories
+- FU-268 [P1/NO-STATUS] stale 27d -- `record_credit(state=...)` with no `path=` still writes the canonical state file -- the DESTRUCTIVE path is the DEFAULT and the safe one is opt-in
+- FU-119 [P1/open] stale 23d -- The goose-canary tests a TRANSPORT the mesh does not use — it drives goose straight at a provider, production drives it through the ladder shim
+- FU-321 [P1/pr-open] stale 2d -- A failed wave became "the newest unfinished run" forever, damming every future rescore
+- FU-350 [P1/open] stale 2d -- The tower scheduler was dead for 7 days and every instrument that would have said so was itself a scheduled task
+- FU-303 [P1/open] stale 1d -- fu_verify HANGS ON WINDOWS FOR THE REASON peer_review ALREADY FIXED, SO PHASE 2a PRODUCED NO DATA
+- FU-108 [P1/open] stale -54d -- Validated 2026-07-26 re-score is stranded UNIMPORTED — weekly_rescore has no import phase
+- FU-042 [P2/open] stale 44d -- Hollow gate matches inbound-only, so 87.3% of orphans pass it
+- FU-044 [P2/open] stale 44d -- app/main.py's mount loop swallows every mount failure
+- FU-038 [P2/open] stale 43d -- capmap-check has blocked two agent PRs for a day on pre-existing schema drift
+- FU-077 [P2/open] stale 42d -- Rebuild the mcprisky.io landing for conversion (live ticker, credit-score frame, scorecard hero)
+- FU-080 [P2/open] stale 41d -- Ingest the builder-DuckDB legible signals into the app tier so FU-076's scorecard can use them
+- FU-081 [P2/open] stale 40d -- Nightly backup runs inline in one MCP PowerShell call, but the ~170s dump outlives the ~60-90s MCP transport timeout — step 4 returns a false TIMEOUT 
+- FU-098 [P2/open] stale 40d -- Size-scaled vast spend guard shipped; wire into run loop + fix resume-from-zero (deferred)
+- FU-118 [P2/pr-open] stale 37d -- The MCP SDK the bridges import was declared in NO requirements file, and directive_mcp did an import-time mkdir on a hardcoded absolute path
+- FU-153 [P2/pr-open] stale 36d -- The FU-138 fix was written to a path outside the repo, so the next run could not find it
+- FU-142 [P2/open] stale 31d -- 44 staged self-tests fail as "relative import with no known parent package" -- a package run as a script
+- FU-030 [P2/open] stale 29d -- Two consecutive days of exactly zero score-row delta
+- FU-261 [P2/open] stale 28d -- A `pgrep` predicate sent across the zo_call bridge COUNTS ITS OWN TRANSPORT, so every process-liveness probe reads exactly one too many
+- FU-277 [P2/NO-STATUS] stale 26d -- The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch every run, and the 2026-08-06 co
+- FU-055 [P2/open] stale 23d -- Scoring is not stalled — it is SATURATED; the 200K metric measures the wrong thing
+- FU-062 [P2/open] stale 23d -- drift-check's "cheap inline" precheck takes 38s idle and blocks the trigger POST past the caller's timeout
+- FU-295 [P2/open] stale 23d -- The recurrence fix landed in the WRITER and the defect lives in the 14 PROMPTS that call it -- 13 of 14 lanes are invoking the unkeyed form the fleet 
+- FU-330 [P2/open] stale 22d -- the anti-orphan constructor could report NEVER LAUNCHED for a perfectly healthy launch, because it gave two different questions the same clock
+- FU-316 [P2/open] stale 21d -- BOTH friction RUNNERS HAND THE LINE TO cmd.exe, AND NOTHING SAID SO -- A POWERSHELL PROLOGUE BECAME A LAUNCH THAT LOOKED LIKE A COMPLETED RUN
+- FU-237 [P2/open] stale 15d -- The freshness SLA and the scoring cadence are BOTH 7 days, so `newest_scored_at` hits the breach threshold in the same minute the next wave lands -- t
+- FU-356 [P2/in-progress] stale 2d -- inline-interpreter-source had no stdin-to-DETACH entry; --pysrc --detach added (cycle-0056)
+- FU-050 [P3/open] stale 44d -- The architect's log inode keeps being deleted mid-run
+- FU-128 [P3/open] stale 36d -- The shared checkout has no ops/host/ scripts on disk — every run re-derives the workaround
+- FU-034 [P3/open] stale 23d -- Send the #10348 shell-timeout finding upstream to aaif-goose/goose
+- FU-290 [Punspecified/NO-STATUS] stale 25d -- — A FALSIFICATION PROBE THAT INLINES ITS SUBJECT FREEZES ITS VERDICT FOREVER
+- FU-298 [Punspecified/NO-STATUS] stale 24d -- THE ARCHITECT SALVAGED A DIRECTIVE AND THEN LOGGED THAT IT HAD PROPOSED NOTHING
+- FU-335 [Punspecified/NO-STATUS] stale 21d -- 2026-08-12 | improvement-loop | cycle-0041 | CURING THE LONG CHILD MOVED THE ORPHAN TO THE POLL: EVERY DETACH PATH HANDED BACK A WAIT THAT WAS ITSELF 
+- FU-341 [Punspecified/NO-STATUS] stale 20d -- The scratchpad guard was blind to its own subject, disarmed by a stray token, and fired on its own documentation -- while the call path built to make 
+- FU-345 [Punspecified/NO-STATUS] stale 20d -- a RUNNING verdict that is byte-identical at second 2 and at minute 16
+- FU-343 [Punspecified/NO-STATUS] stale 20d -- a classifier wired into the ONE door it was bitten at, and seven it was not
+- FU-306 [Punspecified/NO-STATUS] stale 16d -- — Every cure for `inline-interpreter-source` was an importable function; all 10 bites happened where no interpreter was running yet
+- FU-312 [Punspecified/NO-STATUS] stale 2d -- rollback selector consumed an ERROR STRING as a row count
+- FU-352 [Punspecified/NO-STATUS] stale 2d -- lane_check_in double-detach: the mandated check-in scored UNKNOWN on every improve_loop cycle (2026-08-24, cycle-0054)
+- FU-353 [Punspecified/NO-STATUS] stale 0d -- the bar CSV changed owner and basis during the standdown; and a detached child is not reboot-proof
+
+## unclassified -- 3 actionable of 5 (0 at P0/P1, 3 with no status field)
+
+- FU-310 [Punspecified/NO-STATUS] stale 23d -- THE LEDGER LINTER'S ENTRY SPAN IS DRAWN WRONG, SO IT GRADED ONE ENTRY'S KEYS TWICE AND LET ITS NEIGHBOUR THROUGH EMPTY
+- FU-344 [Punspecified/NO-STATUS] stale 2d -- A REVERT THAT FAILED WAS RECORDED INSIDE AN *ACTED* ROW, SO THE `REVERT_FAILED` SWEEP READS ZERO AND IS BLIND TO IT
+- FU-378 [Punspecified/NO-STATUS] stale 0d -- the weekly's own liveness signal is its scheduler stamp, so it cannot observe its own dormancy
+
+---
+
+## CITATION HUBS -- what the ledger keeps pointing back to
+
+- FU-207 cited by 13 [P1/OPEN] A scheduled task's `lastRunAt` advanced for five consecutive slots that did no work and left no trace
+- FU-054 cited by 13 [P1/OPEN] Discovery has collapsed to ~2 rows/day — this, not scoring, is what gates 200K
+- FU-114 cited by 13 [P2/OPEN] 4 active services will read HEALTHY in prod while serving nothing
+- FU-233 cited by 9 [P0/closed] The quarantine keyspace is a BASENAME, so the four files that CONSTITUTE the service unit were globally unbuildable -- and the recovery swee
+- FU-231 cited by 9 [P1/closed] The first honest reading of the liveness contract: the promoter's wall stopped being the chairman's Dockerfile and became 37 model names tha
+- FU-031 cited by 9 [P1/closed] Builder marks modules complete with the acceptance self-test SKIPPED (Tier-0 degradation, 74% of builds)
+- FU-102 cited by 9 [P2/closed] prod /spine/health ok:false — 7 services/active modules absent from the Dockerfile COPY-list
+- FU-217 cited by 8 [P1/closed] The promoter's 84% hold bucket is a Dockerfile line that DOES NOT EXIST -- `services/` is COPYed nowhere, so no autonomous service can ever 
+- FU-064 cited by 8 [P2/OPEN] Arming the ratchet: what actually shipped, and the three things it deliberately did NOT decide
+- FU-152 cited by 7 [P2/OPEN] Four copies of goose_runner.py on the box, and the one every deploy-check instinct points at is a DECOY
+- FU-236 cited by 7 [P1/OPEN] The liveness contract passes a 75-byte comment, `no-hollow` passes a 32-byte stub, and both were green and mergeable -- the promotion gate p
+- FU-090 cited by 7 [P1/OPEN] Discovery doubled the moat but assessment coverage HALVED (74%->37%) - 230K new servers are unscored, needs a cost-capped rescore wave
+- FU-006 cited by 7 [P2/OPEN] Architect nvidia-rung non-convergence (~1 in 3 cycles)
+- FU-058 cited by 7 [P1/OPEN] 99.5% of the scored corpus is HIGH or CRITICAL — the risk tier carries almost no information
+- FU-025 cited by 7 [P1/closed] Backup verify + prune must key on the dir-name timestamp, not mtime
+- FU-116 cited by 7 [P1/OPEN] The goose-canary's two most important guards were committed as FILES and never wired as GATES
+- FU-174 cited by 7 [P2/closed] ledger_lint silently DEDUPLICATES colliding FU numbers instead of failing on them
+- FU-229 cited by 6 [P1/closed] The deploy script's own docstring asserted an authority its principal had withdrawn three days earlier -- 20 correct stages, 0 fires, and 45
+- FU-247 cited by 6 [P1/closed] Mutual evaluation replaces chairman deference -- four escalate-only clauses become peer-clearable, enforced by a command rather than a parag
+- FU-195 cited by 6 [P2/OPEN] An EMPTY directory appeared in services/active during a build, and it is the exact shape that would fake the T2 milestone
+- FU-053 cited by 6 [P1/closed] Prod Postgres is at capacity and failing 3/3 health checks — a hard ceiling on PLAN_200K
+- FU-142 cited by 6 [P2/OPEN] 44 staged self-tests fail as "relative import with no known parent package" -- a package run as a script
+- FU-039 cited by 6 [P2/OPEN] CofC 2026-07-20: wire/mount lane DEFERRED to post-census — ruling recorded, triggers set
+- FU-069 cited by 6 [P2/OPEN] Dedup keys on filename, so the same endpoint gets built three, four and five times
+- FU-075 cited by 6 [P1/OPEN] COMPETITIVE THREAT: conduid.com is a direct MCP-trust-scoring rival with a better shopfront and a two-sided flywheel we lack

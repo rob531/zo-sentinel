@@ -1,0 +1,29 @@
+{
+  "_what": "Snapshot of the scheduler's REGISTERED task list. The builder cannot query the scheduler itself, so this file is the bridge. It has its own date and the builder refuses to use it if it is stale.",
+  "_how_to_refresh": "Ask Claude to list scheduled tasks, then rewrite this file. Or run _tools/snapshot_scheduled_tasks.ps1 Windows-side.",
+  "_why_it_matters": "36 lane directories exist on disk; only these are registered. The remainder are orphans -- finished one-shots and abandoned watches that still carry live-looking prompts. A lane directory is not a lane.",
+  "snapshot_at": "2026-09-02T19:20:00+00:00",
+  "tasks": [
+    {"id": "zo-sentinel-pipeline-watch", "enabled": true, "cron": "0 4 * * *", "lastRunAt": "2026-09-02T08:06:15Z"},
+    {"id": "zo-sentinel-loop-watch", "enabled": false, "cron": "0 * * * *", "lastRunAt": "2026-06-24T13:09:31Z"},
+    {"id": "deploy-runtime-from-main", "enabled": true, "cron": "0 5 * * *", "lastRunAt": "2026-09-02T09:09:44Z"},
+    {"id": "mcplookup-nightly-db-backup", "enabled": true, "cron": "0 3 * * *", "lastRunAt": "2026-09-02T07:09:55Z"},
+    {"id": "vast-jobs-daily-audit", "enabled": true, "cron": "30 7 * * *", "lastRunAt": "2026-09-02T11:36:53Z"},
+    {"id": "graphify-kl-daily-refresh", "enabled": true, "cron": "45 5 * * *", "lastRunAt": "2026-09-02T09:51:42Z"},
+    {"id": "cadence-jobs-daily-trigger", "enabled": true, "cron": "20 6 * * *", "lastRunAt": "2026-09-02T10:24:00Z"},
+    {"id": "daily-chairman-review", "enabled": true, "cron": "0 8 * * *", "lastRunAt": "2026-09-02T12:01:04Z"},
+    {"id": "moat-rescore-weekly", "enabled": true, "cron": "0 2 * * 2", "lastRunAt": "2026-09-01T06:04:22Z"},
+    {"id": "moat-rescore-first-run", "enabled": false, "cron": null, "lastRunAt": "2026-07-15T00:00:54Z"},
+    {"id": "plan-200k-count-tracker", "enabled": true, "cron": "45 7 * * *", "lastRunAt": "2026-09-02T11:53:38Z"},
+    {"id": "mcprisky-200k-daily-repost", "enabled": false, "cron": "30 9 * * *", "lastRunAt": "2026-07-24T13:40:49Z"},
+    {"id": "follow-up-triage--implement-agent-for-the-zo-sentinel-project", "enabled": true, "cron": "0 13 * * *", "lastRunAt": "2026-09-02T17:07:20Z"},
+    {"id": "goose-shadow-research", "enabled": true, "cron": "30 7 * * 1", "lastRunAt": "2026-08-31T11:30:51Z"},
+    {"id": "discovery-harvest-daily", "enabled": true, "cron": "0 7 * * *", "lastRunAt": "2026-09-02T11:01:22Z"},
+    {"id": "autopoiesis-bar-tracker", "enabled": true, "cron": "30 10 * * *", "lastRunAt": "2026-09-02T14:31:59Z"},
+    {"id": "prod-drift-sentinel", "enabled": true, "cron": "45 0,6,15,20 * * *", "lastRunAt": "2026-09-02T10:47:28Z"},
+    {"id": "score-import-shepherd", "enabled": true, "cron": "20 9 * * *", "lastRunAt": "2026-09-02T13:25:53Z"},
+    {"id": "clerk-signup-reconcile-nightly", "enabled": true, "cron": "40 4 * * *", "lastRunAt": "2026-09-02T08:41:19Z"},
+    {"id": "improvement-loop", "enabled": true, "cron": "15 2,8,14,20 * * *", "lastRunAt": "2026-09-02T18:19:20Z"},
+    {"id": "spark-scoring-run-review", "enabled": true, "cron": "30 20 * * *", "lastRunAt": "2026-09-02T16:39:21Z"}
+  ]
+}

@@ -1,0 +1,588 @@
+{
+  "measured_at": "2026-09-02T19:53:48+00:00",
+  "ledger_bytes": 3018991,
+  "ledger_mtime": "2026-09-02T18:43:04+00:00",
+  "total_entries": 375,
+  "max_fu_id": 382,
+  "id_gaps": [
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    224
+  ],
+  "by_status": {
+    "open": 145,
+    "resolved": 125,
+    "unspecified": 43,
+    "done": 38,
+    "in-progress": 9,
+    "watch": 7,
+    "pr-open": 7,
+    "partially": 1
+  },
+  "by_priority": {
+    "P2": 147,
+    "P1": 123,
+    "Punspecified": 64,
+    "P3": 32,
+    "P0": 9
+  },
+  "by_class": {
+    "defect": 335,
+    "directive": 22,
+    "learning": 6,
+    "defect (instrument, not product). found while acting as adversary, which is the only role that runs a predicate against the world it is supposed to certify *after* the change.": 1,
+    "defect (instrument). the prose boundary, caught by the candidate whose own `work` text predicts it.": 1,
+    "defect (instrument). a headline number contradicting the body of its own report.": 1,
+    "defect (instrument). census taken from the observations instead of from the world -- the most repeated shape in this ledger.": 1,
+    "defect (the prose boundary), and it is the sharper version of the case self-steering v5.1 already argues.": 1,
+    "trap (review procedure). a shared name is a shared counter, one layer up from code.": 1,
+    "instrument-failure (the 51% class — the artifact you inspected is not the artifact that runs)": 1,
+    "instrument-failure — peer-review mechanism": 1,
+    "instrument-blind-spot / governance-plane": 1,
+    "gates-and-predicates | state: falsified (adversary duty)": 1,
+    "gates-and-predicates / fleet-communication | state: partially repaired": 1,
+    "unspecified": 1
+  },
+  "status_field_absent": 43,
+  "status_token_present_but_unparsed": 0,
+  "invisible_to_status_sweep": [
+    {
+      "fu": "FU-262",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "The floor probe that polices \"the artifact you inspected is not the artifact that runs\" was itself grading a hand-writte"
+    },
+    {
+      "fu": "FU-263",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "A 20KB tool sat at zero callers because the question it answers lived in a docstring -- and the docstring was on the pro"
+    },
+    {
+      "fu": "FU-264",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "The fleet's worst hazard read x3 because the recurrence counter was keyed on FREE TEXT -- and every one of the twelve ro"
+    },
+    {
+      "fu": "FU-265",
+      "priority": "P1",
+      "filed": "2026-08-06",
+      "title": "`PEER_CLEARABLE` was a permission value no code path could read, so the 2026-08-04 ruling was never executable in `autho"
+    },
+    {
+      "fu": "FU-267",
+      "priority": "P1",
+      "filed": "2026-08-06",
+      "title": "The credit-ledger dedup compared an int id to argparse's str, so ONE $25 top-up counted twice and the budget published a"
+    },
+    {
+      "fu": "FU-268",
+      "priority": "P1",
+      "filed": "2026-08-06",
+      "title": "`record_credit(state=...)` with no `path=` still writes the canonical state file -- the DESTRUCTIVE path is the DEFAULT "
+    },
+    {
+      "fu": "FU-269",
+      "priority": "P1",
+      "filed": "2026-08-06",
+      "title": "The dashboard's headline card calls 474,689 servers \"scored\" when 191,273 of them carry risk_tier='unassessed'"
+    },
+    {
+      "fu": "FU-277",
+      "priority": "P2",
+      "filed": "2026-08-07",
+      "title": "The stranded-wave detector -- this lane's founding capability -- exists only as prose, is re-implemented from scratch ev"
+    },
+    {
+      "fu": "FU-289",
+      "priority": "Punspecified",
+      "filed": "2026-08-08",
+      "title": "— A GUARD AGAINST A DEFECT WAS DEFEATED BY THAT DEFECT'S OWN RESIDUE"
+    },
+    {
+      "fu": "FU-290",
+      "priority": "Punspecified",
+      "filed": "2026-08-08",
+      "title": "— A FALSIFICATION PROBE THAT INLINES ITS SUBJECT FREEZES ITS VERDICT FOREVER"
+    },
+    {
+      "fu": "FU-298",
+      "priority": "Punspecified",
+      "filed": "2026-08-09",
+      "title": "THE ARCHITECT SALVAGED A DIRECTIVE AND THEN LOGGED THAT IT HAD PROPOSED NOTHING"
+    },
+    {
+      "fu": "FU-304",
+      "priority": "Punspecified",
+      "filed": "2026-08-09",
+      "title": "SEVEN DARK TOOLS WERE ONE DEAD CHAIN, AND ITS SILENCE LET A COMMITTED ARTIFACT LOSE TWO THIRDS OF THE APP"
+    },
+    {
+      "fu": "FU-305",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "THE HALT WAS ARMED ON A REPORT THAT NOTHING EVER RAN AGAIN, AND ITS 26 ALARM TESTS WERE NEVER COLLECTED"
+    },
+    {
+      "fu": "FU-306",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "— Every cure for `inline-interpreter-source` was an importable function; all 10 bites happened where no interpreter was "
+    },
+    {
+      "fu": "FU-309",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "SIXTEEN PRs WERE BORN UNMERGEABLE BY LANDING CODE IN THE REGISTRY DIRECTORY, AND CLOSING THEM WOULD HAVE DESTROYED 3,500"
+    },
+    {
+      "fu": "FU-310",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "THE LEDGER LINTER'S ENTRY SPAN IS DRAWN WRONG, SO IT GRADED ONE ENTRY'S KEYS TWICE AND LET ITS NEIGHBOUR THROUGH EMPTY"
+    },
+    {
+      "fu": "FU-311",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "THE CHAIN'S CONSUMER WAS DARK, AND ITS DEFAULT INPUT WAS THE STALE ARTIFACT"
+    },
+    {
+      "fu": "FU-312",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "rollback selector consumed an ERROR STRING as a row count"
+    },
+    {
+      "fu": "FU-313",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "2026-08-10 | autopoiesis-bar-tracker | A DECISION READ `ACTED` AND SWEPT GREEN TWICE WHILE ITS ARTIFACT WAS NEVER CREATE"
+    },
+    {
+      "fu": "FU-314",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "2026-08-10 | autopoiesis-bar-tracker | THE CLEARED ACTION AND THE COMMAND THAT IMPLEMENTS IT CAME APART OVERNIGHT, BECAU"
+    },
+    {
+      "fu": "FU-315",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "2026-08-10 | autopoiesis-bar-tracker | A REVERT APPARATUS THAT WAS PROVEN YESTERDAY IS UNPROPOSABLE TODAY, BECAUSE THE P"
+    },
+    {
+      "fu": "FU-318",
+      "priority": "Punspecified",
+      "filed": "2026-08-10",
+      "title": "2026-08-10 | improvement-loop | THE FLEET WAS NOT IGNORING THE CONSTRUCTOR -- SEVEN SKILL.md PROMPTS HANDED IT THE UNSAF"
+    },
+    {
+      "fu": "FU-331",
+      "priority": "P2",
+      "filed": "2026-08-11",
+      "title": "the stranded-wave scan reported 0 with a passing control on the one day two waves died, because the harness parked them "
+    },
+    {
+      "fu": "FU-334",
+      "priority": "Punspecified",
+      "filed": "2026-08-12",
+      "title": "2026-08-12 | improvement-loop | cycle-0040 | THE SELECTOR'S HEADLINE COUNTED A DIFFERENT POPULATION THAN ITS OWN PREDICA"
+    },
+    {
+      "fu": "FU-335",
+      "priority": "Punspecified",
+      "filed": "2026-08-12",
+      "title": "2026-08-12 | improvement-loop | cycle-0041 | CURING THE LONG CHILD MOVED THE ORPHAN TO THE POLL: EVERY DETACH PATH HANDE"
+    },
+    {
+      "fu": "FU-338",
+      "priority": "Punspecified",
+      "filed": "2026-08-12",
+      "title": "2026-08-12 | autopoiesis-bar-tracker | 14:33 slot | A REVERT THAT UNDID THE DATA AND NOT THE CODE RETURNED rc=0, RE-ARME"
+    },
+    {
+      "fu": "FU-341",
+      "priority": "Punspecified",
+      "filed": "2026-08-13",
+      "title": "The scratchpad guard was blind to its own subject, disarmed by a stray token, and fired on its own documentation -- whil"
+    },
+    {
+      "fu": "FU-345",
+      "priority": "Punspecified",
+      "filed": "2026-08-13",
+      "title": "a RUNNING verdict that is byte-identical at second 2 and at minute 16"
+    },
+    {
+      "fu": "FU-343",
+      "priority": "Punspecified",
+      "filed": "2026-08-13",
+      "title": "a classifier wired into the ONE door it was bitten at, and seven it was not"
+    },
+    {
+      "fu": "FU-342",
+      "priority": "Punspecified",
+      "filed": "2026-08-13",
+      "title": "the money guard is tighter than the wedge guard it sits behind, so the startup allowance FU-104 added is unfunded"
+    },
+    {
+      "fu": "FU-344",
+      "priority": "Punspecified",
+      "filed": "2026-08-13",
+      "title": "A REVERT THAT FAILED WAS RECORDED INSIDE AN *ACTED* ROW, SO THE `REVERT_FAILED` SWEEP READS ZERO AND IS BLIND TO IT"
+    },
+    {
+      "fu": "FU-351",
+      "priority": "Punspecified",
+      "filed": "2026-08-23",
+      "title": "a receipt confirmed in print was erased by a sibling that never saw it (lane_receipts lost-update)"
+    },
+    {
+      "fu": "FU-352",
+      "priority": "Punspecified",
+      "filed": "2026-08-24",
+      "title": "lane_check_in double-detach: the mandated check-in scored UNKNOWN on every improve_loop cycle (2026-08-24, cycle-0054)"
+    },
+    {
+      "fu": "FU-353",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "the bar CSV changed owner and basis during the standdown; and a detached child is not reboot-proof"
+    },
+    {
+      "fu": "FU-361",
+      "priority": "P1",
+      "filed": "2026-09-01",
+      "title": "`oldest_scored_at` has not moved since at least 2026-07-19 across 385,000 refresh slots -- the refresh half cannot move "
+    },
+    {
+      "fu": "FU-370",
+      "priority": "Punspecified",
+      "filed": "2026-09-01",
+      "title": "A PROPOSAL PROPOSED THE EXACT MOVE ITS OWN TARGET ARTIFACT FORBIDS BY NAME, WITH THE SAME NUMBERS"
+    },
+    {
+      "fu": "FU-371",
+      "priority": "Punspecified",
+      "filed": "2026-09-01",
+      "title": "A COMPONENT IS NOT LANDED WHEN IT WORKS -- IT IS LANDED WHEN A CENSUS CAN TELL USED FROM UNUSED"
+    },
+    {
+      "fu": "FU-376",
+      "priority": "Punspecified",
+      "filed": "2026-09-01",
+      "title": "a ten-day-TTL roster with no writer anywhere silently collapsed every lane's cadence window"
+    },
+    {
+      "fu": "FU-377",
+      "priority": "Punspecified",
+      "filed": "2026-09-02",
+      "title": "the last of three known-slow fleet tools never got the constructor built to save it"
+    },
+    {
+      "fu": "FU-378",
+      "priority": "Punspecified",
+      "filed": "2026-09-02",
+      "title": "the weekly's own liveness signal is its scheduler stamp, so it cannot observe its own dormancy"
+    },
+    {
+      "fu": "FU-379",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "the paired control a metric's own comment prescribes was written by a different module"
+    },
+    {
+      "fu": "FU-380",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "a failure leaderboard that ranks message LENGTH, and the cure my own prompt prescribed is impossible"
+    },
+    {
+      "fu": "FU-382",
+      "priority": "Punspecified",
+      "filed": null,
+      "title": "A floor probe diffed a SHARED directory and threw away the one thing that could explain its red"
+    }
+  ],
+  "open_total": 168,
+  "open_by_priority": {
+    "P2": 82,
+    "P1": 52,
+    "P3": 21,
+    "Punspecified": 11,
+    "P0": 2
+  },
+  "open_by_source": {
+    "daily-chairman-review": 17,
+    "mcplookup-nightly-db-backup": 8,
+    "goose-shadow-research": 6,
+    "zo-sentinel-pipeline-watch": 5,
+    "follow-up-triage--implement-agent-for-the-zo-sentinel-project": 5,
+    "autopoiesis-bar-tracker": 5,
+    "unspecified": 5,
+    "moat-rescore-weekly": 5,
+    "deploy-runtime-from-main": 4,
+    "chairman (attended) — conduid competitive assessment": 4,
+    "cadence-jobs-daily-trigger": 3,
+    "triage sweep (REACHABILITY_POSTMORTEM_2026-07-19)": 3,
+    "triage sweep (chairman_briefing_2026-07-20)": 3,
+    "prod-drift-sentinel": 3,
+    "follow-up-triage": 3,
+    "improvement-loop": 3,
+    "chairman briefing": 2,
+    "triage sweep (LADDER_ATTRIBUTION_AUDIT_2026-07-19)": 2,
+    "chairman \"lets get scoring running\" session": 2,
+    "daily-chairman-review (chairman-directed)": 2,
+    "graphify-kl-daily-refresh": 2,
+    "governance-lane (chairman-directed)": 2,
+    "deploy-runtime-from-main (09:10Z slot)": 2,
+    "autopoiesis-bar-tracker 23:40-00:00Z, chairman observation": 1,
+    "autopoiesis-bar-tracker 17:45-18:20Z, from follow-up-triage's lane_halt finding": 1
+  },
+  "open_stale_gt_14d": 141,
+  "open_stale_gt_30d": 93,
+  "open_never_logged": 32,
+  "open_without_verify": 12,
+  "open_verify_never_seen_red": 3,
+  "open_by_theme": {
+    "product_surface": 116,
+    "loop_lanes_and_builder": 102,
+    "gates_and_predicates": 86,
+    "deploy_and_infra": 84,
+    "moat_and_scoring": 77,
+    "counters_and_censuses": 54,
+    "governance_and_authority": 50,
+    "mechanical_and_transport": 44,
+    "unclassified": 3
+  },
+  "open_p0p1_by_theme": {
+    "product_surface": 37,
+    "loop_lanes_and_builder": 32,
+    "gates_and_predicates": 24,
+    "deploy_and_infra": 32,
+    "moat_and_scoring": 31,
+    "counters_and_censuses": 11,
+    "governance_and_authority": 17,
+    "mechanical_and_transport": 11,
+    "unclassified": 0
+  },
+  "citation_hubs": [
+    {
+      "fu": "FU-207",
+      "cited_by": 13,
+      "open": true,
+      "priority": "P1",
+      "title": "A scheduled task's `lastRunAt` advanced for five consecutive slots that did no work and left no trace"
+    },
+    {
+      "fu": "FU-054",
+      "cited_by": 13,
+      "open": true,
+      "priority": "P1",
+      "title": "Discovery has collapsed to ~2 rows/day — this, not scoring, is what gates 200K"
+    },
+    {
+      "fu": "FU-114",
+      "cited_by": 13,
+      "open": true,
+      "priority": "P2",
+      "title": "4 active services will read HEALTHY in prod while serving nothing"
+    },
+    {
+      "fu": "FU-233",
+      "cited_by": 9,
+      "open": false,
+      "priority": "P0",
+      "title": "The quarantine keyspace is a BASENAME, so the four files that CONSTITUTE the service unit were globally unbuildable -- and the recovery swee"
+    },
+    {
+      "fu": "FU-231",
+      "cited_by": 9,
+      "open": false,
+      "priority": "P1",
+      "title": "The first honest reading of the liveness contract: the promoter's wall stopped being the chairman's Dockerfile and became 37 model names tha"
+    },
+    {
+      "fu": "FU-031",
+      "cited_by": 9,
+      "open": false,
+      "priority": "P1",
+      "title": "Builder marks modules complete with the acceptance self-test SKIPPED (Tier-0 degradation, 74% of builds)"
+    },
+    {
+      "fu": "FU-102",
+      "cited_by": 9,
+      "open": false,
+      "priority": "P2",
+      "title": "prod /spine/health ok:false — 7 services/active modules absent from the Dockerfile COPY-list"
+    },
+    {
+      "fu": "FU-217",
+      "cited_by": 8,
+      "open": false,
+      "priority": "P1",
+      "title": "The promoter's 84% hold bucket is a Dockerfile line that DOES NOT EXIST -- `services/` is COPYed nowhere, so no autonomous service can ever "
+    },
+    {
+      "fu": "FU-064",
+      "cited_by": 8,
+      "open": true,
+      "priority": "P2",
+      "title": "Arming the ratchet: what actually shipped, and the three things it deliberately did NOT decide"
+    },
+    {
+      "fu": "FU-152",
+      "cited_by": 7,
+      "open": true,
+      "priority": "P2",
+      "title": "Four copies of goose_runner.py on the box, and the one every deploy-check instinct points at is a DECOY"
+    }
+  ],
+  "oldest_open": [
+    {
+      "fu": "FU-001",
+      "filed": "2026-07-16",
+      "age_days": 48,
+      "priority": "P1",
+      "title": "Make wave/rescore harnesses write the run ledger"
+    },
+    {
+      "fu": "FU-006",
+      "filed": "2026-07-18",
+      "age_days": 46,
+      "priority": "P2",
+      "title": "Architect nvidia-rung non-convergence (~1 in 3 cycles)"
+    },
+    {
+      "fu": "FU-008",
+      "filed": "2026-07-18",
+      "age_days": 46,
+      "priority": "P3",
+      "title": "PR dedup gate let a same-name pair through"
+    },
+    {
+      "fu": "FU-018",
+      "filed": "2026-07-19",
+      "age_days": 45,
+      "priority": "P3",
+      "title": "Two sibling gaps found while wiring has_known_cve"
+    },
+    {
+      "fu": "FU-019",
+      "filed": "2026-07-19",
+      "age_days": 45,
+      "priority": "P3",
+      "title": "Decide whether the runtime clone should ever be fully clean"
+    },
+    {
+      "fu": "FU-020",
+      "filed": "2026-07-19",
+      "age_days": 45,
+      "priority": "P3",
+      "title": "Residual harness cleanups from the FU-011/FU-015 fixes"
+    },
+    {
+      "fu": "FU-021",
+      "filed": "2026-07-19",
+      "age_days": 45,
+      "priority": "P2",
+      "title": "rug_pull_monitor: not in go.sh roster; heartbeat cadence is a lie"
+    },
+    {
+      "fu": "FU-022",
+      "filed": "2026-07-19",
+      "age_days": 45,
+      "priority": "P2",
+      "title": "rug_pull_monitor snapshots silently failing (write_service 500s)"
+    },
+    {
+      "fu": "FU-023",
+      "filed": "2026-07-19",
+      "age_days": 45,
+      "priority": "P2",
+      "title": "Shared backup dir is a clobber hazard between agents"
+    },
+    {
+      "fu": "FU-024",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P1",
+      "title": "Nightly moat backup has no retry window or staleness alarm when the Fly control plane is down"
+    },
+    {
+      "fu": "FU-027",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P1",
+      "title": "/freshness cold path still ~55s (the 48s->4s fix only covered the warm path)"
+    },
+    {
+      "fu": "FU-028",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P1",
+      "title": "Container runtime drift has no alarm and no scheduled refresh"
+    },
+    {
+      "fu": "FU-030",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P2",
+      "title": "Two consecutive days of exactly zero score-row delta"
+    },
+    {
+      "fu": "FU-033",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P3",
+      "title": "Concurrent cadence trigger records a `failed` run instead of `skipped`"
+    },
+    {
+      "fu": "FU-034",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P3",
+      "title": "Send the #10348 shell-timeout finding upstream to aaif-goose/goose"
+    },
+    {
+      "fu": "FU-035",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P2",
+      "title": "The $25 budget guard's MTD half is fail-open, and its threshold is a lagging indicator"
+    },
+    {
+      "fu": "FU-036",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P1",
+      "title": "goose_runner was DEAD for 61.6 hours and nothing detected it"
+    },
+    {
+      "fu": "FU-038",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P2",
+      "title": "capmap-check has blocked two agent PRs for a day on pre-existing schema drift"
+    },
+    {
+      "fu": "FU-039",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P2",
+      "title": "CofC 2026-07-20: wire/mount lane DEFERRED to post-census — ruling recorded, triggers set"
+    },
+    {
+      "fu": "FU-040",
+      "filed": "2026-07-20",
+      "age_days": 44,
+      "priority": "P2",
+      "title": "Gaps map harvests EXEMPLAR filenames as build targets, and 3 of the 6 PHASE 9 lanes name dangling/quarantined "
+    }
+  ]
+}

@@ -295,6 +295,31 @@ def _state_abandoned(rid: str, runs_root: Path) -> bool:
     return not st.get("instance_id") or bool(st.get("destroyed"))
 
 
+def _state_terminal(rid: str, runs_root: Path) -> bool:
+    """Terminal by the SAME word `open_run` uses -- FU-321, mirrored (2026-08-31).
+
+    Run 20260822-220319 died at its deadline, was destroyed, and was later
+    refused by `open_run` as terminally finished (`run_skipped_terminal`) --
+    yet this detector kept calling it STRANDED forever: "deadline" is not an
+    abandonment prefix and `run_skipped_terminal` is not an abort event. Two
+    instruments disagreeing about one word, again -- this time between
+    open_run() and the very check whose header warns about that defect.
+
+    The bar is NOT lowered: _terminally_finished supplies the verdict word,
+    and the same spend clause `_state_abandoned` uses is applied on top -- a
+    run still holding an instance stays STRANDED whatever its state.json
+    claims, and `ok` without `run_closed` remains the stranded shape.
+    """
+    try:
+        st = json.loads((runs_root / rid / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False                   # no state = no evidence = still stranded
+    if not isinstance(st, dict):
+        return False
+    return (_terminally_finished(st)
+            and (not st.get("instance_id") or bool(st.get("destroyed"))))
+
+
 def _parse_ts(ts: str) -> datetime | None:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -344,7 +369,8 @@ def open_runs(ledger_path: Path | None = None, now: datetime | None = None,
     out = []
     for rec in opened.values():
         aborted = (_is_abort_event(rec["last_event"])
-                   or _state_abandoned(rec["run_id"], root))
+                   or _state_abandoned(rec["run_id"], root)
+                   or _state_terminal(rec["run_id"], root))
         rec["outcome"] = "aborted" if aborted else "stranded"
         t0 = _parse_ts(rec.get("opened_at") or "")
         rec["open_hours"] = round((now - t0).total_seconds() / 3600.0, 2) if t0 else None
@@ -932,6 +958,74 @@ def _billed_dph(run, args) -> float:
     return quoted
 
 
+WEDGE_GRACE_MIN_DEFAULT = 25
+
+
+def _instance_probe(run) -> dict:
+    """Best-effort live status of the fired instance.
+
+    Returns {} when the API is unreachable (UNKNOWN, not absent -- R6).
+    Returns {"present": False} when the API answered and the instance is
+    genuinely missing from the list (outbid, host reclaim, manual kill).
+    Run 20260822-220319 burned its whole 212m deadline against an instance
+    nobody ever looked at; this is the look.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return {}
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        rows = v.show_instances()
+        if not rows:
+            return {}
+        for i in rows:
+            if str(i.get("id")) == str(iid):
+                return {"present": True,
+                        "actual_status": i.get("actual_status"),
+                        "status_msg": (i.get("status_msg") or "")[:200],
+                        "cur_state": i.get("cur_state")}
+        return {"present": False}
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: instance probe failed ({e.__class__.__name__}: {e}); status UNKNOWN")
+        return {}
+
+
+def _pull_instance_logs(run) -> None:
+    """SSH-free forensics BEFORE destroy, via the vast logs API.
+
+    The existing forensic path (the pod pushes a git branch) is exactly what
+    fails when the pod never boots -- 3 waves died with zero artifacts that
+    way. This path depends only on the vast API and must never raise.
+    """
+    iid = run.state.get("instance_id")
+    if not iid:
+        return
+    coll = run.dir / "results"
+    coll.mkdir(exist_ok=True)
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        text = None
+        for call in (lambda: v.logs(INSTANCE_ID=int(iid)),
+                     lambda: v.logs(id=int(iid)),
+                     lambda: v.logs(int(iid))):
+            try:
+                text = call()
+            except TypeError:
+                continue
+            if text:
+                break
+        if text:
+            (coll / "vast_instance.log").write_text(
+                str(text)[-200_000:], encoding="utf-8")
+            log(f"forensics: saved vast instance log ({len(str(text))} chars)")
+        else:
+            log("forensics: vast logs API returned nothing")
+    except Exception as e:  # noqa: BLE001
+        log(f"forensics: vast logs fetch failed ({e.__class__.__name__}: {e})")
+
+
 def ph_watch_collect(run: Run, args) -> None:
     if run.done("collect") or run.state["phases"].get("collect") == "skipped":
         return
@@ -945,6 +1039,52 @@ def ph_watch_collect(run: Run, args) -> None:
         if st:
             run.mark("watch", result=st, est_cost=round(est_cost, 2))
             break
+        probe = _instance_probe(run)
+        if probe:
+            stat = (probe.get("actual_status")
+                    or ("absent" if probe.get("present") is False else "unknown"))
+            seen = run.state.setdefault("status_seen", [])
+            if not seen or seen[-1] != stat:
+                seen.append(stat)
+                run.save()
+                ledger("instance_status", run.state["run_id"], status=stat,
+                       msg=probe.get("status_msg", ""))
+            if probe.get("present") is False:
+                miss = run.state.get("absent_probes", 0) + 1
+                run.state["absent_probes"] = miss
+                run.save()
+                if miss >= 2:
+                    # Two consecutive authoritative "not in the list" answers:
+                    # waiting out the deadline can never produce a result.
+                    ledger("instance_vanished", run.state["run_id"],
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="vanished")
+                    break
+            else:
+                if run.state.get("absent_probes"):
+                    run.state["absent_probes"] = 0
+                    run.save()
+                if ("running" not in run.state.get("status_seen", [])
+                        and elapsed_h * 60 >= getattr(
+                            args, "wedge_grace_min", WEDGE_GRACE_MIN_DEFAULT)):
+                    # Never reached "running" inside the grace window: machine
+                    # wedge, not a slow job. Blocklist + fail fast.
+                    mid = run.state.get("machine_id")
+                    if mid is not None:
+                        blk = RUNS_ROOT / "wedged_machines.json"
+                        try:
+                            cur = set(json.loads(blk.read_text())) if blk.exists() else set()
+                        except Exception:  # noqa: BLE001
+                            cur = set()
+                        if mid not in cur:
+                            cur.add(mid)
+                            blk.write_text(json.dumps(sorted(cur)))
+                            log(f"wedge: machine {mid} added to blocklist")
+                    ledger("wedge_watch_destroy", run.state["run_id"],
+                           machine=mid, last_status=stat,
+                           elapsed_h=round(elapsed_h, 2))
+                    run.mark("watch", "failed", result="wedge")
+                    break
         if est_cost >= _eff_cost_cap(run, args):
             ledger("cost_ceiling_breach", run.state["run_id"], est=est_cost)
             run.mark("watch", "failed", result="cost_breach")
@@ -976,8 +1116,13 @@ def ph_watch_collect(run: Run, args) -> None:
             got.append("preds.jsonl.gz(reassembled from %d parts)" % len(parts))
     run.mark("collect", collected=got)
     log(f"collect: {got or 'nothing on remote (instance may still be running the job)'}")
+    if run.state.get("result") != "ok" and not got:
+        # Branch path yielded nothing: the instance's own log is the ONLY
+        # remaining evidence and destroy erases it. Pull it via the API first.
+        _pull_instance_logs(run)
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.
-    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline"):
+    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline",
+                                   "wedge", "vanished"):
         _destroy(run, run.state.get("result", "unknown"))
         run.mark("destroy")
     if run.state.get("result") != "ok":
@@ -1195,6 +1340,72 @@ def ph_backfill(run: Run, args) -> None:
     log("backfill OK")
 
 
+ZERO_YIELD_RATE = 0.001            # 0.1% of the refresh half
+
+
+def refresh_yield(state: dict) -> dict | None:
+    """What did the REFRESH half of this delta cohort actually change?
+
+    Measured 2026-09-01 across every landed delta wave's own `delta_summary`,
+    the `overall_risk` axis:
+
+        20260726-014732    15,236 / 20,000    76.2 %
+        20260727-024623    97,989 / 120,000   81.6 %
+        20260727-105859   136,116 / 140,000   97.2 %
+        20260730-001738         0 / 20,000     0.0 %   <-- regime change
+        20260804-060703         0 / 20,000     0.0 %
+        20260831-033413         1 / 20,000     0.005 %
+
+    Three consecutive landed waves spent 60,000 server-slots -- the majority of
+    every delta cohort -- to move ONE server on ONE axis. Every one of those
+    numbers was already being written, to `state.json` and to the
+    `score_change_runs` table, and nothing ever read one back. So the phase was
+    dead for four weeks and about a dollar of GPU time, and the run reports that
+    a successor opens said "ok" each time, truthfully and uselessly.
+
+    THIS IS A REPORT, NOT A GATE. It cannot abort a run, change an exit code or
+    veto a wave (HARNESS_DOCTRINE R7: prefer RECOVERY over RESTRICTION; and the
+    standing rule against answering a finding with another required check). What
+    to DO about a dead refresh half -- shrink `--refresh-cap`, move the budget to
+    never-scored servers -- is cohort policy, and cohort policy goes through peer
+    review, not through a quiet edit in a reporting function.
+
+    Returns None when there is no refresh half to describe, so the loud line
+    means exactly one thing wherever it appears.
+
+    UNKNOWN IS NOT ZERO (R6). `unmeasured` and `zero_yield` are opposite facts
+    that look identical if you collapse a missing summary to 0: one says the
+    phase did nothing, the other says we never asked. A run whose import died
+    before writing the aggregates gets `unmeasured`, and a decision made on it
+    is a decision made on nothing, which is the point of saying so.
+    """
+    refresh = state.get("refresh_servers") or 0
+    if refresh <= 0:
+        return None
+
+    summary = state.get("delta_summary") or {}
+    axes = [a for a in summary.values() if isinstance(a, dict) and "changed" in a]
+    if not axes:
+        # R6: no measurement is not a measurement of nothing.
+        return {"refresh_servers": refresh, "changed": None, "rate": None,
+                "verdict": "unmeasured",
+                "basis": "delta_summary absent or empty -- the refresh half was "
+                         "NOT measured this run; this is not a reading of zero"}
+
+    # Seven axes ship. A wave that moved only `auth_strength` is productive, and
+    # keying this on `overall_risk` alone would bury it.
+    changed = max(int(a.get("changed") or 0) for a in axes)
+    rate = changed / refresh
+    return {
+        "refresh_servers": refresh,
+        "changed": changed,
+        "rate": rate,
+        "verdict": "zero_yield" if rate < ZERO_YIELD_RATE else "productive",
+        "basis": f"max(changed) over {len(axes)} axis/axes of "
+                 f"delta_summary, / refresh_servers",
+    }
+
+
 def ph_postcheck(run: Run, args) -> None:
     if run.done("postcheck"):
         return
@@ -1222,8 +1433,25 @@ def ph_postcheck(run: Run, args) -> None:
         after_basis = "db_import"
         log(f"postcheck: freshness unreadable; scored_servers.after={scored_after} "
             f"taken from the import phase's direct DB read (basis=db_import)")
+    ry = refresh_yield(run.state)
+    if ry and ry["verdict"] == "zero_yield":
+        log(f"POSTCHECK: REFRESH HALF PRODUCED NOTHING -- {ry['changed']} of "
+            f"{ry['refresh_servers']} refreshed servers changed on any axis "
+            f"({ry['rate']:.4%}). The never-scored half is where this wave's "
+            f"value came from. Three landed waves in a row have now read this "
+            f"way (07-30, 08-04, 08-31); if this is the fourth, the refresh cap "
+            f"is buying nothing and the cohort budget belongs elsewhere -- that "
+            f"is a peer-review decision, not an abort.")
+        ledger("refresh_zero_yield", run.state["run_id"], **ry)
+    elif ry and ry["verdict"] == "unmeasured":
+        log(f"POSTCHECK: refresh half UNMEASURED ({ry['basis']}). "
+            f"Not a reading of zero.")
+    elif ry:
+        log(f"postcheck: refresh half changed {ry['changed']} of "
+            f"{ry['refresh_servers']} ({ry['rate']:.2%})")
     report = {
         "run_id": run.state["run_id"], "mode": run.state["mode"],
+        "refresh_yield": ry,
         "freshness_error": freshness_error,
         "degraded_postcheck": bool(freshness_error),
         "exported": run.state.get("exported"), "imported": run.state.get("imported_servers"),
@@ -1265,6 +1493,9 @@ def main() -> None:
     ap.add_argument("--deadline-min", type=int, default=None,
                     help="override the FU-090 size-scaled deadline (default: scaled)")
     ap.add_argument("--poll-secs", type=int, default=120)
+    ap.add_argument("--wedge-grace-min", type=int,
+                    default=WEDGE_GRACE_MIN_DEFAULT,
+                    help="fail fast if the instance never reaches 'running' within this many minutes")
     args = ap.parse_args()
     if args.check_open_runs:
         raise SystemExit(check_open_runs())

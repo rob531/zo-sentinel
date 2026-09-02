@@ -140,6 +140,7 @@ jobs:
             tests/test_rescore_trust_priority.py \
             tests/test_rescore_refresh_yield.py \
             tests/test_vast_spend_selftest.py \
+            tests/test_promoter_repair_wiring.py \
             -q \
             --junitxml=artifacts/junit.xml
 

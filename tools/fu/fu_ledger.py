@@ -189,6 +189,35 @@ class FU:
 
 
 def parse(lines: List[str]) -> List[FU]:
+    """Parse the ledger's LINE LIST into FU entries. The caller owns the file.
+
+    Shape guard added 2026-09-03 (vast-jobs-daily-audit). `append_log` and
+    `insert_key` have raised on this call-shape family since it was named, and
+    cycle-0065 censused the two writers in one commit -- but `parse` is the
+    FIRST call every one of those callers makes and had no guard at all. A str
+    is iterable, so `parse(LEDGER_PATH)` walks the path one CHARACTER at a
+    time, matches no `### FU-NNN | ` heading, and returns `[]`. The caller then
+    reads "this ledger has 0 entries", which is byte-identical to a genuinely
+    empty file -- this repo's false-zero class, arriving through the one door
+    the cure was not wired into (FU-343). Measured today against a ledger
+    holding 379 entries, which printed as 0 and raised nothing.
+    """
+    if not isinstance(lines, list):
+        raise TypeError(
+            "fu_ledger.parse(lines) takes the PARSED LINE LIST, not a path and "
+            "not the raw text. You passed a %s. A str is iterable, so "
+            "parse(<path>) walks it one CHARACTER at a time, matches no "
+            "heading, and returns [] -- a silent zero you cannot tell from an "
+            "empty ledger.\n"
+            "  raw   = open(LEDGER, encoding='utf-8', newline='').read()\n"
+            "  lines = raw.splitlines(keepends=True)\n"
+            "  entries = parse(lines)\n"
+            "Or skip the whole dance -- backup, parse, append, binary write and "
+            "re-parse verify, idempotent via --if-absent:\n"
+            '  python "D:\\zo\\Zocomputer Agents\\_tools\\fu_append_log.py" '
+            '--fu NNN --message "<one line>" --if-absent "<unique substring>"'
+            % type(lines).__name__
+        )
     heads = [(i, m.group(1), (m.group(2) or "").strip())
              for i, l in enumerate(lines) for m in [HEAD_RE.match(l)] if m]
     out: List[FU] = []

@@ -94,6 +94,7 @@ jobs:
           # while the class they catch (FU-102) had already killed 7 prod
           # services on v64. All three are stdlib-only text/graph checks.
           python -m pytest \
+            tests/test_fu_ledger_read_shape.py \
             tests/test_scoring.py \
             tests/test_evaluator_smoke.py \
             tests/test_schema_loader.py \

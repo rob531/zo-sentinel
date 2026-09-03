@@ -39,6 +39,7 @@ Why `class:` exists
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -188,7 +189,95 @@ class FU:
         return None
 
 
+# ------------------------------------------------------- READ-SIDE call shape
+# ADDED 2026-09-03 (improvement-loop cycle-0066).
+#
+# Cycle-0065, hours earlier, censused TWO doors of the `sanctioned-writer-api-
+# shape` family -- append_log and insert_key -- and gave both a TypeError that
+# names the real signature. It censused the WRITE side only. `vast-jobs-daily-
+# audit` was bitten the same morning through the read side:
+#
+#     parse("D:\\zo\\Zocomputer Agents\\FOLLOWUPS.md")   ->   []
+#
+# parse takes a LIST OF LINES. Handed a path STRING it iterates the string's
+# CHARACTERS, matches no heading, and returns an empty list. No raise, no
+# warning: on a 379-entry ledger the caller reads that as "the ledger is
+# empty". That is the defect class this ledger is 51% made of -- a check that
+# cannot go red -- and it sat in the first call every writer makes.
+#
+# line_terminator has the identical hole and a nastier payload: handed a path
+# it returns "", and the caller then writes UNTERMINATED lines into a ledger
+# whose terminators have already flipped twice.
+#
+# THE CURE IS RECOVERY, NOT A GATE (HARNESS_DOCTRINE R7). Cycle-0065 made the
+# wrong call say more; this makes the wrong call WORK. A path is an unambiguous
+# request for that file's lines, so read it. Nothing that used to succeed
+# changes behaviour -- a list argument takes the identical path it always did,
+# which probe_fu_ledger_path_shape_20260903.py asserts as its positive pole on
+# every run. Only the shapes that previously returned a plausible lie change.
+def _read_lines(path):
+    """Read a ledger from disk the one correct way.
+
+    newline="" + keepends: this file's terminators have flipped between CRLF
+    and LF twice, and every edit that lost them lost them here.
+    """
+    with open(path, "r", encoding="utf-8", newline="") as fh:
+        return fh.read().splitlines(keepends=True)
+
+
+def _as_lines(fn, arg):
+    """Accept a line list (unchanged) or a path to a readable ledger."""
+    if isinstance(arg, list):
+        return arg
+    if isinstance(arg, (str, bytes)) or hasattr(arg, "__fspath__"):
+        try:
+            readable = os.path.isfile(arg)
+        except (OSError, ValueError, TypeError):
+            readable = False
+        if readable:
+            return _read_lines(arg)
+    raise _read_shape_error(fn, arg)
+
+
+def _as_entries(fn, arg):
+    """Accept parsed entries (unchanged), raw lines, or a path."""
+    if isinstance(arg, list):
+        # A list of LINES is the other shape the fleet guesses here; parsing it
+        # is what the caller meant. An empty list is genuinely ambiguous and is
+        # passed through, which is what an empty ledger should look like.
+        if arg and isinstance(arg[0], str):
+            return parse(arg)
+        return arg
+    return parse(_as_lines(fn, arg))
+
+
+_READ_SHAPE_HINT = r"""
+fu_ledger.%(fn)s() takes the ledger's LINES, not a filename. It is a PURE
+FUNCTION over a parsed line list -- this module never opens the ledger for you.
+You passed a %(got0)s that is not a readable file, so there is nothing to
+recover from.
+
+A path to an EXISTING file is accepted and read for you (added cycle-0066); a
+path that does not resolve, or any other type, lands here.
+
+  raw   = open(LEDGER, encoding="utf-8", newline="").read()
+  lines = raw.splitlines(keepends=True)
+  entries = parse(lines)
+  fu = {str(f.num).lstrip("0"): f for f in entries}["NNN"]   # num is a STRING
+
+To WRITE a log bullet, do not hand-roll the dance -- one call does all of it,
+idempotently:
+
+  python "D:\zo\Zocomputer Agents\_tools\fu_append_log.py" --fu NNN --message "<one line>" --if-absent "<unique substring>"
+"""
+
+
+def _read_shape_error(fn, got0):
+    return TypeError(_READ_SHAPE_HINT % {"fn": fn, "got0": type(got0).__name__})
+
+
 def parse(lines: List[str]) -> List[FU]:
+    lines = _as_lines("parse", lines)
     heads = [(i, m.group(1), (m.group(2) or "").strip())
              for i, l in enumerate(lines) for m in [HEAD_RE.match(l)] if m]
     out: List[FU] = []
@@ -231,6 +320,7 @@ def line_terminator(lines: List[str]) -> str:
     "a check never observed RED is not evidence" shape from HARNESS_DOCTRINE.
     Detect the convention rather than assume it, so BOTH callers are correct.
     """
+    lines = _as_lines("line_terminator", lines)
     for ln in lines:
         if ln.endswith("\r\n"):
             return "\r\n"

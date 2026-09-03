@@ -141,6 +141,7 @@ jobs:
             tests/test_rescore_refresh_yield.py \
             tests/test_vast_spend_selftest.py \
             tests/test_promoter_repair_wiring.py \
+            tests/test_canary_classify_smoke.py \
             -q \
             --junitxml=artifacts/junit.xml
 

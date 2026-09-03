@@ -1,0 +1,23 @@
+[service]
+name = "server_axis_detail_api"
+import_path = "services.active.server_axis_detail_api.router"
+prefix = "/api"
+tag = "server_axis_detail_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_query = true
+
+[tables.app]
+McpServerRegistry = { read = true }
+McpLlmAxisScore = { read = true }
+McpScoreDispute = { read = true }
+orgs = { read = true }
+users = { read = true }
+
+[tables.mesh]
+mcp_signal_scores = { read = true }
+mesh_memory = { read = true }

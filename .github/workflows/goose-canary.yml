@@ -59,34 +59,104 @@ jobs:
       - name: goose --version
         run: goose --version
 
-      - name: Map smoke rung to goose provider env
+      # THREE OUTCOMES, NOT TWO -- and a rung failover. (chairman issue #4077)
+      #
+      # Until 2026-09-02 this was two steps: a `Map smoke rung` step that pinned
+      # ONE provider into $GITHUB_ENV for the whole job, and a smoke step whose
+      # only two verdicts were "nonce echoed" and
+      #     SMOKE FAIL: nonce not echoed -- this goose broke our recipe/tool loop
+      #
+      # Run 33387672279 (2026-08-31) published exactly that sentence about a
+      # transcript reading `Please check your account with your provider to add
+      # more credits`. goose loaded the recipe, opened a session and reached
+      # cerebras; cerebras refused on BILLING. Nothing was learned about the
+      # candidate version, and the canary asserted a version verdict anyway.
+      # That is the FU-108 class (EXTRACTION_FAILURE != DEGENERATE) and R6
+      # (unknown != zero) -- both of which the `namespacing` step below already
+      # respects with its PROBE INCONCLUSIVE branch. The FIRST step, the one
+      # that actually failed, was the one without them.
+      #
+      # tools/canary/classify_smoke.py owns the three-way decision and carries
+      # its negative controls in tests/test_canary_classify_smoke.py (mutating
+      # its phrase patterns to naive keywords turns 7 of them red -- observed,
+      # not assumed). Exit codes: 0 PASS, 1 FAIL, 2 PROVIDER_UNAVAILABLE.
+      #
+      # ONLY a PROVIDER_UNAVAILABLE falls through to the other rung. A FAIL
+      # stops the job on the spot: retrying a genuine loop regression on a
+      # second provider is how a red canary is talked into green, which is the
+      # one failure mode worse than the one being fixed here. The rung that
+      # WINS is the rung written to $GITHUB_ENV, so every later step in this
+      # job runs on a provider proven reachable seconds earlier rather than on
+      # a dead one chosen at dispatch time.
+      - name: Tool-call smoke (recipe load + model + tool call, with rung failover)
+        env:
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PREFERRED_RUNG: ${{ inputs.smoke_rung }}
         run: |
-          set -euo pipefail
-          if [ "${{ inputs.smoke_rung }}" = "cerebras" ]; then
-            echo "OPENAI_BASE_URL=https://api.cerebras.ai/v1" >> "$GITHUB_ENV"
-            echo "OPENAI_API_KEY=${{ secrets.CEREBRAS_API_KEY }}" >> "$GITHUB_ENV"
-            echo "GOOSE_MODEL=gpt-oss-120b" >> "$GITHUB_ENV"
-          elif [ "${{ inputs.smoke_rung }}" = "groq" ]; then
-            echo "OPENAI_BASE_URL=https://api.groq.com/openai/v1" >> "$GITHUB_ENV"
-            echo "OPENAI_API_KEY=${{ secrets.GROQ_API_KEY }}" >> "$GITHUB_ENV"
-            echo "GOOSE_MODEL=llama-3.3-70b-versatile" >> "$GITHUB_ENV"
-          else
-            echo "unknown rung ${{ inputs.smoke_rung }}"; exit 1
-          fi
-          echo "GOOSE_PROVIDER=openai" >> "$GITHUB_ENV"
+          set -uo pipefail
 
-      - name: Tool-call smoke (recipe load + model + tool call)
-        run: |
-          set -euo pipefail
-          NONCE="ci-$RANDOM-$RANDOM"
-          goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
-            --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
-          if grep -q "CANARY_TOOLCALL_OK::$NONCE" /tmp/smoke.out; then
-            echo "SMOKE PASS: new goose loads recipe + drives model + calls a tool"
-          else
-            echo "SMOKE FAIL: nonce not echoed -- this goose broke our recipe/tool loop"
-            exit 1
-          fi
+          case "$PREFERRED_RUNG" in
+            cerebras) RUNGS="cerebras groq" ;;
+            groq)     RUNGS="groq cerebras" ;;
+            *) echo "unknown rung $PREFERRED_RUNG"; exit 1 ;;
+          esac
+
+          UNAVAILABLE_NOTES=""
+          for RUNG in $RUNGS; do
+            if [ "$RUNG" = "cerebras" ]; then
+              BASE_URL="https://api.cerebras.ai/v1"; KEY="$CEREBRAS_API_KEY"; MODEL="gpt-oss-120b"
+            else
+              BASE_URL="https://api.groq.com/openai/v1"; KEY="$GROQ_API_KEY"; MODEL="llama-3.3-70b-versatile"
+            fi
+
+            if [ -z "$KEY" ]; then
+              echo "rung $RUNG: no API key configured -- skipping (not a goose verdict)"
+              UNAVAILABLE_NOTES="$UNAVAILABLE_NOTES\n  $RUNG: secret not set"
+              continue
+            fi
+
+            echo "=== smoke on rung: $RUNG ($MODEL) ==="
+            NONCE="ci-$RANDOM-$RANDOM"
+            OPENAI_BASE_URL="$BASE_URL" OPENAI_API_KEY="$KEY" \
+            GOOSE_MODEL="$MODEL" GOOSE_PROVIDER="openai" \
+              goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
+                --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
+
+            python tools/canary/classify_smoke.py --transcript /tmp/smoke.out --nonce "$NONCE"
+            case "$?" in
+              0)
+                echo "SMOKE PASS on rung $RUNG: this goose loads a recipe, drives a model and calls a tool."
+                {
+                  echo "OPENAI_BASE_URL=$BASE_URL"
+                  echo "OPENAI_API_KEY=$KEY"
+                  echo "GOOSE_MODEL=$MODEL"
+                  echo "GOOSE_PROVIDER=openai"
+                  echo "CANARY_WINNING_RUNG=$RUNG"
+                } >> "$GITHUB_ENV"
+                exit 0
+                ;;
+              2)
+                echo "rung $RUNG is PROVIDER_UNAVAILABLE -- this says nothing about the candidate goose."
+                UNAVAILABLE_NOTES="$UNAVAILABLE_NOTES\n  $RUNG: provider refused (see verdict line above)"
+                ;;
+              *)
+                echo "SMOKE FAIL on rung $RUNG: goose was driven and the recipe->model->tool loop did not close."
+                echo "No provider-layer signal was present, so this IS a verdict on the candidate version."
+                echo "NOT retrying on another rung: a second provider cannot un-break a broken loop, and"
+                echo "trying would only convert a true red into a green nobody can trust."
+                tail -40 /tmp/smoke.out
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "SMOKE INCONCLUSIVE -- NOT A GOOSE VERDICT, AND NOT A PASS."
+          printf 'Every rung was unavailable at the provider layer:%b\n' "$UNAVAILABLE_NOTES"
+          echo "The candidate version has been neither cleared nor condemned. Restore a rung"
+          echo "(credits/quota/key) and re-dispatch; do not record a version decision from this run."
+          tail -40 /tmp/smoke.out 2>/dev/null || true
+          exit 1
 
       # The bridge needs the MCP SDK. It is NOT declared in any requirements file
       # in this repo -- it exists only in the tower's ambient Python env, which is

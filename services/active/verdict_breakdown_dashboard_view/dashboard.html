@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verdict Breakdown Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 20px;
+    background: #f8f9fa; color: #212529;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 1rem; color: #1a1a2e; }
+
+  .card {
+    background: #fff; padding: 20px; margin-bottom: 16px;
+    border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+  }
+  .card-title {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6c757d; margin: 0 0 16px; font-weight: 600;
+  }
+
+  .server-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 20px; padding-bottom: 16px;
+    border-bottom: 1px solid #e9ecef; flex-wrap: wrap; gap: 12px;
+  }
+  .server-name { font-size: 1.2rem; font-weight: 600; color: #1a1a2e; margin: 0 0 4px; }
+  .server-url { font-size: 0.85rem; color: #6c757d; margin: 0; word-break: break-all; }
+
+  .verdict-row { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+  .verdict-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 6px 16px; border-radius: 20px;
+    font-size: 1rem; font-weight: 700; color: #fff;
+  }
+  .verdict-badge.trusted_general { background: linear-gradient(135deg,#198754,#20c997); }
+  .verdict-badge.trusted_research { background: linear-gradient(135deg,#20c997,#17a2b8); }
+  .verdict-badge.enterprise_controlled { background: linear-gradient(135deg,#ffc107,#fd7e14); }
+  .verdict-badge.caution_limited { background: linear-gradient(135deg,#fd7e14,#dc3545); }
+  .verdict-badge.high_risk_isolated { background: linear-gradient(135deg,#dc3545,#6f42c1); }
+  .verdict-badge.insufficient { background: linear-gradient(135deg,#6c757d,#adb5bd); }
+  .verdict-badge.unknown { background: #dee2e6; color: #495057; }
+
+  .trust-info {
+    font-size: 0.85rem; padding: 8px 12px;
+    border-radius: 6px; background: #f8f9fa; border: 1px solid #e9ecef;
+  }
+  .trust-info.trusted { border-color: #d1e7dd; background: #f8fff9; }
+  .trust-info.untrusted { border-color: #f8d7da; background: #fff5f5; }
+  .trust-info .label { font-weight: 600; margin-right: 6px; }
+  .trust-info .reason { color: #6c757d; }
+
+  .axes-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .axis-card {
+    background: #f8f9fa; padding: 14px; border-radius: 8px;
+    border: 1px solid #e9ecef;
+  }
+  .axis-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .axis-name { font-size: 0.88rem; font-weight: 600; color: #495057; }
+  .axis-label { font-size: 0.85rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; }
+  .axis-label.excellent { background: #d1e7dd; color: #0f5132; }
+  .axis-label.good { background: #cfe2ff; color: #084298; }
+  .axis-label.fair { background: #fff3cd; color: #664d03; }
+  .axis-label.poor { background: #f8d7da; color: #842029; }
+  .axis-label.critical { background: #e2a9e2; color: #4a1259; }
+  .axis-label.unknown { background: #e9ecef; color: #495057; }
+
+  .axis-bar-wrap {
+    height: 12px; background: #dee2e6; border-radius: 6px; overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .axis-fill { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+  .axis-fill.excellent { background: linear-gradient(90deg,#28a745,#20c997); }
+  .axis-fill.good { background: linear-gradient(90deg,#20c997,#17a2b8); }
+  .axis-fill.fair { background: linear-gradient(90deg,#ffc107,#fd7e14); }
+  .axis-fill.poor { background: linear-gradient(90deg,#fd7e14,#dc3545); }
+  .axis-fill.critical { background: linear-gradient(90deg,#dc3545,#6f42c1); }
+  .axis-fill.unknown { background: #dee2e6; }
+
+  .axis-probs {
+    display: flex; gap: 8px; font-size: 0.75rem; color: #6c757d;
+    flex-wrap: wrap;
+  }
+  .prob-item { display: flex; align-items: center; gap: 4px; }
+  .prob-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .prob-item .dot.critical { background: #dc3545; }
+  .prob-item .dot.danger { background: #fd7e14; }
+  .prob-item .dot.safe { background: #20c997; }
+
+  .overall-section {
+    background: linear-gradient(135deg,#f8f9fa,#e9ecef);
+    padding: 20px; border-radius: 8px; margin-bottom: 16px;
+    text-align: center;
+  }
+  .overall-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6c757d; margin: 0 0 12px; }
+  .overall-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 100px; height: 100px; border-radius: 50%;
+    font-size: 2rem; font-weight: 700; color: #fff;
+    margin: 0 auto 12px;
+  }
+  .overall-badge.excellent { background: linear-gradient(135deg,#28a745,#20c997); }
+  .overall-badge.good { background: linear-gradient(135deg,#20c997,#17a2b8); }
+  .overall-badge.fair { background: linear-gradient(135deg,#ffc107,#fd7e14); }
+  .overall-badge.poor { background: linear-gradient(135deg,#fd7e14,#dc3545); }
+  .overall-badge.critical { background: linear-gradient(135deg,#dc3545,#6f42c1); }
+  .overall-badge.unknown { background: #6c757d; }
+
+  .model-version {
+    font-size: 0.75rem; color: #6c757d;
+    padding-top: 12px; border-top: 1px solid #e9ecef;
+    display: flex; justify-content: space-between;
+  }
+
+  .search-form {
+    display: flex; gap: 12px; align-items: flex-end;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .search-group { display: flex; flex-direction: column; gap: 4px; }
+  .search-group label { font-size: 0.8rem; color: #6c757d; font-weight: 500; }
+  .search-group input {
+    padding: 10px 14px; border: 1px solid #dee2e6;
+    border-radius: 6px; font-size: 0.95rem; min-width: 280px;
+  }
+  .search-group input:focus { outline: 2px solid #0d6efd; outline-offset: 1px; border-color: #86b7fe; }
+  .search-btn {
+    background: #0d6efd; color: #fff; border: none;
+    padding: 10px 20px; border-radius: 6px; cursor: pointer;
+    font-size: 0.88rem; display: flex; align-items: center; gap: 6px;
+  }
+  .search-btn:hover { background: #0b5ed7; }
+  .search-btn:focus { outline: 2px solid #0d6efd; outline-offset: 2px; }
+  .search-btn:disabled { background: #a8c4e8; cursor: not-allowed; }
+
+  .loading, .error, .empty {
+    text-align: center; padding: 60px 20px;
+    color: #6c757d; font-size: 1rem;
+  }
+  .loading::before {
+    content: ''; display: inline-block; width: 24px; height: 24px;
+    border: 3px solid #dee2e6; border-top-color: #0d6efd;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin-right: 10px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: #dc3545; background: #fff5f5; border: 1px solid #fcc2c2; border-radius: 8px; }
+  .empty { background: #fff; border: 1px dashed #dee2e6; }
+
+  .criteria-label { font-size: 0.75rem; color: #6c757d; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <h1>Verdict Breakdown Dashboard</h1>
+
+  <form class="search-form" id="searchForm" aria-label="Server search">
+    <div class="search-group">
+      <label for="serverIdInput">Server ID</label>
+      <input type="text" id="serverIdInput" placeholder="Enter server ID (UUID)" aria-label="Server ID to lookup">
+    </div>
+    <button type="submit" class="search-btn" aria-label="Look up server verdict">
+      <span aria-hidden="true">&#128269;</span> Look Up
+    </button>
+  </form>
+
+  <div id="content">
+    <div class="card">
+      <div class="empty" role="status" aria-label="Dashboard ready">Enter a server ID above to view its verdict breakdown</div>
+    </div>
+  </div>
+
+  <script>
+    // In-memory auth state only
+    const authState = { token: null };
+    if (!authState.token) {
+      authState.token = (window !== window.top && window.top.__ZO_AUTH__)
+        ? window.top.__ZO_AUTH__.bearer
+        : 'Bearer placeholder';
+    }
+
+    const API_BASE = '/api';
+
+    // Axis display order
+    const AXIS_ORDER = [
+      'overall_risk', 'auth_strength', 'capability_breadth',
+      'data_sensitivity', 'network_egress', 'maintainer_trust', 'exploit_surface'
+    ];
+
+    function pTopToScore(pTop) {
+      if (pTop == null) return 0;
+      return Math.round(pTop * 100);
+    }
+
+    function scoreClass(score) {
+      if (score >= 90) return 'excellent';
+      if (score >= 70) return 'good';
+      if (score >= 50) return 'fair';
+      if (score >= 25) return 'poor';
+      if (score >= 0) return 'critical';
+      return 'unknown';
+    }
+
+    function tierClass(tier) {
+      if (!tier) return 'unknown';
+      const known = ['TRUSTED_GENERAL', 'TRUSTED_RESEARCH', 'ENTERPRISE_CONTROLLED',
+                     'CAUTION_LIMITED', 'HIGH_RISK_ISOLATED', 'INSUFFICIENT'];
+      const t = tier.toUpperCase().replace(/[^A-Z_]/g, '_');
+      return known.includes(t) ? tier.toLowerCase().replace(/[^a-z_]/g, '_') : 'unknown';
+    }
+
+    function buildProbs(axis) {
+      const items = [];
+      if (axis.p_critical != null) {
+        items.push('<span class="prob-item"><span class="dot critical"></span>Critical: ' + Math.round(axis.p_critical * 100) + '%</span>');
+      }
+      if (axis.p_danger != null) {
+        items.push('<span class="prob-item"><span class="dot danger"></span>Danger: ' + Math.round(axis.p_danger * 100) + '%</span>');
+      }
+      return items.join('');
+    }
+
+    function buildAxisCard(axisName, axis) {
+      var score = pTopToScore(axis ? axis.p_top : null);
+      var card = document.createElement('div');
+      card.className = 'axis-card';
+      card.setAttribute('role', 'meter');
+      card.setAttribute('aria-label', axisName + ': ' + score + ' out of 100');
+      card.setAttribute('aria-valuenow', score);
+      card.setAttribute('aria-valuemin', 0);
+      card.setAttribute('aria-valuemax', 100);
+
+      var header = document.createElement('div');
+      header.className = 'axis-header';
+
+      var name = document.createElement('div');
+      name.className = 'axis-name';
+      name.textContent = axisName.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+
+      var label = document.createElement('span');
+      var labelText = (axis && axis.label) ? axis.label : '?';
+      label.className = 'axis-label ' + scoreClass(score);
+      label.textContent = labelText;
+
+      header.appendChild(name);
+      header.appendChild(label);
+
+      var barWrap = document.createElement('div');
+      barWrap.className = 'axis-bar-wrap';
+      var fill = document.createElement('div');
+      fill.className = 'axis-fill ' + scoreClass(score);
+      fill.style.width = Math.max(0, Math.min(100, score)) + '%';
+      barWrap.appendChild(fill);
+
+      var probs = document.createElement('div');
+      probs.className = 'axis-probs';
+      probs.innerHTML = buildProbs(axis || {});
+
+      card.appendChild(header);
+      card.appendChild(barWrap);
+      card.appendChild(probs);
+      return card;
+    }
+
+    function renderDashboard(data) {
+      var content = document.getElementById('content');
+      content.innerHTML = '';
+
+      var header = document.createElement('div');
+      header.className = 'server-header';
+
+      var headerLeft = document.createElement('div');
+      var serverName = document.createElement('h2');
+      serverName.className = 'server-name';
+      serverName.textContent = data.name || data.server_id || 'Unknown Server';
+      var serverUrl = document.createElement('p');
+      serverUrl.className = 'server-url';
+      serverUrl.textContent = data.url || '';
+      headerLeft.appendChild(serverName);
+      headerLeft.appendChild(serverUrl);
+      header.appendChild(headerLeft);
+
+      var verdictRow = document.createElement('div');
+      verdictRow.className = 'verdict-row';
+
+      var verdictBadge = document.createElement('div');
+      verdictBadge.className = 'verdict-badge ' + tierClass(data.published_overall_risk);
+      verdictBadge.setAttribute('aria-label', 'Verdict: ' + (data.published_overall_risk || 'UNKNOWN'));
+      verdictBadge.textContent = data.published_overall_risk || '?';
+
+      var trustInfo = document.createElement('div');
+      var isTrusted = data.trusted === true;
+      var isMasquerade = data.masquerade_flag === true;
+      trustInfo.className = 'trust-info ' + (isTrusted ? 'trusted' : 'untrusted');
+      var labelText = isTrusted ? 'Trusted' : (isMasquerade ? 'Masquerade Flagged' : 'Unverified');
+      trustInfo.innerHTML = '<span class="label">' + labelText + '</span>' +
+        (data.trust_basis ? '<span class="reason"> \u2014 ' + data.trust_basis + '</span>' : '');
+
+      verdictRow.appendChild(verdictBadge);
+      verdictRow.appendChild(trustInfo);
+      header.appendChild(verdictRow);
+      content.appendChild(header);
+
+      var overallSection = document.createElement('div');
+      overallSection.className = 'overall-section';
+
+      var overallTitle = document.createElement('div');
+      overallTitle.className = 'overall-title';
+      overallTitle.textContent = 'Overall Risk Score';
+      overallSection.appendChild(overallTitle);
+
+      var overallBadge = document.createElement('div');
+      var axes = data.axes || {};
+      var overallAxis = axes['overall_risk'];
+      var overallScore = pTopToScore(overallAxis ? overallAxis.p_top : null);
+      overallBadge.className = 'overall-badge ' + scoreClass(overallScore);
+      overallBadge.setAttribute('aria-label', 'Overall score: ' + overallScore);
+      overallBadge.textContent = overallScore;
+      overallSection.appendChild(overallBadge);
+
+      if (data.display_label) {
+        var displayLabel = document.createElement('div');
+        displayLabel.className = 'criteria-label';
+        displayLabel.textContent = data.display_label;
+        overallSection.appendChild(displayLabel);
+      }
+
+      content.appendChild(overallSection);
+
+      var axesCard = document.createElement('div');
+      axesCard.className = 'card';
+
+      var axesTitle = document.createElement('div');
+      axesTitle.className = 'card-title';
+      axesTitle.textContent = 'Risk Axes';
+      axesCard.appendChild(axesTitle);
+
+      var axesGrid = document.createElement('div');
+      axesGrid.className = 'axes-grid';
+
+      var hasAxes = false;
+      for (var i = 0; i < AXIS_ORDER.length; i++) {
+        var axisName = AXIS_ORDER[i];
+        if (axisName === 'overall_risk') continue;
+        if (axes[axisName]) {
+          hasAxes = true;
+          axesGrid.appendChild(buildAxisCard(axisName, axes[axisName]));
+        }
+      }
+
+      for (var key in axes) {
+        if (axes.hasOwnProperty(key) && AXIS_ORDER.indexOf(key) === -1) {
+          hasAxes = true;
+          axesGrid.appendChild(buildAxisCard(key, axes[key]));
+        }
+      }
+
+      if (!hasAxes) {
+        var emptyMsg = document.createElement('div');
+        emptyMsg.className = 'empty';
+        emptyMsg.textContent = 'No axis scores available';
+        axesGrid.appendChild(emptyMsg);
+      }
+
+      axesCard.appendChild(axesGrid);
+      content.appendChild(axesCard);
+
+      var modelVersion = document.createElement('div');
+      modelVersion.className = 'model-version';
+      modelVersion.innerHTML = '<span>Model: ' + (data.model_version || 'N/A') + '</span><span>Criteria: v1.0</span>';
+      modelVersion.style.cssText = 'padding:16px 0; margin-top:8px;';
+      content.appendChild(modelVersion);
+    }
+
+    function showMessage(msg, cls, ariaLabel) {
+      var content = document.getElementById('content');
+      var el = document.createElement('div');
+      el.className = cls;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-label', ariaLabel || msg);
+      el.setAttribute('aria-live', 'polite');
+      el.textContent = msg;
+      content.innerHTML = '';
+      content.appendChild(el);
+    }
+
+    async function fetchVerdict(serverId) {
+      if (!serverId || !serverId.trim()) {
+        showMessage('Please enter a server ID', 'error', 'Validation error');
+        return;
+      }
+      showMessage('Loading verdict data\u2026', 'loading', 'Loading verdict data');
+      try {
+        var resp = await fetch(API_BASE + '/verdict/' + encodeURIComponent(serverId.trim()), {
+          method: 'GET',
+          headers: {
+            'Authorization': authState.token,
+            'Accept': 'application/json'
+          }
+        });
+        if (!resp.ok) {
+          if (resp.status === 404) {
+            showMessage('Server not found. Check the server ID and try again.', 'empty', 'Server not found');
+          } else {
+            throw new Error('HTTP ' + resp.status);
+          }
+          return;
+        }
+        var json = await resp.json();
+        renderDashboard(json);
+      } catch (e) {
+        console.error('[verdict_breakdown_dashboard] fetch error:', e);
+        showMessage('Unable to load verdict data. Please try again.', 'error', 'Load error');
+      }
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var input = document.getElementById('serverIdInput');
+      fetchVerdict(input.value);
+    });
+
+    (function selfTest() {
+      try {
+        renderDashboard({});
+        renderDashboard({
+          server_id: 'test-123',
+          name: 'Test Server',
+          url: 'https://example.com',
+          model_version: 'v3.0_40974559',
+          published_overall_risk: 'TRUSTED_GENERAL',
+          model_overall_risk: 'HIGH',
+          trusted: true,
+          trust_basis: 'Official publisher',
+          masquerade_flag: false,
+          trusted_override: true,
+          override_reason: 'Official publisher',
+          display_label: 'Automated heuristic assessment',
+          axes: {
+            overall_risk: { axis_name: 'overall_risk', label: 'TRUSTED_GENERAL', label_index: 1, p_top: 0.92, p_critical: 0.02, p_danger: 0.05 },
+            auth_strength: { axis_name: 'auth_strength', label: 'STRONG', label_index: 1, p_top: 0.88, p_critical: 0.05, p_danger: 0.07 },
+            capability_breadth: { axis_name: 'capability_breadth', label: 'BROAD', label_index: 2, p_top: 0.75, p_critical: 0.10, p_danger: 0.15 },
+            data_sensitivity: { axis_name: 'data_sensitivity', label: 'LOW', label_index: 0, p_top: 0.95, p_critical: 0.01, p_danger: 0.04 },
+            network_egress: { axis_name: 'network_egress', label: 'MINIMAL', label_index: 0, p_top: 0.90, p_critical: 0.03, p_danger: 0.07 },
+            maintainer_trust: { axis_name: 'maintainer_trust', label: 'ESTABLISHED', label_index: 1, p_top: 0.85, p_critical: 0.08, p_danger: 0.07 },
+            exploit_surface: { axis_name: 'exploit_surface', label: 'MODERATE', label_index: 1, p_top: 0.65, p_critical: 0.15, p_danger: 0.20 }
+          }
+        });
+        renderDashboard({
+          server_id: 'partial-456',
+          name: 'Partial Server',
+          published_overall_risk: 'CAUTION_LIMITED',
+          trusted: false,
+          axes: {
+            overall_risk: { axis_name: 'overall_risk', label: 'CAUTION_LIMITED', p_top: 0.45 }
+          }
+        });
+        renderDashboard({
+          server_id: null,
+          name: null,
+          url: null,
+          model_version: null,
+          published_overall_risk: null,
+          trusted: null,
+          trust_basis: null,
+          masquerade_flag: null,
+          trusted_override: null,
+          display_label: null,
+          axes: {
+            overall_risk: { axis_name: 'overall_risk', label: null, p_top: null, p_critical: null, p_danger: null }
+          }
+        });
+        console.info('[SELFTEST] All empty/partial render paths passed \u2014 no exceptions thrown.');
+      } catch (e) {
+        console.error('[SELFTEST] FAILED:', e);
+        throw e;
+      }
+    })();
+  </script>
+</body>
+</html>

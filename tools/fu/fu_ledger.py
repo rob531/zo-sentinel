@@ -239,7 +239,82 @@ def line_terminator(lines: List[str]) -> str:
     return ""
 
 
-def insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "log") -> int:
+# ---------------------------------------------------------------- call shape
+# ADDED 2026-09-03 (improvement-loop cycle-0065) for the friction family
+# `sanctioned-writer-api-shape`: 5 bites across 5 lanes in the trailing 7d,
+# first bitten 2026-08-30. Three of the six recorded rows are THIS exact call.
+#
+# THE DEFECT. Every lane prompt on this tower names `fu_ledger.append_log` as
+# "the sanctioned writer". It reads like a writer and it is not: it is a PURE
+# function over a parsed line list that neither opens nor writes the ledger.
+# Lanes therefore call `append_log(fu, text)` and get
+#     TypeError: append_log() missing 1 required positional argument: 'text'
+# which names the ARITY and nothing else -- not the real shape, not the host
+# dance around it, not the one-call CLI that already does all of it. Recorded
+# cost of re-deriving that from the bare TypeError: 3-6 minutes, per bite,
+# per lane, five times in the last seven days.
+#
+# THIS IS NOT A NEW GATE (HARNESS_DOCTRINE R7, recovery over restriction). It
+# refuses nothing that used to work -- the guessed call was ALREADY a
+# TypeError. It changes only what that TypeError SAYS, at the exact moment and
+# on the exact surface where the bitten lane is standing. A hazard note in a
+# prompt was tried first and is the reason this family has a name at all.
+_MISSING = object()
+
+_SHAPE_HINT = r"""
+fu_ledger.%(fn)s(lines, fu, %(rest)s) is a PURE FUNCTION over a parsed line
+list. It does NOT open, read, write or back up the ledger -- the caller owns
+the file. You called it as %(fn)s(<%(got0)s>, ...), which is the shape the
+lane prompts imply and which no version of this module has ever had.
+
+ONE-CALL FIX -- prefer this. It does the whole dance (backup, parse, append,
+binary write, re-parse verify) and is idempotent via --if-absent:
+
+  python "D:\zo\Zocomputer Agents\_tools\fu_append_log.py" --fu NNN --message "<one line>" --if-absent "<unique substring from this write>"
+
+  Add --dry-run first. Exit 0 = bullet present in the re-parsed ledger;
+  1 = refused (bad args / unknown FU); 2 = WROTE BUT COULD NOT VERIFY,
+  treat as a failed write and restore the backup it printed.
+
+IN-PROCESS FIX, if you genuinely need the pure function:
+
+  raw   = open(LEDGER, encoding="utf-8", newline="").read()
+  lines = raw.splitlines(keepends=True)
+  fu    = {str(f.num).lstrip("0"): f for f in parse(lines)}["NNN"]
+  append_log(lines, fu, text)              # <-- lines FIRST, then fu, then text
+  open(LEDGER, "wb").write("".join(lines).encode("utf-8"))
+  # then assert the LF count GREW and the crlf/lf ratio class did not move
+
+Two more shapes in this same family, so you do not pay for them separately:
+  * FU.num is a STRING with leading zeros ('035'), never an int. Key it as
+    str(f.num).lstrip("0"); `f.num == 35` can only ever be False, and an
+    identity check that is always False reads as "FU-035 does not exist".
+  * The heading form is `### FU-NNN | title` -- three hashes, a pipe, no
+    colon and no double dash. HEAD_RE is the contract; a heading that misses
+    it is INVISIBLE to fu_verify.py while ledger_lint.py still calls the file
+    clean.
+"""
+
+
+def _shape_error(fn, rest, got0):
+    return TypeError(_SHAPE_HINT % {
+        "fn": fn, "rest": rest, "got0": type(got0).__name__,
+    })
+
+
+def insert_key(lines, fu=_MISSING, key=_MISSING, value=_MISSING,
+               before="log") -> int:
+    """Insert `- key: value` into an entry. Body lives in _insert_key.
+
+    Guard added 2026-09-03 (cycle-0065): same call-shape family as append_log,
+    censused and cured in the SAME commit rather than one door of two.
+    """
+    if value is _MISSING or not isinstance(lines, list):
+        raise _shape_error("insert_key", "key, value", lines)
+    return _insert_key(lines, fu, key, value, before)
+
+
+def _insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "log") -> int:
     """Insert `- key: value` into an entry, preferring a slot before `before`.
 
     Returns the index written. Callers MUST re-parse afterwards; indices in
@@ -274,7 +349,19 @@ def _is_wrapped_log_line(line: str) -> bool:
     return line.startswith("    ") and line.strip() != ""
 
 
-def append_log(lines: List[str], fu: FU, text: str) -> int:
+def append_log(lines, fu=_MISSING, text=_MISSING) -> int:
+    """Append a dated bullet under `- log:`. Body lives in _append_log.
+
+    Guard added 2026-09-03 (cycle-0065): the shape the fleet guesses,
+    append_log(fu, text), now raises a TypeError that names the correct
+    signature and the one-call CLI instead of only the missing arity.
+    """
+    if text is _MISSING or not isinstance(lines, list):
+        raise _shape_error("append_log", "text", lines)
+    return _append_log(lines, fu, text)
+
+
+def _append_log(lines: List[str], fu: FU, text: str) -> int:
     """Append a dated bullet under `- log:`, creating the key if needed.
 
     Accepts `lines` with or without line terminators (see `line_terminator`).

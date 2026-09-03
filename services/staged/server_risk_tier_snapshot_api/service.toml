@@ -1,0 +1,25 @@
+[service]
+name = "server_risk_tier_snapshot_api"
+import_path = "services.active.server_risk_tier_snapshot_api.router"
+prefix = "/api"
+tag = "server_risk_tier_snapshot_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_store = true
+
+[data_sources]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[server]
+host = "0.0.0.0"
+port = 8772
+workers = 4
+
+[health]
+liveness = "/health/live"
+readiness = "/health/ready"

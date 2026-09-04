@@ -47,7 +47,14 @@ jobs:
         # a reader (the uploaded artifact) instead of being a capability nothing runs.
         # REPORT-ONLY by construction: `|| true` means a render hiccup never blocks the
         # gate -- recovery over restriction, no new required check.
+        #
+        # HARDENED 2026-09-04: the step promised REPORT-ONLY but guarded only its
+        # SECOND command; `run:` executes under `bash -e` and capmap-check is a
+        # BLOCKING job, so a scan_capmap hiccup would have failed the gate on every
+        # PR. Step-level continue-on-error matches the app-graph step below and
+        # makes the promise true for the whole block.
         if: always()
+        continue-on-error: true
         run: |
           mkdir -p artifacts
           python tools/scan_capmap.py artifacts/capmap.json

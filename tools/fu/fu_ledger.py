@@ -392,16 +392,115 @@ def _shape_error(fn, rest, got0):
     })
 
 
+# ---------------------------------------------------------------------------
+# THE SECOND ARGUMENT. Cycle-0065/0066 cured the FIRST argument (`lines`) of
+# these two writers and the family kept biting, because the bites were never
+# about `lines`. Both recorded 2026-09-03/04 bites passed a correct list and a
+# present text and died inside the bodies, on `fu`:
+#
+#   2026-09-03T19:56Z prod-drift-sentinel  append_log(lines, fu="FU-235", ...)
+#   2026-09-04T00:46Z improvement-loop     append_log(lines, 395, ...)
+#
+# Both are the SAME mistake and it is not an unreasonable one: `fu` is spelled
+# like a number everywhere the fleet reads about it, FU.num is a STRING with
+# leading zeros, and the _MISSING sentinel makes inspect.signature print
+# `fu=<object object at 0x...>` -- so the one recovery a bitten caller reaches
+# for, reading the signature, tells them nothing.
+#
+# R7 says prefer RECOVERY over RESTRICTION, so this resolves the number instead
+# of explaining it. An FU object still takes the identical path it always did
+# (probe pole D asserts that on every run), so nothing that worked changes.
+# What changes: the shapes that previously raised AttributeError from four
+# frames down now work, and the one shape that must NEVER silently succeed --
+# a number that is not in this ledger -- raises an error that NAMES the number.
+def _fu_key(value) -> Optional[str]:
+    """Canonicalise an FU designator: 'FU-035', '035', 35, ' 35 ' -> '35'.
+
+    Returns None when the value is not FU-number-shaped at all, which is the
+    caller's signal to raise rather than guess.
+    """
+    text = str(value).strip()
+    if text.lower().startswith("fu-"):
+        text = text[3:].strip()
+    if not text.isdigit():
+        return None
+    return text.lstrip("0") or "0"
+
+
+class DuplicateFU(ValueError):
+    """Two entries claim the same FU number. Refuse to guess which one."""
+
+
+class UnknownFU(ValueError):
+    """An FU designator that this ledger does not contain.
+
+    A distinct type because "FU-999 is not here" and "you passed the wrong
+    shape" want different handling, and because the failure this replaces --
+    AttributeError from inside _append_log -- was indistinguishable from a
+    genuine module bug.
+    """
+
+
+def _as_fu(fn: str, lines: List[str], arg):
+    """Accept an FU object (unchanged) or any FU designator, and resolve it."""
+    if arg is not _MISSING and hasattr(arg, "keys") and hasattr(arg, "num"):
+        return arg
+    key = _fu_key(arg)
+    if key is None:
+        raise TypeError(
+            "fu_ledger.%s(lines, fu, ...): `fu` must be the FU OBJECT from "
+            "parse(), or an FU number ('395', 'FU-395' or 395). You passed a "
+            "%s. Note FU.num is a STRING with leading zeros ('035'), so "
+            "f.num == 35 is always False.\n%s"
+            % (fn, type(arg).__name__ if arg is not _MISSING else "missing argument",
+               _ONE_CALL_POINTER)
+        )
+    found = [f for f in parse(lines) if _fu_key(f.num) == key]
+    if len(found) > 1:
+        raise DuplicateFU(
+            "fu_ledger.%s: FU-%s appears %d times in this ledger; refusing to "
+            "guess which entry you meant. Resolve the duplicate headings first."
+            % (fn, key, len(found))
+        )
+    if not found:
+        present = sorted(
+            (_fu_key(f.num) or "?" for f in parse(lines)),
+            key=lambda s: int(s) if s.isdigit() else -1,
+        )
+        near = [n for n in present if n.isdigit() and abs(int(n) - int(key)) <= 3]
+        raise UnknownFU(
+            "fu_ledger.%s: FU-%s is not in this ledger (%d entries parsed%s). "
+            "A heading that misses HEAD_RE (`### FU-NNN | title` -- three "
+            "hashes, a pipe, no colon and no double dash) does not exist to "
+            "this module even though ledger_lint.py still calls the file "
+            "clean. Check the heading form before concluding the entry is "
+            "absent."
+            % (fn, key, len(present),
+               "; nearest present: " + ", ".join(near) if near else "")
+        )
+    return found[0]
+
+
+_ONE_CALL_POINTER = (
+    "\nONE-CALL FIX -- does the whole dance (backup, parse, append, binary "
+    "write, re-parse verify) and is idempotent:\n\n"
+    "  python \"D:\\zo\\Zocomputer Agents\\_tools\\fu_append_log.py\" "
+    "--fu NNN --message \"<one line>\" --if-absent \"<unique substring>\"\n"
+)
+
+
 def insert_key(lines, fu=_MISSING, key=_MISSING, value=_MISSING,
                before="log") -> int:
     """Insert `- key: value` into an entry. Body lives in _insert_key.
 
     Guard added 2026-09-03 (cycle-0065): same call-shape family as append_log,
     censused and cured in the SAME commit rather than one door of two.
+    Cycle-0069: `fu` now accepts an FU number as well as an FU object -- the
+    same commit cures both writers, because one door of two reads as a cure.
     """
     if value is _MISSING or not isinstance(lines, list):
         raise _shape_error("insert_key", "key, value", lines)
-    return _insert_key(lines, fu, key, value, before)
+    return _insert_key(lines, _as_fu("insert_key", lines, fu), key, value, before)
 
 
 def _insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "log") -> int:
@@ -445,10 +544,13 @@ def append_log(lines, fu=_MISSING, text=_MISSING) -> int:
     Guard added 2026-09-03 (cycle-0065): the shape the fleet guesses,
     append_log(fu, text), now raises a TypeError that names the correct
     signature and the one-call CLI instead of only the missing arity.
+    Cycle-0069: `fu` now accepts 395 / '395' / 'FU-395' as well as the FU
+    object, because that -- not `lines` -- is what the 2026-09-03 and
+    2026-09-04 bites actually passed.
     """
     if text is _MISSING or not isinstance(lines, list):
         raise _shape_error("append_log", "text", lines)
-    return _append_log(lines, fu, text)
+    return _append_log(lines, _as_fu("append_log", lines, fu), text)
 
 
 def _append_log(lines: List[str], fu: FU, text: str) -> int:

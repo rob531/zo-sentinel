@@ -1,0 +1,8 @@
+[service]
+name = "server_scoring_velocity"
+import_path = "services.active.server_scoring_velocity.router"
+prefix = "/api"
+tag = "server_scoring_velocity"
+origin = "service"
+auth = "public"
+needs_data_layer = true

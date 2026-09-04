@@ -115,7 +115,7 @@ jobs:
 
           # The paths that can change what this checker resolves. This list is
           # the former `on.pull_request.paths:` block, moved here verbatim.
-          GATED_RE='^(app/|services/|tools/|schema/bus_catalog\.json$|\.github/workflows/referent-verify\.yml$)'
+          GATED_RE='^(app/|services/|tools/|auto_emitted_service/|service_package/|[^/]+\.py$|schema/bus_catalog\.json$|\.github/workflows/referent-verify\.yml$)'
 
           if [ "$EVENT" != "pull_request" ]; then
             echo "event=$EVENT (not a PR) -> full check"

@@ -40,6 +40,30 @@ jobs:
       - name: Deterministic capmap pull-check (BLOCKING -- fails on schema drift)
         run: python tools/pull_check.py
 
+      - name: Feature-completeness report (REPORT-ONLY -- renders capmap -> HTML)
+        # pull_check above SCANS the capmap and gates on drift; this RENDERS the same
+        # capmap into the self-contained feature_completeness.html the tool's docstring
+        # promises ("the E2E weekly-runner's output"), so the report has a producer and
+        # a reader (the uploaded artifact) instead of being a capability nothing runs.
+        # REPORT-ONLY by construction: `|| true` means a render hiccup never blocks the
+        # gate -- recovery over restriction, no new required check.
+        if: always()
+        run: |
+          mkdir -p artifacts
+          python tools/scan_capmap.py artifacts/capmap.json
+          python tools/feature_completeness_report.py artifacts/capmap.json artifacts/feature_completeness.html || true
+
+      - name: Upload feature-completeness report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-completeness
+          path: |
+            artifacts/capmap.json
+            artifacts/feature_completeness.html
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Service-manifest shape gate (BLOCKING -- FU-120)
         # 2026-07-29: pr_triage._manifest_is_valid() parsed manifests correctly but
         # was wired to a CLASSIFIER. Returning False demoted a PR into the ordinary

@@ -121,6 +121,17 @@ ISSUE_LABEL = "agent:code-zo"
 #: is a restart; 2 is an outage.
 ISSUE_AFTER_CYCLES = 2
 
+#: ...and the absence must also have LASTED this long. Cycles are counted per
+#: invocation, and on 2026-09-04/05 two instances of this check ran at once
+#: (watchdog.sh's bare launch + go.sh's daemon_wrapper launch) sharing ONE
+#: state file: "cycle 1" and "cycle 2" were 4 seconds apart, inside a go.sh
+#: boot where intent_engine_daemon simply had not started yet. Issue #4706 was
+#: filed for a daemon that came up 20s later. A counter cannot tell two samples
+#: from two intervals; a clock can. Sized so one process on the default tick
+#: still needs its second sample, and two processes on the same tick still
+#: cannot fire on the first.
+ISSUE_AFTER_SECONDS = 600
+
 #: How often to nudge an ALREADY-OPEN drift issue. At the 15-minute tick a lane
 #: down for a week would otherwise generate 672 comments.
 REISSUE_EVERY_N_CYCLES = 24
@@ -487,6 +498,28 @@ def match(decl: dict, live: list[dict]) -> list[dict]:
 # 3. STATE, HEARTBEAT, ISSUES
 # ---------------------------------------------------------------------------
 
+def _seconds_since(iso: str | None) -> float:
+    """Age of a stored ISO timestamp in seconds; 0.0 when unparseable, so a
+    corrupt `since` DELAYS an issue rather than forging one."""
+    if not iso:
+        return 0.0
+    try:
+        then = datetime.fromisoformat(iso)
+        if then.tzinfo is None:
+            then = then.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - then).total_seconds())
+    except Exception:
+        return 0.0
+
+
+def earns_issue(rec: dict) -> bool:
+    """An absence earns an issue only when BOTH the sample count and the wall
+    clock say so. Two processes sampling 4s apart satisfy the count; only an
+    outage satisfies the clock."""
+    return (rec.get("cycles", 0) >= ISSUE_AFTER_CYCLES
+            and _seconds_since(rec.get("since")) >= ISSUE_AFTER_SECONDS)
+
+
 def load_state() -> dict:
     try:
         return json.loads(STATE.read_text())
@@ -697,7 +730,8 @@ def run_cycle(allow_issues: bool = True) -> dict:
         lines.append(f"MISSING {m['name']} -- declared in "
                      f"{','.join(m['declared_in'])}, canonical {m['script']}, "
                      f"cycle {rec['cycles']}")
-        if allow_issues and rec["cycles"] >= ISSUE_AFTER_CYCLES:
+        m["absent_seconds"] = _seconds_since(rec.get("since"))
+        if allow_issues and earns_issue(rec):
             num = raise_issue(m["name"], m, rec["cycles"], st)
             if num:
                 m["issue"] = num

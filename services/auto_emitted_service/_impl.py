@@ -99,16 +99,21 @@ def get_score_disputes_endpoint(
     server_id: _t.Optional[str] = None,
     status: _t.Optional[str] = None,
 ) -> _JSON:
-    conditions: _t.List[str] = []
     params: _t.Dict[str, _t.Any] = {}
+    clauses: _t.List[str] = []
     if server_id is not None:
-        conditions.append("server_id = :server_id")
+        clauses.append("server_id = :server_id")
         params["server_id"] = server_id
     if status is not None:
-        conditions.append("status = :status")
+        clauses.append("status = :status")
         params["status"] = status
-    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-    sql = f"SELECT * FROM mcp_score_disputes {where_clause} LIMIT 100"
+    # Build WHERE clause safely: hardcoded names only, values via params
+    sql_parts = ["SELECT * FROM mcp_score_disputes"]
+    if clauses:
+        sql_parts.append("WHERE")
+        sql_parts.append(" AND ".join(clauses))
+    sql_parts.append("LIMIT 100")
+    sql = " ".join(sql_parts)
     return _query_mesh(sql, params=params if params else None)
 
 

@@ -1,0 +1,8 @@
+[service]
+name = "scoring_wave_ledger_api"
+import_path = "services.active.scoring_wave_ledger_api.router"
+prefix = "/api"
+tag = "scoring_wave_ledger_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

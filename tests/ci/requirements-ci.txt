@@ -15,7 +15,7 @@ psycopg[binary]>=3.3.4,<4.0
 SQLAlchemy>=2.0.51,<2.1
 alembic>=1.18.5,<2.0
 passlib>=1.7.4,<2.0
-pydantic>=2.13.4,<3.0
+pydantic>=2.13.5,<3.0
 
 # app-tier deps for the Perspectives/Ask module self-tests (sqlite in-memory)
 sqlalchemy>=2.0

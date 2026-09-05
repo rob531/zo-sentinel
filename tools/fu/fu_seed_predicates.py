@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pathlib
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -41,6 +42,13 @@ QUERY_ENDPOINT = os.environ.get("FU_QUERY_ENDPOINT", "http://127.0.0.1:8772/quer
 ZO_PROBE = os.environ.get(
     "FU_ZO_PROBE", r"D:\zo\Zocomputer Agents\_tools\zo_probe.py")
 
+# Absolute, like ZO_PROBE above: a predicate runs from whatever cwd the verifier
+# happens to hold, so a repo-relative path here would be a silent red.
+FLY_PROBE = os.environ.get(
+    "FU_FLY_PROBE",
+    str(pathlib.Path(__file__).resolve().parents[2] / "tools" / "fly_token.py"))
+FLY_PROBE_CMD = 'python "%s" --probe' % FLY_PROBE
+
 
 def sql_assert(sql: str, py_test: str) -> str:
     """A predicate that queries the mesh bus and asserts on the result.
@@ -60,10 +68,16 @@ def sql_assert(sql: str, py_test: str) -> str:
 
 PREDICATES = {
     # ---- infrastructure / credentials -----------------------------------
-    "FU-134": ("flyctl auth whoami",
-               "the 720h token timer either holds a live session or it does not"),
-    "FU-149": ("flyctl auth whoami",
-               "same token, tower side; every prod-PG tunnel depends on this exiting 0"),
+    # A BARE `flyctl auth whoami` READS THE CLOCK, NOT THE CREDENTIAL. It exits 1
+    # on every box where the client-side 720h re-login timer has rolled over,
+    # even while that same credential is authenticating a 494MB moat backup
+    # (measured 2026-09-03, hours_remaining=-37.5). --probe hydrates from
+    # AgentVault first, so it fails only when auth has ACTUALLY failed.
+    "FU-134": (FLY_PROBE_CMD,
+               "hydrated probe answers live; the 720h timer has no veto"),
+    "FU-149": (FLY_PROBE_CMD,
+               "same token, tower side; every prod-PG tunnel depends on this "
+               "probe exiting 0"),
 
     # ---- daemon liveness (FU-115's own 'reliable probe') ----------------
     "FU-115": (sql_assert(

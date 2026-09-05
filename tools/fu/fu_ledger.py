@@ -45,7 +45,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 HEAD_RE = re.compile(r"^### FU-(\d+)\b(?:\s*\|\s*(.*))?$")
-KEY_RE = re.compile(r"^- ([a-z][a-z_ ]*):\s?(.*)$")
+# 2026-09-05 (daily-chairman-review): writers since FU-362 emit the key in bold
+# (`- **date:** 2026-09-04`). 31 lint errors across 20 entries were this ONE
+# spelling; every entry carried the key. Optional `**` on either side of the
+# colon; captured key/value are unchanged so every reader sees what it saw
+# for `- date:`.
+KEY_RE = re.compile(r"^- (?:\*\*)?([a-z][a-z_ ]*):(?:\*\*)?\s?(.*)$")
 
 # The `- date:` line packs 4 fields separated by any of ' - ', ' · ', ' • '.
 FIELD_SEP_RE = re.compile(r"\s+[·•]\s+|\s+-\s+")
@@ -135,7 +140,14 @@ class FU:
 
     @property
     def fu_class(self) -> str:
-        c = (self.vals.get("class") or "").strip().lower()
+        # 2026-09-05: writers annotate the class in place (`defect (instrument,
+        # not product). Found while ...`). The class is the FIRST token; the
+        # rest is prose. Reading the whole value made every annotated entry
+        # look class-less, and ledger_lint --fix then REPLACED the line with a
+        # bare `- class: defect`, erasing the annotation (caught by a byte-count
+        # that FELL after a repair that only adds lines).
+        raw = (self.vals.get("class") or "").strip().lower()
+        c = re.split(r"[\s(,;:]", raw, 1)[0] if raw else ""
         return c if c in VALID_CLASS else ""
 
     @property

@@ -24,6 +24,32 @@ permissions:
   contents: write
   pull-requests: write
 
+# RATE-BUDGET GUARD (added 2026-09-04).
+#
+# MEASURED, 2026-09-04 (only these three numbers are measurements):
+#   - auto-merge runs: 100 runs spanning 4.67h == ~21/hour.
+#   - `pr-relander` still dies at 23:01Z on "GraphQL: API rate limit already
+#     exceeded for site ID installation", 0.3s after its token validates.
+#   - 14 of the 30 open autonomous-build+triage:solid PRs are ALREADY armed,
+#     and both sweeps below re-arm them on every run. `gh pr merge --auto` on
+#     an armed PR is a no-op; the `gh pr view` preceding it is not.
+#
+# NOT ESTABLISHED: that these sweeps are the sole or even the dominant consumer
+# of the installation budget. An earlier estimate of ~7,800 calls/hour assumed
+# ~250 triage:solid PRs; the real figure is 30, so that arithmetic was wrong and
+# is withdrawn. This change removes measured waste and a real burst amplifier.
+# It may not be sufficient. Whatever is actually draining the budget still needs
+# to be identified by logging resources.graphql.used/remaining at the head of
+# each job -- do not read a green relander as proof this was the whole cause.
+#
+# Two sweep jobs fire on workflow_run:completed for SIX workflows, so one CI
+# pass over one PR can start six identical sweeps. A cancelled sweep is
+# superseded by an identical newer one, so collapsing a burst loses nothing.
+# Mirrors pr-relander.yml's own `group: pr-relander`.
+concurrency:
+  group: auto-merge-sweep
+  cancel-in-progress: true
+
 jobs:
   autonomous-build:
     runs-on: ubuntu-latest
@@ -146,8 +172,18 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number -q '.[].number';
-                   gh pr list -R "$REPO" --state open --label land-when-green --json number,isDraft -q '.[] | select(.isDraft == false) | .number'; } | sort -u ) || prs=""
+          # ALREADY-ARMED PRs ARE SKIPPED AT THE LIST (added 2026-09-04).
+          # `gh pr merge --auto` on an already-armed PR is a no-op, but the
+          # `gh pr view --json files` above it costs an API call every run.
+          # Measured 2026-09-04: 14 of 30 matching PRs were already armed.
+          # This job is UNCAPPED (green-sweep caps at 60; this one does not),
+          # so the waste scales with queue depth -- and the queue grew 276->321
+          # in two days. A cost that scales with a growing population fails
+          # worse every day. Filtering changes no outcome: an armed PR needs no
+          # re-arming, and the ci-hold/freeze-hold guards still run on every
+          # push via the pull_request_target `autonomous-build` job.
+          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number,autoMergeRequest -q '.[] | select(.autoMergeRequest == null) | .number';
+                   gh pr list -R "$REPO" --state open --label land-when-green --json number,isDraft,autoMergeRequest -q '.[] | select(.isDraft == false) | select(.autoMergeRequest == null) | .number'; } | sort -u ) || prs=""
           for pr in $prs; do
             files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
             # CI-SURFACE GUARD (added 2026-09-01, alongside RELANDER_TOKEN).
@@ -202,9 +238,12 @@ jobs:
           SWEEP_CAP: "60"
         run: |
           set -uo pipefail
+          # Already-armed PRs skipped at the list (added 2026-09-04): each one
+          # otherwise costs TWO calls below (mergeStateStatus, then files) to
+          # re-arm something already armed. ~80 of the open PRs are armed.
           if ! prs=$(gh pr list -R "$REPO" --state open --label autonomous-build \
-                       --limit 500 --json number,isDraft \
-                       -q '.[] | select(.isDraft == false) | .number' 2>qerr.txt); then
+                       --limit 500 --json number,isDraft,autoMergeRequest \
+                       -q '.[] | select(.isDraft == false) | select(.autoMergeRequest == null) | .number' 2>qerr.txt); then
             echo "::error::green-sweep query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
             exit 1
           fi

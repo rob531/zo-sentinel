@@ -1,0 +1,7 @@
+name = "axis_scores_risk_tier_consumer"
+import_path = "services.active.axis_scores_risk_tier_consumer.router"
+prefix = "/api"
+tag = "axis_scores_risk_tier_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,7 @@
+name = "mcp_server_registry_source_distribution_view"
+import_path = "services.active.mcp_server_registry_source_distribution_view.router"
+prefix = "/api"
+tag = "mcp_server_registry_source_distribution_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true

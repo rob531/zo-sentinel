@@ -1,0 +1,21 @@
+[service]
+name = "server_axis_timeline_api"
+import_path = "services.active.server_axis_timeline_api.router"
+prefix = "/api"
+tag = "server_axis_timeline_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[description]
+summary = "Timeline API for server axis scores and disputes"
+models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "User"]
+
+[data_access]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[dependencies]
+requires_auth = false
+rate_limit = null
+cache_ttl = 300

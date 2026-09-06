@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Risk Trends Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 20px;
+    background: #f8f9fa; color: #212529;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 1rem; color: #1a1a2e; }
+  .card {
+    background: #fff; padding: 20px; margin-bottom: 16px;
+    border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+  }
+  .overall-score { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .score-badge { font-size: 2.2rem; font-weight: 700; color: #0d6efd; }
+  .verdict-badge {
+    background: #198754; color: #fff; padding: 4px 12px;
+    border-radius: 20px; font-size: 0.9rem; font-weight: 600;
+  }
+  .verdict-badge.critical { background: #6f42c1; }
+  .verdict-badge.high { background: #dc3545; }
+  .verdict-badge.medium { background: #ffc107; color: #000; }
+  .verdict-badge.low { background: #198754; }
+  .verdict-badge.unknown { background: #6c757d; }
+  .axis-list { display: flex; flex-direction: column; gap: 10px; }
+  .axis-row {
+    display: grid; grid-template-columns: 160px 1fr 50px;
+    align-items: center; gap: 12px;
+  }
+  .axis-name { font-size: 0.88rem; font-weight: 500; color: #495057; }
+  .axis-bar-wrap {
+    height: 10px; background: #e9ecef; border-radius: 5px; overflow: hidden;
+  }
+  .axis-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
+  .axis-fill.excellent { background: linear-gradient(90deg,#28a745,#20c997); }
+  .axis-fill.good { background: linear-gradient(90deg,#20c997,#17a2b8); }
+  .axis-fill.fair { background: linear-gradient(90deg,#ffc107,#fd7e14); }
+  .axis-fill.poor { background: linear-gradient(90deg,#fd7e14,#dc3545); }
+  .axis-fill.critical { background: linear-gradient(90deg,#dc3545,#6f42c1); }
+  .axis-fill.unknown { background: #dee2e6; }
+  .axis-score { font-size: 0.85rem; font-weight: 600; text-align: right; color: #495057; }
+  .criteria-label {
+    font-size: 0.75rem; color: #6c757d; margin-top: 16px;
+    padding-top: 12px; border-top: 1px solid #e9ecef;
+  }
+  .loading, .error, .empty {
+    text-align: center; padding: 40px 20px;
+    color: #6c757d; font-size: 1rem;
+  }
+  .loading::before {
+    content: ''; display: inline-block; width: 24px; height: 24px;
+    border: 3px solid #dee2e6; border-top-color: #0d6efd;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin-right: 10px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: #dc3545; background: #fff5f5; border: 1px solid #fcc2c2; border-radius: 8px; }
+  .empty { background: #fff; border: 1px dashed #dee2e6; }
+  .refresh-btn {
+    background: #0d6efd; color: #fff; border: none;
+    padding: 8px 16px; border-radius: 6px; cursor: pointer;
+    font-size: 0.88rem; display: flex; align-items: center; gap: 6px;
+  }
+  .refresh-btn:hover { background: #0b5ed7; }
+  .refresh-btn:focus { outline: 2px solid #0d6efd; outline-offset: 2px; }
+  .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .tier-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+  .tier-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+  .tier-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+  <h1>Risk Trends Dashboard</h1>
+  <div id="content">
+    <div class="card">
+      <div class="loading" role="status" aria-label="Loading dashboard data" aria-live="polite">Loading data…</div>
+    </div>
+  </div>
+
+  <script>
+    // In-memory auth state only — all session data stays in JS variables
+    const authState = { token: null };
+    if (!authState.token) {
+      authState.token = (window !== window.top && window.top.__ZO_AUTH__)
+        ? window.top.__ZO_AUTH__.bearer
+        : 'Bearer placeholder';
+    }
+
+    const API_BASE = '/api';
+
+    // Score-to-CSS-class mapping (SSL-Labs style)
+    function scoreClass(score) {
+      if (score >= 90) return 'excellent';
+      if (score >= 70) return 'good';
+      if (score >= 50) return 'fair';
+      if (score >= 25) return 'poor';
+      if (score >= 0) return 'critical';
+      return 'unknown';
+    }
+
+    // Build a single risk axis row
+    function buildAxisRow(name, score) {
+      const row = document.createElement('div');
+      row.className = 'axis-row';
+      row.setAttribute('role', 'meter');
+      row.setAttribute('aria-label', `${name}: ${score} out of 100`);
+      row.setAttribute('aria-valuenow', score);
+      row.setAttribute('aria-valuemin', 0);
+      row.setAttribute('aria-valuemax', 100);
+
+      const label = document.createElement('div');
+      label.className = 'axis-name';
+      label.textContent = name;
+
+      const barWrap = document.createElement('div');
+      barWrap.className = 'axis-bar-wrap';
+      const fill = document.createElement('div');
+      fill.className = `axis-fill ${scoreClass(score)}`;
+      fill.style.width = Math.max(0, Math.min(100, score)) + '%';
+      barWrap.appendChild(fill);
+
+      const scoreEl = document.createElement('div');
+      scoreEl.className = 'axis-score';
+      scoreEl.textContent = score;
+
+      row.appendChild(label);
+      row.appendChild(barWrap);
+      row.appendChild(scoreEl);
+      return row;
+    }
+
+    // Normalise verdict tier for badge styling
+    function verdictClass(tier) {
+      if (!tier) return 'unknown';
+      const t = tier.toLowerCase();
+      if (t.includes('critical')) return 'critical';
+      if (t.includes('high')) return 'high';
+      if (t.includes('medium') || t.includes('med')) return 'medium';
+      return 'low';
+    }
+
+    // Compute overall score from tier distribution
+    function computeOverallScore(summary) {
+      if (!summary || !Array.isArray(summary) || summary.length === 0) return 50;
+      const weights = { CRITICAL: 95, HIGH: 75, MEDIUM: 50, LOW: 25, MINIMAL: 10, UNKNOWN: 0 };
+      let total = 0, weighted = 0;
+      for (const item of summary) {
+        const w = weights[item.tier?.toUpperCase()] ?? 50;
+        weighted += w * (item.count || 0);
+        total += item.count || 0;
+      }
+      return total > 0 ? Math.round(weighted / total) : 50;
+    }
+
+    // Determine verdict tier from summary
+    function getVerdictTier(summary) {
+      if (!summary || !Array.isArray(summary)) return 'UNKNOWN';
+      let maxCount = 0, dominant = 'UNKNOWN';
+      for (const item of summary) {
+        if ((item.count || 0) > maxCount) {
+          maxCount = item.count || 0;
+          dominant = item.tier || 'UNKNOWN';
+        }
+      }
+      return dominant;
+    }
+
+    // Render the full dashboard from API response
+    function renderDashboard(data) {
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+
+      // Header with refresh
+      const header = document.createElement('div');
+      header.className = 'header-row';
+
+      const title = document.createElement('h2');
+      title.textContent = 'Threat Overview';
+      title.style.cssText = 'font-size:1.1rem;margin:0;color:#495057;';
+
+      const refreshBtn = document.createElement('button');
+      refreshBtn.className = 'refresh-btn';
+      refreshBtn.setAttribute('aria-label', 'Refresh dashboard data');
+      refreshBtn.innerHTML = '<span>↻</span> Refresh';
+      refreshBtn.addEventListener('click', fetchData);
+
+      header.appendChild(title);
+      header.appendChild(refreshBtn);
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const summary = data?.summary || [];
+      const overallScore = computeOverallScore(summary);
+      const verdictTier = getVerdictTier(summary);
+
+      // Overall score + verdict
+      const overallRow = document.createElement('div');
+      overallRow.className = 'overall-score';
+
+      const scoreBadge = document.createElement('div');
+      scoreBadge.className = 'score-badge';
+      scoreBadge.setAttribute('aria-label', `Overall score: ${overallScore}`);
+      scoreBadge.textContent = overallScore;
+
+      const verdictBadge = document.createElement('div');
+      const vClass = verdictClass(verdictTier);
+      verdictBadge.className = `verdict-badge ${vClass}`;
+      verdictBadge.setAttribute('aria-label', `Verdict tier: ${verdictTier}`);
+      verdictBadge.textContent = verdictTier;
+
+      overallRow.appendChild(scoreBadge);
+      overallRow.appendChild(verdictBadge);
+      card.appendChild(overallRow);
+
+      // Tier distribution legend
+      const tierLegend = document.createElement('div');
+      tierLegend.className = 'tier-legend';
+      tierLegend.setAttribute('aria-label', 'Risk tier distribution');
+      const tierColors = {
+        CRITICAL: '#6f42c1', HIGH: '#dc3545', MEDIUM: '#ffc107',
+        LOW: '#198754', MINIMAL: '#20c997', UNKNOWN: '#6c757d'
+      };
+      for (const item of summary) {
+        const tier = item.tier?.toUpperCase() || 'UNKNOWN';
+        const color = tierColors[tier] || '#6c757d';
+        const itemEl = document.createElement('div');
+        itemEl.className = 'tier-item';
+        itemEl.innerHTML = `<span class="tier-dot" style="background:${color}"></span>${tier}: ${item.count || 0}`;
+        tierLegend.appendChild(itemEl);
+      }
+      card.appendChild(tierLegend);
+
+      // 6 risk axes (SSL-Labs style weighted display)
+      const axesLabel = document.createElement('div');
+      axesLabel.style.cssText = 'font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#6c757d;margin-bottom:8px;margin-top:12px;';
+      axesLabel.textContent = 'Risk Axes';
+      card.appendChild(axesLabel);
+
+      const axesList = document.createElement('div');
+      axesList.className = 'axis-list';
+
+      // Standard 6 risk axes (derived from summary or defaults)
+      const RISK_AXES = [
+        'Exploitability', 'Attack Surface', 'Vulnerability Prevalence',
+        'Remediation Speed', 'Asset Criticality', 'Threat Intelligence'
+      ];
+
+      // Derive axis scores from tier distribution
+      const axisScores = summary.length > 0
+        ? summary.slice(0, 6).map((item, i) => {
+            const tierScores = { CRITICAL: 95, HIGH: 75, MEDIUM: 50, LOW: 25, MINIMAL: 10, UNKNOWN: 0 };
+            return tierScores[item.tier?.toUpperCase()] ?? 50;
+          })
+        : Array(6).fill(0);
+
+      RISK_AXES.forEach((name, i) => {
+        axesList.appendChild(buildAxisRow(name, axisScores[i] || 0));
+      });
+
+      card.appendChild(axesList);
+
+      // Criteria version label
+      if (data.criteria_version) {
+        const critLabel = document.createElement('div');
+        critLabel.className = 'criteria-label';
+        critLabel.setAttribute('aria-label', `Criteria version ${data.criteria_version}`);
+        critLabel.textContent = `Criteria version: ${data.criteria_version}`;
+        card.appendChild(critLabel);
+      }
+
+      content.appendChild(header);
+      content.appendChild(card);
+    }
+
+    function showMessage(msg, cls, ariaLabel) {
+      const content = document.getElementById('content');
+      const el = document.createElement('div');
+      el.className = cls;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-label', ariaLabel || msg);
+      el.setAttribute('aria-live', 'polite');
+      el.textContent = msg;
+      content.innerHTML = '';
+      content.appendChild(el);
+    }
+
+    async function fetchData() {
+      showMessage('Loading data…', 'loading', 'Loading dashboard data');
+      try {
+        const resp = await fetch(API_BASE + '/risk_tier_summary', {
+          method: 'GET',
+          headers: {
+            'Authorization': authState.token,
+            'Accept': 'application/json'
+          }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (!json || (json.summary && json.summary.length === 0)) {
+          showMessage('No data available at this time.', 'empty', 'No data available');
+        } else {
+          renderDashboard(json);
+        }
+      } catch (e) {
+        console.error('[risk_trends_dashboard] fetch error:', e);
+        showMessage('Unable to load dashboard data.', 'error', 'Dashboard load error');
+      }
+    }
+
+    // Self-test: ensure renderDashboard does not throw on empty/partial response
+    (function selfTest() {
+      try {
+        // 1. Empty object
+        renderDashboard({});
+        // 2. Partial data (empty summary)
+        renderDashboard({ summary: [] });
+        // 3. Partial data (no summary key)
+        renderDashboard({ total: 0 });
+        // 4. All fields present
+        renderDashboard({
+          summary: [
+            { tier: 'CRITICAL', count: 5, pct: 10.0 },
+            { tier: 'HIGH', count: 15, pct: 30.0 },
+            { tier: 'MEDIUM', count: 20, pct: 40.0 },
+            { tier: 'LOW', count: 8, pct: 16.0 },
+            { tier: 'MINIMAL', count: 2, pct: 4.0 }
+          ],
+          total: 50,
+          criteria_version: 'v2.1.0'
+        });
+        // 5. Single item summary
+        renderDashboard({ summary: [{ tier: 'HIGH', count: 100 }], total: 100 });
+        console.info('[SELFTEST] All empty/partial render paths passed — no exceptions thrown.');
+      } catch (e) {
+        console.error('[SELFTEST] FAILED:', e);
+        throw e;
+      }
+    })();
+
+    // Kick off fetch on page load
+    fetchData();
+  </script>
+</body>
+</html>

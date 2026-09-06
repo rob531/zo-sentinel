@@ -176,11 +176,11 @@ LADDER = [
     # gemma-format payload (no systemInstruction); adapter detects by prefix.
     # Order: 12B fastest, 4B smallest, 27B largest reliable.
     ModelSpec("gemini_direct",  "gemma-3-12b-it",                  128_000, 15, 0.0,
-              "Gemma 3 12B Instruct (free, 1.7s, 128K ctx)", tool_capable=False),
+              "Gemma 3 12B Instruct (free, 1.7s, 128K ctx)", tool_capable=False, enabled=False),  # 404 2026-09-06
     ModelSpec("gemini_direct",  "gemma-3-4b-it",                   128_000, 15, 0.0,
-              "Gemma 3 4B Instruct (free, 2.1s, 128K ctx)", tool_capable=False),
+              "Gemma 3 4B Instruct (free, 2.1s, 128K ctx)", tool_capable=False, enabled=False),  # 404 2026-09-06
     ModelSpec("gemini_direct",  "gemma-3-27b-it",                  128_000, 15, 0.0,
-              "Gemma 3 27B Instruct (free, 2.9s, 128K ctx)", tool_capable=False),
+              "Gemma 3 27B Instruct (free, 2.9s, 128K ctx)", tool_capable=False, enabled=False),  # 404 2026-09-06
 
     # Tier 2 -- Zo free models
     ModelSpec("zo_routed", "zo:openai/gpt-5.4-mini",             400_000, 60, 0.0,
@@ -233,9 +233,9 @@ LADDER = [
     # tool-calling). Opt-in via GOOSE_MODEL=zo-ladder-groq (task builder_groq).
     # Model overridable via GROQ_BUILD_MODEL (Groq also serves openai/gpt-oss-120b).
     ModelSpec("openai_compatible",
-              os.environ.get("GROQ_BUILD_MODEL", "llama-3.3-70b-versatile"),
+              os.environ.get("GROQ_BUILD_MODEL", "openai/gpt-oss-120b"),
               131_000, 30, 0.0,
-              "Groq llama-3.3-70b (free ~14.4k rpd, OpenAI-compat, tool-calling)",
+              "Groq gpt-oss-120b (free ~14.4k rpd, OpenAI-compat, tool-calling; llama-3.3-70b 404 2026-09-06)",
               base_url="https://api.groq.com/openai/v1", key_env="GROQ_API_KEY"),
 ]
 

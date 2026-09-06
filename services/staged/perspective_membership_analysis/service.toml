@@ -1,0 +1,10 @@
+name = "perspective_membership_analysis"
+import_path = "services.active.perspective_membership_analysis.router"
+prefix = "/api"
+tag = "perspective_membership_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

@@ -1,0 +1,12 @@
+service = {
+    "name": "server_risk_ranking",
+    "import_path": "services.active.server_risk_ranking.router",
+    "prefix": "/api",
+    "tag": "server_risk_ranking",
+    "origin": "service",
+    "auth": "public",
+    "needs_data_layer": True,
+}
+
+if __name__ == "__main__":
+    print("PASS")

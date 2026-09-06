@@ -1,0 +1,19 @@
+[service]
+name = "orphan_router_census"
+import_path = "services.active.orphan_router_census.router"
+prefix = "/api"
+tag = "orphan_router_census"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+services.active.common.middleware = "logging"
+services.active.common.middleware = "request_id"
+
+[py_deps]
+# No additional py_deps needed beyond app package
+
+[test]
+has_self_test = true
+self_test_description = "Verifies orphan router census returns valid structure with PASS"

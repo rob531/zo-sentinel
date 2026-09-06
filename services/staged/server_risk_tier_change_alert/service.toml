@@ -6,3 +6,16 @@ tag = "server_risk_tier_change_alert"
 origin = "service"
 auth = "public"
 needs_data_layer = true
+
+[router]
+module = "services.active.server_risk_tier_change_alert.router"
+
+[data_layer]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+bus_tables = ["mcp_signal_scores", "mesh_memory"]
+bus_endpoint = "http://127.0.0.1:8772/query"
+
+[test]
+pass_output = "PASS"
+
+The service.toml is a configuration file that defines the service metadata, router location, data layer access patterns, and test expectations. The actual implementation lives in the `services.active.server_risk_tier_change_alert.router` module which handles the risk tier change detection logic.

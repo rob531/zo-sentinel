@@ -1,0 +1,23 @@
+[service]
+name = "risk_tier_dashboard_api"
+import_path = "services.active.risk_tier_dashboard_api.router"
+prefix = "/api"
+tag = "risk_tier_dashboard_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+zo_computer = true
+
+[tables.app]
+- "McpServerRegistry"
+- "McpLlmAxisScore"
+- "McpScoreDispute"
+- "orgs"
+- "users"
+
+[tables.mesh]
+- "mcp_signal_scores"
+- "mesh_memory"

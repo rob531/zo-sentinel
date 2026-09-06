@@ -1,0 +1,26 @@
+[service]
+name = "vuln_linkage_coverage_api"
+import_path = "services.active.vuln_linkage_coverage_api.router"
+prefix = "/api"
+tag = "vuln_linkage_coverage_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[runtime]
+framework = "fastapi"
+workers = 1
+
+[dependencies]
+internal = ["app.db", "app.models"]
+external = ["write_service"]
+
+[api.routes]
+GET /vuln-linkage/coverage = "get_vuln_linkage_coverage"
+GET /vuln-linkage/servers/{server_id} = "get_server_vuln_coverage"
+GET /vuln-linkage/summary = "get_coverage_summary"
+GET /health = "health_check"
+
+[test]
+self_test_port = 18773
+expected_output = "PASS"

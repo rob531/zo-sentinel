@@ -1,0 +1,7 @@
+name = "nvd_cve_feed_ingestor"
+import_path = "services.active.nvd_cve_feed_ingestor.router"
+prefix = "/api"
+tag = "nvd_cve_feed_ingestor"
+origin = "service"
+auth = "public"
+needs_data_layer = true

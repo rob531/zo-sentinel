@@ -1,0 +1,29 @@
+[service]
+name = "risk_tier_trend_service"
+import_path = "services.active.risk_tier_trend_service.router"
+prefix = "/api"
+tag = "risk_tier_trend_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_store = true
+
+[tables.app]
+McpLlmAxisScore = "read"
+orgs = "read"
+users = "read"
+
+[tables.mesh]
+mcp_signal_scores = "read"
+mesh_memory = "read"
+
+[endpoints]
+GET /api/risk-tier-trends = "get_risk_tier_trends"
+GET /api/risk-tier-trends/{org_id} = "get_org_risk_tier_trends"
+
+[test]
+self_test_command = "python -m services.active.risk_tier_trend_service"
+expected_output = "PASS"

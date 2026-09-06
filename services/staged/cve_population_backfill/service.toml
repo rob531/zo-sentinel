@@ -1,0 +1,8 @@
+[service]
+name = "cve_population_backfill"
+import_path = "services.active.cve_population_backfill.router"
+prefix = "/api"
+tag = "cve_population_backfill"
+origin = "service"
+auth = "public"
+needs_data_layer = true

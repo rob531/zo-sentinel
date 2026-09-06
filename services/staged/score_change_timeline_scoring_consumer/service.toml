@@ -1,0 +1,9 @@
+Let me first examine the existing patterns and schema truth to understand what's needed.
+
+<search_files>
+<query>service.toml pattern</query>
+</search_files>
+
+<search_files>
+<query>SCHEMA_TRUTH.md</query>
+</search_files>

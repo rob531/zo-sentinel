@@ -123,8 +123,15 @@ jobs:
               goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
                 --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
 
-            python tools/canary/classify_smoke.py --transcript /tmp/smoke.out --nonce "$NONCE"
-            case "$?" in
+            # errexit trap (found 2026-09-06, run 34048327136): GitHub's default
+            # `shell: bash` is `bash -eo pipefail`, and `set -uo pipefail` above
+            # does NOT clear -e. So classify_smoke's exit 2 killed the step
+            # BEFORE `case` ran -- the failover below had never once executed;
+            # cerebras 402 == whole canary red, which is exactly the run that
+            # closed #4077's false lead. Capture the rc instead of reading $?.
+            RC=0
+            python tools/canary/classify_smoke.py --transcript /tmp/smoke.out --nonce "$NONCE" || RC=$?
+            case "$RC" in
               0)
                 echo "SMOKE PASS on rung $RUNG: this goose loads a recipe, drives a model and calls a tool."
                 {

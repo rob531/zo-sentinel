@@ -1,0 +1,7 @@
+name = "server_detail"
+import_path = "services.active.server_detail.router"
+prefix = "/api"
+tag = "server_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = true

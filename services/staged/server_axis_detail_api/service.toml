@@ -7,17 +7,16 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[dependencies]
-app_db = true
-mesh_query = true
+[routes]
+GET /servers/{server_id}/axis-details = "get_server_axis_details"
+GET /servers/{server_id}/axis-details/{axis} = "get_server_axis_detail"
+GET /servers/{server_id}/signal-summary = "get_signal_summary"
 
-[tables.app]
-McpServerRegistry = { read = true }
-McpLlmAxisScore = { read = true }
-McpScoreDispute = { read = true }
-orgs = { read = true }
-users = { read = true }
+[models]
+McpServerRegistry = "McpServerRegistry"
+McpLlmAxisScore = "McpLlmAxisScore"
+mcp_signal_scores = "McpSignalScore"
 
-[tables.mesh]
-mcp_signal_scores = { read = true }
-mesh_memory = { read = true }
+[pipeline]
+endpoint = "http://127.0.0.1:8772/query"
+tables = ["mcp_signal_scores", "mesh_memory"]

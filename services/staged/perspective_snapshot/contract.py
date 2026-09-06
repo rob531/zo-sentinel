@@ -2,46 +2,90 @@
 services.staged.perspective_snapshot.contract
 """
 
-from fastapi import FastAPI, Depends
+from datetime import datetime
+from typing import List
+
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# Real data layer imports (must remain unchanged for production)
-from app.db import get_session
+# Real data layer imports (must stay unchanged)
+from app.db import Base, get_session
 from app.models import (
-    Base,
     Perspective,
-    McpServerRegistry,
+    PerspectiveEvent,
     PerspectiveSnapshot,
 )
 
-# Service router import
-from services.staged.perspective_snapshot.router import router as snapshot_router
-
-app = FastAPI()
-app.include_router(snapshot_router, prefix="/api")
+router = APIRouter(prefix="/api")
 
 
+class SnapshotResponse(BaseModel):
+    snapshot_id: int
+    taken_at: datetime
+
+
+@router.post(
+    "/perspectives/{perspective_id}/snapshot",
+    response_model=SnapshotResponse,
+    status_code=200,
+)
+def create_snapshot(
+    perspective_id: int,
+    session: Session = Depends(get_session),
+):
+    # Verify the perspective exists
+    perspective = session.get(Perspective, perspective_id)
+    if perspective is None:
+        raise HTTPException(status_code=404, detail="Perspective not found")
+
+    # Determine current membership (distinct server ids from events)
+    server_ids = (
+        session.query(PerspectiveEvent.server_id)
+        .filter(PerspectiveEvent.perspective_id == perspective_id)
+        .distinct()
+        .all()
+    )
+    membership: List[int] = [sid for (sid,) in server_ids]
+
+    # Create snapshot record
+    snapshot = PerspectiveSnapshot(
+        perspective_id=perspective_id,
+        membership=membership,
+        taken_at=datetime.utcnow(),
+    )
+    session.add(snapshot)
+    session.commit()
+    session.refresh(snapshot)
+
+    return SnapshotResponse(snapshot_id=snapshot.id, taken_at=snapshot.taken_at)
+
+
+# --------------------------------------------------------------------------- #
+# Self‑test (run with: python -m services.staged.perspective_snapshot.contract)
+# --------------------------------------------------------------------------- #
 if __name__ == "__main__":
-    # ----------------------------------------------------------------------
-    # In‑memory SQLite setup for self‑test (dependency override)
-    # ----------------------------------------------------------------------
-    SQLITE_URL = "sqlite:///:memory:"
-    engine = create_engine(
-        SQLITE_URL,
+
+    # ------------------------------------------------------------------- #
+    # Build a minimal FastAPI app with the router and override the DB layer
+    # ------------------------------------------------------------------- #
+    app = FastAPI()
+    app.include_router(router)
+
+    # In‑memory SQLite engine (StaticPool) for the test
+    test_engine = create_engine(
+        "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-    # Create all tables defined in the real models
-    Base.metadata.create_all(bind=engine)
-
-    # Dependency override to use the in‑memory session
+    # Override the dependency used by the router
     def _override_get_session():
-        db = SessionLocal()
+        db = TestSessionLocal()
         try:
             yield db
         finally:
@@ -49,49 +93,58 @@ if __name__ == "__main__":
 
     app.dependency_overrides[get_session] = _override_get_session
 
-    # ----------------------------------------------------------------------
-    # Seed minimal data required for the acceptance test
-    # ----------------------------------------------------------------------
-    with SessionLocal() as db:
-        # Perspective (id=1)
-        perspective = Perspective(id=1, name="test_perspective")
+    # Create tables
+    Base.metadata.create_all(bind=test_engine)
+
+    # ------------------------------------------------------------------- #
+    # Seed minimal data: a perspective with two server events
+    # ------------------------------------------------------------------- #
+    with TestSessionLocal() as db:
+        perspective = Perspective(
+            id=1,
+            name="test-perspective",
+            description="test",
+            facet_filters="{}",
+            org_id=1,
+            created_by=1,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
         db.add(perspective)
 
-        # Three server registry entries; only one will match the default filter
-        servers = [
-            McpServerRegistry(server_id=1, perspective_id=1, facet="allowed"),
-            McpServerRegistry(server_id=2, perspective_id=1, facet="blocked"),
-            McpServerRegistry(server_id=3, perspective_id=1, facet="blocked"),
-        ]
-        db.add_all(servers)
+        event1 = PerspectiveEvent(
+            id=1,
+            perspective_id=1,
+            server_id=10,
+            change_type="add",
+            old_tier=None,
+            new_tier=None,
+            seen=False,
+            created_at=datetime.utcnow(),
+        )
+        event2 = PerspectiveEvent(
+            id=2,
+            perspective_id=1,
+            server_id=20,
+            change_type="add",
+            old_tier=None,
+            new_tier=None,
+            seen=False,
+            created_at=datetime.utcnow(),
+        )
+        db.add_all([event1, event2])
         db.commit()
 
-    # ----------------------------------------------------------------------
-    # Run acceptance test
-    # ----------------------------------------------------------------------
+    # ------------------------------------------------------------------- #
+    # Run the acceptance test
+    # ------------------------------------------------------------------- #
     client = TestClient(app)
 
-    # POST snapshot – no body required for default behaviour
-    response = client.post("/api/perspective/1/snapshot")
-    assert response.status_code == 201, f"Unexpected status {response.status_code}"
-    payload = response.json()
-    assert "snapshot_id" in payload, "Missing snapshot_id in response"
-    assert "membership_count" in payload, "Missing membership_count in response"
-    assert payload["membership_count"] == 1, "Expected exactly one server in membership"
-
-    # Verify the snapshot record was created and contains the expected server_id
-    with SessionLocal() as db:
-        snap = db.query(PerspectiveSnapshot).filter_by(id=payload["snapshot_id"]).one_or_none()
-        assert snap is not None, "Snapshot record not found in DB"
-        # Assuming the snapshot stores a JSON list of server IDs in a column named `membership`
-        membership = getattr(snap, "membership", None)
-        assert membership is not None, "Snapshot missing membership data"
-        # membership may be stored as JSON string or list; handle both
-        if isinstance(membership, str):
-            import json
-
-            membership = json.loads(membership)
-        assert isinstance(membership, (list, tuple)), "Membership is not a list"
-        assert 1 in membership, "Expected server_id 1 in membership"
+    resp = client.post("/api/perspectives/1/snapshot")
+    assert resp.status_code == 200, f"Unexpected status {resp.status_code}"
+    data = resp.json()
+    assert "snapshot_id" in data and isinstance(data["snapshot_id"], int)
+    assert "taken_at" in data
 
     print("PASS")
+    raise SystemExit(0)

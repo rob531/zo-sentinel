@@ -1,0 +1,42 @@
+"""Score dispute audit service."""
+import sys
+
+__all__ = ["router", "service_config"]
+
+SERVICE_CONFIG = {
+    "name": "score_dispute_audit",
+    "import_path": "services.active.score_dispute_audit.router",
+    "prefix": "/api",
+    "tag": "score_dispute_audit",
+    "origin": "service",
+    "auth": "public",
+    "needs_data_layer": True,
+}
+
+
+def get_app_tables():
+    """Return list of app table models used by this service."""
+    from app.models import McpScoreDispute, McpServerRegistry, McpLlmAxisScore
+    return [McpScoreDispute, McpServerRegistry, McpLlmAxisScore]
+
+
+def query_mesh_data(query: str) -> list[dict]:
+    """Query mesh/pipeline tables via write_service."""
+    import urllib.request
+    import json
+    
+    payload = json.dumps({"sql": query, "type": "query"}).encode()
+    req = urllib.request.Request(
+        "http://127.0.0.1:8772/query",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
+if __name__ == "__main__":
+    assert SERVICE_CONFIG["name"] == "score_dispute_audit"
+    assert SERVICE_CONFIG["needs_data_layer"] is True
+    print("PASS")

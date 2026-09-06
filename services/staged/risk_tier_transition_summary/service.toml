@@ -1,0 +1,1 @@
+cat docs/SCHEMA_TRUTH.md 2>/dev/null || find . -name "SCHEMA_TRUTH.md" -exec cat {} \; 2>/dev/null | head -500

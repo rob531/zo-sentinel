@@ -1,0 +1,51 @@
+[service]
+name = "mcp_llm_axis_scores_time_series_view"
+import_path = "services.active.mcp_llm_axis_scores_time_series_view.router"
+prefix = "/api"
+tag = "mcp_llm_axis_scores_time_series_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[endpoint.time_series]
+path = "/mcp/llm/axis/scores/time-series"
+method = "GET"
+description = "Get time series of LLM axis scores grouped by time bucket"
+
+[parameter.server_id]
+type = "string"
+required = false
+location = "query"
+description = "Filter by server ID"
+
+[parameter.axis_name]
+type = "string"
+required = false
+location = "query"
+description = "Filter by axis name"
+
+[parameter.bucket]
+type = "string"
+required = false
+location = "query"
+default = "day"
+description = "Time bucket: hour, day, week, month"
+
+[parameter.start_time]
+type = "string"
+required = false
+location = "query"
+description = "ISO8601 start time filter"
+
+[parameter.end_time]
+type = "string"
+required = false
+location = "query"
+description = "ISO8601 end time filter"
+
+[accept]
+condition = "time_series_data"
+format = "json"
+
+[accept.condition.time_series_data]
+columns = ["bucket", "axis_name", "count", "avg_p_critical", "avg_p_danger", "avg_p_top", "escalated_count"]

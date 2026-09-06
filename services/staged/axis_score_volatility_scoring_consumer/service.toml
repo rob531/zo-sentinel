@@ -1,0 +1,32 @@
+name = "axis_score_volatility_scoring_consumer"
+import_path = "services.active.axis_score_volatility_scoring_consumer.router"
+prefix = "/api"
+tag = "axis_score_volatility_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+module = "services.active.axis_score_volatility_scoring_consumer.router"
+
+[dependencies]
+app_db = true
+mesh_store = true
+
+[tables.app]
+- "McpServerRegistry"
+- "McpLlmAxisScore"
+- "McpScoreDispute"
+- "orgs"
+- "users"
+
+[tables.mesh]
+- "mcp_signal_scores"
+- "mesh_memory"
+
+[mesh]
+query_endpoint = "http://127.0.0.1:8772/query"
+
+[test]
+requires_data_layer = true
+self_test_pass_pattern = "PASS"

@@ -1,0 +1,1 @@
+# Read SCHEMA_TRUTH.md to understand available symbols

@@ -1,0 +1,7 @@
+name = "cve_facet_compile_service"
+import_path = "services.active.cve_facet_compile_service.router"
+prefix = "/api"
+tag = "cve_facet_compile_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true

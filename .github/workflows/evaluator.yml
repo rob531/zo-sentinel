@@ -145,6 +145,7 @@ jobs:
             tests/test_promoter_repair_wiring.py \
             tests/test_canary_classify_smoke.py \
             tests/test_requeue_quarantined.py \
+            tests/test_fu272_active_path_guard.py \
             -q \
             --junitxml=artifacts/junit.xml
 

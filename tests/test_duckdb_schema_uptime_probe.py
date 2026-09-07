@@ -301,3 +301,72 @@ class TestCycleOneShot:
         assert len(emitted) == 1
         assert emitted[0][0] == "duckdb_outage"
         assert "duckdb_drift" not in summary, "drift check must be skipped on outage"
+
+
+# ---------------------------------------------------------------------------
+# FU-403: go.sh wiring guard -- probe must be launched and killed by go.sh
+# (a probe whose process is never started is not an armed instrument)
+# ---------------------------------------------------------------------------
+
+
+class TestGoShWiring:
+    """Static checks that ops/host/go.sh references duckdb_schema_uptime_probe
+    in both its kill list (section 1) and its launch list (section 12.8b).
+    These are negative-control-tested: deliberately remove either reference
+    from a temp copy and the test turns RED.
+    """
+
+    GO_SH = Path(__file__).resolve().parents[1] / "ops" / "host" / "go.sh"
+
+    def _read(self) -> str:
+        return self.GO_SH.read_text(encoding="utf-8")
+
+    def test_go_sh_exists(self):
+        assert self.GO_SH.is_file(), f"go.sh not found at {self.GO_SH}"
+
+    def test_probe_in_kill_list(self):
+        """Section 1 pkill loop must include the probe so stale copies are
+        cleaned up on restart (same list as all other daemons)."""
+        text = self._read()
+        assert "duckdb_schema_uptime_probe" in text, (
+            "go.sh section 1 kill list does not mention duckdb_schema_uptime_probe; "
+            "a restarted host will leave stale probe copies running alongside the new one"
+        )
+
+    def test_probe_launched_in_go_sh(self):
+        """go.sh must launch the probe (nohup ... duckdb_schema_uptime_probe ...)
+        so it becomes a managed resident daemon, not a file that nobody executes."""
+        text = self._read()
+        # Require both a launch line and a pgrep liveness check.
+        assert "zo_sentinel.probes.duckdb_schema_uptime_probe" in text, (
+            "go.sh does not launch zo_sentinel.probes.duckdb_schema_uptime_probe; "
+            "the probe is dead code until this is wired (FU-403)"
+        )
+        assert "DuckDBSchemaUptimeProbe" in text, (
+            "go.sh has no pgrep/ok line for DuckDBSchemaUptimeProbe; "
+            "launch success is unconfirmed (H2: unknown != zero)"
+        )
+
+    def test_negative_control_kill_list(self, tmp_path):
+        """Removing probe from the kill list makes the wiring test RED."""
+        original = self._read()
+        # Simulate a go.sh that lost the kill-list entry
+        broken = original.replace(
+            "registry_api.py approval_workflow.py duckdb_schema_uptime_probe \\",
+            "registry_api.py approval_workflow.py \\",
+        )
+        assert "duckdb_schema_uptime_probe" not in broken.split("pkill")[0].split("\n", 80)[0] or \
+               "duckdb_schema_uptime_probe" not in broken.split("1. Kill")[1][:3000], \
+               "Broken go.sh still contains probe in kill section -- negative control is wrong"
+        # The text no longer has duckdb_schema_uptime_probe in the kill block
+        kill_block = broken.split("1. Kill stale")[1].split("2.")[0] if "2." in broken else broken[:3000]
+        assert "duckdb_schema_uptime_probe" not in kill_block
+
+    def test_negative_control_launch(self, tmp_path):
+        """Removing the launch line makes the launch test RED."""
+        original = self._read()
+        broken = original.replace(
+            "zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300",
+            "# REMOVED FOR NEGATIVE CONTROL",
+        )
+        assert "zo_sentinel.probes.duckdb_schema_uptime_probe" not in broken

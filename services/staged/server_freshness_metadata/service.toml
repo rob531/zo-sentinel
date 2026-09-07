@@ -1,0 +1,11 @@
+[service]
+name = "server_freshness_metadata"
+import_path = "services.active.server_freshness_metadata.router"
+prefix = "/api"
+tag = "server_freshness_metadata"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true

@@ -134,6 +134,7 @@ jobs:
             tests/test_ops_audit_state.py \
             tests/test_schema_truth_current.py \
             tests/test_queue_census.py \
+            tests/test_lane_isolation.py \
             tests/test_graph_gap_directives_wired.py \
             tests/test_undeclared_write_guard.py \
             tests/test_rescore_billed_dph.py \

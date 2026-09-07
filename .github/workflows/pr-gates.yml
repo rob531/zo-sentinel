@@ -111,6 +111,27 @@ jobs:
         # HALT CONDITION (ruling): >3 builder PRs red on this gate within 6h.
         run: python tools/reachability_ratchet.py --enforce
 
+      - name: Lane halt check (BLOCKING -- FU-253)
+        # queue_census.py raises a per-lane halt sentinel when a builder lane emits
+        # mostly-invalid output (VALIDITY_COLLAPSE). The sentinel is armed by default
+        # since 2026-07-30, but arming writes a record; it does not stop a lane.
+        # A sentinel is only enforcement once a caller consults it.
+        #
+        # This step IS that consultation: `--enforce-all` exits 1 if any unexpired
+        # armed halt exists in artifacts/lane_halts/, printing each blocked lane.
+        # It exits 0 when the directory is absent (no census run yet) -- the gate
+        # is on the DERIVATIVE: a lane that crossed the validity floor and had its
+        # halt raised by the census, not on any pre-existing state.
+        #
+        # The scheduled queue-census workflow (queue-census.yml) is the producer that
+        # writes the sentinel files this step reads. Without the producer, no sentinels
+        # are ever raised, and this step is always green -- which is correct: silence
+        # from a lane that has never been assessed is not the same as silence from a
+        # lane that is known-bad.
+        #
+        # ROLLBACK is one word: delete `--enforce-all` from the run line below.
+        run: python tools/lane_halt.py --enforce-all
+
       - name: Spine generator in-sync (BLOCKING -- committed file matches services/active/)
         # FU-039/072 Option B, AUTHORITATIVE. app/_spine_generated.py is what prod
         # mounts; it MUST equal a fresh render from services/active/, else the spine

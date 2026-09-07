@@ -1,0 +1,14 @@
+# service.toml
+
+service = {
+    "name": "registry_staleness_sweep",
+    "import_path": "services.active.registry_staleness_sweep.router",
+    "prefix": "/api",
+    "tag": "registry_staleness_sweep",
+    "origin": "service",
+    "auth": "public",
+    "needs_data_layer": True,
+}
+
+if __name__ == "__main__":
+    print("PASS")

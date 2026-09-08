@@ -1,0 +1,19 @@
+[service]
+name = "risk_tier_latest"
+import_path = "services.active.risk_tier_latest.router"
+prefix = "/api"
+tag = "risk_tier_latest"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true
+
+[router]
+module = "services.active.risk_tier_latest.router"
+
+[models]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute"]
+bus_tables = ["mcp_signal_scores", "mesh_memory"]

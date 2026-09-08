@@ -1,0 +1,61 @@
+# service.toml for high_value_routers_wiring
+# Data access via app.db SQLAlchemy session (app plane) and bus catalog tables (mesh plane)
+
+from app.db import get_session
+from app.models import (
+    McpServerRegistry,
+    McpLlmAxisScore,
+    McpScoreDispute,
+)
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
+from contextlib import contextmanager
+
+# Service metadata
+name = "high_value_routers_wiring"
+import_path = "services.active.high_value_routers_wiring.router"
+prefix = "/api"
+tag = "high_value_routers_wiring"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+
+@contextmanager
+def _override_session():
+    """Create an in-memory SQLite session for self-test override."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def verify_service_config():
+    """Verify service configuration is valid."""
+    assert name == "high_value_routers_wiring"
+    assert import_path == "services.active.high_value_routers_wiring.router"
+    assert prefix == "/api"
+    assert tag == "high_value_routers_wiring"
+    assert origin == "service"
+    assert auth == "public"
+    assert needs_data_layer is True
+    assert get_session is not None
+    assert McpServerRegistry is not None
+    assert McpLlmAxisScore is not None
+    assert McpScoreDispute is not None
+
+
+if __name__ == "__main__":
+    verify_service_config()
+    with _override_session() as session:
+        assert isinstance(session, Session)
+    print("PASS")

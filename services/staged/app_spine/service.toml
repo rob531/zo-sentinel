@@ -1,0 +1,10 @@
+name = "app_spine"
+import_path = "services.active.app_spine.router"
+prefix = "/api"
+tag = "app_spine"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

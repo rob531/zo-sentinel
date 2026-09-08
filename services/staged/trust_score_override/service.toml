@@ -1,0 +1,7 @@
+name = "trust_score_override"
+import_path = "services.active.trust_score_override.router"
+prefix = "/api"
+tag = "trust_score_override"
+origin = "service"
+auth = "public"
+needs_data_layer = true

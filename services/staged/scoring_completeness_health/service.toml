@@ -1,0 +1,10 @@
+name = "scoring_completeness_health"
+import_path = "services.active.scoring_completeness_health.router"
+prefix = "/api"
+tag = "scoring_completeness_health"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

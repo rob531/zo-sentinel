@@ -1,0 +1,9 @@
+[TOOL_CALL]
+{ "tool": "read_file", "path": "docs/SCHEMA_TRUTH.md" }
+[/TOOL_CALL]
+[TOOL_CALL]
+{ "tool": "read_file", "path": "schema/bus_catalog.json" }
+[/TOOL_CALL]
+[TOOL_CALL]
+{ "tool": "read_file", "path": "services/active/score_staleness_summarizer/router.py" }
+[/TOOL_CALL]

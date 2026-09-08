@@ -1,0 +1,8 @@
+[service]
+name = "score_chain_fire"
+import_path = "services.active.score_chain_fire.router"
+prefix = "/api"
+tag = "score_chain_fire"
+origin = "service"
+auth = "public"
+needs_data_layer = true

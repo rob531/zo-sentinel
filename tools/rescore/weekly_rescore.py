@@ -959,6 +959,7 @@ def _billed_dph(run, args) -> float:
 
 
 WEDGE_GRACE_MIN_DEFAULT = 25
+POD_PROGRESS_EVERY_SECS = 300
 
 
 def _instance_probe(run) -> dict:
@@ -990,6 +991,71 @@ def _instance_probe(run) -> dict:
         log(f"watch: instance probe failed ({e.__class__.__name__}: {e}); status UNKNOWN")
         return {}
 
+
+
+def _pod_progress(run) -> str:
+    """Last scoring-progress fragment the pod emitted, via the vast logs API.
+
+    Report-only, best effort, never raises: an unreadable API yields "" and the
+    caller says nothing rather than something false (R6 -- unknown is not zero).
+    Cached for POD_PROGRESS_EVERY_SECS so the watch loop does not hammer it.
+    """
+    import re as _re
+    now = time.time()
+    last = run.state.get("_pod_progress_at", 0)
+    if now - last < POD_PROGRESS_EVERY_SECS:
+        return run.state.get("_pod_progress", "")
+    iid = run.state.get("instance_id")
+    if not iid:
+        return ""
+    text = ""
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        for call in (lambda: v.logs(INSTANCE_ID=int(iid)),
+                     lambda: v.logs(id=int(iid)),
+                     lambda: v.logs(int(iid))):
+            try:
+                text = call() or ""
+            except TypeError:
+                continue
+            if text:
+                break
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: pod progress unreadable ({e.__class__.__name__}); progress UNKNOWN")
+        text = ""
+    frag = ""
+    for m in _re.finditer(r"(\d+)/(\d+)\s*\[", str(text)):
+        done, total = m.group(1), m.group(2)
+        if total and int(total) > 100:      # the inputs bar, not a 2-shard loader
+            frag = f"{done}/{total}"
+    run.state["_pod_progress"] = frag
+    run.state["_pod_progress_at"] = now
+    run.save()
+    return frag
+
+
+def _watch_basis(run, probe: dict) -> str:
+    """The status the loop ALREADY holds, rendered into the line a human reads.
+
+    Run 20260909-014759 spent 40 minutes printing "no results yet" while
+    state.json recorded status_seen == [unknown, loading, running] and the pod
+    was 30% through its cohort. Nothing was broken; the reading was simply
+    silent about the one fact that separates a wedge from a slow job. A value
+    measured, stored and then omitted from the only surface anyone reads is
+    this fleet's most expensive recurring shape (cf. FU-358).
+    """
+    if not probe:
+        status = "UNKNOWN (probe unreadable)"
+    elif probe.get("present") is False:
+        status = "absent"
+    else:
+        status = probe.get("actual_status") or "unknown"
+    out = f", status {status}"
+    prog = _pod_progress(run)
+    if prog:
+        out += f", pod {prog}"
+    return out
 
 def _pull_instance_logs(run) -> None:
     """SSH-free forensics BEFORE destroy, via the vast logs API.
@@ -1093,7 +1159,8 @@ def ph_watch_collect(run: Run, args) -> None:
             ledger("deadline_breach", run.state["run_id"], elapsed_h=round(elapsed_h, 2))
             run.mark("watch", "failed", result="deadline")
             break
-        log(f"watch: no results yet (elapsed {elapsed_h:.2f}h, est ${est_cost:.2f})")
+        log(f"watch: no results yet (elapsed {elapsed_h:.2f}h, est ${est_cost:.2f}"
+            f"{_watch_basis(run, probe)})")
         time.sleep(args.poll_secs)
     # COLLECT (forensics ALWAYS -- I3), from ok or fail branch
     url = f"https://x-access-token:{pat}@github.com/{SFT_REPO}.git"

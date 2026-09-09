@@ -296,7 +296,7 @@ def load_catalog() -> tuple[dict, dict, str | None]:
     # --- app plane -----------------------------------------------------------
     if MODELS.exists():
         try:
-            tree = ast.parse(MODELS.read_text(), str(MODELS))
+            tree = ast.parse(MODELS.read_text(encoding="utf-8"), str(MODELS))
             n = 0
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ClassDef):
@@ -324,7 +324,7 @@ def load_catalog() -> tuple[dict, dict, str | None]:
         n = 0
         for f in MIGRATIONS.glob("*.py"):
             try:
-                txt = f.read_text(errors="replace")
+                txt = f.read_text(encoding="utf-8", errors="replace")
             except Exception:                      # noqa: BLE001
                 continue
             for m in re.finditer(
@@ -365,7 +365,7 @@ def load_catalog() -> tuple[dict, dict, str | None]:
                     f"exist -- the provenance for its tables is gone")
             else:
                 try:
-                    src_txt = src_path.read_text(errors="replace")
+                    src_txt = src_path.read_text(encoding="utf-8", errors="replace")
                 except Exception:                  # noqa: BLE001
                     ext_problems.append(
                         f"external plane '{pname}': cannot read '{creator}'")
@@ -553,7 +553,7 @@ def scan_tree() -> tuple[dict, dict, list[dict], int]:
         seen.add(f)
         n += 1
         try:
-            tree = ast.parse(f.read_text(errors="replace"), str(f))
+            tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"), str(f))
         except SyntaxError as exc:
             # A module we cannot parse is a referent we cannot check. Recorded
             # as UNKNOWN, never dropped -- silent drops are how coverage rots.

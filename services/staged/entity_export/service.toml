@@ -1,0 +1,10 @@
+name = "entity_export"
+import_path = "services.active.entity_export.router"
+prefix = "/api"
+tag = "entity_export"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

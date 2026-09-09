@@ -261,9 +261,43 @@ def prune_done_pending():
     return moved
 
 
+def topup_quarantine():
+    """Top the directive queue up from the #4070 quarantine when it runs thin.
+
+    improvement-loop cycle-0087. tools/requeue_quarantined.py implements the
+    paced re-emission for GH #4079 and was measured DARK -- built, CI-tested,
+    and called by NOTHING for 14 days, because its own docstring asked a cron,
+    a lane or a human to remember to run it. This is the remembering, in code.
+
+    Fail-soft and non-blocking by construction: the tool reads the whole repo
+    to decide eligibility (minutes, not seconds), so quarantine_topup spawns it
+    detached and returns at once, and it swallows every exception -- a top-up
+    that can stall or kill the builder is worse than no top-up. Disable with
+    ZO_QUARANTINE_TOPUP=0.
+    """
+    try:
+        # By FILE PATH, not `from tools.quarantine_topup import ...`: this file
+        # already wraps `from tools.uv_gate_runner import run_gates` because
+        # tools/ is NOT importable in every launch context, and a seam that
+        # silently degrades to a no-op is the exact defect this cycle is
+        # closing. Resolved relative to THIS file, so it follows the daemon.
+        import importlib.util as _ilu
+        _src = Path(__file__).resolve().parent / "tools" / "quarantine_topup.py"
+        _spec = _ilu.spec_from_file_location("quarantine_topup", _src)
+        _mod = _ilu.module_from_spec(_spec)
+        sys.modules["quarantine_topup"] = _mod
+        _spec.loader.exec_module(_mod)
+        spawned, why = _mod.topup(PENDING_DIR)
+        if spawned:
+            log(f"quarantine top-up: {why}")
+    except Exception as e:                                      # noqa: BLE001
+        log(f"quarantine top-up unavailable (non-fatal): {e}")
+
+
 def load_directives_from_mesh():
     """Load directives from BOTH mesh_memory DB and pending dir (merged)."""
     prune_done_pending()   # keep pending/ from growing unbounded with done files
+    topup_quarantine()     # keep the queue non-empty from the #4079 backlog
     directives = []
     seen_ids = set()
 

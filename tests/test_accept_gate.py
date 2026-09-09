@@ -477,3 +477,60 @@ def test_failures_still_reject_with_the_real_payload_shape():
     )
     assert verdict == REJECT
     assert any("boom" in r for r in reasons)
+
+
+# --- UI build badge (added 2026-09-09) --------------------------------------
+# The badge is REPORTED, never blocking. Rolling prod back because a cosmetic
+# stamp disagreed would be the gate causing more harm than the defect it found;
+# but a mismatch nobody is told about is the invisibility this change exists to
+# end, so it must appear in the reasons either way.
+
+def _green(sha="abc123"):
+    return ((200, {"ok": True}),
+            (200, {"git_sha": sha}),
+            (200, {"ok": True, "service_count": 1, "mounted": ["s"], "failures": []}))
+
+
+def test_ui_badge_match_is_recorded_on_accept():
+    h, v, s = _green()
+    verdict, reasons = accept_gate.evaluate(h, v, s, "abc123", ui_sha="abc123")
+    assert verdict == accept_gate.ACCEPT
+    assert any("UI build badge" in r and "abc123" in r for r in reasons)
+
+
+def test_ui_badge_mismatch_is_reported_but_does_NOT_reject():
+    h, v, s = _green()
+    verdict, reasons = accept_gate.evaluate(h, v, s, "abc123", ui_sha="0ldbuild")
+    assert verdict == accept_gate.ACCEPT, "a badge must never roll prod back"
+    assert any("UI BADGE MISMATCH" in r for r in reasons)
+    assert any("0ldbuild" in r for r in reasons)
+
+
+def test_ui_badge_unknown_is_named():
+    h, v, s = _green()
+    verdict, reasons = accept_gate.evaluate(h, v, s, "abc123", ui_sha="unknown")
+    assert any("unknown" in r and "GIT_SHA" in r for r in reasons)
+
+
+def test_unobserved_ui_badge_is_silent_not_green():
+    """None = we did not read the page. UNKNOWN is not a pass and not a fail;
+    it must not manufacture a reassuring line (R6)."""
+    h, v, s = _green()
+    verdict, reasons = accept_gate.evaluate(h, v, s, "abc123", ui_sha=None)
+    assert verdict == accept_gate.ACCEPT
+    assert not any("UI" in r for r in reasons)
+
+
+def test_ui_note_rides_along_with_a_real_reject():
+    """A badge finding must not be lost when something else fails."""
+    h, v, s = _green()
+    bad_spine = (200, {"ok": False, "service_count": 1, "mounted": [], "failures": ["x"]})
+    verdict, reasons = accept_gate.evaluate(h, v, bad_spine, "abc123", ui_sha="0ldbuild")
+    assert verdict == accept_gate.REJECT
+    assert any("UI BADGE MISMATCH" in r for r in reasons)
+
+
+def test_evaluate_signature_is_backward_compatible():
+    """Every existing caller passes four positional args and must keep working."""
+    h, v, s = _green()
+    assert accept_gate.evaluate(h, v, s, "abc123")[0] == accept_gate.ACCEPT

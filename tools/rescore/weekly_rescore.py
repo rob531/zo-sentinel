@@ -1000,6 +1000,7 @@ def _pod_progress(run) -> str:
     caller says nothing rather than something false (R6 -- unknown is not zero).
     Cached for POD_PROGRESS_EVERY_SECS so the watch loop does not hammer it.
     """
+    import hashlib as _hashlib
     import re as _re
     now = time.time()
     last = run.state.get("_pod_progress_at", 0)
@@ -1029,6 +1030,22 @@ def _pod_progress(run) -> str:
         done, total = m.group(1), m.group(2)
         if total and int(total) > 100:      # the inputs bar, not a 2-shard loader
             frag = f"{done}/{total}"
+    # The vast logs API can serve a FROZEN snapshot: on instance 50335633 it
+    # returned byte-identical text (md5 0d5d3168, 5642 B) across 5 calls and 12
+    # minutes, tail stuck at `7/28601`, with and without `tail=`. A number
+    # carried forward is indistinguishable from a number measured, so publish
+    # the fragment only while the snapshot is actually moving, and say once
+    # that the instrument is blind rather than printing a comfortable digit.
+    digest = _hashlib.md5(str(text).encode("utf-8", "replace")).hexdigest()
+    if text and digest == run.state.get("_pod_log_md5"):
+        if not run.state.get("_pod_log_frozen_said"):
+            log("watch: vast log snapshot unchanged between polls -- pod progress "
+                "UNAVAILABLE (frozen API, not a stalled pod)")
+            run.state["_pod_log_frozen_said"] = True
+        frag = ""
+    else:
+        run.state["_pod_log_md5"] = digest
+        run.state["_pod_log_frozen_said"] = False
     run.state["_pod_progress"] = frag
     run.state["_pod_progress_at"] = now
     run.save()

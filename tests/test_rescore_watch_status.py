@@ -146,3 +146,43 @@ def test_pod_progress_is_cached_between_polls(wr, monkeypatch):
 
 def test_no_instance_id_is_not_an_error(wr):
     assert wr._pod_progress(_Run()) == ""
+
+
+def _fake_logs(monkeypatch, wr, texts):
+    """Serve `texts` in order, repeating the last one forever."""
+    seq = list(texts)
+
+    def logs(self, *a, **k):
+        return seq.pop(0) if len(seq) > 1 else seq[0]
+
+    monkeypatch.setattr(wr, "secret", lambda name: "k")
+    fake = type("V", (), {"logs": logs})
+    monkeypatch.setitem(sys.modules, "vastai_sdk",
+                        types.SimpleNamespace(VastAI=lambda **k: fake()))
+
+
+def test_frozen_log_snapshot_publishes_nothing(wr, monkeypatch):
+    """MEASURED on instance 50335633: the vast logs API served byte-identical
+    text across 5 calls and 12 minutes while the pod was demonstrably scoring.
+    Republishing `7/28601` every poll would be a carried value wearing the
+    costume of a measured one. Second identical fetch must yield "".
+    """
+    frozen = "inputs.jsonl:   0%|  | 7/28601 [00:01<2:00:56,  3.94it/s]\n"
+    _fake_logs(monkeypatch, wr, [frozen])
+    run = _Run(instance_id=1)
+    assert wr._pod_progress(run) == "7/28601"        # first sight: honest
+    run.state["_pod_progress_at"] = 0                # expire the cache
+    assert wr._pod_progress(run) == ""               # unchanged: say nothing
+
+
+def test_moving_log_keeps_publishing(wr, monkeypatch):
+    """The negative control for the guard above. If a CHANGING log were also
+    suppressed, the guard would have bought honesty by going blind."""
+    _fake_logs(monkeypatch, wr, [
+        "inputs.jsonl: 7/28601 [00:01<2:00:56,  3.94it/s]\n",
+        "inputs.jsonl: 9000/28601 [09:12<21:44,  7.14it/s]\n",
+    ])
+    run = _Run(instance_id=1)
+    assert wr._pod_progress(run) == "7/28601"
+    run.state["_pod_progress_at"] = 0
+    assert wr._pod_progress(run) == "9000/28601"

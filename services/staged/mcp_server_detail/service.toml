@@ -1,0 +1,23 @@
+name = "mcp_server_detail"
+import_path = "services.active.mcp_server_detail.router"
+prefix = "/api"
+tag = "mcp_server_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    required = {
+        "name",
+        "import_path",
+        "prefix",
+        "tag",
+        "origin",
+        "auth",
+        "needs_data_layer",
+    }
+    present = {k for k in globals() if not k.startswith("__")}
+    if required.issubset(present):
+        print("PASS")
+    else:
+        raise SystemExit(1)

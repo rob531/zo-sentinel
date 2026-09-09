@@ -9,7 +9,15 @@
 # Format: one repo-relative path per line. '#' comments and blanks ignored.
 #
 # Discovered 2026-05-29 (Python 3.11 py_compile):
-scanner_fingerprints_wiring.py         # SyntaxError: invalid character '：' (U+FF1A)
-snow_connector_wiring_v2.py            # f-string expression part cannot include a backslash (py<3.12)
-snow_webhook_inbound_wiring.py         # f-string expression part cannot include a backslash (py<3.12)
-watch.py                               # f-string expression part cannot include a backslash (py<3.12)
+#   -- all four CLEARED 2026-09-09 (#4080 part [4], PR #4848). The ratchet
+#      worked exactly as designed: fixing them turned `syntax_quarantine_stale`
+#      RED, which is how this file came to be edited at all.
+#
+#      Worth recording, because two instruments disagreed for months and nothing
+#      reconciled them: Tier 0 was GREEN on these files the whole time BECAUSE
+#      they were quarantined here, while `referent_verify.py` reported
+#      PARSE COVERAGE = UNKNOWN over the same four and had no idea they were
+#      known. One check's "handled" was the other's "unknown". If a file is ever
+#      added back below, say so in referent_verify's report too.
+#
+# (empty -- every tracked *.py compiles under python 3.11)

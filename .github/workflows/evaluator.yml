@@ -128,6 +128,8 @@ jobs:
             tests/test_cadence_admin.py \
             tests/test_dockerfile_copy_covers_active_services.py \
             tests/test_deploy_prod_script.py \
+            tests/test_ui_version_badge.py \
+            tests/test_accept_gate.py \
             tests/test_migration_graph_single_head.py \
             tests/test_fire_gate.py \
             tests/test_sha_green.py \

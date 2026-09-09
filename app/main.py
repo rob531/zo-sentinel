@@ -62,9 +62,18 @@ app.include_router(clerk_webhook.router)
 _STATIC = pathlib.Path(__file__).parent / "static"
 
 import os as _os
+
+from app.build_badge import inject as _inject_build_badge
+
+
 def _render(name: str) -> str:
     html = (_STATIC / name).read_text(encoding="utf-8")
-    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    # Stamp the build that served this page (app/build_badge.py). Injected here
+    # rather than written into each static file: the version must come from the
+    # IMAGE, and a literal in a checked-in .html is a number someone has to
+    # remember to bump -- which is the failure mode, not the fix.
+    return _inject_build_badge(html)
 
 
 
@@ -76,7 +85,10 @@ def consent_gate():
 
 @app.get("/disclaimer", response_class=HTMLResponse)
 def disclaimer_page():
-    return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
+    # Bypasses _render (no Clerk key needed) -- but it is still a page someone
+    # screenshots, so it is still stamped. Every HTML route or none.
+    return _inject_build_badge(
+        (_STATIC / "consent_gate.html").read_text(encoding="utf-8"))
 
 # --- SOA spine (FU-039/072; CofC 2026-07-23) --------------------------------
 # Mounts are GENERATED at build time from services/active/ into
@@ -111,7 +123,8 @@ def _render_root(name: str) -> str:
     """Serve a repo-root view file (the factory/spec-canonical filenames) with
     the same Clerk-PK injection app/static pages get."""
     html = (_REPO_ROOT / name).read_text(encoding="utf-8")
-    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    return _inject_build_badge(html)
 
 
 @app.get("/perspectives", response_class=HTMLResponse)

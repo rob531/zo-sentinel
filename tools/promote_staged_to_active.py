@@ -386,6 +386,14 @@ def main(argv=None):
     ap.add_argument("--enforce", action="store_true", help="actually move PROMOTE verdicts (else observe)")
     ap.add_argument("--max-per-run", type=int, default=1, help="cap promotions per run (human-gated cohort)")
     ap.add_argument("--regenerate", action="store_true", help="run generate_spine --emit after a promotion")
+    ap.add_argument("--only", action="append", default=[], metavar="NAME",
+                    help="promote ONLY these staged services (repeatable). scan() is "
+                         "sorted(), so --max-per-run alone always picks the "
+                         "alphabetically-first PROMOTE verdict; --only lets a caller "
+                         "take a known-good service without being blocked by whatever "
+                         "happens to sort first.")
+    ap.add_argument("--skip", action="append", default=[], metavar="NAME",
+                    help="never promote these staged services (repeatable)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
@@ -395,8 +403,23 @@ def main(argv=None):
 
     promoted = []
     if args.enforce:
+        only = set(args.only)
+        skip = set(args.skip)
+        unknown = (only | skip) - {v["service"] for v in verdicts}
+        if unknown:
+            print("  ERROR: --only/--skip name(s) not in staged/: %s"
+                  % ", ".join(sorted(unknown)))
+            return 2
         for v in verdicts:
             if v["verdict"] != "PROMOTE":
+                continue
+            if only and v["service"] not in only:
+                v["verdict"] = "HOLD"
+                v["reasons"].append("deselected: --only did not name it")
+                continue
+            if v["service"] in skip:
+                v["verdict"] = "HOLD"
+                v["reasons"].append("deselected: named in --skip")
                 continue
             if len(promoted) >= args.max_per_run:
                 v["verdict"] = "HOLD"

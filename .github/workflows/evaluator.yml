@@ -150,6 +150,115 @@ jobs:
             tests/test_requeue_quarantined.py \
             tests/test_quarantine_topup.py \
             tests/test_no_module_scope_test_imports.py \
+            # 2026-09-10, improvement-loop cycle-0090: the 89 files below were
+            # ADDED IN ONE BATCH. A census of ALL 18 workflow files (not just this
+            # one) found 100 of the 156 tests/test_*.py on origin/main were named by
+            # NO workflow, and no workflow runs a wholesale `pytest tests/` -- so
+            # 64%% of the committed suite had been written, reviewed, merged and
+            # NEVER ONCE EXECUTED. This is the same defect the 2026-08-05 and
+            # 2026-09-01 notes above each repaired for one small family; batching it
+            # is what stops it recurring a fourth time.
+            # NOT a new gate (HARNESS_DOCTRINE R7, and the standing META CAP): no
+            # check is added, no threshold moves. Assertions that were already
+            # committed are simply made to run.
+            # CHOSEN FROM EVIDENCE, NOT OPTIMISM: all 100 were executed against a
+            # clean origin/main worktree first; 89 PASS, 9 FAIL, 2 collect nothing.
+            # ONLY THE 89 ARE ADDED, so this batch cannot dam the queue with a red
+            # that is not about the PR under test. The 11 excluded are real latent
+            # breakage and are reported separately -- they are findings, not noise.
+            # NEGATIVE CONTROL: `pytest -q` on this file list before the batch
+            # collected 0 of these 89; the junit test count must rise by roughly the
+            # number they contain, and a count that does not move means the batch
+            # ran none of them (the 2026-09-01 tell, restated).
+            tests/test_app_surface_kl.py \
+            tests/test_arch_salvage.py \
+            tests/test_architect_rotation.py \
+            tests/test_architect_service_schooling.py \
+            tests/test_bakeoff_scorer.py \
+            tests/test_build_completion.py \
+            tests/test_build_lessons.py \
+            tests/test_build_routing_exemplar_rung.py \
+            tests/test_builder_selftest_integrity_report.py \
+            tests/test_calibration_layer.py \
+            tests/test_canonical_family_rules.py \
+            tests/test_clerk_webhook.py \
+            tests/test_deterministic_signal_report.py \
+            tests/test_directive_mcp_import_guard.py \
+            tests/test_directive_recipe_stamp.py \
+            tests/test_durable_quarantine.py \
+            tests/test_failure_classifier.py \
+            tests/test_fenced_pycall_adapter_wiring.py \
+            tests/test_fenced_pycall_salvage.py \
+            tests/test_fly_token.py \
+            tests/test_freshness_gate.py \
+            tests/test_gate8_identity_keyspace.py \
+            tests/test_gate_attribution.py \
+            tests/test_gemini_toolcalls.py \
+            tests/test_generator_recency_dedup.py \
+            tests/test_graph_domain_digest.py \
+            tests/test_graph_refresh.py \
+            tests/test_hollow_service_member.py \
+            tests/test_information_schema_pagination.py \
+            tests/test_ladder_failover.py \
+            tests/test_ladder_prune_reorder.py \
+            tests/test_lane_isolation.py \
+            tests/test_ledger_lane_attribution.py \
+            tests/test_loop_watch.py \
+            tests/test_matrix_routing.py \
+            tests/test_minimax_toolcall_parse.py \
+            tests/test_model_import_linter.py \
+            tests/test_model_import_linter_aliases.py \
+            tests/test_model_import_linter_dep_overrides.py \
+            tests/test_openai_compatible_rung.py \
+            tests/test_output_file_sanity.py \
+            tests/test_pipeline_liveness_guard.py \
+            tests/test_pr_triage_degraded_fetch.py \
+            tests/test_pr_triage_fu141.py \
+            tests/test_pr_triage_label_writes.py \
+            tests/test_pr_triage_manifest.py \
+            tests/test_promote_staged_to_active.py \
+            tests/test_promoter_canonical_path.py \
+            tests/test_promoter_hollow_seam.py \
+            tests/test_promoter_salvage_alias.py \
+            tests/test_publisher_auto_declare.py \
+            tests/test_reachability_deferred.py \
+            tests/test_reachability_ratchet.py \
+            tests/test_recipe_selector.py \
+            tests/test_referent_external_planes.py \
+            tests/test_referent_verify_routes.py \
+            tests/test_referent_verify_sql_comments.py \
+            tests/test_referent_verify_staleness.py \
+            tests/test_referent_verify_stays_armed.py \
+            tests/test_registration_drift_debounce.py \
+            tests/test_rollback_anchor_probe.py \
+            tests/test_runbook_pin.py \
+            tests/test_rung_quota.py \
+            tests/test_salvage_logger_exists.py \
+            tests/test_schema_kl.py \
+            tests/test_schema_kl_fresh.py \
+            tests/test_selftest_verdict.py \
+            tests/test_sentinel_run_ledger.py \
+            tests/test_service_decomposer_paths.py \
+            tests/test_service_directive_expansion.py \
+            tests/test_service_manifest_gate.py \
+            tests/test_service_packages_are_importable.py \
+            tests/test_shadow_decision.py \
+            tests/test_spec_candidate_exemplar_exclusion.py \
+            tests/test_spec_candidate_scope_exclusion.py \
+            tests/test_spine.py \
+            tests/test_spine_manifest.py \
+            tests/test_starvation_floor.py \
+            tests/test_text_toolcall_salvage.py \
+            tests/test_threat_intel_cvss_severity.py \
+            tests/test_threat_intel_ingestor_null_url.py \
+            tests/test_threat_intel_write_honesty.py \
+            tests/test_tier0_selftest_logging.py \
+            tests/test_tier_invariant.py \
+            tests/test_timeout_salvage_wiring.py \
+            tests/test_trust_gating_override.py \
+            tests/test_verify_candidate_script.py \
+            tests/test_worktree_lifecycle.py \
+            tests/test_zo_secrets_loader.py \
             -q \
             --junitxml=artifacts/junit.xml
 

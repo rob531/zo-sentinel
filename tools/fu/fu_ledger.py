@@ -501,8 +501,104 @@ _ONE_CALL_POINTER = (
 )
 
 
+# --------------------------------------------------------------- write-through
+# CYCLE-0088. `parse(PATH)` has worked since cycle-0066; the writers did not,
+# and the family's last three bites were callers who inferred symmetry and were
+# right to. A path is an unambiguous request for THAT FILE, so do the whole
+# sanctioned dance on it -- backup, read with newline="", parse, mutate, write
+# BINARY, then re-read and prove the round-trip byte-exact. A text-mode write
+# has silently stripped every CR from this file twice; only bytes are safe.
+# The list-first shape is untouched and its positive pole is asserted on every
+# run by tests/test_fu_ledger_write_path_shape.py.
+def _is_ledger_path(arg) -> bool:
+    """True only for an EXISTING file. A missing path is UNKNOWN, not a ledger."""
+    if arg is _MISSING or isinstance(arg, list):
+        return False
+    if not (isinstance(arg, (str, bytes)) or hasattr(arg, "__fspath__")):
+        return False
+    try:
+        return os.path.isfile(arg)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _backup_beside(path: str) -> str:
+    """Copy the ledger into _followup_backups/<date>/ beside it, first.
+
+    Same location fu_append_log.py has used since 2026-08-03, so a restore
+    instruction printed by either tool means the same thing.
+    """
+    import datetime as _dt
+    import shutil as _sh
+    now = _dt.datetime.now(_dt.timezone.utc)
+    d = os.path.join(os.path.dirname(os.path.abspath(path)), "_followup_backups",
+                     now.strftime("%Y-%m-%d"))
+    os.makedirs(d, exist_ok=True)
+    dest = os.path.join(d, "%s.pre-write-%s" % (os.path.basename(path),
+                                                now.strftime("%Y%m%dT%H%M%SZ")))
+    _sh.copy2(path, dest)
+    return dest
+
+
+def _terminator_class(text: str, n_lines: int) -> str:
+    """CRLF / LF / MIXED. The class, not the count -- the count moves on purpose."""
+    crlf = text.count("\r\n")
+    if crlf == 0:
+        return "LF"
+    if crlf == n_lines:
+        return "CRLF"
+    return "MIXED:%d/%d" % (crlf, n_lines)
+
+
+def _write_through(fn, path, mutate, if_absent=None) -> int:
+    """Perform `mutate(lines, entries)` against the file at `path`, verified.
+
+    Returns the index written, or -1 when `if_absent` was already present (a
+    retried lane run must CONVERGE, not duplicate). Restores the backup and
+    raises if the re-read does not match what we wrote.
+    """
+    path = os.fspath(path)
+    lines = _read_lines(path)
+    entries = parse(lines)
+    joined_before = "".join(lines)
+    klass_before = _terminator_class(joined_before, len(lines))
+    if if_absent is not None and if_absent in joined_before:
+        return -1
+
+    backup = _backup_beside(path)
+    pos = mutate(lines, entries)
+    payload = "".join(lines)
+    with open(path, "wb") as fh:
+        fh.write(payload.encode("utf-8"))
+
+    # THE MEASUREMENT. A writer's return value is not evidence; the file is.
+    again = _read_lines(path)
+    problems = []
+    if "".join(again) != payload:
+        problems.append("re-read is not byte-identical to what was written")
+    klass_after = _terminator_class("".join(again), len(again))
+    if klass_after != klass_before:
+        problems.append("terminator class moved %s -> %s" % (klass_before, klass_after))
+    if len(parse(again)) != len(entries):
+        problems.append("entry count moved %d -> %d"
+                        % (len(entries), len(parse(again))))
+    if problems:
+        import shutil as _sh
+        _sh.copy2(backup, path)
+        raise LedgerWriteFailed(
+            "fu_ledger.%s(%s): %s. The ledger has been RESTORED from %s and "
+            "nothing was kept. This is a failed write, not a partial one."
+            % (fn, path, "; ".join(problems), backup)
+        )
+    return pos
+
+
+class LedgerWriteFailed(RuntimeError):
+    """A path-mode write that could not be verified. The file was restored."""
+
+
 def insert_key(lines, fu=_MISSING, key=_MISSING, value=_MISSING,
-               before="log") -> int:
+               before="log", if_absent=None) -> int:
     """Insert `- key: value` into an entry. Body lives in _insert_key.
 
     Guard added 2026-09-03 (cycle-0065): same call-shape family as append_log,
@@ -510,6 +606,16 @@ def insert_key(lines, fu=_MISSING, key=_MISSING, value=_MISSING,
     Cycle-0069: `fu` now accepts an FU number as well as an FU object -- the
     same commit cures both writers, because one door of two reads as a cure.
     """
+    if _is_ledger_path(lines) and value is not _MISSING:
+        # cycle-0088: a path is an unambiguous request for that file. Do the
+        # whole verified dance rather than raising a paragraph at a caller who
+        # correctly inferred symmetry with parse(PATH).
+        return _write_through(
+            "insert_key", lines,
+            lambda ls, es: _insert_key(ls, _as_fu("insert_key", ls, fu),
+                                       key, value, before),
+            if_absent=if_absent,
+        )
     if value is _MISSING or not isinstance(lines, list):
         raise _shape_error("insert_key", "key, value", lines)
     return _insert_key(lines, _as_fu("insert_key", lines, fu), key, value, before)
@@ -550,7 +656,7 @@ def _is_wrapped_log_line(line: str) -> bool:
     return line.startswith("    ") and line.strip() != ""
 
 
-def append_log(lines, fu=_MISSING, text=_MISSING) -> int:
+def append_log(lines, fu=_MISSING, text=_MISSING, if_absent=None) -> int:
     """Append a dated bullet under `- log:`. Body lives in _append_log.
 
     Guard added 2026-09-03 (cycle-0065): the shape the fleet guesses,
@@ -560,6 +666,14 @@ def append_log(lines, fu=_MISSING, text=_MISSING) -> int:
     object, because that -- not `lines` -- is what the 2026-09-03 and
     2026-09-04 bites actually passed.
     """
+    if _is_ledger_path(lines) and text is not _MISSING:
+        # cycle-0088: see insert_key. Same door, same commit -- one door of two
+        # reads as a cure and is not one.
+        return _write_through(
+            "append_log", lines,
+            lambda ls, es: _append_log(ls, _as_fu("append_log", ls, fu), text),
+            if_absent=if_absent,
+        )
     if text is _MISSING or not isinstance(lines, list):
         raise _shape_error("append_log", "text", lines)
     return _append_log(lines, _as_fu("append_log", lines, fu), text)

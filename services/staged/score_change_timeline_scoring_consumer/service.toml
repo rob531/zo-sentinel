@@ -1,9 +1,11 @@
-Let me first examine the existing patterns and schema truth to understand what's needed.
+[service]
+name = "score_change_timeline_scoring_consumer"
+import_path = "services.active.score_change_timeline_scoring_consumer.router"
+prefix = "/api"
+tag = "score_change_timeline_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
 
-<search_files>
-<query>service.toml pattern</query>
-</search_files>
-
-<search_files>
-<query>SCHEMA_TRUTH.md</query>
-</search_files>
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

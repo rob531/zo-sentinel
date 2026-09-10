@@ -1,10 +1,11 @@
+[service]
 name = "app_spine"
 import_path = "services.active.app_spine.router"
 prefix = "/api"
 tag = "app_spine"
 origin = "service"
 auth = "public"
-needs_data_layer = True
+needs_data_layer = true
 
-if __name__ == "__main__":
-    print("PASS")
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

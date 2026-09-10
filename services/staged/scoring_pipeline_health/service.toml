@@ -1,0 +1,8 @@
+[service]
+name = "scoring_pipeline_health"
+import_path = "services.active.scoring_pipeline_health.router"
+prefix = "/api"
+tag = "scoring_pipeline_health"
+origin = "service"
+auth = "public"
+needs_data_layer = true

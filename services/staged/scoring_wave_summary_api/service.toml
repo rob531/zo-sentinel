@@ -1,1 +1,11 @@
-Now I'll create the Python implementation file at the specified import path:
+[service]
+name = "scoring_wave_summary_api"
+import_path = "services.active.scoring_wave_summary_api.router"
+prefix = "/api"
+tag = "scoring_wave_summary_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

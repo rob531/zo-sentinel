@@ -1,1 +1,11 @@
-Wait, I need to write the complete service.toml with the actual router implementation, not just the configuration. Let me write the actual file content that includes the service definition and self-test.
+[service]
+name = "mcp_scoring_burndown"
+import_path = "services.active.mcp_scoring_burndown.router"
+prefix = "/api"
+tag = "mcp_scoring_burndown"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

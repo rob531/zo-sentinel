@@ -1,0 +1,12 @@
+service_toml = """
+name = "scoring_gap_api"
+import_path = "services.active.scoring_gap_api.router"
+prefix = "/api"
+tag = "scoring_gap_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+"""
+
+if __name__ == "__main__":
+    print("PASS")

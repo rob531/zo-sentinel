@@ -149,6 +149,7 @@ jobs:
             tests/test_canary_classify_smoke.py \
             tests/test_requeue_quarantined.py \
             tests/test_quarantine_topup.py \
+            tests/test_no_module_scope_test_imports.py \
             -q \
             --junitxml=artifacts/junit.xml
 

@@ -7,13 +7,5 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[dependencies]
-services.active.common.middleware = "logging"
-services.active.common.middleware = "request_id"
-
-[py_deps]
-# No additional py_deps needed beyond app package
-
-[test]
-has_self_test = true
-self_test_description = "Verifies orphan router census returns valid structure with PASS"
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

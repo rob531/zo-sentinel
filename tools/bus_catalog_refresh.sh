@@ -127,3 +127,53 @@ all: once the snapshot passes its staleness budget the checker reports UNKNOWN
 and stops claiming the tables are fine. Refs #4032."
 git push -q -f origin "$BRANCH"
 log "pushed $BRANCH ($REASON)"
+
+# A PUSHED BRANCH IS NOT A REFRESHED SNAPSHOT.
+#
+# This script used to end at the push. Nothing opened a pull request for
+# `auto/catalog/bus-catalog-refresh` and nothing merged it, so on every run
+# where the guard fired correctly the new snapshot went to a branch and stopped
+# there. `schema/bus_catalog.json` on main was last updated 2026-08-26; on
+# 2026-09-03 the live bus held 46 tables / 373 columns against the committed
+# 45 / 361, and referent-verify -- a REQUIRED check whose tables pass is ARMED
+# -- had been resolving referents against that stale plane for eight days,
+# five days from the 14d budget at which it turns STALE-RED and blocks every
+# pull request on the repository.
+#
+# The push was never the arming. The merge is. So the script opens the PR.
+#
+# IDEMPOTENT: the force-push above updates an existing PR in place, so if one
+# is already open for this branch there is nothing to do and that is a success,
+# not a duplicate. `gh pr list --head` is the check; `gh pr create` runs only
+# when it comes back empty.
+#
+# AND IT REPORTS ITS OWN FAILURE. If the PR cannot be opened, this exits
+# non-zero so bus_catalog_guard.sh records `refresh_exit_code != 0` in
+# /home/workspace/logs/bus_catalog_heartbeat.json. The whole defect class here
+# is a step that stops working without saying so; a PR-open that fails quietly
+# would reproduce it one layer out.
+if ! command -v gh >/dev/null 2>&1; then
+    log "pr_open_failed=gh-not-installed -- $BRANCH is pushed but unmerged"
+    exit 4
+fi
+
+EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+if [ -n "$EXISTING" ]; then
+    log "pr_already_open=#$EXISTING (force-push updated it in place)"
+    exit 0
+fi
+
+if PR_URL=$(gh pr create --head "$BRANCH" --base main \
+        --title "chore(catalog): refresh bus_catalog.json -- ${REASON}" \
+        --body "Automated refresh from the live write-service catalog on the ZoComputer host, paginated and reconciled against COUNT(\*).
+
+Reason: **${REASON}** (committed snapshot was ${AGE_DAYS}d old; heartbeat window ${HEARTBEAT_DAYS}d).
+
+\`tools/referent_verify.py\` measures \`bus_captured_at\` against a 336h (14d) budget and is a required status check with its tables pass armed. Past that budget it returns STALE-RED, and a red required context blocks every pull request on this repository. Merging this resets that clock.
+
+Opened by \`tools/bus_catalog_refresh.sh\`. Refs #4032, #4080." 2>&1); then
+    log "pr_opened=$PR_URL"
+else
+    log "pr_open_failed=$PR_URL -- $BRANCH is pushed but unmerged"
+    exit 4
+fi

@@ -1,14 +1,14 @@
-import FastAPI, json
+import fastapi, json
 from typing import Any
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from sqlalchemy.orm import Session
 
-router = FastAPI.APIRouter()
+router = fastapi.APIRouter()
 
 
 @router.get("/mesh-scores")
-def mesh_scores_endpoint(session: Session = FastAPI.Depends(get_session)) -> dict[str, Any]:
+def mesh_scores_endpoint(session: Session = fastapi.Depends(get_session)) -> dict[str, Any]:
     import requests
     try:
         resp = requests.post(
@@ -26,7 +26,7 @@ mesh_scores = mesh_scores_endpoint
 
 
 @router.get("/mesh-memory")
-def mesh_memory_endpoint(session: Session = FastAPI.Depends(get_session)) -> dict[str, Any]:
+def mesh_memory_endpoint(session: Session = fastapi.Depends(get_session)) -> dict[str, Any]:
     import requests
     try:
         resp = requests.post(
@@ -44,7 +44,7 @@ get_mesh_memory = mesh_memory_endpoint
 
 
 @router.get("/signal-scores")
-def signal_scores_endpoint(session: Session = FastAPI.Depends(get_session)) -> dict[str, Any]:
+def signal_scores_endpoint(session: Session = fastapi.Depends(get_session)) -> dict[str, Any]:
     import requests
     try:
         resp = requests.post(
@@ -68,7 +68,7 @@ def get_mesh_scores_endpoint(session: Session) -> dict[str, Any]:
 @router.post("/reset-quarantine")
 def reset_quarantine_endpoint(
     server_id: str = "",
-    session: Session = FastAPI.Depends(get_session),
+    session: Session = fastapi.Depends(get_session),
 ) -> dict[str, Any]:
     return {"status": "reset", "server_id": server_id}
 

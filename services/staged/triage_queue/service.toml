@@ -1,0 +1,11 @@
+[service]
+name = "triage_queue"
+import_path = "services.active.triage_queue.router"
+prefix = "/api"
+tag = "triage_queue"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

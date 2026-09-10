@@ -298,7 +298,7 @@ Directives go in `directives/` (timestamped, flat) or `directives/pending/` (que
 - Re-run `treewalk.py` after every set of changes.
 - Append every improvement to `SESSION_LOG.md`.
 - Emit a directive for anything needing ZoComputer-side changes.
-- Stubs are acceptable — keep moving, don't block on live data.
+- Stubs are acceptable — keep moving, don't block on live data. EXCEPT where a stub would shadow an existing implementation — see "Import-boundary incident (2026-08-16)", constraint 3.
 - No permission prompts. No confirmation pauses. Keep iterating.
 
 ## Builder self-repair harness (ZoComputer-side)

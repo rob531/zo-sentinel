@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 # Real data layer imports (must stay unchanged)
 from app.db import get_session
-from app.models import ServerRegistry, LlmAxisScore
+from app.models import McpServerRegistry, McpLlmAxisScore
 
 router = APIRouter(prefix="/api")
 
@@ -35,14 +35,14 @@ def get_freshness(session: Session = Depends(get_session)):
     now = datetime.datetime.utcnow()
 
     # Total servers
-    total_servers = session.execute(select(func.count()).select_from(ServerRegistry)).scalar_one()
+    total_servers = session.execute(select(func.count()).select_from(McpServerRegistry)).scalar_one()
 
     # Servers that have at least one score
     scored_subq = (
-        select(LlmAxisScore.server_id).distinct().subquery()
+        select(McpLlmAxisScore.server_id).distinct().subquery()
     )
     scored_servers = session.execute(
-        select(func.count()).select_from(ServerRegistry).where(ServerRegistry.id.in_(scored_subq))
+        select(func.count()).select_from(McpServerRegistry).where(McpServerRegistry.id.in_(scored_subq))
     ).scalar_one()
 
     unscored_servers = total_servers - scored_servers
@@ -51,35 +51,35 @@ def get_freshness(session: Session = Depends(get_session)):
     oldest_unscored_days = 0
     if unscored_servers:
         oldest = session.execute(
-            select(func.max(func.julianday(now) - func.julianday(ServerRegistry.created_at))).where(
-                ~ServerRegistry.id.in_(scored_subq)
+            select(func.max(func.julianday(now) - func.julianday(McpServerRegistry.created_at))).where(
+                ~McpServerRegistry.id.in_(scored_subq)
             )
         ).scalar_one()
         oldest_unscored_days = int(oldest) if oldest is not None else 0
 
     # Tier distribution
     tier_rows = session.execute(
-        select(ServerRegistry.risk_tier, func.count()).group_by(ServerRegistry.risk_tier)
+        select(McpServerRegistry.risk_tier, func.count()).group_by(McpServerRegistry.risk_tier)
     ).all()
     tier_distribution = {tier: cnt for tier, cnt in tier_rows}
 
     # Recent scores per server (latest scored_at)
     latest_scores_subq = (
         select(
-            LlmAxisScore.server_id,
-            func.max(LlmAxisScore.scored_at).label("last_scored_at")
+            McpLlmAxisScore.server_id,
+            func.max(McpLlmAxisScore.scored_at).label("last_scored_at")
         )
-        .group_by(LlmAxisScore.server_id)
+        .group_by(McpLlmAxisScore.server_id)
         .subquery()
     )
     recent_rows = session.execute(
         select(
-            ServerRegistry.id,
-            ServerRegistry.name,
+            McpServerRegistry.id,
+            McpServerRegistry.name,
             latest_scores_subq.c.last_scored_at,
-            ServerRegistry.risk_tier,
+            McpServerRegistry.risk_tier,
         )
-        .join(latest_scores_subq, ServerRegistry.id == latest_scores_subq.c.server_id)
+        .join(latest_scores_subq, McpServerRegistry.id == latest_scores_subq.c.server_id)
     ).all()
     recent_scores = [
         RecentScore(
@@ -132,18 +132,18 @@ if __name__ == "__main__":
         now = datetime.datetime.utcnow()
         # 5 servers
         servers = [
-            ServerRegistry(id=1, name="srv‑a", risk_tier="high", created_at=now - datetime.timedelta(days=30)),
-            ServerRegistry(id=2, name="srv‑b", risk_tier="medium", created_at=now - datetime.timedelta(days=20)),
-            ServerRegistry(id=3, name="srv‑c", risk_tier="low", created_at=now - datetime.timedelta(days=10)),
-            ServerRegistry(id=4, name="srv‑d", risk_tier="high", created_at=now - datetime.timedelta(days=5)),
-            ServerRegistry(id=5, name="srv‑e", risk_tier="medium", created_at=now - datetime.timedelta(days=2)),
+            McpServerRegistry(id=1, name="srv‑a", risk_tier="high", created_at=now - datetime.timedelta(days=30)),
+            McpServerRegistry(id=2, name="srv‑b", risk_tier="medium", created_at=now - datetime.timedelta(days=20)),
+            McpServerRegistry(id=3, name="srv‑c", risk_tier="low", created_at=now - datetime.timedelta(days=10)),
+            McpServerRegistry(id=4, name="srv‑d", risk_tier="high", created_at=now - datetime.timedelta(days=5)),
+            McpServerRegistry(id=5, name="srv‑e", risk_tier="medium", created_at=now - datetime.timedelta(days=2)),
         ]
         sess.add_all(servers)
         # 3 scored servers (1,2,3)
         scores = [
-            LlmAxisScore(id=1, server_id=1, scored_at=now - datetime.timedelta(days=1), score=0.9),
-            LlmAxisScore(id=2, server_id=2, scored_at=now - datetime.timedelta(days=2), score=0.7),
-            LlmAxisScore(id=3, server_id=3, scored_at=now - datetime.timedelta(days=3), score=0.5),
+            McpLlmAxisScore(id=1, server_id=1, scored_at=now - datetime.timedelta(days=1), score=0.9),
+            McpLlmAxisScore(id=2, server_id=2, scored_at=now - datetime.timedelta(days=2), score=0.7),
+            McpLlmAxisScore(id=3, server_id=3, scored_at=now - datetime.timedelta(days=3), score=0.5),
         ]
         sess.add_all(scores)
         sess.commit()

@@ -1,0 +1,11 @@
+[service]
+name = "finalize_score"
+import_path = "services.active.finalize_score.router"
+prefix = "/api"
+tag = "finalize_score"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

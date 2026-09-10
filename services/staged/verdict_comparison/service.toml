@@ -1,0 +1,8 @@
+[service]
+name = "verdict_comparison"
+import_path = "services.active.verdict_comparison.router"
+prefix = "/api"
+tag = "verdict_comparison"
+origin = "service"
+auth = "public"
+needs_data_layer = true

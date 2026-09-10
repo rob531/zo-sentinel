@@ -3,7 +3,7 @@ import requests
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 def get_mesh_memory(server_id: int) -> List[Dict[str, Any]]:
     """Fetch mesh memory data for a given server ID."""

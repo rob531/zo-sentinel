@@ -1,0 +1,8 @@
+[service]
+name = "cve_axis_freshness"
+import_path = "services.active.cve_axis_freshness.router"
+prefix = "/api"
+tag = "cve_axis_freshness"
+origin = "service"
+auth = "public"
+needs_data_layer = true

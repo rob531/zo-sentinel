@@ -25,9 +25,39 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# FU-349 / issue #3415: a build_service directive literally named "contract"
+# was decomposed (a spec-parser grabbed the concern-word as a service name).
+# Its scaffold-init directive then got resolved by a goose tier-1 agent to the
+# REPO ROOT package marker, coupling zo_sentinel to app and killing every
+# `python -m zo_sentinel.*` entrypoint. Refuse names that are concern-words,
+# load-bearing top-level packages, or not snake_case identifiers. Raising here
+# covers every caller (CLI + promoter fan-out) in one place.
+RESERVED_SERVICE_NAMES = frozenset({
+    # the decomposer's own concern-words -- a service named after one is a
+    # parsing accident, never an intent
+    "contract", "logic", "router", "init", "service", "toml", "service_toml",
+    "spec", "exemplar",
+    # load-bearing top-level packages/dirs a mis-resolved path could squat on
+    "app", "zo_sentinel", "services", "staged", "active", "tools", "tests",
+    "ops", "alembic", "main",
+})
+_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def validate_service_name(name: str) -> None:
+    """Raise ValueError iff *name* must not become a service."""
+    if not _NAME_RE.match(name or ""):
+        raise ValueError(
+            "service name %r is not a snake_case identifier" % (name,))
+    if name in RESERVED_SERVICE_NAMES:
+        raise ValueError(
+            "service name %r is reserved (concern-word or load-bearing "
+            "package; see FU-349 / issue #3415)" % (name,))
 
 # concern -> (exemplar file, one-line role used in the directive description)
 CODE_FILES = [
@@ -59,20 +89,32 @@ def _service_toml(name: str, prefix: str, tag: str) -> str:
 
 def decompose(name: str, spec: str, prefix: str = "/api", tag: str = "",
               exemplar_dir: str = "services/_exemplar") -> list[dict]:
-    """Return the ordered list of directive dicts for one service."""
+    """Return the ordered list of directive dicts for one service.
+
+    Raises ValueError for reserved/malformed names (see FU-349 / #3415).
+    """
+    validate_service_name(name)
     tag = tag or name
     staged = "services/staged/%s" % name
     directives: list[dict] = []
 
     # deterministic files first (write_raw): __init__.py + service.toml
+    # FU-349 / #3415: the description must name the EXACT repo-relative path.
+    # "the package __init__.py for service 'contract'" was resolved by a goose
+    # tier-1 agent to the repo-root zo_sentinel/__init__.py, which took the
+    # whole pipeline down. Never leave the target path to interpretation.
     directives.append({
         "task": "scaffold_%s_init" % name,
         "handler": "write_raw",
         "output_file": "%s/__init__.py" % staged,
         "content": _init_body(),
-        "description": ("Create the package __init__.py for service '%s' so its "
-                        "relative intra-service imports work as a package under "
-                        "services.staged/active. Deterministic scaffold." % name),
+        "description": ("Create EXACTLY the file %s/__init__.py -- this literal "
+                        "repo-relative path and no other. It is the staged package "
+                        "marker for service '%s' so its relative intra-service "
+                        "imports work under services.staged/active. Do NOT write or "
+                        "modify zo_sentinel/__init__.py, app/__init__.py, or any "
+                        "__init__.py outside %s/. Deterministic scaffold; content "
+                        "is provided verbatim." % (staged, name, staged)),
         "complexity": "low",
     })
     directives.append({
@@ -80,9 +122,10 @@ def decompose(name: str, spec: str, prefix: str = "/api", tag: str = "",
         "handler": "write_raw",
         "output_file": "%s/service.toml" % staged,
         "content": _service_toml(name, prefix, tag),
-        "description": ("Create the service.toml registration for service '%s' "
+        "description": ("Create EXACTLY the file %s/service.toml -- this literal "
+                        "repo-relative path and no other -- registering service '%s' "
                         "(import_path services.active.%s.router, prefix %s). This is "
-                        "the contract the spine reads after promotion." % (name, name, prefix)),
+                        "the contract the spine reads after promotion." % (staged, name, name, prefix)),
         "complexity": "low",
     })
 

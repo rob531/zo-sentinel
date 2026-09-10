@@ -1,0 +1,12 @@
+[service]
+name = "verdict_summary"
+import_path = "services.active.verdict_summary.router"
+prefix = "/api"
+tag = "verdict_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.verdict_summary.router"
+expected_output = "PASS"

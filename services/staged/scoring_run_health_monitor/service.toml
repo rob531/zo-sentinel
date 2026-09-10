@@ -1,0 +1,17 @@
+[service]
+name = "scoring_run_health_monitor"
+import_path = "services.active.scoring_run_health_monitor.router"
+prefix = "/api"
+tag = "scoring_run_health_monitor"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.test]
+self_test = true
+test_import_path = "services.active.scoring_run_health_monitor.test"
+test_prefix = "/test"
+test_tag = "scoring_run_health_monitor_test"
+test_origin = "test"
+test_auth = "public"
+test_needs_data_layer = true

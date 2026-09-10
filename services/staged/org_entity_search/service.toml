@@ -1,0 +1,11 @@
+[service]
+name = "org_entity_search"
+import_path = "services.active.org_entity_search.router"
+prefix = "/api"
+tag = "org_entity_search"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

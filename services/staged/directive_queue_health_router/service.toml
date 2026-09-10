@@ -1,0 +1,8 @@
+[service]
+name = "directive_queue_health_router"
+import_path = "services.active.directive_queue_health_router.router"
+prefix = "/api"
+tag = "directive_queue_health_router"
+origin = "service"
+auth = "public"
+needs_data_layer = true

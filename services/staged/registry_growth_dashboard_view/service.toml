@@ -1,0 +1,9 @@
+# service.toml
+[service]
+name = "registry_growth_dashboard_view"
+import_path = "services.active.registry_growth_dashboard_view.router"
+prefix = "/api"
+tag = "registry_growth_dashboard_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true

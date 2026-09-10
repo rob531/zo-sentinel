@@ -1,0 +1,8 @@
+[service]
+name = "score_badge_api"
+import_path = "services.active.score_badge_api.router"
+prefix = "/api"
+tag = "score_badge_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

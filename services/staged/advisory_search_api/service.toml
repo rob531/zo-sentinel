@@ -1,0 +1,16 @@
+[service]
+name = "advisory_search_api"
+import_path = "services.active.advisory_search_api.router"
+prefix = "/api"
+tag = "advisory_search_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true
+
+[tables]
+app = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+mesh = ["mcp_signal_scores", "mesh_memory"]

@@ -120,7 +120,7 @@ def setup_database(session: Session) -> None:
     
     session.execute(
         text("""
-            CREATE TABLE IF NOT EXISTS mcp_llm_axis_scores (
+            CREATE TABLE IF NOT EXISTS McpLlmAxisScore (
                 id SERIAL PRIMARY KEY,
                 org_id INTEGER NOT NULL,
                 axis VARCHAR(255) NOT NULL,
@@ -154,7 +154,7 @@ def main() -> None:
     )
     test_session.execute(
         text(
-            "INSERT INTO mcp_llm_axis_scores (org_id, axis, score) "
+            "INSERT INTO McpLlmAxisScore (org_id, axis, score) "
             "VALUES (:org_id, :axis, :score)"
         ),
         {"org_id": 1, "axis": "test_axis", "score": 0.72}

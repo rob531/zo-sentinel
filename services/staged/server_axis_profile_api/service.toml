@@ -1,0 +1,24 @@
+[service]
+name = "server_axis_profile_api"
+import_path = "services.active.server_axis_profile_api.router"
+prefix = "/api"
+tag = "server_axis_profile_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { version = ">=0.1.0", source = "internal" }
+
+[endpoints]
+get_servers = { method = "GET", path = "/servers", auth = "public" }
+get_server_profile = { method = "GET", path = "/servers/{server_id}", auth = "public" }
+get_axis_scores = { method = "GET", path = "/axis-scores", auth = "public" }
+
+[database]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[test]
+self_test = true
+test_data = "in_memory"

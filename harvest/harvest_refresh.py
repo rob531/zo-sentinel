@@ -21,7 +21,12 @@ Then:  python sprint_import.py         # loads the new dated jsonl into prod
 import argparse, json, subprocess, time, datetime, os
 import requests
 
-DIR = r"D:\zo\runs\sprint200k"
+# One file, two hosts. This was a hardcoded Windows path, which is why a
+# second hand-edited copy grew on Zo. HARVEST_DIR lets both hosts run THIS
+# file. Set HARVEST_HOST_TAG on the non-tower host so the two producers
+# write distinct filenames into a shared drop dir and never clobber.
+DIR = os.environ.get("HARVEST_DIR") or r"D:\zo\runs\sprint200k"
+HOST_TAG = os.environ.get("HARVEST_HOST_TAG", "").strip()
 TOK = subprocess.check_output(["gh", "auth", "token"], text=True).strip()
 H = {"Authorization": "Bearer %s" % TOK, "Accept": "application/vnd.github+json"}
 
@@ -66,8 +71,15 @@ def emit(f, item, q, seen):
     seen.add(fn)
     lic = item.get("license") or {}
     owner = item.get("owner") or {}
+    # STABLE IDENTITY (2026-09-10). full_name is mutable and re-claimable: a
+    # measured 368 names in our own corpus already carry >1 immutable
+    # created_at, 40/40 confirmed live as the name having changed hands. The
+    # repo id survives BOTH rename and owner transfer. It was in this same
+    # response all along -- we simply never copied it -- so capturing it costs
+    # ZERO additional API quota. See harvest/recon/FINDINGS.md.
     f.write(json.dumps({"source": "github", "query": q,
         "fetched_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "gh_repo_id": item.get("id"), "gh_node_id": item.get("node_id"),
         "full_name": fn, "html_url": item.get("html_url"),
         "description": (item.get("description") or "")[:500],
         "stargazers_count": item.get("stargazers_count"), "forks_count": item.get("forks_count"),
@@ -121,8 +133,9 @@ def main():
 
     queries = [s.strip() for s in args.queries.split(",")] if args.queries else QUERIES_WIDE
     tag = ("full" if args.full else "since%s" % args.since.replace("-", ""))
-    out = args.out or os.path.join(DIR, "refresh_%s_%s.jsonl" % (
-        datetime.date.today().isoformat().replace("-", ""), tag))
+    host = ("_" + HOST_TAG) if HOST_TAG else ""
+    out = args.out or os.path.join(DIR, "refresh_%s%s_%s.jsonl" % (
+        datetime.date.today().isoformat().replace("-", ""), host, tag))
     logpath = os.path.join(DIR, "harvest_refresh.log")
 
     log(logpath, "START refresh out=%s start=%s end=%s queries=%d" % (out, start, end, len(queries)))

@@ -393,21 +393,22 @@ def rows_from_file(path):
                     "pushed_at","created_at","archived","disabled","fork","license_spdx",
                     "owner_login","owner_type","query")}
             meta["harvested_at"] = j.get("fetched_at"); meta["harvest_lane"] = "sprint_gh"
-            out.append((sid_github(fn), fn, "github", url, j.get("description") or "", now, meta))
+            out.append((sid_github(fn), fn, "github", url, j.get("description") or "", now, meta,
+                    j.get("gh_repo_id")))
         elif src == "npm":
             name = j.get("name")
             if not name: bad += 1; continue
             url = "https://www.npmjs.com/package/%s" % name
             meta = {k: j.get(k) for k in ("repository","license","downloads","latest_release","keywords","via")}
             meta["harvested_at"] = j.get("fetched_at"); meta["harvest_lane"] = "sprint_npm"
-            out.append((sid_npm(name), name, "npm", url, j.get("description") or "", now, meta))
+            out.append((sid_npm(name), name, "npm", url, j.get("description") or "", now, meta, None))
         elif src == "pypi":
             name = j.get("name")
             if not name: bad += 1; continue
             url = "https://pypi.org/project/%s/" % name
             meta = {k: j.get(k) for k in ("repository","license","author","latest_release","keywords")}
             meta["harvested_at"] = j.get("fetched_at"); meta["harvest_lane"] = "sprint_pypi"
-            out.append((sid_pypi(name), name, "pypi", url, j.get("description") or "", now, meta))
+            out.append((sid_pypi(name), name, "pypi", url, j.get("description") or "", now, meta, None))
     return out, bad
 
 def main():
@@ -420,8 +421,8 @@ def main():
             seen.add(r[0]); tuples.append(r); fresh += 1
         log("%s: rows=%d fresh=%d fail_closed=%d" % (path.split("\\")[-1], len(rows), fresh, bad))
     prepared = [(sid, name, src, url, desc, None, "unknown", "", None, None, now, now, now, 1,
-                 "unassessed", json.dumps(meta))
-                for (sid, name, src, url, desc, now, meta) in tuples]
+                 "unassessed", json.dumps(meta), ghid)
+                for (sid, name, src, url, desc, now, meta, ghid) in tuples]
     log("prepared=%d" % len(prepared))
     if DRY or not prepared:
         log("dry-run or nothing to do"); return
@@ -515,7 +516,8 @@ def main():
     except Exception as e:
         log("anti-filter FAILED (%s) -- falling back to full upsert" % e)
     cols = ("server_id,name,registry_source,url,description,trust_score,verdict,verdict_reasoning,"
-            "confidence,last_assessed,first_seen,last_seen,last_scanned,scan_count,risk_tier,metadata")
+            "confidence,last_assessed,first_seen,last_seen,last_scanned,scan_count,risk_tier,metadata,"
+            "gh_repo_id")
     if prepared:
         execute_values(cur,
             "INSERT INTO mcp_server_registry (%s) VALUES %%s ON CONFLICT (server_id) DO NOTHING" % cols,

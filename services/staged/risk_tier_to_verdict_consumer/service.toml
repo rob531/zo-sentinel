@@ -1,1 +1,11 @@
-Now let me create the router.py file:
+[service]
+name = "risk_tier_to_verdict_consumer"
+import_path = "services.active.risk_tier_to_verdict_consumer.router"
+prefix = "/api"
+tag = "risk_tier_to_verdict_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

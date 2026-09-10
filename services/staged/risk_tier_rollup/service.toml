@@ -1,0 +1,12 @@
+[service]
+name = "risk_tier_rollup"
+import_path = "services.active.risk_tier_rollup.router"
+prefix = "/api"
+tag = "risk_tier_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+bus_write_service = true

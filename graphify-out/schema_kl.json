@@ -1,4 +1,6 @@
 {
+  "built_at": "2026-08-26T19:16:07+00:00",
+  "built_at_commit": "a78a514a",
   "models": {
     "ApiKey": {
       "column_meta": {
@@ -41,6 +43,100 @@
         "org_id"
       ],
       "table": "api_keys"
+    },
+    "AskCorpusDoc": {
+      "column_meta": {
+        "content_hash": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "indexed_at": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "snippet": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "terms": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "content_hash",
+        "indexed_at",
+        "server_id",
+        "snippet",
+        "terms"
+      ],
+      "relationships": [],
+      "required_construct": [],
+      "table": "ask_corpus_index"
+    },
+    "CadenceJobRun": {
+      "column_meta": {
+        "detail": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "finished_at": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "job": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "rows_affected": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "started_at": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "status": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "detail",
+        "finished_at",
+        "id",
+        "job",
+        "rows_affected",
+        "started_at",
+        "status"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "job",
+        "started_at",
+        "status"
+      ],
+      "table": "cadence_job_runs"
     },
     "McpLlmAxisScore": {
       "column_meta": {
@@ -144,6 +240,87 @@
         "server_id"
       ],
       "table": "mcp_llm_axis_scores"
+    },
+    "McpScoreDispute": {
+      "column_meta": {
+        "admin_note": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "created_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "explanation": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "proposed_axes": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "proposed_overall_risk": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "reason_category": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "resolved_at": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "status": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "submitted_by": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "admin_note",
+        "created_at",
+        "explanation",
+        "id",
+        "proposed_axes",
+        "proposed_overall_risk",
+        "reason_category",
+        "resolved_at",
+        "server_id",
+        "status",
+        "submitted_by"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "explanation",
+        "proposed_overall_risk",
+        "reason_category",
+        "server_id",
+        "submitted_by"
+      ],
+      "table": "mcp_score_disputes"
     },
     "McpServerRegistry": {
       "column_meta": {
@@ -277,8 +454,255 @@
       "required_construct": [],
       "table": "orgs"
     },
+    "Perspective": {
+      "column_meta": {
+        "created_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "created_by": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "description": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "facet_filters": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "name": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "org_id": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "updated_at": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "created_at",
+        "created_by",
+        "description",
+        "facet_filters",
+        "id",
+        "name",
+        "org_id",
+        "updated_at"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "created_by",
+        "facet_filters",
+        "name"
+      ],
+      "table": "perspectives"
+    },
+    "PerspectiveEvent": {
+      "column_meta": {
+        "change_type": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "created_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "new_tier": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "old_tier": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "perspective_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "seen": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "change_type",
+        "created_at",
+        "id",
+        "new_tier",
+        "old_tier",
+        "perspective_id",
+        "seen",
+        "server_id"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "change_type",
+        "perspective_id",
+        "server_id"
+      ],
+      "table": "perspective_events"
+    },
+    "PerspectiveSnapshot": {
+      "column_meta": {
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "membership": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "perspective_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "taken_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "id",
+        "membership",
+        "perspective_id",
+        "taken_at"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "perspective_id"
+      ],
+      "table": "perspective_snapshots"
+    },
+    "ThreatIntelRef": {
+      "column_meta": {
+        "fetched_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "indicator_type": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "indicator_value": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "is_aggregator": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "pulse_created": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "pulse_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "pulse_name": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "source": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "source_url": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "fetched_at",
+        "id",
+        "indicator_type",
+        "indicator_value",
+        "is_aggregator",
+        "pulse_created",
+        "pulse_id",
+        "pulse_name",
+        "source",
+        "source_url"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "indicator_type",
+        "indicator_value",
+        "pulse_id",
+        "source",
+        "source_url"
+      ],
+      "table": "threat_intel_refs"
+    },
     "User": {
       "column_meta": {
+        "clerk_created_at": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "clerk_id": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "clerk_synced_via": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
         "created_at": {
           "has_default": true,
           "nullable": false,
@@ -311,6 +735,9 @@
         }
       },
       "columns": [
+        "clerk_created_at",
+        "clerk_id",
+        "clerk_synced_via",
         "created_at",
         "email",
         "id",
@@ -325,6 +752,153 @@
         "password_hash"
       ],
       "table": "users"
+    },
+    "VulnAdvisory": {
+      "column_meta": {
+        "affected_ranges": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "aliases": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "content_hash": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "ecosystem": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "feed": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "fetched_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "identities": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "package": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "published_at": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "severity": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "source_url": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "summary": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "affected_ranges",
+        "aliases",
+        "content_hash",
+        "ecosystem",
+        "feed",
+        "fetched_at",
+        "id",
+        "identities",
+        "package",
+        "published_at",
+        "severity",
+        "source_url",
+        "summary"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "feed",
+        "source_url"
+      ],
+      "table": "vuln_advisories"
+    },
+    "VulnLink": {
+      "column_meta": {
+        "advisory_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "linked_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "match_basis": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "match_confidence": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "match_value": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "advisory_id",
+        "id",
+        "linked_at",
+        "match_basis",
+        "match_confidence",
+        "match_value",
+        "server_id"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "advisory_id",
+        "match_basis",
+        "match_confidence",
+        "match_value",
+        "server_id"
+      ],
+      "table": "vuln_links"
     }
   },
   "source": "app.models",

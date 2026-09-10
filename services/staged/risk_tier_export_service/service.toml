@@ -1,0 +1,28 @@
+[service]
+name = "risk_tier_export_service"
+import_path = "services.active.risk_tier_export_service.router"
+prefix = "/api"
+tag = "risk_tier_export_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[build]
+python_version = "3.11"
+requirements = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "sqlalchemy>=2.0.0",
+    "httpx>=0.25.0",
+    "psycopg2-binary>=2.9.0",
+]
+
+[dependencies]
+modules = [
+    "app.db",
+    "app.models",
+]
+
+[export]
+format = "csv"
+tables = ["mcp_server_registry", "mcp_llm_axis_scores"]

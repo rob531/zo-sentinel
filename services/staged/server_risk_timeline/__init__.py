@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     # Create test data
     session = SessionLocal()
-    session.execute("CREATE TABLE mcp_server_registry (id INTEGER PRIMARY KEY, name TEXT)")
-    session.execute("INSERT INTO mcp_server_registry (id, name) VALUES (1, 'Test Server')")
+    session.execute("CREATE TABLE McpServerRegistry (id INTEGER PRIMARY KEY, name TEXT)")
+    session.execute("INSERT INTO McpServerRegistry (id, name) VALUES (1, 'Test Server')")
     session.commit()
 
     # Test get_mesh_scores

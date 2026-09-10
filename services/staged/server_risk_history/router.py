@@ -11,7 +11,7 @@ def get_server_risk_history(server_id: str, days: int = 30, session: Session = D
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
-    # Get risk tier history from mcp_server_registry
+    # Get risk tier history from McpServerRegistry
     tier_history = session.query(
         McpServerRegistry.server_id,
         McpServerRegistry.risk_tier,
@@ -23,7 +23,7 @@ def get_server_risk_history(server_id: str, days: int = 30, session: Session = D
         McpServerRegistry.last_assessed.asc()
     ).all()
 
-    # Get overall risk scores from mcp_llm_axis_scores
+    # Get overall risk scores from McpLlmAxisScore
     risk_scores = session.query(
         McpLlmAxisScore.server_id,
         McpLlmAxisScore.scored_at,

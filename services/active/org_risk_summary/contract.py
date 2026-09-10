@@ -1,6 +1,5 @@
 # services/staged/org_risk_summary/contract.py
 from fastapi import APIRouter, Depends, FastAPI
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db import get_session
@@ -56,6 +55,7 @@ def get_org_risk_summary(org_id: str, db: Session = Depends(get_session)):
 # Self‑test (run with: python -m services.staged.org_risk_summary.contract)
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool

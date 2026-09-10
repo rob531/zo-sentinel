@@ -4,7 +4,6 @@ from typing import Dict, List
 
 import requests
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -76,6 +75,7 @@ def get_org_risk_summary(org_id: str, db: Session = Depends(get_session)):
 # Self‑test (executed when running this file directly)
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient
 
     # ----------------------------------------------------------------------- #
     # Create an in‑memory SQLite DB and override the app dependency

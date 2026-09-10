@@ -1,12 +1,11 @@
-service = {
-    "name": "server_submission_api",
-    "import_path": "services.active.server_submission_api.router",
-    "prefix": "/api",
-    "tag": "server_submission_api",
-    "origin": "service",
-    "auth": "public",
-    "needs_data_layer": True,
-}
+[service]
+name = "server_submission_api"
+import_path = "services.active.server_submission_api.router"
+prefix = "/api"
+tag = "server_submission_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
 
-if __name__ == "__main__":
-    print("PASS")
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

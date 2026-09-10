@@ -1,1 +1,11 @@
-cat docs/SCHEMA_TRUTH.md 2>/dev/null || find . -name "SCHEMA_TRUTH.md" -exec cat {} \; 2>/dev/null | head -500
+[service]
+name = "risk_tier_transition_summary"
+import_path = "services.active.risk_tier_transition_summary.router"
+prefix = "/api"
+tag = "risk_tier_transition_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -1,0 +1,8 @@
+[service]
+name = "verdict_trend"
+import_path = "services.active.verdict_trend.router"
+prefix = "/api"
+tag = "verdict_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

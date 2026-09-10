@@ -52,6 +52,35 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+
+def _commit_replace(tmp, dest):
+    """Commit `tmp` onto `dest` through FU-212's proven fallback.
+
+    WHY (measured 2026-09-01, prod-drift-sentinel 04:47Z). `os.replace` is
+    MoveFileEx(REPLACE_EXISTING) and Windows refuses it with WinError 5 when the
+    DESTINATION carries a mapped section -- while `open(dest,"r+b")` and a plain
+    `os.rename(dest, other)` both still succeed. FU-212 measured this on
+    FOLLOWUPS.md in July and wired the rename-swap cure into
+    ``tools/fu/fu_lock.py``. It was wired into exactly ONE call site. This writer
+    was not one of them, so the mandated run receipt (FU-164) failed 12/12
+    attempts over ~40s and step 0 of the lane could not complete.
+
+    A cure wired into one door of many reads as a cure (FU-343). This is another
+    door, not another cure -- the algorithm is fu_lock's, unchanged.
+
+    Imported BY FILE PATH with ``sys.modules`` seeded first: this repo has more
+    than one copy of the fu_* modules on disk and plain ``import`` picks by
+    sys.path order rather than by the tree you are running from.
+    """
+    import importlib.util
+    import sys as _sys
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fu", "fu_lock.py")
+    spec = importlib.util.spec_from_file_location("_zo_fu_lock_for_commit", p)
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules["_zo_fu_lock_for_commit"] = mod   # before exec_module, or dataclasses dies
+    spec.loader.exec_module(mod)
+    return mod.replace_with_fallback(str(tmp), str(dest))
+
 DEFAULT_STATE = Path(r"D:\zo\Zocomputer Agents\prod_deploy_state.json")
 DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 
@@ -77,9 +106,64 @@ DEFAULT_EVIDENCE = Path(r"D:\zo\Zocomputer Agents\_deploy_evidence")
 # OLD :47-era receipts still inside the window attested. If you find them
 # disagreeing with the live cron again, fix the constant AND ask why a value
 # that must track an external schedule is still a literal.
-SLOT_MINUTE = 15
+# --- 2026-07-31: THE CADENCE WAS CUT, AND THIS CONSTANT WENT STALE A SECOND TIME.
+# The task was reduced from 8 slots/day to 4 (`list_scheduled_tasks` ->
+# `cronExpression: "45 0,6,15,20 * * *"`, `jitterSeconds: 97`) after FU-207, in
+# which one 17.5h-suspended run starved five consecutive slots.
+#
+# THE CRON IS EVALUATED IN LOCAL TIME. FU-210 concluded UTC, and was wrong.
+#
+# FU-210's evidence was `nextRunAt: 2026-08-01T00:46:37Z` == 00:45 + the 97s
+# jitter, read as proof that hour 0 of the cron means 00:00Z. It is not proof of
+# anything: local 20:45 (the last slot of the local grid) IS 00:45Z. Both
+# hypotheses predict that timestamp identically, so the one field checked was the
+# single field in the day that cannot discriminate between them. A corroboration
+# that both hypotheses predict is not corroboration -- it is a coincidence that
+# reads like one, which is worse, because it closes the question.
+#
+# THE DISCRIMINATING READS, on records that differ under the two hypotheses:
+#   1. THIS TASK, PRE-CUT. cron `15 */3 * * *`, `nextRunAt 2026-07-31T22:16:37Z`
+#      = 22:15Z + 97s. Under UTC the grid is 00:15,03:15..21:15Z and 22:15Z is
+#      NOT ON IT AT ALL. Under local (UTC-4) 22:15Z is 18:15 local, and 18 is on
+#      `*/3`. Only one hypothesis can even produce the observed slot.
+#   2. A DIFFERENT TASK, so the answer cannot depend on this one's quirks.
+#      `mcplookup-nightly-db-backup`: cron `0 3 * * *`, jitter 546s,
+#      `nextRunAt 2026-08-01T07:09:06Z` = 07:00:00Z + 546s. Under UTC that record
+#      would read 03:09:06Z. It is four hours out -- exactly this box's offset.
+# Both were read from the same `list_scheduled_tasks` payload as the cron itself.
+#
+# The cost of the error was not cosmetic: three of the four daily slots would
+# have been graded at instants when no run can occur (06:45Z/15:45Z/20:45Z are
+# 02:45/11:45/16:45 local), so every one would go MISSED forever -- and MISSED is
+# an email condition. FU-210 set out to stop the grid lying and, uncaught, would
+# have converted it from stale to permanently red. A guard that can only go red
+# is as broken as one that can only go green, and it is likelier to be silenced.
+#
+# LOCAL SLOTS 00:45, 06:45, 15:45, 20:45 (America/New_York) -> UTC below.
+# These are UTC-4 conversions and are therefore WRONG BY AN HOUR after the DST
+# change on 2026-11-01; see `test_grid_is_the_local_cron_converted` for the
+# derivation that will fail loudly when it does, rather than drifting quietly.
+#
+# WHY THERE ARE TWO GRIDS. A 24h window straddling the cut contains slots from
+# BOTH cadences. Collapsing them to one grid would either invent phantom slots
+# before the cut or erase the five real ones FU-207 is about. GRID_CUT_UTC is set
+# between the last legacy slot that actually came due (16:15Z) and the first
+# observed post-cut receipt (19:21:41Z); no slot of either grid falls in that gap,
+# so the boundary cannot silently add or drop one.
+SLOT_LOCAL_HHMM = ((0, 45), (6, 45), (15, 45), (20, 45))
+SLOT_TZ = "America/New_York"
+SLOT_UTC_HHMM = ((0, 45), (4, 45), (10, 45), (19, 45))
+GRID_CUT_UTC = "2026-07-31T18:00:00Z"
+
+# The pre-cut grid, kept so receipts and misses from before the cut are still
+# judged against the schedule that was actually in force when they happened.
+LEGACY_SLOT_UTC_HHMM = tuple((h, 15) for h in range(1, 24, 3))
+
+# Retained for compatibility with anything importing them; the grid above is the
+# authority. Do NOT reintroduce a computation that depends on these.
+SLOT_MINUTE = 45
 SLOT_EVERY_HOURS = 3
-SLOT_UTC_ANCHOR_HOUR = 1  # 01:15Z, then every SLOT_EVERY_HOURS
+SLOT_UTC_ANCHOR_HOUR = 0
 
 NAME_TS_RE = re.compile(r"(\d{8}T\d{6}Z)")
 
@@ -130,6 +214,53 @@ def read_state(state_path: Path) -> dict:
     return data
 
 
+#: The lane this ledger speaks for. The evidence directory is SHARED by every
+#: lane that runs ops/host/verify_candidate.ps1, so "an artifact exists" and
+#: "THIS lane produced an artifact" are different facts and were being conflated.
+THIS_LANE = "prod-drift"
+
+
+def lane_of(path: Path):
+    """Which lane produced this artifact, or None if it cannot be attributed.
+
+    None is NOT "mine" and not "foreign" -- it is UNKNOWN, and unknown is not
+    zero (R6). Artifacts written before the stamp existed have no field and keep
+    the OLD behaviour deliberately: retro-attributing them would be a guess, and
+    a guess that silences an alarm is worse than an alarm that names its own
+    uncertainty.
+    """
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(blob, dict):
+        return None
+    lane = blob.get("produced_by_lane")
+    if not isinstance(lane, str) or not lane:
+        return None
+    # "unattributed" is the STAMPER'S OWN WORD FOR UNKNOWN, and it must land in
+    # the same bucket as an absent field. verify_candidate.ps1 writes it when it
+    # can resolve neither $env:ZO_LANE nor a `\_lanes\<name>` component in
+    # $PSScriptRoot -- which is exactly what happens when the script is invoked
+    # from the SHARED checkout, the path this repo's own runbook prints.
+    #
+    # Measured 2026-08-07T19:49:42Z: prod-drift ran verify_candidate.ps1 from
+    # D:\zo\zo-sentinel\zo-sentinel\ops\host\, its own verdict artifact was
+    # stamped "unattributed", and --window-hours 24 reported it as
+    #   foreign evidence (ADVISORY, excluded from the orphan test -- another
+    #   lane's dry-run in the shared evidence dir)
+    # A string meaning "I do not know who wrote this" was read as "somebody else
+    # definitely wrote this", which is the one reading that REMOVES it from the
+    # orphan test. The guard did not go red. It went QUIET, under a CLEAN verdict.
+    #
+    # That inverts the rule this function's own docstring states four lines up:
+    # unknown is not zero (R6). Absence was handled correctly; the sentinel VALUE
+    # that means the same thing was not.
+    if lane == "unattributed":
+        return None
+    return lane
+
+
 def collect_evidence(evidence_dir: Path) -> list:
     """Every verdict artifact with the instant it was CHECKED (from content)."""
     if not evidence_dir.exists():
@@ -153,8 +284,60 @@ def collect_evidence(evidence_dir: Path) -> list:
             # Neither content nor name can date it. Do not guess from mtime.
             out.append({"path": str(path), "checked_utc": None, "source": "UNDATABLE"})
             continue
-        out.append({"path": str(path), "checked_utc": checked, "source": source})
+        out.append(
+            {
+                "path": str(path),
+                "checked_utc": checked,
+                "source": source,
+                "produced_by_lane": lane_of(path),
+            }
+        )
     return out
+
+
+#: Set by the most recent resolve_post_cut_grid() call so render() can publish
+#: the BASIS of the grid alongside the verdict it produced (R5).
+GRID_BASIS = "not yet resolved"
+
+
+def resolve_post_cut_grid(on_date=None):
+    """The post-cut grid, FETCHED from the scheduler mirror when possible.
+
+    FU-213. `SLOT_UTC_HHMM` below is correct today because FU-211 retyped it
+    correctly; it was also "correct today" after FU-205 and after FU-210, and
+    was wrong within a day both times. This asks the mirror -- written from the
+    live `list_scheduled_tasks` payload by the daily follow-up-triage run --
+    and falls back to the literal, ALWAYS recording which one it used.
+
+    A disagreement is reported, never silently resolved: the mirror wins
+    (it is the only party that has actually seen the scheduler) but the literal
+    it contradicts is named in the basis, because a grid that changes under a
+    reader without saying so is the whole defect being fixed.
+    """
+    global GRID_BASIS
+    try:
+        from tools import scheduler_mirror_read as smr
+    except ImportError:
+        try:
+            import scheduler_mirror_read as smr        # flat sys.path
+        except ImportError:
+            GRID_BASIS = "literal (mirror reader unavailable)"
+            return SLOT_UTC_HHMM
+
+    slots, note = smr.utc_slots_for("prod-drift-sentinel", on_date=on_date)
+    if slots is None:
+        GRID_BASIS = "literal SLOT_UTC_HHMM -- %s" % note
+        return SLOT_UTC_HHMM
+    if tuple(slots) != tuple(SLOT_UTC_HHMM):
+        GRID_BASIS = (
+            "MIRROR, and it DISAGREES with the literal in this file: "
+            "mirror=%s literal=%s (%s). The mirror wins -- it is the only "
+            "party that has read the scheduler -- but fix the literal."
+            % (" ".join("%02d:%02d" % s for s in slots),
+               " ".join("%02d:%02d" % s for s in SLOT_UTC_HHMM), note))
+        return tuple(slots)
+    GRID_BASIS = "mirror, agrees with the literal (%s)" % note
+    return tuple(slots)
 
 
 def expected_slots(now: datetime, window_hours: int) -> list:
@@ -162,15 +345,53 @@ def expected_slots(now: datetime, window_hours: int) -> list:
     if window_hours <= 0:
         raise LedgerError("window-hours must be positive")
     start = now - timedelta(hours=window_hours)
+    cut = parse_iso(GRID_CUT_UTC)
+    post_cut = resolve_post_cut_grid(now.date())
     slots = []
-    cursor = (start - timedelta(days=1)).replace(
-        hour=SLOT_UTC_ANCHOR_HOUR, minute=SLOT_MINUTE, second=0, microsecond=0
-    )
-    while cursor <= now:
-        if cursor >= start:
-            slots.append(cursor)
-        cursor += timedelta(hours=SLOT_EVERY_HOURS)
-    return slots
+    day = (start - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    last = now + timedelta(days=1)
+    while day <= last:
+        # UNION, not a per-day choice: a per-day choice cannot emit a slot that
+        # exists only under the OTHER cadence, and the cut-over day needs both.
+        for hh, mm in sorted(set(LEGACY_SLOT_UTC_HHMM) | set(post_cut)):
+            slot = day.replace(hour=hh, minute=mm)
+            # Each slot is judged against the cadence in force AT THAT SLOT, not
+            # the one in force at the day's start -- otherwise the cut-over day
+            # reports whichever grid the loop happened to pick first.
+            in_force = LEGACY_SLOT_UTC_HHMM if slot < cut else post_cut
+            if (hh, mm) not in in_force:
+                continue
+            if start <= slot <= now:
+                slots.append(slot)
+        day += timedelta(days=1)
+    return sorted(set(slots))
+
+
+def grid_phase_report(receipts: list, now: datetime, window_hours: int) -> list:
+    """How far is each in-window receipt from its NEAREST declared slot?
+
+    This is the tool doubting its own grid. A slot list is a claim about a
+    schedule that lives somewhere else, and this constant has now gone stale
+    twice (:47 -> :15 on 2026-07-30, :15 -> the 4-slot cadence on 2026-07-31).
+    Both times the symptom was identical to a real outage: a list of MISSED
+    SLOTS. The two causes are distinguishable by ONE measurement -- if the task
+    genuinely did not run, there is no receipt near the slot; if the GRID is
+    wrong, the receipts are all there and all sitting at the same wrong offset.
+    Printing the offsets puts that distinction in front of the reader instead of
+    leaving it to an audit.
+
+    Returns [(receipt, nearest_slot, delta_minutes)], newest last.
+    """
+    slots = expected_slots(now, window_hours)
+    start = now - timedelta(hours=window_hours)
+    out = []
+    for r in sorted(receipts):
+        if r < start or not slots:
+            continue
+        nearest = min(slots, key=lambda s: abs((r - s).total_seconds()))
+        out.append((r, nearest, (r - nearest).total_seconds() / 60.0))
+    return out
 
 
 def reconcile(
@@ -193,11 +414,33 @@ def reconcile(
     undatable = [e["path"] for e in evidence if e["checked_utc"] is None]
     dated = [e for e in evidence if e["checked_utc"] is not None]
 
+    # FOREIGN EVIDENCE: produced by a DIFFERENT lane out of the SHARED evidence
+    # directory. Measured 2026-08-02: a sibling lane dry-ran verify_candidate.ps1
+    # at 18:15Z on 9d365abd, and prod-drift's ledger reported it as ORPHAN
+    # EVIDENCE -- "verification ran, state never recorded it" -- on a run whose
+    # own receipts (00:47/04:46/10:47/19:47Z) show no missed slot at all. The
+    # alarm was about a lane that did nothing wrong, and a HARD signal that fires
+    # every time ANY sibling verifies is one that can never clear.
+    # Excluded from the orphan test; reported anyway on its own ADVISORY line,
+    # because an exclusion nobody can see is indistinguishable from a check that
+    # stopped running.
+    foreign = [
+        {
+            "path": e["path"],
+            "checked_utc": fmt(e["checked_utc"]),
+            "lane": e.get("produced_by_lane"),
+        }
+        for e in dated
+        if e.get("produced_by_lane") not in (None, THIS_LANE)
+    ]
+    foreign_paths = {f["path"] for f in foreign}
+
     # ORPHAN EVIDENCE: the verification ran, the record never landed.
     orphans = [
         {"path": e["path"], "checked_utc": fmt(e["checked_utc"]), "source": e["source"]}
         for e in dated
         if e["checked_utc"] > last_check
+        and e["path"] not in foreign_paths
         and not any(
             abs((e["checked_utc"] - r).total_seconds()) <= tolerance_min * 60
             for r in receipts
@@ -255,6 +498,12 @@ def reconcile(
         "evidence_count": len(evidence),
         "undatable_evidence": undatable,
         "orphan_evidence": orphans,
+        "foreign_evidence": foreign,
+        "grid_phase": [
+            (r.strftime("%Y-%m-%dT%H:%M:%SZ"),
+             sl.strftime("%Y-%m-%dT%H:%M:%SZ"), d)
+            for r, sl, d in grid_phase_report(receipts, now, window_hours)
+        ],
         "missed_slots": missed,
         "unattested_slots": unattested,
         "clean": not orphans and not missed and not undatable,
@@ -273,7 +522,7 @@ def record_receipt(state_path: Path, now: datetime) -> dict:
     state["run_receipts"] = sorted(set(receipts))[-64:]
     tmp = state_path.with_suffix(state_path.suffix + ".tmp")
     tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    os.replace(tmp, state_path)
+    _commit_replace(tmp, state_path)
     return {"receipt": stamp, "added": added, "count": len(state["run_receipts"])}
 
 
@@ -283,8 +532,23 @@ def render(report: dict) -> str:
         f"last_check  : {report['last_check_utc']}",
         f"receipts    : {len(report['receipts'])}",
         f"evidence    : {report['evidence_count']} artifact(s)",
+        # The grid is the single input that has been wrong three times in two
+        # days (FU-205/210/211). Its provenance is printed with every verdict
+        # so a stale grid is visible in the same glance as the misses it causes.
+        f"grid basis  : {GRID_BASIS}",
         "",
     ]
+    if report.get("foreign_evidence"):
+        lines.append(
+            "foreign evidence (ADVISORY, excluded from the orphan test -- another"
+            " lane's dry-run in the shared evidence dir):"
+        )
+        for item in report["foreign_evidence"]:
+            lines.append(
+                f"  {item['checked_utc']}  lane={item['lane']}  {item['path']}"
+            )
+        lines.append("")
+
     if report["orphan_evidence"]:
         lines.append("ORPHAN EVIDENCE -- verification ran, state never recorded it:")
         for orphan in report["orphan_evidence"]:
@@ -294,6 +558,17 @@ def render(report: dict) -> str:
         lines.append("MISSED SLOTS -- cron came due and left no trace at all:")
         for slot in report["missed_slots"]:
             lines.append(f"  {slot}")
+        # A MISSED list has TWO causes that are indistinguishable from here: the
+        # task did not run, or THIS FILE'S SLOT GRID IS STALE. The offsets below
+        # separate them -- a stale grid shows every receipt PRESENT and all of
+        # them sitting at the same wrong offset. Printed beside the misses on
+        # purpose, so the distinction reaches the reader instead of waiting for
+        # an audit. (This grid has gone stale twice: 2026-07-30 and 07-31.)
+        if report.get("grid_phase"):
+            lines.append("  -- receipt phase vs nearest declared slot (a UNIFORM"
+                         " non-zero offset means the GRID is wrong, not the task):")
+            for r, slot, delta in report["grid_phase"]:
+                lines.append("     %s  nearest %s  %+.0f min" % (r, slot, delta))
         lines.append("")
     if report["unattested_slots"]:
         lines.append(

@@ -1,0 +1,9 @@
+# service.toml
+[service]
+name = "axis_probability_variance_scoring_consumer"
+import_path = "services.active.axis_probability_variance_scoring_consumer.router"
+prefix = "/api"
+tag = "axis_probability_variance_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,17 +1,17 @@
 from fastapi import FastAPI, Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 app = FastAPI()
 
 def get_app_tables():
     session = Depends(get_session)
     return {
-        "mcp_server_registry": session.query(McpServerRegistry).all(),
-        "mcp_llm_axis_scores": session.query(McpLlmAxisScore).all(),
-        "mcp_score_disputes": session.query(McpScoreDispute).all(),
-        "orgs": session.query(Orgs).all(),
-        "users": session.query(Users).all()
+        "McpServerRegistry": session.query(McpServerRegistry).all(),
+        "McpLlmAxisScore": session.query(McpLlmAxisScore).all(),
+        "McpScoreDispute": session.query(McpScoreDispute).all(),
+        "orgs": session.query(Org).all(),
+        "users": session.query(User).all()
     }
 
 def get_mesh_tables():
@@ -21,7 +21,7 @@ def get_mesh_tables():
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     McpServerRegistry.__table__.create(engine)
     McpLlmAxisScore.__table__.create(engine)
     McpScoreDispute.__table__.create(engine)
-    Orgs.__table__.create(engine)
-    Users.__table__.create(engine)
+    Org.__table__.create(engine)
+    User.__table__.create(engine)
 
     # Test data access
     try:

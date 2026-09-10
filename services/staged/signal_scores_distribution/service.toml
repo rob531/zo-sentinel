@@ -1,0 +1,8 @@
+[service]
+name = "signal_scores_distribution"
+import_path = "services.active.signal_scores_distribution.router"
+prefix = "/api"
+tag = "signal_scores_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true

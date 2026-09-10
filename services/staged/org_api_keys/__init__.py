@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 app = FastAPI()
 
@@ -10,7 +10,7 @@ async def health_check():
 
 def test_self():
     from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -23,8 +23,8 @@ def test_self():
     McpServerRegistry.metadata.create_all(test_engine)
     McpLlmAxisScore.metadata.create_all(test_engine)
     McpScoreDispute.metadata.create_all(test_engine)
-    Orgs.metadata.create_all(test_engine)
-    Users.metadata.create_all(test_engine)
+    Org.metadata.create_all(test_engine)
+    User.metadata.create_all(test_engine)
 
     # Test the health endpoint
     from fastapi.testclient import TestClient

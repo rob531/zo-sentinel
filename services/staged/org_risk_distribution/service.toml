@@ -1,0 +1,12 @@
+[service]
+name = "org_risk_distribution"
+import_path = "services.active.org_risk_distribution.router"
+prefix = "/api"
+tag = "org_risk_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.org_risk_distribution"
+expected_output = "PASS"

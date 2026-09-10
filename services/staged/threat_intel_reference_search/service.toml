@@ -1,0 +1,8 @@
+[service]
+name = "threat_intel_reference_search"
+import_path = "services.active.threat_intel_reference_search.router"
+prefix = "/api"
+tag = "threat_intel_reference_search"
+origin = "service"
+auth = "public"
+needs_data_layer = true

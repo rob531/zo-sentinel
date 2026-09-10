@@ -1,0 +1,17 @@
+[service]
+name = "axis_score_timeline_api"
+import_path = "services.active.axis_score_timeline_api.router"
+prefix = "/api"
+tag = "axis_score_timeline_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+fastapi = "*"
+sqlalchemy = { extras = ["asyncio"] }
+httpx = "*"
+
+[project]
+version = "0.1.0"
+description = "Axis score timeline API"

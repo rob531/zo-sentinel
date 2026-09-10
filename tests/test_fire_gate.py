@@ -190,7 +190,7 @@ def test_compare_is_pinned_to_the_resolved_sha_not_the_ref(monkeypatch):
 
 def test_files_across_all_pages_are_merged(monkeypatch):
     monkeypatch.setattr(fire_gate, "_gh", _fake_gh(_two_page_compare(nfiles=5)))
-    changed, ncommits = fire_gate.changed_files("r/r", "c" * 40, _HEAD)
+    changed, ncommits, _src = fire_gate.changed_files("r/r", "c" * 40, _HEAD)
     assert ncommits == 124
     assert len(changed) == 5
 
@@ -214,7 +214,7 @@ def test_under_the_cap_still_returns_normally(monkeypatch):
         "files": [{"filename": f"f{i}.py"} for i in range(fire_gate.COMPARE_FILES_CAP - 1)],
     }]
     monkeypatch.setattr(fire_gate, "_gh", _fake_gh(docs))
-    changed, _ = fire_gate.changed_files("r/r", "c" * 40, _HEAD)
+    changed, _n, _src = fire_gate.changed_files("r/r", "c" * 40, _HEAD)
     assert len(changed) == fire_gate.COMPARE_FILES_CAP - 1
 
 
@@ -308,3 +308,66 @@ def test_an_unparseable_dockerfile_is_an_error_not_a_safe(monkeypatch):
     """Zero COPY sources => empty surface => every path looks inert. Must be ERROR."""
     rc = _run_main(monkeypatch, ["app/main.py"], dockerfile="FROM python:3.11\nRUN echo hi\n")
     assert rc == 2
+
+
+# --------------------------------------------------------------------------- CI
+# Added 2026-08-05 (improvement-loop cycle-0006) with sha_green wired in. The whole
+# value of the asymmetry is that RED and UNKNOWN behave DIFFERENTLY, so both poles
+# are asserted on the same function; each of these has been seen to fail against the
+# obvious wrong implementation (`if ci["rc"]: restage`), which reds the pipe on every
+# instrument outage.
+
+
+def test_ci_red_turns_an_image_inert_delta_into_restage():
+    """The motivating case: nothing in the delta reaches the image, so the old code
+    said SAFE -- about a commit that failed CI."""
+    verdict, forced = fire_gate.apply_ci("SAFE", {"verdict": "RED", "rc": 1})
+    assert verdict == "RESTAGE"
+    assert forced is True
+
+
+def test_ci_unknown_never_changes_the_verdict():
+    """R6/R7. This is the assertion that stops the wiring becoming a gate that can
+    stall the pipe whenever GitHub hiccups."""
+    for ci in ({"verdict": "UNKNOWN", "rc": 2}, {"verdict": "UNKNOWN", "rc": None},
+               {"verdict": "SKIPPED", "rc": None}, {}):
+        verdict, forced = fire_gate.apply_ci("SAFE", ci)
+        assert verdict == "SAFE", ci
+        assert forced is False, ci
+
+
+def test_ci_green_leaves_a_safe_delta_safe():
+    verdict, forced = fire_gate.apply_ci("SAFE", {"verdict": "GREEN", "rc": 0})
+    assert verdict == "SAFE"
+    assert forced is False
+
+
+def test_ci_never_rescues_a_restage():
+    """A green CI verdict must not launder a delta that touches the image surface --
+    the two questions are independent and only one of them is about bytes."""
+    for ci in ({"verdict": "GREEN", "rc": 0}, {"verdict": "RED", "rc": 1},
+               {"verdict": "UNKNOWN", "rc": 2}):
+        verdict, forced = fire_gate.apply_ci("RESTAGE", ci)
+        assert verdict == "RESTAGE", ci
+        assert forced is False, ci
+
+
+def test_target_ci_reports_unknown_when_sha_green_cannot_be_consulted(monkeypatch):
+    """An import error, a missing gh, an API outage -- all must arrive as UNKNOWN
+    with a stated reason, never as a crash and never as a verdict."""
+    import builtins
+    real_import = builtins.__import__
+
+    def boom(name, *args, **kw):
+        if name == "sha_green":
+            raise ImportError("simulated: sha_green unavailable")
+        return real_import(name, *args, **kw)
+
+    monkeypatch.setattr(builtins, "__import__", boom)
+    ci = fire_gate.target_ci("o/r", "0" * 40)
+    assert ci["verdict"] == "UNKNOWN"
+    assert ci["rc"] == 2
+    assert ci["source"] == "unavailable"
+    assert "sha_green" in ci["detail"]
+    # ...and an UNKNOWN from an unavailable instrument must still not block.
+    assert fire_gate.apply_ci("SAFE", ci) == ("SAFE", False)

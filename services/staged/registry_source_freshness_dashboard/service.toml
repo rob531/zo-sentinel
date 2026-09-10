@@ -1,0 +1,8 @@
+[service]
+name = "registry_source_freshness_dashboard"
+import_path = "services.active.registry_source_freshness_dashboard.router"
+prefix = "/api"
+tag = "registry_source_freshness_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

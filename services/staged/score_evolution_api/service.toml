@@ -1,0 +1,9 @@
+# service.toml
+[service]
+name = "score_evolution_api"
+import_path = "services.active.score_evolution_api.router"
+prefix = "/api"
+tag = "score_evolution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

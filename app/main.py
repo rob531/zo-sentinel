@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth
+from . import auth, clerk_webhook
 from .db import init_db
 from .rbac import require_role
 from .security import Principal, get_principal
@@ -57,13 +57,23 @@ def admin_ping(principal: Principal = Depends(require_role("admin"))):
 
 
 app.include_router(auth.router)
+app.include_router(clerk_webhook.router)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
 import os as _os
+
+from app.build_badge import inject as _inject_build_badge
+
+
 def _render(name: str) -> str:
     html = (_STATIC / name).read_text(encoding="utf-8")
-    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    # Stamp the build that served this page (app/build_badge.py). Injected here
+    # rather than written into each static file: the version must come from the
+    # IMAGE, and a literal in a checked-in .html is a number someone has to
+    # remember to bump -- which is the failure mode, not the fix.
+    return _inject_build_badge(html)
 
 
 
@@ -75,7 +85,10 @@ def consent_gate():
 
 @app.get("/disclaimer", response_class=HTMLResponse)
 def disclaimer_page():
-    return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
+    # Bypasses _render (no Clerk key needed) -- but it is still a page someone
+    # screenshots, so it is still stamped. Every HTML route or none.
+    return _inject_build_badge(
+        (_STATIC / "consent_gate.html").read_text(encoding="utf-8"))
 
 # --- SOA spine (FU-039/072; CofC 2026-07-23) --------------------------------
 # Mounts are GENERATED at build time from services/active/ into
@@ -110,7 +123,8 @@ def _render_root(name: str) -> str:
     """Serve a repo-root view file (the factory/spec-canonical filenames) with
     the same Clerk-PK injection app/static pages get."""
     html = (_REPO_ROOT / name).read_text(encoding="utf-8")
-    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    return _inject_build_badge(html)
 
 
 @app.get("/perspectives", response_class=HTMLResponse)
@@ -149,6 +163,12 @@ def roadmap_page():
     """FATHER launch condition: the public roadmap, so v1 reads as a
     foundation, not 'just a lookup'."""
     return _render_root("roadmap_announcement.html")
+
+
+@app.get("/dashboard/exemptions", response_class=HTMLResponse)
+def exemptions_dashboard_page():
+    """Exemptions dashboard: manage and view MCP server risk-score exemptions."""
+    return _render_root("mcp_exemptions_dashboard_view.html")
 
 
 @app.get("/explore")
@@ -216,3 +236,25 @@ async def _vanity_redirect(request, call_next):
             target += "?" + request.url.query
         return RedirectResponse(target, status_code=301)
     return await call_next(request)
+
+
+# --- Self-test ---------------------------------------------------------------
+if __name__ == "__main__":
+    from fastapi.testclient import TestClient
+    from unittest.mock import patch
+
+    # Mock auth so the dashboard route is accessible without a real session
+    with patch("app.security.get_principal") as mock_principal:
+        mock_principal.return_value = Principal(
+            user_id="test-user",
+            org_id="test-org",
+            role="admin",
+            email="test@example.com",
+        )
+        client = TestClient(app)
+        resp = client.get("/dashboard/exemptions")
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        assert "MCP Exemptions Dashboard" in resp.text, (
+            "Expected dashboard title not found in response"
+        )
+        print("PASS")

@@ -1,0 +1,18 @@
+[service]
+name = "org_risk_tier_compare"
+import_path = "services.active.org_risk_tier_compare.router"
+prefix = "/api"
+tag = "org_risk_tier_compare"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[python]
+version = "3.11"
+
+[dependencies]
+fastapi = ">=0.100.0"
+uvicorn = ">=0.23.0"
+sqlalchemy = ">=2.0.0"
+httpx = ">=0.24.0"
+pydantic = ">=2.0.0"

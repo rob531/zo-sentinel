@@ -1,0 +1,8 @@
+[service]
+name = "score_run_ledger_writer"
+import_path = "services.active.score_run_ledger_writer.router"
+prefix = "/api"
+tag = "score_run_ledger_writer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,4 +1,4 @@
-service_toml = """
+[service]
 name = "scoring_gap_api"
 import_path = "services.active.scoring_gap_api.router"
 prefix = "/api"
@@ -6,7 +6,6 @@ tag = "scoring_gap_api"
 origin = "service"
 auth = "public"
 needs_data_layer = true
-"""
 
-if __name__ == "__main__":
-    print("PASS")
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

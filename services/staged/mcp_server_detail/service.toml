@@ -1,23 +1,11 @@
+[service]
 name = "mcp_server_detail"
 import_path = "services.active.mcp_server_detail.router"
 prefix = "/api"
 tag = "mcp_server_detail"
 origin = "service"
 auth = "public"
-needs_data_layer = True
+needs_data_layer = true
 
-if __name__ == "__main__":
-    required = {
-        "name",
-        "import_path",
-        "prefix",
-        "tag",
-        "origin",
-        "auth",
-        "needs_data_layer",
-    }
-    present = {k for k in globals() if not k.startswith("__")}
-    if required.issubset(present):
-        print("PASS")
-    else:
-        raise SystemExit(1)
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

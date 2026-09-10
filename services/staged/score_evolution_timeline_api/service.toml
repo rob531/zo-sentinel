@@ -7,15 +7,5 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[dependencies]
-# App Postgres tables accessed via SQLAlchemy session
-app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
-
-# Bus/pipeline tables accessed via write_service
-bus_tables = ["mcp_signal_scores", "mcp_llm_axis_scores", "mesh_memory"]
-
-[endpoints]
-GET /timeline/{server_id} = "get_score_evolution_timeline"
-GET /timeline/{server_id}/axis/{axis} = "get_axis_evolution"
-GET /timeline/{server_id}/disputes = "get_dispute_history"
-GET /servers = "list_tracked_servers"
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

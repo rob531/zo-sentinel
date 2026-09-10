@@ -1,9 +1,11 @@
-[TOOL_CALL]
-{ "tool": "read_file", "path": "docs/SCHEMA_TRUTH.md" }
-[/TOOL_CALL]
-[TOOL_CALL]
-{ "tool": "read_file", "path": "schema/bus_catalog.json" }
-[/TOOL_CALL]
-[TOOL_CALL]
-{ "tool": "read_file", "path": "services/active/score_staleness_summarizer/router.py" }
-[/TOOL_CALL]
+[service]
+name = "score_staleness_summarizer"
+import_path = "services.active.score_staleness_summarizer.router"
+prefix = "/api"
+tag = "score_staleness_summarizer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

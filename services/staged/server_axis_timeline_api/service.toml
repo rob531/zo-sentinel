@@ -7,15 +7,5 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[description]
-summary = "Timeline API for server axis scores and disputes"
-models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "User"]
-
-[data_access]
-app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
-mesh_tables = ["mcp_signal_scores", "mesh_memory"]
-
-[dependencies]
-requires_auth = false
-rate_limit = null
-cache_ttl = 300
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

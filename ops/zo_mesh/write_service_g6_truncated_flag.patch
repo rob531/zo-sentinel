@@ -1,0 +1,40 @@
+--- a/write_service.py
++++ b/write_service.py
+@@ -615,15 +615,34 @@
+             return self._query_via_writer_locked(sql, params, limit)
+ 
+     def _query_via_writer_locked(self, sql: str, params: list, limit: int) -> dict:
++        # MERGE_AUDIT_2026-08-23 G6. This appends a LIMIT the caller never wrote
++        # and then reports `count` as the number of rows RETURNED, not the number
++        # that matched -- so a truncated answer is indistinguishable from a
++        # complete one. A schema enumeration against information_schema.columns
++        # returned 200 rows / 25 tables when the truth was 355 columns / 44
++        # tables, and nothing in the response said so.
++        #
++        # `truncated` is True only when the cap this service INJECTED actually
++        # filled up. A caller's own LIMIT is that caller's choice, not a silent
++        # truncation; and an injected cap that came back short truncated nothing.
+         safe = sql.rstrip(";")
+-        if "limit" not in safe.lower() and limit:
++        capped = "limit" not in safe.lower() and bool(limit)
++        if capped:
+             safe += f" LIMIT {limit}"
+         rows = self._con.execute(safe, params).fetchall()
+         desc = self._con.description
+         if not desc:
+-            return {"rows": [], "count": 0}
++            return {"rows": [], "count": 0, "truncated": False}
+         cols = [d[0] for d in desc]
+-        return {"rows": [dict(zip(cols, r)) for r in rows], "count": len(rows)}
++        truncated = bool(capped and len(rows) >= limit)
++        out = {"rows": [dict(zip(cols, r)) for r in rows],
++               "count": len(rows),
++               "truncated": truncated}
++        if truncated:
++            out["limit"] = limit
++            out["hint"] = ("result truncated at the server-injected LIMIT %d; "
++                           "re-query with an explicit LIMIT/OFFSET to page" % limit)
++        return out
+ 
+     def stats_from_db(self) -> dict:
+         with self._con_lock:

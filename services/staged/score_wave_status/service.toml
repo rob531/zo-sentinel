@@ -1,0 +1,11 @@
+[service]
+name = "score_wave_status"
+import_path = "services.active.score_wave_status.router"
+prefix = "/api"
+tag = "score_wave_status"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

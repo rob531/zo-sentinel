@@ -1,0 +1,41 @@
+[service]
+name = "axis_breakdown_api"
+import_path = "services.active.axis_breakdown_api.router"
+prefix = "/api"
+tag = "axis_breakdown_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+file = "router.py"
+
+[database]
+app_db = true
+mesh_query_endpoint = "http://127.0.0.1:8772/query"
+
+[tables]
+app_tables = [
+    "McpLlmAxisScore",
+    "McpScoreDispute",
+    "McpServerRegistry"
+]
+mesh_tables = [
+    "mcp_signal_scores",
+    "mcp_signal_enrichments"
+]
+
+[api]
+endpoints = [
+    "GET /breakdown",
+    "GET /breakdown/{score_id}",
+    "GET /axis/{axis_name}",
+    "GET /compare/{server_id}",
+    "POST /breakdown/refresh"
+]
+
+[test]
+self_test = true
+
+[service.main]
+app_instance = "app.main:app"

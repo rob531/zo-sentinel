@@ -1,0 +1,23 @@
+[service]
+name = "registry_scoring_summary"
+import_path = "services.active.registry_scoring_summary.router"
+prefix = "/api"
+tag = "registry_scoring_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[routing]
+get_summary = "/registry-scoring-summary"
+get_summary_by_org = "/registry-scoring-summary/org/{org_id}"
+
+[data_sources]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[dependencies]
+app_db = "required"
+write_service = "required"
+
+[acceptance]
+self_test = "PASS"

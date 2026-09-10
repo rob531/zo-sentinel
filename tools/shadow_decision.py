@@ -137,6 +137,35 @@ import json
 import os
 import sys
 
+
+def _commit_replace(tmp, dest):
+    """Commit `tmp` onto `dest` through FU-212's proven fallback.
+
+    WHY (measured 2026-09-01, prod-drift-sentinel 04:47Z). `os.replace` is
+    MoveFileEx(REPLACE_EXISTING) and Windows refuses it with WinError 5 when the
+    DESTINATION carries a mapped section -- while `open(dest,"r+b")` and a plain
+    `os.rename(dest, other)` both still succeed. FU-212 measured this on
+    FOLLOWUPS.md in July and wired the rename-swap cure into
+    ``tools/fu/fu_lock.py``. It was wired into exactly ONE call site. This writer
+    was not one of them, so the mandated run receipt (FU-164) failed 12/12
+    attempts over ~40s and step 0 of the lane could not complete.
+
+    A cure wired into one door of many reads as a cure (FU-343). This is another
+    door, not another cure -- the algorithm is fu_lock's, unchanged.
+
+    Imported BY FILE PATH with ``sys.modules`` seeded first: this repo has more
+    than one copy of the fu_* modules on disk and plain ``import`` picks by
+    sys.path order rather than by the tree you are running from.
+    """
+    import importlib.util
+    import sys as _sys
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fu", "fu_lock.py")
+    spec = importlib.util.spec_from_file_location("_zo_fu_lock_for_commit", p)
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules["_zo_fu_lock_for_commit"] = mod   # before exec_module, or dataclasses dies
+    spec.loader.exec_module(mod)
+    return mod.replace_with_fallback(str(tmp), str(dest))
+
 STORE = os.environ.get(
     "SHADOW_STORE",
     r"D:\zo\Zocomputer Agents\shadow_decisions.jsonl",
@@ -272,7 +301,7 @@ def _rewrite(recs: list) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         for r in recs:
             fh.write(json.dumps(r, sort_keys=True) + "\n")
-    os.replace(tmp, STORE)
+    _commit_replace(tmp, STORE)
 
 
 def _counted(rec) -> bool:
@@ -388,6 +417,36 @@ def record(a) -> int:
     return 0
 
 
+def _delegated_self_fire_active():
+    """Is a DELEGATED prod fire currently possible for this lane?
+
+    Both conjuncts come from the ENFORCED sources -- authority.json parsed, and
+    authority.py run as a SUBPROCESS (never imported: an import has side
+    effects, FU-268).  Returns (active, basis).  On any read failure it returns
+    False: unknown is not a breach (R6).
+    """
+    import subprocess as _sp, json as _json, sys as _sys, os as _os
+    base = r"D:\zo\Zocomputer Agents"
+    try:
+        with open(_os.path.join(base, "authority.json"), encoding="utf-8") as fh:
+            aj = _json.load(fh)
+        granted = bool(((aj.get("delegated") or {})
+                        .get("prod_deploy_fire") or {}).get("granted"))
+    except Exception as e:
+        return (False, "authority.json unreadable (%s) -- NOT treated as active (R6)"
+                       % type(e).__name__)
+    try:
+        r = _sp.run([_sys.executable, _os.path.join(base, "_tools", "authority.py"),
+                     "--away"], capture_output=True, text=True, timeout=60)
+        away = "AWAY WINDOW ACTIVE" in (r.stdout or "")
+    except Exception as e:
+        return (False, "authority.py --away unrunnable (%s) -- NOT treated as active (R6)"
+                       % type(e).__name__)
+    return (bool(granted and away),
+            "authority.json delegated.prod_deploy_fire.granted=%s; "
+            "authority.py --away ACTIVE=%s" % (granted, away))
+
+
 def reconcile(a) -> int:
     given = [v for v in (a.fired_sha, a.held_sha,
                          getattr(a, "superseded_sha", None)) if v]
@@ -412,6 +471,40 @@ def reconcile(a) -> int:
               "(e.g. fire_gate RESTAGE), use --superseded-sha instead (FU-180).",
               file=sys.stderr)
         return 2
+    # ------------------------------------------------------------------
+    # A DELEGATED SELF-FIRE HAS NO HONEST VERB.  Peer decision
+    # `reconcile-must-refuse-delegated-self-fire`, CLEARED 2026-08-08T11:08:10Z
+    # by discovery-harvest-daily with a discriminating positive control, and
+    # ACTED 2026-08-09 -- fourteen hours in which a cleared decision nobody
+    # executed was, in effect, a decision never made.
+    #
+    # `--fired-sha` sets human_fired=True.  While the chairman is away and
+    # prod_deploy_fire is DELEGATED, the firer is this lane, so counting it as
+    # an agreement grades the decider against its own action -- FATHER's
+    # anti-self-adjudication clause (2026-07-29).  Measured twice:
+    # 2026-08-07T10:52:42Z (3c9efd49, reverted by hand in-run) and
+    # 2026-08-09T01:02Z (f25ee197, consecutive_agreements 4 -> 5).
+    #
+    # The pull toward the wrong verb is strongest when it is dressed as a
+    # repair.  A missing verb is not a neutral gap: one of the available verbs
+    # gets stretched, and a stretched grade is downstream indistinguishable
+    # from a measured one.  The decision stays PENDING, which is excluded from
+    # every count and is the honest reading.
+    #
+    # `--fired-by human` is the escape hatch for a genuinely ATTENDED fire.
+    if human_fired and getattr(a, "fired_by", None) != "human":
+        _active, _basis = _delegated_self_fire_active()
+        if _active:
+            print("REFUSED: --fired-sha records human_fired=True, but a "
+                  "DELEGATED self-fire is currently possible, so this lane may "
+                  "be grading its own action (FATHER 2026-07-29).\n"
+                  "  basis: %s\n"
+                  "  Leave the decision PENDING -- pending is excluded from "
+                  "every count, and that is the honest reading. If a HUMAN "
+                  "actually fired, re-run with --fired-by human." % _basis,
+                  file=sys.stderr)
+            return 2
+
     recs = _load()
     target = None
     for r in recs:
@@ -629,6 +722,10 @@ def main() -> int:
     ap.add_argument("--acted", default="no")
     ap.add_argument("--fired-sha")
     ap.add_argument("--held-sha")
+    ap.add_argument("--fired-by", dest="fired_by", choices=["human"],
+                    help="Assert the fire was ATTENDED. Required with --fired-sha "
+                         "whenever a DELEGATED self-fire is possible, so the lane "
+                         "cannot grade its own action (FATHER 2026-07-29).")
     ap.add_argument("--superseded-sha", dest="superseded_sha",
                     help="candidate abandoned without ever being judged (FU-180)")
     ap.add_argument("--superseded-by", dest="superseded_by",

@@ -1,0 +1,8 @@
+[service]
+name = "admin_submissions"
+import_path = "services.active.admin_submissions.router"
+prefix = "/api"
+tag = "admin_submissions"
+origin = "service"
+auth = "public"
+needs_data_layer = true

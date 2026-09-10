@@ -1,0 +1,8 @@
+[service]
+name = "scoring_backlog_api"
+import_path = "services.active.scoring_backlog_api.router"
+prefix = "/api"
+tag = "scoring_backlog_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

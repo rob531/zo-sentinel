@@ -1,12 +1,11 @@
-# service.toml
-
+[service]
 name = "circuit_breaker_state_api"
 import_path = "services.active.circuit_breaker_state_api.router"
 prefix = "/api"
 tag = "circuit_breaker_state_api"
 origin = "service"
 auth = "public"
-needs_data_layer = True
+needs_data_layer = true
 
-if __name__ == "__main__":
-    print("PASS")
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

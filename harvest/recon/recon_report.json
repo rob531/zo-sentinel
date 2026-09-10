@@ -1,0 +1,357 @@
+{
+  "generated_at": "2026-09-10T20:50:08.446276Z",
+  "seed": 20260910,
+  "phase0_search_response": {
+    "has_id": true,
+    "has_node_id": true,
+    "sample_id": 952238700,
+    "sample_node_id": "R_kgDOOMICbA",
+    "sample_full_name": "awslabs/mcp",
+    "all_keys": [
+      "allow_forking",
+      "archive_url",
+      "archived",
+      "assignees_url",
+      "blobs_url",
+      "branches_url",
+      "clone_url",
+      "collaborators_url",
+      "comments_url",
+      "commits_url",
+      "compare_url",
+      "contents_url",
+      "contributors_url",
+      "created_at",
+      "default_branch",
+      "deployments_url",
+      "description",
+      "disabled",
+      "downloads_url",
+      "events_url",
+      "fork",
+      "forks",
+      "forks_count",
+      "forks_url",
+      "full_name",
+      "git_commits_url",
+      "git_refs_url",
+      "git_tags_url",
+      "git_url",
+      "has_discussions",
+      "has_downloads",
+      "has_issues",
+      "has_pages",
+      "has_projects",
+      "has_pull_requests",
+      "has_wiki",
+      "homepage",
+      "hooks_url",
+      "html_url",
+      "id",
+      "is_template",
+      "issue_comment_url",
+      "issue_events_url",
+      "issues_url",
+      "keys_url",
+      "labels_url",
+      "language",
+      "languages_url",
+      "license",
+      "merges_url",
+      "milestones_url",
+      "mirror_url",
+      "name",
+      "node_id",
+      "notifications_url",
+      "open_issues",
+      "open_issues_count",
+      "owner",
+      "permissions",
+      "private",
+      "pull_request_creation_policy",
+      "pulls_url",
+      "pushed_at",
+      "releases_url",
+      "score",
+      "size",
+      "ssh_url",
+      "stargazers_count",
+      "stargazers_url",
+      "statuses_url",
+      "subscribers_url",
+      "subscription_url",
+      "svn_url",
+      "tags_url",
+      "teams_url",
+      "topics",
+      "trees_url",
+      "updated_at",
+      "url",
+      "visibility",
+      "watchers",
+      "watchers_count",
+      "web_commit_signoff_required"
+    ]
+  },
+  "phase1_offline": {
+    "files_scanned": 38,
+    "github_rows": 408410,
+    "distinct_full_name": 354306,
+    "distinct_html_url": 354306,
+    "missing_created_at_or_owner": 0,
+    "owner_created_groups": 354082,
+    "rename_candidate_groups": 565,
+    "rename_candidate_examples": [
+      {
+        "owner": "adityathakur0209",
+        "created_at": "2026-07-23T11:15:20Z",
+        "names": [
+          "adityathakur0209/Backstory-MCP",
+          "adityathakur0209/agent-handoff-mcp"
+        ]
+      },
+      {
+        "owner": "jorgemrht",
+        "created_at": "2026-07-23T18:13:48Z",
+        "names": [
+          "jorgemrht/fuel-finder-mcp",
+          "jorgemrht/reposta-mcp"
+        ]
+      },
+      {
+        "owner": "altetsa",
+        "created_at": "2026-07-23T17:50:10Z",
+        "names": [
+          "altetsa/Gelato-mcp-server",
+          "altetsa/gelato-mcp-server"
+        ]
+      },
+      {
+        "owner": "shreyshah173",
+        "created_at": "2026-07-23T14:22:03Z",
+        "names": [
+          "shreyshah173/Basic-Leave-Management-MCP",
+          "shreyshah173/HR-Management-MCP"
+        ]
+      },
+      {
+        "owner": "saatvik-10",
+        "created_at": "2026-07-22T08:53:08Z",
+        "names": [
+          "saatvik-10/github-mcp-server",
+          "saatvik-10/mcp-server"
+        ]
+      },
+      {
+        "owner": "Sher9",
+        "created_at": "2026-07-22T07:40:38Z",
+        "names": [
+          "Sher9/DataQuery-MCP",
+          "Sher9/DataQuery-MCP-Server"
+        ]
+      },
+      {
+        "owner": "T-parrish",
+        "created_at": "2026-07-21T21:27:27Z",
+        "names": [
+          "T-parrish/bandcamp_mcp_server",
+          "T-parrish/mcp_servers"
+        ]
+      },
+      {
+        "owner": "xsip",
+        "created_at": "2026-07-20T20:02:54Z",
+        "names": [
+          "xsip/mcp-bridge",
+          "xsip/mcp-loop"
+        ]
+      },
+      {
+        "owner": "Mirza-Afroz-Baig",
+        "created_at": "2026-07-20T17:44:44Z",
+        "names": [
+          "Mirza-Afroz-Baig/expense-remote-mcp-server",
+          "Mirza-Afroz-Baig/test-remote-mcp-server-"
+        ]
+      },
+      {
+        "owner": "prelearn-code",
+        "created_at": "2026-07-16T09:57:18Z",
+        "names": [
+          "prelearn-code/deepseek-mcp",
+          "prelearn-code/timicc-mcp"
+        ]
+      },
+      {
+        "owner": "feelgom",
+        "created_at": "2026-07-14T10:18:43Z",
+        "names": [
+          "feelgom/ask-my-data-mcp",
+          "feelgom/career-mcp"
+        ]
+      },
+      {
+        "owner": "dcc-mcp",
+        "created_at": "2026-07-11T11:16:20Z",
+        "names": [
+          "dcc-mcp/dcc-ai-openai-image",
+          "dcc-mcp/dcc-materialx",
+          "dcc-mcp/dcc-texture-pipeline"
+        ]
+      },
+      {
+        "owner": "id5463",
+        "created_at": "2026-07-10T01:56:06Z",
+        "names": [
+          "id5463/mcp-server-academic-search",
+          "id5463/mcp-server-ark",
+          "id5463/mcp-server-clash"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-06T10:24:57Z",
+        "names": [
+          "309441738/ola-cp-recommendations-mcp-glama",
+          "309441738/ola-cp-recommendations-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-06T10:23:40Z",
+        "names": [
+          "309441738/ola-cruise-beach-mcp-glama",
+          "309441738/ola-cruise-beach-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-06T10:24:48Z",
+        "names": [
+          "309441738/ola-cp-comparison-mcp-glama",
+          "309441738/ola-cp-comparison-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-06T10:24:38Z",
+        "names": [
+          "309441738/ola-cruise-excursion-mcp-glama",
+          "309441738/ola-cruise-excursion-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-01T06:36:33Z",
+        "names": [
+          "309441738/ola-mcp-related-tours-mcp-glama",
+          "309441738/ola-mcp-related-tours-mcp-registry"
+        ]
+      },
+      {
+        "owner": "aithink001",
+        "created_at": "2026-07-01T13:40:10Z",
+        "names": [
+          "aithink001/lemgen-ai-design-mcp",
+          "aithink001/lemgen-trending-prompts"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-01T06:36:34Z",
+        "names": [
+          "309441738/ola-mcp-related-tours",
+          "309441738/ola-mcp-related-tours-claude-plugin",
+          "309441738/ola-mcp-related-tours-cursor-skill",
+          "309441738/ola-mcp-related-tours-zapier"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-01T06:35:10Z",
+        "names": [
+          "309441738/ola-cruise-multi-destination-mcp-glama",
+          "309441738/ola-cruise-multi-destination-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-07-01T06:33:47Z",
+        "names": [
+          "309441738/ola-cruise-luxury-experiences-mcp-glama",
+          "309441738/ola-cruise-luxury-experiences-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-06-30T09:56:43Z",
+        "names": [
+          "309441738/craftwave-skill-9-mcp-glama",
+          "309441738/craftwave-skill-9-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-06-30T09:35:54Z",
+        "names": [
+          "309441738/craftwave-skill-7-mcp-glama",
+          "309441738/craftwave-skill-7-mcp-registry"
+        ]
+      },
+      {
+        "owner": "309441738",
+        "created_at": "2026-06-30T09:35:19Z",
+        "names": [
+          "309441738/craftwave-skill-6-mcp-glama",
+          "309441738/craftwave-skill-6-mcp-registry"
+        ]
+      }
+    ],
+    "html_url_collisions": 0,
+    "html_url_collision_examples": []
+  },
+  "phase2_api": {
+    "n": 400,
+    "counts": {
+      "alive_same_name": 391,
+      "renamed": 3,
+      "gone_404": 5,
+      "other": 1,
+      "error": 0
+    },
+    "rename_rate": 0.0075,
+    "gone_rate": 0.0125,
+    "renames": [
+      {
+        "harvested_as": "SavageCore/autobrr-mcp",
+        "now": "arr-mcps/autobrr-mcp",
+        "id": 1332615861,
+        "node_id": "R_kgDOT24atQ"
+      },
+      {
+        "harvested_as": "modu-ai/cowork-plugins",
+        "now": "modu-ai/moai-cowork",
+        "id": 1158424301,
+        "node_id": "R_kgDORQwm7Q"
+      },
+      {
+        "harvested_as": "rocky3419/mcp-dev-utils",
+        "now": "sivasankarsaiirlapati/mcp-dev-utils",
+        "id": 1115847234,
+        "node_id": "R_kgDOQoJ6Qg"
+      }
+    ],
+    "gone_examples": [
+      "Timwal78/scriptdocs-mcp-server",
+      "OpenSource-Technologies/blvd-mcp-frontend",
+      "amp-rh/mcp-builder",
+      "Melchizedek6809/mcprs",
+      "GRU-953/markitdown-mcp"
+    ],
+    "negative_control": {
+      "404": 20,
+      "not404": 0
+    },
+    "negative_control_pass": true
+  }
+}

@@ -1,0 +1,21 @@
+[service]
+name = "threat_intel_summary_api"
+import_path = "services.active.threat_intel_summary_api.router"
+prefix = "/api"
+tag = "threat_intel_summary_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[description]
+summary = "Aggregated threat intelligence summary from articles and signals"
+endpoints = ["/summary", "/articles", "/trends"]
+
+[data_sources]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+bus_tables = ["mcp_signal_scores", "mesh_memory", "threat_intel_articles", "world_articles", "world_topics", "mcp_signal_enrichments"]
+
+[dependencies]
+requires_auth = false
+rate_limit_rpm = 120
+cache_ttl_seconds = 300

@@ -1,0 +1,17 @@
+[service]
+name = "risk_tier_changes_dashboard_view"
+import_path = "services.active.risk_tier_changes_dashboard_view.router"
+prefix = "/api"
+tag = "risk_tier_changes_dashboard_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+fastapi = ">=0.104.0"
+sqlalchemy = ">=2.0.0"
+httpx = ">=0.25.0"
+pydantic = ">=2.5.0"
+
+[python]
+version = "3.11"

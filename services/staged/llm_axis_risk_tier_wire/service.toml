@@ -1,0 +1,8 @@
+[service]
+name = "llm_axis_risk_tier_wire"
+import_path = "services.active.llm_axis_risk_tier_wire.router"
+prefix = "/api"
+tag = "llm_axis_risk_tier_wire"
+origin = "service"
+auth = "public"
+needs_data_layer = true

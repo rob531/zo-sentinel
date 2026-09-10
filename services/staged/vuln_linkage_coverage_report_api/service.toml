@@ -1,3 +1,11 @@
-Looking at the task, I need to create a service that reads from both app tables (via SQLAlchemy) and the bus catalog tables (via HTTP to 127.0.0.1:8772).
+[service]
+name = "vuln_linkage_coverage_report_api"
+import_path = "services.active.vuln_linkage_coverage_report_api.router"
+prefix = "/api"
+tag = "vuln_linkage_coverage_report_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
 
-Let me first check the SCHEMA_TRUTH.md to understand the available models and then create the complete service.
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

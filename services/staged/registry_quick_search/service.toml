@@ -1,1 +1,11 @@
-Now I'll create the router module that this service.toml references:
+[service]
+name = "registry_quick_search"
+import_path = "services.active.registry_quick_search.router"
+prefix = "/api"
+tag = "registry_quick_search"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

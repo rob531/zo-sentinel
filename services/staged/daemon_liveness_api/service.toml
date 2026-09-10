@@ -1,3 +1,11 @@
----
+[service]
+name = "daemon_liveness_api"
+import_path = "services.active.daemon_liveness_api.router"
+prefix = "/api"
+tag = "daemon_liveness_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
 
-**services/active/daemon_liveness_api/__init__.py**
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

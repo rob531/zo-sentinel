@@ -7,16 +7,5 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[routes]
-GET /servers/{server_id}/axis-details = "get_server_axis_details"
-GET /servers/{server_id}/axis-details/{axis} = "get_server_axis_detail"
-GET /servers/{server_id}/signal-summary = "get_signal_summary"
-
-[models]
-McpServerRegistry = "McpServerRegistry"
-McpLlmAxisScore = "McpLlmAxisScore"
-mcp_signal_scores = "McpSignalScore"
-
-[pipeline]
-endpoint = "http://127.0.0.1:8772/query"
-tables = ["mcp_signal_scores", "mesh_memory"]
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

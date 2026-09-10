@@ -1,1 +1,11 @@
-Wait, this appears to be a configuration file, not a Python module. Let me create the actual Python router module for this service:
+[service]
+name = "risk_tier_forecast_api"
+import_path = "services.active.risk_tier_forecast_api.router"
+prefix = "/api"
+tag = "risk_tier_forecast_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

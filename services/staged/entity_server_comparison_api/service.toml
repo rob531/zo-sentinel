@@ -1,0 +1,8 @@
+[service]
+name = "entity_server_comparison_api"
+import_path = "services.active.entity_server_comparison_api.router"
+prefix = "/api"
+tag = "entity_server_comparison_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

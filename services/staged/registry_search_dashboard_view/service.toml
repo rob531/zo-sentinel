@@ -1,0 +1,20 @@
+[service]
+name = "registry_search_dashboard_view"
+import_path = "services.active.registry_search_dashboard_view.router"
+prefix = "/api"
+tag = "registry_search_dashboard_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = "app"
+
+[python]
+path = "services/active/registry_search_dashboard_view"
+
+[files]
+router = "services/active/registry_search_dashboard_view/router.py"
+
+[test]
+command = "python -m services.active.registry_search_dashboard_view"

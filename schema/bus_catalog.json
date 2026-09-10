@@ -1,10 +1,10 @@
 {
-  "captured_at": "2026-08-26T19:20:13.563425+00:00",
-  "column_count": 361,
+  "captured_at": "2026-09-03T17:14:51.741650+00:00",
+  "column_count": 373,
   "columns_with_unlisted_table": 0,
   "schema_version": 1,
   "source": "write_service:information_schema",
-  "table_count": 45,
+  "table_count": 46,
   "tables": {
     "agent_outputs": {
       "agent_id": "VARCHAR",
@@ -239,6 +239,20 @@
       "id": "BIGINT",
       "server_id": "VARCHAR",
       "snapshot_hash": "VARCHAR"
+    },
+    "mcp_ecosystems_metadata": {
+      "cache_age_h": "DOUBLE",
+      "dominant_ecosystem": "VARCHAR",
+      "downloads": "BIGINT",
+      "ecosystems": "VARCHAR",
+      "fetched_at": "VARCHAR",
+      "github_repo": "VARCHAR",
+      "latest_release_age_days": "INTEGER",
+      "latest_version": "VARCHAR",
+      "npm_name": "VARCHAR",
+      "package_count": "INTEGER",
+      "pypi_name": "VARCHAR",
+      "server_id": "VARCHAR"
     },
     "mcp_exemptions": {
       "active": "BOOLEAN",

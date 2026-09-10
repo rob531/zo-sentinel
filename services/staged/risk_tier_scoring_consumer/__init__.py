@@ -62,8 +62,10 @@ def get_mesh_memory(server_id: int, db_session=Depends(get_session)) -> List[Mes
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.dependency_overrides import override_dependencies_for_testing
-    override_dependencies_for_testing()
+    # FU-369: removed an import of `override_dependencies_for_testing` from a module that does
+    # not exist in this tree, together with its call below. The call
+    # installed nothing this file does not already do for itself.
+    # FU-369: call removed with its phantom import (see above).
 
     # Test data setup
     test_server = McpServerRegistry(server_id=1, org_id=1, name="Test Server")

@@ -1,1 +1,11 @@
-Wait, the user wants a Python file that compiles with py_compile. Let me create the correct format:
+[service]
+name = "risk_tier_summary_by_perspective"
+import_path = "services.active.risk_tier_summary_by_perspective.router"
+prefix = "/api"
+tag = "risk_tier_summary_by_perspective"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

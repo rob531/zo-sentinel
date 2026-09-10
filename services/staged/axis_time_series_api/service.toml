@@ -1,1 +1,11 @@
-Now I'll create the router.py file:
+[service]
+name = "axis_time_series_api"
+import_path = "services.active.axis_time_series_api.router"
+prefix = "/api"
+tag = "axis_time_series_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

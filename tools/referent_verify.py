@@ -734,6 +734,30 @@ def merged_prs(hours: int) -> list[str]:
 
 
 # -------------------------------------------------------------------- main ---
+def _print_capped(items, cap, indent, render, what):
+    """Print at most `cap` items -- and SAY SO, loudly, when the cap bites.
+
+    R6 (unknown is not zero) applied to DISPLAY. A list silently cut at a cap
+    is byte-indistinguishable from a complete one, so a reader censusing this
+    tool's stdout gets the CAP as the population. Measured 2026-09-10: this
+    printer emitted 25 MISSING COLUMN lines while the summary line one screen
+    above said 146, with nothing between them saying the list had been cut; a
+    lane censused the 25 and published it as the whole backlog. The number and
+    the list disagreed and the artefact did not know it.
+
+    The cure is display-only and idempotent: same items, same order, plus one
+    line naming what was withheld and where to get it.
+    """
+    total = len(items)
+    for it in items[:cap]:
+        print(f"{indent}{render(it)}")
+    if total > cap:
+        print(f"{indent}... and {total - cap} more {what} NOT SHOWN "
+              f"({total} total; display capped at {cap} -- "
+              f"use --json for the full set)")
+    return total
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--enforce", action="store_true",
@@ -766,10 +790,11 @@ def main() -> int:
     report["routes"] = routes
     print(f"\n[1] ROUTE REFERENTS .......... {routes['verdict']}")
     print(f"    {routes['detail']}")
-    for f in routes.get("failures", [])[:10]:
-        print(f"    FAIL mount: {f}")
-    for u in routes.get("unresolved", [])[:10]:
-        print(f"    FAIL unresolved route: {u}")
+    _print_capped(routes.get("failures", []), 10, "    ",
+                  lambda f: f"FAIL mount: {f}", "mount failure(s)")
+    _print_capped(routes.get("unresolved", []), 10, "    ",
+                  lambda u: f"FAIL unresolved route: {u}",
+                  "unresolved route(s)")
     if routes["verdict"] == "FAIL":
         fails.append("routes")
     elif routes["verdict"] == "UNKNOWN":
@@ -870,16 +895,23 @@ def main() -> int:
                   f"resolvable in all of them. Correct for a module's own temp "
                   f"table, weaker than it looks across the tree. Module-scoping "
                   f"it is the next tightening; see #4080.)")
-        for t, sites in list(missing_t.items())[:25]:
+        _mt = list(missing_t.items())
+        for t, sites in _mt[:25]:
             print(f"    MISSING TABLE  {t}")
-            for s in sites[:3]:
-                print(f"        referenced at {s}")
+            _print_capped(sites, 3, "        ",
+                          lambda s: f"referenced at {s}", "ref site(s)")
+        if len(_mt) > 25:
+            print(f"    ... and {len(_mt) - 25} more MISSING TABLE(s) NOT "
+                  f"SHOWN ({len(_mt)} total; display capped at 25 -- "
+                  f"use --json for the full set)")
         report["tables"] = {
             "verdict": "FAIL" if missing_t else "PASS",
             "referenced": len(table_sites),
             "declared_plane": _cat_only,
             "code_created_only": _created_only,
             "missing": {t: s[:5] for t, s in missing_t.items()},
+            "missing_site_cap": 5,
+            "missing_site_counts": {t: len(s) for t, s in missing_t.items()},
         }
         if missing_t:
             fails.append("tables")
@@ -890,14 +922,21 @@ def main() -> int:
               f"{'FAIL' if missing_c else 'PASS'}")
         print(f"    {len(column_sites)} qualified column refs checked, "
               f"{len(missing_c)} MISSING")
-        for c, sites in list(missing_c.items())[:25]:
+        _mc = list(missing_c.items())
+        for c, sites in _mc[:25]:
             print(f"    MISSING COLUMN {c}")
-            for s in sites[:3]:
-                print(f"        referenced at {s}")
+            _print_capped(sites, 3, "        ",
+                          lambda s: f"referenced at {s}", "ref site(s)")
+        if len(_mc) > 25:
+            print(f"    ... and {len(_mc) - 25} more MISSING COLUMN(s) NOT "
+                  f"SHOWN ({len(_mc)} total; display capped at 25 -- "
+                  f"use --json for the full set)")
         report["columns"] = {
             "verdict": "FAIL" if missing_c else "PASS",
             "checked": len(column_sites),
             "missing": {c: s[:5] for c, s in missing_c.items()},
+            "missing_site_cap": 5,
+            "missing_site_counts": {c: len(s) for c, s in missing_c.items()},
         }
         if missing_c:
             fails.append("columns")
@@ -907,8 +946,9 @@ def main() -> int:
           f"{'UNKNOWN' if unparseable else 'PASS'}")
     print(f"    {len(unparseable)} module(s) could not be parsed "
           f"(their referents are unchecked)")
-    for u in unparseable[:10]:
-        print(f"    UNPARSEABLE {u['file']}:{u['line']}")
+    _print_capped(unparseable, 10, "    ",
+                  lambda u: f"UNPARSEABLE {u['file']}:{u['line']}",
+                  "unparseable module(s)")
     if unparseable:
         unknowns.append(f"{len(unparseable)} unparseable module(s)")
 
@@ -916,10 +956,7 @@ def main() -> int:
     prs = merged_prs(args.since_hours)
     report["merged_prs"] = prs
     print(f"\n[5] PRs MERGED IN LAST {args.since_hours}h ... {len(prs)}")
-    for p in prs[:15]:
-        print(f"    {p}")
-    if len(prs) > 15:
-        print(f"    ... and {len(prs) - 15} more")
+    _print_capped(prs, 15, "    ", lambda p: f"{p}", "merged PR(s)")
     print("    (a green verdict above covers these; a red one implicates them)")
 
     # -- verdict --------------------------------------------------------------

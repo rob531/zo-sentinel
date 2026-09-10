@@ -1,0 +1,12 @@
+config = {
+    "name": "mcp_llm_axis_scores_detail_api",
+    "import_path": "services.active.mcp_llm_axis_scores_detail_api.router",
+    "prefix": "/api",
+    "tag": "mcp_llm_axis_scores_detail_api",
+    "origin": "service",
+    "auth": "public",
+    "needs_data_layer": True,
+}
+
+if __name__ == "__main__":
+    print("PASS")

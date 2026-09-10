@@ -1,0 +1,23 @@
+[service]
+name = "mcp_risk_tier_detail_api"
+import_path = "services.active.mcp_risk_tier_detail_api.router"
+prefix = "/api"
+tag = "mcp_risk_tier_detail_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[files]
+service_toml = "service.toml"
+router = "services/active/mcp_risk_tier_detail_api/router.py"
+
+[dependencies]
+internal = ["app", "services.lib"]
+
+[config]
+
+[build]
+
+[test]
+unit = ["tests/unit/test_router.py"]
+integration = []

@@ -1,0 +1,13 @@
+[service]
+name = "wire_main_integration"
+import_path = "services.active.wire_main_integration.router"
+prefix = "/api"
+tag = "wire_main_integration"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = "app.db"
+app_models = "app.models"
+mesh_store = "http://127.0.0.1:8772/query"

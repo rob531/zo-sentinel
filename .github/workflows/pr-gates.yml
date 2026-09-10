@@ -40,6 +40,37 @@ jobs:
       - name: Deterministic capmap pull-check (BLOCKING -- fails on schema drift)
         run: python tools/pull_check.py
 
+      - name: Feature-completeness report (REPORT-ONLY -- renders capmap -> HTML)
+        # pull_check above SCANS the capmap and gates on drift; this RENDERS the same
+        # capmap into the self-contained feature_completeness.html the tool's docstring
+        # promises ("the E2E weekly-runner's output"), so the report has a producer and
+        # a reader (the uploaded artifact) instead of being a capability nothing runs.
+        # REPORT-ONLY by construction: `|| true` means a render hiccup never blocks the
+        # gate -- recovery over restriction, no new required check.
+        #
+        # HARDENED 2026-09-04: the step promised REPORT-ONLY but guarded only its
+        # SECOND command; `run:` executes under `bash -e` and capmap-check is a
+        # BLOCKING job, so a scan_capmap hiccup would have failed the gate on every
+        # PR. Step-level continue-on-error matches the app-graph step below and
+        # makes the promise true for the whole block.
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          python tools/scan_capmap.py artifacts/capmap.json
+          python tools/feature_completeness_report.py artifacts/capmap.json artifacts/feature_completeness.html || true
+
+      - name: Upload feature-completeness report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-completeness
+          path: |
+            artifacts/capmap.json
+            artifacts/feature_completeness.html
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Service-manifest shape gate (BLOCKING -- FU-120)
         # 2026-07-29: pr_triage._manifest_is_valid() parsed manifests correctly but
         # was wired to a CLASSIFIER. Returning False demoted a PR into the ordinary
@@ -289,13 +320,32 @@ jobs:
       - name: Install ruff
         run: python -m pip install --upgrade pip ruff
 
+      - name: Workflow permission keys (BLOCKING -- invalid keys fail runs silently)
+        run: |
+          pip install pyyaml -q
+          python3 tools/check_workflow_permissions.py
+
       - name: Ruff (BLOCKING -- maintained surface)
         # Real-bug rules (F = pyflakes, E9 = syntax/runtime) over the code we
         # maintain. A new undefined name / unused import / broken f-string here
         # fails the PR.
+        #
+        # MERGE_AUDIT_2026-08-23 G2: this covered one tree out of five. The
+        # gated tree (zo_sentinel/) had ZERO unresolved imports while every
+        # finding in that audit sat in an ungated one -- which is the argument
+        # for widening rather than a coincidence. app/ and tools/ are added
+        # here; both were brought to zero F,E9 in the same commit (20 findings,
+        # including a real F821 undefined `Session` in
+        # app/routers/ask_corpus_health_api.py).
+        #
+        # Ratchet, not a sweep: services/** and the ~900 root modules stay in
+        # the report-only pass below until they are clean enough to add. Note
+        # what this does NOT buy -- pyflakes resolves names WITHIN a file, not
+        # module existence across the tree, so it would not have caught L1/L2's
+        # class unless the symbol were also used undefined.
         run: |
           ruff check --select F,E9 --output-format github \
-            zo_sentinel tests/ci tests/gates
+            zo_sentinel tests/ci tests/gates app tools
 
       - name: Ruff (report-only -- whole repo)
         # Visibility into the legacy root debt without blocking. Ratchet target.

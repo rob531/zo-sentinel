@@ -1,1 +1,11 @@
-Now let me create the actual Python module file. First, let me create the directory structure and files:
+[service]
+name = "trust_status_api"
+import_path = "services.active.trust_status_api.router"
+prefix = "/api"
+tag = "trust_status_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -1,1 +1,11 @@
-Now I need to write the router.py file:
+[service]
+name = "score_tier_mapper"
+import_path = "services.active.score_tier_mapper.router"
+prefix = "/api"
+tag = "score_tier_mapper"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

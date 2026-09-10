@@ -7,20 +7,5 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[runtime]
-framework = "fastapi"
-workers = 1
-
-[dependencies]
-internal = ["app.db", "app.models"]
-external = ["write_service"]
-
-[api.routes]
-GET /vuln-linkage/coverage = "get_vuln_linkage_coverage"
-GET /vuln-linkage/servers/{server_id} = "get_server_vuln_coverage"
-GET /vuln-linkage/summary = "get_coverage_summary"
-GET /health = "health_check"
-
-[test]
-self_test_port = 18773
-expected_output = "PASS"
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

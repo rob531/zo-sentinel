@@ -1,14 +1,11 @@
-# service.toml
+[service]
+name = "mcp_llm_axis_scores_detail"
+import_path = "services.active.mcp_llm_axis_scores_detail.router"
+prefix = "/api"
+tag = "mcp_llm_axis_scores_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = true
 
-service = {
-    "name": "mcp_llm_axis_scores_detail",
-    "import_path": "services.active.mcp_llm_axis_scores_detail.router",
-    "prefix": "/api",
-    "tag": "mcp_llm_axis_scores_detail",
-    "origin": "service",
-    "auth": "public",
-    "needs_data_layer": True,
-}
-
-if __name__ == "__main__":
-    print("PASS")
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

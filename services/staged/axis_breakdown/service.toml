@@ -1,0 +1,11 @@
+[service]
+name = "axis_breakdown"
+import_path = "services.active.axis_breakdown.router"
+prefix = "/api"
+tag = "axis_breakdown"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[build]
+target = "pyproject.toml"

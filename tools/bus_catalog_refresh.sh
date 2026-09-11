@@ -114,7 +114,21 @@ fi
 REASON="heartbeat refresh (${AGE_DAYS}d old)"
 [ "$CONTENT_CHANGED" = "1" ] && REASON="bus schema changed"
 
-git checkout -q -b "$BRANCH"
+# IDEMPOTENT BRANCH CREATION -- do not revert this to `-b`.
+#   `git checkout -b` exits 128 when the local branch already exists, and
+#   `set -e` makes that fatal. The branch is created on the first run that
+#   fires, so from the second onward this script died HERE -- three lines above
+#   a comment block that asserts this path is idempotent because the force-push
+#   updates an open PR in place. The comment was idempotent; the command was
+#   not, and neither the push, the PR-open, nor the non-zero-reporting below it
+#   was ever reached. Measured on the host 2026-09-11:
+#       fatal: a branch named 'auto/catalog/bus-catalog-refresh' already exists
+#       [catalog-guard] bus_catalog_refresh.sh exited 128
+#   with the committed snapshot 8d old against a 14d STALE-RED budget.
+#   `-B` resets the branch to the current detached origin/main HEAD, which is
+#   exactly what the `push -f` below already assumes.
+git worktree prune
+git checkout -q -B "$BRANCH"
 git add "$SNAP"
 git -c user.name="substrate-bot" -c user.email="substrate-bot@users.noreply.github.com" \
     commit -q -m "chore(catalog): refresh bus_catalog.json -- ${REASON}

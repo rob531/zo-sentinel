@@ -1,3 +1,4 @@
+[service]
 name = "signal_score_trends"
 import_path = "services.active.signal_score_trends.router"
 prefix = "/api"
@@ -5,3 +6,6 @@ tag = "signal_score_trends"
 origin = "service"
 auth = "public"
 needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

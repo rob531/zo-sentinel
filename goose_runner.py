@@ -2197,6 +2197,13 @@ def run():
                             _complete(directive, directive_id,
                                       "write_raw: content written verbatim",
                                       routed_model="write_raw")
+                            # 2026-09-11 daily-chairman-review: without this the
+                            # engine fallback below (`if not produced:`) runs anyway
+                            # and the model writes its chat over the bytes write_raw
+                            # just wrote. Measured: 326 B verbatim at 21:43:45Z ->
+                            # 187 B of prose at 21:44:19Z -> PR #4958 born RED.
+                            # SUCCESS ONLY: a rejected gate chain still falls through.
+                            produced = True
                         else:
                             _ghost_or_fail(directive, directive_id,
                                            routed_model="write_raw",

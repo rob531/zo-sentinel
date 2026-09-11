@@ -1,0 +1,3 @@
+Wait, that's the input. I need to create the actual Python file at `services/active/ask_corpus_drift/router.py` and the `__main__.py` for self-testing.
+
+Let me write the complete service:

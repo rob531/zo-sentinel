@@ -1,0 +1,175 @@
+[service]
+name = "server_scoring_summary"
+import_path = "services.active.server_scoring_summary.router"
+prefix = "/api"
+tag = "server_scoring_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[implementation.python]
+router = """
+import os
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.db import get_session
+from app.models import McpServerRegistry, McpLlmAxisScore
+
+router = APIRouter()
+
+class ScoreBreakdown(BaseModel):
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+
+class TopServer(BaseModel):
+    server_id: int
+    name: str
+    org_name: Optional[str] = None
+    avg_score: float
+    repo_url: Optional[str] = None
+
+class ScoringSummaryResponse(BaseModel):
+    total_servers: int
+    avg_score: Optional[float]
+    score_breakdown: ScoreBreakdown
+    top_servers: list[TopServer]
+
+    class Config:
+        from_attributes = True
+
+@router.get("/server_scoring_summary", response_model=ScoringSummaryResponse)
+async def get_scoring_summary(session: Session = Depends(get_session)):
+    total_servers = session.query(McpServerRegistry).filter(
+        McpServerRegistry.is_active == True
+    ).count()
+
+    avg_score = session.query(func.avg(McpLlmAxisScore.score)).scalar()
+
+    servers = session.query(McpServerRegistry).filter(
+        McpServerRegistry.is_active == True
+    ).all()
+
+    breakdowns = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    server_scores = {}
+    for server in servers:
+        srv_avg = session.query(func.avg(McpLlmAxisScore.score)).filter(
+            McpLlmAxisScore.server_id == server.id
+        ).scalar()
+        score = srv_avg if srv_avg is not None else 0.0
+        server_scores[server.id] = score
+        if score < 2.0:
+            breakdowns["critical"] += 1
+        elif score < 3.0:
+            breakdowns["high"] += 1
+        elif score < 4.0:
+            breakdowns["medium"] += 1
+        else:
+            breakdowns["low"] += 1
+
+    sorted_servers = sorted(server_scores.items(), key=lambda x: x[1], reverse=True)
+    top_5 = sorted_servers[:5]
+
+    top_servers_data = []
+    for srv_id, score in top_5:
+        srv = session.query(McpServerRegistry).filter(McpServerRegistry.id == srv_id).first()
+        if srv:
+            top_servers_data.append(TopServer(
+                server_id=srv.id,
+                name=srv.name,
+                org_name=srv.org_name,
+                avg_score=round(score, 2),
+                repo_url=srv.repo_url
+            ))
+
+    return ScoringSummaryResponse(
+        total_servers=total_servers,
+        avg_score=round(avg_score, 2) if avg_score else None,
+        score_breakdown=ScoreBreakdown(**breakdowns),
+        top_servers=top_servers_data
+    )
+"""
+
+if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, ".")
+
+    from fastapi import FastAPI
+    from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+    from sqlalchemy.orm import declarative_base, sessionmaker, Session as SASession
+    from sqlalchemy.pool import StaticPool
+    from fastapi.testclient import TestClient
+
+    Base = declarative_base()
+
+    class MockOrgs(Base):
+        __tablename__ = "orgs"
+        id = Column(Integer, primary_key=True)
+        name = Column(String, nullable=False)
+
+    class MockUsers(Base):
+        __tablename__ = "users"
+        id = Column(Integer, primary_key=True)
+        email = Column(String, nullable=False)
+        org_id = Column(Integer, ForeignKey("orgs.id"))
+
+    class MockMcpServerRegistry(Base):
+        __tablename__ = "mcp_server_registry"
+        id = Column(Integer, primary_key=True)
+        name = Column(String, nullable=False)
+        org_name = Column(String)
+        repo_url = Column(String)
+        is_active = Column(Boolean, default=True)
+
+    class MockMcpLlmAxisScore(Base):
+        __tablename__ = "mcp_llm_axis_scores"
+        id = Column(Integer, primary_key=True)
+        server_id = Column(Integer, ForeignKey("mcp_server_registry.id"))
+        axis_name = Column(String, nullable=False)
+        score = Column(Float, nullable=False)
+        model = Column(String, nullable=False)
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    def override_get_session():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    db = TestingSessionLocal()
+    db.add(MockOrgs(id=1, name="Acme Corp"))
+    db.add(MockOrgs(id=2, name="Globex"))
+    db.add(MockUsers(id=1, email="alice@acme.com", org_id=1))
+    db.add(MockUsers(id=2, email="bob@globex.com", org_id=2))
+    db.add(MockMcpServerRegistry(id=1, name="server-alpha", org_name="Acme Corp", repo_url="https://github.com/acme/server-alpha", is_active=True))
+    db.add(MockMcpServerRegistry(id=2, name="server-beta", org_name="Globex", repo_url="https://github.com/globex/server-beta", is_active=True))
+    db.add(MockMcpServerRegistry(id=3, name="server-gamma", org_name="Acme Corp", repo_url=None, is_active=True))
+    db.add(MockMcpLlmAxisScore(server_id=1, axis_name="accuracy", score=4.5, model="gpt-4"))
+    db.add(MockMcpLlmAxisScore(server_id=1, axis_name="safety", score=4.2, model="gpt-4"))
+    db.add(MockMcpLlmAxisScore(server_id=2, axis_name="accuracy", score=3.1, model="claude-3"))
+    db.add(MockMcpLlmAxisScore(server_id=3, axis_name="accuracy", score=1.8, model="gpt-3.5"))
+    db.commit()
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_session] = override_get_session
+
+    client = TestClient(app)
+    response = client.get("/server_scoring_summary")
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+    data = response.json()
+    assert data["total_servers"] == 3, f"Expected 3 servers, got {data['total_servers']}"
+
+    print("PASS")

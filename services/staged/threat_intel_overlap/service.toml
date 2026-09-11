@@ -1,0 +1,27 @@
+[service]
+name = "threat_intel_overlap"
+import_path = "services.active.threat_intel_overlap.router"
+prefix = "/api"
+tag = "threat_intel_overlap"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true
+
+[databases]
+app_postgres = "required"
+zo_computer = "required"
+
+[endpoints]
+GET /api/threat_intel_overlap/servers - Find MCP servers matching threat intel
+GET /api/threat_intel_overlap/correlations - Correlated threats across sources
+GET /api/threat_intel_overlap/signal-match - Signal scores matching threat patterns
+POST /api/threat_intel_overlap/analyze - Analyze threat overlap between sources
+GET /api/threat_intel_overlap/summary - Summary of threat overlap findings
+
+[acceptance]
+self_test = "python -m services.active.threat_intel_overlap.router prints PASS"
+requires = ["app.db", "write_service:8772"]

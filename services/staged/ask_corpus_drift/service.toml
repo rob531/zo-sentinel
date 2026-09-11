@@ -1,3 +1,11 @@
-Wait, that's the input. I need to create the actual Python file at `services/active/ask_corpus_drift/router.py` and the `__main__.py` for self-testing.
+[service]
+name = "ask_corpus_drift"
+import_path = "services.active.ask_corpus_drift.router"
+prefix = "/api"
+tag = "ask_corpus_drift"
+origin = "service"
+auth = "public"
+needs_data_layer = true
 
-Let me write the complete service:
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -1,165 +1,217 @@
-from typing import List, Dict, Optional
-from pydantic import BaseModel
+from typing import List, Dict, Any
+from fastapi import Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, distinct
 from app.db import get_session
 from app.models import McpServerRegistry
-from Levenshtein import distance as levenshtein_distance
-from fastapi import Depends
+from pydantic import BaseModel
+from fuzzywuzzy import fuzz
 
-class ServerMember(BaseModel):
+class Server(BaseModel):
     server_id: str
     name: str
-    url: str
-    last_seen: Optional[str]
+    first_seen: str
 
-class ServerFamily(BaseModel):
-    canonical_id: str
-    name: str
-    members: List[ServerMember]
+class Family(BaseModel):
+    family_id: str
+    registry_source: str
+    count: int
+    servers: List[Server]
 
-class RegistryFamilyDedupReport(BaseModel):
-    total_servers: int
-    families: List[ServerFamily]
+class Report(BaseModel):
+    families: List[Family]
 
-def get_registry_family_dedup_report(db: Session = Depends(get_session)) -> RegistryFamilyDedupReport:
-    # Query all servers from the registry
+def detect_duplicate_families(db: Session = Depends(get_session)) -> Report:
     servers = db.query(McpServerRegistry).all()
 
-    # Group servers by URL domain prefix (e.g., github.com/org)
-    domain_groups = {}
+    # Group servers by registry_source
+    source_groups = {}
     for server in servers:
-        if not server.url:
-            continue
-        domain = '/'.join(server.url.split('/')[:3])
-        if domain not in domain_groups:
-            domain_groups[domain] = []
-        domain_groups[domain].append(server)
+        if server.registry_source not in source_groups:
+            source_groups[server.registry_source] = []
+        source_groups[server.registry_source].append(server)
 
-    # Process each domain group to find families
     families = []
-    processed_ids = set()
+    family_id = 1
 
-    for domain, group in domain_groups.items():
-        if len(group) < 2:
-            continue
+    for source, servers in source_groups.items():
+        # Group servers into families based on name similarity
+        ungrouped_servers = servers.copy()
+        while ungrouped_servers:
+            # Start a new family with the first ungrouped server
+            family_servers = [ungrouped_servers.pop(0)]
+            family_servers_to_remove = []
 
-        # Sort by last_seen to prioritize more recent servers
-        group.sort(key=lambda x: x.last_seen, reverse=True)
+            # Compare with remaining ungrouped servers
+            for i, server in enumerate(ungrouped_servers):
+                for family_server in family_servers:
+                    # Check for similarity (Levenshtein ratio > 0.85 or same org prefix)
+                    if (fuzz.ratio(server.name.lower(), family_server.name.lower()) > 85 or
+                        server.name.split('.')[0] == family_server.name.split('.')[0]):
+                        family_servers.append(server)
+                        family_servers_to_remove.append(i)
+                        break
 
-        # Use the first server as the canonical for this domain
-        canonical = group[0]
-        family_members = [canonical]
-        processed_ids.add(canonical.server_id)
+            # Remove grouped servers from ungrouped list
+            for idx in sorted(family_servers_to_remove, reverse=True):
+                ungrouped_servers.pop(idx)
 
-        # Compare other servers in the domain to the canonical
-        for server in group[1:]:
-            if server.server_id in processed_ids:
-                continue
+            # Create family record
+            family = Family(
+                family_id=str(family_id),
+                registry_source=source,
+                count=len(family_servers),
+                servers=[Server(
+                    server_id=server.server_id,
+                    name=server.name,
+                    first_seen=str(server.first_seen)
+                ) for server in family_servers]
+            )
+            families.append(family)
+            family_id += 1
 
-            # Simple heuristic: if names are similar (Levenshtein < 5) and share domain
-            if (levenshtein_distance(server.name.lower(), canonical.name.lower()) < 5 and
-                server.url.startswith(canonical.url.split('/')[0])):
-                family_members.append(server)
-                processed_ids.add(server.server_id)
-
-        if len(family_members) > 1:
-            families.append({
-                "canonical_id": canonical.server_id,
-                "name": canonical.name,
-                "members": [{
-                    "server_id": m.server_id,
-                    "name": m.name,
-                    "url": m.url,
-                    "last_seen": m.last_seen
-                } for m in family_members]
-            })
-
-    # Add remaining ungrouped servers as their own families
-    for server in servers:
-        if server.server_id not in processed_ids:
-            families.append({
-                "canonical_id": server.server_id,
-                "name": server.name,
-                "members": [{
-                    "server_id": server.server_id,
-                    "name": server.name,
-                    "url": server.url,
-                    "last_seen": server.last_seen
-                }]
-            })
-
-    return RegistryFamilyDedupReport(
-        total_servers=len(servers),
-        families=families
-    )
+    return Report(families=families)
 
 if __name__ == "__main__":
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.models import Base
-    from datetime import datetime
 
-    # Setup in-memory SQLite for testing
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # Setup test database
+    test_db = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(test_db)
+    TestSession = sessionmaker(bind=test_db)
 
-    # Override dependency for testing
-    app.dependency_overrides[get_session] = lambda: SessionLocal()
+    # Create test app
+    test_app = FastAPI()
+    test_app.dependency_overrides[get_session] = lambda: TestSession()
 
-    # Seed test data
+    # Add test route
+    @test_app.get("/api/registry/family/dedup-report")
+    async def test_route(db: Session = Depends(get_session)):
+        return detect_duplicate_families(db)
+
+    # Create test data
     test_servers = [
         McpServerRegistry(
-            server_id="github.com/org/repo1",
-            name="Repo 1",
-            url="https://github.com/org/repo1",
-            last_seen=datetime.now()
+            server_id="1",
+            name="server1.example.com",
+            registry_source="source1",
+            first_seen="2023-01-01",
+            confidence=0.9,
+            description="Test server 1",
+            last_assessed="2023-01-02",
+            last_scanned="2023-01-02",
+            last_seen="2023-01-03",
+            meta={},
+            risk_tier="low",
+            scan_count=1,
+            trust_score=0.8,
+            url="http://server1.example.com",
+            verdict="safe",
+            verdict_reasoning="Test reasoning"
         ),
         McpServerRegistry(
-            server_id="github.com/org/repo2",
-            name="Repo 2",
-            url="https://github.com/org/repo2",
-            last_seen=datetime.now()
+            server_id="2",
+            name="server2.example.com",
+            registry_source="source1",
+            first_seen="2023-01-01",
+            confidence=0.9,
+            description="Test server 2",
+            last_assessed="2023-01-02",
+            last_scanned="2023-01-02",
+            last_seen="2023-01-03",
+            meta={},
+            risk_tier="low",
+            scan_count=1,
+            trust_score=0.8,
+            url="http://server2.example.com",
+            verdict="safe",
+            verdict_reasoning="Test reasoning"
         ),
         McpServerRegistry(
-            server_id="github.com/org/repo-extra",
-            name="Repo Extra",
-            url="https://github.com/org/repo-extra",
-            last_seen=datetime.now()
+            server_id="3",
+            name="server1.example.com",  # Duplicate of server1
+            registry_source="source1",
+            first_seen="2023-01-01",
+            confidence=0.9,
+            description="Test server 3",
+            last_assessed="2023-01-02",
+            last_scanned="2023-01-02",
+            last_seen="2023-01-03",
+            meta={},
+            risk_tier="low",
+            scan_count=1,
+            trust_score=0.8,
+            url="http://server1.example.com",
+            verdict="safe",
+            verdict_reasoning="Test reasoning"
         ),
         McpServerRegistry(
-            server_id="gitlab.com/other/repo1",
-            name="Other Repo 1",
-            url="https://gitlab.com/other/repo1",
-            last_seen=datetime.now()
+            server_id="4",
+            name="server3.example.com",
+            registry_source="source2",
+            first_seen="2023-01-01",
+            confidence=0.9,
+            description="Test server 4",
+            last_assessed="2023-01-02",
+            last_scanned="2023-01-02",
+            last_seen="2023-01-03",
+            meta={},
+            risk_tier="low",
+            scan_count=1,
+            trust_score=0.8,
+            url="http://server3.example.com",
+            verdict="safe",
+            verdict_reasoning="Test reasoning"
         ),
         McpServerRegistry(
-            server_id="gitlab.com/other/repo2",
-            name="Other Repo 2",
-            url="https://gitlab.com/other/repo2",
-            last_seen=datetime.now()
-        ),
-        McpServerRegistry(
-            server_id="bitbucket.org/team/project",
-            name="Team Project",
-            url="https://bitbucket.org/team/project",
-            last_seen=datetime.now()
+            server_id="5",
+            name="server4.example.com",
+            registry_source="source2",
+            first_seen="2023-01-01",
+            confidence=0.9,
+            description="Test server 5",
+            last_assessed="2023-01-02",
+            last_scanned="2023-01-02",
+            last_seen="2023-01-03",
+            meta={},
+            risk_tier="low",
+            scan_count=1,
+            trust_score=0.8,
+            url="http://server4.example.com",
+            verdict="safe",
+            verdict_reasoning="Test reasoning"
         )
     ]
 
-    db = SessionLocal()
-    db.add_all(test_servers)
-    db.commit()
+    # Add test data to database
+    test_session = TestSession()
+    for server in test_servers:
+        test_session.add(server)
+    test_session.commit()
 
-    # Run the report
-    report = get_registry_family_dedup_report()
+    # Run test
+    client = TestClient(test_app)
+    response = client.get("/api/registry/family/dedup-report")
+    assert response.status_code == 200
 
-    # Assertions
-    assert report.total_servers == 6
-    assert len(report.families) == 3
+    # Verify response
+    data = response.json()
+    assert len(data["families"]) == 3  # 2 from source1 (1 family with 2 servers), 2 from source2 (2 families)
 
-    family_sizes = [len(family.members) for family in report.families]
-    assert 2 in family_sizes
+    # Check source1 family
+    source1_family = next(f for f in data["families"] if f["registry_source"] == "source1")
+    assert source1_family["count"] == 2
+    assert len(source1_family["servers"]) == 2
+    assert any(s["name"] == "server1.example.com" for s in source1_family["servers"])
+
+    # Check source2 families
+    source2_families = [f for f in data["families"] if f["registry_source"] == "source2"]
+    assert len(source2_families) == 2
+    for family in source2_families:
+        assert family["count"] == 1
+        assert len(family["servers"]) == 1
 
     print("PASS")

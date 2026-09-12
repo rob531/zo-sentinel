@@ -1,0 +1,8 @@
+[service]
+name = "server_cve_advisories"
+import_path = "services.active.server_cve_advisories.router"
+prefix = "/api"
+tag = "server_cve_advisories"
+origin = "service"
+auth = "public"
+needs_data_layer = true

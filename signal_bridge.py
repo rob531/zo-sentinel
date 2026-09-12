@@ -100,7 +100,7 @@ def write_discrimination_floor_breach(signal_name: str, server_id: str, score: f
 def get_unbridged_enrichments() -> List[Dict[str, Any]]:
     excluded = ', '.join([f"'{k}'" for k in ENRICHMENT_TO_SIGNAL.keys()])
     result = ws_query(f"""
-        SELECT e.server_id, e.signal_type, e.score, e.computed_at, e.evidence
+        SELECT e.server_id, e.signal_type, e.score, e.computed_at, e.evidence_blob AS evidence
         FROM mcp_signal_enrichments e
         WHERE e.signal_type IN ({excluded})
           AND e.server_id NOT LIKE '__harness_%'

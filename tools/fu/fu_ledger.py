@@ -39,12 +39,18 @@ Why `class:` exists
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 HEAD_RE = re.compile(r"^### FU-(\d+)\b(?:\s*\|\s*(.*))?$")
-KEY_RE = re.compile(r"^- ([a-z][a-z_ ]*):\s?(.*)$")
+# 2026-09-05 (daily-chairman-review): writers since FU-362 emit the key in bold
+# (`- **date:** 2026-09-04`). 31 lint errors across 20 entries were this ONE
+# spelling; every entry carried the key. Optional `**` on either side of the
+# colon; captured key/value are unchanged so every reader sees what it saw
+# for `- date:`.
+KEY_RE = re.compile(r"^- (?:\*\*)?([a-z][a-z_ ]*):(?:\*\*)?\s?(.*)$")
 
 # The `- date:` line packs 4 fields separated by any of ' - ', ' · ', ' • '.
 FIELD_SEP_RE = re.compile(r"\s+[·•]\s+|\s+-\s+")
@@ -134,7 +140,14 @@ class FU:
 
     @property
     def fu_class(self) -> str:
-        c = (self.vals.get("class") or "").strip().lower()
+        # 2026-09-05: writers annotate the class in place (`defect (instrument,
+        # not product). Found while ...`). The class is the FIRST token; the
+        # rest is prose. Reading the whole value made every annotated entry
+        # look class-less, and ledger_lint --fix then REPLACED the line with a
+        # bare `- class: defect`, erasing the annotation (caught by a byte-count
+        # that FELL after a repair that only adds lines).
+        raw = (self.vals.get("class") or "").strip().lower()
+        c = re.split(r"[\s(,;:]", raw, 1)[0] if raw else ""
         return c if c in VALID_CLASS else ""
 
     @property
@@ -188,7 +201,95 @@ class FU:
         return None
 
 
+# ------------------------------------------------------- READ-SIDE call shape
+# ADDED 2026-09-03 (improvement-loop cycle-0066).
+#
+# Cycle-0065, hours earlier, censused TWO doors of the `sanctioned-writer-api-
+# shape` family -- append_log and insert_key -- and gave both a TypeError that
+# names the real signature. It censused the WRITE side only. `vast-jobs-daily-
+# audit` was bitten the same morning through the read side:
+#
+#     parse("D:\\zo\\Zocomputer Agents\\FOLLOWUPS.md")   ->   []
+#
+# parse takes a LIST OF LINES. Handed a path STRING it iterates the string's
+# CHARACTERS, matches no heading, and returns an empty list. No raise, no
+# warning: on a 379-entry ledger the caller reads that as "the ledger is
+# empty". That is the defect class this ledger is 51% made of -- a check that
+# cannot go red -- and it sat in the first call every writer makes.
+#
+# line_terminator has the identical hole and a nastier payload: handed a path
+# it returns "", and the caller then writes UNTERMINATED lines into a ledger
+# whose terminators have already flipped twice.
+#
+# THE CURE IS RECOVERY, NOT A GATE (HARNESS_DOCTRINE R7). Cycle-0065 made the
+# wrong call say more; this makes the wrong call WORK. A path is an unambiguous
+# request for that file's lines, so read it. Nothing that used to succeed
+# changes behaviour -- a list argument takes the identical path it always did,
+# which probe_fu_ledger_path_shape_20260903.py asserts as its positive pole on
+# every run. Only the shapes that previously returned a plausible lie change.
+def _read_lines(path):
+    """Read a ledger from disk the one correct way.
+
+    newline="" + keepends: this file's terminators have flipped between CRLF
+    and LF twice, and every edit that lost them lost them here.
+    """
+    with open(path, "r", encoding="utf-8", newline="") as fh:
+        return fh.read().splitlines(keepends=True)
+
+
+def _as_lines(fn, arg):
+    """Accept a line list (unchanged) or a path to a readable ledger."""
+    if isinstance(arg, list):
+        return arg
+    if isinstance(arg, (str, bytes)) or hasattr(arg, "__fspath__"):
+        try:
+            readable = os.path.isfile(arg)
+        except (OSError, ValueError, TypeError):
+            readable = False
+        if readable:
+            return _read_lines(arg)
+    raise _read_shape_error(fn, arg)
+
+
+def _as_entries(fn, arg):
+    """Accept parsed entries (unchanged), raw lines, or a path."""
+    if isinstance(arg, list):
+        # A list of LINES is the other shape the fleet guesses here; parsing it
+        # is what the caller meant. An empty list is genuinely ambiguous and is
+        # passed through, which is what an empty ledger should look like.
+        if arg and isinstance(arg[0], str):
+            return parse(arg)
+        return arg
+    return parse(_as_lines(fn, arg))
+
+
+_READ_SHAPE_HINT = r"""
+fu_ledger.%(fn)s() takes the ledger's LINES, not a filename. It is a PURE
+FUNCTION over a parsed line list -- this module never opens the ledger for you.
+You passed a %(got0)s that is not a readable file, so there is nothing to
+recover from.
+
+A path to an EXISTING file is accepted and read for you (added cycle-0066); a
+path that does not resolve, or any other type, lands here.
+
+  raw   = open(LEDGER, encoding="utf-8", newline="").read()
+  lines = raw.splitlines(keepends=True)
+  entries = parse(lines)
+  fu = {str(f.num).lstrip("0"): f for f in entries}["NNN"]   # num is a STRING
+
+To WRITE a log bullet, do not hand-roll the dance -- one call does all of it,
+idempotently:
+
+  python "D:\zo\Zocomputer Agents\_tools\fu_append_log.py" --fu NNN --message "<one line>" --if-absent "<unique substring>"
+"""
+
+
+def _read_shape_error(fn, got0):
+    return TypeError(_READ_SHAPE_HINT % {"fn": fn, "got0": type(got0).__name__})
+
+
 def parse(lines: List[str]) -> List[FU]:
+    lines = _as_lines("parse", lines)
     heads = [(i, m.group(1), (m.group(2) or "").strip())
              for i, l in enumerate(lines) for m in [HEAD_RE.match(l)] if m]
     out: List[FU] = []
@@ -231,6 +332,7 @@ def line_terminator(lines: List[str]) -> str:
     "a check never observed RED is not evidence" shape from HARNESS_DOCTRINE.
     Detect the convention rather than assume it, so BOTH callers are correct.
     """
+    lines = _as_lines("line_terminator", lines)
     for ln in lines:
         if ln.endswith("\r\n"):
             return "\r\n"
@@ -239,7 +341,287 @@ def line_terminator(lines: List[str]) -> str:
     return ""
 
 
-def insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "log") -> int:
+# ---------------------------------------------------------------- call shape
+# ADDED 2026-09-03 (improvement-loop cycle-0065) for the friction family
+# `sanctioned-writer-api-shape`: 5 bites across 5 lanes in the trailing 7d,
+# first bitten 2026-08-30. Three of the six recorded rows are THIS exact call.
+#
+# THE DEFECT. Every lane prompt on this tower names `fu_ledger.append_log` as
+# "the sanctioned writer". It reads like a writer and it is not: it is a PURE
+# function over a parsed line list that neither opens nor writes the ledger.
+# Lanes therefore call `append_log(fu, text)` and get
+#     TypeError: append_log() missing 1 required positional argument: 'text'
+# which names the ARITY and nothing else -- not the real shape, not the host
+# dance around it, not the one-call CLI that already does all of it. Recorded
+# cost of re-deriving that from the bare TypeError: 3-6 minutes, per bite,
+# per lane, five times in the last seven days.
+#
+# THIS IS NOT A NEW GATE (HARNESS_DOCTRINE R7, recovery over restriction). It
+# refuses nothing that used to work -- the guessed call was ALREADY a
+# TypeError. It changes only what that TypeError SAYS, at the exact moment and
+# on the exact surface where the bitten lane is standing. A hazard note in a
+# prompt was tried first and is the reason this family has a name at all.
+_MISSING = object()
+
+_SHAPE_HINT = r"""
+fu_ledger.%(fn)s(lines, fu, %(rest)s) is a PURE FUNCTION over a parsed line
+list. It does NOT open, read, write or back up the ledger -- the caller owns
+the file. You called it as %(fn)s(<%(got0)s>, ...), which is the shape the
+lane prompts imply and which no version of this module has ever had.
+
+ONE-CALL FIX -- prefer this. It does the whole dance (backup, parse, append,
+binary write, re-parse verify) and is idempotent via --if-absent:
+
+  python "D:\zo\Zocomputer Agents\_tools\fu_append_log.py" --fu NNN --message "<one line>" --if-absent "<unique substring from this write>"
+
+  Add --dry-run first. Exit 0 = bullet present in the re-parsed ledger;
+  1 = refused (bad args / unknown FU); 2 = WROTE BUT COULD NOT VERIFY,
+  treat as a failed write and restore the backup it printed.
+
+IN-PROCESS FIX, if you genuinely need the pure function:
+
+  raw   = open(LEDGER, encoding="utf-8", newline="").read()
+  lines = raw.splitlines(keepends=True)
+  fu    = {str(f.num).lstrip("0"): f for f in parse(lines)}["NNN"]
+  append_log(lines, fu, text)              # <-- lines FIRST, then fu, then text
+  open(LEDGER, "wb").write("".join(lines).encode("utf-8"))
+  # then assert the LF count GREW and the crlf/lf ratio class did not move
+
+Two more shapes in this same family, so you do not pay for them separately:
+  * FU.num is a STRING with leading zeros ('035'), never an int. Key it as
+    str(f.num).lstrip("0"); `f.num == 35` can only ever be False, and an
+    identity check that is always False reads as "FU-035 does not exist".
+  * The heading form is `### FU-NNN | title` -- three hashes, a pipe, no
+    colon and no double dash. HEAD_RE is the contract; a heading that misses
+    it is INVISIBLE to fu_verify.py while ledger_lint.py still calls the file
+    clean.
+"""
+
+
+def _shape_error(fn, rest, got0):
+    return TypeError(_SHAPE_HINT % {
+        "fn": fn, "rest": rest, "got0": type(got0).__name__,
+    })
+
+
+# ---------------------------------------------------------------------------
+# THE SECOND ARGUMENT. Cycle-0065/0066 cured the FIRST argument (`lines`) of
+# these two writers and the family kept biting, because the bites were never
+# about `lines`. Both recorded 2026-09-03/04 bites passed a correct list and a
+# present text and died inside the bodies, on `fu`:
+#
+#   2026-09-03T19:56Z prod-drift-sentinel  append_log(lines, fu="FU-235", ...)
+#   2026-09-04T00:46Z improvement-loop     append_log(lines, 395, ...)
+#
+# Both are the SAME mistake and it is not an unreasonable one: `fu` is spelled
+# like a number everywhere the fleet reads about it, FU.num is a STRING with
+# leading zeros, and the _MISSING sentinel makes inspect.signature print
+# `fu=<object object at 0x...>` -- so the one recovery a bitten caller reaches
+# for, reading the signature, tells them nothing.
+#
+# R7 says prefer RECOVERY over RESTRICTION, so this resolves the number instead
+# of explaining it. An FU object still takes the identical path it always did
+# (probe pole D asserts that on every run), so nothing that worked changes.
+# What changes: the shapes that previously raised AttributeError from four
+# frames down now work, and the one shape that must NEVER silently succeed --
+# a number that is not in this ledger -- raises an error that NAMES the number.
+def _fu_key(value) -> Optional[str]:
+    """Canonicalise an FU designator: 'FU-035', '035', 35, ' 35 ' -> '35'.
+
+    Returns None when the value is not FU-number-shaped at all, which is the
+    caller's signal to raise rather than guess.
+    """
+    text = str(value).strip()
+    if text.lower().startswith("fu-"):
+        text = text[3:].strip()
+    if not text.isdigit():
+        return None
+    return text.lstrip("0") or "0"
+
+
+class DuplicateFU(ValueError):
+    """Two entries claim the same FU number. Refuse to guess which one."""
+
+
+class UnknownFU(ValueError):
+    """An FU designator that this ledger does not contain.
+
+    A distinct type because "FU-999 is not here" and "you passed the wrong
+    shape" want different handling, and because the failure this replaces --
+    AttributeError from inside _append_log -- was indistinguishable from a
+    genuine module bug.
+    """
+
+
+def _as_fu(fn: str, lines: List[str], arg):
+    """Accept an FU object (unchanged) or any FU designator, and resolve it."""
+    if arg is not _MISSING and hasattr(arg, "keys") and hasattr(arg, "num"):
+        return arg
+    key = _fu_key(arg)
+    if key is None:
+        raise TypeError(
+            "fu_ledger.%s(lines, fu, ...): `fu` must be the FU OBJECT from "
+            "parse(), or an FU number ('395', 'FU-395' or 395). You passed a "
+            "%s. Note FU.num is a STRING with leading zeros ('035'), so "
+            "f.num == 35 is always False.\n%s"
+            % (fn, type(arg).__name__ if arg is not _MISSING else "missing argument",
+               _ONE_CALL_POINTER)
+        )
+    found = [f for f in parse(lines) if _fu_key(f.num) == key]
+    if len(found) > 1:
+        raise DuplicateFU(
+            "fu_ledger.%s: FU-%s appears %d times in this ledger; refusing to "
+            "guess which entry you meant. Resolve the duplicate headings first."
+            % (fn, key, len(found))
+        )
+    if not found:
+        present = sorted(
+            (_fu_key(f.num) or "?" for f in parse(lines)),
+            key=lambda s: int(s) if s.isdigit() else -1,
+        )
+        near = [n for n in present if n.isdigit() and abs(int(n) - int(key)) <= 3]
+        raise UnknownFU(
+            "fu_ledger.%s: FU-%s is not in this ledger (%d entries parsed%s). "
+            "A heading that misses HEAD_RE (`### FU-NNN | title` -- three "
+            "hashes, a pipe, no colon and no double dash) does not exist to "
+            "this module even though ledger_lint.py still calls the file "
+            "clean. Check the heading form before concluding the entry is "
+            "absent."
+            % (fn, key, len(present),
+               "; nearest present: " + ", ".join(near) if near else "")
+        )
+    return found[0]
+
+
+_ONE_CALL_POINTER = (
+    "\nONE-CALL FIX -- does the whole dance (backup, parse, append, binary "
+    "write, re-parse verify) and is idempotent:\n\n"
+    "  python \"D:\\zo\\Zocomputer Agents\\_tools\\fu_append_log.py\" "
+    "--fu NNN --message \"<one line>\" --if-absent \"<unique substring>\"\n"
+)
+
+
+# --------------------------------------------------------------- write-through
+# CYCLE-0088. `parse(PATH)` has worked since cycle-0066; the writers did not,
+# and the family's last three bites were callers who inferred symmetry and were
+# right to. A path is an unambiguous request for THAT FILE, so do the whole
+# sanctioned dance on it -- backup, read with newline="", parse, mutate, write
+# BINARY, then re-read and prove the round-trip byte-exact. A text-mode write
+# has silently stripped every CR from this file twice; only bytes are safe.
+# The list-first shape is untouched and its positive pole is asserted on every
+# run by tests/test_fu_ledger_write_path_shape.py.
+def _is_ledger_path(arg) -> bool:
+    """True only for an EXISTING file. A missing path is UNKNOWN, not a ledger."""
+    if arg is _MISSING or isinstance(arg, list):
+        return False
+    if not (isinstance(arg, (str, bytes)) or hasattr(arg, "__fspath__")):
+        return False
+    try:
+        return os.path.isfile(arg)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _backup_beside(path: str) -> str:
+    """Copy the ledger into _followup_backups/<date>/ beside it, first.
+
+    Same location fu_append_log.py has used since 2026-08-03, so a restore
+    instruction printed by either tool means the same thing.
+    """
+    import datetime as _dt
+    import shutil as _sh
+    now = _dt.datetime.now(_dt.timezone.utc)
+    d = os.path.join(os.path.dirname(os.path.abspath(path)), "_followup_backups",
+                     now.strftime("%Y-%m-%d"))
+    os.makedirs(d, exist_ok=True)
+    dest = os.path.join(d, "%s.pre-write-%s" % (os.path.basename(path),
+                                                now.strftime("%Y%m%dT%H%M%SZ")))
+    _sh.copy2(path, dest)
+    return dest
+
+
+def _terminator_class(text: str, n_lines: int) -> str:
+    """CRLF / LF / MIXED. The class, not the count -- the count moves on purpose."""
+    crlf = text.count("\r\n")
+    if crlf == 0:
+        return "LF"
+    if crlf == n_lines:
+        return "CRLF"
+    return "MIXED:%d/%d" % (crlf, n_lines)
+
+
+def _write_through(fn, path, mutate, if_absent=None) -> int:
+    """Perform `mutate(lines, entries)` against the file at `path`, verified.
+
+    Returns the index written, or -1 when `if_absent` was already present (a
+    retried lane run must CONVERGE, not duplicate). Restores the backup and
+    raises if the re-read does not match what we wrote.
+    """
+    path = os.fspath(path)
+    lines = _read_lines(path)
+    entries = parse(lines)
+    joined_before = "".join(lines)
+    klass_before = _terminator_class(joined_before, len(lines))
+    if if_absent is not None and if_absent in joined_before:
+        return -1
+
+    backup = _backup_beside(path)
+    pos = mutate(lines, entries)
+    payload = "".join(lines)
+    with open(path, "wb") as fh:
+        fh.write(payload.encode("utf-8"))
+
+    # THE MEASUREMENT. A writer's return value is not evidence; the file is.
+    again = _read_lines(path)
+    problems = []
+    if "".join(again) != payload:
+        problems.append("re-read is not byte-identical to what was written")
+    klass_after = _terminator_class("".join(again), len(again))
+    if klass_after != klass_before:
+        problems.append("terminator class moved %s -> %s" % (klass_before, klass_after))
+    if len(parse(again)) != len(entries):
+        problems.append("entry count moved %d -> %d"
+                        % (len(entries), len(parse(again))))
+    if problems:
+        import shutil as _sh
+        _sh.copy2(backup, path)
+        raise LedgerWriteFailed(
+            "fu_ledger.%s(%s): %s. The ledger has been RESTORED from %s and "
+            "nothing was kept. This is a failed write, not a partial one."
+            % (fn, path, "; ".join(problems), backup)
+        )
+    return pos
+
+
+class LedgerWriteFailed(RuntimeError):
+    """A path-mode write that could not be verified. The file was restored."""
+
+
+def insert_key(lines, fu=_MISSING, key=_MISSING, value=_MISSING,
+               before="log", if_absent=None) -> int:
+    """Insert `- key: value` into an entry. Body lives in _insert_key.
+
+    Guard added 2026-09-03 (cycle-0065): same call-shape family as append_log,
+    censused and cured in the SAME commit rather than one door of two.
+    Cycle-0069: `fu` now accepts an FU number as well as an FU object -- the
+    same commit cures both writers, because one door of two reads as a cure.
+    """
+    if _is_ledger_path(lines) and value is not _MISSING:
+        # cycle-0088: a path is an unambiguous request for that file. Do the
+        # whole verified dance rather than raising a paragraph at a caller who
+        # correctly inferred symmetry with parse(PATH).
+        return _write_through(
+            "insert_key", lines,
+            lambda ls, es: _insert_key(ls, _as_fu("insert_key", ls, fu),
+                                       key, value, before),
+            if_absent=if_absent,
+        )
+    if value is _MISSING or not isinstance(lines, list):
+        raise _shape_error("insert_key", "key, value", lines)
+    return _insert_key(lines, _as_fu("insert_key", lines, fu), key, value, before)
+
+
+def _insert_key(lines: List[str], fu: FU, key: str, value: str, before: str = "log") -> int:
     """Insert `- key: value` into an entry, preferring a slot before `before`.
 
     Returns the index written. Callers MUST re-parse afterwards; indices in
@@ -274,7 +656,30 @@ def _is_wrapped_log_line(line: str) -> bool:
     return line.startswith("    ") and line.strip() != ""
 
 
-def append_log(lines: List[str], fu: FU, text: str) -> int:
+def append_log(lines, fu=_MISSING, text=_MISSING, if_absent=None) -> int:
+    """Append a dated bullet under `- log:`. Body lives in _append_log.
+
+    Guard added 2026-09-03 (cycle-0065): the shape the fleet guesses,
+    append_log(fu, text), now raises a TypeError that names the correct
+    signature and the one-call CLI instead of only the missing arity.
+    Cycle-0069: `fu` now accepts 395 / '395' / 'FU-395' as well as the FU
+    object, because that -- not `lines` -- is what the 2026-09-03 and
+    2026-09-04 bites actually passed.
+    """
+    if _is_ledger_path(lines) and text is not _MISSING:
+        # cycle-0088: see insert_key. Same door, same commit -- one door of two
+        # reads as a cure and is not one.
+        return _write_through(
+            "append_log", lines,
+            lambda ls, es: _append_log(ls, _as_fu("append_log", ls, fu), text),
+            if_absent=if_absent,
+        )
+    if text is _MISSING or not isinstance(lines, list):
+        raise _shape_error("append_log", "text", lines)
+    return _append_log(lines, _as_fu("append_log", lines, fu), text)
+
+
+def _append_log(lines: List[str], fu: FU, text: str) -> int:
     """Append a dated bullet under `- log:`, creating the key if needed.
 
     Accepts `lines` with or without line terminators (see `line_terminator`).

@@ -87,69 +87,97 @@ def get_sla_report(db: Session = Depends(get_session)) -> SLAReportResponse:
 
 
 if __name__ == "__main__":
-    import sqlite3
-    from fastapi.testclient import TestClient
-    from main import app
     from datetime import timedelta
 
-    conn = sqlite3.connect(":memory:")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE cadence_job_runs (
-            job TEXT, status TEXT, started_at TEXT, finished_at TEXT, rows_affected INTEGER
-        )
-    """)
-    base = datetime(2024, 1, 1, 0, 0, 0)
-    test_data = [
-        ("data_sync", "success", base + timedelta(seconds=1), base + timedelta(seconds=121), 500),
-        ("data_sync", "success", base + timedelta(seconds=200), base + timedelta(seconds=300), 600),
-        ("data_sync", "success", base + timedelta(seconds=400), base + timedelta(seconds=500), 550),
-        ("data_sync", "success", base + timedelta(seconds=600), base + timedelta(seconds=700), 480),
-        ("data_sync", "success", base + timedelta(seconds=800), base + timedelta(seconds=900), 520),
-        ("etl_batch", "success", base + timedelta(seconds=1000), base + timedelta(seconds=1600), 10000),
-        ("etl_batch", "failed", base + timedelta(seconds=1700), base + timedelta(seconds=2400), 0),
-        ("etl_batch", "success", base + timedelta(seconds=2500), base + timedelta(seconds=3200), 12000),
-        ("etl_batch", "failed", base + timedelta(seconds=3300), base + timedelta(seconds=4100), 0),
-        ("etl_batch", "success", base + timedelta(seconds=4200), base + timedelta(seconds=5000), 11000),
-        ("report_gen", "success", base + timedelta(seconds=10), base + timedelta(seconds=80), 200),
-        ("report_gen", "failed", base + timedelta(seconds=200), base + timedelta(seconds=350), 0),
-        ("report_gen", "success", base + timedelta(seconds=400), base + timedelta(seconds=510), 180),
-        ("report_gen", "success", base + timedelta(seconds=600), base + timedelta(seconds=780), 220),
-        ("report_gen", "success", base + timedelta(seconds=900), base + timedelta(seconds=1100), 190),
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db import Base, get_session as real_get_session
+    from app.models import CadenceJobRun  # registers the table on Base.metadata
+
+    # MERGE_AUDIT_2026-08-23 L3. This self-test used to open with
+    # `from main import app` -- a bare top-level `main` that resolves to
+    # nothing. It is inert at mount time (it sits inside __main__), so the
+    # service imports and mounts correctly and no gate ever walked this path.
+    # It matters because this file is the FIRST autonomously promoted service
+    # (#3171): it is the exemplar the promotion lane copies, so the defect
+    # propagating matters more than the defect.
+    #
+    # Rebuilt the way the builder recipe prescribes and this service's own
+    # contract.py already does it: a LOCAL FastAPI() plus a real in-memory
+    # SQLAlchemy session. Importing the global app.main:app would drag the whole
+    # generated spine into a unit self-test. The previous body also overrode
+    # get_session with a raw sqlite3 connection, which cannot execute the
+    # TextClause this router passes -- so the self-test could not have passed
+    # even with the import repaired.
+    app = FastAPI()
+    app.include_router(router)
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    base_ts = datetime(2024, 1, 1, 0, 0, 0)
+    # (job, status, start_offset_s, end_offset_s, rows_affected)
+    seed = [
+        ("data_sync", "success", 1, 121, 500),
+        ("data_sync", "success", 200, 300, 600),
+        ("data_sync", "success", 400, 500, 550),
+        ("data_sync", "success", 600, 700, 480),
+        ("data_sync", "success", 800, 900, 520),
+        ("etl_batch", "success", 1000, 1600, 10000),
+        ("etl_batch", "failed", 1700, 2400, 0),
+        ("etl_batch", "success", 2500, 3200, 12000),
+        ("etl_batch", "failed", 3300, 4100, 0),
+        ("etl_batch", "success", 4200, 5000, 11000),
+        ("report_gen", "success", 10, 80, 200),
+        ("report_gen", "failed", 200, 350, 0),
+        ("report_gen", "success", 400, 510, 180),
+        ("report_gen", "success", 600, 780, 220),
+        ("report_gen", "success", 900, 1100, 190),
     ]
-    for row in test_data:
-        cursor.execute("INSERT INTO cadence_job_runs VALUES (?, ?, ?, ?, ?)", row)
-    conn.commit()
+    with TestSessionLocal() as db:
+        for job, status, start_s, end_s, rows_affected in seed:
+            db.add(CadenceJobRun(
+                job=job,
+                status=status,
+                started_at=base_ts + timedelta(seconds=start_s),
+                finished_at=base_ts + timedelta(seconds=end_s),
+                rows_affected=rows_affected,
+            ))
+        db.commit()
 
     def get_test_session():
-        return sqlite3.connect(":memory:")
-
-    from app.db import get_session as real_get_session
-    app.dependency_overrides[real_get_session] = lambda: sqlite3.connect(":memory:")
-    test_conn = sqlite3.connect(":memory:")
-    test_conn.execute("""
-        CREATE TABLE cadence_job_runs (
-            job TEXT, status TEXT, started_at TEXT, finished_at TEXT, rows_affected INTEGER
-        )
-    """)
-    for row in test_data:
-        test_conn.execute("INSERT INTO cadence_job_runs VALUES (?, ?, ?, ?, ?)", row)
-    test_conn.commit()
-
-    def get_test_session():
-        test_conn.row_factory = sqlite3.Row
-        return test_conn
+        db = TestSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
 
     app.dependency_overrides[real_get_session] = get_test_session
+
     client = TestClient(app)
     response = client.get("/api/cadence/sla-report")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-    data = response.json()
-    jobs = data.get("jobs", [])
-    assert len(jobs) >= 3, f"Expected at least 3 jobs, got {len(jobs)}"
-    has_success = any(job["success_rate"] > 0 for job in jobs)
-    assert has_success, "Expected at least one job with success_rate > 0"
-    print(f"Jobs found: {len(jobs)}")
-    for job in jobs:
-        print(f"  - {job['name']}: success_rate={job['success_rate']:.2%}")
+
+    jobs = {j["name"]: j for j in response.json().get("jobs", [])}
+    assert len(jobs) == 3, f"Expected 3 jobs, got {len(jobs)}"
+    assert jobs["data_sync"]["total_runs"] == 5
+    assert jobs["data_sync"]["success_rate"] == 1.0, "data_sync is all-success"
+    assert jobs["etl_batch"]["success_rate"] == 0.6, "etl_batch is 3/5 success"
+    assert jobs["report_gen"]["success_rate"] == 0.8, "report_gen is 4/5 success"
+    # data_sync's SLA target is 120s and every run is <=120s.
+    assert jobs["data_sync"]["sla_compliance_pct"] == 1.0
+    assert jobs["etl_batch"]["rows_throughput"] > 0
+
+    for name, job in sorted(jobs.items()):
+        print(f"  - {name}: success_rate={job['success_rate']:.2%} "
+              f"sla={job['sla_compliance_pct']:.2%}")
     print("PASS")

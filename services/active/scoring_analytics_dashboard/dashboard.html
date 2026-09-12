@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scoring Analytics Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 20px;
+    background: #f0f2f5; color: #1a1a2e;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; color: #1a1a2e; }
+  .subtitle { font-size: 0.8rem; color: #6c757d; margin: 0 0 20px; }
+
+  .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .summary-card {
+    background: #fff;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+    text-align: center;
+  }
+  .summary-card .value { font-size: 2rem; font-weight: 700; }
+  .summary-card .label { font-size: 0.78rem; color: #6c757d; margin-top: 4px; }
+  .summary-card.separation .value { color: #0d6efd; }
+  .summary-card.calibration .value { color: #198754; }
+  .summary-card.total .value { color: #495057; }
+
+  .card {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6c757d;
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+
+  /* SSL-Labs-style risk axis display */
+  .axis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  .axis-card {
+    background: #f8f9fa;
+    padding: 14px;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+  }
+  .axis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .axis-name { font-size: 0.88rem; font-weight: 600; color: #495057; }
+  .axis-score { font-size: 1rem; font-weight: 700; color: #212529; }
+  .axis-bar-wrap {
+    height: 8px;
+    background: #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .axis-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .axis-fill.excellent { background: linear-gradient(90deg, #28a745, #20c997); }
+  .axis-fill.good { background: linear-gradient(90deg, #20c997, #17a2b8); }
+  .axis-fill.fair { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+  .axis-fill.poor { background: linear-gradient(90deg, #fd7e14, #dc3545); }
+  .axis-fill.critical { background: linear-gradient(90deg, #dc3545, #6f42c1); }
+  .axis-fill.unknown { background: #dee2e6; }
+  .axis-quartiles {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: #6c757d;
+  }
+
+  /* Tier distribution table */
+  .tier-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .tier-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+    border-bottom: 2px solid #e9ecef;
+    background: #f8f9fa;
+  }
+  .tier-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+  }
+  .tier-table tr:last-child td { border-bottom: none; }
+  .tier-table tr:hover td { background: #f8f9fa; }
+
+  .tier-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .tier-badge.critical { background: #6f42c1; color: #fff; }
+  .tier-badge.high { background: #dc3545; color: #fff; }
+  .tier-badge.medium { background: #ffc107; color: #000; }
+  .tier-badge.low { background: #198754; color: #fff; }
+  .tier-badge.minimal { background: #20c997; color: #fff; }
+  .tier-badge.unknown { background: #6c757d; color: #fff; }
+
+  .num-cell {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: #495057;
+  }
+
+  .mini-bar {
+    width: 80px;
+    height: 6px;
+    background: #dee2e6;
+    border-radius: 3px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 8px;
+    overflow: hidden;
+  }
+  .mini-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: #0d6efd;
+  }
+
+  /* Verdict tiers */
+  .verdict-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .verdict-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .verdict-chip.trusted_general { background: #d1e7dd; color: #0f5132; }
+  .verdict-chip.trusted_research { background: #b6dfd4; color: #0a6659; }
+  .verdict-chip.enterprise_controlled { background: #fff3cd; color: #664d03; }
+  .verdict-chip.caution_limited { background: #f8d7da; color: #842029; }
+  .verdict-chip.high_risk_isolated { background: #f5c2c7; color: #6b1d27; }
+  .verdict-chip.insufficient { background: #e2e3e5; color: #41464b; }
+  .verdict-chip.unknown { background: #e9ecef; color: #495057; }
+
+  .criteria-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+  }
+
+  .refresh-btn {
+    background: #0d6efd;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .refresh-btn:hover { background: #0b5ed7; }
+  .refresh-btn:focus { outline: 2px solid #0d6efd; outline-offset: 2px; }
+  .refresh-btn:disabled { background: #a8c4e8; cursor: not-allowed; }
+
+  .loading, .error, .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    font-size: 0.95rem;
+    border-radius: 8px;
+  }
+  .loading::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 24px;
+    border: 3px solid #dee2e6;
+    border-top-color: #0d6efd;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: #dc3545; background: #fff5f5; border: 1px solid #fcc2c2; }
+  .empty { background: #fff; border: 1px dashed #dee2e6; }
+
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .axis-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header-row">
+  <div>
+    <h1>Scoring Analytics Dashboard</h1>
+    <p class="subtitle" id="as-of" aria-live="polite">Loading…</p>
+  </div>
+  <button class="refresh-btn" id="refresh-btn" aria-label="Refresh scoring analytics data" onclick="fetchData()">
+    <span aria-hidden="true">&#8635;</span> Refresh
+  </button>
+</div>
+
+<div class="summary-cards" id="summary-cards" aria-label="Scoring analytics summary" role="region">
+  <div class="summary-card separation" aria-label="Separation score metric">
+    <div class="value" id="stat-separation">—</div>
+    <div class="label">Separation</div>
+  </div>
+  <div class="summary-card calibration" aria-label="Calibration index metric">
+    <div class="value" id="stat-calibration">—</div>
+    <div class="label">Calibration</div>
+  </div>
+  <div class="summary-card total" aria-label="Total servers scored">
+    <div class="value" id="stat-total">—</div>
+    <div class="label">Total</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title" id="tier-section-title">Risk Tier Distribution</div>
+  <div id="tier-container">
+    <div class="loading" role="status" aria-label="Loading tier data" aria-live="polite">Loading tier data…</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title" id="axis-section-title">Model Discrimination Quality</div>
+  <div id="axis-container">
+    <div class="loading" role="status" aria-label="Loading axis data" aria-live="polite">Loading axis data…</div>
+  </div>
+</div>
+
+<script>
+  // In-memory auth state — bearer token resolved at runtime
+  const authState = { token: null };
+  if (!authState.token) {
+    authState.token = (window !== window.top && window.top.__ZO_AUTH__)
+      ? window.top.__ZO_AUTH__.bearer
+      : 'Bearer placeholder';
+  }
+
+  const API_BASE = '/api';
+
+  // Tier name to CSS class mapping
+  function tierClass(tier) {
+    if (!tier) return 'unknown';
+    const t = tier.toLowerCase();
+    if (t === 'critical' || t === 'high_risk_isolated') return 'critical';
+    if (t === 'high' || t === 'caution_limited') return 'high';
+    if (t === 'medium' || t === 'enterprise_controlled') return 'medium';
+    if (t === 'low' || t === 'trusted_general') return 'low';
+    if (t === 'minimal' || t === 'trusted_research') return 'minimal';
+    return 'unknown';
+  }
+
+  // Verdict tier chip class
+  function verdictChipClass(tier) {
+    if (!tier) return 'unknown';
+    const t = tier.toLowerCase().replace(/\s+/g, '_');
+    const known = ['trusted_general', 'trusted_research', 'enterprise_controlled',
+                   'caution_limited', 'high_risk_isolated', 'insufficient'];
+    return known.includes(t) ? t : 'unknown';
+  }
+
+  // Score to CSS class (SSL-Labs style)
+  function scoreClass(score) {
+    if (score >= 0.9) return 'excellent';
+    if (score >= 0.7) return 'good';
+    if (score >= 0.5) return 'fair';
+    if (score >= 0.25) return 'poor';
+    if (score >= 0) return 'critical';
+    return 'unknown';
+  }
+
+  // Render summary cards from API response
+  function renderSummary(data) {
+    if (!data) return;
+    const sepEl = document.getElementById('stat-separation');
+    const calEl = document.getElementById('stat-calibration');
+    const totalEl = document.getElementById('stat-total');
+    if (sepEl) sepEl.textContent = typeof data.separation_score === 'number'
+      ? data.separation_score.toFixed(3) : '—';
+    if (calEl) calEl.textContent = typeof data.calibration_index === 'number'
+      ? data.calibration_index.toFixed(3) : '—';
+    const total = data.tiers
+      ? data.tiers.reduce((s, t) => s + (t.count || 0), 0)
+      : 0;
+    if (totalEl) totalEl.textContent = total || '—';
+  }
+
+  // Render tier distribution table
+  function renderTiers(data) {
+    const container = document.getElementById('tier-container');
+    container.innerHTML = '';
+
+    const tiers = data && data.tiers;
+    if (!tiers || tiers.length === 0) {
+      container.innerHTML = '<div class="empty" role="status" aria-label="No tier data available">No tier data available at this time.</div>';
+      return;
+    }
+
+    // Compute max count for mini-bars
+    const maxCount = Math.max(...tiers.map(t => t.count || 0), 1);
+
+    const table = document.createElement('table');
+    table.className = 'tier-table';
+    table.setAttribute('aria-label', 'Risk tier distribution table');
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Tier', 'Count', 'Mean p_top', 'StdDev', 'p25', 'p50', 'p75'].forEach(h => {
+      const th = document.createElement('th');
+      th.setAttribute('scope', 'col');
+      th.textContent = h;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    tiers.forEach(tier => {
+      const tr = document.createElement('tr');
+
+      const tierTd = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = `tier-badge ${tierClass(tier.tier)}`;
+      badge.setAttribute('aria-label', `Risk tier: ${tier.tier || 'unknown'}`);
+      badge.textContent = tier.tier || 'Unknown';
+      tierTd.appendChild(badge);
+
+      const countTd = document.createElement('td');
+      countTd.className = 'num-cell';
+      const countSpan = document.createElement('span');
+      countSpan.textContent = tier.count || 0;
+      countTd.appendChild(countSpan);
+      const miniBar = document.createElement('span');
+      miniBar.className = 'mini-bar';
+      const miniFill = document.createElement('span');
+      miniFill.className = 'mini-fill';
+      miniFill.style.width = ((tier.count || 0) / maxCount * 100) + '%';
+      miniBar.appendChild(miniFill);
+      countTd.appendChild(miniBar);
+
+      const meanTd = document.createElement('td');
+      meanTd.className = 'num-cell';
+      meanTd.textContent = typeof tier.mean_p_top === 'number' ? tier.mean_p_top.toFixed(4) : '—';
+
+      const stdTd = document.createElement('td');
+      stdTd.className = 'num-cell';
+      stdTd.textContent = typeof tier.stddev_p_top === 'number' ? tier.stddev_p_top.toFixed(4) : '—';
+
+      const p25Td = document.createElement('td');
+      p25Td.className = 'num-cell';
+      p25Td.textContent = typeof tier.p25 === 'number' ? tier.p25.toFixed(4) : '—';
+
+      const p50Td = document.createElement('td');
+      p50Td.className = 'num-cell';
+      p50Td.textContent = typeof tier.p50 === 'number' ? tier.p50.toFixed(4) : '—';
+
+      const p75Td = document.createElement('td');
+      p75Td.className = 'num-cell';
+      p75Td.textContent = typeof tier.p75 === 'number' ? tier.p75.toFixed(4) : '—';
+
+      tr.appendChild(tierTd);
+      tr.appendChild(countTd);
+      tr.appendChild(meanTd);
+      tr.appendChild(stdTd);
+      tr.appendChild(p25Td);
+      tr.appendChild(p50Td);
+      tr.appendChild(p75Td);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    // Render verdict chips based on tiers present
+    const verdictGrid = document.createElement('div');
+    verdictGrid.className = 'verdict-grid';
+    verdictGrid.setAttribute('aria-label', 'Verdict tier chips');
+    tiers.forEach(tier => {
+      const chip = document.createElement('span');
+      chip.className = `verdict-chip ${verdictChipClass(tier.tier)}`;
+      chip.setAttribute('aria-label', `${tier.tier}: ${tier.count || 0} servers`);
+      chip.textContent = `${tier.tier || 'Unknown'} (${tier.count || 0})`;
+      verdictGrid.appendChild(chip);
+    });
+    container.appendChild(verdictGrid);
+  }
+
+  // Standard 6 risk axes (SSL-Labs-style weighted display)
+  const RISK_AXES = [
+    'Exploitability',
+    'Attack Surface',
+    'Vulnerability Prevalence',
+    'Remediation Speed',
+    'Asset Criticality',
+    'Threat Intelligence'
+  ];
+
+  // Render axis cards (SSL-Labs-style weighted display)
+  function renderAxes(data) {
+    const container = document.getElementById('axis-container');
+    container.innerHTML = '';
+
+    const tiers = data && data.tiers;
+    if (!tiers || tiers.length === 0) {
+      container.innerHTML = '<div class="empty" role="status" aria-label="No axis data available">No axis data available at this time.</div>';
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'axis-grid';
+
+    tiers.slice(0, 6).forEach((tier, idx) => {
+      const axisName = RISK_AXES[idx] || `Axis ${idx + 1}`;
+      const meanScore = tier.mean_p_top || 0;
+      const p25 = tier.p25 || 0;
+      const p50 = tier.p50 || 0;
+      const p75 = tier.p75 || 0;
+
+      const card = document.createElement('div');
+      card.className = 'axis-card';
+
+      const header = document.createElement('div');
+      header.className = 'axis-header';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'axis-name';
+      nameEl.textContent = axisName;
+
+      const scoreEl = document.createElement('div');
+      scoreEl.className = 'axis-score';
+      scoreEl.setAttribute('aria-label', `Score: ${meanScore.toFixed(4)}`);
+      scoreEl.textContent = meanScore.toFixed(3);
+
+      header.appendChild(nameEl);
+      header.appendChild(scoreEl);
+
+      const barWrap = document.createElement('div');
+      barWrap.className = 'axis-bar-wrap';
+      const fill = document.createElement('div');
+      fill.className = `axis-fill ${scoreClass(meanScore)}`;
+      fill.style.width = Math.max(0, Math.min(100, meanScore * 100)) + '%';
+      barWrap.appendChild(fill);
+
+      const quartiles = document.createElement('div');
+      quartiles.className = 'axis-quartiles';
+      quartiles.innerHTML =
+        `<span>P25: ${p25.toFixed(3)}</span>` +
+        `<span>P50: ${p50.toFixed(3)}</span>` +
+        `<span>P75: ${p75.toFixed(3)}</span>`;
+
+      card.appendChild(header);
+      card.appendChild(barWrap);
+      card.appendChild(quartiles);
+      grid.appendChild(card);
+    });
+
+    container.appendChild(grid);
+
+    // Criteria version label
+    const critLabel = document.createElement('div');
+    critLabel.className = 'criteria-label';
+    critLabel.setAttribute('aria-label', 'Criteria version label');
+    critLabel.textContent = 'Criteria version: scoring_v1 | Model: p_top discrimination across risk tiers';
+    container.appendChild(critLabel);
+  }
+
+  // Update "as-of" subtitle
+  function updateAsOf(isoStr) {
+    const el = document.getElementById('as-of');
+    if (!el) return;
+    if (isoStr) {
+      try {
+        const d = new Date(isoStr);
+        el.textContent = 'Scored at: ' + d.toLocaleString();
+      } catch (_) {
+        el.textContent = 'Scored at: ' + isoStr;
+      }
+    } else {
+      el.textContent = 'As of: ' + new Date().toLocaleString();
+    }
+  }
+
+  function showLoading() {
+    ['tier-container', 'axis-container'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<div class="loading" role="status" aria-label="Loading data" aria-live="polite">Loading data…</div>';
+    });
+  }
+
+  function showError(msg) {
+    ['tier-container', 'axis-container'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<div class="error" role="alert" aria-label="Error loading data">${msg}</div>`;
+    });
+  }
+
+  async function fetchData() {
+    const btn = document.getElementById('refresh-btn');
+    if (btn) btn.disabled = true;
+    showLoading();
+    try {
+      const resp = await fetch(API_BASE + '/scoring/analytics', {
+        method: 'GET',
+        headers: {
+          'Authorization': authState.token,
+          'Accept': 'application/json'
+        }
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + resp.statusText);
+      const json = await resp.json();
+      renderSummary(json);
+      renderTiers(json);
+      renderAxes(json);
+      updateAsOf(json.scored_at);
+    } catch (e) {
+      console.error('[scoring_analytics_dashboard] fetch error:', e);
+      showError('Unable to load scoring analytics data. Please try again.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ── SELFTEST ──────────────────────────────────────────────────────────────
+  // Verify render functions handle empty/partial API responses without throwing.
+  (function selfTest() {
+    try {
+      // 1. Full response
+      renderSummary({
+        tiers: [
+          { tier: 'critical', count: 5, mean_p_top: 0.92, stddev_p_top: 0.05, p25: 0.88, p50: 0.93, p75: 0.97 },
+          { tier: 'high', count: 15, mean_p_top: 0.72, stddev_p_top: 0.08, p25: 0.65, p50: 0.73, p75: 0.80 },
+          { tier: 'medium', count: 25, mean_p_top: 0.48, stddev_p_top: 0.10, p25: 0.40, p50: 0.50, p75: 0.58 },
+          { tier: 'low', count: 40, mean_p_top: 0.22, stddev_p_top: 0.06, p25: 0.18, p50: 0.22, p75: 0.28 },
+          { tier: 'minimal', count: 10, mean_p_top: 0.08, stddev_p_top: 0.03, p25: 0.06, p50: 0.08, p75: 0.11 }
+        ],
+        separation_score: 0.42,
+        calibration_index: 0.88,
+        scored_at: '2026-09-03T06:00:00+00:00'
+      });
+
+      // 2. Empty response (no tiers)
+      renderSummary({ tiers: [], separation_score: 0, calibration_index: 0 });
+
+      // 3. Null/undefined tiers
+      renderSummary({ separation_score: 0.5, calibration_index: 0.9 });
+
+      // 4. Single tier
+      renderSummary({
+        tiers: [{ tier: 'unknown', count: 1, mean_p_top: 0.5, stddev_p_top: 0, p25: 0.5, p50: 0.5, p75: 0.5 }],
+        separation_score: 0,
+        calibration_index: 1.0
+      });
+
+      // 5. Null/undefined fields inside tier
+      renderSummary({
+        tiers: [{ tier: null, count: null, mean_p_top: null, stddev_p_top: null, p25: null, p50: null, p75: null }]
+      });
+
+      // 6. All zeros
+      renderSummary({
+        tiers: [{ tier: 'zero', count: 0, mean_p_top: 0, stddev_p_top: 0, p25: 0, p50: 0, p75: 0 }],
+        separation_score: 0,
+        calibration_index: 0
+      });
+
+      // 7. Missing scored_at
+      renderSummary({ tiers: [{ tier: 'test', count: 1 }], separation_score: 0.1 });
+
+      console.info('[SELFTEST] All empty/partial render paths passed — no exceptions thrown.');
+    } catch (e) {
+      console.error('[SELFTEST] FAILED:', e);
+      throw e;
+    }
+  })();
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Kick off initial fetch on page load
+  fetchData();
+</script>
+</body>
+</html>

@@ -55,6 +55,16 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.pull_request.labels.*.name, 'autonomous-build') && contains(github.event.pull_request.labels.*.name, 'triage:solid') && github.event.pull_request.draft == false
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Logs resources.graphql.used/remaining/reset so the chairman can
+          # identify which workflow actually drains the installation budget.
+          # Per FU-406 next action: the real consumer is still UNIDENTIFIED.
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=autonomous-build used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Convergence-freeze guard + enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,6 +109,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'land-when-green') && github.event.pull_request.draft == false
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=opt-in-land used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Convergence-freeze guard + enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -166,6 +183,13 @@ jobs:
     if: github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=triage-solid-sweep used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Enable auto-merge on triage:solid autonomous-build PRs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -231,6 +255,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=green-sweep used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Enable auto-merge on any green autonomous-build PR
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,8 @@
+[service]
+name = "factory_liveness_probe"
+import_path = "services.active.factory_liveness_probe.router"
+prefix = "/api"
+tag = "factory_liveness_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

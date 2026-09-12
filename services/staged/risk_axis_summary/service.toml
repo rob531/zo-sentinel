@@ -1,0 +1,8 @@
+[service]
+name = "risk_axis_summary"
+import_path = "services.active.risk_axis_summary.router"
+prefix = "/api"
+tag = "risk_axis_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true

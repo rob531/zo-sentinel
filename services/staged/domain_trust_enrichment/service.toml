@@ -1,0 +1,8 @@
+[service]
+name = "domain_trust_enrichment"
+import_path = "services.active.domain_trust_enrichment.router"
+prefix = "/api"
+tag = "domain_trust_enrichment"
+origin = "service"
+auth = "public"
+needs_data_layer = true

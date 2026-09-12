@@ -1,0 +1,30 @@
+[service]
+name = "view_risk_tier_trend"
+import_path = "services.active.view_risk_tier_trend.router"
+prefix = "/api"
+tag = "view_risk_tier_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[build]
+entry = "services/active/view_risk_tier_trend/router.py"
+
+[acceptance]
+self_test = "python -m services.active.view_risk_tier_trend"
+pass_output = "PASS"
+
+[[tables]]
+name = "mcp_risk_timeline"
+location = "write_service"
+query_endpoint = "http://127.0.0.1:8772/query"
+
+[[tables]]
+name = "mcp_risk_register"
+location = "write_service"
+query_endpoint = "http://127.0.0.1:8772/query"
+
+[[tables]]
+name = "mcp_server_registry"
+location = "app_db"
+model = "McpServerRegistry"

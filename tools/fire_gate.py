@@ -19,8 +19,11 @@ This script answers the real question mechanically, and derives the answer FROM 
 DOCKERFILE AT THE STAGED SHA rather than from a hardcoded list, so it cannot go stale
 when the COPY list changes.
 
-  exit 0  SAFE   -- no path in the delta can reach the image; fire the later sha.
-  exit 1  RESTAGE -- the delta touches the image surface; let the sentinel re-verify.
+  exit 0  SAFE   -- no path in the delta can reach the image AND the target sha is
+                    not CI-red; fire the later sha.
+  exit 1  RESTAGE -- the delta touches the image surface, OR the target sha is CI-RED
+                    on the required contexts (sha_green.py); let the sentinel
+                    re-verify. A CI-UNKNOWN target never produces this on its own.
   exit 2  ERROR  -- could not establish the answer. Never treat as SAFE.
                     (A probe that cannot evaluate is not a green.)
 
@@ -48,6 +51,8 @@ import sys
 #                     so a change here is intent-drift even before the generated file moves.
 #                     This is the FU-102/v64 class (7 modules imported, none COPYed).
 ALWAYS_SENSITIVE = ("Dockerfile", ".dockerignore", "fly.toml", "services/active/")
+
+_SHA40 = re.compile(r"[0-9a-f]{40}")
 
 # Explicitly NOT sensitive: services/staged/ is the builder's scratch surface. Nothing
 # there is copied and nothing there is imported until a promotion moves it to active.
@@ -267,12 +272,76 @@ def changed_files(
     return g_files, g_total or total, f"local-git ({path})"
 
 
+# --------------------------------------------------------------------------- CI
+# THE TARGET SHA'S CI VERDICT. Until 2026-08-05 this question was asked in PROSE
+# only: ops/host/deploy_prod.ps1 `.PARAMETER Sha` says "Must be a CI-green
+# origin/main commit", and nothing anywhere executed that sentence. `sha_green.py`
+# was written for precisely this question after the 2026-07-30T19:2xZ incident in
+# which the ad-hoc greenness query was pointed at /commits/<sha>/status -- a
+# surface on which all 7 required contexts read ABSENT, with nothing erroring --
+# and then it sat at 20,406 bytes with ZERO callers until the improvement loop's
+# dark-tool census selected it (cycle-0006). A precondition that lives only in a
+# docstring is exactly the failure this apparatus exists to remove.
+#
+# This is NOT a new gate. It is the EXISTING precondition, moved out of a sentence
+# and into the code that computes the fire decision. And it is deliberately
+# ASYMMETRIC, because a symmetric one would be a gate that can stall the pipe:
+#
+#   sha_green RED (rc=1)     -> RESTAGE. Firing a CI-red sha was never permitted,
+#                               by any reading, so this forecloses nothing that was
+#                               previously allowed.
+#   sha_green UNKNOWN (rc=2) -> VERDICT UNCHANGED, reported loudly. Unknown is not
+#                               red (R6). An instrument that cannot answer must not
+#                               convert into a blocker (R7) -- that is how gates
+#                               that "can only go red" get built, and this repo has
+#                               paid for several.
+#   sha_green unavailable    -> identical to UNKNOWN. Never a block, never a silent
+#                               pass, and it always says which of the two it was.
+#
+# --no-ci exists so the delta question stays answerable when GitHub is unreachable:
+# recovery over restriction. It prints that it was used; a skip is never a pass.
+
+
+def target_ci(repo: str, sha: str, branch: str = "main") -> dict:
+    """Ask sha_green whether `sha` is green on the REQUIRED contexts.
+
+    Never raises: an exception here would turn an advisory signal into an outage of
+    the delta check, which is the opposite of the point.
+    """
+    try:
+        here = str(pathlib.Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        from sha_green import judge, resolve_required
+        resolve_required(repo, branch)
+        res = judge(repo, sha)
+        return {"verdict": res["verdict"], "rc": res["rc"],
+                "detail": str(res.get("detail", ""))[:400], "source": "sha_green.judge"}
+    except Exception as exc:  # noqa: BLE001
+        return {"verdict": "UNKNOWN", "rc": 2,
+                "detail": f"sha_green could not be consulted: {exc}",
+                "source": "unavailable"}
+
+
+def apply_ci(verdict: str, ci: dict) -> tuple[str, bool]:
+    """Fold the CI verdict into the delta verdict. Pure, so it is testable without
+    a network, and so the asymmetry above is one readable expression rather than a
+    condition scattered through main()."""
+    if verdict == "SAFE" and ci.get("rc") == 1:
+        return "RESTAGE", True
+    return verdict, False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--staged", required=True, help="the vetted/staged SHA (40 chars)")
     ap.add_argument("--target", default="main")
     ap.add_argument("--repo", default="rob531/zo-sentinel")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-ci", action="store_true", dest="no_ci",
+                    help="skip the target sha's CI verdict (sha_green). The\n"
+                         "delta question stays answerable when GitHub is\n"
+                         "unreachable; the output always says the check was skipped.")
     ap.add_argument(
         "--repo-path", default=None, dest="repo_path",
         help="local clone used ONLY when the compare API caps out; "
@@ -296,6 +365,14 @@ def main() -> int:
     hits = [(p, why) for p in changed if (why := classify(p, files, prefixes))]
     verdict = "RESTAGE" if hits else "SAFE"
 
+    if a.no_ci:
+        ci = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
+              "detail": "--no-ci: the target sha's CI state was NOT consulted"}
+    else:
+        ci = target_ci(a.repo, head, a.target if not _SHA40.fullmatch(a.target)
+                       else "main")
+    verdict, ci_forced = apply_ci(verdict, ci)
+
     if a.json:
         print(json.dumps({
             "verdict": verdict, "staged": a.staged, "target": a.target,
@@ -303,6 +380,7 @@ def main() -> int:
             "files_in_delta": len(changed), "files_source": src,
             "image_surface_hits": [{"path": p, "why": w} for p, w in hits],
             "copy_files": sorted(files), "copy_prefixes": sorted(prefixes),
+            "target_ci": ci, "restaged_by_ci": ci_forced,
         }, indent=2))
     else:
         print(f"staged   : {a.staged}")
@@ -311,16 +389,35 @@ def main() -> int:
         print(f"filesrc  : {src}")
         print(f"surface  : {len(files)} COPYed files + {len(prefixes)} COPYed dirs "
               f"+ {len(ALWAYS_SENSITIVE)} contract paths")
+        print(f"target CI: {ci['verdict']} (rc={ci['rc']}) via {ci['source']}")
+        if ci["verdict"] not in ("GREEN", "SKIPPED"):
+            print(f"           {ci['detail'][:200]}")
+        if ci["verdict"] == "UNKNOWN":
+            print("           UNKNOWN IS NOT RED and it is not green: the CI state\n"
+                  "           could not be established, so it has NOT changed the\n"
+                  "           verdict below. Establish it before firing.")
+        if a.staged == head:
+            print("note     : staged == target head, so the delta is empty BY\n"
+                  "           CONSTRUCTION and a SAFE below is tautological -- the\n"
+                  "           CI line above is the only real signal in this run.")
         if hits:
             print(f"\nVERDICT: RESTAGE -- {len(hits)} path(s) in the delta reach the image:")
             for p, w in hits:
                 print(f"  - {p}   [{w}]")
             print("\nThe staged evidence does NOT cover these. Let the next prod-drift-sentinel")
             print("run re-verify, or fire the ORIGINAL staged sha, which is still vetted.")
+        elif ci_forced:
+            print("\nVERDICT: RESTAGE -- the delta is image-inert, but the TARGET SHA\n"
+                  "IS CI-RED on the required contexts. A byte-equivalent image built\n"
+                  "from a red sha is still a red sha; deploy_prod.ps1 has always\n"
+                  "required a CI-green commit. Fire the ORIGINAL staged sha, which is\n"
+                  "still vetted, or wait for main to go green.")
         else:
             print("\nVERDICT: SAFE -- nothing in the delta can reach the image.")
             print(f"Firing {a.target} builds a byte-equivalent image to the staged one.")
-    return 1 if hits else 0
+            if ci["verdict"] == "GREEN":
+                print("The target sha is also CI-GREEN on the required contexts.")
+    return 1 if verdict == "RESTAGE" else 0
 
 
 if __name__ == "__main__":

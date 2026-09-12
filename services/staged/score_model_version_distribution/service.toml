@@ -1,0 +1,8 @@
+[service]
+name = "score_model_version_distribution"
+import_path = "services.active.score_model_version_distribution.router"
+prefix = "/api"
+tag = "score_model_version_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -298,7 +298,19 @@ def _expand_service_directives(proposed_dir: Path) -> int:
             except OSError:
                 pass
             continue
-        children = decompose(name, spec, str(d.get("prefix") or "/api"), str(d.get("tag") or ""))
+        try:
+            children = decompose(name, spec, str(d.get("prefix") or "/api"), str(d.get("tag") or ""))
+        except ValueError as e:
+            # FU-349 / #3415: reserved/malformed service name (e.g. a spec-parser
+            # grabbed the concern-word "contract" as a service). Reject loudly;
+            # never fan out a service that squats on a concern-word or a
+            # load-bearing package.
+            log.warning("build_service %s: %s -> .rejected", p.name, e)
+            try:
+                os.replace(p, p.with_name(p.name + ".rejected"))
+            except OSError:
+                pass
+            continue
         for c in children:
             c["parent_service_directive"] = p.name
             stem = c["output_file"].replace("/", "_").replace(".", "_")

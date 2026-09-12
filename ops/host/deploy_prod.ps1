@@ -60,6 +60,9 @@
 
 .PARAMETER Sha
   Full 40-char commit SHA to deploy. Must be a CI-green origin/main commit.
+  This is no longer prose alone: tools/fire_gate.py consults tools/sha_green.py on
+  the target sha and returns RESTAGE (rc=1) if it is CI-RED. A CI-UNKNOWN target
+  leaves the verdict unchanged and says so -- unknown is not red.
 
 .PARAMETER RollbackImage
   Current prod release image, recorded before the deploy as the rollback anchor

@@ -261,9 +261,43 @@ def prune_done_pending():
     return moved
 
 
+def topup_quarantine():
+    """Top the directive queue up from the #4070 quarantine when it runs thin.
+
+    improvement-loop cycle-0087. tools/requeue_quarantined.py implements the
+    paced re-emission for GH #4079 and was measured DARK -- built, CI-tested,
+    and called by NOTHING for 14 days, because its own docstring asked a cron,
+    a lane or a human to remember to run it. This is the remembering, in code.
+
+    Fail-soft and non-blocking by construction: the tool reads the whole repo
+    to decide eligibility (minutes, not seconds), so quarantine_topup spawns it
+    detached and returns at once, and it swallows every exception -- a top-up
+    that can stall or kill the builder is worse than no top-up. Disable with
+    ZO_QUARANTINE_TOPUP=0.
+    """
+    try:
+        # By FILE PATH, not `from tools.quarantine_topup import ...`: this file
+        # already wraps `from tools.uv_gate_runner import run_gates` because
+        # tools/ is NOT importable in every launch context, and a seam that
+        # silently degrades to a no-op is the exact defect this cycle is
+        # closing. Resolved relative to THIS file, so it follows the daemon.
+        import importlib.util as _ilu
+        _src = Path(__file__).resolve().parent / "tools" / "quarantine_topup.py"
+        _spec = _ilu.spec_from_file_location("quarantine_topup", _src)
+        _mod = _ilu.module_from_spec(_spec)
+        sys.modules["quarantine_topup"] = _mod
+        _spec.loader.exec_module(_mod)
+        spawned, why = _mod.topup(PENDING_DIR)
+        if spawned:
+            log(f"quarantine top-up: {why}")
+    except Exception as e:                                      # noqa: BLE001
+        log(f"quarantine top-up unavailable (non-fatal): {e}")
+
+
 def load_directives_from_mesh():
     """Load directives from BOTH mesh_memory DB and pending dir (merged)."""
     prune_done_pending()   # keep pending/ from growing unbounded with done files
+    topup_quarantine()     # keep the queue non-empty from the #4079 backlog
     directives = []
     seen_ids = set()
 
@@ -1902,6 +1936,46 @@ def gate_error_text(gate):
     return f"gate={key}: {reason}"
 
 
+def _write_raw_directive(directive, directive_id):
+    """handler=="write_raw": the directive already CARRIES the exact bytes.
+
+    CofC ruling 2026-09-10 (daily-chairman-review). The `handler` field was
+    validated by zo_sentinel/mcp_servers/directive_mcp.py, by
+    zo_sentinel/promoters/proposed_to_pending_promoter.py and by
+    directive_validator.py -- and honoured by NO executor. Every directive,
+    whatever its handler, reached run_goose_task(). So a write_raw scaffold
+    directive handed an LLM the finished file as a task DESCRIPTION and asked it
+    to produce that file; the model wrote its own chat instead. Measured
+    2026-09-10 over all 361 open PRs: 68 carry a services/staged/<n>/service.toml
+    that does not parse, first lines including `[TOOL_CALL]`, `---`, a python
+    triple-quoted assignment, and "Now I'll create the router module:". 0 were
+    unfetchable, so 68 is a direct count. Oldest 2026-07-31; none self-healed.
+
+    Writing the bytes is both the cure and a saving: this class of directive
+    stops spending an LLM invocation to reproduce what it was already given.
+    The gate chain is UNCHANGED and still runs on the result -- no gate is
+    added, none is bypassed (harness doctrine R7: recovery, not restriction).
+
+    Returns True if the declared output landed on disk.
+    """
+    content = directive.get("content")
+    if not isinstance(content, str) or not content:
+        log(f"[write_raw] {directive_id}: no content -> falling through to engine")
+        return False
+    out = declared_output(directive)
+    if out is None:
+        log(f"[write_raw] {directive_id}: no declared output_file -> falling through")
+        return False
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content)
+    except Exception as exc:
+        log(f"[write_raw] {directive_id}: write failed: {exc}")
+        return False
+    log(f"[write_raw] {directive_id}: wrote {len(content)} B verbatim -> {out} (no LLM)")
+    return True
+
+
 def _gate_chain(directive, directive_id, pre_diff_state, engine_ok):
     """Run the completion gate chain, returning (passed, failing_gate).
 
@@ -2109,7 +2183,28 @@ def run():
                 # ledger records the real reason instead of a blanket
                 # "output_file was not produced" (chairman review 2026-07-20).
                 _failed_gate = None
-                if goose_installed:
+                # CofC 2026-09-10: handler dispatch, which this executor never
+                # had. A write_raw directive carries its finished bytes; write
+                # them rather than asking a model to re-derive them. Anything
+                # that is not a satisfiable write_raw falls through to exactly
+                # the path it took before.
+                _raw_done = False
+                if directive.get("handler") == "write_raw":
+                    if _write_raw_directive(directive, directive_id):
+                        _ok, _failed_gate = _gate_chain(directive, directive_id,
+                                                        _pre_diff, True)
+                        if _ok:
+                            _complete(directive, directive_id,
+                                      "write_raw: content written verbatim",
+                                      routed_model="write_raw")
+                        else:
+                            _ghost_or_fail(directive, directive_id,
+                                           routed_model="write_raw",
+                                           gate=_failed_gate)
+                        _raw_done = True
+                if _raw_done:
+                    pass
+                elif goose_installed:
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive), directive_obj=directive)
                     _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
                                                     bool(result.get("success")))

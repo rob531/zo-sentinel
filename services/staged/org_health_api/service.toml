@@ -1,0 +1,8 @@
+[service]
+name = "org_health_api"
+import_path = "services.active.org_health_api.router"
+prefix = "/api"
+tag = "org_health_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

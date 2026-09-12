@@ -42,8 +42,14 @@ def get_audit_log(
     session: Session = Depends(get_session)
 ):
     """
-    Retrieve audit log entries joined with McpServerRegistry for server name resolution.
+    Retrieve audit log entries joined with mcp_server_registry for server name resolution.
     Returns rows with timestamp, target_server_id, action, actor, detail, and server_name.
+
+    The API field `detail` is the real column `audit_log.details_json`, and
+    `server_name` is `mcp_server_registry.name`, both aliased so the response
+    contract is unchanged. `audit_log.detail` and `McpServerRegistry` do not
+    exist -- the latter is the ORM CLASS name used as a table name
+    (BUILDER_ANTIPATTERNS.md AP-005). Refs #4080.
     """
     # Base query with join
     base_query = """
@@ -52,10 +58,10 @@ def get_audit_log(
             al.target_server_id,
             al.action,
             al.actor,
-            al.detail,
-            msr.server_name
+            al.details_json AS detail,
+            msr.name AS server_name
         FROM audit_log al
-        LEFT JOIN McpServerRegistry msr ON al.target_server_id = msr.id
+        LEFT JOIN mcp_server_registry msr ON al.target_server_id = msr.server_id
         WHERE 1=1
     """
     params = {}
@@ -115,7 +121,7 @@ def log_audit(
         timestamp = datetime.utcnow()
     session.execute(
         text("""
-            INSERT INTO audit_log (timestamp, target_server_id, action, actor, detail)
+            INSERT INTO audit_log (timestamp, target_server_id, action, actor, details_json)
             VALUES (:timestamp, :target_server_id, :action, :actor, :detail)
         """),
         {
@@ -138,8 +144,8 @@ def ensure_tables(session: Session) -> None:
             target_server_id INTEGER NOT NULL,
             action VARCHAR(255) NOT NULL,
             actor VARCHAR(255) NOT NULL,
-            detail TEXT,
-            FOREIGN KEY (target_server_id) REFERENCES McpServerRegistry(id) ON DELETE CASCADE
+            details_json TEXT,
+            FOREIGN KEY (target_server_id) REFERENCES mcp_server_registry(server_id) ON DELETE CASCADE
         )
     """))
     session.commit()
@@ -149,7 +155,7 @@ def create_entries_bulk(session: Session, entries: List[dict]) -> dict:
     for entry in entries:
         session.execute(
             text("""
-                INSERT INTO audit_log (timestamp, target_server_id, action, actor, detail)
+                INSERT INTO audit_log (timestamp, target_server_id, action, actor, details_json)
                 VALUES (:timestamp, :target_server_id, :action, :actor, :detail)
             """),
             entry
@@ -187,7 +193,7 @@ if __name__ == "__main__":
     # Create tables in test DB
     with engine.connect() as conn:
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS McpServerRegistry (
+            CREATE TABLE IF NOT EXISTS mcp_server_registry (
                 id INTEGER PRIMARY KEY,
                 server_name VARCHAR(255) NOT NULL,
                 endpoint VARCHAR(500),
@@ -202,8 +208,8 @@ if __name__ == "__main__":
                 target_server_id INTEGER NOT NULL,
                 action VARCHAR(255) NOT NULL,
                 actor VARCHAR(255) NOT NULL,
-                detail TEXT,
-                FOREIGN KEY (target_server_id) REFERENCES McpServerRegistry(id) ON DELETE CASCADE
+                details_json TEXT,
+                FOREIGN KEY (target_server_id) REFERENCES mcp_server_registry(server_id) ON DELETE CASCADE
             )
         """))
         conn.commit()
@@ -212,12 +218,12 @@ if __name__ == "__main__":
     with engine.connect() as conn:
         # Server 1
         conn.execute(
-            text("INSERT INTO McpServerRegistry (id, server_name) VALUES (:id, :name)"),
+            text("INSERT INTO mcp_server_registry (server_id, name) VALUES (:id, :name)"),
             {"id": 1, "name": "production-api"}
         )
         # Server 2
         conn.execute(
-            text("INSERT INTO McpServerRegistry (id, server_name) VALUES (:id, :name)"),
+            text("INSERT INTO mcp_server_registry (server_id, name) VALUES (:id, :name)"),
             {"id": 2, "name": "staging-worker"}
         )
         conn.commit()
@@ -252,7 +258,7 @@ if __name__ == "__main__":
         for entry in audit_entries:
             conn.execute(
                 text("""
-                    INSERT INTO audit_log (timestamp, target_server_id, action, actor, detail)
+                    INSERT INTO audit_log (timestamp, target_server_id, action, actor, details_json)
                     VALUES (:timestamp, :target_server_id, :action, :actor, :detail)
                 """),
                 entry

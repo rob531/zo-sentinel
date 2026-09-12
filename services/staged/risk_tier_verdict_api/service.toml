@@ -1,0 +1,12 @@
+service = {
+    "name": "risk_tier_verdict_api",
+    "import_path": "services.active.risk_tier_verdict_api.router",
+    "prefix": "/api",
+    "tag": "risk_tier_verdict_api",
+    "origin": "service",
+    "auth": "public",
+    "needs_data_layer": true,
+}
+
+if __name__ == "__main__":
+    print("PASS")

@@ -120,6 +120,16 @@ jobs:
       required: ${{ steps.drift.outputs.required }}
       have_pat: ${{ steps.drift.outputs.have_pat }}
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Logs resources.graphql.used/remaining/reset so the chairman can
+          # identify which workflow actually drains the installation budget.
+          # Per FU-406 next action: the real consumer is still UNIDENTIFIED.
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=preflight used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Derive required contexts and check reachability
         id: drift
         env:
@@ -201,6 +211,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=reland used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Refresh stale-but-clean and solid-but-blocked autonomous-build PRs
         env:
           # READ/WRITE SPLIT. GITHUB_TOKEN has full repo read and is guaranteed

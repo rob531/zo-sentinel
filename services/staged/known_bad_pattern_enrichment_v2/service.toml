@@ -1,0 +1,8 @@
+[service]
+name = "known_bad_pattern_enrichment_v2"
+import_path = "services.active.known_bad_pattern_enrichment_v2.router"
+prefix = "/api"
+tag = "known_bad_pattern_enrichment_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true

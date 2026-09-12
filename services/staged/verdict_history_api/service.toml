@@ -1,0 +1,8 @@
+[service]
+name = "verdict_history_api"
+import_path = "services.active.verdict_history_api.router"
+prefix = "/api"
+tag = "verdict_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -60,7 +60,7 @@ def setup_database() -> None:
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 

@@ -1,0 +1,8 @@
+[service]
+name = "cve_exposure_rank"
+import_path = "services.active.cve_exposure_rank.router"
+prefix = "/api"
+tag = "cve_exposure_rank"
+origin = "service"
+auth = "public"
+needs_data_layer = true

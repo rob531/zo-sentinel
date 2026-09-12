@@ -1,0 +1,32 @@
+[project]
+name = "score_staleness_probe"
+version = "1.0.0"
+description = "Probe service to check staleness of score data"
+requires-python = ">=3.11"
+
+[dependencies]
+fastapi = "*"
+sqlalchemy = { extras = ["asyncio"], version = "*" }
+httpx = "*"
+app = { path = "..", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[service]
+name = "score_staleness_probe"
+import_path = "services.active.score_staleness_probe.router"
+prefix = "/api"
+tag = "score_staleness_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

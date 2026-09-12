@@ -1,0 +1,15 @@
+[service]
+name = "server_risk_tier_assignment"
+import_path = "services.active.server_risk_tier_assignment.router"
+prefix = "/api"
+tag = "server_risk_tier_assignment"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+system = []
+
+[data_sources]
+app_tables = ["mcp_server_registry"]
+mesh_tables = ["mcp_signal_scores", "mcp_risk_timeline"]

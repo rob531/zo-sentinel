@@ -1,0 +1,12 @@
+[service]
+name = "mcp_llm_axis_scores_distribution_view"
+import_path = "services.active.mcp_llm_axis_scores_distribution_view.router"
+prefix = "/api"
+tag = "mcp_llm_axis_scores_distribution_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.mcp_llm_axis_scores_distribution_view.router"
+expected_output = "PASS"

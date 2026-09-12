@@ -53,6 +53,7 @@ import sys
 ALWAYS_SENSITIVE = ("Dockerfile", ".dockerignore", "fly.toml", "services/active/")
 
 _SHA40 = re.compile(r"[0-9a-f]{40}")
+_LOCAL_REMOTE_PREFIXES = ("origin", "upstream")
 
 # Explicitly NOT sensitive: services/staged/ is the builder's scratch surface. Nothing
 # there is copied and nothing there is imported until a promotion moves it to active.
@@ -182,10 +183,32 @@ def resolve_head(repo: str, target: str) -> str:
       * TOCTOU. Naming and judging the same sha means the verdict still refers to a
         real tree even if main advances mid-run.
     """
-    sha = _gh(["api", f"repos/{repo}/commits/{target}", "--jq", ".sha"]).strip()
-    if not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise RuntimeError(f"could not resolve --target {target!r} to a sha (got {sha!r})")
-    return sha
+    attempts = [target]
+    if not _SHA40.fullmatch(target) and "/" in target:
+        remote, _, branch = target.partition("/")
+        if branch and remote in _LOCAL_REMOTE_PREFIXES:
+            attempts.append(branch)
+
+    last: Exception | None = None
+    for attempt in attempts:
+        try:
+            sha = _gh(["api", f"repos/{repo}/commits/{attempt}", "--jq", ".sha"]).strip()
+        except Exception as exc:  # noqa: BLE001 -- retried below, re-raised if last
+            last = exc
+            continue
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            if attempt != target:
+                print(
+                    f"note     : --target {target!r} is a LOCAL remote-tracking ref; "
+                    f"GitHub knows the branch as {attempt!r}. Resolved against {attempt!r}.",
+                    file=sys.stderr,
+                )
+            return sha
+        last = RuntimeError(
+            f"could not resolve --target {attempt!r} to a sha (got {sha!r})"
+        )
+
+    raise last if last else RuntimeError(f"could not resolve --target {target!r}")
 
 
 def _git(repo_path: str, args: list[str]) -> str:

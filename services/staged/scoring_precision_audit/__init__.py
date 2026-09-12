@@ -31,7 +31,7 @@ def get_signal_scores(session: Any = None, org_id: str | None = None) -> dict[st
 
 def get_mesh_scores(session: Any = None, org_id: str | None = None) -> dict[str, Any]:
     """Retrieve mesh scores from the ZoComputer store."""
-    payload = {"query": "SELECT * FROM mcp_llm_axis_scores"}
+    payload = {"query": "SELECT * FROM McpLlmAxisScore"}
     if org_id:
         payload["query"] += f" WHERE org_id = '{org_id}'"
     resp = requests.post(MESH_API_URL, json=payload, timeout=30)

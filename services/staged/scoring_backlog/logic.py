@@ -27,9 +27,9 @@ def get_scoring_backlog(db: Session = Depends(get_session)) -> BacklogResponse:
         r.first_seen,
         r.scan_count
     FROM
-        mcp_server_registry r
+        McpServerRegistry r
     LEFT JOIN
-        mcp_llm_axis_scores s ON r.server_id = s.server_id
+        McpLlmAxisScore s ON r.server_id = s.server_id
     WHERE
         s.scored_at IS NULL
     """
@@ -54,14 +54,14 @@ if __name__ == "__main__":
     # Seed test data
     db = SessionLocal()
     db.execute("""
-    INSERT INTO mcp_server_registry (server_id, name, url, registry_source, first_seen, scan_count)
+    INSERT INTO McpServerRegistry (server_id, name, url, registry_source, first_seen, scan_count)
     VALUES
         (1, 'Server 1', 'http://server1', 'source1', '2023-01-01', 10),
         (2, 'Server 2', 'http://server2', 'source2', '2023-01-02', 20),
         (3, 'Server 3', 'http://server3', 'source3', '2023-01-03', 30)
     """)
     db.execute("""
-    INSERT INTO mcp_llm_axis_scores (server_id, scored_at)
+    INSERT INTO McpLlmAxisScore (server_id, scored_at)
     VALUES (1, '2023-01-01')
     """)
     db.commit()

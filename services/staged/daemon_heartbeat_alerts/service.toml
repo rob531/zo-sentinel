@@ -1,0 +1,8 @@
+[service]
+name = "daemon_heartbeat_alerts"
+import_path = "services.active.daemon_heartbeat_alerts.router"
+prefix = "/api"
+tag = "daemon_heartbeat_alerts"
+origin = "service"
+auth = "public"
+needs_data_layer = true

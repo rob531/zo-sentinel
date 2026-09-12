@@ -1,0 +1,12 @@
+[service]
+name = "mcp_risk_tier_comparison_api"
+import_path = "services.active.mcp_risk_tier_comparison_api.router"
+prefix = "/api"
+tag = "mcp_risk_tier_comparison_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.mcp_risk_tier_comparison_api"
+expected_output = "PASS"

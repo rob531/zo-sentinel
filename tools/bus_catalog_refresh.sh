@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# Host-side refresher for schema/bus_catalog.json.
+#
+# WHY THIS FILE IS IN THE REPO
+#   The 2026-04 E2E runner died because its activation -- wire_test_hooks.py
+#   patching an untracked zo_sentinel_builder.py -- lived outside version
+#   control. Nothing recorded that it had stopped, and no commit could record
+#   why, because nothing that happened was a commit. This script is the
+#   activation for the referent gate's host half, so it is tracked, reviewable,
+#   and diffable. The crontab line calls this file and holds no logic of its own.
+#
+# WHAT IT DOES
+#   Reads the live bus catalog (paginated) in a CLEAN worktree of origin/main --
+#   never the build workspace, whose untracked files are the B2 failure mode --
+#   and pushes a refresh branch when EITHER:
+#     - the catalog content actually changed (tables/columns added or removed), or
+#     - the committed snapshot is over HEARTBEAT_DAYS old.
+#
+#   Refreshing on content-change alone would let captured_at drift past the
+#   checker's staleness budget while the schema happened to be stable, turning a
+#   healthy system red. Refreshing every night would open a no-op PR every night
+#   and train everyone to ignore it. So: on change, or on heartbeat.
+#
+# Usage:  tools/bus_catalog_refresh.sh [--dry-run]
+set -euo pipefail
+
+REPO="${ZO_REPO:-/home/workspace/zo_sentinel}"
+WORK="${ZO_CATALOG_WORKTREE:-/home/workspace/.catalog_refresh_wt}"
+HEARTBEAT_DAYS="${HEARTBEAT_DAYS:-7}"
+BRANCH="auto/catalog/bus-catalog-refresh"
+# Overridable so the refresher can be exercised end-to-end before it is on main.
+BASE_REF="${ZO_CATALOG_BASE_REF:-origin/main}"
+SNAP="schema/bus_catalog.json"
+DRY=0
+[ "${1:-}" = "--dry-run" ] && DRY=1
+
+log() { echo "[catalog-refresh] $*"; }
+
+cd "$REPO"
+git fetch -q origin
+
+# Clean worktree of origin/main. Rebuilt each run so nothing accumulates in it.
+git worktree remove --force "$WORK" 2>/dev/null || true
+rm -rf "$WORK"
+git worktree add -q --detach "$WORK" "$BASE_REF"
+trap 'cd "$REPO" && git worktree remove --force "$WORK" 2>/dev/null || true' EXIT
+
+cd "$WORK"
+
+# Distinguish "the tool is not on main yet" from "the bus is down". The first
+# cut of this script reported a MISSING SCRIPT as "bus unreachable" -- the same
+# conflation of two different unknowns that this whole gate exists to stop.
+if [ ! -f tools/bus_catalog_snapshot.py ]; then
+    log "ERROR: tools/bus_catalog_snapshot.py absent from $BASE_REF."
+    log "       The refresher cannot run until PR #4036 merges. This is a"
+    log "       missing tool, NOT an unreachable bus."
+    exit 3
+fi
+
+if ! python3 tools/bus_catalog_snapshot.py --emit "$SNAP"; then
+    # Non-zero here means the bus was unreachable. Leave the committed snapshot
+    # alone: an old-but-true catalog is recoverable, and the checker will call
+    # it UNKNOWN once it ages out. Overwriting it with a partial or empty read
+    # would be worse -- that manufactures false MISSING verdicts.
+    log "bus unreachable; committed snapshot left untouched"
+    exit 2
+fi
+
+if git diff --quiet -- "$SNAP"; then
+    log "catalog byte-identical; nothing to do"
+    exit 0
+fi
+
+# Distinguish a real schema change from a captured_at-only bump.
+CONTENT_CHANGED=$(python3 - <<'PY'
+import json, subprocess, sys
+new = json.load(open("schema/bus_catalog.json"))
+old = json.loads(subprocess.run(
+    ["git", "show", "HEAD:schema/bus_catalog.json"],
+    capture_output=True, text=True).stdout or "{}")
+print("1" if new.get("tables") != old.get("tables") else "0")
+PY
+)
+
+AGE_DAYS=$(python3 - <<'PY'
+import json, subprocess
+from datetime import datetime, timezone
+try:
+    old = json.loads(subprocess.run(
+        ["git", "show", "HEAD:schema/bus_catalog.json"],
+        capture_output=True, text=True).stdout)
+    ts = datetime.fromisoformat(old["captured_at"])
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    print(int((datetime.now(timezone.utc) - ts).total_seconds() // 86400))
+except Exception:
+    print(999)
+PY
+)
+
+log "content_changed=$CONTENT_CHANGED committed_age=${AGE_DAYS}d heartbeat=${HEARTBEAT_DAYS}d"
+
+if [ "$CONTENT_CHANGED" = "0" ] && [ "$AGE_DAYS" -lt "$HEARTBEAT_DAYS" ]; then
+    log "timestamp-only change inside heartbeat window; not pushing"
+    exit 0
+fi
+
+if [ "$DRY" = "1" ]; then
+    log "DRY RUN -- would push $BRANCH"
+    git --no-pager diff --stat -- "$SNAP"
+    exit 0
+fi
+
+REASON="heartbeat refresh (${AGE_DAYS}d old)"
+[ "$CONTENT_CHANGED" = "1" ] && REASON="bus schema changed"
+
+# IDEMPOTENT BRANCH CREATION -- do not revert this to `-b`.
+#   `git checkout -b` exits 128 when the local branch already exists, and
+#   `set -e` makes that fatal. The branch is created on the first run that
+#   fires, so from the second onward this script died HERE -- three lines above
+#   a comment block that asserts this path is idempotent because the force-push
+#   updates an open PR in place. The comment was idempotent; the command was
+#   not, and neither the push, the PR-open, nor the non-zero-reporting below it
+#   was ever reached. Measured on the host 2026-09-11:
+#       fatal: a branch named 'auto/catalog/bus-catalog-refresh' already exists
+#       [catalog-guard] bus_catalog_refresh.sh exited 128
+#   with the committed snapshot 8d old against a 14d STALE-RED budget.
+#   `-B` resets the branch to the current detached origin/main HEAD, which is
+#   exactly what the `push -f` below already assumes.
+git worktree prune
+git checkout -q -B "$BRANCH"
+git add "$SNAP"
+git -c user.name="substrate-bot" -c user.email="substrate-bot@users.noreply.github.com" \
+    commit -q -m "chore(catalog): refresh bus_catalog.json -- ${REASON}
+
+Regenerated by tools/bus_catalog_refresh.sh from the live write-service
+catalog, paginated and reconciled against COUNT(*).
+
+Keeping this current is what lets tools/referent_verify.py render a verdict at
+all: once the snapshot passes its staleness budget the checker reports UNKNOWN
+and stops claiming the tables are fine. Refs #4032."
+git push -q -f origin "$BRANCH"
+log "pushed $BRANCH ($REASON)"
+
+# A PUSHED BRANCH IS NOT A REFRESHED SNAPSHOT.
+#
+# This script used to end at the push. Nothing opened a pull request for
+# `auto/catalog/bus-catalog-refresh` and nothing merged it, so on every run
+# where the guard fired correctly the new snapshot went to a branch and stopped
+# there. `schema/bus_catalog.json` on main was last updated 2026-08-26; on
+# 2026-09-03 the live bus held 46 tables / 373 columns against the committed
+# 45 / 361, and referent-verify -- a REQUIRED check whose tables pass is ARMED
+# -- had been resolving referents against that stale plane for eight days,
+# five days from the 14d budget at which it turns STALE-RED and blocks every
+# pull request on the repository.
+#
+# The push was never the arming. The merge is. So the script opens the PR.
+#
+# IDEMPOTENT: the force-push above updates an existing PR in place, so if one
+# is already open for this branch there is nothing to do and that is a success,
+# not a duplicate. `gh pr list --head` is the check; `gh pr create` runs only
+# when it comes back empty.
+#
+# AND IT REPORTS ITS OWN FAILURE. If the PR cannot be opened, this exits
+# non-zero so bus_catalog_guard.sh records `refresh_exit_code != 0` in
+# /home/workspace/logs/bus_catalog_heartbeat.json. The whole defect class here
+# is a step that stops working without saying so; a PR-open that fails quietly
+# would reproduce it one layer out.
+if ! command -v gh >/dev/null 2>&1; then
+    log "pr_open_failed=gh-not-installed -- $BRANCH is pushed but unmerged"
+    exit 4
+fi
+
+EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+if [ -n "$EXISTING" ]; then
+    log "pr_already_open=#$EXISTING (force-push updated it in place)"
+    exit 0
+fi
+
+if PR_URL=$(gh pr create --head "$BRANCH" --base main \
+        --title "chore(catalog): refresh bus_catalog.json -- ${REASON}" \
+        --body "Automated refresh from the live write-service catalog on the ZoComputer host, paginated and reconciled against COUNT(\*).
+
+Reason: **${REASON}** (committed snapshot was ${AGE_DAYS}d old; heartbeat window ${HEARTBEAT_DAYS}d).
+
+\`tools/referent_verify.py\` measures \`bus_captured_at\` against a 336h (14d) budget and is a required status check with its tables pass armed. Past that budget it returns STALE-RED, and a red required context blocks every pull request on this repository. Merging this resets that clock.
+
+Opened by \`tools/bus_catalog_refresh.sh\`. Refs #4032, #4080." 2>&1); then
+    log "pr_opened=$PR_URL"
+else
+    log "pr_open_failed=$PR_URL -- $BRANCH is pushed but unmerged"
+    exit 4
+fi

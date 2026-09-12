@@ -1,0 +1,8 @@
+[service]
+name = "community_signal_enrichment_wiring"
+import_path = "services.active.community_signal_enrichment_wiring.router"
+prefix = "/api"
+tag = "community_signal_enrichment_wiring"
+origin = "service"
+auth = "public"
+needs_data_layer = true

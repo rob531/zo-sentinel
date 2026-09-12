@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_transition_feed"
+import_path = "services.active.risk_tier_transition_feed.router"
+prefix = "/api"
+tag = "risk_tier_transition_feed"
+origin = "service"
+auth = "public"
+needs_data_layer = true

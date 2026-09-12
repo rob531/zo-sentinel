@@ -1,0 +1,25 @@
+[service]
+name = "registry_health_summary"
+import_path = "services.active.registry_health_summary.router"
+prefix = "/api"
+tag = "registry_health_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+
+[python]
+requirements = ["fastapi", "sqlalchemy"]
+
+[router]
+file = "router.py"
+
+[[tests]]
+name = "self_test"
+command = "python -m services.active.registry_health_summary"
+
+[[tests]]
+name = "unit"
+command = "pytest tests/ -v"

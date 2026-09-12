@@ -1,0 +1,8 @@
+[service]
+name = "risk_delta_report_api"
+import_path = "services.active.risk_delta_report_api.router"
+prefix = "/api"
+tag = "risk_delta_report_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

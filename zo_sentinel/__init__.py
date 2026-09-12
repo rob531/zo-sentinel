@@ -1,13 +1,32 @@
-"""zo_sentinel package marker.
+# Auto-emitted service package. Relative intra-service imports survive
+# staged->active promotion without rewrite.
 
-This file MUST exist. Without it, ``zo_sentinel`` is a PEP 420 namespace
-package, and Python's import machinery keeps scanning ``sys.path`` past the
-local checkout. If any *other* ``zo_sentinel`` exists earlier-resolved on the
-path (e.g. an older site-packages copy that predates the ingestor/promoters/
-publisher subpackages added 2026-05-27), it shadows this one: ``goose_runner``
-still imports ``zo_sentinel.build_routing`` (a flat module present in the old
-copy) but ``python3 -m zo_sentinel.ingestor`` / ``zo_sentinel.promoters`` fail
-with ``No module named`` because those subpackages only live here.
+from . import (
+    arch_salvage,
+    authority_log_report,
+    build_completion,
+    build_lessons,
+    build_routing,
+    dead_organ_report,
+    engine_build,
+    policy,
+    queue_janitor,
+    sentinel_directive_generator_goose,
+    vast_jobs,
+    # Add other necessary imports here
+)
 
-Making this a regular package pins resolution to the local checkout.
-"""
+__all__ = [
+    'arch_salvage',
+    'authority_log_report',
+    'build_completion',
+    'build_lessons',
+    'build_routing',
+    'dead_organ_report',
+    'engine_build',
+    'policy',
+    'queue_janitor',
+    'sentinel_directive_generator_goose',
+    'vast_jobs',
+    # Add other necessary exports here
+]

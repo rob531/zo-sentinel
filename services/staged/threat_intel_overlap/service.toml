@@ -1,0 +1,11 @@
+[service]
+name = "threat_intel_overlap"
+import_path = "services.active.threat_intel_overlap.router"
+prefix = "/api"
+tag = "threat_intel_overlap"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

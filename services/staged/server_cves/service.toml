@@ -1,0 +1,8 @@
+[service]
+name = "server_cves"
+import_path = "services.active.server_cves.router"
+prefix = "/api"
+tag = "server_cves"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,44 @@
+[service]
+name = "perspective_snapshot_daemon"
+import_path = "services.active.perspective_snapshot_daemon.router"
+prefix = "/api"
+tag = "perspective_snapshot_daemon"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[build]
+framework = "fastapi"
+entrypoint = "router:app"
+
+[build.test]
+command = "python -m services.active.perspective_snapshot_daemon"
+env = { "PYTHONPATH" = "." }
+
+[acceptance]
+self_test = true
+output_contains = "PASS"
+
+[acceptance.criteria]
+in_memory_override = true
+schema_columns = ["created_at", "created_by", "description", "facet_filters", "id", "name", "org_id", "updated_at"]
+table = "perspectives"
+
+[data_plane.app]
+tables = ["perspectives"]
+session = "app.db.get_session"
+models = ["Perspective"]
+
+[data_plane.mesh]
+tables = ["mcp_signal_scores", "mesh_memory"]
+endpoint = "http://127.0.0.1:8772/query"
+
+[dependencies]
+fastapi = ">=0.100.0"
+sqlalchemy = ">=2.0.0"
+httpx = ">=0.24.0"
+pydantic = ">=2.0.0"
+
+[test.setup]
+tables_created = ["perspectives"]
+seed_data = true

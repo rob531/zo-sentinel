@@ -1,0 +1,8 @@
+[service]
+name = "axis_change_probe"
+import_path = "services.active.axis_change_probe.router"
+prefix = "/api"
+tag = "axis_change_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

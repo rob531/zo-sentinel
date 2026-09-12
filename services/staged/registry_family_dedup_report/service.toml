@@ -1,0 +1,12 @@
+[service]
+name = "registry_family_dedup_report"
+import_path = "services.active.registry_family_dedup_report.router"
+prefix = "/api"
+tag = "registry_family_dedup_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.registry_family_dedup_report"
+expected_output = "PASS"

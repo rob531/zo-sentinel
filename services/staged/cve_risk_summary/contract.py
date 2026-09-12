@@ -14,7 +14,7 @@ app = FastAPI(title="cve_risk_summary", version="1.0.0")
 @app.get("/api/cve/risk-summary")
 def get_cve_risk_summary(session: Session = Depends(get_session)) -> dict[str, Any]:
     """
-    Aggregate CVE risk summary from vuln_advisories joined to vuln_links to mcp_server_registry.
+    Aggregate CVE risk summary from vuln_advisories joined to vuln_links to McpServerRegistry.
     Returns severity counts per server and overall ecosystem distribution.
     """
     # Subquery to join advisories -> links -> servers

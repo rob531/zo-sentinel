@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import mcp_llm_axis_scores, mcp_server_registry
+from app.models import McpLlmAxisScore, McpServerRegistry
 
 router = APIRouter(prefix="/api")
 
@@ -46,8 +46,8 @@ def get_risk_tier_timeline(
             DATE_TRUNC('day', s.scored_at) AS day,
             r.risk_tier AS tier,
             COUNT(*) AS cnt
-        FROM mcp_llm_axis_scores AS s
-        JOIN mcp_server_registry AS r
+        FROM McpLlmAxisScore AS s
+        JOIN McpServerRegistry AS r
           ON s.server_id = r.server_id
         WHERE s.axis_name = :axis_name
           AND s.server_id = :server_id
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     try:
         # Registry entry
         db.add(
-            mcp_server_registry(
+            McpServerRegistry(
                 server_id="srv1",
                 risk_tier="high",
             )
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         today = datetime.utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
         for i in range(3):
             db.add(
-                mcp_llm_axis_scores(
+                McpLlmAxisScore(
                     server_id="srv1",
                     axis_name="overall_risk",
                     scored_at=today - timedelta(days=i),

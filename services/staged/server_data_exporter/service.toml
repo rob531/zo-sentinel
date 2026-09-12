@@ -1,0 +1,8 @@
+[service]
+name = "server_data_exporter"
+import_path = "services.active.server_data_exporter.router"
+prefix = "/api"
+tag = "server_data_exporter"
+origin = "service"
+auth = "public"
+needs_data_layer = true

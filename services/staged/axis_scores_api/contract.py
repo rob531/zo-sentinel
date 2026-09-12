@@ -7,7 +7,7 @@ from typing import List
 import sys
 
 from app.db import get_session
-from app.models import mcp_llm_axis_scores, mcp_server_registry
+from app.models import McpLlmAxisScore, McpServerRegistry
 
 
 app = FastAPI()
@@ -32,9 +32,9 @@ class AxisScoresResponse(BaseModel):
 @app.get("/api/servers/{server_id}/axis-scores", response_model=AxisScoresResponse)
 def get_axis_scores(server_id: str, session: Session = Depends(get_session)):
     rows = (
-        session.query(mcp_llm_axis_scores)
-        .filter(mcp_llm_axis_scores.server_id == server_id)
-        .order_by(mcp_llm_axis_scores.scored_at.desc())
+        session.query(McpLlmAxisScore)
+        .filter(McpLlmAxisScore.server_id == server_id)
+        .order_by(McpLlmAxisScore.scored_at.desc())
         .all()
     )
     axes = [
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     with engine.begin() as conn:
         conn.execute(text("""
-            CREATE TABLE mcp_server_registry (
+            CREATE TABLE McpServerRegistry (
                 server_id TEXT PRIMARY KEY,
                 server_name TEXT,
                 org_id TEXT,
@@ -80,7 +80,7 @@ if __name__ == "__main__":
             )
         """))
         conn.execute(text("""
-            CREATE TABLE mcp_llm_axis_scores (
+            CREATE TABLE McpLlmAxisScore (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 server_id TEXT,
                 axis_name TEXT,
@@ -96,33 +96,33 @@ if __name__ == "__main__":
 
     session = TestingSessionLocal()
 
-    session.add(mcp_server_registry(server_id="srv-001", server_name="Server One", org_id="org-1"))
-    session.add(mcp_server_registry(server_id="srv-002", server_name="Server Two", org_id="org-1"))
+    session.add(McpServerRegistry(server_id="srv-001", server_name="Server One", org_id="org-1"))
+    session.add(McpServerRegistry(server_id="srv-002", server_name="Server Two", org_id="org-1"))
 
     from datetime import datetime
     base_time = datetime(2024, 1, 15, 10, 0, 0)
 
-    session.add(mcp_llm_axis_scores(
+    session.add(McpLlmAxisScore(
         server_id="srv-001", axis_name="risk", label="High", label_index=2,
         p_top=0.75, p_critical=0.15, p_danger=0.10, escalated=1, scored_at=base_time
     ))
-    session.add(mcp_llm_axis_scores(
+    session.add(McpLlmAxisScore(
         server_id="srv-001", axis_name="compliance", label="Medium", label_index=1,
         p_top=0.30, p_critical=0.40, p_danger=0.30, escalated=0, scored_at=base_time
     ))
-    session.add(mcp_llm_axis_scores(
+    session.add(McpLlmAxisScore(
         server_id="srv-001", axis_name="stability", label="Low", label_index=0,
         p_top=0.10, p_critical=0.20, p_danger=0.70, escalated=0, scored_at=base_time
     ))
-    session.add(mcp_llm_axis_scores(
+    session.add(McpLlmAxisScore(
         server_id="srv-002", axis_name="risk", label="Critical", label_index=3,
         p_top=0.95, p_critical=0.03, p_danger=0.02, escalated=1, scored_at=base_time
     ))
-    session.add(mcp_llm_axis_scores(
+    session.add(McpLlmAxisScore(
         server_id="srv-002", axis_name="performance", label="High", label_index=2,
         p_top=0.60, p_critical=0.30, p_danger=0.10, escalated=1, scored_at=base_time
     ))
-    session.add(mcp_llm_axis_scores(
+    session.add(McpLlmAxisScore(
         server_id="srv-002", axis_name="availability", label="Medium", label_index=1,
         p_top=0.25, p_critical=0.45, p_danger=0.30, escalated=0, scored_at=base_time
     ))

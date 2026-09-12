@@ -5,7 +5,7 @@ Logic for the ``/api/servers/{server_id}/risk-tier`` endpoint.
 
 The implementation mirrors the exemplar service logic and operates directly on the
 real application models (no stubs).  It computes a weighted composite score from
-the ``mcp_llm_axis_scores`` table joined with ``mcp_server_registry`` and derives
+the ``McpLlmAxisScore`` table joined with ``McpServerRegistry`` and derives
 a risk tier according to the specification.
 
 The module also contains a self‑test that runs against an in‑memory SQLite
@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 # Real application imports – these must be used verbatim.
 from app.db import get_session
-from app.models import MCP_LLM_Axis_Scores, MCP_Server_Registry
+from app.models import McpLlmAxisScore, McpServerRegistry
 
 router = APIRouter()
 
@@ -82,7 +82,7 @@ def get_server_risk_tier(
     # ------------------------------------------------------------------- #
     # Retrieve the server registry entry – needed for ``criteria_version``.
     # ------------------------------------------------------------------- #
-    server_row = session.get(MCP_Server_Registry, server_id)
+    server_row = session.get(McpServerRegistry, server_id)
     if server_row is None:
         raise HTTPException(status_code=404, detail="Server not found")
 
@@ -91,14 +91,14 @@ def get_server_risk_tier(
     # ------------------------------------------------------------------- #
     stmt = (
         select(
-            func.sum(MCP_LLM_Axis_Scores.score * MCP_LLM_Axis_Scores.weight).label(
+            func.sum(McpLlmAxisScore.score * McpLlmAxisScore.weight).label(
                 "weighted_sum"
             ),
-            func.sum(MCP_LLM_Axis_Scores.weight).label("total_weight"),
-            func.count(MCP_LLM_Axis_Scores.axis_name).label("axis_count"),
+            func.sum(McpLlmAxisScore.weight).label("total_weight"),
+            func.count(McpLlmAxisScore.axis_name).label("axis_count"),
         )
-        .where(MCP_LLM_Axis_Scores.server_id == server_id)
-        .group_by(MCP_LLM_Axis_Scores.server_id)
+        .where(McpLlmAxisScore.server_id == server_id)
+        .group_by(McpLlmAxisScore.server_id)
     )
     result = session.execute(stmt).first()
 
@@ -161,9 +161,9 @@ if __name__ == "__main__":  # pragma: no cover
         sess = TestSession()
         # Servers
         servers = [
-            MCP_Server_Registry(id=1, criteria_version="v1"),
-            MCP_Server_Registry(id=2, criteria_version="v1"),
-            MCP_Server_Registry(id=3, criteria_version="v1"),
+            McpServerRegistry(id=1, criteria_version="v1"),
+            McpServerRegistry(id=2, criteria_version="v1"),
+            McpServerRegistry(id=3, criteria_version="v1"),
         ]
         sess.add_all(servers)
 
@@ -171,7 +171,7 @@ if __name__ == "__main__":  # pragma: no cover
         # Server 1: high scores → composite > 75 → TRUSTED_GENERAL
         for axis in range(_EXPECTED_AXIS_COUNT):
             sess.add(
-                MCP_LLM_Axis_Scores(
+                McpLlmAxisScore(
                     server_id=1,
                     axis_name=f"axis_{axis}",
                     score=90.0,
@@ -181,7 +181,7 @@ if __name__ == "__main__":  # pragma: no cover
         # Server 2: moderate scores → composite ~ 65 → TRUSTED_RESEARCH
         for axis in range(_EXPECTED_AXIS_COUNT):
             sess.add(
-                MCP_LLM_Axis_Scores(
+                McpLlmAxisScore(
                     server_id=2,
                     axis_name=f"axis_{axis}",
                     score=65.0,
@@ -190,7 +190,7 @@ if __name__ == "__main__":  # pragma: no cover
             )
         # Server 3: only two axes → insufficient data
         sess.add(
-            MCP_LLM_Axis_Scores(
+            McpLlmAxisScore(
                 server_id=3,
                 axis_name="axis_0",
                 score=50.0,
@@ -198,7 +198,7 @@ if __name__ == "__main__":  # pragma: no cover
             )
         )
         sess.add(
-            MCP_LLM_Axis_Scores(
+            McpLlmAxisScore(
                 server_id=3,
                 axis_name="axis_1",
                 score=55.0,

@@ -1,0 +1,8 @@
+[service]
+name = "unscored_backlog_report_api"
+import_path = "services.active.unscored_backlog_report_api.router"
+prefix = "/api"
+tag = "unscored_backlog_report_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -371,3 +371,62 @@ def test_target_ci_reports_unknown_when_sha_green_cannot_be_consulted(monkeypatc
     assert "sha_green" in ci["detail"]
     # ...and an UNKNOWN from an unavailable instrument must still not block.
     assert fire_gate.apply_ci("SAFE", ci) == ("SAFE", False)
+# --- resolve_head: a LOCAL remote-tracking ref is not a GitHub ref -------------
+#
+# `fire_gate.py --target origin/main` returned `verdict=ERROR rc=2` --
+# "gh: No commit found for SHA: origin/main (HTTP 422)" -- because `origin/` is a
+# purely local remote-tracking prefix that GitHub has never heard of. Measured
+# 2026-09-12 by prod-drift-sentinel, whose own instructions say `origin/main`
+# everywhere else. An ERROR is the right refusal for an UNEVALUABLE probe; this
+# one was evaluable. These tests pin the retry AND pin that it stayed a refusal
+# for a target that really is unresolvable -- a widening that silences the error
+# path would be worse than the bug.
+
+
+def _fake_gh_refs(known):
+    """A _gh stand-in: resolves only the refs in `known`, else raises like gh does."""
+    calls = []
+
+    def gh(args):
+        ref = args[1].split("/commits/", 1)[1]
+        calls.append(ref)
+        if ref in known:
+            return known[ref] + "\n"
+        raise RuntimeError(f"gh: No commit found for SHA: {ref} (HTTP 422)")
+
+    return gh, calls
+
+
+HEAD = "a" * 40
+
+
+def test_remote_tracking_target_resolves_via_branch(monkeypatch):
+    gh, calls = _fake_gh_refs({"main": HEAD})
+    monkeypatch.setattr(fire_gate, "_gh", gh)
+    assert fire_gate.resolve_head("o/r", "origin/main") == HEAD
+    # it tried the literal FIRST, so a real branch named with a slash is unaffected
+    assert calls == ["origin/main", "main"]
+
+
+def test_plain_branch_target_is_unchanged(monkeypatch):
+    gh, calls = _fake_gh_refs({"main": HEAD})
+    monkeypatch.setattr(fire_gate, "_gh", gh)
+    assert fire_gate.resolve_head("o/r", "main") == HEAD
+    assert calls == ["main"]
+
+
+def test_unresolvable_remote_tracking_target_still_raises(monkeypatch):
+    """POSITIVE CONTROL: the ERROR path must stay reachable."""
+    gh, _ = _fake_gh_refs({"main": HEAD})
+    monkeypatch.setattr(fire_gate, "_gh", gh)
+    with pytest.raises(Exception):
+        fire_gate.resolve_head("o/r", "origin/no-such-branch-zzz")
+
+
+def test_unknown_remote_prefix_is_not_stripped(monkeypatch):
+    """`foo/bar` may be a REAL branch name; only known remote prefixes retry."""
+    gh, calls = _fake_gh_refs({"bar": HEAD})
+    monkeypatch.setattr(fire_gate, "_gh", gh)
+    with pytest.raises(Exception):
+        fire_gate.resolve_head("o/r", "feature/bar")
+    assert calls == ["feature/bar"]

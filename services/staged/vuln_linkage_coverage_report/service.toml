@@ -1,0 +1,8 @@
+[service]
+name = "vuln_linkage_coverage_report"
+import_path = "services.active.vuln_linkage_coverage_report.router"
+prefix = "/api"
+tag = "vuln_linkage_coverage_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

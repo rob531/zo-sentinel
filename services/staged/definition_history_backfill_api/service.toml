@@ -1,0 +1,8 @@
+[service]
+name = "definition_history_backfill_api"
+import_path = "services.active.definition_history_backfill_api.router"
+prefix = "/api"
+tag = "definition_history_backfill_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

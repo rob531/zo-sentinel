@@ -1,0 +1,8 @@
+[service]
+name = "registry_growth_progress_api"
+import_path = "services.active.registry_growth_progress_api.router"
+prefix = "/api"
+tag = "registry_growth_progress_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

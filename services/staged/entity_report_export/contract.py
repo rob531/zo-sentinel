@@ -76,16 +76,16 @@ if __name__ == "__main__":
     # Insert test data
     with engine.connect() as conn:
         conn.execute(
-            "INSERT INTO mcp_server_registry (id, name, org_id, created_at, updated_at) VALUES (1, 'Test Server 1', 1, '2023-01-01', '2023-01-02')"
+            "INSERT INTO McpServerRegistry (id, name, org_id, created_at, updated_at) VALUES (1, 'Test Server 1', 1, '2023-01-01', '2023-01-02')"
         )
         conn.execute(
-            "INSERT INTO mcp_llm_axis_scores (server_id, score, updated_at) VALUES (1, 0.85, '2023-01-02')"
+            "INSERT INTO McpLlmAxisScore (server_id, score, updated_at) VALUES (1, 0.85, '2023-01-02')"
         )
         conn.execute(
-            "INSERT INTO mcp_server_registry (id, name, org_id, created_at, updated_at) VALUES (2, 'Test Server 2', 2, '2023-01-03', '2023-01-04')"
+            "INSERT INTO McpServerRegistry (id, name, org_id, created_at, updated_at) VALUES (2, 'Test Server 2', 2, '2023-01-03', '2023-01-04')"
         )
         conn.execute(
-            "INSERT INTO mcp_llm_axis_scores (server_id, score, updated_at) VALUES (2, 0.90, '2023-01-04')"
+            "INSERT INTO McpLlmAxisScore (server_id, score, updated_at) VALUES (2, 0.90, '2023-01-04')"
         )
         conn.commit()
 

@@ -1,0 +1,8 @@
+[service]
+name = "scoring_anomaly_probe"
+import_path = "services.active.scoring_anomaly_probe.router"
+prefix = "/api"
+tag = "scoring_anomaly_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -152,18 +152,38 @@ class EnrichmentsWriter:
         return False
     
     def poll_for_pending_enrichments(self) -> List[Dict[str, Any]]:
+        """UNRESOLVED REFERENT -- the work queue has no producer, anywhere.
+
+        This selected `server_id, enrichment_type, score, evidence_blob FROM
+        mcp_enrichment_work_queue WHERE written = 0`. That table exists on no
+        plane -- not on the bus, not as a __tablename__, in no migration -- and
+        NOTHING IN THIS REPOSITORY EVER WRITES ONE. The only two references to
+        the name in the whole tree were this SELECT and the UPDATE that marks a
+        row processed: a consumer and an acknowledger, with no producer.
+
+        There is no near-miss to correct it to, and that distinguishes it from
+        the other names on the #4080 list. The closest real table,
+        `mcp_signal_enrichments`, is this writer's OUTPUT -- write_enrichment()
+        writes it -- so reading it as the input queue would make the daemon feed
+        on itself, and it carries no `written` column to drive the handshake.
+        No assignment of real tables makes this query true.
+
+        So the intended referent is recorded as UNRESOLVED rather than guessed.
+        A plausible wrong name is how this backlog was created; it passes the
+        check and hides forever, where an honest unresolved stays visible.
+
+        Behaviour is UNCHANGED. _query_service() has always raised on the
+        missing table and returned [], so this has never yielded a single item
+        and run() has always fallen through to
+        _compute_and_write_missing_enrichments(), which is the path that
+        actually works. What changes is that the module no longer NAMES a table
+        that does not exist.
+
+        TO REBUILD: a queue needs a writer. Whatever enqueues enrichment work
+        must declare its own table (a migration, or an ensure_tables() in the
+        producer) before this consumer can be restored. Refs #4080.
         """
-        Poll write_service for pending enrichment work from the queue.
-        
-        Returns:
-            List of dicts with keys: server_id, enrichment_type, score, evidence_blob
-        """
-        sql = """
-            SELECT server_id, enrichment_type, score, evidence_blob 
-            FROM mcp_enrichment_work_queue 
-            WHERE written = 0
-        """
-        return self._query_service(sql)
+        return []
     
     def _get_server_metadata(self, server_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -289,22 +309,23 @@ class EnrichmentsWriter:
                     logger.error(f"Failed to write computed enrichment for {server_id}")
     
     def _mark_queue_item_processed(self, server_id: str, enrichment_type: str) -> None:
+        """Acknowledge a queue item. UNREACHABLE while the queue is unresolved.
+
+        Its only caller is _process_queue_items(), which is only fed by
+        poll_for_pending_enrichments() -- see that docstring: the queue table
+        has no producer on any plane, so this is never called. The
+        acknowledgement is kept, not deleted, because it is half of a handshake
+        that a future producer would need; it just cannot name a table that
+        does not exist while it waits. Refs #4080.
         """
-        Mark a queue item as processed by setting written = 1.
-        """
-        sql = f"""
-            UPDATE mcp_enrichment_work_queue 
-            SET written = 1 
-            WHERE server_id = '{server_id}' AND enrichment_type = '{enrichment_type}'
-        """
-        try:
-            self.session.post(
-                f"{WRITE_SERVICE_URL}/query",
-                json={"sql": sql},
-                timeout=ENRICHMENT_TIMEOUT
-            )
-        except requests.RequestException as e:
-            logger.warning(f"Failed to mark queue item processed: {e}")
+        logger.debug(
+            "queue ack skipped for %s/%s: mcp_enrichment_work_queue is an "
+            "UNRESOLVED referent (no producer on any plane)",
+            server_id, enrichment_type)
+        return
+        # Restored when a producer declares the queue table:
+        #   UPDATE <queue table> SET written = 1
+        #    WHERE server_id = ? AND enrichment_type = ?
     
     def _send_heartbeat(self) -> bool:
         """
@@ -475,11 +496,16 @@ if __name__ == '__main__':
         # Create writer instance
         writer = EnrichmentsWriter()
         
-        # Test 1: poll_for_pending_enrichments returns mock data
+        # Test 1: poll_for_pending_enrichments yields nothing.
+        #
+        # It used to assert one mock item against a mock /query endpoint, which
+        # is how a query against a table that exists on NO plane passed its own
+        # self-test for months: the mock answered a question the real bus
+        # cannot. See the docstring on poll_for_pending_enrichments -- the work
+        # queue has no producer anywhere, so the referent is UNRESOLVED and the
+        # method now says so instead of naming a phantom table. Refs #4080.
         pending = writer.poll_for_pending_enrichments()
-        assert test_state['query_called'], "Query endpoint was not called"
-        assert len(pending) == 1, f"Expected 1 pending item, got {len(pending)}"
-        assert pending[0]['server_id'] == 'test-server-001', "Wrong server_id"
+        assert pending == [], f"Expected no pending items, got {pending}"
         
         # Test 2: write_enrichment sends correct payload
         success = writer.write_enrichment(

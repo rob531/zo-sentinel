@@ -1,0 +1,8 @@
+[service]
+name = "unmounted_router_census_api"
+import_path = "services.active.unmounted_router_census_api.router"
+prefix = "/api"
+tag = "unmounted_router_census_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

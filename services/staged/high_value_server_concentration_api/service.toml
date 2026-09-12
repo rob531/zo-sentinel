@@ -1,0 +1,8 @@
+[service]
+name = "high_value_server_concentration_api"
+import_path = "services.active.high_value_server_concentration_api.router"
+prefix = "/api"
+tag = "high_value_server_concentration_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

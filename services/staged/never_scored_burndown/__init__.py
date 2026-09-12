@@ -38,7 +38,7 @@ def get_mesh_scores(server_id: int, session: Session = Depends(get_session)) -> 
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_llm_axis_scores WHERE server_id = {server_id}"},
+            json={"query": f"SELECT * FROM McpLlmAxisScore WHERE server_id = {server_id}"},
             timeout=10
         )
         response.raise_for_status()

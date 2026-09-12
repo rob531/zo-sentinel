@@ -202,8 +202,19 @@ VALIDATORS = {
 # --------------------------------------------------------------------------
 def collect(validate: bool = True, merged_sample: int = 200) -> dict:
     now = dt.datetime.now(dt.timezone.utc)
-    open_prs = _gh_json("pr", "list", "-R", REPO, "--state", "open", "--limit", "300",
+    # --limit 1000, and it is checked. `--limit 300` stood here while the open
+    # queue measured 314 on 2026-09-12 -- so this census, whose entire job is to
+    # report queue DEPTH, was under-reporting it by 14 and would have kept
+    # widening the gap in silence. A result exactly as long as its own page size
+    # is a CAP, not a count, and must say so rather than be read as a number.
+    _OPEN_LIMIT = 1000
+    open_prs = _gh_json("pr", "list", "-R", REPO, "--state", "open",
+                        "--limit", str(_OPEN_LIMIT),
                         "--json", "number,title,createdAt,labels,files")
+    if len(open_prs) >= _OPEN_LIMIT:
+        print(f"WARNING: open-PR query returned {len(open_prs)} rows against "
+              f"--limit {_OPEN_LIMIT}: this is a CAP, not a count. Queue depth "
+              f"below is a FLOOR, not the population.", file=sys.stderr)
     merged = _gh_json("pr", "list", "-R", REPO, "--state", "merged", "--limit",
                       str(merged_sample), "--json",
                       "number,title,mergedAt,labels,files")

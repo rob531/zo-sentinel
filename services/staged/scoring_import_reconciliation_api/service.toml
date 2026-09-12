@@ -1,0 +1,8 @@
+[service]
+name = "scoring_import_reconciliation_api"
+import_path = "services.active.scoring_import_reconciliation_api.router"
+prefix = "/api"
+tag = "scoring_import_reconciliation_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

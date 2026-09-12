@@ -1,0 +1,8 @@
+[service]
+name = "cadence_runtime_trend"
+import_path = "services.active.cadence_runtime_trend.router"
+prefix = "/api"
+tag = "cadence_runtime_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

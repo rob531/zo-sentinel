@@ -33,8 +33,8 @@ def get_tier_transitions(days: int, session: Session = Depends(get_session)) -> 
                 DATE(s.scored_at) AS day,
                 s.risk_tier,
                 LAG(s.risk_tier) OVER (PARTITION BY s.server_id ORDER BY s.scored_at) AS prev_risk_tier
-            FROM mcp_server_registry s
-            JOIN mcp_llm_axis_scores a ON s.server_id = a.server_id
+            FROM McpServerRegistry s
+            JOIN McpLlmAxisScore a ON s.server_id = a.server_id
             WHERE s.scored_at BETWEEN :start_date AND :end_date
         )
         SELECT

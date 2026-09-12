@@ -1,0 +1,12 @@
+[service]
+name = "risk_score_facet_summary"
+import_path = "services.active.risk_score_facet_summary.router"
+prefix = "/api"
+tag = "risk_score_facet_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

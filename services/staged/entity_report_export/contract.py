@@ -1,3 +1,4 @@
+from sqlalchemy.pool import StaticPool
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
@@ -58,7 +59,7 @@ async def export_entity_report(format: str, session: Session = Depends(get_sessi
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import StaticPool, get_session
+    from app.db import get_session
     from app.models import Base
     from sqlalchemy import create_engine
 
@@ -75,16 +76,16 @@ if __name__ == "__main__":
     # Insert test data
     with engine.connect() as conn:
         conn.execute(
-            "INSERT INTO mcp_server_registry (id, name, org_id, created_at, updated_at) VALUES (1, 'Test Server 1', 1, '2023-01-01', '2023-01-02')"
+            "INSERT INTO McpServerRegistry (id, name, org_id, created_at, updated_at) VALUES (1, 'Test Server 1', 1, '2023-01-01', '2023-01-02')"
         )
         conn.execute(
-            "INSERT INTO mcp_llm_axis_scores (server_id, score, updated_at) VALUES (1, 0.85, '2023-01-02')"
+            "INSERT INTO McpLlmAxisScore (server_id, score, updated_at) VALUES (1, 0.85, '2023-01-02')"
         )
         conn.execute(
-            "INSERT INTO mcp_server_registry (id, name, org_id, created_at, updated_at) VALUES (2, 'Test Server 2', 2, '2023-01-03', '2023-01-04')"
+            "INSERT INTO McpServerRegistry (id, name, org_id, created_at, updated_at) VALUES (2, 'Test Server 2', 2, '2023-01-03', '2023-01-04')"
         )
         conn.execute(
-            "INSERT INTO mcp_llm_axis_scores (server_id, score, updated_at) VALUES (2, 0.90, '2023-01-04')"
+            "INSERT INTO McpLlmAxisScore (server_id, score, updated_at) VALUES (2, 0.90, '2023-01-04')"
         )
         conn.commit()
 

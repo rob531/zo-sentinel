@@ -1,0 +1,8 @@
+[service]
+name = "score_change_alert"
+import_path = "services.active.score_change_alert.router"
+prefix = "/api"
+tag = "score_change_alert"
+origin = "service"
+auth = "public"
+needs_data_layer = true

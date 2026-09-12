@@ -1,5 +1,5 @@
 title: "Zo Sentinel Service-Dir-from-Exemplar Builder (SOA atomic unit)"
-description: "The autonomous builder's SOA lane: emit ONE self-contained SERVICE DIRECTORY into services/staged/<name>/ by mirroring the canonical service-dir exemplar (services/_exemplar/), ONE FILE PER BOUNDED PASS (logic -> router -> contract -> service.toml), then run the service's own contract.py and require PASS. The atomic unit is the SERVICE; each emission stays single-file-per-concern (the proven module_from_exemplar lane, generalised to a directory). NEVER edits the spine; NEVER promotes -- staged->active is the promoter's gated decision."
+description: "The autonomous builder's SOA lane: emit ONE self-contained SERVICE DIRECTORY into the services/staged/ directory named for the service by mirroring the canonical service-dir exemplar (services/_exemplar/), ONE FILE PER BOUNDED PASS (logic -> router -> contract -> service.toml), then run the service's own contract.py and require PASS. The atomic unit is the SERVICE; each emission stays single-file-per-concern (the proven module_from_exemplar lane, generalised to a directory). NEVER edits the spine; NEVER promotes -- staged->active is the promoter's gated decision."
 version: "0.2"
 
 # WHY THIS EXISTS
@@ -23,7 +23,7 @@ parameters:
   - key: service_name
     input_type: string
     requirement: required
-    description: "snake_case service name -> services/staged/<service_name>/ (the dir to create)."
+    description: "snake_case service name. The directory to create is services/staged/ + this value, e.g. service_name=cve_feed_ingestion -> services/staged/cve_feed_ingestion/. SUBSTITUTE THE VALUE: never emit a path containing < or > -- those are reserved on Windows and one such path makes every checkout of main fail on the tower (FU-209)."
   - key: service_spec
     input_type: string
     requirement: required

@@ -1,0 +1,8 @@
+[service]
+name = "registry_ingest_anomaly_report"
+import_path = "services.active.registry_ingest_anomaly_report.router"
+prefix = "/api"
+tag = "registry_ingest_anomaly_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

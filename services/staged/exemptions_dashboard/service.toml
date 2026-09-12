@@ -1,0 +1,8 @@
+[service]
+name = "exemptions_dashboard"
+import_path = "services.active.exemptions_dashboard.router"
+prefix = "/api"
+tag = "exemptions_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

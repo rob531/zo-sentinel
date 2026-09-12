@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 app = FastAPI()
 
@@ -40,13 +40,13 @@ def self_test():
         session.add(dispute)
         session.commit()
 
-        # Test Orgs
-        org = Orgs(name="test_org")
+        # Test Org
+        org = Org(name="test_org")
         session.add(org)
         session.commit()
 
-        # Test Users
-        user = Users(name="test_user", org_id=org.id)
+        # Test User
+        user = User(name="test_user", org_id=org.id)
         session.add(user)
         session.commit()
 

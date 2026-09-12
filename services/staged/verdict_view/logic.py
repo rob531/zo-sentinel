@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 
 from app.db import get_session
-from app.models import mcp_server_registry, mcp_llm_axis_scores
+from app.models import McpServerRegistry, McpLlmAxisScore
 
 
 class AxisScore(BaseModel):
@@ -25,16 +25,16 @@ async def get_verdict_view(
 ) -> VerdictViewResponse:
     """Return verdict view for a given server."""
     server = (
-        db.query(mcp_server_registry)
-        .filter(mcp_server_registry.server_id == server_id)
+        db.query(McpServerRegistry)
+        .filter(McpServerRegistry.server_id == server_id)
         .first()
     )
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     score_rows = (
-        db.query(mcp_llm_axis_scores)
-        .filter(mcp_llm_axis_scores.server_id == server_id)
+        db.query(McpLlmAxisScore)
+        .filter(McpLlmAxisScore.server_id == server_id)
         .all()
     )
 
@@ -70,14 +70,14 @@ if __name__ == "__main__":  # pragma: no cover
         db = SessionLocal()
 
         # Insert a test server and a single axis score
-        test_server = mcp_server_registry(
+        test_server = McpServerRegistry(
             server_id=1,
             verdict="allow",
             risk_tier="low",
         )
         db.add(test_server)
 
-        test_score = mcp_llm_axis_scores(
+        test_score = McpLlmAxisScore(
             server_id=1,
             axis="security",
             label="secure",

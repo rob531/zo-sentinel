@@ -4,10 +4,15 @@ app = "mcplookup" # Replace with your actual reserved Fly app name
 primary_region = "ewr" # Or your preferred region
 
 [deploy]
-  # migrate-in-image on every release: alembic runs with the app's own
-  # DATABASE_URL, so new tables are owned by the app role (no GRANT drift --
-  # the score-disputes lesson).
-  release_command = "alembic upgrade head"
+  # migrate-in-image on every release. Migrations run as the OWNER, not as the
+  # app role: prod Postgres splits ownership 8/11 and `mcplookup_app` owns
+  # neither `users` nor `orgs`, so 0011_clerk_identity died on
+  # `must be owner of table users` (FU-235). That split is a deliberate
+  # least-privilege control, not drift -- see infra/postgres/roles/README.md --
+  # so we override the env var for just this command instead of moving
+  # ownership. OWNER_DATABASE_URL is already a Deployed Fly secret. App runtime
+  # still uses the least-privilege DATABASE_URL; only this command is elevated.
+  release_command = "sh -lc 'DATABASE_URL=\"$OWNER_DATABASE_URL\" alembic upgrade head'"
 
 [build]
   dockerfile = "Dockerfile"

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpPerspectiveEvent
+from app.models import McpServerRegistry, PerspectiveEvent
 from typing import Dict, Any
 
 router = APIRouter()
@@ -17,8 +17,8 @@ def get_perspective_events_rollup(perspective_id: int, session: Session = Depend
         Dictionary containing counts per change_type and new_tier.
     """
     # Query perspective events for the given perspective_id
-    events = session.query(McpPerspectiveEvent).filter(
-        McpPerspectiveEvent.perspective_id == perspective_id
+    events = session.query(PerspectiveEvent).filter(
+        PerspectiveEvent.perspective_id == perspective_id
     ).all()
 
     # Initialize counters
@@ -69,22 +69,22 @@ if __name__ == "__main__":
 
     # Create test perspective events
     test_events = [
-        McpPerspectiveEvent(
+        PerspectiveEvent(
             perspective_id=perspective_id,
             change_type="added",
             new_tier="high"
         ),
-        McpPerspectiveEvent(
+        PerspectiveEvent(
             perspective_id=perspective_id,
             change_type="removed",
             new_tier="medium"
         ),
-        McpPerspectiveEvent(
+        PerspectiveEvent(
             perspective_id=perspective_id,
             change_type="added",
             new_tier="high"
         ),
-        McpPerspectiveEvent(
+        PerspectiveEvent(
             perspective_id=perspective_id,
             change_type="updated",
             new_tier="low"

@@ -1,0 +1,12 @@
+[service]
+name = "never_scored_burndown_api"
+import_path = "services.active.never_scored_burndown_api.router"
+prefix = "/api"
+tag = "never_scored_burndown_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.never_scored_burndown_api"
+expected_output = "PASS"

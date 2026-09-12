@@ -1,0 +1,8 @@
+[service]
+name = "mcp_server_risk_export"
+import_path = "services.active.mcp_server_risk_export.router"
+prefix = "/api"
+tag = "mcp_server_risk_export"
+origin = "service"
+auth = "public"
+needs_data_layer = true

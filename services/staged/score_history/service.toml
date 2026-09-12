@@ -1,0 +1,8 @@
+[service]
+name = "score_history"
+import_path = "services.active.score_history.router"
+prefix = "/api"
+tag = "score_history"
+origin = "service"
+auth = "public"
+needs_data_layer = true

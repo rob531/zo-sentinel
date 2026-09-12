@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from app.db import get_session
-from app.models import McpServerRegistry, CadenceJobRuns
+from app.models import McpServerRegistry, CadenceJobRun
 from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
 import json
@@ -72,9 +72,9 @@ def get_registry_growth_snapshot(db: Session = Depends(get_session)) -> Registry
     growth_series = []
     for day in range(30):
         date = today - timedelta(days=day)
-        count = db.query(CadenceJobRuns).filter(
-            CadenceJobRuns.job == 'registry_growth_snapshot',
-            func.date(CadenceJobRuns.created_at) == date
+        count = db.query(CadenceJobRun).filter(
+            CadenceJobRun.job == 'registry_growth_snapshot',
+            func.date(CadenceJobRun.created_at) == date
         ).scalar()
 
         if count is not None:

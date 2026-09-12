@@ -53,8 +53,11 @@
   PERMANENTLY regardless of gates, because of the IRREVERSIBLE EDGE below.
   First lane-fired release: v66, sha d5cb1d0f, 2026-08-02, accept_gate ACCEPT rc=0.
 
-  IRREVERSIBLE EDGE: fly.toml carries `release_command = "alembic upgrade head"`,
-  which runs against the prod moat Postgres on every release. There is no true
+  IRREVERSIBLE EDGE: fly.toml carries a `release_command` that runs alembic
+  against the prod moat Postgres on every release. This comment deliberately
+  does NOT restate the command -- it did until 2026-08-04 and was wrong for the
+  v69 fire. The script READS the live value out of the candidate's fly.toml and
+  prints it before deploying; trust that line, not this one. There is no true
   Fly migration rollback. Only fire when the staged migration class is GREEN
   (expand-only or no-op) and a moat backup < 24h exists.
 
@@ -164,7 +167,23 @@ try {
     $buildTime = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     Say "head=$head tree=$tree build_time=$buildTime"
-    Say "release_command = 'alembic upgrade head' WILL run against the prod moat PG."
+    # READ the release_command; do not restate it. This line hardcoded
+    # 'alembic upgrade head' and went stale the moment FU-235 (#2775) changed
+    # fly.toml to run alembic under $OWNER_DATABASE_URL. It is the one line an
+    # operator reads to learn what is about to touch the moat, and for the
+    # duration of the v69 fire it would have named the wrong command. A runbook
+    # that restates a value it is standing next to is a second source of truth,
+    # and the second one only ever drifts.
+    $flyTomlPath = Join-Path $WorktreePath "fly.toml"
+    $relLine = Select-String -Path $flyTomlPath -Pattern '^\s*release_command\s*=' |
+               Select-Object -First 1
+    if (-not $relLine) {
+        Die "no release_command in the candidate's fly.toml ($flyTomlPath). Refusing to fire without knowing what runs against the prod moat PG -- an unreadable value must not read as a safe one."
+    }
+    $relCmd = ($relLine.Line -replace '^\s*release_command\s*=\s*', '').Trim()
+    Say "release_command (READ from the candidate's fly.toml, not restated):"
+    Say "  $relCmd"
+    Say "That WILL run against the prod moat PG."
 
     $deployCmd = "flyctl deploy --app $App --yes --build-arg GIT_SHA=$Sha --build-arg BUILD_TIME=$buildTime"
     Say "DEPLOY COMMAND: $deployCmd"

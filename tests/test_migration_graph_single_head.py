@@ -2,9 +2,12 @@
 
 WHY THIS EXISTS
 ---------------
-`fly.toml` carries `release_command = "alembic upgrade head"`, so every prod
-deploy runs this command against the prod moat Postgres. There is no true Fly
-migration rollback, and a release has already failed on this path once (v61).
+`fly.toml` carries a `release_command` that ends in `alembic upgrade head`, so
+every prod deploy runs alembic against the prod moat Postgres. (Since FU-235 the
+command is wrapped to run under `$OWNER_DATABASE_URL`; what this test asserts is
+a property of the revision graph and is unaffected by which role runs it.) There
+is no true Fly migration rollback, and a release has already failed on this path
+once (v61).
 
 `prod-drift-sentinel` classifies each candidate's migration risk before staging
 a deploy, and until now it did so by diffing migration FILE PATHS between prod's

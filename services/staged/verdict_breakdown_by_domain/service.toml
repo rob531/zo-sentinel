@@ -1,0 +1,12 @@
+[service]
+name = "verdict_breakdown_by_domain"
+import_path = "services.active.verdict_breakdown_by_domain.router"
+prefix = "/api"
+tag = "verdict_breakdown_by_domain"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.test]
+command = "python -m services.active.verdict_breakdown_by_domain.router"
+expected_output = "PASS"

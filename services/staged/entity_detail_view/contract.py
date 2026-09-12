@@ -1,0 +1,1 @@
+# services/_exemplar/contract.py - Reference structure

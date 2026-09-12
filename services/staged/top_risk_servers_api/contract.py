@@ -1,3 +1,4 @@
+from sqlalchemy.pool import StaticPool
 from typing import List, Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
@@ -102,7 +103,7 @@ async def get_top_risk_servers(
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import StaticPool, get_session
+    from app.db import get_session
     from app.models import Base
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

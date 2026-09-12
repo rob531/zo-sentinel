@@ -1,0 +1,8 @@
+[service]
+name = "signal_health"
+import_path = "services.active.signal_health.router"
+prefix = "/api"
+tag = "signal_health"
+origin = "service"
+auth = "public"
+needs_data_layer = true

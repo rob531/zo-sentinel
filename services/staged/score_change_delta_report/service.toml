@@ -1,0 +1,12 @@
+[service]
+name = "score_change_delta_report"
+import_path = "services.active.score_change_delta_report.router"
+prefix = "/api"
+tag = "score_change_delta_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.score_change_delta_report"
+expected_output = "PASS"

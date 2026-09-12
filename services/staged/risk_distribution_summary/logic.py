@@ -6,7 +6,7 @@ from typing import Dict
 from fastapi import Depends
 
 from app.db import get_session
-from app.models import mcp_server_registry
+from app.models import McpServerRegistry
 from pydantic import BaseModel
 
 
@@ -26,7 +26,7 @@ def get_risk_distribution(
     """
     tiers = [
         row[0]
-        for row in session.query(mcp_server_registry.risk_tier).all()
+        for row in session.query(McpServerRegistry.risk_tier).all()
         if row[0] is not None
     ]
     counter = Counter(tiers)
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     with SessionLocal() as session:
         for row in test_data:
-            session.add(mcp_server_registry(**row))
+            session.add(McpServerRegistry(**row))
         session.commit()
 
         # Invoke the logic under test.

@@ -144,4 +144,39 @@ if [ -f "$REKEY" ]; then
     fi
 fi
 
+# 4. REPO-ROOT PACKAGE MARKER MUTATION (2026-08-22, daily-chairman-review).
+#    zo_sentinel/__init__.py is a bare package marker by contract. Twice now
+#    (GH #3415, 2026-08-13..16, a three-day total build outage; and again by
+#    2026-08-22) it was overwritten with an "Auto-emitted service package" body
+#    carrying ~20 `from .X import Y` lines naming modules that do not exist, so
+#    `import zo_sentinel` raises ModuleNotFoundError and EVERY
+#    `python3 -m zo_sentinel.*` entrypoint dies at package init. The running
+#    promoter survives because it holds the pre-mutation module in memory --
+#    which is exactly why nothing alarms until a restart, and then a restart
+#    loop that never yields a surviving process looks, from outside, identical
+#    to a healthy one.
+#    The WRITER is not yet identified, so this guard tests the OUTCOME (does the
+#    package import?) rather than policing a writer, and repairs from HEAD.
+#    Idempotent; exits 0 on a clean tree; snapshots the mutation before repair.
+PMG="$SENTINEL/ops/host/package_marker_guard.py"
+if [ -f "$PMG" ]; then
+    python3 "$PMG" 2>&1 | sed 's/^/  marker_guard: /' || log "package_marker_guard NONZERO -- markers still broken after repair"
+fi
+
+# 5. PIPELINE LIVENESS ALARM (GH #3415 prevention 3, FU-349). Outcome-based:
+#    live pending work + no <id>.done.json stamped at the directives ROOT
+#    within 2h -> alarm loudly and latch $LOGS/PIPELINE_STALLED (JSON basis
+#    inside) for other lanes to read; auto-cleared when completions flow
+#    again. Read-only and report-loud: it gates and restarts NOTHING --
+#    healing is sections 1-4's job, making a stall impossible to miss is
+#    this one's. Would have caught the 08-13..16 outage the first morning,
+#    whatever the mechanism.
+PLG="$SENTINEL/ops/host/pipeline_liveness_guard.py"
+if [ -f "$PLG" ]; then
+    python3 "$PLG" 2>&1 | sed 's/^/  liveness_guard: /'
+    plg_rc=${PIPESTATUS[0]:-0}
+    [ "$plg_rc" -eq 1 ] && log "PIPELINE LIVENESS ALARM -- live pending work and no completion in 2h (basis: $LOGS/PIPELINE_STALLED)"
+    [ "$plg_rc" -eq 2 ] && log "pipeline_liveness_guard CANNOT-EVALUATE (rc=2) -- unknown is not healthy"
+fi
+
 log "tick complete"

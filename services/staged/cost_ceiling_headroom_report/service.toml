@@ -1,0 +1,8 @@
+[service]
+name = "cost_ceiling_headroom_report"
+import_path = "services.active.cost_ceiling_headroom_report.router"
+prefix = "/api"
+tag = "cost_ceiling_headroom_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

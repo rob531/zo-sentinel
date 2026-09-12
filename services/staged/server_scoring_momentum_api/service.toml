@@ -1,0 +1,31 @@
+[service]
+name = "server_scoring_momentum_api"
+import_path = "services.active.server_scoring_momentum_api.router"
+prefix = "/api"
+tag = "server_scoring_momentum_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[mesh]
+write_service = "http://127.0.0.1:8772"
+
+[test.overrides]
+app = "app.main:app"
+
+[test.static_pool]
+connections = 1
+
+[[test.seed.McpLlmAxisScore]]
+id = "sig-001"
+server_id = "srv-001"
+axis = "momentum"
+score = 0.75
+org_id = "org-001"
+
+[[test.seed.mcp_signal_scores]]
+id = "sig-001"
+server_id = "srv-001"
+signal_type = "velocity"
+value = 0.8
+confidence = 0.9

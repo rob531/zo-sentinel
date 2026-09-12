@@ -1,0 +1,20 @@
+[service]
+name = "cve_detail_api"
+import_path = "services.active.cve_detail_api.router"
+prefix = "/api"
+tag = "cve_detail_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app.postgres = true
+mesh.query = true
+
+[router]
+file = "router.py"
+
+[[endpoints]]
+path = "/cve-detail/{cve_id}"
+method = "GET"
+handler = "get_cve_detail"

@@ -17,11 +17,11 @@ from fastapi import Depends
 # App DB access – must be imported exactly as specified.
 from app.db import get_session
 from app.models import (
-    mcp_server_registry,
-    mcp_llm_axis_scores,
-    mcp_score_disputes,
-    orgs,
-    users,
+    McpServerRegistry,
+    McpLlmAxisScore,
+    McpScoreDispute,
+    Org,
+    User,
 )
 
 # --------------------------------------------------------------------------- #
@@ -86,12 +86,12 @@ def reset_server_export_api_quarantine(session=Depends(get_session)) -> None:
     """
     Placeholder for the quarantine reset action.
 
-    In production this would update the ``mcp_server_registry`` table to clear
+    In production this would update the ``McpServerRegistry`` table to clear
     any quarantine flags.  The implementation is intentionally minimal to
     satisfy import contracts without side effects.
     """
     # Example of a safe no‑op DB interaction:
-    # session.query(mcp_server_registry).filter_by(quarantined=True).update({"quarantined": False})
+    # session.query(McpServerRegistry).filter_by(quarantined=True).update({"quarantined": False})
     # session.commit()
     return None
 

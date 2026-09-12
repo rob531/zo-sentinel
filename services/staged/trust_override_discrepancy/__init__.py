@@ -11,8 +11,8 @@ from app.db import get_session
 try:
     from app.models import (
         MCP_SERVER_REGISTRY_TABLES,
-        MCP_LLM_AXIS_SCORES,
-        MCP_SCORE_DISPUTES,
+        McpLlmAxisScore,
+        McpScoreDispute,
         ORGS_TABLE,
         USERS_TABLE,
     )

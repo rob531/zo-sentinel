@@ -1,0 +1,21 @@
+[service]
+name = "risk_trajectory_api"
+import_path = "services.active.risk_trajectory_api.router"
+prefix = "/api"
+tag = "risk_trajectory_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = "app.db"
+app_models = "app.models"
+sqlalchemy = "sqlalchemy"
+
+[tables]
+app_plane = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_plane = ["mcp_signal_scores", "mesh_memory"]
+
+[mesh_query]
+endpoint = "http://127.0.0.1:8772/query"
+method = "POST"

@@ -561,3 +561,41 @@ def test_the_grid_survives_the_dst_change(tmp_path, monkeypatch):
     assert summer == ((0, 45), (4, 45), (10, 45), (19, 45))   # UTC-4
     assert winter == ((1, 45), (5, 45), (11, 45), (20, 45))   # UTC-5
     assert summer != winter
+
+
+def test_unattributed_is_unknown_not_another_lane(tmp_path):
+    """`unattributed` is the stamper's word for "I could not tell", so it must
+    land in the SAME bucket as an absent field -- not in `foreign`.
+
+    Measured 2026-08-07T19:49:42Z: prod-drift ran ops/host/verify_candidate.ps1
+    from the SHARED checkout, so $PSScriptRoot had no `\\_lanes\\<name>` component
+    and $env:ZO_LANE was unset. The script stamped "unattributed"; the ledger then
+    reported prod-drift's OWN verdict as "another lane's dry-run" and EXCLUDED it
+    from the orphan test -- the one reading that makes the guard go quiet instead
+    of red. lane_of()'s own docstring already says unknown is not zero (R6);
+    absence obeyed it and the sentinel VALUE did not.
+
+    Two-point standard: the middle assert is the bug (it failed before the fix),
+    the last assert is the positive control (a genuinely foreign lane must STILL
+    be flagged, or the fix is a rubber stamp).
+    """
+    import json
+
+    def stamped(name, lane):
+        path = tmp_path / name
+        path.write_text(json.dumps({"verdict": "PASS", "produced_by_lane": lane}),
+                        encoding="utf-8")
+        return path
+
+    mine    = stamped("verdict_aaaaaaaa_20260807T190000Z.json", "prod-drift")
+    unknown = stamped("verdict_bbbbbbbb_20260807T190100Z.json", "unattributed")
+    absent  = tmp_path / "verdict_dddddddd_20260807T190300Z.json"
+    absent.write_text(json.dumps({"verdict": "PASS"}), encoding="utf-8")
+    other   = stamped("verdict_cccccccc_20260807T190200Z.json", "some-other-lane")
+
+    assert srl.lane_of(mine) == srl.THIS_LANE
+    assert srl.lane_of(absent) is None
+    assert srl.lane_of(unknown) is None, (
+        "unattributed must read as UNKNOWN, exactly like an absent field")
+    assert srl.lane_of(other) == "some-other-lane", (
+        "positive control: a real sibling stamp must still be foreign")

@@ -13,7 +13,7 @@ Usage (tower-side, fly proxy auto-started like the rescore tooling):
   python materialize_canonical_family.py --dsn-file <path> --apply
   python materialize_canonical_family.py --dsn-file <path> --rederive
 """
-import argparse, json, os, re, socket, subprocess, sys, time
+import argparse, json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from family_rules import derive_family

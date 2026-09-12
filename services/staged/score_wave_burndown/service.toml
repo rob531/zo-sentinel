@@ -1,0 +1,8 @@
+[service]
+name = "score_wave_burndown"
+import_path = "services.active.score_wave_burndown.router"
+prefix = "/api"
+tag = "score_wave_burndown"
+origin = "service"
+auth = "public"
+needs_data_layer = true

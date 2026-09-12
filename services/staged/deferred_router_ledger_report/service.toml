@@ -1,0 +1,11 @@
+[service]
+name = "deferred_router_ledger_report"
+import_path = "services.active.deferred_router_ledger_report.router"
+prefix = "/api"
+tag = "deferred_router_ledger_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

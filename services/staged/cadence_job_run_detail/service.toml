@@ -1,0 +1,25 @@
+[service]
+name = "cadence_job_run_detail"
+import_path = "services.active.cadence_job_run_detail.router"
+prefix = "/api"
+tag = "cadence_job_run_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+module = "services.active.cadence_job_run_detail.router"
+
+[data_access]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+mesh_endpoint = "http://127.0.0.1:8772/query"
+
+[dependencies]
+app_db = true
+mesh_client = true
+
+[server]
+host = "0.0.0.0"
+port = 8000
+reload = false

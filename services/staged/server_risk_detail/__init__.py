@@ -26,11 +26,11 @@ from app.db import get_session
 from app.models import (
     MeshMemory,          # mcp_mesh_memory table
     MeshSignalScore,    # mcp_signal_scores table
-    ServerRegistry,     # mcp_server_registry table
-    LLMAxisScore,       # mcp_llm_axis_scores table
-    ScoreDispute,       # mcp_score_disputes table
-    Org,                # orgs table
-    User,               # users table
+    McpServerRegistry,     # McpServerRegistry table
+    McpLlmAxisScore,       # McpLlmAxisScore table
+    McpScoreDispute,       # McpScoreDispute table
+    Org,                # Org table
+    User,               # User table
 )
 
 router = APIRouter()

@@ -1,0 +1,9 @@
+# service.toml
+[service]
+name = "verdict_criteria_audit"
+import_path = "services.active.verdict_criteria_audit.router"
+prefix = "/api"
+tag = "verdict_criteria_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -151,6 +151,7 @@ jobs:
             tests/test_quarantine_topup.py \
             tests/test_architect_domain_map.py \
             tests/test_no_module_scope_test_imports.py \
+            tests/test_edit_fidelity.py \
             -q \
             --junitxml=artifacts/junit.xml
 

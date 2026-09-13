@@ -1,0 +1,22 @@
+[service]
+name = "risk_tier_analytics"
+import_path = "services.active.risk_tier_analytics.router"
+prefix = "/api"
+tag = "risk_tier_analytics"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[endpoints]
+health = "/health"
+risk_tiers = "/risk-tiers"
+org_risk_summary = "/risk-tiers/{org_id}"
+server_risk_detail = "/risk-tiers/servers/{server_id}"
+tier_distribution = "/risk-tiers/distribution"
+
+[database]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[acceptance]
+self_test_output = "PASS"

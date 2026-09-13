@@ -110,7 +110,13 @@ jobs:
                   f"columns checks are now **STALE-RED**. Every pull request on "
                   f"this repository is blocked until a fresh snapshot lands.\n")
               out("Fix the host refresher. Do not raise the budget.\n")
-              out("```\nssh host\n  pgrep cron || service cron start\n"
+              out("```\nssh host\n"
+                  "  # cron is dead on this host (no cron daemon -- FU-389);\n"
+                  "  # use the supervisord path instead:\n"
+                  "  bash tools/install_catalog_supervisord.sh\n"
+                  "  supervisorctl -c /etc/zo/supervisord-user.conf reread\n"
+                  "  supervisorctl -c /etc/zo/supervisord-user.conf update\n"
+                  "  # or force a one-shot refresh immediately:\n"
                   "  bash tools/bus_catalog_guard.sh --force\n```")
               sys.exit(1)
 
@@ -120,10 +126,13 @@ jobs:
               out(f"The host refresher has not landed a snapshot in {age:.2f}d. "
                   f"In {BUDGET - age:.1f}d `referent-verify` turns STALE-RED and "
                   f"blocks every PR on this repo.\n")
-              out("First thing to check is whether the host has a cron daemon at "
-                  "all -- on 2026-08-27 it did not, and all three of the "
-                  "refresher's triggers were inert (#4080).\n")
-              out("```\nssh host\n  pgrep cron || service cron start\n"
+              out("The host has NO cron daemon (FU-389: `pgrep -x cron` empty, "
+                  "`pgrep -x supervisord` running). All three crontab triggers "
+                  "are inert. Use the supervisord path:\n")
+              out("```\nssh host\n"
+                  "  bash tools/install_catalog_supervisord.sh\n"
+                  "  supervisorctl -c /etc/zo/supervisord-user.conf reread\n"
+                  "  supervisorctl -c /etc/zo/supervisord-user.conf update\n"
                   "  bash tools/bus_catalog_guard.sh --force\n"
                   "  cat /home/workspace/logs/bus_catalog_heartbeat.json\n```")
               sys.exit(1)

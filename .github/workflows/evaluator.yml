@@ -144,6 +144,7 @@ jobs:
             tests/test_rescore_open_run_detection.py \
             tests/test_rescore_trust_priority.py \
             tests/test_rescore_refresh_yield.py \
+            tests/test_rescore_watch_status.py \
             tests/test_vast_spend_selftest.py \
             tests/test_promoter_repair_wiring.py \
             tests/test_canary_classify_smoke.py \

@@ -91,6 +91,25 @@ def fetch_health(key: Optional[str] = None, url: str = HEALTH_URL) -> Dict[str, 
         raise CadenceError("cadence health body is not JSON: %r" % body[:200]) from exc
 
 
+def _require_overdue(job: Dict[str, Any], name: Any) -> None:
+    """A job object with no `overdue` key carries ZERO health information.
+
+    Found by an adversary probe 2026-09-13 against v1 of this file:
+    `{"sla_hours":36,"jobs":{"a":{},"b":{}}}` came back AUTHENTICATED_GREEN and
+    printed "2 job(s) inspected ... overdue=False" for two EMPTY objects. That is
+    this tool's own R3 rule ("a check that inspected nothing is not a pass")
+    failing one level of nesting down: the zero-jobs guard counted CONTAINERS,
+    not OBSERVATIONS. A renamed key (`is_overdue`) had the same effect, because
+    `bool(job.get("overdue"))` defaults a missing key to False -- which is the
+    shape-drift class the shape guard exists for, one level lower.
+    """
+    if "overdue" not in job:
+        raise CadenceError(
+            "job %r carries no `overdue` key -- an empty or renamed job object "
+            "is zero observations, not a healthy one (R3/R6); keys present: %s"
+            % (name, sorted(job.keys())))
+
+
 def normalise_jobs(raw: Any) -> List[Dict[str, Any]]:
     """Accept the REAL shape (dict keyed by name) and a list, reject anything else.
 
@@ -99,8 +118,12 @@ def normalise_jobs(raw: Any) -> List[Dict[str, Any]]:
     this function does not recognise raises -- it never degrades to an empty
     list, because an empty list is what reads as GREEN.
     """
-    if raw is None:
-        raise CadenceError("no jobs key in the response -- UNKNOWN, not green")
+    # NOTE: there is deliberately NO separate `raw is None` guard. v2 had one and
+    # the mutation matrix proved it was DECORATION -- removing it changed no
+    # assertion, because the catch-all raise at the bottom already covers None
+    # with a better message. Redundant defence that cannot be observed failing is
+    # indistinguishable from no defence, and it inflates the count of guards a
+    # reader thinks are proven.
     if isinstance(raw, dict):
         out = []
         for name, job in raw.items():
@@ -108,6 +131,7 @@ def normalise_jobs(raw: Any) -> List[Dict[str, Any]]:
                 raise CadenceError(
                     "job %r is %s, not an object -- shape not recognised"
                     % (name, type(job).__name__))
+            _require_overdue(job, name)
             out.append(dict(job, name=name))
         return out
     if isinstance(raw, list):
@@ -117,6 +141,7 @@ def normalise_jobs(raw: Any) -> List[Dict[str, Any]]:
                     "job entry is %s, not an object -- a list of %s is the "
                     "shape that reads as GREEN while blind"
                     % (type(job).__name__, type(job).__name__))
+            _require_overdue(job, job.get("name"))
         return list(raw)
     raise CadenceError("jobs is %s -- shape not recognised; UNKNOWN, not green"
                        % type(raw).__name__)
@@ -136,11 +161,23 @@ def evaluate(body: Dict[str, Any]) -> Dict[str, Any]:
     # which made the zero-jobs guard below unreachable -- the mutation matrix
     # caught that on 2026-09-13: removing the zero-jobs guard changed no
     # assertion, i.e. it was decoration.  Each guard now owns exactly one case.
-    if not isinstance(sla, (int, float)):
+    # `isinstance(True, int)` is True in Python, so a bare numeric check accepts
+    # `"sla_hours": true` as proof of authentication. Found by adversary probe D.
+    if isinstance(sla, bool) or not isinstance(sla, (int, float)):
         raise CadenceError(
-            "no sla_hours in the response -- an authenticated health read "
-            "always carries it, so this is UNKNOWN, not green (got keys %s)"
+            "no numeric sla_hours in the response -- an authenticated health "
+            "read always carries it, so this is UNKNOWN, not green (got keys %s)"
             % sorted(body.keys()))
+    # ABSENT IS NOT ZERO (R6), and these are OUR OWN fields. v1 read
+    # `body.get("alert")` -> None -> falsy -> not RED, so a body with `alert` and
+    # `zombie_running` MISSING printed "zombie_running=None, alert=None" next to
+    # the word GREEN. That is the exact class sla_hours was added to prevent,
+    # rebuilt one field over. Found by adversary probe B, 2026-09-13.
+    for field in ("zombie_running", "alert"):
+        if field not in body:
+            raise CadenceError(
+                "response carries no `%s` -- absent is UNKNOWN, not zero (R6); "
+                "keys present: %s" % (field, sorted(body.keys())))
     jobs = normalise_jobs(body.get("jobs"))
     if not jobs:
         raise CadenceError("zero jobs after normalisation -- a check that "
@@ -148,6 +185,12 @@ def evaluate(body: Dict[str, Any]) -> Dict[str, Any]:
     out["auth_proven"] = True
     out["sla_hours"] = sla
     out["jobs_seen"] = len(jobs)
+    # .get() ON PURPOSE, even though the guard above proves both keys exist.
+    # With a direct subscript, mutating the guard out raises KeyError -- a CRASH,
+    # which the matrix correctly refuses to count as proof. With .get(), mutating
+    # the guard out produces the FALSE GREEN the guard exists to prevent, so the
+    # assertion fires by name. The guard must be the thing that is observed, not
+    # the subscript standing in for it.
     out["zombie_running"] = body.get("zombie_running")
     out["alert"] = body.get("alert")
     for job in jobs:
@@ -199,13 +242,33 @@ GREEN_BODY = {"sla_hours": 36,
               "jobs": {"perspective_snapshots": {"last_ok": "2026-09-13T10:28:15", "overdue": False},
                        "ask_corpus_drift": {"last_ok": "2026-09-13T10:26:49", "overdue": False}},
               "zombie_running": 0, "alert": False}
+# Each of the three RED terms gets a fixture where it is the ONLY red signal.
+# v1 had one OVERDUE_BODY that set `overdue` AND `alert` together, so deleting
+# `zombie_running` and `alert` from the red computation entirely left --self-test
+# GREEN: two thirds of the tool's own definition of RED carried no assertion.
+# Found by adversary probe 2026-09-13.
 OVERDUE_BODY = {"sla_hours": 36,
                 "jobs": {"perspective_snapshots": {"last_ok": "2026-09-11T10:28:15", "overdue": True},
                          "ask_corpus_drift": {"last_ok": "2026-09-13T10:26:49", "overdue": False}},
-                "zombie_running": 0, "alert": True}
+                "zombie_running": 0, "alert": False}
+ALERT_ONLY_BODY = {"sla_hours": 36,
+                   "jobs": {"ask_corpus_drift": {"last_ok": "2026-09-13T10:26:49", "overdue": False}},
+                   "zombie_running": 0, "alert": True}
+ZOMBIE_ONLY_BODY = {"sla_hours": 36,
+                    "jobs": {"ask_corpus_drift": {"last_ok": "2026-09-13T10:26:49", "overdue": False}},
+                    "zombie_running": 2, "alert": False}
 UNAUTH_BODY = {"detail": "Authentication required"}
 LIST_SHAPE_BODY = {"sla_hours": 36, "jobs": ["perspective_snapshots", "ask_corpus_drift"],
                    "zombie_running": 0, "alert": False}
+EMPTY_JOB_OBJECTS_BODY = {"sla_hours": 36,
+                          "jobs": {"perspective_snapshots": {}, "ask_corpus_drift": {}},
+                          "zombie_running": 0, "alert": False}
+RENAMED_OVERDUE_BODY = {"sla_hours": 36,
+                        "jobs": {"ask_corpus_drift": {"is_overdue": True}},
+                        "zombie_running": 0, "alert": False}
+BOOL_SLA_BODY = {"sla_hours": True,
+                 "jobs": {"ask_corpus_drift": {"overdue": False}},
+                 "zombie_running": 0, "alert": False}
 
 
 def _expect_unknown(body, label, failures):
@@ -245,7 +308,8 @@ def selftest() -> int:
         if rc_for(rep) != 0:
             failures.append("green body rc must be 0, got %s" % rc_for(rep))
 
-    # NEGATIVE POLE -- it must be capable of reading RED at all.
+    # NEGATIVE POLE -- it must be capable of reading RED at all, and EACH of the
+    # three red signals must be able to produce RED ON ITS OWN.
     rep = _eval_or_fail(OVERDUE_BODY, "overdue body", failures)
     if rep is not None:
         if rep["verdict"] != "RED":
@@ -255,29 +319,51 @@ def selftest() -> int:
         if rc_for(rep) != 1:
             failures.append("overdue body rc must be 1, got %s" % rc_for(rep))
 
+    for body, label in ((ALERT_ONLY_BODY, "alert-only body"),
+                        (ZOMBIE_ONLY_BODY, "zombie-only body")):
+        rep = _eval_or_fail(body, label, failures)
+        if rep is not None and rep["verdict"] != "RED":
+            failures.append("%s must be RED on that signal ALONE, got %s"
+                            % (label, rep["verdict"]))
+
     # THE TWO FALSE-GREEN PATHS THAT MOTIVATED THIS TOOL.
     # Each of these is owned by exactly ONE guard -- verified by the mutation
     # matrix in tools/cadence_mutation_control.py, which requires every guard to
     # be observed carrying at least one assertion.
     _expect_unknown(UNAUTH_BODY, "401 body", failures)              # sla_hours guard
     _expect_unknown(LIST_SHAPE_BODY, "list-shaped jobs", failures)  # shape guard
-    _expect_unknown({"sla_hours": 36, "jobs": {}}, "empty jobs", failures)  # zero-jobs guard
-    _expect_unknown({"jobs": GREEN_BODY["jobs"]}, "missing sla_hours", failures)
-    _expect_unknown({"sla_hours": 36}, "missing jobs key", failures)
+    _expect_unknown({"sla_hours": 36, "jobs": {}, "zombie_running": 0, "alert": False},
+                    "empty jobs", failures)                         # zero-jobs guard
+    _expect_unknown({"jobs": GREEN_BODY["jobs"], "zombie_running": 0, "alert": False},
+                    "missing sla_hours", failures)
+    _expect_unknown({"sla_hours": 36, "zombie_running": 0, "alert": False},
+                    "missing jobs key", failures)
+    # The five false greens an adversary demonstrated against v1 on 2026-09-13.
+    # Every one of these returned AUTHENTICATED_GREEN before today.
+    _expect_unknown(EMPTY_JOB_OBJECTS_BODY, "empty job objects", failures)
+    _expect_unknown(RENAMED_OVERDUE_BODY, "renamed overdue key", failures)
+    _expect_unknown(BOOL_SLA_BODY, "boolean sla_hours", failures)
+    _expect_unknown({"sla_hours": 36, "jobs": GREEN_BODY["jobs"], "alert": False},
+                    "missing zombie_running", failures)
+    _expect_unknown({"sla_hours": 36, "jobs": GREEN_BODY["jobs"], "zombie_running": 0},
+                    "missing alert", failures)
 
     # UNKNOWN must not be rc 0 -- the whole point is that it is not a pass.
     if rc_for({"verdict": "UNKNOWN"}) != 2:
         failures.append("UNKNOWN rc must be 2")
 
     print(json.dumps({"self_test": "cadence_health",
-                      "checks": 14, "failures": failures,
+                      "checks": 26, "failures": failures,
                       "ok": not failures}, indent=2))
     if failures:
         print("SELF-TEST RED: %d" % len(failures))
         return 1
-    print("SELF-TEST GREEN: positive pole reaches GREEN, negative pole reaches "
-          "RED, and both measured false-green paths (401 body, list-shaped "
-          "jobs) are refused as UNKNOWN.")
+    print("SELF-TEST GREEN: the positive pole reaches GREEN; EACH of the three "
+          "red signals (overdue / alert / zombie_running) reaches RED on its "
+          "own; and all ten measured false-green paths are refused as UNKNOWN "
+          "-- 401 body, list-shaped jobs, empty jobs, empty job OBJECTS, a "
+          "renamed overdue key, boolean sla_hours, and each of the four missing "
+          "top-level fields.")
     return 0
 
 

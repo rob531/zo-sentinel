@@ -131,6 +131,7 @@ jobs:
             tests/test_deploy_prod_script.py \
             tests/test_ui_version_badge.py \
             tests/test_accept_gate.py \
+            tests/test_vanity_redirect_webhooks.py \
             tests/test_migration_graph_single_head.py \
             tests/test_fire_gate.py \
             tests/test_sha_green.py \
@@ -144,6 +145,7 @@ jobs:
             tests/test_rescore_open_run_detection.py \
             tests/test_rescore_trust_priority.py \
             tests/test_rescore_refresh_yield.py \
+            tests/test_rescore_watch_status.py \
             tests/test_vast_spend_selftest.py \
             tests/test_cadence_health_selftest.py \
             tests/test_promoter_repair_wiring.py \

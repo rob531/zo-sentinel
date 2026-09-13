@@ -227,14 +227,35 @@ _ALL_HOSTED_DOMAINS = _VANITY_SUFFIXES + ("mcplookup.app",)
 _VANITY_SUFFIXES = tuple(d for d in _ALL_HOSTED_DOMAINS if d != _CANONICAL_HOST)
 
 
+# Paths that must be SERVED on every hosted domain, never canonicalised.
+# Svix does not follow redirects, and a client that does follow a 301 downgrades
+# POST to GET and drops the body and the `svix-*` signature headers -- so a
+# redirect here is a silently dropped webhook delivery, not a canonicalisation.
+# `mcplookup.app` is the HISTORIC PRIMARY and therefore the most likely host on
+# the Clerk endpoint record, which was created while it was canonical.
+# Measured 2026-09-13: POST https://mcplookup.app/webhooks/clerk -> 301, while
+# the canonical host answers an unsigned POST with 401 (verifier armed, healthy).
+# That is a complete mechanism for FU-245's 78-day zero-delivery drought. It is
+# NOT a diagnosis: the URL Clerk is actually configured with is still unreadable
+# from anywhere we can reach. This makes the endpoint work on ANY hosted domain,
+# so it is a cure that does not depend on knowing which one is registered.
+_NEVER_REDIRECT_PREFIXES = ("/webhooks/",)
+
+
 @app.middleware("http")
 async def _vanity_redirect(request, call_next):
     host = (request.headers.get("host") or "").split(":")[0].lower()
-    if host and host != _CANONICAL_HOST and host.endswith(_VANITY_SUFFIXES):
-        target = f"https://{_CANONICAL_HOST}{request.url.path}"
+    path = request.url.path
+    if (host and host != _CANONICAL_HOST and host.endswith(_VANITY_SUFFIXES)
+            and not path.startswith(_NEVER_REDIRECT_PREFIXES)):
+        target = f"https://{_CANONICAL_HOST}{path}"
         if request.url.query:
             target += "?" + request.url.query
-        return RedirectResponse(target, status_code=301)
+        # GET/HEAD keep 301 -- unchanged behaviour, no canonicalisation risk.
+        # Everything else gets 308, which preserves method and body; 301 lets a
+        # client rewrite the method to GET and swallow the request.
+        code = 301 if request.method in ("GET", "HEAD") else 308
+        return RedirectResponse(target, status_code=code)
     return await call_next(request)
 
 

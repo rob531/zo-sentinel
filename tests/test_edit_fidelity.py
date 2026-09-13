@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 from tools.edit_fidelity import corrupt as C  # noqa: E402
 from tools.edit_fidelity import metrics as M  # noqa: E402
 from tools.edit_fidelity import repairers as R  # noqa: E402
+from tools.edit_fidelity import merge_runs as MR  # noqa: E402
 from tools.edit_fidelity import run_eval as E  # noqa: E402
 from tools.edit_fidelity import tasks as T  # noqa: E402
 
@@ -239,6 +240,7 @@ def test_validity_gate_keeps_red_discards_green_counts_and_restores(tmp_path):
     assert T.read_text(repo / "pkg" / "calc.py") == CALC, "gate must restore the file byte-for-byte"
     for t in tasks:
         assert t.corrupted != t.reference
+        assert t.shape == T.SHAPE_EASY and t.n_nodes == 1
         assert t.corruption.invert(t.corrupted) == t.reference
         assert "FAILED" in t.fail_tail or "Error" in t.fail_tail
     # persisted task set round-trips with the gate counts attached
@@ -346,6 +348,11 @@ def test_anthropic_repairer_with_fake_transport_accounts_usage_and_caps(tmp_path
                               max_cost_usd=1.0, post=fake_post, shared_usage=shared)
     res = rep.repair(t)
     assert res.output == t.reference and res.meta["fenced"] and not res.meta["truncated"]
+    # the FULL response is kept so an extractor fix can re-score offline, without
+    # buying the run again (measured 2026-09-13: that gap cost a $2.68 A/B)
+    assert res.meta["raw_text"].startswith("Here you go:")
+    assert t.reference.rstrip("\n") in res.meta["raw_text"]
+    assert R.extract_code(res.meta["raw_text"]) == res.output
     assert calls[0]["model"] == "claude-sonnet-4-5" and calls[0]["max_tokens"] == 4096
     assert R.PRESERVATION_INSTRUCTION in calls[0]["messages"][0]["content"]
     u = rep.usage_summary()
@@ -366,6 +373,53 @@ def test_extract_code_takes_the_largest_fence_not_the_first():
     # fence and the whole file in a second; first-fence extraction scored fid 0.99
     text = "The bug:\n```python\nx == y\n```\nFixed file:\n```python\nimport os\n\n\ndef f():\n    return 1\n```\n"
     assert R.extract_code(text) == "import os\n\n\ndef f():\n    return 1\n"
+
+
+def test_extract_code_takes_the_module_not_the_prose_around_indented_fences():
+    """Measured 2026-09-13: the shape of the answer that cost a $2.68 A/B.
+
+    Under the hard prompt the model replies with a numbered list whose fences
+    are INDENTED, then the whole module in a column-0 fence. The old pattern
+    could not close an indented fence, so one match ran across the prose and
+    `max(..., key=len)` preferred that blob to the module: 10 of 30 plain-arm
+    rows were scored as unparseable ~0.9-fidelity failures while the correct
+    module sat in the same response.
+    """
+    module = ('"""Mod."""\n\n\ndef f(a, b):\n    if isinstance(a, str):\n'
+              '        return a\n    return b\n')
+    text = (
+        "I found two bugs.\n\n"
+        "1. On line 5:\n"
+        "   ```python\n"
+        "   if isinstance(str, a):\n"
+        "   ```\n"
+        "   The arguments are the wrong way round.\n\n"
+        "2. Same on line 9:\n"
+        "   ```python\n"
+        "   if not isinstance(dict, content):\n"
+        "   ```\n"
+        "   Should be `isinstance(content, dict)`.\n\n"
+        "Here is the corrected module:\n\n"
+        "```python\n" + module + "```\n"
+    )
+    out = R.extract_code(text)
+    assert out.rstrip("\n") == module.rstrip("\n"), out
+    ast.parse(out)
+    # the prose between the indented fences must never be what comes back
+    assert "wrong way round" not in out and "Should be" not in out
+    # every fence is seen, including the indented ones
+    assert len(R._FENCE_RE.findall(text)) == 3
+
+
+def test_extract_code_prefers_a_parsable_block_but_still_returns_broken_code():
+    # nothing parses -> the largest block is returned, so a broken repair is
+    # scored as broken instead of being replaced by something that compiles
+    only_broken = "```python\ndef f(:\n    pass\n```"
+    assert "def f(:" in R.extract_code(only_broken)
+    # a large prose blob loses to a smaller real module
+    mixed = ("```\n" + "this is not python at all, " * 40 + "\n```\n"
+             "```python\ndef g():\n    return 1\n```\n")
+    assert R.extract_code(mixed) == "def g():\n    return 1\n"
 
 
 def test_extract_code_and_cost_fallback():
@@ -450,6 +504,406 @@ def test_sign_test_is_two_sided_and_drops_ties():
     r = E.sign_test([0.0] * 5, [0.1] * 5)
     assert r["wins"] == 5 and r["losses"] == 0 and r["p_two_sided"] == pytest.approx(2 / 32)
     assert E.sign_test([1.0, 2.0], [1.0, 2.0])["p_two_sided"] is None
+
+
+# --------------------------------------------------------------------------- hard shape: multi-node splices
+
+def _two_candidates_in_different_functions(seed=1):
+    cands, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=seed)
+    by_func = {}
+    for c in cands:
+        by_func.setdefault(c.func, []).append(c)
+    funcs = sorted(by_func)
+    assert len(funcs) >= 2, funcs
+    return [by_func[funcs[0]][0], by_func[funcs[1]][0]]
+
+
+def test_apply_all_and_invert_all_round_trip_exactly_and_keep_the_remainder():
+    picks = _two_candidates_in_different_functions()
+    corrupted = C.apply_all(CALC, picks)
+    assert corrupted != CALC
+    ast.parse(corrupted)
+    assert C.invert_all(corrupted, picks) == CALC
+    assert C.untouched_remainder_identical_multi(CALC, corrupted, picks)
+    assert C.apply_all(CALC, list(reversed(picks))) == corrupted, "input order must not matter"
+    # applying one node alone must not reproduce the two-node text
+    for c in picks:
+        assert c.apply(CALC) != corrupted
+
+
+def test_apply_all_refuses_overlapping_splices():
+    cands, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=1)
+    c = cands[0]
+    twin = C.Corruption(**{**c.to_dict(), "note": "same span, different object"})
+    assert not C.spans_disjoint([c, twin])
+    with pytest.raises(ValueError):
+        C.apply_all(CALC, [c, twin])
+
+
+def test_untouched_remainder_multi_catches_an_edit_outside_the_spans():
+    picks = _two_candidates_in_different_functions()
+    corrupted = C.apply_all(CALC, picks)
+    tampered = corrupted.replace("LIMIT = 10", "LIMIT = 99")
+    assert tampered != corrupted
+    assert not C.untouched_remainder_identical_multi(CALC, tampered, picks)
+
+
+def test_min_func_lines_filters_and_prefer_long_only_reorders():
+    base, bstats = C.enumerate_candidates(CALC, "pkg/calc.py", seed=7)
+    assert bstats["short_func_rejects"] == 0
+    # `untested` is 4 lines; `clamp` and `classify` are 8
+    long_only, lstats = C.enumerate_candidates(CALC, "pkg/calc.py", seed=7, min_func_lines=8)
+    assert lstats["short_func_rejects"] > 0
+    assert long_only and len(long_only) < len(base)
+    assert all(c.func_lines >= 8 for c in long_only)
+    assert not any(c.func == "untested" for c in long_only)
+    ordered, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=7, prefer_long=True)
+    lens = [c.func_lines for c in ordered]
+    assert lens == sorted(lens, reverse=True)
+    assert sorted(c.id for c in ordered) == sorted(c.id for c in base), "a reordering, not a filter"
+    again, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=7, prefer_long=True)
+    assert [c.id for c in again] == [c.id for c in ordered], "still deterministic from the seed"
+
+
+def test_build_combos_prefers_distinct_functions_and_never_reuses_a_component():
+    cands, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=2)
+    assert len({c.func for c in cands}) >= 2, "the fixture must offer several functions"
+    combos = T.build_combos(cands, (2,), random.Random(0), limit=3)
+    assert combos
+    seen = []
+    for combo in combos:
+        assert len(combo) == 2
+        assert C.spans_disjoint(combo)
+        assert [c.start for c in combo] == sorted(c.start for c in combo)
+        seen.extend(id(c) for c in combo)
+    assert len(seen) == len(set(seen)), "a component may belong to at most one combo"
+    assert len({c.func for c in combos[0]}) == 2, "with functions to spare, the first combo spreads"
+
+
+def test_build_combos_stops_when_the_pool_cannot_fill_another_set():
+    cands, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=2)
+    assert T.build_combos(cands[:1], (2,), random.Random(0), limit=5) == []
+    assert len(T.build_combos(cands, (2,), random.Random(0), limit=99)) <= len(cands) // 2
+    assert len(T.build_combos(cands, (3,), random.Random(0), limit=1)[0]) == 3
+
+
+# --------------------------------------------------------------------------- hard shape: the gate
+
+def _hard_tasks(tmp_path, n=2, nodes=(2,)):
+    repo = _mini_repo(tmp_path)
+    tasks, gs = T.select_tasks(repo, [("pkg/calc.py", "tests/test_calc.py")], n_target=n, seed=11,
+                               max_per_file=n, max_candidates_per_file=14, shape=T.SHAPE_HARD,
+                               nodes=nodes, prefer_long=True, log=lambda *_: None)
+    assert len(tasks) == n, f"fixture produced {len(tasks)} hard tasks, wanted {n}"
+    return repo, tasks, gs
+
+
+def test_hard_gate_builds_multi_node_tasks_whose_components_are_each_red(tmp_path):
+    repo, tasks, gs = _hard_tasks(tmp_path, n=2)
+    assert gs.valid == 2
+    assert gs.components_valid >= 4, "each node of each task had to be red on its own"
+    assert gs.combos_tried >= gs.valid
+    assert gs.combos_green == gs.combos_tried - gs.valid
+    assert gs.candidates_tried == gs.components_valid + gs.discarded_green + gs.discarded_timeout
+    assert gs.func_len_mean > 0 and gs.nodes_hist == {"2": 2}
+    assert T.read_text(repo / "pkg" / "calc.py") == CALC, "the gate must restore the file byte-for-byte"
+    for t in tasks:
+        assert t.shape == T.SHAPE_HARD and t.n_nodes == 2
+        assert C.spans_disjoint(t.corruptions)
+        assert t.corrupted == C.apply_all(t.reference, t.corruptions)
+        assert C.invert_all(t.corrupted, t.corruptions) == t.reference
+        assert t.id.count("+") == 1 and t.corruption is t.corruptions[0]
+        for c in t.corruptions:
+            fails, _ = T.gate_one(repo, t.source_file, t.test_target, c, t.reference, timeout=120)
+            assert fails, f"component {c.id} is not red on its own"
+    assert T.read_text(repo / "pkg" / "calc.py") == CALC
+
+
+def test_hard_task_round_trips_through_json_with_every_node(tmp_path):
+    _, tasks, gs = _hard_tasks(tmp_path, n=1)
+    out = tmp_path / "hard.json"
+    T.save_tasks(out, tasks, gs, {"seed": 11, "shape": T.SHAPE_HARD})
+    again, gate2, meta2 = T.load_tasks(out)
+    assert [t.id for t in again] == [t.id for t in tasks]
+    assert again[0].shape == T.SHAPE_HARD and again[0].n_nodes == tasks[0].n_nodes
+    assert C.invert_all(again[0].corrupted, again[0].corruptions) == again[0].reference
+    assert gate2["components_valid"] == gs.components_valid and meta2["shape"] == T.SHAPE_HARD
+
+
+def test_task_from_dict_still_reads_a_single_node_record():
+    """The easy shape's on-disk form predates `corruptions`; it must still load."""
+    cands, _ = C.enumerate_candidates(CALC, "pkg/calc.py", seed=1)
+    c = cands[0]
+    legacy = {"source_file": "pkg/calc.py", "test_target": "tests/test_calc.py",
+              "corruption": c.to_dict(), "reference": CALC, "corrupted": c.apply(CALC)}
+    t = T.Task.from_dict(legacy)
+    assert t.n_nodes == 1 and t.shape == T.SHAPE_EASY and t.corruption.id == c.id
+    assert t.funcs == [c.func]
+
+
+def test_select_tasks_rejects_an_unknown_shape(tmp_path):
+    repo = _mini_repo(tmp_path)
+    with pytest.raises(ValueError):
+        T.select_tasks(repo, [("pkg/calc.py", "tests/test_calc.py")], n_target=1, shape="medium",
+                       log=lambda *_: None)
+
+
+# --------------------------------------------------------------------------- hard shape: repairers
+
+def test_oracle_undoes_every_node_of_a_hard_task(tmp_path):
+    repo, tasks, _ = _hard_tasks(tmp_path, n=2)
+    for t in tasks:
+        res = R.OracleRepairer().repair(t)
+        assert res.meta["inverse_of"] == [c.id for c in t.corruptions]
+        row = E.score_repair(repo, t, res.output, timeout=120, python=None)
+        assert row["passed"] and row["fidelity_lev"] == 0.0 and row["delta_cc"] == 0
+
+
+def test_sloppy_rewrites_every_function_a_hard_task_touches(tmp_path):
+    repo, tasks, _ = _hard_tasks(tmp_path, n=2)
+    for t in tasks:
+        res = R.SloppyRepairer().repair(t)
+        row = E.score_repair(repo, t, res.output, timeout=120, python=None)
+        assert row["passed"], row["diff"]
+        assert row["fidelity_lev"] > 0.02 and row["delta_cc"] > 0
+        assert res.meta["rewrote"] == t.funcs
+        for fn in t.funcs:
+            assert f"def {fn.split('.')[-1]}(" in res.output, f"{fn} vanished from the rewrite"
+        # semantics of every rewritten function survive, not just the tested inputs
+        ns_ref, ns_out = {}, {}
+        exec(compile(t.reference, "ref", "exec"), ns_ref)  # nosec B102 - the test's own fixture module
+        exec(compile(res.output, "out", "exec"), ns_out)  # nosec B102 - the sloppy rewrite of that fixture
+        for fn in t.funcs:
+            for args in [(0, True), (5, False), (7, True), (3, 0, 10), (-2, 0, 10), (12, 0, 10)]:
+                try:
+                    exp = ns_ref[fn](*args)
+                except TypeError:
+                    continue
+                assert ns_out[fn](*args) == exp
+    assert T.read_text(repo / "pkg" / "calc.py") == CALC
+
+
+def test_hard_prompt_withholds_function_test_and_tail_but_differs_only_by_preservation(tmp_path):
+    _, hard, _ = _hard_tasks(tmp_path, n=1)
+    t = hard[0]
+    plain = R.build_prompt(t, preservation=False)
+    pres = R.build_prompt(t, preservation=True)
+    assert pres.replace(R.PRESERVATION_INSTRUCTION + "\n\n", "") == plain
+    assert R.HARD_TASK_STATEMENT in plain
+    assert t.test_target not in plain, "hard prompt named the failing test target"
+    assert "pytest output" not in plain and t.fail_tail not in plain, "hard prompt leaked the tail"
+    for c in t.corruptions:
+        assert f"`{c.func}`" not in plain, "hard prompt named the enclosing function"
+    assert t.corrupted in plain, "the file itself is still handed over"
+    # the only string separating the arms must carry no task information
+    assert not any(ch.isdigit() for ch in R.PRESERVATION_INSTRUCTION)
+    for word in ("two", "three", "both", "each bug", "function `"):
+        assert word not in R.PRESERVATION_INSTRUCTION.lower()
+
+
+def test_easy_prompt_is_unchanged_by_the_hard_shape_support(tmp_path):
+    _, easy = _valid_tasks(tmp_path, n=1)
+    plain = R.build_prompt(easy[0], preservation=False)
+    assert easy[0].test_target in plain and "pytest output" in plain
+    assert f"`{easy[0].corruption.func}`" in plain
+    assert R.HARD_TASK_STATEMENT not in plain
+
+
+# --------------------------------------------------------------------------- hard shape: analysis
+
+def test_split_by_pass_separates_broken_repairs_from_over_edits():
+    rows = [{"passed": True, "fidelity_lev": 0.0, "delta_cc": 0},
+            {"passed": True, "fidelity_lev": 0.02, "delta_cc": 1},
+            {"passed": False, "fidelity_lev": 0.90, "delta_cc": -3}]
+    sp = E.split_by_pass(rows)
+    assert sp["passed"]["n"] == 2 and sp["failed"]["n"] == 1
+    assert sp["passed"]["fidelity_lev_mean"] == pytest.approx(0.01)
+    assert sp["failed"]["fidelity_lev_mean"] == pytest.approx(0.90)
+    assert sp["passed"]["at_floor"] == 1
+    # a broken repair must not be able to inflate the passed (over-editing) mean
+    assert sp["passed"]["fidelity_lev_mean"] < sp["failed"]["fidelity_lev_mean"]
+    assert E.aggregate(rows)["fidelity_lev_mean"] > sp["passed"]["fidelity_lev_mean"]
+
+
+def test_sign_test_power_is_monotone_and_honest_about_small_n():
+    assert E.sign_test_power(0, 0.9) == 0.0
+    assert E.sign_test_power(5, 0.9) == 0.0, "n=5 cannot reject at alpha=0.05 two-sided"
+    assert E.sign_test_power(30, 0.5) == pytest.approx(0.05, abs=0.03)   # ~alpha under the null
+    assert E.sign_test_power(30, 0.85) > E.sign_test_power(30, 0.75) > E.sign_test_power(30, 0.65)
+    assert E.sign_test_power(60, 0.75) > E.sign_test_power(20, 0.75)
+    assert 0.0 <= E.sign_test_power(13, 0.75) <= 1.0
+
+
+def test_min_detectable_preference_matches_the_power_curve():
+    n = 13
+    p = E.min_detectable_preference(n)
+    assert p is not None and E.sign_test_power(n, p) >= 0.8
+    assert E.sign_test_power(n, round(p - 0.01, 2)) < 0.8
+    assert E.min_detectable_preference(200) < E.min_detectable_preference(20)
+    assert E.min_detectable_preference(4) is None, "no sample this small can ever reject"
+
+
+def test_resolve_shape_defaults_by_shape_and_an_explicit_flag_always_wins():
+    ap = E.build_parser()
+    easy = E.resolve_shape(ap.parse_args([]))
+    assert easy == {"shape": "easy", "nodes": (1,), "min_lines": T.DEFAULT_MIN_LINES,
+                    "max_bytes": T.DEFAULT_MAX_BYTES, "min_func_lines": 0, "prefer_long": False}
+    hard = E.resolve_shape(ap.parse_args(["--shape", "hard"]))
+    assert hard["nodes"] == T.HARD_NODES and hard["prefer_long"]
+    assert hard["min_lines"] == T.HARD_MIN_LINES and hard["max_bytes"] == T.HARD_MAX_BYTES
+    assert hard["min_func_lines"] == T.HARD_MIN_FUNC_LINES
+    override = E.resolve_shape(ap.parse_args(["--shape", "hard", "--min-lines", "5",
+                                              "--min-func-lines", "0", "--nodes", "2"]))
+    assert override["min_lines"] == 5 and override["min_func_lines"] == 0 and override["nodes"] == (2,)
+    with pytest.raises(ValueError):
+        E.resolve_shape(ap.parse_args(["--nodes", "2"]))              # easy shape takes no nodes
+    with pytest.raises(ValueError):
+        E.resolve_shape(ap.parse_args(["--shape", "hard", "--nodes", "0"]))
+
+
+def test_run_eval_self_test_separates_the_poles_under_the_hard_shape(tmp_path):
+    repo = _mini_repo(tmp_path)
+    targets = tmp_path / "targets.txt"
+    targets.write_text("tests/test_calc.py\n", encoding="utf-8")
+    p = _run_eval(repo, "--shape", "hard", "--self-test", "--self-test-n", "2", "--targets", str(targets),
+                  "--min-lines", "5", "--min-func-lines", "0", "--nodes", "2",
+                  "--max-candidates-per-file", "14")
+    assert p.returncode == E.EXIT_OK, p.stdout + p.stderr
+    assert "separated=True" in p.stdout
+    report = list((repo / "_out").glob("report_*.md"))[0].read_text(encoding="utf-8")
+    assert "task shape **hard**" in report and "individually-red components" in report
+    assert "oracle GREEN pole" in report and "**True**" in report
+    assert "split by pass@1 outcome" in report
+    results = json.loads(list((repo / "_out").glob("results_*.json"))[0].read_text(encoding="utf-8"))
+    assert results["shape"]["shape"] == "hard" and results["shape"]["nodes"] == [2]
+    assert results["task_ids"] and all(t.count("+") == 1 for t in results["task_ids"])
+    assert T.read_text(repo / "pkg" / "calc.py") == CALC
+
+
+def test_only_tasks_runs_a_subset_and_a_bad_id_is_unevaluable_not_empty(tmp_path):
+    repo = _mini_repo(tmp_path)
+    targets = tmp_path / "targets.txt"
+    targets.write_text("tests/test_calc.py\n", encoding="utf-8")
+    common = ["--targets", str(targets), "--min-lines", "5", "--max-candidates-per-file", "8"]
+    first = _run_eval(repo, "--n-tasks", "2", *common)
+    assert first.returncode == E.EXIT_OK, first.stdout + first.stderr
+    ids = json.loads((repo / "_out" / "tasks.json").read_text(encoding="utf-8"))
+    ids = [t["id"] for t in ids["tasks"]]
+    assert len(ids) == 2
+    only = _run_eval(repo, "--n-tasks", "2", "--only-tasks", ids[1], *common)
+    assert only.returncode == E.EXIT_OK, only.stdout + only.stderr
+    assert "--only-tasks: running 1 of 2" in only.stdout
+    res = sorted((repo / "_out").glob("results_*.json"))[-1]
+    payload = json.loads(res.read_text(encoding="utf-8"))
+    assert payload["task_ids"] == [ids[1]]
+    assert all(len(rows) == 1 for rows in payload["rows"].values())
+    # a typo must never read as a clean run over nothing
+    bad = _run_eval(repo, "--n-tasks", "2", "--only-tasks", ids[0] + ",nope::x@1:1", *common)
+    assert bad.returncode == E.EXIT_UNEVALUABLE, bad.stdout + bad.stderr
+    assert "UNEVALUABLE" in bad.stdout
+
+
+def test_run_eval_refuses_to_mix_a_cached_shape_with_another(tmp_path):
+    repo = _mini_repo(tmp_path)
+    targets = tmp_path / "targets.txt"
+    targets.write_text("tests/test_calc.py\n", encoding="utf-8")
+    common = ["--targets", str(targets), "--min-lines", "5", "--min-func-lines", "0",
+              "--max-candidates-per-file", "14"]
+    first = _run_eval(repo, "--shape", "hard", "--nodes", "2", "--n-tasks", "1", *common)
+    assert first.returncode == E.EXIT_OK, first.stdout + first.stderr
+    second = _run_eval(repo, "--n-tasks", "1", *common)   # easy shape, same --tasks-json
+    assert second.returncode == E.EXIT_ERROR, second.stdout + second.stderr
+    assert "cached tasks are shape" in second.stdout
+
+
+# --------------------------------------------------------------------------- merge_runs
+
+def _payload(ts, rows, tasks_json="tj.json", shape="hard"):
+    return {"ts": ts, "tasks_json": tasks_json, "shape": {"shape": shape, "nodes": [2]},
+            "gate": {}, "task_ids": sorted({r["task"] for rs in rows.values() for r in rs}),
+            "rows": rows, "aggregate": {}}
+
+
+def _row(task, passed, fid, dcc=0, syntax=False):
+    r = {"task": task, "passed": passed, "fidelity_lev": fid, "delta_cc": dcc, "n_passed": 1}
+    if syntax:
+        r["syntax_error"] = True
+        r["delta_cc"] = None
+    return r
+
+
+def test_merge_replaces_only_named_rows_and_recomputes_every_aggregate():
+    base = _payload("base", {
+        "anthropic_plain": [_row("t1", False, 0.92, syntax=True), _row("t2", True, 0.0)],
+        "anthropic_preserve": [_row("t1", True, 0.0), _row("t2", True, 0.0)],
+    })
+    ov = _payload("fixed", {"anthropic_plain": [_row("t1", True, 0.0)]})
+    out = MR.merge(base, [ov])
+    plain = {r["task"]: r for r in out["rows"]["anthropic_plain"]}
+    assert plain["t1"]["passed"] and plain["t1"]["fidelity_lev"] == 0.0
+    assert plain["t1"]["source_run"] == "fixed" and plain["t2"]["source_run"] == "base"
+    assert out["merged_from"]["rows_replaced"] == {"anthropic_plain": 1}
+    # aggregates are recomputed, not copied from the base
+    assert out["aggregate"]["anthropic_plain"]["pass_at_1"] == 1.0
+    assert out["aggregate"]["anthropic_plain"]["fidelity_lev_mean"] == 0.0
+    assert out["split_by_pass"]["anthropic_plain"]["passed"]["at_floor"] == 2
+    assert out["paired"]["n"] == 2 and out["paired"]["pass_plain"] == 2
+
+
+def test_merge_reports_a_paired_mcnemar_on_pass_at_1():
+    base = _payload("base", {
+        "anthropic_plain": [_row("t1", True, 0.0), _row("t2", True, 0.0), _row("t3", False, 0.1)],
+        "anthropic_preserve": [_row("t1", False, 0.2), _row("t2", True, 0.0), _row("t3", False, 0.1)],
+    })
+    out = MR.recompute(base)
+    mc = out["paired"]["pass_mcnemar"]
+    assert mc["plain_only"] == 1 and mc["preserve_only"] == 0 and mc["concordant"] == 2
+    assert mc["p_two_sided"] == 1.0          # one discordant pair proves nothing
+    assert out["paired"]["pass_plain"] == 2 and out["paired"]["pass_preserve"] == 1
+
+
+def test_merge_refuses_to_invent_a_row_or_cross_task_sets():
+    base = _payload("base", {"anthropic_plain": [_row("t1", True, 0.0)]})
+    with pytest.raises(ValueError, match="not in the base run"):
+        MR.merge(base, [_payload("ov", {"anthropic_plain": [_row("nope", True, 0.0)]})])
+    with pytest.raises(ValueError, match="not in the base run"):
+        MR.merge(base, [_payload("ov", {"sloppy": [_row("t1", True, 0.0)]})])
+    with pytest.raises(ValueError, match="different --tasks-json"):
+        MR.merge(base, [_payload("ov", {"anthropic_plain": [_row("t1", True, 0.0)]}, tasks_json="other.json")])
+    with pytest.raises(ValueError, match="different task shape"):
+        MR.merge(base, [_payload("ov", {"anthropic_plain": [_row("t1", True, 0.0)]}, shape="easy")])
+
+
+def test_merge_runs_cli_writes_a_merged_report(tmp_path):
+    base = _payload("base", {
+        "anthropic_plain": [_row("t1", False, 0.92, syntax=True)],
+        "anthropic_preserve": [_row("t1", True, 0.0)],
+    })
+    ov = _payload("fixed", {"anthropic_plain": [_row("t1", True, 0.0)]})
+    bp, op = tmp_path / "base.json", tmp_path / "ov.json"
+    bp.write_text(json.dumps(base), encoding="utf-8")
+    op.write_text(json.dumps(ov), encoding="utf-8")
+    rc = MR.main(["--base", str(bp), "--override", str(op), "--out-dir", str(tmp_path / "out"),
+                  "--label", "corrected"])
+    assert rc == MR.EXIT_OK
+    rep = list((tmp_path / "out").glob("report_*_corrected.md"))
+    assert rep, list((tmp_path / "out").iterdir())
+    text = rep[0].read_text(encoding="utf-8")
+    assert "split by pass@1 outcome" in text and "McNemar" in text
+    res = json.loads(list((tmp_path / "out").glob("results_*_corrected.json"))[0].read_text(encoding="utf-8"))
+    assert res["rows"]["anthropic_plain"][0]["passed"]
+    assert res["merged_from"]["base"] == "base"
+
+
+def test_merge_runs_cli_refuses_a_bad_override_without_writing(tmp_path):
+    base = _payload("base", {"anthropic_plain": [_row("t1", True, 0.0)]})
+    ov = _payload("ov", {"anthropic_plain": [_row("ghost", True, 0.0)]})
+    bp, op = tmp_path / "b.json", tmp_path / "o.json"
+    bp.write_text(json.dumps(base), encoding="utf-8")
+    op.write_text(json.dumps(ov), encoding="utf-8")
+    out = tmp_path / "out"
+    assert MR.main(["--base", str(bp), "--override", str(op), "--out-dir", str(out)]) == MR.EXIT_ERROR
+    assert not out.exists() or not list(out.glob("results_*.json"))
 
 
 # --------------------------------------------------------------------------- the zero-dependency rule

@@ -16,7 +16,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-SRC = Path(r"D:\zo\_lanes\ops-audit\tools\cadence_health.py")
+# Repo-relative, NOT a tower path: this runs on a CI runner too, and a hardcoded
+# D:\ would make the gate pass by never executing (the 51% class -- the artifact
+# you inspected is not the artifact that runs).
+SRC = Path(__file__).resolve().parent / "cadence_health.py"
+if not SRC.exists():  # pragma: no cover
+    raise SystemExit("cadence_health.py not found beside %s -- refusing to "
+                     "report a result about a file that is not there" % __file__)
 
 MUTATIONS = {
     # the auth_proven positive signal a 401 cannot forge

@@ -203,9 +203,11 @@ def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> tupl
 
 
 def urllib_post(url: str, headers: Dict[str, str], body: bytes, timeout: int = 180) -> tuple:
+    if not url.startswith("https://"):
+        raise ValueError("refusing a non-https endpoint")
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 - fixed https api.anthropic.com host
             return resp.status, resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")
@@ -303,6 +305,6 @@ def list_models(api_key: str, post: Optional[Callable] = None) -> List[str]:
     """GET /v1/models -- used by run_eval to fail loudly on a wrong model id."""
     req = urllib.request.Request("https://api.anthropic.com/v1/models?limit=100",
                                  headers={"x-api-key": api_key, "anthropic-version": API_VERSION})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 - fixed https api.anthropic.com host
         data = json.loads(resp.read().decode("utf-8"))
     return [m["id"] for m in data.get("data", [])]

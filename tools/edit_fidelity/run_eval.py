@@ -25,6 +25,7 @@ import json
 import math
 import os
 import pathlib
+import shlex
 import statistics
 import subprocess
 import sys
@@ -228,10 +229,20 @@ def _git_head(repo: pathlib.Path) -> str:
         return "?"
 
 
+def _split_cmd(cmd: str) -> List[str]:
+    """argv for --key-cmd without a shell (Bandit B602). On Windows the POSIX
+    splitter would eat the backslashes in paths, so split non-POSIX there and
+    strip the surrounding quotes shlex leaves on each token."""
+    if os.name == "nt":
+        return [t[1:-1] if len(t) > 1 and t[0] == t[-1] and t[0] in "\"'" else t
+                for t in shlex.split(cmd, posix=False)]
+    return shlex.split(cmd)
+
+
 def _fetch_key(key_cmd: Optional[str]) -> Optional[str]:
     if not key_cmd:
         return os.environ.get("ANTHROPIC_API_KEY") or None
-    p = subprocess.run(key_cmd, shell=True, capture_output=True, text=True, timeout=60)
+    p = subprocess.run(_split_cmd(key_cmd), capture_output=True, text=True, timeout=60)
     key = (p.stdout or "").strip().splitlines()
     return key[-1].strip() if key else None
 

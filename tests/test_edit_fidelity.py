@@ -298,8 +298,8 @@ def test_sloppy_pole_is_red_but_correct(tmp_path):
         assert row["delta_cc"] > 0
         # semantics preserved for the rewritten function, not just the tested inputs
         ns_ref, ns_out = {}, {}
-        exec(compile(t.reference, "ref", "exec"), ns_ref)
-        exec(compile(out, "out", "exec"), ns_out)
+        exec(compile(t.reference, "ref", "exec"), ns_ref)  # nosec B102 - the test's own fixture module
+        exec(compile(out, "out", "exec"), ns_out)  # nosec B102 - the sloppy rewrite of that fixture
         fn = t.corruption.func
         for args in [(0, True), (5, False), (7, True), (3, 0, 10), (-2, 0, 10), (12, 0, 10)]:
             try:
@@ -433,6 +433,17 @@ def test_model_arms_are_interleaved_and_a_budget_trip_keeps_paired_rows(tmp_path
         E.run_arms_interleaved(repo, reps, tasks, timeout=120, python=None)
     kept = ei.value.rows
     assert len(kept["anthropic_plain"]) == 2 and len(kept["anthropic_preserve"]) == 1
+
+
+def test_key_cmd_is_split_without_a_shell():
+    if sys.platform == "win32":
+        assert E._split_cmd(r'"C:\Program Files\py.exe" D:\v\fetch_secret.py anthropic') == \
+            [r"C:\Program Files\py.exe", r"D:\v\fetch_secret.py", "anthropic"]
+    else:
+        assert E._split_cmd('"/opt/my py/python" /v/fetch_secret.py anthropic') == \
+            ["/opt/my py/python", "/v/fetch_secret.py", "anthropic"]
+    # the key never touches a shell: a metacharacter is just an argument
+    assert E._split_cmd("echo hi;rm") == ["echo", "hi;rm"]
 
 
 def test_sign_test_is_two_sided_and_drops_ties():

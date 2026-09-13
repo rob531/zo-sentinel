@@ -5,6 +5,11 @@
     python tools/edit_fidelity/run_eval.py --n-tasks 20 --arms oracle,sloppy,anthropic_plain,anthropic_preserve \
         --model <id> --key-cmd "python D:/agentvault/fetch_secret.py anthropic"
 
+    # harder task shape: 2-3 bugs per task, long enclosing functions, and a
+    # prompt with the localisation signal withheld (see tasks.py TASK SHAPES)
+    python tools/edit_fidelity/run_eval.py --shape hard --self-test
+    python tools/edit_fidelity/run_eval.py --shape hard --n-tasks 30 --arms <as above>
+
 Exit codes (distinct on purpose -- "no task ran" must never read as "0 excess edits"):
     0  evaluated
     1  error
@@ -134,6 +139,62 @@ def aggregate(rows: List[Dict]) -> Dict:
     }
 
 
+def split_by_pass(rows: List[Dict]) -> Dict:
+    """Fidelity split by whether the repair actually WORKED.
+
+    Guard against the instrument. A model that breaks the file also scores far
+    from the reference, and that is a different phenomenon from over-editing:
+    reading a raw fidelity mean without this split would let broken repairs
+    masquerade as excess edits. ``at_floor`` counts byte-perfect rows, which is
+    what "the arm is on the floor" means numerically.
+    """
+
+    def part(rs: List[Dict]) -> Dict:
+        fid = [r["fidelity_lev"] for r in rs if r.get("fidelity_lev") is not None]
+        dcc = [r["delta_cc"] for r in rs if r.get("delta_cc") is not None]
+        return {"n": len(rs),
+                "fidelity_lev_mean": round(statistics.fmean(fid), 4) if fid else None,
+                "fidelity_lev_median": round(statistics.median(fid), 4) if fid else None,
+                "delta_cc_mean": round(statistics.fmean(dcc), 3) if dcc else None,
+                "at_floor": sum(1 for f in fid if f == 0.0)}
+    return {"passed": part([r for r in rows if r.get("passed")]),
+            "failed": part([r for r in rows if not r.get("passed")])}
+
+
+def sign_test_power(n: int, p: float, alpha: float = 0.05) -> float:
+    """Power of the two-sided sign test with ``n`` non-tied pairs against a true
+    per-pair preference ``p``. Exact binomial, stdlib only.
+
+    The rejection region is the largest ``k`` whose two-sided tail is still
+    <= alpha; power is the probability under Binom(n, p) of landing in it.
+    This is what turns "we found nothing" into either "nothing is there" or
+    "this sample could never have seen it".
+    """
+    if n <= 0:
+        return 0.0
+    crit = -1
+    for k in range(n + 1):
+        if 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n <= alpha:
+            crit = k
+        else:
+            break
+    if crit < 0:
+        return 0.0   # no n this small can reject at alpha, whatever the data
+
+    def pmf(i: int) -> float:
+        return math.comb(n, i) * p ** i * (1 - p) ** (n - i)
+    return sum(pmf(i) for i in range(0, crit + 1)) + sum(pmf(i) for i in range(n - crit, n + 1))
+
+
+def min_detectable_preference(n: int, power: float = 0.8, alpha: float = 0.05) -> Optional[float]:
+    """Smallest per-pair preference this many non-tied pairs can detect at
+    ``power``. None when no preference short of certainty would do it."""
+    for i in range(51, 100):
+        if sign_test_power(n, i / 100.0, alpha) >= power:
+            return i / 100.0
+    return None
+
+
 def sign_test(a: List[float], b: List[float]) -> Dict:
     """Paired two-sided sign test on (a_i < b_i). Ties dropped. stdlib only."""
     wins = sum(1 for x, y in zip(a, b) if x < y)
@@ -174,11 +235,23 @@ def _fmt(v, nd=4):
 
 
 def write_report(path: pathlib.Path, payload: Dict) -> None:
-    g = payload["gate"]
-    lines = [f"# Edit-fidelity eval -- {payload['ts']}", ""]
-    lines += [f"Repo `{payload['repo']}` @ `{payload['git_head']}`; seed {payload['seed']}; "
-              f"model `{payload.get('model') or '-'}`.", ""]
+    g = payload.get("gate", {})
+    lines = [f"# Edit-fidelity eval -- {payload.get('ts', '?')}", ""]
+    sh = payload.get("shape", {})
+    shape_name = sh.get("shape", "easy")
+    extra = ""
+    if shape_name == "hard":
+        extra = (f"; task shape **hard** (nodes per task {sh.get('nodes')}, enclosing function "
+                 f">= {sh.get('min_func_lines')} lines, prompt withholds the enclosing function, "
+                 f"which test fails, and the pytest tail)")
+    # .get throughout: a report is the human-readable record of a run that has
+    # already been paid for, so a missing header field must degrade to "?" and
+    # still emit the numbers, never raise and lose them.
+    lines += [f"Repo `{payload.get('repo', '?')}` @ `{payload.get('git_head', '?')}`; "
+              f"seed {payload.get('seed', '?')}; "
+              f"model `{payload.get('model') or '-'}`{extra}.", ""]
     lines += ["## Validity gate (task discovery)", "",
+              f"- file size window: {sh.get('min_lines')}+ lines, <= {sh.get('max_bytes')} bytes",
               f"- pairs (source, test) considered: {g.get('pairs_considered')}",
               f"- candidates tried: {g.get('candidates_tried')}",
               f"- VALID tasks (test green on clean, RED on corrupted): {g.get('valid')}",
@@ -186,9 +259,18 @@ def write_report(path: pathlib.Path, payload: Dict) -> None:
               f"- discarded, timeout: {g.get('discarded_timeout')}",
               f"- pairs skipped, clean run not green / zero collected: {g.get('pairs_clean_fail')}",
               f"- pairs skipped, clean run over time budget: {g.get('pairs_clean_slow')}",
-              f"- corrupt.py syntax rejects (must be 0): {g.get('syntax_rejects')}",
-              f"- tried by class: {json.dumps(g.get('by_class_tried', {}), sort_keys=True)}",
-              f"- valid by class: {json.dumps(g.get('by_class_valid', {}), sort_keys=True)}",
+              f"- corrupt.py syntax rejects (must be 0): {g.get('syntax_rejects')}"]
+    if shape_name == "hard":
+        lines += [f"- candidates skipped, enclosing function under {sh.get('min_func_lines')} lines: "
+                  f"{g.get('short_func_rejects')}",
+                  f"- individually-red components: {g.get('components_valid')}; "
+                  f"combos tried: {g.get('combos_tried')}; combos green (discarded): {g.get('combos_green')}",
+                  f"- nodes per task: {json.dumps(g.get('nodes_hist', {}), sort_keys=True)}; "
+                  f"distinct functions per task: {json.dumps(g.get('functions_hist', {}), sort_keys=True)}; "
+                  f"mean enclosing-function length: {g.get('func_len_mean')} lines"]
+    red_label = "red components by class" if shape_name == "hard" else "valid by class"
+    lines += [f"- tried by class: {json.dumps(g.get('by_class_tried', {}), sort_keys=True)}",
+              f"- {red_label}: {json.dumps(g.get('by_class_valid', {}), sort_keys=True)}",
               f"- green(discarded) by class: {json.dumps(g.get('by_class_green', {}), sort_keys=True)}", ""]
     if payload.get("self_test"):
         st = payload["self_test"]
@@ -203,6 +285,19 @@ def write_report(path: pathlib.Path, payload: Dict) -> None:
                      f"{_fmt(agg['fidelity_lev_median'])} | {_fmt(agg['fidelity_lev_max'])} | {_fmt(agg['delta_cc_mean'], 3)} | "
                      f"{agg['delta_cc_positive']} | {_fmt(agg['pass_at_1'])} ({agg['pass_count']}/{agg['n']}) |")
     lines.append("")
+    if payload.get("split_by_pass"):
+        lines += ["### Fidelity split by pass@1 outcome (over-editing and breaking are different things)", "",
+                  "A repair that BREAKS the file also scores far from the reference. Only the passed "
+                  "column can be read as over-editing; the failed column is a different phenomenon and "
+                  "is reported separately so the two cannot be confused.", "",
+                  "| arm | passed n | fidelity mean (passed) | delta_cc mean (passed) | byte-perfect (passed) | "
+                  "failed n | fidelity mean (failed) |",
+                  "|---|---|---|---|---|---|---|"]
+        for arm, sp in payload["split_by_pass"].items():
+            p, f = sp["passed"], sp["failed"]
+            lines.append(f"| {arm} | {p['n']} | {_fmt(p['fidelity_lev_mean'])} | {_fmt(p['delta_cc_mean'], 3)} | "
+                         f"{p['at_floor']} | {f['n']} | {_fmt(f['fidelity_lev_mean'])} |")
+        lines.append("")
     if payload.get("paired"):
         p = payload["paired"]
         lines += ["## Paired comparison: anthropic_preserve vs anthropic_plain (same tasks)", "",
@@ -212,6 +307,24 @@ def write_report(path: pathlib.Path, payload: Dict) -> None:
                   f"- delta_cc: preserve lower on {p['delta_cc']['wins']}, higher on {p['delta_cc']['losses']}, "
                   f"ties {p['delta_cc']['ties']}; sign-test p = {_fmt(p['delta_cc']['p_two_sided'])}",
                   f"- pass@1: preserve {p['pass_preserve']} vs plain {p['pass_plain']} (of {p['n']})", ""]
+        mc = p.get("pass_mcnemar")
+        if mc:
+            lines += [f"- pass@1 is paired too, so it gets a paired test: McNemar exact over the "
+                      f"{mc['preserve_only'] + mc['plain_only']} discordant task(s) "
+                      f"(preserve-only {mc['preserve_only']}, plain-only {mc['plain_only']}, "
+                      f"concordant {mc['concordant']}); p = {_fmt(mc['p_two_sided'])}", ""]
+        pw = p.get("power")
+        if pw:
+            mdp = pw["min_detectable_preference_at_80pct"]
+            lines += ["### Power of this sample (two-sided sign test, alpha 0.05)", "",
+                      f"- non-tied fidelity pairs: {pw['n_non_tied']} of {p['n']}",
+                      "- power to detect a per-pair preference of 0.65 / 0.75 / 0.85 for the preservation arm: "
+                      + " / ".join(_fmt(pw["power_at"][str(x)]) for x in (0.65, 0.75, 0.85)),
+                      "- smallest per-pair preference detectable at 80% power with this many non-tied pairs: "
+                      + (_fmt(mdp, 2) if mdp is not None else "none below certainty"),
+                      "- the paper reports means (0.195 -> 0.131), not a per-pair win rate, so the 0.65-0.85 "
+                      "grid is an assumption stated here rather than the paper's effect size; a null with low "
+                      "power at 0.75 is 'n too small to tell', not evidence of absence.", ""]
     if payload.get("usage"):
         lines += ["## Model usage", "", "```", json.dumps(payload["usage"], indent=1), "```", ""]
     if payload.get("exit_code") not in (None, 0):
@@ -254,15 +367,28 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--n-tasks", type=int, default=20)
     ap.add_argument("--tasks-json", default=None, help="cache of selected tasks (default <out-dir>/tasks_<seed>.json)")
     ap.add_argument("--rediscover", action="store_true", help="ignore an existing --tasks-json")
+    ap.add_argument("--only-tasks", default=None,
+                    help="comma-separated task ids: run only these cached tasks. Exits 3 "
+                         "(UNEVALUABLE) if an id matches nothing, so a typo can never look "
+                         "like a clean subset. Use it to re-score specific rows after an "
+                         "extractor or metric fix without re-buying the whole run.")
     ap.add_argument("--arms", default="oracle,sloppy", help=f"comma list from {ARMS}")
     ap.add_argument("--self-test", action="store_true", help="prove both poles on live repo files; exit 2 if not separated")
     ap.add_argument("--self-test-n", type=int, default=3)
     ap.add_argument("--targets", default="auto", help="'auto' = the repo's evaluator.yml pytest list, or a file with one test path per line")
+    ap.add_argument("--shape", default=T.SHAPE_EASY, choices=list(T.SHAPES),
+                    help="task shape. 'hard' = 2-3 corruptions per task in different functions, "
+                         "longer enclosing functions, and a prompt with the localisation signal "
+                         "withheld. Sets the --min-lines/--max-bytes/--min-func-lines/--nodes "
+                         "defaults below unless you pass them explicitly.")
+    ap.add_argument("--nodes", default=None, help="hard shape: comma list of corruptions per task (default 2,3)")
+    ap.add_argument("--min-func-lines", type=int, default=None,
+                    help="skip candidates whose enclosing function is shorter than this")
     ap.add_argument("--max-per-file", type=int, default=3)
     ap.add_argument("--max-candidates-per-file", type=int, default=12)
     ap.add_argument("--clean-budget-secs", type=float, default=30.0)
-    ap.add_argument("--min-lines", type=int, default=T.DEFAULT_MIN_LINES)
-    ap.add_argument("--max-bytes", type=int, default=T.DEFAULT_MAX_BYTES)
+    ap.add_argument("--min-lines", type=int, default=None)
+    ap.add_argument("--max-bytes", type=int, default=None)
     ap.add_argument("--timeout", type=int, default=300, help="per pytest subprocess")
     ap.add_argument("--python", default=None, help="interpreter for pytest subprocesses (default: this one)")
     ap.add_argument("--model", default="claude-sonnet-4-5")
@@ -273,6 +399,34 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--list-models", action="store_true")
     ap.add_argument("--out-dir", default=str(_HERE.parent / "results"))
     return ap
+
+
+def resolve_shape(args: argparse.Namespace) -> Dict:
+    """Fill the shape-dependent knobs that were left unset.
+
+    An explicit flag ALWAYS wins -- the shape only supplies defaults, so a run
+    can be reproduced from the printed parameters alone and nothing is set
+    behind the operator's back. The resolved values travel into the results
+    payload for the same reason.
+    """
+    hard = args.shape == T.SHAPE_HARD
+    nodes = tuple(int(x) for x in args.nodes.split(",") if x.strip()) if args.nodes \
+        else (T.HARD_NODES if hard else (1,))
+    if any(n < 1 for n in nodes):
+        raise ValueError(f"--nodes must be >= 1, got {nodes}")
+    if not hard and nodes != (1,):
+        raise ValueError("--nodes is only meaningful with --shape hard")
+    return {
+        "shape": args.shape,
+        "nodes": nodes,
+        "min_lines": args.min_lines if args.min_lines is not None
+        else (T.HARD_MIN_LINES if hard else T.DEFAULT_MIN_LINES),
+        "max_bytes": args.max_bytes if args.max_bytes is not None
+        else (T.HARD_MAX_BYTES if hard else T.DEFAULT_MAX_BYTES),
+        "min_func_lines": args.min_func_lines if args.min_func_lines is not None
+        else (T.HARD_MIN_FUNC_LINES if hard else 0),
+        "prefer_long": hard,
+    }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -302,7 +456,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_OK
 
     # ---- tasks
-    tasks_json = pathlib.Path(args.tasks_json) if args.tasks_json else out_dir / f"tasks_{args.seed}.json"
+    try:
+        shape = resolve_shape(args)
+    except ValueError as e:
+        log(str(e))
+        return EXIT_ERROR
+    log(f"task shape: {json.dumps(shape)}")
+    default_name = f"tasks_{shape['shape']}_{args.seed}.json" if shape["shape"] != T.SHAPE_EASY \
+        else f"tasks_{args.seed}.json"
+    tasks_json = pathlib.Path(args.tasks_json) if args.tasks_json else out_dir / default_name
     n_target = args.self_test_n if args.self_test else args.n_tasks
     if tasks_json.is_file() and not args.rediscover:
         tasks, gate, meta = T.load_tasks(tasks_json)
@@ -312,24 +474,43 @@ def main(argv: Optional[List[str]] = None) -> int:
         if stale:
             log(f"UNEVALUABLE: {len(stale)} cached task(s) no longer match the live file; use --rediscover: {stale[:3]}")
             return EXIT_UNEVALUABLE
+        cached_shapes = sorted({t.shape for t in tasks})
+        if cached_shapes and cached_shapes != [shape["shape"]]:
+            log(f"cached tasks are shape {cached_shapes}, not {shape['shape']!r}; "
+                f"use --rediscover or a different --tasks-json")
+            return EXIT_ERROR
         tasks = tasks[:n_target] if args.self_test else tasks
+        if args.only_tasks:
+            wanted = [t.strip() for t in args.only_tasks.split(",") if t.strip()]
+            have = {t.id for t in tasks}
+            missing = [w for w in wanted if w not in have]
+            if missing:
+                # A silently-empty subset would be indistinguishable from a clean
+                # run over nothing, which is the "0 excess edits" lie this eval
+                # exists to avoid. A typo is UNEVALUABLE, not a result.
+                log(f"UNEVALUABLE: --only-tasks named {len(missing)} id(s) not in {tasks_json}: {missing[:3]}")
+                return EXIT_UNEVALUABLE
+            tasks = [t for t in tasks if t.id in set(wanted)]
+            log(f"--only-tasks: running {len(tasks)} of {len(have)} cached task(s)")
     else:
         if args.targets == "auto":
             targets = T.evaluator_targets(repo)
         else:
             targets = [ln.strip() for ln in pathlib.Path(args.targets).read_text(encoding="utf-8").splitlines() if ln.strip()]
-        pairs = T.build_pairs(repo, targets, min_lines=args.min_lines, max_bytes=args.max_bytes)
+        pairs = T.build_pairs(repo, targets, min_lines=shape["min_lines"], max_bytes=shape["max_bytes"])
         log(f"discovery: {len(targets)} test targets -> {len(pairs)} (source, test) pairs in the size window "
-            f"[{args.min_lines}+ lines, <= {args.max_bytes} bytes]")
+            f"[{shape['min_lines']}+ lines, <= {shape['max_bytes']} bytes]")
         t0 = time.time()
         tasks, gstats = T.select_tasks(repo, pairs, n_target=n_target, seed=args.seed,
                                        max_per_file=args.max_per_file,
                                        max_candidates_per_file=args.max_candidates_per_file,
                                        clean_budget_secs=args.clean_budget_secs, timeout=args.timeout,
-                                       python=args.python, log=log)
+                                       python=args.python, log=log, shape=shape["shape"],
+                                       nodes=shape["nodes"], min_func_lines=shape["min_func_lines"],
+                                       prefer_long=shape["prefer_long"])
         gate = gstats.to_dict()
         meta = {"seed": args.seed, "git_head": _git_head(repo), "targets": len(targets), "pairs": len(pairs),
-                "discovery_secs": round(time.time() - t0, 1), "min_lines": args.min_lines, "max_bytes": args.max_bytes}
+                "discovery_secs": round(time.time() - t0, 1), **shape, "nodes": list(shape["nodes"])}
         T.save_tasks(tasks_json, tasks, gstats, meta)
         log(f"discovery done in {meta['discovery_secs']}s: {len(tasks)} valid, "
             f"{gate['discarded_green']} discarded green, {gate['candidates_tried']} tried; saved {tasks_json}")
@@ -337,6 +518,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     payload: Dict = {"ts": ts, "repo": str(repo), "git_head": _git_head(repo), "seed": args.seed,
                      "tasks_json": str(tasks_json), "gate": gate, "task_ids": [t.id for t in tasks],
                      "arms": arms, "model": args.model if any(a.startswith("anthropic") for a in arms) else None,
+                     "shape": {**shape, "nodes": list(shape["nodes"])}, "task_meta": meta,
                      "rows": {}, "aggregate": {}}
     if not tasks:
         payload.update({"exit_code": EXIT_UNEVALUABLE, "exit_reason": "no valid task survived the gate"})
@@ -387,9 +569,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             log(f"BUDGET: {e}")
             exit_code, exit_reason = EXIT_BUDGET, str(e)
             payload["rows"].update(getattr(e, "rows", {}))
+    payload["split_by_pass"] = {}
     for a, rows in payload["rows"].items():
         payload["aggregate"][a] = aggregate(rows)
+        payload["split_by_pass"][a] = split_by_pass(rows)
         log(f"  {a}: {json.dumps(payload['aggregate'][a])}")
+        log(f"  {a} split by pass@1: {json.dumps(payload['split_by_pass'][a])}")
 
     # ---- poles
     if "oracle" in payload["rows"] and "sloppy" in payload["rows"]:
@@ -414,6 +599,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                                   [q.get("delta_cc") or 0 for p, q in pairs_ok]),
             "pass_preserve": sum(1 for p, q in pairs_ok if p.get("passed")),
             "pass_plain": sum(1 for p, q in pairs_ok if q.get("passed")),
+        }
+        # Power, stated rather than implied. A null on a handful of non-tied
+        # pairs is "n too small to tell"; only the power curve says which.
+        n_eff = payload["paired"]["fidelity"]["wins"] + payload["paired"]["fidelity"]["losses"]
+        payload["paired"]["power"] = {
+            "n_non_tied": n_eff,
+            "power_at": {str(p): round(sign_test_power(n_eff, p), 4) for p in (0.65, 0.75, 0.85)},
+            "min_detectable_preference_at_80pct": min_detectable_preference(n_eff),
         }
         log(f"paired: {json.dumps(payload['paired'])}")
 

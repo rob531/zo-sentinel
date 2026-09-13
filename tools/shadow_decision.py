@@ -420,10 +420,11 @@ def record(a) -> int:
 def _delegated_self_fire_active():
     """Is a DELEGATED prod fire currently possible for this lane?
 
-    Both conjuncts come from the ENFORCED sources -- authority.json parsed, and
-    authority.py run as a SUBPROCESS (never imported: an import has side
-    effects, FU-268).  Returns (active, basis).  On any read failure it returns
-    False: unknown is not a breach (R6).
+    Reads the ENFORCED source -- authority.json, parsed.  Returns (active,
+    basis).  On a read failure it returns False: unknown is not a breach (R6).
+
+    2026-09-13: the `away` conjunct was REMOVED.  See the comment below; it
+    dark-failed this guard for fourteen days.
     """
     import subprocess as _sp, json as _json, sys as _sys, os as _os
     base = r"D:\zo\Zocomputer Agents"
@@ -435,16 +436,29 @@ def _delegated_self_fire_active():
     except Exception as e:
         return (False, "authority.json unreadable (%s) -- NOT treated as active (R6)"
                        % type(e).__name__)
-    try:
-        r = _sp.run([_sys.executable, _os.path.join(base, "_tools", "authority.py"),
-                     "--away"], capture_output=True, text=True, timeout=60)
-        away = "AWAY WINDOW ACTIVE" in (r.stdout or "")
-    except Exception as e:
-        return (False, "authority.py --away unrunnable (%s) -- NOT treated as active (R6)"
-                       % type(e).__name__)
-    return (bool(granted and away),
-            "authority.json delegated.prod_deploy_fire.granted=%s; "
-            "authority.py --away ACTIVE=%s" % (granted, away))
+    # THE `away` CONJUNCT IS GONE (2026-09-13, measured by prod-drift-sentinel).
+    #
+    # `granted and away` went False the moment the away window expired on
+    # 2026-08-30, so this guard went DARK while the thing it guards -- a
+    # DELEGATED self-fire -- stayed fully live.  It does not go red; it goes
+    # quiet, and `--reconcile --fired-sha` then returns "AGREED rc=0" for a
+    # fire the lane performed itself.  Measured in the store on 2026-09-13:
+    # 7 of the 12 `agreed` rows are stamped >= 2026-08-30 and EVERY one has
+    # fired_by=None -- the whole post-expiry agreement pool is self-graded.
+    #
+    # The envelope says the stance comes from the envelope, "NOT from anyone's
+    # absence, presence, reachability, or reply latency".  Absence was never
+    # what makes a self-fire possible; the GRANT is.  So the grant alone is the
+    # predicate.
+    #
+    # `--may prod_deploy_fire` is deliberately NOT used as a conjunct either:
+    # it folds in the rate ceiling, which is BREACHED for 24h immediately after
+    # a fire -- which is exactly when reconcile runs -- so it would reproduce
+    # the same darkness on a different clock.
+    return (bool(granted),
+            "authority.json delegated.prod_deploy_fire.granted=%s "
+            "(the `away` conjunct was removed 2026-09-13 -- it dark-failed this "
+            "guard from 2026-08-30 while the grant stayed live)" % granted)
 
 
 def reconcile(a) -> int:
@@ -478,8 +492,8 @@ def reconcile(a) -> int:
     # ACTED 2026-08-09 -- fourteen hours in which a cleared decision nobody
     # executed was, in effect, a decision never made.
     #
-    # `--fired-sha` sets human_fired=True.  While the chairman is away and
-    # prod_deploy_fire is DELEGATED, the firer is this lane, so counting it as
+    # `--fired-sha` sets human_fired=True.  While prod_deploy_fire is
+    # DELEGATED, the firer is this lane, so counting it as
     # an agreement grades the decider against its own action -- FATHER's
     # anti-self-adjudication clause (2026-07-29).  Measured twice:
     # 2026-08-07T10:52:42Z (3c9efd49, reverted by hand in-run) and

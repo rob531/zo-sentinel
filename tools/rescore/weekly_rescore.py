@@ -131,6 +131,62 @@ def secret(name: str) -> str:
 
 
 # ---------------------------------------------------------------- run state
+_DRIVER_PROV = None
+
+
+def _driver_provenance() -> dict:
+    """Which tree is this code running from? Computed once per process, report-only.
+
+    `HERE` has been resolved at import since the first version of this file and has
+    never once been written down, so no artifact a wave leaves behind says which
+    worktree fired it. The cost of that omission is measurable: "which worktree does
+    `moat-rescore-weekly` actually RUN from?" has been an open question since
+    2026-08-11 and could only ever be answered by ELIMINATION -- on 2026-09-13 a
+    census of 94 rescore trees on the tower could narrow it to 33 and no further.
+    R1 asks every lane to resolve the running artifact from the RUNTIME rather than
+    a repo path; this is the runtime writing its own answer down once, at the moment
+    it matters, instead of thirty-three lanes guessing later.
+
+    Same shape as #4814 (a status the watch loop already held and omitted from the
+    line a human reads) and FU-358 -- a value measured, held, and never published.
+
+    NEVER RAISES. A provenance helper that can kill a paid fire is strictly worse
+    than no helper at all. Every field independently degrades to the string
+    "UNKNOWN": a tree that is not a git checkout, a git that is missing, and a git
+    that times out must all read UNKNOWN and never a plausible-looking default,
+    because unknown is not zero (R6) and a fabricated sha is worse than a blank.
+    """
+    global _DRIVER_PROV
+    if _DRIVER_PROV is not None:
+        return dict(_DRIVER_PROV)
+    prov = {"launch_dir": "UNKNOWN", "git_sha": "UNKNOWN", "dirty": "UNKNOWN",
+            "driver_md5": "UNKNOWN", "host": "UNKNOWN"}
+    try:
+        import hashlib as _hashlib
+        prov["launch_dir"] = str(HERE)
+        prov["driver_md5"] = _hashlib.md5(Path(__file__).resolve().read_bytes()).hexdigest()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        prov["host"] = socket.gethostname()
+    except Exception:  # noqa: BLE001
+        pass
+    for key, argv, conv in (
+        ("git_sha", ["git", "rev-parse", "HEAD"], lambda s: s.strip() or "UNKNOWN"),
+        ("dirty", ["git", "status", "--porcelain"],
+         lambda s: bool([ln for ln in s.splitlines() if ln and not ln.startswith("??")])),
+    ):
+        try:
+            r = subprocess.run(argv, cwd=str(HERE), capture_output=True, text=True,
+                               timeout=30)
+            if r.returncode == 0:
+                prov[key] = conv(r.stdout)
+        except Exception:  # noqa: BLE001
+            pass
+    _DRIVER_PROV = prov
+    return dict(prov)
+
+
 class Run:
     def __init__(self, run_dir: Path):
         self.dir = run_dir
@@ -144,8 +200,28 @@ class Run:
     def done(self, phase: str) -> bool:
         return self.state.get("phases", {}).get(phase) == "done"
 
+    def _record_driver(self) -> None:
+        """Stamp this PROCESS's driver into the run, deduped.
+
+        `driver` is the most recent observation; `driver_seen` accumulates every
+        distinct (launch_dir, git_sha) the run has been touched by. The two differ
+        precisely when a run is fired from one tree and collected from another --
+        which is the failure this exists to make visible, so recording only the
+        first observation would hide the one case worth recording.
+        """
+        try:
+            prov = _driver_provenance()
+            self.state["driver"] = prov
+            seen = self.state.setdefault("driver_seen", [])
+            key = [prov.get("launch_dir"), prov.get("git_sha")]
+            if key not in seen:
+                seen.append(key)
+        except Exception:  # noqa: BLE001
+            pass
+
     def mark(self, phase: str, status: str = "done", **kw) -> None:
         self.state.setdefault("phases", {})[phase] = status
+        self._record_driver()
         self.state.update(kw)
         self.save()
         ledger(f"phase_{phase}_{status}", self.state["run_id"])

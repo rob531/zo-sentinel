@@ -317,6 +317,36 @@ def parse(lines: List[str]) -> List[FU]:
     return out
 
 
+def by_id(entries: List[FU]) -> Dict[str, FU]:
+    """Index entries by `FU-NNN`, raising DuplicateFU on a collision.
+
+    Use this INSTEAD of `{f.id: f for f in parse(lines)}` everywhere. Same
+    result on a clean ledger, loud on a dirty one.
+
+    FU-174: a dict comprehension keeps the LAST match on a duplicate-headed
+    ledger, silently. This raises instead so there is no way to write the bug.
+    """
+    entries = _as_entries("by_id", entries)
+    out: Dict[str, FU] = {}
+    for fu in entries:
+        prev = out.get(fu.id)
+        if prev is not None:
+            raise DuplicateFU(
+                "%s appears twice (lines %d and %d): %r vs %r. A repeat is a dated "
+                "`log:` bullet under the existing entry, never a second heading. "
+                "Renumber the newer one before any write."
+                % (fu.id, prev.start + 1, fu.start + 1, prev.title, fu.title))
+        out[fu.id] = fu
+    return out
+
+
+def next_num(entries: List[FU]) -> str:
+    """Lowest free FU number ABOVE the current maximum, zero-padded to 3."""
+    entries = _as_entries("next_num", entries)
+    nums = [int(f.num) for f in entries if f.num.isdigit()]
+    return "%03d" % ((max(nums) + 1) if nums else 1)
+
+
 def line_terminator(lines: List[str]) -> str:
     """Return the terminator the caller's `lines` carry ("" if unterminated).
 

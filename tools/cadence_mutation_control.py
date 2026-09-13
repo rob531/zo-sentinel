@@ -27,7 +27,7 @@ if not SRC.exists():  # pragma: no cover
 MUTATIONS = {
     # the auth_proven positive signal a 401 cannot forge
     "auth_positive_signal": (
-        '    if not isinstance(sla, (int, float)):',
+        '    if isinstance(sla, bool) or not isinstance(sla, (int, float)):',
         '    if False:'),
     # the shape guard: degrade to the naive list-shaped reader that motivated this
     "shape_guard": (
@@ -41,6 +41,21 @@ MUTATIONS = {
     "unknown_is_not_green": (
         '    return {"AUTHENTICATED_GREEN": 0, "RED": 1}.get(rep.get("verdict"), 2)',
         '    return {"AUTHENTICATED_GREEN": 0, "RED": 1}.get(rep.get("verdict"), 0)'),
+    # --- added 2026-09-13 after an adversary showed these guards were UNMUTATED
+    #     and therefore unproven: the matrix covered 4 of 8+ guards and claimed
+    #     "every guard". Scope is now stated, and these four are covered.
+    "zombie_and_alert_are_red_signals": (
+        '    red = bool(out["overdue"]) or bool(out["zombie_running"]) or bool(out["alert"])',
+        '    red = bool(out["overdue"])'),
+    "absent_field_is_not_zero": (
+        '        if field not in body:',
+        '        if False:'),
+    "per_job_overdue_required": (
+        '    if "overdue" not in job:',
+        '    if False:'),
+    "bool_is_not_a_number": (
+        '    if isinstance(sla, bool) or not isinstance(sla, (int, float)):',
+        '    if not isinstance(sla, (int, float)):'),
 }
 
 base = SRC.read_text(encoding="utf-8")
@@ -72,12 +87,22 @@ for name, (old, new) in MUTATIONS.items():
         fails = json.loads(r.stdout.split("SELF-TEST")[0]).get("failures", [])
     except Exception:
         pass
+    # rc != 0 IS NOT PROOF. An adversary probe on 2026-09-13 showed a mutant that
+    # crashes at import, or inside evaluate(), also exits non-zero with ZERO
+    # assertions fired -- so "the guard carried an assertion" and "the mutant did
+    # not even run" scored identically. That is rc-from-a-crash-reads-as-a-verdict
+    # inside the very tool built to police it. The proof is a NAMED assertion.
     results[name] = {
         "applied": True,
         "rc": r.returncode,
-        "went_red": r.returncode != 0,
         "assertions_that_fired": fails,
+        "proved": bool(fails),
+        "went_red": r.returncode != 0,
     }
+    if r.returncode != 0 and not fails:
+        results[name]["note"] = (
+            "NON-ZERO BUT NO NAMED ASSERTION -- indistinguishable from a mutant "
+            "that failed to import. Not counted as proof.")
 
 print(json.dumps(results, indent=2))
 
@@ -85,7 +110,7 @@ shutil.rmtree(tmp, ignore_errors=True)
 
 baseline_ok = results["_unmutated_baseline"]["ok"]
 dead = [k for k, v in results.items()
-        if k != "_unmutated_baseline" and v.get("applied") and not v.get("went_red")]
+        if k != "_unmutated_baseline" and v.get("applied") and not v.get("proved")]
 vacuous = [k for k, v in results.items() if v.get("applied") is False]
 
 print()
@@ -98,6 +123,12 @@ if vacuous:
 if dead:
     print("UNPROVEN GUARD(S) -- removing these changed no assertion: %s" % ", ".join(dead))
     sys.exit(1)
-print("R4 GREEN: every guard was observed carrying at least one assertion -- "
-      "each mutation turned --self-test RED, and the unmutated baseline is GREEN.")
+covered = len(MUTATIONS)
+print("R4 GREEN: %d of %d mutated guards each produced a NAMED assertion failure, "
+      "and the unmutated baseline is GREEN.\n"
+      "SCOPE (state it, do not overclaim): this matrix covers the %d guards listed "
+      "in MUTATIONS. A guard not listed here is UNPROVEN, not proven -- v1 claimed "
+      "'every guard' while covering 4 of 8+, and an adversary found two of the "
+      "uncovered ones carrying no assertion at all."
+      % (covered, covered, covered))
 sys.exit(0)

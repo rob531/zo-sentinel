@@ -30,6 +30,13 @@ every task has an enclosing function for the sloppy repairer to rewrite and
 for a model to be told about. Module-level and class-level statements are
 deliberately out of scope.
 
+Several DISJOINT corruptions can be carried by one task (``apply_all`` /
+``invert_all``), which is how the hard task shape builds a bug that no
+single-hunk edit can repair. Disjointness is enforced, not assumed, and the
+round trip ``invert_all(apply_all(src, cs), cs) == src`` is exact -- the whole
+multi-node machinery is still only splices, so the byte-for-byte rule above
+holds for every character outside the union of the spans.
+
 Adding a class: write ``_find_<name>(source, tree, rng) -> list[Corruption]``,
 register it in ``CORRUPTION_CLASSES``. Each candidate must be a single splice
 that leaves the file parseable (``enumerate_candidates`` re-parses and drops
@@ -43,7 +50,7 @@ import ast
 import dataclasses
 import random
 import re
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 CORRUPTION_CLASS_NAMES = (
     "comparison_flip",
@@ -78,6 +85,20 @@ class Corruption:
     @property
     def id(self) -> str:
         return f"{self.cls}@{self.lineno}:{self.col}"
+
+    @property
+    def func_lines(self) -> int:
+        """Length, in lines, of the enclosing function (the `def` line included).
+
+        The hard task shape prefers long enclosing functions: a one-line
+        function localises the bug for the model by simply existing.
+        """
+        return self.func_end_lineno - self.func_lineno + 1
+
+    @property
+    def end(self) -> int:
+        """Character offset one past this splice's span in the REFERENCE text."""
+        return self.start + len(self.original)
 
     def apply(self, source: str) -> str:
         seg = source[self.start:self.start + len(self.original)]
@@ -362,13 +383,24 @@ CORRUPTION_CLASSES: Dict[str, Callable] = {
 # --------------------------------------------------------------------------- api
 
 def enumerate_candidates(source: str, file: str, seed: int = 0,
-                         classes: Optional[List[str]] = None) -> Tuple[List[Corruption], dict]:
+                         classes: Optional[List[str]] = None, min_func_lines: int = 0,
+                         prefer_long: bool = False) -> Tuple[List[Corruption], dict]:
     """All corruption candidates in ``source``, in a seeded shuffled order.
 
     Returns (candidates, stats). ``stats["syntax_rejects"]`` counts candidates
     whose splice did not re-parse (should be 0; non-zero is a bug in a finder).
     Every returned candidate has been verified to (a) re-parse and (b) invert
     back to the exact original string.
+
+    ``min_func_lines`` drops candidates whose enclosing function is shorter than
+    that (counted in ``stats["short_func_rejects"]``), and ``prefer_long`` then
+    orders what survives by enclosing-function length, longest first. Both are
+    off by default, so the easy shape enumerates exactly as it always did. They
+    are the "longer enclosing functions" lever of the hard shape: the shorter
+    the function a bug sits in, the more the function boundary itself tells the
+    repairer where to look. The sort is STABLE, so the seeded shuffle survives
+    as the tie-break among functions of equal length and the order stays
+    reproducible from the seed.
     """
     tree = ast.parse(source)
     idx = _LineIndex(source)
@@ -378,11 +410,15 @@ def enumerate_candidates(source: str, file: str, seed: int = 0,
     raw: List[Corruption] = []
     for name in wanted:
         raw.extend(CORRUPTION_CLASSES[name](source, tree, idx, rng, file, funcs))
-    stats = {"enumerated": len(raw), "syntax_rejects": 0, "noop_rejects": 0, "by_class": {}}
+    stats = {"enumerated": len(raw), "syntax_rejects": 0, "noop_rejects": 0,
+             "short_func_rejects": 0, "by_class": {}}
     ok: List[Corruption] = []
     for c in raw:
         if c.original == c.corrupted:
             stats["noop_rejects"] += 1
+            continue
+        if c.func_lines < min_func_lines:
+            stats["short_func_rejects"] += 1
             continue
         try:
             corrupted = c.apply(source)
@@ -395,8 +431,11 @@ def enumerate_candidates(source: str, file: str, seed: int = 0,
             continue
         ok.append(c)
     rng.shuffle(ok)
+    if prefer_long:
+        ok.sort(key=lambda c: -c.func_lines)  # stable: the seeded shuffle is the tie-break
     for c in ok:
         stats["by_class"][c.cls] = stats["by_class"].get(c.cls, 0) + 1
+    stats["func_lines_max"] = max((c.func_lines for c in ok), default=0)
     return ok, stats
 
 
@@ -404,3 +443,64 @@ def untouched_remainder_identical(source: str, corrupted: str, c: Corruption) ->
     """True iff everything outside the splice is byte-identical (the invariant)."""
     return (source[:c.start] == corrupted[:c.start]
             and source[c.start + len(c.original):] == corrupted[c.start + len(c.corrupted):])
+
+
+# --------------------------------------------------------------------------- multi-node
+
+def spans_disjoint(corruptions: Sequence[Corruption]) -> bool:
+    """True iff no two splices overlap in the reference text.
+
+    ``apply_all`` is only well defined on disjoint splices: two corruptions that
+    share a character would each record an ``original`` the other has already
+    rewritten, and the second ``apply`` would (correctly) refuse.
+    """
+    spans = sorted((c.start, c.end) for c in corruptions)
+    return all(spans[i][1] <= spans[i + 1][0] for i in range(len(spans) - 1))
+
+
+def apply_all(source: str, corruptions: Sequence[Corruption]) -> str:
+    """Apply several disjoint splices to one source, HIGHEST ``start`` first.
+
+    Descending order needs no offset bookkeeping: when a splice is applied,
+    every character below its own ``start`` is still byte-identical to
+    ``source``, so its recorded ``(start, original)`` pair is still exact. Each
+    ``apply`` re-checks that pair, so a violation raises instead of silently
+    corrupting the wrong span.
+    """
+    if not spans_disjoint(corruptions):
+        raise ValueError("overlapping corruptions cannot be applied together")
+    for c in sorted(corruptions, key=lambda c: c.start, reverse=True):
+        source = c.apply(source)
+    return source
+
+
+def invert_all(corrupted: str, corruptions: Sequence[Corruption]) -> str:
+    """Exact inverse of ``apply_all``, LOWEST ``start`` first.
+
+    The mirror of the argument above: once every splice below this one has been
+    undone, the text under ``start`` is again byte-identical to the reference,
+    so the recorded offset is exact. ``apply_all`` then ``invert_all`` returns
+    the original string character for character -- the property the oracle arm
+    depends on, and one the tests assert directly.
+    """
+    for c in sorted(corruptions, key=lambda c: c.start):
+        corrupted = c.invert(corrupted)
+    return corrupted
+
+
+def untouched_remainder_identical_multi(source: str, corrupted: str,
+                                        corruptions: Sequence[Corruption]) -> bool:
+    """True iff every character outside the union of the splices is unchanged.
+
+    The multi-node form of the byte-for-byte invariant: walk the reference and
+    the corrupted text in step, skipping each recorded span on its own side.
+    """
+    cs = sorted(corruptions, key=lambda c: c.start)
+    ref_pos = out_pos = 0
+    for c in cs:
+        if source[ref_pos:c.start] != corrupted[out_pos:out_pos + (c.start - ref_pos)]:
+            return False
+        out_pos += c.start - ref_pos
+        ref_pos = c.end
+        out_pos += len(c.corrupted)
+    return source[ref_pos:] == corrupted[out_pos:]

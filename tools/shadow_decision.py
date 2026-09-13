@@ -426,7 +426,7 @@ def _delegated_self_fire_active():
     2026-09-13: the `away` conjunct was REMOVED.  See the comment below; it
     dark-failed this guard for fourteen days.
     """
-    import subprocess as _sp, json as _json, sys as _sys, os as _os
+    import json as _json, os as _os
     base = r"D:\zo\Zocomputer Agents"
     try:
         with open(_os.path.join(base, "authority.json"), encoding="utf-8") as fh:

@@ -1,11 +1,12 @@
 """Pluggable repairers. Same interface: ``repair(task) -> RepairResult``.
 
 OracleRepairer
-    Applies the KNOWN inverse of the corruption. By construction it must score
+    Applies the KNOWN inverse of every corruption the task carries (1 in the
+    easy shape, 2-3 in the hard one). By construction it must score
     fidelity_lev == 0.0 and pass. This is the GREEN pole of the self-test.
 
 SloppyRepairer
-    Restores correctness, then rewrites the ENCLOSING FUNCTION the way an
+    Restores correctness, then rewrites EVERY ENCLOSING FUNCTION the way an
     over-editing model does: re-emits it through ``ast.unparse`` (comments
     gone, quoting and spacing normalised), renames every local variable, and
     wraps the body in a defensive ``try/except Exception: raise`` it did not
@@ -16,7 +17,10 @@ SloppyRepairer
 AnthropicRepairer(preservation: bool)
     A real model call over the Messages API using stdlib ``urllib`` only (the
     ``anthropic`` SDK is deliberately NOT imported -- zero new dependencies).
-    Two prompt variants that differ ONLY by the preservation instruction.
+    Two prompt variants that differ ONLY by the preservation instruction --
+    including under the hard shape, whose task statement withholds the
+    enclosing function, the failing test's identity and the pytest tail from
+    BOTH arms alike.
     Output tokens are capped per call, total calls are capped per instance,
     and cumulative usage plus an estimated cost are tracked and printable.
     The transport is injectable (``post=``) so tests exercise parsing, budget
@@ -37,8 +41,9 @@ import urllib.error
 import urllib.request
 from typing import Callable, Dict, List, Optional
 
+from . import corrupt as C
 from .corrupt import _LineIndex
-from .tasks import Task
+from .tasks import SHAPE_HARD, Task
 
 API_URL = "https://api.anthropic.com/v1/messages"
 API_VERSION = "2023-06-01"
@@ -76,7 +81,10 @@ class OracleRepairer(Repairer):
     name = "oracle"
 
     def repair(self, task: Task) -> RepairResult:
-        return RepairResult(task.corruption.invert(task.corrupted), {"inverse_of": task.corruption.id})
+        """Undo every corruption the task carries -- one in the easy shape, 2-3
+        in the hard one. ``invert_all`` is exact, so this must score 0.0."""
+        out = C.invert_all(task.corrupted, task.corruptions)
+        return RepairResult(out, {"inverse_of": [c.id for c in task.corruptions]})
 
 
 # --------------------------------------------------------------------------- sloppy
@@ -147,49 +155,119 @@ class SloppyRepairer(Repairer):
         return reference[:start] + text + reference[end:]
 
     def repair(self, task: Task) -> RepairResult:
-        out = self.rewrite_function(task.reference, task.corruption.func_lineno)
-        return RepairResult(out, {"rewrote": task.corruption.func})
+        """Rewrite EVERY function this task's bugs sit in.
+
+        Descending by start line: re-emitting a function changes how many lines
+        it occupies, which shifts everything BELOW it but leaves the line
+        numbers above it untouched -- so working bottom-up keeps every
+        not-yet-rewritten ``func_lineno`` exact without re-deriving it.
+        """
+        out = task.reference
+        for lineno in sorted({c.func_lineno for c in task.corruptions}, reverse=True):
+            out = self.rewrite_function(out, lineno)
+        return RepairResult(out, {"rewrote": task.funcs})
 
 
 # --------------------------------------------------------------------------- anthropic
 
-_FENCE_RE = re.compile(r"```(?:python|py)?[ \t]*\r?\n(.*?)\r?\n```", re.S)
+#: Fenced-block matcher. BOTH delimiters may be indented: measured 2026-09-13,
+#: under the hard prompt the model answers with a numbered list whose code
+#: fences are indented under the list items. An earlier version of this pattern
+#: anchored the CLOSING fence at column 0, so every indented closer was skipped
+#: and one match ran from an early opening fence all the way to some later
+#: column-0 fence -- swallowing the prose between them. That mis-extraction
+#: scored 10 of 30 plain-arm rows as unparseable ~0.9-fidelity failures when the
+#: complete, correct module was present in the very same response.
+_FENCE_RE = re.compile(r"^[ \t]*```(?:python|py)?[ \t]*\r?\n(.*?)^[ \t]*```", re.S | re.M)
 
+#: Shape-neutral on purpose: the hard shape puts 2-3 bugs in a file, and a
+#: system prompt saying "a bug" would invite the model to stop after the first
+#: one -- that would depress pass@1 for a reason that is the harness's fault,
+#: not the model's. Both arms always receive this identical text, so the A/B
+#: itself is untouched by the wording.
 SYSTEM_PROMPT = (
-    "You are repairing a bug in one Python module of an existing codebase. "
+    "You are repairing one or more bugs in one Python module of an existing codebase. "
     "Return the COMPLETE corrected module inside a single ```python fenced block "
     "and nothing else: no prose before or after the block."
 )
 
+#: Deliberately says nothing about HOW MANY bugs there are or WHERE they are.
+#: Only this string separates the two model arms, so any task information in it
+#: would be a second difference between them and the A/B would stop being an
+#: A/B. Count and location live in the shared task statement below.
 PRESERVATION_INSTRUCTION = (
-    "Make the MINIMAL edit that fixes the bug. Preserve the original implementation "
+    "Make the MINIMAL edit that repairs the file. Preserve the original implementation "
     "exactly: keep every line that is not the bug byte-for-byte, including comments, "
     "blank lines, quoting, formatting, variable names and structure. Do not refactor, "
     "reformat, rename, reorder, simplify or add defensive code."
 )
 
+#: The hard shape's task statement. It withholds the three things that made the
+#: easy shape trivial -- the enclosing function name, WHICH test fails, and the
+#: pytest tail -- and hands over the file plus the bare fact that the suite is
+#: red. "one or more" is shared by both arms so neither learns the node count
+#: the other does not have.
+HARD_TASK_STATEMENT = (
+    "At least one test in this repository's test suite fails against this file. "
+    "One or more small bugs have been introduced somewhere in it. Find every one of "
+    "them and fix it. You are not told which test fails, which function is at fault, "
+    "or how many bugs there are."
+)
+
 
 def build_prompt(task: Task, preservation: bool) -> str:
-    parts = [
-        f"File: {task.source_file}",
-        f"The test target `{task.test_target}` fails against this file. "
-        f"The bug is inside the function `{task.corruption.func}`. Fix it.",
-    ]
+    """The user message for one repair.
+
+    The two arms MUST differ only by ``PRESERVATION_INSTRUCTION`` -- a test
+    asserts exactly that by string subtraction.
+    """
+    hard = getattr(task, "shape", "easy") == SHAPE_HARD
+    if hard:
+        parts = [f"File: {task.source_file}", HARD_TASK_STATEMENT]
+    else:
+        parts = [
+            f"File: {task.source_file}",
+            f"The test target `{task.test_target}` fails against this file. "
+            f"The bug is inside the function `{task.corruption.func}`. Fix it.",
+        ]
     if preservation:
         parts.append(PRESERVATION_INSTRUCTION)
-    parts.append("pytest output (tail):\n```\n" + task.fail_tail[-3000:] + "\n```")
+    if not hard:   # the failing-test tail is itself a localisation signal
+        parts.append("pytest output (tail):\n```\n" + task.fail_tail[-3000:] + "\n```")
     parts.append("Current file contents:\n```python\n" + task.corrupted + "\n```")
     return "\n\n".join(parts)
 
 
 def extract_code(text: str) -> str:
-    """The LARGEST fenced block. Models routinely disobey "nothing else" and put a
-    short diagnostic snippet in a first fence before the whole file in a second;
-    taking the first fence scored such a repair as a 47-byte file (measured)."""
-    blocks = [m.group(1) for m in _FENCE_RE.finditer(text)]
-    if blocks:
-        return max(blocks, key=len) + "\n"
-    return text
+    """The largest fenced block that PARSES as Python; the largest overall if none do.
+
+    Two measured failure modes, in order of discovery:
+
+    1. Models disobey "nothing else" and put a short diagnostic snippet in a
+       first fence before the whole file in a second; taking the FIRST fence
+       scored such a repair as a 47-byte file (2026-09-12).
+    2. They also answer with a numbered list of indented fences AROUND the
+       file. Size alone then picks a prose blob over the module, which scored
+       as an unparseable ~0.9-fidelity failure even though the correct module
+       was in the same response (2026-09-13, 10 of 30 plain-arm rows).
+
+    Preferring a block that parses fixes (2) without reopening (1): a prose
+    blob is not valid Python, and among real candidate modules the largest is
+    still the whole file rather than a snippet of it. When nothing parses the
+    largest block is still returned, so a genuinely broken repair is scored as
+    broken rather than silently replaced by something that happens to compile.
+    """
+    blocks = [m.group(1).rstrip("\n") for m in _FENCE_RE.finditer(text)]
+    if not blocks:
+        return text
+    parsable = []
+    for b in blocks:
+        try:
+            ast.parse(b)
+        except (SyntaxError, ValueError):
+            continue
+        parsable.append(b)
+    return max(parsable or blocks, key=len) + "\n"
 
 
 def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> tuple:
@@ -288,6 +366,12 @@ class AnthropicRepairer(Repairer):
         text = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
         code = extract_code(text)
         return RepairResult(code, {
+            # The FULL response text, so a later extractor fix can re-score this
+            # run offline. Storing only the extracted code cost a whole $2.68
+            # hard-shape A/B: when extract_code turned out to be picking prose
+            # over the module, the raw text needed to re-extract was gone and
+            # the only way to recover the rows was to buy them again.
+            "raw_text": text,
             "model": resp.get("model", self.model),
             "stop_reason": resp.get("stop_reason"),
             "input_tokens": usage.get("input_tokens"),

@@ -102,15 +102,21 @@ ARTIFACT_DIR = os.path.join(ROOT, "artifacts")
 ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "reachability_ratchet.json")
 
 # >40 active deferrals = the hatch has become the new graveyard.
-# Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Do not raise this
-# number to make the warning quiet; escalate to the chairman instead.
+# Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Raising this number
+# to quieten the warning is still the wrong move. What changed on 2026-09-13
+# is WHO adjudicates it -- see the retirement note below.
 #
 # MERGE_AUDIT_2026-08-23 G4: this cap was ADVISORY. Being over it printed the
 # reopen trigger inside a check that exited 0, so it appeared in no PR status and
 # blocked nothing -- "an instrument reporting faithfully into a place nobody
 # reads", which is the failure mode this file's own comments keep naming. It is
-# still printed, because the ruling's escalation is still owed. What BLOCKS now
-# is the derivative: see DEFERRED NON-INCREASING below.
+# still printed, but the escalation it used to name was RETIRED 2026-09-13 by
+# peer decision deferred-cap-reopen-trigger-is-the-derivative (PR #5035): the
+# adjudicator is peer review, not the chairman, and the thing that BLOCKS is
+# the derivative -- see DEFERRED NON-INCREASING below. The sentence is not
+# reproduced anywhere in this file: to a substring match, a record of a
+# retired rule is indistinguishable from still obeying it, which is exactly
+# what rule_echo matches on.
 DEFERRED_REVIEW_CAP = 40
 
 # A module "exposes a router" if it constructs an APIRouter or decorates one.
@@ -413,7 +419,8 @@ def main():
     if len(active_deferred) > DEFERRED_REVIEW_CAP:
         print("\n  DEFERRED LIST OVER CAP: %d > %d. Per the 2026-07-21 CofC ruling "
               "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
-              "Escalate to the chairman; do not raise the cap to make this quiet."
+              "Route it through peer review (peer_review.py --propose); the cap is "
+              "not to be raised to quieten this line."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
 
     # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------

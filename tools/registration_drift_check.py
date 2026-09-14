@@ -843,15 +843,27 @@ def run_cycle(allow_issues: bool = True) -> dict:
                 m["issue"] = num
                 lines.append(f"  -> issue #{num}")
 
+    # THE CLOSE PATH IS DRIVEN BY `issues`, NOT ONLY BY `consecutive_missing`.
+    #
+    # It used to walk only consecutive_missing, and that left an unreachable
+    # state: any cycle that drops a name from consecutive_missing WITHOUT
+    # closing -- a `--no-issues` run is the obvious one, and it is what the
+    # #5046 verification itself did to the live state file -- orphans the entry
+    # in `issues`, where nothing ever looks at it again. The lane recovers, the
+    # issue stays open forever, and the next reader sees an open incident for a
+    # healthy daemon. An open issue is the thing that must be reconciled, so the
+    # record of open issues is the thing to iterate.
     rot_by_name = {d["name"]: d for d in rotated_out}
-    for name in list(st["consecutive_missing"]):
-        if name not in {m["name"] for m in missing}:
-            st["consecutive_missing"].pop(name, None)
-            why = (rot_by_name[name]["rotation"]["why"] if name in rot_by_name
-                   else "running again")
-            if allow_issues:
-                close_issue(name, st, why)
-            lines.append(f"RECOVERED {name} -- {why}")
+    missing_names = {m["name"] for m in missing}
+    for name in sorted(set(st["consecutive_missing"]) | set(st["issues"])):
+        if name in missing_names:
+            continue
+        st["consecutive_missing"].pop(name, None)
+        why = (rot_by_name[name]["rotation"]["why"] if name in rot_by_name
+               else "running again")
+        if allow_issues:
+            close_issue(name, st, why)
+        lines.append(f"RECOVERED {name} -- {why}")
 
     for d in rotated_out:
         lines.append(f"ROTATED_OUT {d['name']} -- {d['rotation']['why']}")

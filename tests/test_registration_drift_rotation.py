@@ -192,3 +192,66 @@ def test_rotated_out_closes_the_open_issue_saying_which_exit_it_took(
     st = json.loads((tmp_path / "state.json").read_text())
     assert st["issues"] == {}
     assert st["consecutive_missing"] == {}
+
+
+def test_an_orphaned_open_issue_is_still_closed(monkeypatch, tmp_path, bed):
+    """The close path must be driven by `issues`, not by `consecutive_missing`.
+
+    Any cycle that drops a name from consecutive_missing without closing --
+    a `--no-issues` run is the obvious one, and the #5046 verification itself
+    did exactly that to the live state file -- used to orphan the entry in
+    `issues`, where nothing ever looked again. The lane recovers and the issue
+    stays open forever.
+
+    NEGATIVE CONTROL for this one is test_..._still_reports_missing_when_
+    rotation_is_broken above: a name that IS still missing must NOT be closed.
+    """
+    closed = {}
+    monkeypatch.setattr(rdc, "_gh",
+                        lambda args: (closed.update({"args": args}), (0, ""))[1])
+    live = [_proc(24973, bed["rotator"]), _proc(41216, bed["hewho"])]
+
+    monkeypatch.setattr(rdc, "GO_SH", tmp_path / "nonexistent_go.sh")
+    monkeypatch.setattr(rdc, "WATCHDOG_SH", tmp_path / "nonexistent_wd.sh")
+    monkeypatch.setattr(rdc, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(rdc, "HEARTBEAT", tmp_path / "hb.json")
+    monkeypatch.setattr(rdc, "DRIFT_LOG", tmp_path / "drift.log")
+    monkeypatch.setattr(rdc, "merge_declared", lambda a, b: _decl(bed["intent"]))
+    monkeypatch.setattr(rdc, "running_processes", lambda: (live, []))
+    monkeypatch.setattr(rdc, "emit_bus", lambda report: None)
+    # the orphan: an OPEN issue with NO consecutive_missing entry behind it
+    (tmp_path / "state.json").write_text(json.dumps({
+        "consecutive_missing": {},
+        "issues": {"intent_engine_daemon": "5046"}}))
+
+    rdc.run_cycle(allow_issues=True)
+
+    assert closed.get("args", [None, None])[0:2] == ["issue", "close"]
+    assert closed["args"][2] == "5046"
+    assert json.loads((tmp_path / "state.json").read_text())["issues"] == {}
+
+
+def test_a_still_missing_lane_keeps_its_issue_open(monkeypatch, tmp_path, bed):
+    """NEGATIVE CONTROL for the orphan sweep: reconciling from `issues` must not
+    become a way to close an issue for a daemon that is still down."""
+    calls = []
+    monkeypatch.setattr(rdc, "_gh", lambda args: (calls.append(args), (0, ""))[1])
+    live = [_proc(24973, bed["rotator"])]          # rotator up, NO child alive
+
+    monkeypatch.setattr(rdc, "GO_SH", tmp_path / "nonexistent_go.sh")
+    monkeypatch.setattr(rdc, "WATCHDOG_SH", tmp_path / "nonexistent_wd.sh")
+    monkeypatch.setattr(rdc, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(rdc, "HEARTBEAT", tmp_path / "hb.json")
+    monkeypatch.setattr(rdc, "DRIFT_LOG", tmp_path / "drift.log")
+    monkeypatch.setattr(rdc, "merge_declared", lambda a, b: _decl(bed["intent"]))
+    monkeypatch.setattr(rdc, "running_processes", lambda: (live, []))
+    monkeypatch.setattr(rdc, "emit_bus", lambda report: None)
+    (tmp_path / "state.json").write_text(json.dumps({
+        "consecutive_missing": {},
+        "issues": {"intent_engine_daemon": "5046"}}))
+
+    rdc.run_cycle(allow_issues=True)
+
+    assert not any(a[0:2] == ["issue", "close"] for a in calls)
+    st = json.loads((tmp_path / "state.json").read_text())
+    assert st["issues"] == {"intent_engine_daemon": "5046"}

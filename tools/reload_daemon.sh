@@ -74,7 +74,26 @@ else
              -not -path "*/node_modules/*" -not -path "*/.git/*" \
              2>/dev/null | head -1 || true)"
   if [ -n "$NESTED" ]; then
-    MODE="module"; SCRIPT="$NESTED"; _derive_module "$NESTED"
+    # FU-460 (2026-09-14): HARNESS_DOCTRINE R1 -- the RUNTIME decides how a
+    # daemon is started, not the filesystem layout. A nested <name>.py sitting
+    # in a package dir CAN be run as `-m pkg.sub.name`, but go.sh declares
+    # these by PATH and they run in SCRIPT form. Classifying them module-mode
+    # built a CHILD_PAT that matched nothing, so every reload fell through to
+    # the cold relaunch below -- which pkill'd the LIVE wrapper and then handed
+    # daemon_wrapper.sh a `-m` it has no code to parse. Net effect of a
+    # "reload": a healthy supervised daemon became an ORPHAN on stale code.
+    # Measured 2026-09-14: 2 of 26 live wrapper-managed daemons are in this
+    # class, and module-mode misfired on 2 of the 2 cases it fired on.
+    # Ask the runtime first, then go.sh; only guess from layout as a last resort.
+    if pgrep -f "python.*${NAME}\.py" >/dev/null 2>&1; then
+      SCRIPT="$NESTED"                      # live proc is script form -> MODE stays "file"
+    elif grep -qE "daemon_wrapper\.sh +${NAME}([[:space:]]|\\\\|$)" "$MESH/go.sh" 2>/dev/null &&
+         grep -A3 -E "daemon_wrapper\.sh +${NAME}([[:space:]]|\\\\|$)" "$MESH/go.sh" 2>/dev/null \
+           | grep -q "${NAME}\.py"; then
+      SCRIPT="$NESTED"                      # go.sh declares it by path -> script form
+    else
+      MODE="module"; SCRIPT="$NESTED"; _derive_module "$NESTED"
+    fi
   else
     # 4. ask the running process how it was started
     LIVE="$(pgrep -af "python.* -m ([A-Za-z0-9_]+\.)*${NAME}( |$)" 2>/dev/null \
@@ -147,6 +166,19 @@ done
 # Fallback: cold relaunch under a FRESH wrapper (covers wrapper-dead,
 # unpatched-wrapper, and back-off-forever cases).
 if [ -z "$NEW" ]; then
+  # FU-460: NEVER trade a live supervisor for a dead one. daemon_wrapper.sh
+  # takes `<name> <script-path>` and contains NO `-m` handling at all, so a
+  # module-mode cold relaunch CANNOT succeed -- and the pkill below would have
+  # already destroyed the working wrapper by the time we found that out. This
+  # is the "surface advertised a shape the writer refuses" class: refuse up
+  # front and leave the existing wrapper running.
+  if [ "$MODE" = "module" ] && ! grep -q -- '-m' "$MESH/daemon_wrapper.sh" 2>/dev/null; then
+    rm -f "$MARKER"
+    echo "REFUSING cold relaunch: $NAME resolved module-mode, but $MESH/daemon_wrapper.sh"
+    echo "  has no -m support -- the relaunch would fail AFTER killing the live wrapper."
+    echo "  Existing wrapper left UNTOUCHED. Fix the wrapper contract or the resolution."
+    exit 2
+  fi
   echo "child did not respawn -- cold-relaunching a fresh wrapper"
   rm -f "$MARKER"
   pkill -f "$WRAP_PAT" 2>/dev/null || true

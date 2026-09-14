@@ -1617,7 +1617,30 @@ def _selftest_gate(directive, directive_id):
         # cwd + the real inherited /pkg/:/root/ -> reproduces production exactly.
         _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": "",
                 "PYTHONPATH": str(PROJECT_DIR) + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
-        proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
+        # FU-459: #2177 cured the `app.*` half of THIS loader (PYTHONPATH) and left
+        # the RELATIVE-import half untouched. Running a file BY PATH can never give
+        # it a parent package, so `from .logic import x` -- correct for a
+        # services/staged/<name>/ package, and the exact form
+        # promote_staged_to_active.py imports SUCCESSFULLY -- raised ImportError and
+        # classify_selftest returned RED. Measured 2026-09-14 on the live runner log:
+        # of the 14 services RED-ed for this in 24h, 6 (43%) imported CLEAN under the
+        # runtime's own loader; the other 7 fail with `cannot import name` and stay
+        # RED via the branch ABOVE the relative-import one, so no true positive is
+        # lost. `python -m` still executes __main__, so the self-test contract holds.
+        # Falls back to the path form for anything not under PROJECT_DIR.
+        _selftest_argv = [_sys.executable, str(out)]
+        _dotted = None
+        try:
+            _rel = _os.path.relpath(str(out), str(PROJECT_DIR))
+            if not _rel.startswith(_os.pardir):
+                _parts = _os.path.splitext(_rel)[0].split(_os.sep)
+                if _parts and all(p.isidentifier() for p in _parts):
+                    _dotted = ".".join(_parts)
+        except Exception:
+            _dotted = None
+        if _dotted:
+            _selftest_argv = [_sys.executable, "-m", _dotted]
+        proc = subprocess.run(_selftest_argv, capture_output=True,
                               text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")

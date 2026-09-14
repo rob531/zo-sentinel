@@ -176,6 +176,19 @@ def _terminal_task_stems() -> set:
     repeats of a single task, and 77.2% of the live corpus.
     """
     stems = set()
+    # Compacted history: tools/compact_proposed_corpus.py folds the corpus into
+    # one index so the directory can be cleared without re-opening the loop.
+    # Read it FIRST -- it may be the only surviving record.
+    try:
+        _idx = PROPOSED_DIR.parent / "handled_tasks.json"
+        if _idx.is_file():
+            _doc = json.loads(_idx.read_text(encoding="utf-8"))
+            for _t, _v in (_doc.get("tasks") or {}).items():
+                _st = (_v or {}).get("states") or {}
+                if any(_st.get(_s) for _s in ("expanded", "duplicate")):
+                    stems.add(_t)
+    except Exception:
+        pass    # the index is an optimisation; never fail the dedup on it
     if not PROPOSED_DIR.exists():
         return stems
     for p in PROPOSED_DIR.iterdir():

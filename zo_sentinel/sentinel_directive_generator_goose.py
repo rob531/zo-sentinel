@@ -31,6 +31,7 @@ EQUIVALENCE TO EXISTING GENERATOR:
 """
 import json
 import logging
+import re
 import os
 import signal
 import subprocess
@@ -155,6 +156,48 @@ def _count_pending() -> int:
     return sum(1 for p in PENDING_DIR.glob("*.json") if ".bak" not in p.name)
 
 
+# Terminal markers that mean "this task was HANDLED" -- these must suppress a
+# re-proposal. .rejected and .revived deliberately do NOT: the system declined
+# that attempt, and a later, better one is legitimate (the FU-011 lesson, which
+# this must not regress).
+_SETTLED_SUFFIXES = (".expanded", ".duplicate")
+
+# Producer prefixes stamped onto the FILE name but absent from the task name.
+_PRODUCER_PREFIX_RE = re.compile(r"^(?:salvage_\d{14}_|gen_[0-9a-f]{8}_)")
+
+
+def _terminal_task_stems() -> set:
+    """Task names whose proposals were already HANDLED and renamed away.
+
+    The promoter renames a handled parent to `<name>.json.expanded`, which no
+    longer matches the `*.json` glob in _queued_stems(). Without this, the dedup
+    memory is erased by the very act of processing the directive, and the
+    architect re-proposes the same task every cycle forever -- measured at 798
+    repeats of a single task, and 77.2% of the live corpus.
+    """
+    stems = set()
+    if not PROPOSED_DIR.exists():
+        return stems
+    for p in PROPOSED_DIR.iterdir():
+        if not p.is_file() or ".bak" in p.name:
+            continue
+        name = p.name
+        # tolerate the collision counter the promoter appends (.expanded.1)
+        base = re.sub(r"\.(\d+)$", "", name)
+        if not base.endswith(_SETTLED_SUFFIXES):
+            continue
+        for suf in _SETTLED_SUFFIXES:
+            if base.endswith(suf):
+                base = base[: -len(suf)]
+                break
+        if base.endswith(".json"):
+            base = base[: -len(".json")]
+        base = _PRODUCER_PREFIX_RE.sub("", base)
+        if base:
+            stems.add(base)
+    return stems
+
+
 def _queued_stems() -> set:
     """Every task name already in flight or finished -- the dedup set."""
     stems = set()
@@ -165,6 +208,9 @@ def _queued_stems() -> set:
             if ".bak" in p.name:   # FU-011: a stale .bak must not suppress a live re-proposal
                 continue
             stems.add(p.stem.replace(".done", "").replace(".failed", ""))
+    # Handled-and-renamed history: without this the set forgets a task the
+    # instant it is processed. See _terminal_task_stems().
+    stems |= _terminal_task_stems()
     return stems
 
 

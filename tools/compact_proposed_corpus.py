@@ -171,6 +171,35 @@ def merge_existing(tasks: dict) -> dict:
     return tasks
 
 
+
+def _assert_consumer_is_index_aware() -> list:
+    """Refuse to delete the markers unless the code that reads them can read
+    the index instead.
+
+    ORDERING HAZARD (hit for real on 2026-09-14): the markers were archived at
+    17:55 while the running generator had been started at 17:42, before the
+    index-aware patch landed. That process had neither the markers (deleted)
+    nor the index (its in-memory code did not read it), so dedup collapsed to
+    the pre-fix state and three repeat proposals got through in 13 minutes.
+
+    Deleting the only copy of a memory is safe only once its reader can reach
+    the new copy -- AND the reader has been restarted to pick that up. The
+    first half is checkable here. The second half is not, so it is shouted.
+    """
+    problems = []
+    try:
+        src = (SENTINEL / "zo_sentinel"
+               / "sentinel_directive_generator_goose.py").read_text(encoding="utf-8")
+        if "handled_tasks.json" not in src:
+            problems.append(
+                "sentinel_directive_generator_goose.py does not read "
+                "handled_tasks.json -- deleting the markers would erase the "
+                "dedup memory outright. Land the index-aware change first.")
+    except Exception as exc:
+        problems.append("could not verify the consumer reads the index (%s)" % exc)
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true",
@@ -225,6 +254,14 @@ def main() -> int:
         print("\n--dry-run: nothing written. Re-run with --apply.")
         return 0
 
+    problems = _assert_consumer_is_index_aware()
+    if problems and not args.keep_files:
+        print("\nREFUSING TO DELETE:")
+        for p_ in problems:
+            print("  - %s" % p_)
+        print("  (re-run with --keep-files to write the index and tarball only)")
+        return 6
+
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     tarball = ARCHIVE_DIR / ("proposed_corpus_%s.tar.gz" % stamp)
@@ -258,6 +295,15 @@ def main() -> int:
             print("could not remove %s: %s" % (p.name, exc))
     print("removed %d loose files; %d remain"
           % (removed, sum(1 for _ in PROPOSED.iterdir())))
+    print()
+    print("!" * 70)
+    print("RESTART ANY RUNNING CONSUMER NOW.")
+    print("A daemon started before the index-aware change has neither the")
+    print("markers (just deleted) nor the index (not in its loaded code).")
+    print("That window has no dedup at all -- it happened on 2026-09-14 and")
+    print("let three repeat proposals through in 13 minutes.")
+    print("  pkill -f sentinel_directive_generator_goose  # wrapper respawns")
+    print("!" * 70)
     return 0
 
 

@@ -194,12 +194,12 @@ done
 
 if [[ "$MODE" == "verify" ]]; then
   hdr "VERIFY (no restarts; SUMMARY only)"
-  echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
-  echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
-  echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
-  echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
-  echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
-  echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
+  echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null|| true)"
+  echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null|| true)"
+  echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null|| true)"
+  echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null|| true)"
+  echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null|| true)"
+  echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null|| true)"
   echo "  tailscaled procs:        $(pgrep -af tailscaled 2>/dev/null | wc -l | tr -d ' ')"
   PYCOUNT=$(pgrep -af python3 2>/dev/null | wc -l | tr -d ' ')
   echo "  python3 procs running:   $PYCOUNT"
@@ -228,7 +228,27 @@ else
 fi
 
 set -E   # errtrace: fire ERR trap inside functions too
-trap 'rc=$?; echo "[go.sh] boot step failed rc=$rc -- keeping container ALIVE (degraded) for debug"; exec sleep infinity' ERR
+# ERR trap: keep the container ALIVE (degraded) for debug when a boot STEP fails.
+#
+# MUST be a no-op in subshells. Inside $( ... ) the old inline trap's
+# `exec sleep infinity` replaced the SUBSTITUTION subshell, which held the
+# substitution pipe's write end open forever and deadlocked the parent read.
+# Observed 2026-09-14: :8790 SentinelUI down -> curl rc=7 in the SUMMARY block
+# -> trap fired inside the substitution -> go.sh wedged at SUMMARY, boot marker
+# never written, and the trap's own message went into the captured pipe so the
+# log just stopped mid-line. Same wedge was present on the preceding boot run.
+#
+# Guard on BOTH BASH_SUBSHELL and BASHPID: the first catches $( ) and ( ),
+# the second catches a backgrounded/forked context that resets neither.
+_go_err_trap() {
+  local rc=$?
+  if [[ ${BASH_SUBSHELL:-0} -ne 0 || ${BASHPID:-$$} -ne $$ ]]; then
+    return $rc    # subshell: never exec -- let the substitution close cleanly
+  fi
+  echo "[go.sh] boot step failed rc=$rc -- keeping container ALIVE (degraded) for debug"
+  exec sleep infinity
+}
+trap '_go_err_trap' ERR
 hdr "1. Kill stale daemons + duplicates"
 $SUPCTL stop zo_sentinel_builder 2>/dev/null && warn "stopped zo_sentinel_builder" || true
 sleep 1
@@ -299,7 +319,7 @@ hdr "3b. WriteService readiness gate (gate the herd on a ready writer)"
 # lived at section 18 -- after everything had already started hammering it).
 WS_GATE=0
 for i in $(seq 1 30); do
-    if [[ "$(curl -m3 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)" == "200" ]]; then WS_GATE=1; break; fi
+    if [[ "$(curl -m3 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null|| true)" == "200" ]]; then WS_GATE=1; break; fi
     sleep 3
 done
 [[ "$WS_GATE" == "1" ]] && ok ":8772 ready -- starting dependent daemons" || warn ":8772 NOT ready after 90s -- daemons may contend"
@@ -660,12 +680,12 @@ else
 fi
 
 hdr "SUMMARY"
-echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
-echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
-echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
-echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
-echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
-echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
+echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null|| true)"
+echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null|| true)"
+echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null|| true)"
+echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null|| true)"
+echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null|| true)"
+echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null|| true)"
 echo "  tailscaled procs:        $(pgrep -af tailscaled 2>/dev/null | wc -l | tr -d ' ')"
 TP_RUNNING=0
 for sc in "${TRUST_PIPELINE[@]}"; do pgrep -f "$sc" >/dev/null 2>&1 && TP_RUNNING=$((TP_RUNNING + 1)); done

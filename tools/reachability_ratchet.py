@@ -313,17 +313,94 @@ def deferred_count_at(rev):
         return None
 
 
-def write_baseline(count, note, deferred_count=None):
-    payload = {
-        "orphan_count": count,
-        "set_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "note": note,
-    }
+
+def _arg_value(flag, argv=None):
+    """Value following `flag` in argv, or None."""
+    argv = argv if argv is not None else sys.argv
+    try:
+        i = argv.index(flag)
+        return argv[i + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def write_baseline(count, note, deferred_count=None, allow_raise=False,
+                   reason=None):
+    """Pin the baseline. TIGHTENS ONLY.  # _RATCHET_NO_RAISE_v1
+
+    A ratchet that can raise its own number is a thermometer. This file's own
+    note records the near-miss: "--update-baseline wanted to RAISE it
+    277 -> 335, which is the exact move this note forbids." A human caught it.
+    An unattended nightly job would not, so the refusal lives here, at the
+    single write point, rather than in the caller's discipline.
+
+    Raising requires allow_raise AND a reason, which is recorded in history so
+    the decision is attributable.
+
+    The existing `note` is PRESERVED, not overwritten: it carries the CofC
+    ruling and the pinning rationale, and replacing it with a one-line
+    changelog throws away the reasoning that makes the number mean anything.
+    """
+    prev = load_baseline_doc()
+    proposed = {"orphan_count": count}
     if deferred_count is not None:
-        payload["deferred_count"] = deferred_count
+        proposed["deferred_count"] = deferred_count
+
+    refused = {}
+    final = {}
+    for key, new_val in proposed.items():
+        old_val = prev.get(key) if prev else None
+        if old_val is None or new_val <= old_val:
+            final[key] = new_val
+        elif allow_raise and reason:
+            final[key] = new_val
+        else:
+            refused[key] = (old_val, new_val)
+            final[key] = old_val
+
+    if refused:
+        for key, (old_val, new_val) in refused.items():
+            sys.stderr.write(
+                "REFUSING TO RAISE %s: baseline=%s current=%s (+%d).\n"
+                "  A ratchet only goes down. Fix the regression, or justify it\n"
+                "  explicitly with --allow-raise --reason '...'.\n"
+                % (key, old_val, new_val, new_val - old_val))
+        if not final:
+            return None
+
+    payload = dict(prev or {})
+    payload.update(final)
+    payload["set_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    # Preserve the accumulated doctrine note; never replace it with a changelog.
+    if prev and prev.get("note"):
+        payload["note"] = prev["note"]
+    else:
+        payload["note"] = note
+    changed = {k: [prev.get(k) if prev else None, v]
+               for k, v in final.items()
+               if not prev or prev.get(k) != v}
+    if changed:
+        hist = list((prev or {}).get("history") or [])
+        hist.append({
+            "at": payload["set_at"],
+            "changes": changed,
+            "reason": reason or "tightened by --update-baseline (measured)",
+        })
+        payload["history"] = hist[-40:]
     with open(BASELINE_PATH, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2)
+        json.dump(payload, fh, indent=2, sort_keys=True)
         fh.write("\n")
+    return payload
+
+
+def load_baseline_doc():
+    """The whole baseline document (write_baseline needs more than the count)."""
+    try:
+        with open(BASELINE_PATH, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except Exception:
+        return {}
 
 
 def main():
@@ -351,11 +428,23 @@ def main():
         json.dump(data, fh, indent=1)
 
     if update:
-        write_baseline(count, "ratchet updated by --update-baseline",
-                       deferred_count=len(active_deferred))
-        print("baseline updated -> orphans=%d deferred=%d"
-              % (count, len(active_deferred)))
-        return 0
+        # Report what the baseline ACTUALLY holds after the write, not what we
+        # asked it to hold. write_baseline refuses raises, so echoing the
+        # measured count here would announce a write that did not happen --
+        # the same lying-success-line failure this repo keeps finding.
+        written = write_baseline(
+            count, "ratchet updated by --update-baseline",
+            allow_raise=("--allow-raise" in sys.argv),
+            reason=_arg_value("--reason"),
+            deferred_count=len(active_deferred))
+        written = written or load_baseline_doc()
+        now_orphans = written.get("orphan_count")
+        now_deferred = written.get("deferred_count")
+        held = (now_orphans != count) or (now_deferred != len(active_deferred))
+        print("baseline now -> orphans=%s deferred=%s  (measured orphans=%d deferred=%d)%s"
+              % (now_orphans, now_deferred, count, len(active_deferred),
+                 "  [some values HELD -- see refusals above]" if held else ""))
+        return 1 if held else 0
 
     if not quiet:
         print("\n=== reachability ratchet @ %s ===" % ROOT)

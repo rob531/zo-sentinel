@@ -1,0 +1,19 @@
+[service]
+name = "risk_tier_deriver"
+import_path = "services.active.risk_tier_deriver.router"
+prefix = "/api"
+tag = "risk_tier_deriver"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+class_name = "router"
+module_name = "router"
+
+[dependencies]
+core = ["app", "write_service"]
+
+[meta]
+version = "1.0.0"
+description = "Derives risk tiers for MCP servers based on signal scores and LLM axis assessments"

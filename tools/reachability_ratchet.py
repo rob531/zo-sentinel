@@ -103,7 +103,9 @@ ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "reachability_ratchet.json")
 
 # >40 active deferrals = the hatch has become the new graveyard.
 # Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Do not raise this
-# number to make the warning quiet; escalate to the chairman instead.
+# number to make the warning quiet. RETIRED 2026-09-13 (peer decision
+# deferred-cap-reopen-trigger-is-the-derivative): the reopen trigger is
+# the DERIVATIVE rule below, which blocks in code. This level is a report.
 #
 # MERGE_AUDIT_2026-08-23 G4: this cap was ADVISORY. Being over it printed the
 # reopen trigger inside a check that exited 0, so it appeared in no PR status and
@@ -413,7 +415,7 @@ def main():
     if len(active_deferred) > DEFERRED_REVIEW_CAP:
         print("\n  DEFERRED LIST OVER CAP: %d > %d. Per the 2026-07-21 CofC ruling "
               "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
-              "Escalate to the chairman; do not raise the cap to make this quiet."
+              "The blocking rule is the DERIVATIVE below; this line reports a level."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
 
     # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------

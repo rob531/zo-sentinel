@@ -88,7 +88,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections import Counter, defaultdict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -257,7 +257,7 @@ def sample_servers(n: int, seed: int) -> list[dict]:
         "SELECT DISTINCT r.server_id, r.name, r.url, r.registry_source, "
         "r.description FROM mcp_server_registry r "
         "JOIN mcp_llm_axis_scores a ON a.server_id = r.server_id "
-        f"ORDER BY r.server_id LIMIT 190")
+        "ORDER BY r.server_id LIMIT 190")
     random.Random(seed).shuffle(rows)
     return rows[:n]
 

@@ -121,6 +121,17 @@ ISSUE_LABEL = "agent:code-zo"
 #: is a restart; 2 is an outage.
 ISSUE_AFTER_CYCLES = 2
 
+#: ...and the absence must also have LASTED this long. Cycles are counted per
+#: invocation, and on 2026-09-04/05 two instances of this check ran at once
+#: (watchdog.sh's bare launch + go.sh's daemon_wrapper launch) sharing ONE
+#: state file: "cycle 1" and "cycle 2" were 4 seconds apart, inside a go.sh
+#: boot where intent_engine_daemon simply had not started yet. Issue #4706 was
+#: filed for a daemon that came up 20s later. A counter cannot tell two samples
+#: from two intervals; a clock can. Sized so one process on the default tick
+#: still needs its second sample, and two processes on the same tick still
+#: cannot fire on the first.
+ISSUE_AFTER_SECONDS = 600
+
 #: How often to nudge an ALREADY-OPEN drift issue. At the 15-minute tick a lane
 #: down for a week would otherwise generate 672 comments.
 REISSUE_EVERY_N_CYCLES = 24
@@ -448,6 +459,91 @@ def running_processes() -> tuple[list[dict], list[dict]]:
     return live, excluded
 
 
+#: A rotator's own script must be at least this small to be read. A rotator is a
+#: few dozen lines; refusing to slurp anything larger keeps this from reading a
+#: 40MB log that happens to be argv[1].
+ROTATOR_MAX_BYTES = 256 * 1024
+
+
+def _rotator_owns(missing_script: str, live: list[dict]) -> dict | None:
+    """Is this daemon's absence a live ROTATOR's decision rather than drift?
+
+    THE CASE THIS IS BUILT FROM -- issue #5046, 2026-09-14. `intent_engine_daemon`
+    was reported missing for 18 consecutive cycles starting 02:08 UTC. It was not
+    dead. `zo_mesh/intent_rotation_service.py` runs it 06:00-21:59 ET and runs
+    `he_who_comes_next.py` the other eight hours, and 02:08 UTC is 22:08 ET --
+    eight minutes after the rotator correctly swapped it out. The check filed a
+    chairman issue for a daemon behaving exactly as designed, and the issue's own
+    advice ("read the log tail before restarting") was the only thing standing
+    between it and a restart that would have fought the supervisor.
+
+    WHY THIS IS NOT THE FALSE GREEN THE FILE EXISTS TO STOP.
+        A WRAPPER is supposed to keep its child running at ALL times, so a live
+        wrapper over a dead child is drift, and letting it vouch is the exact
+        false green `SUPERVISOR_SCRIPTS` was written against. A ROTATOR is the
+        opposite: it names SEVERAL MUTUALLY-EXCLUSIVE children and is supposed to
+        have exactly one of them alive. So the discriminator is not "something
+        supervises it" -- that would re-open the false green -- it is:
+
+            a live process names this script AND at least one OTHER command
+            path, AND one of those OTHER paths is ITSELF currently alive.
+
+        A wrapper names one child and can never satisfy the second clause. A
+        rotator whose current child has ALSO died cannot satisfy it either, so a
+        genuinely broken rotation still reports MISSING. Both poles are exercised
+        in tests/test_registration_drift_rotation.py.
+
+    DERIVED AT RUN TIME, NEVER COPIED. No schedule, no daemon name and no port is
+    written down here. A copy of "intent_engine runs 06:00-21:59" in this file
+    would be wrong the first time anyone edits the rotator, and this repo has
+    paid for a carried copy of a shape more than once. The rotator's own source
+    is the single source of truth and it is read live.
+    """
+    try:
+        want = str(Path(missing_script).resolve())
+    except OSError:
+        want = missing_script
+    alive = {p["script"] for p in live}
+
+    for proc in live:
+        src_path = proc["script"]
+        if src_path == want:
+            continue
+        try:
+            sp = Path(src_path)
+            if not sp.is_file() or sp.stat().st_size > ROTATOR_MAX_BYTES:
+                continue
+            body = sp.read_text(errors="replace")
+        except OSError:
+            continue
+        if want not in body and Path(want).name not in body:
+            continue
+        # It names our daemon. Does it also name a DIFFERENT command that is
+        # alive right now? That -- and only that -- makes it a rotator.
+        # Absoluteness is asked of Path, not of a leading "/" in the regex. The
+        # first cut of this hardcoded `/...` and every positive case failed on a
+        # Windows test runner while all four negative controls passed -- a cure
+        # that is only correct on the host it was written on, caught by running
+        # the poles rather than by reading the pattern.
+        for other in re.findall(r"['\"]([^'\"\s]+\.(?:py|sh))['\"]", body):
+            if not Path(other).is_absolute():
+                continue
+            try:
+                other_r = str(Path(other).resolve())
+            except OSError:
+                other_r = other
+            if other_r == want:
+                continue
+            if other_r in alive:
+                return {"rotator_pid": proc["pid"],
+                        "rotator_script": src_path,
+                        "active_sibling": other_r,
+                        "why": (f"rotated out by {Path(src_path).name} "
+                                f"(pid {proc['pid']}), which is currently "
+                                f"running {Path(other_r).name}")}
+    return None
+
+
 def _port_open(port: int) -> bool:
     try:
         import urllib.request
@@ -487,6 +583,28 @@ def match(decl: dict, live: list[dict]) -> list[dict]:
 # 3. STATE, HEARTBEAT, ISSUES
 # ---------------------------------------------------------------------------
 
+def _seconds_since(iso: str | None) -> float:
+    """Age of a stored ISO timestamp in seconds; 0.0 when unparseable, so a
+    corrupt `since` DELAYS an issue rather than forging one."""
+    if not iso:
+        return 0.0
+    try:
+        then = datetime.fromisoformat(iso)
+        if then.tzinfo is None:
+            then = then.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - then).total_seconds())
+    except Exception:
+        return 0.0
+
+
+def earns_issue(rec: dict) -> bool:
+    """An absence earns an issue only when BOTH the sample count and the wall
+    clock say so. Two processes sampling 4s apart satisfy the count; only an
+    outage satisfies the clock."""
+    return (rec.get("cycles", 0) >= ISSUE_AFTER_CYCLES
+            and _seconds_since(rec.get("since")) >= ISSUE_AFTER_SECONDS)
+
+
 def load_state() -> dict:
     try:
         return json.loads(STATE.read_text())
@@ -522,6 +640,8 @@ def emit_heartbeat(report: dict) -> None:
         "one_sided": report["counts"]["one_sided"],
         "coverage_fraction": report["coverage"]["fraction"],
         "missing_names": [m["name"] for m in report["missing"]],
+        "rotated_out": report["counts"].get("rotated_out", 0),
+        "rotated_out_names": [d["name"] for d in report.get("rotated_out", [])],
         "healthy": report["counts"]["missing"] == 0,
     }, indent=2))
 
@@ -608,11 +728,18 @@ def raise_issue(name: str, decl: dict, cycles: int, st: dict) -> str | None:
     return num
 
 
-def close_issue(name: str, st: dict) -> None:
+def close_issue(name: str, st: dict, why: str = "running again") -> None:
+    """Close the lane's issue, SAYING WHICH of the two exits it took.
+
+    "running again" and "rotated out by a live supervisor" are different facts
+    and a reader deciding whether to trust this check needs to know which one
+    closed the issue. Collapsing them into one sentence is how a false positive
+    gets retired as if it had been a real outage that healed.
+    """
     num = st["issues"].pop(name, None)
     if num:
         _gh(["issue", "close", str(num), "--repo", REPO,
-             "--comment", f"`{name}` is running again as of {now_iso()}. "
+             "--comment", f"`{name}`: {why} (as of {now_iso()}). "
                           "Closed by tools/registration_drift_check.py."])
 
 
@@ -630,11 +757,21 @@ def run_cycle(allow_issues: bool = True) -> dict:
 
     live, excluded = running_processes()
 
-    missing, present = [], []
+    missing, present, rotated_out = [], [], []
     for _k, decl in sorted(declared.items(), key=lambda kv: kv[1]["name"]):
         hits = match(decl, live)
-        (present if hits else missing).append(
-            dict(decl, pids=[h["pid"] for h in hits]))
+        if hits:
+            present.append(dict(decl, pids=[h["pid"] for h in hits]))
+            continue
+        # ABSENT IS NOT YET MISSING. Ask the second question first: is a live
+        # rotator deliberately running a sibling instead? Named and counted
+        # either way -- an absence explained away silently is how a check that
+        # was right once becomes a check nobody can audit. See _rotator_owns.
+        owner = _rotator_owns(decl["script"], live)
+        if owner:
+            rotated_out.append(dict(decl, pids=[], rotation=owner))
+        else:
+            missing.append(dict(decl, pids=[]))
 
     # Declared in go.sh but NOT watched by watchdog.sh (or the reverse). This is
     # drift too, and it is the quieter kind: the daemon starts at boot and then
@@ -667,6 +804,7 @@ def run_cycle(allow_issues: bool = True) -> dict:
             "undeclared": len(undeclared),
             "one_sided": len(one_sided),
             "launchers_excluded": len(excluded),
+            "rotated_out": len(rotated_out),
         },
         "coverage": {
             "lane": "host daemon lane (go.sh + watchdog.sh)",
@@ -681,6 +819,7 @@ def run_cycle(allow_issues: bool = True) -> dict:
         },
         "missing": missing,
         "present": present,
+        "rotated_out": rotated_out,
         "one_sided": one_sided,
         "undeclared": undeclared,
         "launchers_excluded": excluded,
@@ -697,18 +836,37 @@ def run_cycle(allow_issues: bool = True) -> dict:
         lines.append(f"MISSING {m['name']} -- declared in "
                      f"{','.join(m['declared_in'])}, canonical {m['script']}, "
                      f"cycle {rec['cycles']}")
-        if allow_issues and rec["cycles"] >= ISSUE_AFTER_CYCLES:
+        m["absent_seconds"] = _seconds_since(rec.get("since"))
+        if allow_issues and earns_issue(rec):
             num = raise_issue(m["name"], m, rec["cycles"], st)
             if num:
                 m["issue"] = num
                 lines.append(f"  -> issue #{num}")
 
-    for name in list(st["consecutive_missing"]):
-        if name not in {m["name"] for m in missing}:
-            st["consecutive_missing"].pop(name, None)
-            if allow_issues:
-                close_issue(name, st)
-            lines.append(f"RECOVERED {name} -- running again")
+    # THE CLOSE PATH IS DRIVEN BY `issues`, NOT ONLY BY `consecutive_missing`.
+    #
+    # It used to walk only consecutive_missing, and that left an unreachable
+    # state: any cycle that drops a name from consecutive_missing WITHOUT
+    # closing -- a `--no-issues` run is the obvious one, and it is what the
+    # #5046 verification itself did to the live state file -- orphans the entry
+    # in `issues`, where nothing ever looks at it again. The lane recovers, the
+    # issue stays open forever, and the next reader sees an open incident for a
+    # healthy daemon. An open issue is the thing that must be reconciled, so the
+    # record of open issues is the thing to iterate.
+    rot_by_name = {d["name"]: d for d in rotated_out}
+    missing_names = {m["name"] for m in missing}
+    for name in sorted(set(st["consecutive_missing"]) | set(st["issues"])):
+        if name in missing_names:
+            continue
+        st["consecutive_missing"].pop(name, None)
+        why = (rot_by_name[name]["rotation"]["why"] if name in rot_by_name
+               else "running again")
+        if allow_issues:
+            close_issue(name, st, why)
+        lines.append(f"RECOVERED {name} -- {why}")
+
+    for d in rotated_out:
+        lines.append(f"ROTATED_OUT {d['name']} -- {d['rotation']['why']}")
 
     for d in one_sided:
         lines.append(f"ONE-SIDED {d['name']} -- {d['consequence']} "
@@ -741,7 +899,7 @@ def render(r: dict) -> str:
                f"{c['launchers_excluded']}")
     out.append("")
     if r["missing"]:
-        out.append(f"[1] MISSING -- declared but no process on the canonical path")
+        out.append("[1] MISSING -- declared but no process on the canonical path")
         for m in r["missing"]:
             out.append(f"    {m['name']:<42} cycle {m.get('consecutive_cycles', 1)}"
                        + (f"  -> issue #{m['issue']}" if m.get("issue") else ""))
@@ -749,6 +907,13 @@ def render(r: dict) -> str:
             out.append(f"        declared in: {', '.join(m['declared_in'])}")
     else:
         out.append("[1] MISSING ...................... none")
+    out.append("")
+    if r.get("rotated_out"):
+        out.append("[1b] ROTATED OUT -- absent BY DESIGN, a live rotator runs a sibling")
+        for d in r["rotated_out"]:
+            out.append(f"    {d['name']:<42} {d['rotation']['why']}")
+    else:
+        out.append("[1b] ROTATED OUT ................. none")
     out.append("")
     if r["one_sided"]:
         out.append("[2] ONE-SIDED -- declared on one surface only")
@@ -789,6 +954,8 @@ def status_line() -> str:
     lanes = (f"lanes {c['running']}/{c['declared']} up"
              + (f" | MISSING {','.join(m['name'] for m in r['missing'])}"
                 if r["missing"] else "")
+             + (f" | rotated-out {','.join(d['name'] for d in r['rotated_out'])}"
+                if r.get("rotated_out") else "")
              + (f" | {c['one_sided']} one-sided" if c["one_sided"] else ""))
 
     phantom = "phantoms UNKNOWN (no local referent census)"

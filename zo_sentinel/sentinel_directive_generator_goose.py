@@ -610,6 +610,70 @@ def _recent_proposals(days: int = 3, cap: int = 25) -> list:
     return out
 
 
+# ---------------------------------------------------------------------------
+# DOMAIN MAP -- wiring for tools/graph_domain_digest.py (cycle-0092)
+# ---------------------------------------------------------------------------
+# The digest tool was built 2026-06-26, its READING was repaired 2026-09-02
+# (FU-110: exemplar column could not name a real module; the column labelled
+# `modules` was counting symbols), and it then sat DARK for eight more days --
+# its own docstring handed the wiring off in prose to "the directive-architect
+# lane", which is exactly the hand-off this loop exists to replace. Nothing had
+# ever read its output, so the architect had NO domain map in context: the
+# recipe's own RANGE ACROSS DOMAINS rule pointed at an OPTIONAL bridge tool the
+# architect may call at most once and only AFTER it has already proposed. That
+# is the +0 / same-3-5-subjects fixation loop, told to range with no map.
+#
+# Loaded BY PATH rather than imported as a module because tools/ is not a
+# package on the daemon's sys.path, and the path is the literal the dark-tool
+# census greps for -- the caller and the evidence of the caller are the same
+# string, so this cannot go dark again without this line disappearing.
+#
+# FAIL-SOFT AND BOUNDED. The bus at :8772 is the same one _query_recent_failures
+# uses and it has frozen before; an unreachable bus must cost the architect a
+# field, never a cycle. UNKNOWN is not zero (R6): on any fault the key is absent
+# from ctx entirely rather than present-and-empty, so the recipe's
+# `context.domain_map` conditional distinguishes "no map" from "no domains".
+_DIGEST_REL = "tools/graph_domain_digest.py"
+DOMAIN_MAP_TIMEOUT = int(os.environ.get("DGG_DOMAIN_MAP_TIMEOUT", 20))
+
+
+def _digest_path() -> Path:
+    """Resolve the digest tool. Repo-relative first (the checkout this file is
+    running out of), then the deployed SENTINEL_DIR -- they are the same tree in
+    prod and differ only under test."""
+    for base in (Path(__file__).resolve().parent.parent, SENTINEL_DIR):
+        p = base / _DIGEST_REL
+        if p.exists():
+            return p
+    return Path(__file__).resolve().parent.parent / _DIGEST_REL
+
+
+def _load_digest():
+    import importlib.util
+    p = _digest_path()
+    spec = importlib.util.spec_from_file_location("graph_domain_digest", p)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"no loader for {p}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["graph_domain_digest"] = mod   # BEFORE exec_module: dataclass/
+    spec.loader.exec_module(mod)               # annotation resolution needs it
+    return mod
+
+
+def _domain_map() -> str:
+    """The digest text, or "" on ANY fault (never raises, never blocks a cycle)."""
+    try:
+        mod = _load_digest()
+        rows = mod.fetch(mod.SQL, timeout=DOMAIN_MAP_TIMEOUT)
+        if not rows:
+            log.warning("domain map: bus returned 0 rows -- omitting (UNKNOWN, not empty)")
+            return ""
+        return mod.format_digest(rows)
+    except Exception as e:  # noqa: BLE001
+        log.warning("domain map unavailable (fail-soft, architect loses one field): %s", e)
+        return ""
+
+
 def _trim_schema(schema):
     """Strip the stale static 'Already Built' + 'High-Value Targets'(snow/aidr)
     tail from the legacy schema doc before it enters the architect context.
@@ -631,6 +695,7 @@ def _trim_schema(schema):
 def build_context() -> dict:
     ctx = {
         "schema":            _trim_schema(_try_load_schema()),
+        "domain_map":        _domain_map(),
         "layer1":            _cap_layer1(_try_import_layer1()),
         "recent_failures":   _query_recent_failures(),
         "proposed_depth":    _count_proposed(),
@@ -650,6 +715,10 @@ def build_context() -> dict:
     for _m in recent + graph_mods:
         if _m and _m not in _seen:
             _seen.add(_m); mods.append(_m)
+    # A digest that could not be measured must not occupy a field the recipe
+    # reads as authoritative: drop the key rather than ship "".
+    if not ctx.get("domain_map"):
+        ctx.pop("domain_map", None)
     if mods:
         used = len(json.dumps(ctx, default=str))
         budget = max(0, CTX_MODULE_BUDGET - used)

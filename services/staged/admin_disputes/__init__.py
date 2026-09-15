@@ -221,7 +221,8 @@ def _run_self_test():
 
     try:
         # Test the service
-        from app.db import get_session as override_get_session
+        # FU-369: removed an import of `override_get_session` from a module that does not
+        # exist in this tree. The name was never used in this file.
         from app.db import get_session as original_get_session
 
         app.dependency_overrides[original_get_session] = lambda: db

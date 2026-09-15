@@ -1,0 +1,8 @@
+[service]
+name = "refresh_stale_daemons"
+import_path = "services.active.refresh_stale_daemons.router"
+prefix = "/api"
+tag = "refresh_stale_daemons"
+origin = "service"
+auth = "public"
+needs_data_layer = true

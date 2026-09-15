@@ -194,12 +194,12 @@ done
 
 if [[ "$MODE" == "verify" ]]; then
   hdr "VERIFY (no restarts; SUMMARY only)"
-  echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
-  echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
-  echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
-  echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
-  echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
-  echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
+  echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null|| true)"
+  echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null|| true)"
+  echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null|| true)"
+  echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null|| true)"
+  echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null|| true)"
+  echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null|| true)"
   echo "  tailscaled procs:        $(pgrep -af tailscaled 2>/dev/null | wc -l | tr -d ' ')"
   PYCOUNT=$(pgrep -af python3 2>/dev/null | wc -l | tr -d ' ')
   echo "  python3 procs running:   $PYCOUNT"
@@ -227,6 +227,28 @@ else
   ok "Hot recovery ($WORKSPACE_DAEMONS workspace daemons currently running)"
 fi
 
+set -E   # errtrace: fire ERR trap inside functions too
+# ERR trap: keep the container ALIVE (degraded) for debug when a boot STEP fails.
+#
+# MUST be a no-op in subshells. Inside $( ... ) the old inline trap's
+# `exec sleep infinity` replaced the SUBSTITUTION subshell, which held the
+# substitution pipe's write end open forever and deadlocked the parent read.
+# Observed 2026-09-14: :8790 SentinelUI down -> curl rc=7 in the SUMMARY block
+# -> trap fired inside the substitution -> go.sh wedged at SUMMARY, boot marker
+# never written, and the trap's own message went into the captured pipe so the
+# log just stopped mid-line. Same wedge was present on the preceding boot run.
+#
+# Guard on BOTH BASH_SUBSHELL and BASHPID: the first catches $( ) and ( ),
+# the second catches a backgrounded/forked context that resets neither.
+_go_err_trap() {
+  local rc=$?
+  if [[ ${BASH_SUBSHELL:-0} -ne 0 || ${BASHPID:-$$} -ne $$ ]]; then
+    return $rc    # subshell: never exec -- let the substitution close cleanly
+  fi
+  echo "[go.sh] boot step failed rc=$rc -- keeping container ALIVE (degraded) for debug"
+  exec sleep infinity
+}
+trap '_go_err_trap' ERR
 hdr "1. Kill stale daemons + duplicates"
 $SUPCTL stop zo_sentinel_builder 2>/dev/null && warn "stopped zo_sentinel_builder" || true
 sleep 1
@@ -297,7 +319,7 @@ hdr "3b. WriteService readiness gate (gate the herd on a ready writer)"
 # lived at section 18 -- after everything had already started hammering it).
 WS_GATE=0
 for i in $(seq 1 30); do
-    if [[ "$(curl -m3 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)" == "200" ]]; then WS_GATE=1; break; fi
+    if [[ "$(curl -m3 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null|| true)" == "200" ]]; then WS_GATE=1; break; fi
     sleep 3
 done
 [[ "$WS_GATE" == "1" ]] && ok ":8772 ready -- starting dependent daemons" || warn ":8772 NOT ready after 90s -- daemons may contend"
@@ -369,13 +391,16 @@ sleep 2
 GR=$(pgrep -f 'goose_runner.py' 2>/dev/null | head -1)
 [[ -n "$GR" ]] && ok "GooseRunner PID $GR" || warn "GooseRunner failed"
 
-hdr "12.5 Sentinel Directive Generator"
-nohup bash $MESH/daemon_wrapper.sh sentinel_directive_generator $SENTINEL/sentinel_directive_generator.py >> $LOGS/sentinel_sentinel_directive_generator.log 2>&1 &
-sleep 2
-SDG=$(pgrep -f 'sentinel_directive_generator.py' 2>/dev/null | head -1)
-[[ -n "$SDG" ]] && ok "DirectiveGenerator PID $SDG" || warn "DirectiveGenerator failed"
+hdr "12.5 Sentinel Directive Generator (RETIRED -- superseded by 12.5b goose architect)"
+# Legacy MiniMax directive generator. Phase-0b's goose architect (12.5b,
+# sentinel_directive_generator_goose.py / directive_architect.yaml) supersedes it
+# and is /app-product-scoped. The legacy prompt still ordered enrichment work,
+# flooding proposed/ to cap and starving the goose architect. No longer launched.
+# It stays in the section-1 pkill list so any straggler is reaped (NOT relaunched).
+ok "DirectiveGenerator retired (live architect = 12.5b goose / directive_architect.yaml)"
 
 hdr "12.5b Sentinel Directive Generator (Goose -- Phase 0b sibling)"
+export ZO_ARCHITECT_MODEL="zo-ladder-nvidia"   # capable tool-calling rung -- fixes the MiniMax rung-0 +0/tool-loop. Unset to revert.
 nohup bash $MESH/daemon_wrapper.sh sentinel_directive_generator_goose $SENTINEL/sentinel_directive_generator_goose.py >> $LOGS/sentinel_directive_generator_goose.log 2>&1 &
 sleep 2
 SDGG=$(pgrep -f 'sentinel_directive_generator_goose.py' 2>/dev/null | head -1)
@@ -476,12 +501,12 @@ for _svc in "forensic_detail_api_v2:8779:forensic_detail" \
     # `||` appends a 2nd 000 -> "000000" -> "!= 000" is TRUE -> falsely "already
     # running" -> the launch is SKIPPED (the 2026-06-10 no-log-files bug). Use
     # `:-000` only to cover the rare empty-output case.
-    _h=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/health 2>/dev/null); _h=${_h:-000}
+    _h=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/health 2>/dev/null|| true); _h=${_h:-000}
     if [[ "$_h" != "000" ]]; then
         ok ":$_port $_file already running"
     else
         nohup python3 $SENTINEL/$_file.py >> $LOGS/sentinel_$_log.log 2>&1 & sleep 2
-        _h2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/ 2>/dev/null); _h2=${_h2:-000}
+        _h2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$_port/ 2>/dev/null|| true); _h2=${_h2:-000}
         [[ "$_h2" != "000" ]] && ok ":$_port $_file started" \
             || warn ":$_port $_file not listening -- check $LOGS/sentinel_$_log.log"
     fi
@@ -512,16 +537,20 @@ for sc in "${MESH_DAEMONS[@]}"; do
     [[ -n "$PID" ]] && ok "$NAME PID $PID" || warn "$NAME failed to start"
 done
 
+pgrep -f "python.*watchdog_daemon.py" >/dev/null 2>&1 || nohup bash $MESH/daemon_wrapper.sh watchdog_daemon $MESH/watchdog_daemon.py >> $LOGS/watchdog_daemon.log 2>&1 &
+
 # Wave boundary before the remaining periodic writers.
 wait_writer_calm
-hdr "12.8b DuckDB Schema Uptime Probe (FU-403 -- arm the paginating drift daemon)"
-# This probe ships dormant by design (docs/SCHEMA_AS_CODE.md): it needs an
-# explicit launch because it was never wired into go.sh. It is a resident daemon
-# (not a one-shot): --interval 300 means it sleeps between cycles internally, so
-# the outer while-loop only respawns on crash (same pattern as loop_watch /
-# graph_refresh above). Writer-gated: it emits to mesh_memory on state
-# transitions, so start it after the writer is calm.
-nohup bash -c "while true; do python3 -m zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300; sleep 30; done" \
+hdr "12.7b DuckDB Schema Uptime Probe"
+# Self-looping like loop_watch / graph_refresh: --interval drives the cadence and
+# the outer while-loop only respawns on crash. Writer-gated: it emits to
+# mesh_memory on state transitions, so start it after the writer is calm.
+#
+# RESTORED 2026-09-15. The box's go.sh had no mention of this probe at all, so
+# the process was running unmanaged and would not have survived the next Modal
+# reboot (temporal_checks failure mode #7: anything not launched by go.sh dies
+# and does not come back).
+nohup bash -c "while true; do python3 -m zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300; sleep 30; done" \\
     >> $LOGS/duckdb_schema_uptime_probe.log 2>&1 &
 sleep 2
 DSP=$(pgrep -f 'duckdb_schema_uptime_probe' 2>/dev/null | head -1)
@@ -541,6 +570,60 @@ nohup bash -c "while true; do python3 $SENTINEL/tools/graph_refresh.py --interva
 sleep 2
 GRF=$(pgrep -f 'graph_refresh.py' 2>/dev/null | head -1)
 [[ -n "$GRF" ]] && ok "GraphRefresh PID $GRF" || warn "GraphRefresh failed"
+
+hdr "12.8b proposed_to_pending_promoter (boot-start, 2026-08-28)"
+# WATCHDOG-ONLY UNTIL NOW. watchdog.sh has supervised this since v3.6 -- added
+# after it died silently on 2026-06-09 and 20h of generated directives piled up
+# unpromoted -- but go.sh never STARTED it. So after a reboot the promoter was
+# absent until the watchdog's next tick noticed, a window of up to 15 minutes on
+# a box that reboots unpredictably, and the whole build pipeline is downstream of
+# it. Declared on both surfaces now, like everything else.
+#
+# Runs as a module, so it needs cwd=$SENTINEL; `exec` keeps the running cmdline
+# as plain `python3 -m ...` so the watchdog's pgrep guard still matches.
+pgrep -f "python.*proposed_to_pending_promoter" >/dev/null 2>&1 || \
+    nohup bash -c "cd $SENTINEL && exec python3 -m zo_sentinel.promoters.proposed_to_pending_promoter" \
+        >> $LOGS/proposed_to_pending_promoter.log 2>&1 &
+sleep 2
+P2P=$(pgrep -f "python.*proposed_to_pending_promoter" 2>/dev/null | head -1)
+[[ -n "$P2P" ]] && ok "PromoterP2P PID $P2P" || warn "PromoterP2P failed to start"
+
+hdr "12.9 Registration drift + autopoiesis bar (restored 2026-08-28)"
+# REGISTRATION DRIFT CHECK -- diffs the DECLARED daemon set in this file and in
+# watchdog.sh against what is actually running. Nothing has ever compared those
+# two, which is how the promoter crash-loop went 10 days unnoticed and how four
+# lanes went 10+ days dark. It matches on the CANONICAL INSTALL PATH and
+# excludes launcher scripts under $LOGS, because `pgrep -f <name>` matches those
+# launchers and reports a dead daemon as alive.
+#
+# It is declared in BOTH this file and watchdog.sh on purpose: here so a reboot
+# brings it back, there so a crash does. Anything declared in only one of the
+# two is exactly the "one-sided" drift it reports on everything else, and this
+# check must not be an instance of the fault it exists to find.
+#
+# ZO_DAEMON=1 rather than a --daemon argument: daemon_wrapper.sh does not
+# forward trailing args (see 12.8), but it does pass the environment through, so
+# this stays on the wrapper pattern instead of adding a third launch shape.
+nohup env ZO_DAEMON=1 bash $MESH/daemon_wrapper.sh registration_drift_check \
+    $SENTINEL/tools/registration_drift_check.py \
+    >> $LOGS/registration_drift_check.log 2>&1 &
+sleep 2
+RDC=$(pgrep -f "python.*registration_drift_check.py" 2>/dev/null | head -1)
+[[ -n "$RDC" ]] && ok "RegistrationDriftCheck PID $RDC" || warn "RegistrationDriftCheck failed"
+
+# AUTOPOIESIS BAR TRACKER -- the loop's own daily measure of whether any of this
+# work is helping. It was a Claude Desktop scheduled task on the tower; that
+# surface stopped on 2026-07-27 and the series stopped on 2026-08-13. The tower
+# is unreachable from here (tailnet answers, every port filtered) but every
+# input is local, so the MEASUREMENT is restored here. It writes the numbers
+# only -- rows carry phase=MEASURED-ONLY and ungraded T1/T2/T3, because the
+# grading needs a model and this daemon does not fake it.
+nohup env ZO_DAEMON=1 bash $MESH/daemon_wrapper.sh autopoiesis_bar_tracker \
+    $SENTINEL/tools/autopoiesis_bar_tracker.py \
+    >> $LOGS/autopoiesis_bar_tracker.log 2>&1 &
+sleep 2
+ABT=$(pgrep -f "python.*autopoiesis_bar_tracker.py" 2>/dev/null | head -1)
+[[ -n "$ABT" ]] && ok "AutopoiesisBarTracker PID $ABT" || warn "AutopoiesisBarTracker failed"
 
 hdr "13. World Article Feeder"
 nohup python3 $MESH/world_article_feeder.py >> $LOGS/world_article_feeder.log 2>&1 & sleep 2
@@ -612,12 +695,12 @@ else
 fi
 
 hdr "SUMMARY"
-echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null)"
-echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null)"
-echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null)"
-echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null)"
-echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null)"
-echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null)"
+echo "  :8772 WriteService:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8772/health 2>/dev/null|| true)"
+echo "  :8773 InferenceRouter:   $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8773/health 2>/dev/null|| true)"
+echo "  :8780 ApprovalWorkflow:  $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8780/health 2>/dev/null|| true)"
+echo "  :8781 RegistryAPI:       $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8781/health 2>/dev/null|| true)"
+echo "  :8790 SentinelUI:        $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/health 2>/dev/null|| true)"
+echo "  :8795 BuildWatcher:      $(curl -m5 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health 2>/dev/null|| true)"
 echo "  tailscaled procs:        $(pgrep -af tailscaled 2>/dev/null | wc -l | tr -d ' ')"
 TP_RUNNING=0
 for sc in "${TRUST_PIPELINE[@]}"; do pgrep -f "$sc" >/dev/null 2>&1 && TP_RUNNING=$((TP_RUNNING + 1)); done

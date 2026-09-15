@@ -258,7 +258,7 @@ for proc in write_service.py inference_router_service.py run_manager.py \
             world_article_feeder.py zo_sentinel_builder.py goose_runner.py \
             sentinel_directive_generator.py sentinel_directive_generator_goose.py gate_scheduler.py \
             liveness_probe.py loop_watch.py graph_refresh.py signal_bridge.py ecosystems_metadata_fetcher.py \
-            registry_api.py approval_workflow.py \
+            registry_api.py approval_workflow.py duckdb_schema_uptime_probe \
             zo_sentinel.ingestor zo_sentinel.publisher \
             "${TRUST_PIPELINE[@]}" \
             "${MESH_DAEMONS[@]}"; do
@@ -541,6 +541,21 @@ pgrep -f "python.*watchdog_daemon.py" >/dev/null 2>&1 || nohup bash $MESH/daemon
 
 # Wave boundary before the remaining periodic writers.
 wait_writer_calm
+hdr "12.7b DuckDB Schema Uptime Probe"
+# Self-looping like loop_watch / graph_refresh: --interval drives the cadence and
+# the outer while-loop only respawns on crash. Writer-gated: it emits to
+# mesh_memory on state transitions, so start it after the writer is calm.
+#
+# RESTORED 2026-09-15. The box's go.sh had no mention of this probe at all, so
+# the process was running unmanaged and would not have survived the next Modal
+# reboot (temporal_checks failure mode #7: anything not launched by go.sh dies
+# and does not come back).
+nohup bash -c "while true; do python3 -m zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300; sleep 30; done" \\
+    >> $LOGS/duckdb_schema_uptime_probe.log 2>&1 &
+sleep 2
+DSP=$(pgrep -f 'duckdb_schema_uptime_probe' 2>/dev/null | head -1)
+[[ -n "$DSP" ]] && ok "DuckDBSchemaUptimeProbe PID $DSP" || warn "DuckDBSchemaUptimeProbe failed to start"
+
 hdr "12.8 Monitors (loop_watch + graph_refresh -- self-looping, crash-respawn)"
 # loop_watch: read-only end-to-end loop watcher; emails on ALERT via /zo/notify.
 # graph_refresh: self-healing re-indexer (idle-gated; loads only on a HEAD change).

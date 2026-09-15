@@ -118,10 +118,14 @@ def cmd_assess(args) -> int:
     
     # Query for server data
     result = ws_query("""
-        SELECT server_id, name, description, server_url, verdict, trust_score, 
-               risk_tier, attestation_status, last_assessed, registered_at
-        FROM mcp_servers 
-        WHERE name LIKE ? OR server_url LIKE ? OR server_id = ?
+        SELECT r.server_id, r.name, r.description,
+               r.url AS server_url, r.verdict, r.trust_score, r.risk_tier,
+               (SELECT a.status FROM mcp_attestations a
+                 WHERE a.server_id = r.server_id
+                 ORDER BY a.generated_at DESC LIMIT 1) AS attestation_status,
+               r.last_assessed, r.first_seen AS registered_at
+        FROM mcp_server_registry r
+        WHERE r.name LIKE ? OR r.url LIKE ? OR r.server_id = ?
         LIMIT 1
     """, {"p1": f"%{server_name}%", "p2": f"%{server_name}%", "p3": server_name})
     
@@ -161,10 +165,12 @@ def cmd_assess(args) -> int:
     
     # Get signals for this server
     signals_result = ws_query("""
-        SELECT signal_type, signal_value, weight, timestamp
-        FROM signal_scores 
+        SELECT signal_name AS signal_type,
+               score       AS signal_value,
+               scored_at   AS timestamp
+        FROM mcp_signal_scores
         WHERE server_id = ?
-        ORDER BY timestamp DESC
+        ORDER BY scored_at DESC
         LIMIT 10
     """, {"p1": server.get('server_id')})
     
@@ -188,9 +194,9 @@ def cmd_search(args) -> int:
     print(f"\n{BOLD}{CYAN}🔎 Searching for: {query}{RESET}\n")
     
     result = ws_query("""
-        SELECT server_id, name, server_url, verdict, trust_score, risk_tier
-        FROM mcp_servers 
-        WHERE name LIKE ? OR description LIKE ? OR server_url LIKE ?
+        SELECT server_id, name, url AS server_url, verdict, trust_score, risk_tier
+        FROM mcp_server_registry
+        WHERE name LIKE ? OR description LIKE ? OR url LIKE ?
         ORDER BY trust_score DESC
         LIMIT 20
     """, {"p1": f"%{query}%", "p2": f"%{query}%", "p3": f"%{query}%"})
@@ -283,7 +289,7 @@ def cmd_status(args) -> int:
             SUM(CASE WHEN verdict = 'TRUSTED_GENERAL' OR verdict = 'TRUSTED_RESEARCH' THEN 1 ELSE 0 END) as trusted,
             SUM(CASE WHEN risk_tier = 'TIER1_CRITICAL' OR risk_tier = 'TIER2_HIGH' THEN 1 ELSE 0 END) as high_risk,
             SUM(CASE WHEN trust_score = 0 OR trust_score IS NULL THEN 1 ELSE 0 END) as unscored
-        FROM mcp_servers
+        FROM mcp_server_registry
     """, {})
     
     stats = result.get("data", {}).get("results", [])
@@ -324,8 +330,9 @@ def cmd_risks(args) -> int:
     print(f"\n{BOLD}{RED}⚠ High Risk Servers (Tier: {tier}){RESET}\n")
     
     result = ws_query(f"""
-        SELECT server_id, name, server_url, verdict, trust_score, risk_tier, last_assessed
-        FROM mcp_servers 
+        SELECT server_id, name, url AS server_url, verdict, trust_score,
+               risk_tier, last_assessed
+        FROM mcp_server_registry
         WHERE risk_tier IN ('TIER1_CRITICAL', 'TIER2_HIGH')
         ORDER BY trust_score ASC, last_assessed DESC
         LIMIT 50
@@ -359,11 +366,23 @@ def cmd_threats(args) -> int:
     
     print(f"\n{BOLD}{RED}💀 Threat Intelligence (Last {days} days){RESET}\n")
     
+    # `known_threats` is not a table -- known_threats.py is a MODULE of static
+    # constants (KNOWN_MALICIOUS_PACKAGES, HIGH_RISK_PATTERNS) imported by
+    # signal_analyser.py. A module name was read as a table name. The per-server
+    # threat records live on the bus in mcp_threat_associations; the server's
+    # own name and verdict come from the registry. Refs #4080.
     result = ws_query(f"""
-        SELECT server_id, name, verdict, threat_category, source, detected_at, confidence
-        FROM known_threats 
-        WHERE detected_at > now() - INTERVAL '{days} days'
-        ORDER BY detected_at DESC
+        SELECT t.server_id,
+               r.name,
+               r.verdict,
+               t.threat_type  AS threat_category,
+               t.severity,
+               t.reported_at  AS detected_at,
+               t.evidence
+        FROM mcp_threat_associations t
+        LEFT JOIN mcp_server_registry r ON r.server_id = t.server_id
+        WHERE t.reported_at > now() - INTERVAL '{days} days'
+        ORDER BY t.reported_at DESC
         LIMIT 50
     """, {})
     
@@ -373,18 +392,16 @@ def cmd_threats(args) -> int:
         print(f"{GREEN}✓ No recent threats detected!{RESET}\n")
         return 0
     
-    print(f"{BOLD}{'Server':<25} {'Verdict':<20} {'Category':<20} {'Source':<15} {'Confidence':<10}{RESET}")
+    print(f"{BOLD}{'Server':<25} {'Verdict':<20} {'Category':<20} {'Severity':<15}{RESET}")
     print(f"{DIM}{'─' * 100}{RESET}")
     
     for threat in threats:
         name = threat.get('name', 'Unknown')[:23]
         verdict = color_verdict(threat.get('verdict', 'KNOWN_THREAT'))
         category = threat.get('threat_category', 'unknown')[:18]
-        source = threat.get('source', 'unknown')[:13]
-        conf = threat.get('confidence', 0)
-        conf_str = f"{conf:.0%}" if conf else "N/A"
+        severity = str(threat.get('severity', 'unknown'))[:13]
         
-        print(f"{RED}{name:<25}{RESET} {verdict:<20} {MAGENTA}{category:<20}{RESET} {DIM}{source:<15}{RESET} {YELLOW}{conf_str:<10}{RESET}")
+        print(f"{RED}{name:<25}{RESET} {verdict:<20} {MAGENTA}{category:<20}{RESET} {YELLOW}{severity:<15}{RESET}")
     
     print(f"\n{DIM}Total threats: {len(threats)}{RESET}\n")
     return 0
@@ -402,9 +419,13 @@ def cmd_report(args) -> int:
             SUM(CASE WHEN verdict = 'ENTERPRISE_CONTROLLED' THEN 1 ELSE 0 END) as enterprise,
             SUM(CASE WHEN verdict = 'CAUTION_LIMITED' THEN 1 ELSE 0 END) as caution,
             SUM(CASE WHEN verdict IN ('HIGH_RISK_ISOLATED', 'KNOWN_THREAT') THEN 1 ELSE 0 END) as high_risk,
-            SUM(CASE WHEN attestation_status = 'active' THEN 1 ELSE 0 END) as attested,
-            SUM(CASE WHEN attestation_status = 'expired' THEN 1 ELSE 0 END) as expired
-        FROM mcp_servers
+            SUM(CASE WHEN EXISTS (SELECT 1 FROM mcp_attestations a
+                                   WHERE a.server_id = r.server_id
+                                     AND a.status = 'active') THEN 1 ELSE 0 END) as attested,
+            SUM(CASE WHEN EXISTS (SELECT 1 FROM mcp_attestations a
+                                   WHERE a.server_id = r.server_id
+                                     AND a.status = 'expired') THEN 1 ELSE 0 END) as expired
+        FROM mcp_server_registry r
     """, {})
     
     stats = result.get("data", {}).get("results", [])
@@ -451,7 +472,7 @@ def cmd_report(args) -> int:
     # Risk distribution
     result2 = ws_query("""
         SELECT risk_tier, COUNT(*) as count
-        FROM mcp_servers
+        FROM mcp_server_registry
         GROUP BY risk_tier
         ORDER BY 
             CASE risk_tier

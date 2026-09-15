@@ -1,0 +1,180 @@
+name: ratchet-nightly
+
+# The missing half of every ratchet in this repo.
+#
+# The ratchets hold REAL measured numbers -- orphan_count 277, deferred_count
+# 62 -- but nothing re-measures them. They are pinned by hand, in a PR, when
+# someone remembers. Two things follow from that, both observed:
+#
+#   (1) The tree drifts past the pin and nobody learns until every PR is red.
+#       reachability_ratchet has been reporting "REGRESSION orphans=335
+#       baseline=277 delta=+58" on main and passing only on the deferred
+#       offset (effective 273). That is a number nobody re-derived for weeks.
+#
+#   (2) Improvements are never banked. A PR that mounts three routers lowers
+#       the real count and the baseline stays where it was, so the gate keeps
+#       tolerating debt that has already been paid off.
+#
+# This job closes both: measure nightly on main, BANK improvements
+# automatically, and SHOUT regressions once here instead of N times across
+# every open PR.
+#
+# THE SAFETY PROPERTY THAT MAKES AUTOMATION SAFE
+#
+# tools/reachability_ratchet.py write_baseline() is mechanically unable to
+# raise a pinned number (_RATCHET_NO_RAISE_v1). Without that, an unattended
+# --update-baseline would rubber-stamp every regression into the baseline and
+# the ratchet would become a thermometer following the tree downhill. The
+# baseline's own note records the near-miss it prevents: "--update-baseline
+# wanted to RAISE it 277 -> 335, which is the exact move this note forbids."
+#
+# So: this job can only ever ratchet DOWN. A regression makes it FAIL, loudly,
+# and changes nothing.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"        # 03:17 UTC, off the top of the hour
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "measure and report, commit nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ratchet-nightly
+  cancel-in-progress: false      # never cancel a run that may be committing
+
+jobs:
+  remeasure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2         # reachability derives a HEAD~1 comparison
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # ---- measure (never gates; this is the census) --------------------
+      - name: Reachability census (observe)
+        id: reach
+        run: |
+          set +e
+          python tools/reachability_ratchet.py | tee reach.txt
+          echo "verdict=$(grep -o 'verdict: [A-Z-]*' reach.txt | head -1 | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Spine strict census (how many active services are unshippable)
+        id: spine
+        run: |
+          set +e
+          python tools/generate_spine.py --strict > spine.txt 2>&1
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          tail -5 spine.txt
+          # NO_TOML is the builder's signature failure: the publisher writes
+          # exactly one file (router.py) and cannot also write service.toml,
+          # so every service PR lands unshippable. Count it so the trend is
+          # visible even before the publisher is fixed.
+          echo "no_toml=$(grep -o '[A-Za-z0-9_]*=NO_TOML' spine.txt | wc -l | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Capmap drift (observe)
+        run: python tools/pull_check.py --quiet || true
+
+      # ---- bank improvements; refuse regressions ------------------------
+      - name: Tighten baselines (DOWN ONLY)
+        id: tighten
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set +e
+          python tools/reachability_ratchet.py --update-baseline | tee tighten.txt
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # rc=1 means write_baseline HELD a value rather than raising it:
+          # main has regressed against its own pin.
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::a baseline value was HELD -- main has regressed against its pin"
+          fi
+          if git diff --quiet -- tools/reachability_baseline.json; then
+            echo "changed=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit tightened baseline
+        if: ${{ steps.tighten.outputs.changed == 'yes' }}
+        run: |
+          git config user.name  "ratchet-nightly"
+          git config user.email "noreply@anthropic.com"
+          git add tools/reachability_baseline.json
+          git commit -m "chore(ratchet): tighten baseline from nightly census
+
+          Measured on main by .github/workflows/ratchet-nightly.yml. This job
+          can only lower a baseline -- write_baseline() refuses to raise
+          (_RATCHET_NO_RAISE_v1), so an improvement is banked here and a
+          regression is reported rather than absorbed."
+          git push
+
+      # ---- one loud place for a main regression -------------------------
+      - name: Report regression on main
+        if: ${{ steps.tighten.outputs.rc != '0' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = [
+              '`ratchet-nightly` measured main and a baseline value was **held**,',
+              'meaning main has regressed past its own pin. Nothing was raised —',
+              'the ratchet refused, by design.',
+              '',
+              '```',
+              fs.readFileSync('tighten.txt', 'utf8').slice(0, 3000),
+              '```',
+              '',
+              'Fix the regression, or justify it explicitly with',
+              '`--allow-raise --reason "..."` so the decision is attributable.',
+              '',
+              'This issue is updated in place; it is not one issue per night.',
+            ].join('\n');
+            const title = 'ratchet: main has regressed past its baseline';
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'ratchet',
+            });
+            const hit = existing.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: hit.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['ratchet', 'needs-decision'],
+              });
+            }
+
+      - name: Upload census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ratchet-nightly
+          path: |
+            reach.txt
+            spine.txt
+            tighten.txt
+            artifacts/reachability_ratchet.json
+          if-no-files-found: ignore
+
+      # A held baseline must fail the job. A nightly that reports a regression
+      # in an artifact nobody opens is the report-only trap this repo has been
+      # bitten by repeatedly.
+      - name: Fail on held baseline
+        if: ${{ steps.tighten.outputs.rc != '0' }}
+        run: |
+          echo "main is behind its own ratchet; see the ratchet issue."
+          exit 1

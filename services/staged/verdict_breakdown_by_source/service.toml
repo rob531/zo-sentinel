@@ -1,0 +1,11 @@
+[service]
+name = "verdict_breakdown_by_source"
+import_path = "services.active.verdict_breakdown_by_source.router"
+prefix = "/api"
+tag = "verdict_breakdown_by_source"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../app" }

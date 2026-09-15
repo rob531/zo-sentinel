@@ -91,6 +91,7 @@ REQUIRED_FALLBACK = (
     "pytest",
     "no-hollow",
     "schema-prm",
+    "referent-verify",
 )
 
 # Resolved once per process by resolve_required(); every read goes through the
@@ -332,11 +333,11 @@ def protection_controls() -> int:
     branch protection is healthy today. An assertion never seen fail is unproven.
     """
     live_ok = {"contexts": ["capmap-check", "static-analysis", "smoke-ladder",
-                            "frontend", "pytest", "no-hollow", "schema-prm"]}
+                            "frontend", "pytest", "no-hollow", "schema-prm", "referent-verify"]}
     cases = [
         ("live protection, matching the literal",
          live_ok, "branch_protection", True,
-         lambda s, i: len(s) == 7 and not i["drift_vs_literal"]["added"]
+         lambda s, i: len(s) == 8 and not i["drift_vs_literal"]["added"]
                       and not i["drift_vs_literal"]["dropped"]),
 
         ("protection gained a context the literal never had -- THE BUG THIS FIXES",
@@ -384,8 +385,14 @@ def self_test(repo: str) -> int:
     resolve_required(repo)
     print(f"live REQUIRED: {REQUIRED_SOURCE['source']} -- {list(REQUIRED)}\n")
     cases = [
-        ("GREEN", "de06856006e06890d1634d182ff6f9a9b93af13e",
-         "PR #2418 head -- all 7 required contexts success"),
+        # 2026-08-31: was ("GREEN", ...) -- the fixture aged out when branch
+        # protection gained `referent-verify`; that context does not exist on this
+        # 2026-era sha, and absent is not green, so the live set correctly answers
+        # cannot-evaluate. GREEN-via-PR-head-redirect is still exercised by the
+        # origin/main tip case below.
+        ("UNKNOWN", "de06856006e06890d1634d182ff6f9a9b93af13e",
+         "PR #2418 head -- 7 of the NOW-8 required contexts success; "
+         "referent-verify absent by era"),
         ("RED", "faaf7c00660f5d2c11dca4448773ccd51865a138",
          "static-analysis concluded failure (and carries 3 `pytest` re-runs, "
          "so it also exercises latest-per-name)"),

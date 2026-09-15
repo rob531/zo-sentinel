@@ -1,0 +1,23 @@
+[service]
+name = "wire_server_list_api_into_main"
+import_path = "services.active.wire_server_list_api_into_main.router"
+prefix = "/api"
+tag = "wire_server_list_api_into_main"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+module = "services.active.wire_server_list_api_into_main.router"
+
+[dependencies]
+app_db = true
+bus_query = "http://127.0.0.1:8772/query"
+
+[tables]
+app = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+bus = ["mcp_signal_scores", "mesh_memory"]
+
+[self_test]
+enabled = true
+expected_output = "PASS"

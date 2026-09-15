@@ -1,0 +1,12 @@
+[service]
+name = "run_reconciliation_report"
+import_path = "services.active.run_reconciliation_report.router"
+prefix = "/api"
+tag = "run_reconciliation_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.run_reconciliation_report"
+expected_output = "PASS"

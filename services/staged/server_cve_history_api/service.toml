@@ -1,0 +1,22 @@
+[service]
+name = "server_cve_history_api"
+import_path = "services.active.server_cve_history_api.router"
+prefix = "/api"
+tag = "server_cve_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+description = "Verify service.toml configuration is valid and service can be registered"
+expected_pass = true
+
+[dependencies]
+app = "app.main:app"
+
+[test.assertions]
+service_name = "server_cve_history_api"
+has_router_import = true
+prefix_is_api = true
+auth_is_public = true
+needs_data_layer = true

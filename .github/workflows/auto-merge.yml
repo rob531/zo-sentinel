@@ -180,7 +180,25 @@ jobs:
   triage-solid-sweep:
     # Enables auto-merge on the triage bot's solids (pr-triage labels with
     # GITHUB_TOKEN, which can't re-trigger the pull_request_target job above).
-    if: github.event_name == 'workflow_run'
+    # A CANCELLED run is not a verdict.
+    #
+    # `workflow_run: types: [completed]` fires on cancelled and failed runs as
+    # well as successful ones. The six watched workflows all sit in global
+    # concurrency groups with cancel-in-progress, so under PR load they are
+    # cancelled constantly -- and each cancellation started a fresh sweep here,
+    # which queued behind the backlog and was itself cancelled. More queue
+    # pressure produced more cancellations, which produced more sweeps.
+    #
+    # MEASURED 2026-09-15: 200 workflow runs in 10m37s (~1,130/hour, against
+    # the ~21/hour recorded for auto-merge on 2026-09-04); 94 cancelled, 85 of
+    # them auto-merge; 28 queued with 1 job in progress; and ZERO runs in that
+    # window reached success or failure. CI had stopped producing verdicts.
+    #
+    # Both sweeps only act on state a SUCCESSFUL watched run produces -- fresh
+    # triage:solid labels, or a PR newly gone green. A cancelled run has
+    # produced neither, so firing on it can only re-scan unchanged state and
+    # spend installation budget (FU-406).
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Log GraphQL rate-limit budget (FU-406)
@@ -278,7 +296,25 @@ jobs:
     # NOTE: mergeStateStatus is computed LAZILY -- it returns UNKNOWN for every
     # row of a list query and only materialises on a single-PR read. It must be
     # fetched per PR, never filtered in the list.
-    if: github.event_name == 'workflow_run'
+    # A CANCELLED run is not a verdict.
+    #
+    # `workflow_run: types: [completed]` fires on cancelled and failed runs as
+    # well as successful ones. The six watched workflows all sit in global
+    # concurrency groups with cancel-in-progress, so under PR load they are
+    # cancelled constantly -- and each cancellation started a fresh sweep here,
+    # which queued behind the backlog and was itself cancelled. More queue
+    # pressure produced more cancellations, which produced more sweeps.
+    #
+    # MEASURED 2026-09-15: 200 workflow runs in 10m37s (~1,130/hour, against
+    # the ~21/hour recorded for auto-merge on 2026-09-04); 94 cancelled, 85 of
+    # them auto-merge; 28 queued with 1 job in progress; and ZERO runs in that
+    # window reached success or failure. CI had stopped producing verdicts.
+    #
+    # Both sweeps only act on state a SUCCESSFUL watched run produces -- fresh
+    # triage:solid labels, or a PR newly gone green. A cancelled run has
+    # produced neither, so firing on it can only re-scan unchanged state and
+    # spend installation budget (FU-406).
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -485,8 +485,87 @@ def selftest() -> None:
           "where the delta method reported $0.00; every failure path raises)")
 
 
+# --- FU192_DISCRIMINATOR_V1 -------------------------------------------------------
+def auth_discriminator(key=None):
+    """One authenticated session: instances + credit + settled credits.
+
+    A `live_instances: 0` reading is only EVIDENCE if the same session also
+    produced a credit balance -- a 401 cannot. Returns a dict carrying its own
+    verdict so a caller can never publish the bare zero (FU-192, R6).
+
+    NOTE THE SHAPE, it is not the documented one: `/api/v0/invoices/` returns a
+    BARE LIST of rows (amount_cents / is_credit / paid_on), while
+    `/users/current/invoices/` returns a dict whose `invoices` list is EMPTY and
+    whose `current` block carries the credit. A reader that does
+    `body.get("invoices")` on both endpoints gets 0 rows from each and calls it
+    a clean day. Measured 2026-09-10.
+    """
+    import time
+    out = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+           "auth_proven": False, "credit": None, "instances_count": None,
+           "instances": [], "credit_rows": None, "wedged": [],
+           "verdict": "UNKNOWN", "error": None}
+    try:
+        key = key or api_key()
+        out["key_len"] = len(key or "")
+        payload = fetch_invoices(key=key)
+        credit = (payload.get("current") or {}).get("credit")
+        if not isinstance(credit, (int, float)):
+            raise VastSpendError(
+                "no current.credit in an authenticated session -- the read is "
+                "UNKNOWN, not zero (FU-192)")
+        out["credit"] = float(credit)
+        out["auth_proven"] = True
+        out["credit_rows"] = len([r for r in (payload.get("invoices") or [])
+                                  if (r.get("type") == "payment"
+                                      or r.get("is_credit"))])
+        rows = fetch_instances(key=key)
+        out["instances_count"] = len(rows)
+        for r in rows:
+            up_h = None
+            if isinstance(r.get("duration"), (int, float)):
+                up_h = round(r["duration"] / 3600.0, 2)
+            rec = {"id": r.get("id"), "dph": r.get("dph_total"),
+                   "status": r.get("actual_status") or r.get("cur_state"),
+                   "uptime_h": up_h, "label": r.get("label")}
+            out["instances"].append(rec)
+            # wedge guard, scar 2026-07-17: loading for >90min is RED
+            if str(rec["status"]).lower() == "loading" and (up_h or 0) > 1.5:
+                rec["destroy_cmd"] = (
+                    "python tools\\vast_job_runner.py destroy %s" % rec["id"])
+                out["wedged"].append(rec)
+        out["verdict"] = "RED_WEDGE" if out["wedged"] else "AUTHENTICATED"
+    except Exception as exc:                         # noqa: BLE001 -- fail loud
+        out["error"] = "%s: %s" % (exc.__class__.__name__, exc)
+        out["verdict"] = "UNKNOWN"
+    return out
+
+
+def discriminator_control():
+    """R4: the same path with a junk key MUST NOT come back auth_proven.
+
+    Exits 0 when the discriminator correctly refuses -- i.e. this is the
+    positive control proving the check is capable of reading RED at all.
+    """
+    bad = auth_discriminator(key="0" * 64)
+    ok = (bad["auth_proven"] is False and bad["verdict"] == "UNKNOWN"
+          and bad["instances_count"] is None)
+    print(json.dumps({"control": "invalid-key", "refused": ok,
+                      "observed": bad}, indent=2, default=str))
+    return 0 if ok else 1
+# --- end FU192_DISCRIMINATOR_V1 ---------------------------------------------------
+
+
 def main(argv: List[str]) -> int:
     mode = argv[0] if argv else "all"
+    if mode in ("discriminator", "--discriminator", "auth"):
+        rep = auth_discriminator()
+        print(json.dumps(rep, indent=2, default=str))
+        if rep["verdict"] == "RED_WEDGE":
+            return 1
+        return 0 if rep["auth_proven"] else 2
+    if mode in ("discriminator-control", "--discriminator-control"):
+        return discriminator_control()
     if mode in ("selftest", "test", "all"):
         selftest()
         if mode != "all":

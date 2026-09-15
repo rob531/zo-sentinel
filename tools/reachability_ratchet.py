@@ -314,6 +314,33 @@ def deferred_count_at(rev):
 
 
 
+def deferred_rule_line(now_n, refs):
+    """The DEFERRED NON-INCREASING rule's operands, as one line. Never empty.
+
+    `refs` is the list of (count, source) references the rule found. Returns
+    (line, outcome) where outcome is one of SKIPPED / GREW / HELD / SHRANK.
+
+    A pure function on purpose: the rule's legibility is then testable at both
+    poles in milliseconds, without a repo census. Until 2026-09-15 this text was
+    inline in main() and the EQUAL branch printed NOTHING -- so COMPARED-and-held
+    (the rule working) and SKIPPED-for-want-of-a-reference (growth ungated) were
+    indistinguishable in every CI log, which is the opposite reading. R3: a check
+    that goes quiet must still prove it ran.
+    """
+    if not refs:
+        return ("DEFERRED NON-INCREASING: SKIPPED -- now=%d, refs seen: none. "
+                "No reference exists (the baseline file has no deferred_count "
+                "AND HEAD~1 is unreachable -- a shallow CI checkout needs "
+                "fetch-depth >= 2). Growth is UNGATED until a reference exists; "
+                "record one with --update-baseline." % now_n, "SKIPPED")
+    limit_n, src = min(refs)
+    outcome = ("GREW" if now_n > limit_n
+               else "SHRANK" if now_n < limit_n else "HELD")
+    seen = ", ".join("%s=%d" % (s, n) for n, s in refs)
+    return ("DEFERRED NON-INCREASING: COMPARED -- now=%d limit=%d (%s) -> %s. "
+            "refs seen: %s." % (now_n, limit_n, src, outcome, seen), outcome)
+
+
 def _arg_value(flag, argv=None):
     """Value following `flag` in argv, or None."""
     argv = argv if argv is not None else sys.argv
@@ -538,13 +565,25 @@ def main():
     if prev_commit is not None:
         refs.append((prev_commit, "previous commit"))
 
-    if not refs:
-        print("\n  NOTE: no deferred-count reference (baseline predates the field "
-              "and no previous commit is reachable). Record one with "
-              "--update-baseline; growth is UNGATED until you do.")
-    else:
+    # The operands are printed UNCONDITIONALLY, including when the rule holds.
+    # Until 2026-09-15 the EQUAL case -- which is the steady state, and was the
+    # live state at 62 == 62 -- emitted nothing at all. So no CI log could
+    # distinguish COMPARED-and-held from SKIPPED-for-want-of-a-reference, and
+    # the two have opposite meanings: one is the rule working, the other is
+    # growth ungated. That muteness is the whole of what kept #3944 open for 21
+    # days -- the fetch-depth:2 cure for the shallow-checkout skip landed on
+    # main and could not be verified from any run, because a working rule and a
+    # disabled one printed the same thing: nothing.
+    #
+    # This is not a new gate. No failure condition is added, removed or moved;
+    # `failures` is appended to in exactly the one place it was before. It makes
+    # an existing rule legible. R3: a check that went quiet must still prove it
+    # RAN, because skipped is not passed.
+    now_n = len(active_deferred)
+    line, outcome = deferred_rule_line(now_n, refs)
+    print("\n  %s" % line)
+    if refs:
         limit_n, src = min(refs)
-        now_n = len(active_deferred)
         if now_n > limit_n:
             print("\n  DEFERRED LIST GREW: %d > %d (%s). The deferral hatch is for "
                   "not blocking a build that structurally cannot mount -- it is not "

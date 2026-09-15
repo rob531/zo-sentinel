@@ -158,6 +158,7 @@ jobs:
             tests/test_architect_domain_map.py \
             tests/test_no_module_scope_test_imports.py \
             tests/test_edit_fidelity.py \
+            tests/test_auto_stage.py \
             -q \
             --junitxml=artifacts/junit.xml
 

@@ -69,6 +69,10 @@ on:
         description: "Max PRs to refresh this run"
         required: false
         default: "40"
+      chain_depth:
+        description: "Internal: self-chain counter. Leave blank."
+        required: false
+        default: "0"
 
 permissions:
   contents: write
@@ -91,7 +95,17 @@ concurrency:
 env:
   # Contexts that fallback (b) can produce, i.e. those carried by the two
   # dispatchable workflows. Keep in sync with pr-gates.yml + evaluator.yml.
-  DISPATCHABLE: "capmap-check static-analysis smoke-ladder frontend pytest"
+  # Every REQUIRED context is now reachable by workflow_dispatch: no-hollow and
+  # schema-prm gained dispatch triggers, referent-verify already had one. The
+  # PAT is consequently an OPTIMISATION (native events also fire the
+  # non-required checks) and no longer a REQUIREMENT. Nothing here depends on a
+  # human-supplied credential.
+  DISPATCHABLE: "capmap-check static-analysis smoke-ladder frontend pytest no-hollow schema-prm referent-verify"
+  GATE_WORKFLOWS: "pr-gates.yml evaluator.yml no-hollow.yml schema-prm.yml referent-verify.yml"
+  # CAVEAT worth knowing before editing this list: GitHub reads workflow_dispatch
+  # triggers from the DEFAULT BRANCH only. A newly added dispatch trigger returns
+  # HTTP 500 until it is merged to main, so a gate added here cannot be validated
+  # on its own PR -- verify it on main immediately after merge.
   # Last-resort required set, used ONLY if both token paths fail to read branch
   # protection. Staleness here is caught by the guard below, which compares this
   # against the live set whenever the live set is readable.
@@ -106,6 +120,16 @@ jobs:
       required: ${{ steps.drift.outputs.required }}
       have_pat: ${{ steps.drift.outputs.have_pat }}
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Logs resources.graphql.used/remaining/reset so the chairman can
+          # identify which workflow actually drains the installation budget.
+          # Per FU-406 next action: the real consumer is still UNIDENTIFIED.
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=preflight used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Derive required contexts and check reachability
         id: drift
         env:
@@ -160,7 +184,7 @@ jobs:
           echo "required=$req" >> "$GITHUB_OUTPUT"
 
           if [ "$HAVE_PAT" = "true" ]; then
-            echo "::notice::RELANDER_TOKEN present -> native synchronize/reopened; ALL required contexts reachable"
+            echo "::notice::RELANDER_TOKEN present (usability is verified in the reland job, not here)"
             exit 0
           fi
 
@@ -175,7 +199,8 @@ jobs:
           if [ -n "$unreachable" ]; then
             echo "::error::DRIFT: required context(s) unreachable in fallback mode:$unreachable"
             echo "::error::These are PR-context-only and cannot be workflow_dispatch'd. Every refreshed PR will sit at BLOCKED forever."
-            echo "::error::Fix: set the RELANDER_TOKEN secret (fine-grained PAT, Contents RW + Pull requests RW, Workflows NO ACCESS)."
+            echo "::error::A required context is not produced by any workflow this job can dispatch."
+            echo "::error::Either give that workflow a workflow_dispatch trigger, or add it to GATE_WORKFLOWS."
             exit 1
           fi
           echo "::notice::all required contexts reachable via dispatch fallback"
@@ -186,6 +211,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=reland used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Refresh stale-but-clean and solid-but-blocked autonomous-build PRs
         env:
           # READ/WRITE SPLIT. GITHUB_TOKEN has full repo read and is guaranteed
@@ -201,6 +233,8 @@ jobs:
           DISPATCH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RELAND_CAP: ${{ github.event.inputs.reland_cap || '40' }}
+          CHAIN_DEPTH: ${{ github.event.inputs.chain_depth || '0' }}
+          MAX_CHAIN: "6"
         run: |
           set -uo pipefail
 
@@ -224,6 +258,20 @@ jobs:
           if [ -n "${PAT_RAW_LEN:-}" ] && [ "$PAT_RAW_LEN" -ne "${#PAT}" ]; then
             echo "::warning::RELANDER_TOKEN contained $((PAT_RAW_LEN - ${#PAT})) character(s) outside [A-Za-z0-9_]; stripped. Re-set the secret via the web UI to remove them at source."
           fi
+          # A secret that strips to nothing is not "absent" -- it is a
+          # MIS-SET secret, and the two must not look alike. Observed
+          # 2026-09-01: RELANDER_TOKEN held a single non-alphanumeric byte, so
+          # the strip removed "1 character", the validation block never ran
+          # (empty string), and the sweep silently used GITHUB_TOKEN while the
+          # preflight still reported "RELANDER_TOKEN present". Present and
+          # usable are different facts.
+          if [ "${PAT_RAW_LEN:-0}" -gt 0 ] && [ -z "$PAT" ]; then
+            echo "::error::RELANDER_TOKEN is set but contains NO token characters (raw length $PAT_RAW_LEN, all stripped)."
+            echo "::error::The secret was almost certainly written empty or as a stray byte. Re-set it via Settings -> Secrets -> Actions in the WEB UI."
+            echo "::error::Continuing in fallback mode: no-hollow / schema-prm / referent-verify will NOT report and nothing will merge."
+            HAVE_PAT="false"
+          fi
+
           if [ -n "$PAT" ]; then
             if pat_login=$(GH_TOKEN="$PAT" gh api user --jq '.login' 2>pat_err.txt); then
               echo "::notice::RELANDER_TOKEN validated (authenticates as $pat_login)"
@@ -235,16 +283,36 @@ jobs:
             fi
           fi
 
+          # Silence must be auditable: say how many PRs the cap EXCLUDED, so
+          # "nothing to reland" and "everything is too old to try" never print
+          # the same thing.
+          MAX_AGE_DAYS="${RELANDER_MAX_AGE_DAYS:-21}"
+          CUTOFF="$(date -u -d "${MAX_AGE_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)"
+          total_open=$(gh pr list -R "$REPO" --state open --label autonomous-build \
+                        --limit 800 --json number -q '. | length' 2>/dev/null || echo "?")
+          over_age=$(gh pr list -R "$REPO" --state open --label autonomous-build \
+                        --limit 800 --json number,createdAt \
+                        -q "[.[] | select(.createdAt <= \"$CUTOFF\")] | length" 2>/dev/null || echo "?")
+          echo "::notice::age cap ${MAX_AGE_DAYS}d (cutoff $CUTOFF): $over_age of $total_open open autonomous-build PR(s) are past it and will NOT be re-fired"
+
           # --- cohort A: stale-but-clean (original failure mode) -------------
           # NOTE: --limit is MANDATORY. gh pr list defaults to 30 rows; without
           # it this sweep was blind past row 30 and silently reported "nothing
           # to reland" while 28 eligible PRs sat outside the page.
           # Never swallow the error text: a failed query and an empty result
           # are different facts and must not print the same thing.
+          # AGE CAP (RELANDER_MAX_AGE_DAYS): a PR this sweep has re-fired
+          # every day for weeks is not going to land because of one more
+          # re-fire. Measured 2026-09-14: 272 open PRs, 192 of them opened
+          # before 2026-09-01, oldest 2026-07-19 -- and ~10 re-runs per
+          # failing branch per day. That is the bulk of the daily red, and
+          # none of it is new information. Past the cap the PR needs a
+          # decision (land it, fix the builder, or close it), not another
+          # identical run.
           if ! stale=$(gh pr list -R "$REPO" --state open \
                     --label autonomous-build --label triage:stale --limit 500 \
-                    --json number,mergeable,isDraft \
-                    -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number' 2>qerr.txt); then
+                    --json number,mergeable,isDraft,createdAt \
+                    -q ".[] | select(.mergeable != \"CONFLICTING\" and .isDraft == false and .createdAt > \"$CUTOFF\") | .number" 2>qerr.txt); then
             echo "::error::cohort A query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
             exit 1
           fi
@@ -272,8 +340,8 @@ jobs:
             done
           done <<< "$(gh pr list -R "$REPO" --state open \
                         --label autonomous-build --label triage:solid --limit 500 \
-                        --json number,headRefOid,isDraft \
-                        -q '.[] | "\(.number) \(.headRefOid) \(.isDraft)"' 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
+                        --json number,headRefOid,isDraft,createdAt \
+                        -q ".[] | select(.createdAt > \"$CUTOFF\") | \"\(.number) \(.headRefOid) \(.isDraft)\"" 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
           n_solid=$(echo "$solid" | wc -w | tr -d ' ')
           # Silence must always be auditable: say what was EXAMINED, not just
           # what was selected. "0 selected" and "0 examined" are different bugs.
@@ -303,40 +371,41 @@ jobs:
             sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid) || continue
             behind=$(gh api "repos/$REPO/compare/$main_sha...$sha" --jq '.behind_by' 2>/dev/null) || behind=""
 
-            refreshed=false
+            # Rebase onto current main when behind. This is worth doing on its
+            # own merits -- a PR must be tested against the base it will land on
+            # -- but it is no longer how the gates get re-run.
             if [ "${behind:-0}" != "0" ]; then
-              # Path 1: branch is behind main -> merge commit re-fires gates.
               if GH_TOKEN="${PAT:-$GH_TOKEN}" gh pr update-branch "$pr" -R "$REPO" 2>err.txt; then
                 echo "::notice::#$pr branch updated (was $behind behind)"
-                refreshed=true
               else
                 echo "::notice::#$pr not updated ($(tr -d '\n' < err.txt | head -c 200))"
+                continue   # conflicted or racing; nothing to gate
               fi
-            elif [ "$HAVE_PAT" = "true" ]; then
-              # Path 2: already level with main -> update-branch is a no-op, so
-              # close+reopen to emit a `reopened` pull_request event. Only the
-              # PAT can do this; GITHUB_TOKEN events are recursion-guarded.
-              if GH_TOKEN="$PAT" gh pr close "$pr" -R "$REPO" 2>err.txt && sleep 2 && GH_TOKEN="$PAT" gh pr reopen "$pr" -R "$REPO" 2>>err.txt; then
-                echo "::notice::#$pr level with main -> closed+reopened to re-fire PR gates"
-                refreshed=true
-              else
-                echo "::warning::#$pr close/reopen failed ($(tr -d '\n' < err.txt | head -c 200))"
-              fi
-            else
-              echo "::warning::#$pr level with main and no RELANDER_TOKEN -> UNREACHABLE (needs PAT for close/reopen)"
             fi
 
-            if [ "$refreshed" = "true" ]; then
-              count=$((count+1))
-              if [ "$HAVE_PAT" != "true" ]; then
-                branch=$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName) || continue
-                for wf in pr-gates.yml evaluator.yml; do
-                  GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$wf" -R "$REPO" --ref "$branch" \
-                    && echo "::notice::#$pr dispatched $wf on $branch" \
-                    || echo "::warning::#$pr could not dispatch $wf on $branch"
-                done
-              fi
+            # Re-run the gates. EVERY required context is dispatchable, so this
+            # path needs no PAT, works whether or not the branch moved, and has
+            # no "unreachable" case. Previously a PR level with main could only
+            # be refreshed by close+reopen under a human identity.
+            branch=$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName) || continue
+            if [ "$HAVE_PAT" = "true" ] && [ "${behind:-0}" != "0" ]; then
+              # The merge commit already fired everything natively, including
+              # the non-required checks. Dispatching again would only duplicate.
+              echo "::notice::#$pr gates re-fired natively by the update-branch commit"
+              refreshed=true
+            else
+              refreshed=false
+              for wf in $GATE_WORKFLOWS; do
+                if GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$wf" -R "$REPO" --ref "$branch" 2>disp.txt; then
+                  refreshed=true
+                else
+                  echo "::warning::#$pr could not dispatch $wf ($(tr -d '\n' < disp.txt | head -c 160))"
+                fi
+              done
+              [ "$refreshed" = "true" ] && echo "::notice::#$pr dispatched $(echo $GATE_WORKFLOWS | wc -w) gate workflow(s) on $branch"
             fi
+
+            [ "$refreshed" = "true" ] && count=$((count+1))
           done
           # --- backlog telemetry --------------------------------------------
           # The original failure was not that the sweep broke; it exited 0 every
@@ -355,6 +424,7 @@ jobs:
             echo "| refreshed | $count |"
             echo "| unreachable this run | $remaining |"
             echo "| cap | $RELAND_CAP |"
+            echo "| chain depth | $CHAIN_DEPTH / $MAX_CHAIN |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "::notice::refreshed $count of $eligible eligible PR(s); $remaining still waiting"
@@ -365,6 +435,32 @@ jobs:
             exit 1
           fi
 
-          if [ "$remaining" -gt "$RELAND_CAP" ]; then
-            echo "::warning::backlog ($remaining) exceeds one full sweep ($RELAND_CAP) -- draining will take $(( (remaining + RELAND_CAP - 1) / RELAND_CAP )) more run(s)."
+          # --- self-chaining drain -------------------------------------------
+          # A backlog larger than one sweep previously waited for the 6h cron,
+          # so clearing 183 PRs would have taken ~30h of wall clock while the
+          # builder kept adding to it. Instead, a sweep that made progress AND
+          # still has work re-dispatches itself immediately.
+          #
+          # Bounded three ways, because a self-triggering workflow that gets
+          # this wrong is a billing incident:
+          #   - MAX_CHAIN hard-stops the chain regardless of remaining work
+          #   - progress is required: count == 0 breaks the chain (and has
+          #     already failed the run via the no-op guard above)
+          #   - the concurrency group means a chained run cancels any overlap
+          # workflow_dispatch is exempt from the GITHUB_TOKEN recursion guard,
+          # so this works without involving the PAT.
+          if [ "$remaining" -gt 0 ]; then
+            sweeps_needed=$(( (remaining + RELAND_CAP - 1) / RELAND_CAP ))
+            if [ "$count" -eq 0 ]; then
+              echo "::warning::backlog $remaining but no progress this run -- NOT chaining (would loop without draining)."
+            elif [ "$CHAIN_DEPTH" -ge "$MAX_CHAIN" ]; then
+              echo "::warning::backlog $remaining with chain depth $CHAIN_DEPTH/$MAX_CHAIN reached -- stopping. Next scheduled sweep continues."
+            else
+              next=$((CHAIN_DEPTH + 1))
+              echo "::notice::backlog $remaining (~$sweeps_needed sweep(s)) -> chaining run $next/$MAX_CHAIN immediately"
+              gh workflow run pr-relander.yml -R "$REPO" \
+                -f reland_cap="$RELAND_CAP" -f chain_depth="$next" \
+                && echo "::notice::chained sweep $next dispatched" \
+                || echo "::warning::could not dispatch chained sweep; falling back to the 6h cadence"
+            fi
           fi

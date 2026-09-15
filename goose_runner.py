@@ -261,9 +261,43 @@ def prune_done_pending():
     return moved
 
 
+def topup_quarantine():
+    """Top the directive queue up from the #4070 quarantine when it runs thin.
+
+    improvement-loop cycle-0087. tools/requeue_quarantined.py implements the
+    paced re-emission for GH #4079 and was measured DARK -- built, CI-tested,
+    and called by NOTHING for 14 days, because its own docstring asked a cron,
+    a lane or a human to remember to run it. This is the remembering, in code.
+
+    Fail-soft and non-blocking by construction: the tool reads the whole repo
+    to decide eligibility (minutes, not seconds), so quarantine_topup spawns it
+    detached and returns at once, and it swallows every exception -- a top-up
+    that can stall or kill the builder is worse than no top-up. Disable with
+    ZO_QUARANTINE_TOPUP=0.
+    """
+    try:
+        # By FILE PATH, not `from tools.quarantine_topup import ...`: this file
+        # already wraps `from tools.uv_gate_runner import run_gates` because
+        # tools/ is NOT importable in every launch context, and a seam that
+        # silently degrades to a no-op is the exact defect this cycle is
+        # closing. Resolved relative to THIS file, so it follows the daemon.
+        import importlib.util as _ilu
+        _src = Path(__file__).resolve().parent / "tools" / "quarantine_topup.py"
+        _spec = _ilu.spec_from_file_location("quarantine_topup", _src)
+        _mod = _ilu.module_from_spec(_spec)
+        sys.modules["quarantine_topup"] = _mod
+        _spec.loader.exec_module(_mod)
+        spawned, why = _mod.topup(PENDING_DIR)
+        if spawned:
+            log(f"quarantine top-up: {why}")
+    except Exception as e:                                      # noqa: BLE001
+        log(f"quarantine top-up unavailable (non-fatal): {e}")
+
+
 def load_directives_from_mesh():
     """Load directives from BOTH mesh_memory DB and pending dir (merged)."""
     prune_done_pending()   # keep pending/ from growing unbounded with done files
+    topup_quarantine()     # keep the queue non-empty from the #4079 backlog
     directives = []
     seen_ids = set()
 
@@ -1583,7 +1617,30 @@ def _selftest_gate(directive, directive_id):
         # cwd + the real inherited /pkg/:/root/ -> reproduces production exactly.
         _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": "",
                 "PYTHONPATH": str(PROJECT_DIR) + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
-        proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
+        # FU-459: #2177 cured the `app.*` half of THIS loader (PYTHONPATH) and left
+        # the RELATIVE-import half untouched. Running a file BY PATH can never give
+        # it a parent package, so `from .logic import x` -- correct for a
+        # services/staged/<name>/ package, and the exact form
+        # promote_staged_to_active.py imports SUCCESSFULLY -- raised ImportError and
+        # classify_selftest returned RED. Measured 2026-09-14 on the live runner log:
+        # of the 14 services RED-ed for this in 24h, 6 (43%) imported CLEAN under the
+        # runtime's own loader; the other 7 fail with `cannot import name` and stay
+        # RED via the branch ABOVE the relative-import one, so no true positive is
+        # lost. `python -m` still executes __main__, so the self-test contract holds.
+        # Falls back to the path form for anything not under PROJECT_DIR.
+        _selftest_argv = [_sys.executable, str(out)]
+        _dotted = None
+        try:
+            _rel = _os.path.relpath(str(out), str(PROJECT_DIR))
+            if not _rel.startswith(_os.pardir):
+                _parts = _os.path.splitext(_rel)[0].split(_os.sep)
+                if _parts and all(p.isidentifier() for p in _parts):
+                    _dotted = ".".join(_parts)
+        except Exception:
+            _dotted = None
+        if _dotted:
+            _selftest_argv = [_sys.executable, "-m", _dotted]
+        proc = subprocess.run(_selftest_argv, capture_output=True,
                               text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
@@ -1902,6 +1959,46 @@ def gate_error_text(gate):
     return f"gate={key}: {reason}"
 
 
+def _write_raw_directive(directive, directive_id):
+    """handler=="write_raw": the directive already CARRIES the exact bytes.
+
+    CofC ruling 2026-09-10 (daily-chairman-review). The `handler` field was
+    validated by zo_sentinel/mcp_servers/directive_mcp.py, by
+    zo_sentinel/promoters/proposed_to_pending_promoter.py and by
+    directive_validator.py -- and honoured by NO executor. Every directive,
+    whatever its handler, reached run_goose_task(). So a write_raw scaffold
+    directive handed an LLM the finished file as a task DESCRIPTION and asked it
+    to produce that file; the model wrote its own chat instead. Measured
+    2026-09-10 over all 361 open PRs: 68 carry a services/staged/<n>/service.toml
+    that does not parse, first lines including `[TOOL_CALL]`, `---`, a python
+    triple-quoted assignment, and "Now I'll create the router module:". 0 were
+    unfetchable, so 68 is a direct count. Oldest 2026-07-31; none self-healed.
+
+    Writing the bytes is both the cure and a saving: this class of directive
+    stops spending an LLM invocation to reproduce what it was already given.
+    The gate chain is UNCHANGED and still runs on the result -- no gate is
+    added, none is bypassed (harness doctrine R7: recovery, not restriction).
+
+    Returns True if the declared output landed on disk.
+    """
+    content = directive.get("content")
+    if not isinstance(content, str) or not content:
+        log(f"[write_raw] {directive_id}: no content -> falling through to engine")
+        return False
+    out = declared_output(directive)
+    if out is None:
+        log(f"[write_raw] {directive_id}: no declared output_file -> falling through")
+        return False
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content)
+    except Exception as exc:
+        log(f"[write_raw] {directive_id}: write failed: {exc}")
+        return False
+    log(f"[write_raw] {directive_id}: wrote {len(content)} B verbatim -> {out} (no LLM)")
+    return True
+
+
 def _gate_chain(directive, directive_id, pre_diff_state, engine_ok):
     """Run the completion gate chain, returning (passed, failing_gate).
 
@@ -2109,7 +2206,35 @@ def run():
                 # ledger records the real reason instead of a blanket
                 # "output_file was not produced" (chairman review 2026-07-20).
                 _failed_gate = None
-                if goose_installed:
+                # CofC 2026-09-10: handler dispatch, which this executor never
+                # had. A write_raw directive carries its finished bytes; write
+                # them rather than asking a model to re-derive them. Anything
+                # that is not a satisfiable write_raw falls through to exactly
+                # the path it took before.
+                _raw_done = False
+                if directive.get("handler") == "write_raw":
+                    if _write_raw_directive(directive, directive_id):
+                        _ok, _failed_gate = _gate_chain(directive, directive_id,
+                                                        _pre_diff, True)
+                        if _ok:
+                            _complete(directive, directive_id,
+                                      "write_raw: content written verbatim",
+                                      routed_model="write_raw")
+                            # 2026-09-11 daily-chairman-review: without this the
+                            # engine fallback below (`if not produced:`) runs anyway
+                            # and the model writes its chat over the bytes write_raw
+                            # just wrote. Measured: 326 B verbatim at 21:43:45Z ->
+                            # 187 B of prose at 21:44:19Z -> PR #4958 born RED.
+                            # SUCCESS ONLY: a rejected gate chain still falls through.
+                            produced = True
+                        else:
+                            _ghost_or_fail(directive, directive_id,
+                                           routed_model="write_raw",
+                                           gate=_failed_gate)
+                        _raw_done = True
+                if _raw_done:
+                    pass
+                elif goose_installed:
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive), directive_obj=directive)
                     _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
                                                     bool(result.get("success")))

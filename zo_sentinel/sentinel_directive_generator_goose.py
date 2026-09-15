@@ -48,11 +48,16 @@ import requests
 # ---------------------------------------------------------------------------
 
 SERVICE_NAME    = "directive_generator_goose"   # distinct from legacy
-SENTINEL_DIR    = Path("/home/workspace/zo_sentinel")
+# Roots are env-overridable so this module is IMPORTABLE off the box.
+# It was not: CI runners have no /home/workspace, and the import-time
+# mkdir below raised PermissionError before any test could run -- which
+# is the recorded "the daemon module will not import under the CI layout"
+# limitation. A module only its own host can import cannot be tested.
+SENTINEL_DIR    = Path(os.environ.get("ZO_SENTINEL_DIR", "/home/workspace/zo_sentinel"))
 RECIPE_PATH     = SENTINEL_DIR / "goose_recipes" / "directive_architect.yaml"
 PROPOSED_DIR    = SENTINEL_DIR / "directives" / "proposed"
 PENDING_DIR     = SENTINEL_DIR / "directives" / "pending"
-LOG_PATH        = Path("/home/workspace/logs/directive_generator_goose.log")
+LOG_PATH        = Path(os.environ.get("ZO_LOG_DIR", "/home/workspace/logs")) / "directive_generator_goose.log"
 
 POLL_SECS       = int(os.environ.get("DGG_POLL_SECS", 600))    # 10 min default
 HEARTBEAT_SECS  = int(os.environ.get("DGG_HEARTBEAT_SECS", 60))
@@ -82,8 +87,14 @@ CTX_MODULE_BUDGET = 30000   # byte ceiling for the WHOLE ctx incl. the module li
 HEARTBEAT_URL   = "http://127.0.0.1:8772/write"
 WS_QUERY_URL    = "http://127.0.0.1:8772/query"
 
-PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
-LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Best-effort at import: a read-only or absent root must not make the
+# module unimportable. The daemon still creates what it needs at run time
+# (run_goose_cycle -> PROPOSED_DIR.mkdir), so nothing is lost here.
+for _d in (PROPOSED_DIR, LOG_PATH.parent):
+    try:
+        _d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 logging.basicConfig(
     level=logging.INFO,

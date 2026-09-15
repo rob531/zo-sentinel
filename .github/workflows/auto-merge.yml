@@ -55,6 +55,16 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.pull_request.labels.*.name, 'autonomous-build') && contains(github.event.pull_request.labels.*.name, 'triage:solid') && github.event.pull_request.draft == false
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Logs resources.graphql.used/remaining/reset so the chairman can
+          # identify which workflow actually drains the installation budget.
+          # Per FU-406 next action: the real consumer is still UNIDENTIFIED.
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=autonomous-build used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Convergence-freeze guard + enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,6 +109,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'land-when-green') && github.event.pull_request.draft == false
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=opt-in-land used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Convergence-freeze guard + enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -166,25 +183,59 @@ jobs:
     if: github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=triage-solid-sweep used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Enable auto-merge on triage:solid autonomous-build PRs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # An EXPLICIT per-run budget, replacing the accidental one that gh's
+          # default --limit imposed. Same shape as green-sweep's SWEEP_CAP: the
+          # loop costs one `gh pr view --json files` per candidate, so the cost
+          # must be bounded by a number this file states rather than by a page
+          # size it does not know it has. Unlike a page size, this cap ANNOUNCES
+          # the remainder, so a backlog can never be silent again.
+          SWEEP_CAP: "80"
         run: |
           set -uo pipefail
           # ALREADY-ARMED PRs ARE SKIPPED AT THE LIST (added 2026-09-04).
           # `gh pr merge --auto` on an already-armed PR is a no-op, but the
           # `gh pr view --json files` above it costs an API call every run.
-          # Measured 2026-09-04: 14 of 30 matching PRs were already armed.
-          # This job is UNCAPPED (green-sweep caps at 60; this one does not),
-          # so the waste scales with queue depth -- and the queue grew 276->321
-          # in two days. A cost that scales with a growing population fails
-          # worse every day. Filtering changes no outcome: an armed PR needs no
-          # re-arming, and the ci-hold/freeze-hold guards still run on every
-          # push via the pull_request_target `autonomous-build` job.
-          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number,autoMergeRequest -q '.[] | select(.autoMergeRequest == null) | .number';
-                   gh pr list -R "$REPO" --state open --label land-when-green --json number,isDraft,autoMergeRequest -q '.[] | select(.isDraft == false) | select(.autoMergeRequest == null) | .number'; } | sort -u ) || prs=""
+          # Filtering changes no outcome: an armed PR needs no re-arming, and
+          # the ci-hold/freeze-hold guards still run on every push via the
+          # pull_request_target `autonomous-build` job.
+          #
+          # --limit IS MANDATORY (added 2026-09-12, FU-446). The comment that
+          # stood here claimed "this job is UNCAPPED (green-sweep caps at 60;
+          # this one does not)" and cited "14 of 30 matching PRs". It was capped
+          # the whole time, and 30 was the cap: `gh pr list` DEFAULTS TO 30 ROWS.
+          # pr-relander.yml already carries this warning; this file did not.
+          #
+          # Worse, `-q` filters the JSON AFTER gh has already truncated it, so
+          # the unarmed PRs the sweep exists to find are selected from the newest
+          # 30 only. Measured live 2026-09-12 against rob531/zo-sentinel:
+          #   rows fetched by the command as written : 30
+          #   PRs actually carrying both labels      : 132
+          #   unarmed inside the fetched page        : 19   <- the real yield
+          #   unarmed across the true population     : 104
+          #   structurally unreachable by this sweep : 85
+          # Nothing went red for that; the job logged a clean run every time.
+          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --limit 500 --json number,autoMergeRequest -q '.[] | select(.autoMergeRequest == null) | .number';
+                   gh pr list -R "$REPO" --state open --label land-when-green --limit 500 --json number,isDraft,autoMergeRequest -q '.[] | select(.isDraft == false) | select(.autoMergeRequest == null) | .number'; } | sort -u ) || prs=""
+          candidates=$(echo "$prs" | grep -c . || true)
+          echo "::notice::triage-solid-sweep: $candidates unarmed candidate(s) at --limit 500, budget $SWEEP_CAP this run"
+          if [ "$candidates" -gt "$SWEEP_CAP" ]; then
+            echo "::warning::backlog exceeds the per-run budget: $candidates candidates, $SWEEP_CAP examined, $((candidates - SWEEP_CAP)) deferred to the next sweep"
+          fi
+          examined=0
           for pr in $prs; do
+            [ "$examined" -ge "$SWEEP_CAP" ] && break
+            examined=$((examined+1))
             files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
             # CI-SURFACE GUARD (added 2026-09-01, alongside RELANDER_TOKEN).
           # A write-scoped PAT now exists in this PUBLIC repo, and ~90% of PRs
@@ -231,6 +282,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=green-sweep used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Enable auto-merge on any green autonomous-build PR
         env:
           GH_TOKEN: ${{ github.token }}

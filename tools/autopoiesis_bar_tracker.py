@@ -53,10 +53,21 @@ LOGS = Path(os.environ.get("ZO_LOGS", WORKSPACE / "logs"))
 CSV_PATH = Path(os.environ.get("ZO_BAR_CSV", WORKSPACE / "autopoiesis_bar.csv"))
 HEARTBEAT = LOGS / "autopoiesis_bar_heartbeat.json"
 
+# Two writers share this CSV and `phase` says which one wrote a row.
+# They do NOT measure the same thing, so they may not share column names
+# (CofC 2026-09-13). The MACHINE writer (phase=MEASURED-ONLY) counts
+# directories on disk -- the vanity metric the doctrine forbids grading on --
+# and writes the fs_* columns. The GRADED writer measures spineful emission
+# (mounted, live, reachable) and keeps the bare names, which are what T1/T2/T3
+# read. Each writer leaves the other's columns EMPTY: an empty cell is honest,
+# a wrong-definition number reads as a trend. Measured 2026-09-13, same day:
+# active_count 590 vs 33, expanded_total 7296 vs 1470, build_service 7418 vs 7.
 COLUMNS = ["date", "phase", "expanded_total", "redirects_total",
            "build_service_directives", "degradation_rate", "casing_repairs_24h",
            "staged_count", "active_count", "orphan_raw", "orphan_effective",
-           "T1", "T2", "T3", "actions_taken"]
+           "T1", "T2", "T3", "actions_taken",
+           "fs_expanded_total", "fs_build_service_directives",
+           "fs_active_count"]
 
 DEFAULT_INTERVAL = 86400  # daily, matching the original task's cadence
 
@@ -88,7 +99,8 @@ def measure() -> dict:
 
     # 2. EMISSION UPTAKE
     prop = SENTINEL / "directives" / "proposed"
-    m["expanded_total"] = len(list(prop.glob("*.expanded"))) if prop.is_dir() else 0
+    m["fs_expanded_total"] = (len(list(prop.glob("*.expanded")))
+                              if prop.is_dir() else 0)
     red = prop / ".service_redirects.jsonl"
     m["redirects_total"] = (sum(1 for _ in red.open()) if red.exists() else 0)
     n = 0
@@ -96,7 +108,7 @@ def measure() -> dict:
         dd = SENTINEL / "directives" / d
         if dd.is_dir():
             n += sum(1 for f in dd.iterdir() if "build_service" in f.name)
-    m["build_service_directives"] = n
+    m["fs_build_service_directives"] = n
 
     # 3. FU-031 degradation + autonomous casing heals
     rc, out = sh([sys.executable, "tools/builder_selftest_integrity_report.py",
@@ -117,7 +129,9 @@ def measure() -> dict:
 
     # 4. SPINEFUL YIELD
     m["staged_count"] = _count_dir(SENTINEL / "services" / "staged")
-    m["active_count"] = _count_dir(SENTINEL / "services" / "active")
+    # Directories on disk, NOT liveness. Named fs_ so no reader can
+    # mistake it for the graded ship-gate number.
+    m["fs_active_count"] = _count_dir(SENTINEL / "services" / "active")
 
     # 5. CENSUS
     m["orphan_raw"] = m["orphan_effective"] = "UNKNOWN"
@@ -170,18 +184,46 @@ def measure() -> dict:
 
 
 def write_row(m: dict) -> str:
-    """One row per date; a same-day re-run replaces, never duplicates."""
+    """One row per date; a same-day re-run replaces, never duplicates.
+
+    GRADED SUPERSEDES MACHINE (FU-353, peer decision
+    bar-csv-machine-writer-must-not-erase-graded-rows, CLEARED 2026-08-31):
+    the machine (MEASURED-ONLY) writer must never erase a same-date row a
+    grader wrote. Before this guard, `r[0] != m["date"]` dropped EVERY
+    same-date row regardless of phase, so a daemon restart between a graded
+    write and midnight silently erased the graded row (observed 2026-08-31;
+    the daemon fires cycle() immediately on restart with no initial sleep).
+    A graded (non-MEASURED-ONLY) writer still replaces anything; a machine
+    writer still replaces machine rows; one-row-per-date is preserved.
+    """
     rows, header = [], COLUMNS
     if CSV_PATH.exists():
         with CSV_PATH.open(newline="") as fh:
             rd = list(csv.reader(fh))
         if rd:
             header = rd[0]
+            # A header read off disk that predates a COLUMNS addition would
+            # silently drop every new field (the row is built from `header`).
+            # Upgrade it and pad old rows so the new columns are EMPTY, not
+            # absent -- unknown is not zero.
+            missing = [c for c in COLUMNS if c not in header]
+            if missing:
+                header = header + missing
+                rd[1:] = [r + [""] * (len(header) - len(r)) for r in rd[1:] if r]
+            same = [r for r in rd[1:] if r and r[0] == m["date"]]
+            if m.get("phase") == "MEASURED-ONLY" and any(
+                    len(r) > 1 and r[1] != "MEASURED-ONLY" for r in same):
+                # Graded row present: leave the CSV untouched, loudly.
+                print(f"write_row: graded row for {m['date']} supersedes "
+                      f"machine write; CSV left untouched", file=sys.stderr)
+                return ""
             rows = [r for r in rd[1:] if r and r[0] != m["date"]]
     row = [str(m.get(c, "")) for c in header]
     rows.append(row)
     rows.sort(key=lambda r: r[0])
-    tmp = CSV_PATH.with_suffix(".csv.tmp")
+    # Per-pid tmp name: two children racing on a fixed ".csv.tmp" produced a
+    # FileNotFoundError at 2026-08-31T03:58Z when one replaced the other's tmp.
+    tmp = CSV_PATH.with_suffix(f".csv.{os.getpid()}.tmp")
     with tmp.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(header)
@@ -196,7 +238,10 @@ def cycle() -> dict:
     LOGS.mkdir(parents=True, exist_ok=True)
     HEARTBEAT.write_text(json.dumps({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "date": m["date"], "row_written": True,
+        # bool(line): False when the graded-supersedes guard skipped the write
+        # (FU-353) -- a heartbeat asserting a write that did not happen is the
+        # green-that-carries-no-information class.
+        "date": m["date"], "row_written": bool(line),
         "phase": m["phase"],
         "degradation_rate": m["degradation_rate"],
         "orphan_raw": m["orphan_raw"], "orphan_effective": m["orphan_effective"],

@@ -1,0 +1,46 @@
+[service]
+name = "write_service_staleness_probe"
+import_path = "services.active.write_service_staleness_probe.router"
+prefix = "/api"
+tag = "write_service_staleness_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[routes.staleness_summary]
+path = "/staleness/summary"
+method = "GET"
+handler = "get_staleness_summary"
+
+[routes.signal_staleness]
+path = "/staleness/signals"
+method = "GET"
+handler = "get_signal_staleness"
+
+[routes.server_staleness]
+path = "/staleness/servers"
+method = "GET"
+handler = "get_server_staleness"
+
+[routes.axis_staleness]
+path = "/staleness/axis"
+method = "GET"
+handler = "get_axis_staleness"
+
+[data_sources.app]
+type = "postgres"
+models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "Org", "User"]
+
+[data_sources.bus]
+type = "bus"
+tables = ["mcp_signal_scores", "mcp_server_registry", "mcp_llm_axis_scores", "mesh_memory"]
+
+[thresholds]
+signal_max_age_hours = 24
+server_max_age_hours = 168
+axis_max_age_hours = 72
+
+[test]
+self_test_endpoint = "/api/staleness/summary"
+self_test_method = "GET"
+self_test_status = 200

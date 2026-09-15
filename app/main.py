@@ -16,6 +16,7 @@ from .db import init_db
 from .rbac import require_role
 from .security import Principal, get_principal
 from .settings import settings
+from .ask_router import router as ask_router
 
 # Factory-built routers are no longer hand-listed here. The SOA spine
 # (services/active/ -> app/_spine_generated.py) is the source of truth; see below.
@@ -58,6 +59,7 @@ def admin_ping(principal: Principal = Depends(require_role("admin"))):
 
 app.include_router(auth.router)
 app.include_router(clerk_webhook.router)
+app.include_router(ask_router)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
@@ -74,7 +76,6 @@ def _render(name: str) -> str:
     # IMAGE, and a literal in a checked-in .html is a number someone has to
     # remember to bump -- which is the failure mode, not the fix.
     return _inject_build_badge(html)
-
 
 
 @app.get("/", response_class=HTMLResponse)

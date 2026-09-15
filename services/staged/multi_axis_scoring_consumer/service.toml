@@ -1,0 +1,47 @@
+[service]
+name = "multi_axis_scoring_consumer"
+import_path = "services.active.multi_axis_scoring_consumer.router"
+prefix = "/api"
+tag = "multi_axis_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+module = "services.active.multi_axis_scoring_consumer.router"
+
+[[endpoints]]
+path = "/scores"
+method = "GET"
+handler = "get_axis_scores"
+description = "Retrieve multi-axis scoring records"
+
+[[endpoints]]
+path = "/scores/{server_id}"
+method = "GET"
+handler = "get_server_scores"
+description = "Get scores for a specific MCP server"
+
+[[endpoints]]
+path = "/scores/{server_id}/disputes"
+method = "GET"
+handler = "get_score_disputes"
+description = "Get disputes for a server's scores"
+
+[[endpoints]]
+path = "/scores/{server_id}/disputes"
+method = "POST"
+handler = "submit_dispute"
+description = "Submit a score dispute"
+
+[[endpoints]]
+path = "/signals"
+method = "GET"
+handler = "get_signal_scores"
+description = "Get signal scores from mesh store"
+
+[[endpoints]]
+path = "/aggregate"
+method = "POST"
+handler = "compute_aggregate_scores"
+description = "Compute aggregate multi-axis scores"

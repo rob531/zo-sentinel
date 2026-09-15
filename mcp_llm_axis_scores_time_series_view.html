@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Axis Scores Time Series</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #475569;
+            --tier-critical: #dc2626;
+            --tier-high: #ea580c;
+            --tier-medium: #ca8a04;
+            --tier-low: #65a30d;
+            --tier-minimal: #0d9488;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { font-size: 1.75rem; margin-bottom: 8px; color: var(--text-primary); }
+        .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 24px; }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .control-group { display: flex; flex-direction: column; gap: 4px; }
+        .control-group label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; }
+        .control-group select, .control-group input {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            min-width: 180px;
+        }
+        .control-group select:focus, .control-group input:focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+        }
+        .btn {
+            padding: 8px 16px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            align-self: flex-end;
+        }
+        .btn:hover { background: var(--accent-hover); }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .card h2 {
+            font-size: 1rem;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .axis-chart {
+            height: 200px;
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .axis-chart canvas { width: 100% !important; height: 100% !important; }
+        .axis-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .axis-table { width: 100%; border-collapse: collapse; }
+        .axis-table th, .axis-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+        .axis-table th {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+        }
+        .axis-table tr:hover { background: rgba(255,255,255,0.03); }
+        .axis-name { font-weight: 500; color: var(--text-primary); }
+        .score-cell { font-family: 'Courier New', monospace; }
+        .tier-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .tier-badge.critical { background: rgba(220,38,38,0.2); color: var(--tier-critical); }
+        .tier-badge.high { background: rgba(234,88,12,0.2); color: var(--tier-high); }
+        .tier-badge.medium { background: rgba(202,138,4,0.2); color: var(--tier-medium); }
+        .tier-badge.low { background: rgba(101,163,13,0.2); color: var(--tier-low); }
+        .tier-badge.minimal { background: rgba(13,148,136,0.2); color: var(--tier-minimal); }
+        .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+        .bar-row { display: flex; align-items: center; gap: 12px; }
+        .bar-label { width: 140px; font-size: 0.8rem; text-align: right; flex-shrink: 0; color: var(--text-secondary); }
+        .bar-container { flex: 1; height: 20px; background: var(--bg-card); border-radius: 4px; overflow: hidden; }
+        .bar {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            padding-left: 8px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            min-width: 30px;
+        }
+        .bar.critical { background: var(--tier-critical); }
+        .bar.high { background: var(--tier-high); }
+        .bar.medium { background: var(--tier-medium); color: #000; }
+        .bar.low { background: var(--tier-low); }
+        .bar.minimal { background: var(--tier-minimal); }
+        .message {
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .message.loading { background: rgba(59,130,246,0.1); color: var(--accent); }
+        .message.error { background: rgba(220,38,38,0.1); color: var(--tier-critical); }
+        .message.empty { background: rgba(148,163,184,0.1); color: var(--text-secondary); }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .criteria-version {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+        .full-width { grid-column: 1 / -1; }
+        @media (max-width: 768px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .controls { flex-direction: column; }
+            .control-group select, .control-group input { width: 100%; }
+            .bar-label { width: 100px; font-size: 0.7rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LLM Axis Scores Time Series</h1>
+        <p class="subtitle" id="subtitle">Loading...</p>
+
+        <div class="controls" role="search" aria-label="Dashboard controls">
+            <div class="control-group">
+                <label for="daysInput">Days</label>
+                <input type="number" id="daysInput" value="30" min="1" max="365" aria-label="Number of days to look back">
+            </div>
+            <div class="control-group">
+                <label for="axisSelect">Risk Axis</label>
+                <select id="axisSelect" aria-label="Select risk axis to visualize">
+                    <option value="">All Axes</option>
+                </select>
+            </div>
+            <button class="btn" id="refreshBtn" aria-label="Refresh dashboard data">Refresh</button>
+        </div>
+
+        <div id="loadingMsg" class="message loading" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>Loading axis scores...
+        </div>
+        <div id="errorMsg" class="message error" style="display:none;" role="alert" aria-live="assertive"></div>
+
+        <div class="dashboard-grid" id="dashboardGrid" style="display:none;">
+            <!-- Overview card -->
+            <div class="card full-width">
+                <h2>Axis Overview</h2>
+                <div id="overviewContainer">
+                    <div id="overviewChart" class="axis-chart" aria-label="Axis score overview chart"></div>
+                    <table class="axis-table" id="overviewTable" aria-label="Axis overview table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Axis</th>
+                                <th scope="col">Avg P(Top)</th>
+                                <th scope="col">Avg P(Critical)</th>
+                                <th scope="col">Avg P(Danger)</th>
+                                <th scope="col">Escalated</th>
+                                <th scope="col">Risk Tier</th>
+                            </tr>
+                        </thead>
+                        <tbody id="overviewTableBody"></tbody>
+                    </table>
+                    <p class="criteria-version" id="criteriaVersion"></p>
+                </div>
+            </div>
+
+            <!-- Tier distribution card -->
+            <div class="card">
+                <h2>Risk Tier Distribution</h2>
+                <div id="tierChart" class="axis-chart" aria-label="Risk tier distribution chart"></div>
+                <div id="tierBarChart" class="bar-chart" aria-label="Risk tier bar chart"></div>
+            </div>
+
+            <!-- Axis trend card -->
+            <div class="card">
+                <h2>Axis Trend</h2>
+                <div id="trendChart" class="axis-chart" aria-label="Axis trend over time chart"></div>
+                <div class="axis-legend" id="trendLegend" aria-label="Trend chart legend"></div>
+            </div>
+
+            <!-- Per-axis probability card -->
+            <div class="card">
+                <h2>Axis Probability Distribution</h2>
+                <div id="probChart" class="axis-chart" aria-label="Axis probability distribution chart"></div>
+                <div class="axis-legend" id="probLegend" aria-label="Probability chart legend"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // In-memory auth state — no localStorage/sessionStorage
+        const authState = { token: null };
+
+        // API base URL — single const at top of file
+        const API_BASE = window.location.origin;
+
+        const AXIS_NAMES = [
+            'overall_risk', 'auth_strength', 'capability_breadth',
+            'data_sensitivity', 'network_egress', 'maintainer_trust', 'exploit_surface'
+        ];
+
+        const AXIS_LABELS = {
+            overall_risk: 'Overall Risk',
+            auth_strength: 'Auth Strength',
+            capability_breadth: 'Capability Breadth',
+            data_sensitivity: 'Data Sensitivity',
+            network_egress: 'Network Egress',
+            maintainer_trust: 'Maintainer Trust',
+            exploit_surface: 'Exploit Surface'
+        };
+
+        const TIER_COLORS = {
+            critical: '#dc2626',
+            high: '#ea580c',
+            medium: '#ca8a04',
+            low: '#65a30d',
+            minimal: '#0d9488'
+        };
+
+        // DOM refs
+        const daysInput = document.getElementById('daysInput');
+        const axisSelect = document.getElementById('axisSelect');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const loadingMsg = document.getElementById('loadingMsg');
+        const errorMsg = document.getElementById('errorMsg');
+        const dashboardGrid = document.getElementById('dashboardGrid');
+        const subtitle = document.getElementById('subtitle');
+        const criteriaVersion = document.getElementById('criteriaVersion');
+        const overviewTableBody = document.getElementById('overviewTableBody');
+        const tierBarChart = document.getElementById('tierBarChart');
+
+        // Populate axis select
+        AXIS_NAMES.forEach(function(ax) {
+            const opt = document.createElement('option');
+            opt.value = ax;
+            opt.textContent = AXIS_LABELS[ax];
+            axisSelect.appendChild(opt);
+        });
+
+        // Helpers
+        function showLoading() {
+            loadingMsg.style.display = 'block';
+            errorMsg.style.display = 'none';
+            dashboardGrid.style.display = 'none';
+        }
+
+        function showError(msg) {
+            loadingMsg.style.display = 'none';
+            errorMsg.style.display = 'block';
+            errorMsg.textContent = msg;
+            dashboardGrid.style.display = 'none';
+        }
+
+        function showData() {
+            loadingMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+            dashboardGrid.style.display = 'grid';
+        }
+
+        function deriveTier(pTop, pCritical, pDanger) {
+            if (pTop >= 0.8 || pCritical >= 0.7) return 'critical';
+            if (pTop >= 0.6 || pDanger >= 0.7) return 'high';
+            if (pTop >= 0.4 || pDanger >= 0.5) return 'medium';
+            if (pTop >= 0.2 || pDanger >= 0.3) return 'low';
+            return 'minimal';
+        }
+
+        function formatProb(val) {
+            if (val === null || val === undefined) return '—';
+            return (val * 100).toFixed(1) + '%';
+        }
+
+        function safeText(str) {
+            if (str === null || str === undefined) return '—';
+            return String(str);
+        }
+
+        // Fetch wrapper with bearer token
+        async function apiFetch(url) {
+            const headers = { 'Accept': 'application/json' };
+            if (authState.token) {
+                headers['Authorization'] = 'Bearer ' + authState.token;
+            }
+            const resp = await fetch(url, { headers: headers });
+            if (!resp.ok) {
+                const text = await resp.text().catch(function() { return ''; });
+                throw new Error('HTTP ' + resp.status + ': ' + text);
+            }
+            return resp.json();
+        }
+
+        // Fetch overview data
+        async function fetchOverview(days) {
+            const url = API_BASE + '/api/risk-axis/overview?days=' + encodeURIComponent(days);
+            return apiFetch(url);
+        }
+
+        // Fetch axis trend
+        async function fetchAxisTrend(axisName, days) {
+            if (!axisName) return null;
+            const url = API_BASE + '/api/risk-axis/axis/' + encodeURIComponent(axisName) + '/trend?days=' + encodeURIComponent(days);
+            return apiFetch(url);
+        }
+
+        // Fetch tier distribution
+        async function fetchTierDistribution(days) {
+            const url = API_BASE + '/api/risk-axis/tier-distribution?days=' + encodeURIComponent(days);
+            return apiFetch(url);
+        }
+
+        // Canvas drawing helpers
+        function drawLineChart(canvasEl, data, keyY, keyX, colorFn) {
+            const canvas = canvasEl;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            const w = rect.width;
+            const h = rect.height;
+            const pad = { top: 10, right: 10, bottom: 30, left: 45 };
+            const chartW = w - pad.left - pad.right;
+            const chartH = h - pad.top - pad.bottom;
+
+            ctx.clearRect(0, 0, w, h);
+            if (!data || data.length === 0) {
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px -apple-system, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No data available', w / 2, h / 2);
+                return;
+            }
+
+            const values = data.map(function(d) { return d[keyY] !== null && d[keyY] !== undefined ? d[keyY] : 0; });
+            const minVal = 0;
+            const maxVal = 1;
+            const xScale = function(i) { return pad.left + (i / Math.max(data.length - 1, 1)) * chartW; };
+            const yScale = function(v) { return pad.top + (1 - (v - minVal) / (maxVal - minVal)) * chartH; };
+
+            // Grid lines
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 0.5;
+            ctx.setLineDash([4, 4]);
+            for (var t = 0; t <= 1; t += 0.25) {
+                var y = pad.top + (1 - t) * chartH;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(pad.left + chartW, y);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // Y axis labels
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.textAlign = 'right';
+            for (var t = 0; t <= 1; t += 0.25) {
+                ctx.fillText((t * 100).toFixed(0) + '%', pad.left - 5, pad.top + (1 - t) * chartH + 3);
+            }
+
+            // X axis labels (first, mid, last)
+            ctx.textAlign = 'center';
+            if (data.length > 0) {
+                ctx.fillText(safeText(data[0][keyX]).substring(0, 10), xScale(0), h - 8);
+                if (data.length > 1) {
+                    ctx.fillText(safeText(data[Math.floor(data.length / 2)][keyX]).substring(0, 10), xScale(Math.floor(data.length / 2)), h - 8);
+                    ctx.fillText(safeText(data[data.length - 1][keyX]).substring(0, 10), xScale(data.length - 1), h - 8);
+                }
+            }
+
+            // Line
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            data.forEach(function(d, i) {
+                var v = d[keyY] !== null && d[keyY] !== undefined ? d[keyY] : 0;
+                if (i === 0) ctx.moveTo(xScale(i), yScale(v));
+                else ctx.lineTo(xScale(i), yScale(v));
+            });
+            ctx.stroke();
+
+            // Fill under line
+            ctx.globalAlpha = 0.1;
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            data.forEach(function(d, i) {
+                var v = d[keyY] !== null && d[keyY] !== undefined ? d[keyY] : 0;
+                if (i === 0) ctx.moveTo(xScale(i), yScale(v));
+                else ctx.lineTo(xScale(i), yScale(v));
+            });
+            ctx.lineTo(xScale(data.length - 1), pad.top + chartH);
+            ctx.lineTo(xScale(0), pad.top + chartH);
+            ctx.closePath();
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // Dots
+            data.forEach(function(d, i) {
+                var v = d[keyY] !== null && d[keyY] !== undefined ? d[keyY] : 0;
+                ctx.beginPath();
+                ctx.arc(xScale(i), yScale(v), 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#3b82f6';
+                ctx.fill();
+            });
+        }
+
+        function drawOverviewBars(container, axes) {
+            if (!axes || axes.length === 0) {
+                container.innerHTML = '<div class="message empty">No axis data available</div>';
+                return;
+            }
+            var total = axes.reduce(function(s, a) { return s + (a.count || 0); }, 0) || 1;
+            var html = '';
+            axes.forEach(function(ax) {
+                var pct = Math.max(((ax.count || 0) / total) * 100, 2);
+                var tier = deriveTier(ax.avg_p_top || 0, ax.avg_p_critical || 0, ax.avg_p_danger || 0);
+                html += '<div class="bar-row">';
+                html += '<span class="bar-label">' + safeText(AXIS_LABELS[ax.axis_name] || ax.axis_name) + '</span>';
+                html += '<div class="bar-container">';
+                html += '<div class="bar ' + tier + '" style="width:' + pct + '%">' + (ax.count || 0) + '</div>';
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
+        }
+
+        function renderOverviewTable(axes) {
+            if (!axes || axes.length === 0) {
+                overviewTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">No data available</td></tr>';
+                return;
+            }
+            var html = '';
+            axes.forEach(function(ax) {
+                var tier = deriveTier(ax.avg_p_top || 0, ax.avg_p_critical || 0, ax.avg_p_danger || 0);
+                html += '<tr>';
+                html += '<td class="axis-name">' + safeText(AXIS_LABELS[ax.axis_name] || ax.axis_name) + '</td>';
+                html += '<td class="score-cell">' + formatProb(ax.avg_p_top) + '</td>';
+                html += '<td class="score-cell">' + formatProb(ax.avg_p_critical) + '</td>';
+                html += '<td class="score-cell">' + formatProb(ax.avg_p_danger) + '</td>';
+                html += '<td>' + (ax.escalated_count || 0) + '</td>';
+                html += '<td><span class="tier-badge ' + tier + '">' + tier.toUpperCase() + '</span></td>';
+                html += '</tr>';
+            });
+            overviewTableBody.innerHTML = html;
+        }
+
+        function renderTierBarChart(points) {
+            if (!points || points.length === 0) {
+                tierBarChart.innerHTML = '<div class="message empty">No tier distribution data</div>';
+                return;
+            }
+            var latest = points[points.length - 1];
+            var tiers = ['critical', 'high', 'medium', 'low', 'minimal'];
+            var total = tiers.reduce(function(s, t) { return s + (latest[t] || 0); }, 0) || 1;
+            var html = '';
+            tiers.forEach(function(tier) {
+                var count = latest[tier] || 0;
+                var pct = Math.max((count / total) * 100, 2);
+                html += '<div class="bar-row">';
+                html += '<span class="bar-label">' + tier.charAt(0).toUpperCase() + tier.slice(1) + '</span>';
+                html += '<div class="bar-container">';
+                html += '<div class="bar ' + tier + '" style="width:' + pct + '%">' + count + '</div>';
+                html += '</div></div>';
+            });
+            tierBarChart.innerHTML = html;
+        }
+
+        function renderTrendLegend(container, axisName) {
+            container.innerHTML = '<div class="legend-item"><span class="legend-dot" style="background:#3b82f6;" aria-hidden="true"></span> ' + safeText(AXIS_LABELS[axisName] || axisName) + '</div>';
+        }
+
+        function renderProbLegend(container) {
+            var html = '';
+            [{ key: 'p_top', label: 'P(Top)', color: '#dc2626' }, { key: 'p_critical', label: 'P(Critical)', color: '#ea580c' }, { key: 'p_danger', label: 'P(Danger)', color: '#ca8a04' }].forEach(function(item) {
+                html += '<div class="legend-item"><span class="legend-dot" style="background:' + item.color + ';" aria-hidden="true"></span> ' + item.label + '</div>';
+            });
+            container.innerHTML = html;
+        }
+
+        // Draw probability distribution bar chart for one axis
+        function drawProbBars(canvasEl, probs) {
+            if (!probs || typeof probs !== 'object') {
+                probs = { p_top: 0, p_critical: 0, p_danger: 0 };
+            }
+            var items = [
+                { key: 'p_top', label: 'P(Top)', color: '#dc2626' },
+                { key: 'p_critical', label: 'P(Critical)', color: '#ea580c' },
+                { key: 'p_danger', label: 'P(Danger)', color: '#ca8a04' }
+            ];
+            var canvas = canvasEl;
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var w = rect.width;
+            var h = rect.height;
+            ctx.clearRect(0, 0, w, h);
+            var barH = Math.min(40, (h - 20) / items.length - 8);
+            items.forEach(function(item, i) {
+                var val = probs[item.key] !== null && probs[item.key] !== undefined ? probs[item.key] : 0;
+                var barW = val * (w - 80);
+                var y = 10 + i * (barH + 8);
+                // Label
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px -apple-system, sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText(item.label, 75, y + barH / 2 + 4);
+                // Bar background
+                ctx.fillStyle = '#334155';
+                ctx.fillRect(80, y, w - 90, barH);
+                // Bar fill
+                ctx.fillStyle = item.color;
+                ctx.fillRect(80, y, barW, barH);
+                // Value label
+                ctx.fillStyle = '#f1f5f9';
+                ctx.textAlign = 'left';
+                ctx.fillText((val * 100).toFixed(1) + '%', 80 + barW + 4, y + barH / 2 + 4);
+            });
+        }
+
+        // Main render function
+        async function loadData() {
+            var days = parseInt(daysInput.value, 10) || 30;
+            days = Math.min(365, Math.max(1, days));
+            var selectedAxis = axisSelect.value || '';
+
+            showLoading();
+            subtitle.textContent = 'Showing last ' + days + ' days of axis score history';
+
+            try {
+                // Fetch all data in parallel
+                var [overview, tierData] = await Promise.all([
+                    fetchOverview(days).catch(function(e) { return { axes: [], total_servers: 0, as_of: null }; }),
+                    fetchTierDistribution(days).catch(function(e) { return { points: [] }; })
+                ]);
+
+                // Fetch axis trend if selected
+                var trendData = null;
+                if (selectedAxis) {
+                    trendData = await fetchAxisTrend(selectedAxis, days).catch(function(e) { return null; });
+                }
+
+                showData();
+
+                // Render overview
+                renderOverviewTable(overview.axes || []);
+
+                // Render criteria version from overview
+                criteriaVersion.textContent = 'As of: ' + (overview.as_of ? overview.as_of.substring(0, 19) + 'Z' : '—') + ' | Servers: ' + (overview.total_servers || 0);
+
+                // Draw overview bars
+                var overviewChart = document.getElementById('overviewChart');
+                drawOverviewBars(overviewChart, overview.axes || []);
+
+                // Render tier bar chart
+                renderTierBarChart(tierData.points || []);
+
+                // Render trend chart
+                var trendCanvas = document.getElementById('trendChart');
+                if (trendData && trendData.points && trendData.points.length > 0) {
+                    drawLineChart(trendCanvas, trendData.points, 'avg_p_top', 'day');
+                    renderTrendLegend(document.getElementById('trendLegend'), selectedAxis || 'overall_risk');
+                } else {
+                    var tCtx = trendCanvas.getContext('2d');
+                    tCtx.clearRect(0, 0, trendCanvas.width, trendCanvas.height);
+                    tCtx.fillStyle = '#94a3b8';
+                    tCtx.font = '12px -apple-system, sans-serif';
+                    tCtx.textAlign = 'center';
+                    tCtx.fillText(selectedAxis ? 'No trend data for ' + (AXIS_LABELS[selectedAxis] || selectedAxis) : 'Select an axis to view trend', trendCanvas.width / (window.devicePixelRatio || 1) / 2, trendCanvas.height / (window.devicePixelRatio || 1) / 2);
+                    renderTrendLegend(document.getElementById('trendLegend'), selectedAxis || 'overall_risk');
+                }
+
+                // Render probability chart
+                var probCanvas = document.getElementById('probChart');
+                var probData = null;
+                if (selectedAxis && overview.axes) {
+                    overview.axes.forEach(function(ax) {
+                        if (ax.axis_name === selectedAxis) {
+                            probData = { p_top: ax.avg_p_top, p_critical: ax.avg_p_critical, p_danger: ax.avg_p_danger };
+                        }
+                    });
+                } else if (overview.axes && overview.axes.length > 0) {
+                    // Average across all axes
+                    var sumTop = 0, sumCrit = 0, sumDanger = 0, cnt = 0;
+                    overview.axes.forEach(function(ax) {
+                        if (ax.avg_p_top != null) { sumTop += ax.avg_p_top; cnt++; }
+                        if (ax.avg_p_critical != null) sumCrit += ax.avg_p_critical;
+                        if (ax.avg_p_danger != null) sumDanger += ax.avg_p_danger;
+                    });
+                    probData = { p_top: cnt > 0 ? sumTop / cnt : 0, p_critical: cnt > 0 ? sumCrit / cnt : 0, p_danger: cnt > 0 ? sumDanger / cnt : 0 };
+                }
+                drawProbBars(probCanvas, probData);
+                renderProbLegend(document.getElementById('probLegend'));
+
+            } catch (err) {
+                showError('Failed to load data: ' + err.message);
+            }
+        }
+
+        // Event listeners
+        refreshBtn.addEventListener('click', loadData);
+        axisSelect.addEventListener('change', loadData);
+        daysInput.addEventListener('change', loadData);
+
+        // Initial load
+        loadData();
+
+        // SELFTEST: verify render functions handle empty API response
+        if (typeof window !== 'undefined') {
+            window._selfTest = function() {
+                var testCases = [
+                    { axes: [] },
+                    { axes: null },
+                    {},
+                    { axes: [{ axis_name: 'overall_risk', avg_p_top: 0.5, avg_p_critical: 0.1, p_danger: 0.2, count: 10, escalated_count: 1 }] }
+                ];
+                testCases.forEach(function(data) {
+                    renderOverviewTable(data.axes);
+                    drawOverviewBars(document.createElement('div'), data.axes);
+                    renderTierBarChart([]);
+                    if (data.axes && data.axes[0]) {
+                        var probCanvas = document.createElement('canvas');
+                        probCanvas.width = 400;
+                        probCanvas.height = 200;
+                        drawProbBars(probCanvas, { p_top: data.axes[0].avg_p_top, p_critical: data.axes[0].avg_p_critical, p_danger: data.axes[0].p_danger });
+                    }
+                });
+                console.log('Self-test PASS: render functions handle empty/null inputs without throwing');
+            };
+            window._selfTest();
+        }
+    })();
+    </script>
+</body>
+</html>

@@ -150,3 +150,85 @@ def test_line_terminator_detects_the_convention():
     assert fu_ledger.line_terminator(["a\n", "b\n"]) == "\n"
     assert fu_ledger.line_terminator(["a\r\n", "b\r\n"]) == "\r\n"
     assert fu_ledger.line_terminator([]) == ""
+
+
+# --------------------------------------------------------------------------
+# HEAD_RE contract: bad heading FORMS are invisible to parse() (FU-346).
+#
+# fu_ledger.HEAD_RE is `^### FU-(\d+)\b(?:\s*\|\s*(.*))?$`.
+# An entry headed `## FU-NNN -- title` or `### FU-NNN -- title` does not
+# match it, so the entry does not exist to fu_verify.py -- its `verify:`
+# predicate is never executed -- while ledger_lint.py still reports the
+# file CLEAN, because it parses headings its own way.
+#
+# On 2026-09-01 improvement-loop filed FU-362, FU-368 and FU-369 as
+# `## FU-NNN -- title`; all three were invisible, and FU-369 was a 14-site
+# census whose predicate sat unrun.
+#
+# The level-only control (2026-08-13, cycle-0045) demoted `##` -> `###`
+# and the parsed count did not move, because LEVEL is only half the
+# predicate: `### FU-NNN -- title` is `###` and still invisible. Fixing
+# level alone converts an invisible `##`-entry into an invisible `###`-
+# entry. These tests are the negative control that cycle-0045 lacked: they
+# prove that BOTH the wrong level AND the wrong separator are separately
+# sufficient to make parse() return nothing.
+# --------------------------------------------------------------------------
+
+def _bad_form_ledger(heading_line):
+    """Minimal ledger with a single entry using the given heading line."""
+    return [
+        "# FOLLOWUPS",
+        "",
+        heading_line,
+        "- date: 2026-08-13 - source: test - status: open - priority: P1",
+        "- class: defect",
+        "- detail: a detail that never gets processed.",
+        "- verify: NONE",
+        "- resolution:",
+    ]
+
+
+def test_double_hash_dash_separator_is_invisible_to_parse():
+    """NEGATIVE CONTROL: `## FU-NNN -- title` is not returned by parse().
+
+    This is the form improvement-loop emitted on 2026-09-01 for FU-362,
+    FU-368 and FU-369. All three were invisible to fu_verify.py while
+    ledger_lint.py reported CLEAN.
+    """
+    lines = _bad_form_ledger("## FU-920 -- a title with the wrong level and separator")
+    entries = fu_ledger.parse(lines)
+    assert len(entries) == 0, (
+        "parse() returned %d entries for a '## FU-NNN -- title' heading; "
+        "it should return 0. HEAD_RE is the contract." % len(entries)
+    )
+
+
+def test_triple_hash_dash_separator_is_invisible_to_parse():
+    """NEGATIVE CONTROL: `### FU-NNN -- title` is not returned by parse().
+
+    This is the case that made cycle-0045's level-only control look like a
+    refuted hypothesis: demoting `##` -> `###` left the count unchanged
+    because the separator was ALSO wrong. Level is only half the predicate.
+    HEAD_RE wants ` | ` after the number, not ` -- `.
+    """
+    lines = _bad_form_ledger("### FU-921 -- a title with the right level but wrong separator")
+    entries = fu_ledger.parse(lines)
+    assert len(entries) == 0, (
+        "parse() returned %d entries for a '### FU-NNN -- title' heading; "
+        "it should return 0. HEAD_RE is the contract." % len(entries)
+    )
+
+
+def test_correct_pipe_form_is_visible_to_parse():
+    """Positive control: `### FU-NNN | title` IS returned by parse().
+
+    The positive control and both negative controls must be observed in the
+    same test run -- a green without a paired red is not evidence (R3).
+    """
+    lines = _bad_form_ledger("### FU-922 | the correct heading form")
+    entries = fu_ledger.parse(lines)
+    assert len(entries) == 1, (
+        "parse() returned %d entries for a correct '### FU-NNN | title' heading; "
+        "expected 1." % len(entries)
+    )
+    assert entries[0].num == "922"

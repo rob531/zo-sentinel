@@ -49,3 +49,17 @@ state; Decision Dock row closed with re-raise conditions (a relanded PR
 stalling on no-hollow/schema-prm, gate-coverage questions on relanded heads,
 or a required context moving into a PR-context-only workflow).
 Routes: none (governance docs)
+
+## 2026-08-30T00:20:00Z
+6h evaluation wake. LOOP IS DRAINING: 9 fresh builder PRs auto-merged
+unattended overnight (#4247–#4259, 20:12–23:30Z) — emit->triage->auto-merge
+works end to end on green main. All 10 rescued PRs reached triage:solid but
+sat unmerged: their pre-v2 heads lacked evaluator's workflow_dispatch trigger
+(dispatch is evaluated against the target ref's copy of the workflow), so
+pytest never reported and branch protection held them. Fixed by real-user
+update-branch on all 10 (00:13Z) — full native gate suites fired, auto-merge
+re-armed by the synchronize events. GR-13 moved C2->C3 with the measurement.
+Baseline numbers: 293 open autonomous-build, 158 triage:stale, 37 triage:solid.
+Design note for the mission session: relander takes the newest 10 stale per
+run — oldest-stale starvation is possible while emission outpaces drain.
+Routes: none (governance docs)

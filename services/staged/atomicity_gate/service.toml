@@ -1,0 +1,8 @@
+[service]
+name = "atomicity_gate"
+import_path = "services.active.atomicity_gate.router"
+prefix = "/api"
+tag = "atomicity_gate"
+origin = "service"
+auth = "public"
+needs_data_layer = true

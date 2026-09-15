@@ -94,6 +94,8 @@ jobs:
           # while the class they catch (FU-102) had already killed 7 prod
           # services on v64. All three are stdlib-only text/graph checks.
           python -m pytest \
+            tests/test_registration_drift_debounce.py \
+            tests/test_registration_drift_rotation.py \
             tests/test_fu_ledger_read_shape.py \
             tests/test_fu_ledger_fu_arg_shape.py \
             tests/test_fu_ledger_write_path_shape.py \
@@ -131,6 +133,7 @@ jobs:
             tests/test_deploy_prod_script.py \
             tests/test_ui_version_badge.py \
             tests/test_accept_gate.py \
+            tests/test_vanity_redirect_webhooks.py \
             tests/test_migration_graph_single_head.py \
             tests/test_fire_gate.py \
             tests/test_sha_green.py \
@@ -144,7 +147,10 @@ jobs:
             tests/test_rescore_open_run_detection.py \
             tests/test_rescore_trust_priority.py \
             tests/test_rescore_refresh_yield.py \
+            tests/test_rescore_watch_status.py \
+            tests/test_rescore_driver_provenance.py \
             tests/test_vast_spend_selftest.py \
+            tests/test_cadence_health_selftest.py \
             tests/test_promoter_repair_wiring.py \
             tests/test_canary_classify_smoke.py \
             tests/test_requeue_quarantined.py \
@@ -152,6 +158,7 @@ jobs:
             tests/test_architect_domain_map.py \
             tests/test_no_module_scope_test_imports.py \
             tests/test_edit_fidelity.py \
+            tests/test_ratchet_no_raise.py \
             -q \
             --junitxml=artifacts/junit.xml
 

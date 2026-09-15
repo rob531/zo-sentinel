@@ -1,0 +1,23 @@
+[service]
+name = "scoring_analytics_dashboard"
+import_path = "services.active.scoring_analytics_dashboard.router"
+prefix = "/api"
+tag = "scoring_analytics_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+file = "services/active/scoring_analytics_dashboard/router.py"
+
+[[dependencies]]
+import_path = "services.shared.mcp_llm_axis_score.model"
+
+[[dependencies]]
+import_path = "services.shared.scoring_analytics_dashboard.service"
+
+[test]
+env.TEST_MODE = "true"
+
+[build]
+output_dir = "services/active/scoring_analytics_dashboard"

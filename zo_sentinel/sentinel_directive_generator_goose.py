@@ -96,13 +96,28 @@ for _d in (PROPOSED_DIR, LOG_PATH.parent):
     except OSError:
         pass
 
+def _log_handlers():
+    """stdout always; the file only if it can actually be opened.
+
+    logging.FileHandler opens the path EAGERLY, so a missing or read-only log
+    dir raised FileNotFoundError at import and made this module unimportable
+    off the box -- the same class of failure as the import-time mkdir above,
+    one step further down. Logging setup must never decide whether a module can
+    be imported.
+    """
+    handlers = [logging.StreamHandler(sys.stdout)]
+    try:
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        handlers.insert(0, logging.FileHandler(LOG_PATH, encoding="utf-8"))
+    except OSError:
+        pass          # stdout-only is a fine degradation; unimportable is not
+    return handlers
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [directive_gen_goose] %(levelname)s: %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_PATH, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
+    handlers=_log_handlers(),
 )
 log = logging.getLogger(SERVICE_NAME)
 

@@ -79,6 +79,37 @@ def hydrate_fly_token(env=None, fetch_path=None, runner=None):
         return False, f"agentvault fetch failed (non-fatal): {e}"
 
 
+
+def probe(env=None, runner=None):
+    """Decide Fly authentication from EVIDENCE, not from flyctl's 720h clock.
+
+    `flyctl auth whoami` on a bare shell exits 1 with "no access token
+    available. Please login with 'flyctl auth login'" whenever the CLIENT-SIDE
+    re-login timer has rolled over -- a message that names the wrong thing
+    (FU-134). The credential is fine; it simply is not in the environment yet.
+    Hydrating FLY_API_TOKEN from AgentVault first and THEN probing is what the
+    nightly moat backup has done successfully since 2026-07-29, including at
+    hours_remaining = -37.5.
+
+    Returns (ok: bool, detail: str). Never raises.
+
+    `env` and `runner` are injection points for tests only; the production call
+    site passes nothing.
+    """
+    env = os.environ if env is None else env
+    _, note = hydrate_fly_token(env=env)
+    run = runner or (lambda cmd: subprocess.run(
+        cmd, capture_output=True, text=True, timeout=60, env=dict(env)))
+    try:
+        p = run(["flyctl", "auth", "whoami"])
+    except Exception as e:  # pragma: no cover - exercised via injected runner
+        return False, "probe raised: %s [%s]" % (e, note)
+    out = ((getattr(p, "stdout", "") or "") + (getattr(p, "stderr", "") or "")).strip()
+    first = out.splitlines()[0][:160] if out else "(no output)"
+    if p.returncode == 0 and out:
+        return True, "authenticated live as %s [%s]" % (first, note)
+    return False, "flyctl rc=%s: %s [%s]" % (p.returncode, first, note)
+
 def port_open(port, host="127.0.0.1", timeout=2):
     """True if something is already listening. A live proxy is reused, never duplicated."""
     try:
@@ -221,9 +252,44 @@ def _selftest():
     check("absent stderr file is survivable",
           isinstance(proxy_error_detail(P(), Path("Z:/nope/none.err")), str))
 
-    print(("SELFTEST FAILED: " + ", ".join(fails)) if fails else "SELFTEST OK (6/6)")
+
+    # 7. the probe reports OK from a LIVE answer, not from the clock
+    class Ok:
+        returncode, stdout, stderr = 0, "someone@tokens.fly.io\n", ""
+    ok, detail = probe(env={"FLY_API_TOKEN": "preset"}, runner=lambda c: Ok())
+    check("probe trusts a live success", ok is True
+          and "someone@tokens.fly.io" in detail)
+
+    # 8. NEGATIVE CONTROL -- the misleading timer message must still read RED.
+    #    Without this the probe could return True unconditionally and pass.
+    class Bad:
+        returncode, stdout, stderr = 1, "", (
+            "Error: no access token available. Please login with "
+            "'flyctl auth login'\n")
+    ok, detail = probe(env={"FLY_API_TOKEN": "preset"}, runner=lambda c: Bad())
+    check("probe reports a real failure", ok is False
+          and "rc=1" in detail and "no access token" in detail)
+
+    # 9. a runner that explodes is survivable, never an exception
+    def boom_runner(cmd):
+        raise OSError("flyctl not on PATH")
+    ok, detail = probe(env={"FLY_API_TOKEN": "preset"}, runner=boom_runner)
+    check("probe survives a missing flyctl", ok is False and "raised" in detail)
+    total = 9
+    print(("SELFTEST FAILED: " + ", ".join(fails)) if fails
+          else "SELFTEST OK (%d/%d)" % (total, total))
     return 1 if fails else 0
 
 
+def main(argv=None):
+    """--probe = evidence-based auth check (rc 0/1). Default = self-test."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--probe" in argv:
+        ok, detail = probe()
+        print(("FLY AUTH OK: " if ok else "FLY AUTH FAILED: ") + detail)
+        return 0 if ok else 1
+    return _selftest()
+
+
 if __name__ == "__main__":
-    raise SystemExit(_selftest())
+    raise SystemExit(main())

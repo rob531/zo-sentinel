@@ -1,0 +1,8 @@
+[service]
+name = "investigate_definition_history_empty_gap"
+import_path = "services.active.investigate_definition_history_empty_gap.router"
+prefix = "/api"
+tag = "investigate_definition_history_empty_gap"
+origin = "service"
+auth = "public"
+needs_data_layer = true

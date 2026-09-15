@@ -1,0 +1,8 @@
+[service]
+name = "perspective_tier_change_api"
+import_path = "services.active.perspective_tier_change_api.router"
+prefix = "/api"
+tag = "perspective_tier_change_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

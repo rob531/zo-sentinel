@@ -24,11 +24,47 @@ permissions:
   contents: write
   pull-requests: write
 
+# RATE-BUDGET GUARD (added 2026-09-04).
+#
+# MEASURED, 2026-09-04 (only these three numbers are measurements):
+#   - auto-merge runs: 100 runs spanning 4.67h == ~21/hour.
+#   - `pr-relander` still dies at 23:01Z on "GraphQL: API rate limit already
+#     exceeded for site ID installation", 0.3s after its token validates.
+#   - 14 of the 30 open autonomous-build+triage:solid PRs are ALREADY armed,
+#     and both sweeps below re-arm them on every run. `gh pr merge --auto` on
+#     an armed PR is a no-op; the `gh pr view` preceding it is not.
+#
+# NOT ESTABLISHED: that these sweeps are the sole or even the dominant consumer
+# of the installation budget. An earlier estimate of ~7,800 calls/hour assumed
+# ~250 triage:solid PRs; the real figure is 30, so that arithmetic was wrong and
+# is withdrawn. This change removes measured waste and a real burst amplifier.
+# It may not be sufficient. Whatever is actually draining the budget still needs
+# to be identified by logging resources.graphql.used/remaining at the head of
+# each job -- do not read a green relander as proof this was the whole cause.
+#
+# Two sweep jobs fire on workflow_run:completed for SIX workflows, so one CI
+# pass over one PR can start six identical sweeps. A cancelled sweep is
+# superseded by an identical newer one, so collapsing a burst loses nothing.
+# Mirrors pr-relander.yml's own `group: pr-relander`.
+concurrency:
+  group: auto-merge-sweep
+  cancel-in-progress: true
+
 jobs:
   autonomous-build:
     runs-on: ubuntu-latest
     if: contains(github.event.pull_request.labels.*.name, 'autonomous-build') && contains(github.event.pull_request.labels.*.name, 'triage:solid') && github.event.pull_request.draft == false
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Logs resources.graphql.used/remaining/reset so the chairman can
+          # identify which workflow actually drains the installation budget.
+          # Per FU-406 next action: the real consumer is still UNIDENTIFIED.
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=autonomous-build used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Convergence-freeze guard + enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -73,6 +109,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'land-when-green') && github.event.pull_request.draft == false
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=opt-in-land used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Convergence-freeze guard + enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -137,18 +180,80 @@ jobs:
   triage-solid-sweep:
     # Enables auto-merge on the triage bot's solids (pr-triage labels with
     # GITHUB_TOKEN, which can't re-trigger the pull_request_target job above).
-    if: github.event_name == 'workflow_run'
+    # A CANCELLED run is not a verdict.
+    #
+    # `workflow_run: types: [completed]` fires on cancelled and failed runs as
+    # well as successful ones. The six watched workflows all sit in global
+    # concurrency groups with cancel-in-progress, so under PR load they are
+    # cancelled constantly -- and each cancellation started a fresh sweep here,
+    # which queued behind the backlog and was itself cancelled. More queue
+    # pressure produced more cancellations, which produced more sweeps.
+    #
+    # MEASURED 2026-09-15: 200 workflow runs in 10m37s (~1,130/hour, against
+    # the ~21/hour recorded for auto-merge on 2026-09-04); 94 cancelled, 85 of
+    # them auto-merge; 28 queued with 1 job in progress; and ZERO runs in that
+    # window reached success or failure. CI had stopped producing verdicts.
+    #
+    # Both sweeps only act on state a SUCCESSFUL watched run produces -- fresh
+    # triage:solid labels, or a PR newly gone green. A cancelled run has
+    # produced neither, so firing on it can only re-scan unchanged state and
+    # spend installation budget (FU-406).
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=triage-solid-sweep used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Enable auto-merge on triage:solid autonomous-build PRs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # An EXPLICIT per-run budget, replacing the accidental one that gh's
+          # default --limit imposed. Same shape as green-sweep's SWEEP_CAP: the
+          # loop costs one `gh pr view --json files` per candidate, so the cost
+          # must be bounded by a number this file states rather than by a page
+          # size it does not know it has. Unlike a page size, this cap ANNOUNCES
+          # the remainder, so a backlog can never be silent again.
+          SWEEP_CAP: "80"
         run: |
           set -uo pipefail
-          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --json number -q '.[].number';
-                   gh pr list -R "$REPO" --state open --label land-when-green --json number,isDraft -q '.[] | select(.isDraft == false) | .number'; } | sort -u ) || prs=""
+          # ALREADY-ARMED PRs ARE SKIPPED AT THE LIST (added 2026-09-04).
+          # `gh pr merge --auto` on an already-armed PR is a no-op, but the
+          # `gh pr view --json files` above it costs an API call every run.
+          # Filtering changes no outcome: an armed PR needs no re-arming, and
+          # the ci-hold/freeze-hold guards still run on every push via the
+          # pull_request_target `autonomous-build` job.
+          #
+          # --limit IS MANDATORY (added 2026-09-12, FU-446). The comment that
+          # stood here claimed "this job is UNCAPPED (green-sweep caps at 60;
+          # this one does not)" and cited "14 of 30 matching PRs". It was capped
+          # the whole time, and 30 was the cap: `gh pr list` DEFAULTS TO 30 ROWS.
+          # pr-relander.yml already carries this warning; this file did not.
+          #
+          # Worse, `-q` filters the JSON AFTER gh has already truncated it, so
+          # the unarmed PRs the sweep exists to find are selected from the newest
+          # 30 only. Measured live 2026-09-12 against rob531/zo-sentinel:
+          #   rows fetched by the command as written : 30
+          #   PRs actually carrying both labels      : 132
+          #   unarmed inside the fetched page        : 19   <- the real yield
+          #   unarmed across the true population     : 104
+          #   structurally unreachable by this sweep : 85
+          # Nothing went red for that; the job logged a clean run every time.
+          prs=$( { gh pr list -R "$REPO" --state open --label autonomous-build --label triage:solid --limit 500 --json number,autoMergeRequest -q '.[] | select(.autoMergeRequest == null) | .number';
+                   gh pr list -R "$REPO" --state open --label land-when-green --limit 500 --json number,isDraft,autoMergeRequest -q '.[] | select(.isDraft == false) | select(.autoMergeRequest == null) | .number'; } | sort -u ) || prs=""
+          candidates=$(echo "$prs" | grep -c . || true)
+          echo "::notice::triage-solid-sweep: $candidates unarmed candidate(s) at --limit 500, budget $SWEEP_CAP this run"
+          if [ "$candidates" -gt "$SWEEP_CAP" ]; then
+            echo "::warning::backlog exceeds the per-run budget: $candidates candidates, $SWEEP_CAP examined, $((candidates - SWEEP_CAP)) deferred to the next sweep"
+          fi
+          examined=0
           for pr in $prs; do
+            [ "$examined" -ge "$SWEEP_CAP" ] && break
+            examined=$((examined+1))
             files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
             # CI-SURFACE GUARD (added 2026-09-01, alongside RELANDER_TOKEN).
           # A write-scoped PAT now exists in this PUBLIC repo, and ~90% of PRs
@@ -191,10 +296,35 @@ jobs:
     # NOTE: mergeStateStatus is computed LAZILY -- it returns UNKNOWN for every
     # row of a list query and only materialises on a single-PR read. It must be
     # fetched per PR, never filtered in the list.
-    if: github.event_name == 'workflow_run'
+    # A CANCELLED run is not a verdict.
+    #
+    # `workflow_run: types: [completed]` fires on cancelled and failed runs as
+    # well as successful ones. The six watched workflows all sit in global
+    # concurrency groups with cancel-in-progress, so under PR load they are
+    # cancelled constantly -- and each cancellation started a fresh sweep here,
+    # which queued behind the backlog and was itself cancelled. More queue
+    # pressure produced more cancellations, which produced more sweeps.
+    #
+    # MEASURED 2026-09-15: 200 workflow runs in 10m37s (~1,130/hour, against
+    # the ~21/hour recorded for auto-merge on 2026-09-04); 94 cancelled, 85 of
+    # them auto-merge; 28 queued with 1 job in progress; and ZERO runs in that
+    # window reached success or failure. CI had stopped producing verdicts.
+    #
+    # Both sweeps only act on state a SUCCESSFUL watched run produces -- fresh
+    # triage:solid labels, or a PR newly gone green. A cancelled run has
+    # produced neither, so firing on it can only re-scan unchanged state and
+    # spend installation budget (FU-406).
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Log GraphQL rate-limit budget (FU-406)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql -f query='{ rateLimit { used remaining resetAt } }' \
+            --jq '"[rate-limit] job=green-sweep used=\(.data.rateLimit.used) remaining=\(.data.rateLimit.remaining) resetAt=\(.data.rateLimit.resetAt)"' \
+            || echo "::warning::[rate-limit] query failed (non-fatal)"
       - name: Enable auto-merge on any green autonomous-build PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -202,9 +332,12 @@ jobs:
           SWEEP_CAP: "60"
         run: |
           set -uo pipefail
+          # Already-armed PRs skipped at the list (added 2026-09-04): each one
+          # otherwise costs TWO calls below (mergeStateStatus, then files) to
+          # re-arm something already armed. ~80 of the open PRs are armed.
           if ! prs=$(gh pr list -R "$REPO" --state open --label autonomous-build \
-                       --limit 500 --json number,isDraft \
-                       -q '.[] | select(.isDraft == false) | .number' 2>qerr.txt); then
+                       --limit 500 --json number,isDraft,autoMergeRequest \
+                       -q '.[] | select(.isDraft == false) | select(.autoMergeRequest == null) | .number' 2>qerr.txt); then
             echo "::error::green-sweep query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
             exit 1
           fi

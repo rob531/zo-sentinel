@@ -1,0 +1,12 @@
+[service]
+name = "unit_promotion_readiness_report"
+import_path = "services.active.unit_promotion_readiness_report.router"
+prefix = "/api"
+tag = "unit_promotion_readiness_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true

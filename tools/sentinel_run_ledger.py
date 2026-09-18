@@ -472,7 +472,32 @@ def reconcile(
     # in tests. What it removes is a hard signal that fires when nothing is
     # wrong, which is the failure mode that teaches a reader to stop believing
     # the signal. A MISSED SLOT is an email condition; it must mean something.
-    half_cadence = timedelta(hours=SLOT_EVERY_HOURS) / 2
+    # HALF-CADENCE IS DERIVED FROM THE GRID, NOT FROM SLOT_EVERY_HOURS.
+    # SLOT_EVERY_HOURS is a pre-2026-07-31 literal (8x/day every 3h). The
+    # cadence was cut that day to 4x/day at 00:45/06:45/15:45/20:45 local,
+    # whose gaps are 4h/5h/6h/9h -- so the constant yielded a 90-minute
+    # attestation half-window against a grid whose tightest gap is 4h. On
+    # 2026-09-11 the 19:45Z slot's run started at 21:16Z, +91 minutes, and
+    # was reported "cron came due and left no trace at all" -- false by SIXTY
+    # SECONDS, with the trace sitting in the receipts list. This module's own
+    # comment at SLOT_EVERY_HOURS already says the grid is the authority and
+    # "Do NOT reintroduce a computation that depends on these"; line 475 was
+    # that computation.
+    #
+    # The invariant the original intended, and which the constant only
+    # satisfied by coincidence while the cadence was uniform: half the
+    # TIGHTEST gap between consecutive declared slots. At that width a run
+    # can be nearest to at most one slot, so no slot can be covered by
+    # another slot's run. Widening with the grid is more tolerant of PHASE,
+    # never of ABSENCE -- a slot with no run inside half its own tightest
+    # neighbour gap is still MISSED (negative control in tests).
+    _slots = expected_slots(now, window_hours)
+    _gaps = [
+        (b - a)
+        for a, b in zip(_slots, _slots[1:])
+        if (b - a).total_seconds() > 0
+    ]
+    half_cadence = (min(_gaps) / 2) if _gaps else (timedelta(hours=SLOT_EVERY_HOURS) / 2)
     attest = max(tol, half_cadence)
 
     attest_from = min(receipts) if receipts else None

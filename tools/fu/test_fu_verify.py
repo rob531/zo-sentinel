@@ -180,3 +180,63 @@ def test_reopen_demotes_stale_resolution_text():
     assert fu.status == "open"
     assert not (fu.vals.get("resolution") or "").strip()
     assert any("SUPERSEDED" in l for l in lines)
+
+
+# --------------------------------------------------------------------------
+# FU-303. The grandchild-pipe-hang.
+#
+# subprocess.run(cmd, shell=True, capture_output=True, timeout=N) on Windows
+# kills only cmd.exe on timeout and then calls communicate(), which drains the
+# pipes. A grandchild that outlives its parent still holds the inherited write
+# handle, so the pipe never sees EOF and communicate() blocks until the
+# grandchild exits -- potentially minutes beyond the stated timeout.
+#
+# This test proves the fix: run_probe with a grandchild-bearing command must
+# return within (timeout + slack) seconds -- not block forever.
+#
+# The grandchild is the whole point. A child with no grandchild would also
+# pass with the broken capture_output=True code. The test writes a helper
+# script to a temp file (H4: never `python -c` on Windows -- PowerShell eats $
+# and quotes; run by path instead).
+#
+# NEGATIVE-CONTROL PROOF: change _probe_once back to
+#   subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout)
+# and this test will time out after PATIENCE seconds and the pytest session
+# will hang, exactly replicating the 2026-08-09 production symptom.
+# --------------------------------------------------------------------------
+def test_grandchild_pipe_hang_returns_within_timeout():
+    """run_probe must honour its timeout even when a grandchild holds the pipe."""
+    import tempfile
+    import time
+    from pathlib import Path
+
+    PROBE_TIMEOUT = 4      # the timeout we tell run_probe
+    GRANDCHILD_LIFE = 40   # must exceed PROBE_TIMEOUT, or passing proves nothing
+    PATIENCE = 20          # wall-clock ceiling: if we hit this, the hang is present
+
+    # Write the helper to a real file -- never python -c on Windows (H4).
+    body = (
+        "import subprocess, sys, time\n"
+        "subprocess.Popen([sys.executable, '-c',"
+        " 'import time; time.sleep(%d)'])\n"
+        "time.sleep(%d)\n"
+    ) % (GRANDCHILD_LIFE, GRANDCHILD_LIFE)
+
+    tmp = Path(tempfile.mkdtemp()) / "fu303_grandchild_helper.py"
+    tmp.write_text(body, encoding="utf-8")
+    cmd = '"%s" "%s"' % (sys.executable, tmp)
+
+    t0 = time.time()
+    result = fu_verify.run_probe(cmd, timeout=PROBE_TIMEOUT)
+    elapsed = time.time() - t0
+
+    # The verdict must be UNKNOWN (timed out -- grandchild held the pipe but
+    # the probe correctly reported it could not answer).
+    assert result["verdict"] == "UNKNOWN", (
+        "expected UNKNOWN (timeout), got %s after %.1fs" % (result["verdict"], elapsed)
+    )
+    # The run must return within PATIENCE seconds -- not block for GRANDCHILD_LIFE.
+    assert elapsed < PATIENCE, (
+        "run_probe blocked for %.1fs (limit %ds) -- grandchild pipe hang is present"
+        % (elapsed, PATIENCE)
+    )

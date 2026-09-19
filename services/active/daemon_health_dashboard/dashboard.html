@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daemon Health Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 20px;
+    background: #f0f2f5; color: #1a1a2e;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; color: #1a1a2e; }
+  .subtitle { font-size: 0.8rem; color: #6c757d; margin: 0 0 20px; }
+
+  .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .summary-card {
+    background: #fff;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+    text-align: center;
+  }
+  .summary-card .value { font-size: 2rem; font-weight: 700; }
+  .summary-card .label { font-size: 0.78rem; color: #6c757d; margin-top: 4px; }
+  .summary-card.total .value { color: #495057; }
+  .summary-card.healthy .value { color: #198754; }
+  .summary-card.stale .value { color: #dc3545; }
+
+  .card {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6c757d;
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+
+  .daemon-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .daemon-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+    border-bottom: 2px solid #e9ecef;
+  }
+  .daemon-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+  }
+  .daemon-table tr:last-child td { border-bottom: none; }
+  .daemon-table tr:hover td { background: #f8f9fa; }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .status-badge.healthy { background: #d1e7dd; color: #0f5132; }
+  .status-badge.stale { background: #f8d7da; color: #842029; }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .age-cell { color: #495057; font-variant-numeric: tabular-nums; }
+  .age-cell.stale { color: #dc3545; font-weight: 600; }
+
+  .threshold-cell { color: #6c757d; font-size: 0.8rem; }
+  .last-hb { color: #6c757d; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+  .refresh-btn {
+    background: #0d6efd;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .refresh-btn:hover { background: #0b5ed7; }
+  .refresh-btn:focus { outline: 2px solid #0d6efd; outline-offset: 2px; }
+  .refresh-btn:disabled { background: #a8c4e8; cursor: not-allowed; }
+
+  .loading, .error, .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    font-size: 0.95rem;
+    border-radius: 8px;
+  }
+  .loading::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 24px;
+    border: 3px solid #dee2e6;
+    border-top-color: #0d6efd;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: #dc3545; background: #fff5f5; border: 1px solid #fcc2c2; }
+  .empty { background: #fff; border: 1px dashed #dee2e6; }
+
+  .meta-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6c757d; font-size: 0.8rem; }
+
+  .stale-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #6c757d; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-dot.healthy { background: #198754; }
+  .legend-dot.stale { background: #dc3545; }
+
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .daemon-table th:nth-child(4),
+    .daemon-table td:nth-child(4),
+    .daemon-table th:nth-child(5),
+    .daemon-table td:nth-child(5) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header-row">
+  <div>
+    <h1>Daemon Health Dashboard</h1>
+    <p class="subtitle" id="as-of" aria-live="polite">Loading…</p>
+  </div>
+  <button class="refresh-btn" id="refresh-btn" aria-label="Refresh daemon health data" onclick="fetchData()">
+    <span aria-hidden="true">&#8635;</span> Refresh
+  </button>
+</div>
+
+<div class="summary-cards" id="summary-cards" aria-label="Daemon health summary" role="region">
+  <div class="summary-card total" aria-label="Total daemons">
+    <div class="value" id="stat-total">—</div>
+    <div class="label">Total</div>
+  </div>
+  <div class="summary-card healthy" aria-label="Healthy daemons">
+    <div class="value" id="stat-healthy">—</div>
+    <div class="label">Healthy</div>
+  </div>
+  <div class="summary-card stale" aria-label="Stale daemons">
+    <div class="value" id="stat-stale">—</div>
+    <div class="label">Stale</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Registered Daemons</div>
+  <div id="table-container">
+    <div class="loading" role="status" aria-label="Loading daemon data" aria-live="polite">Loading daemon data…</div>
+  </div>
+</div>
+
+<script>
+  // Auth: in-memory state only; no browser-persisted tokens
+  const authState = { token: null };
+  if (!authState.token) {
+    authState.token = (window !== window.top && window.top.__ZO_AUTH__)
+      ? window.top.__ZO_AUTH__.bearer
+      : 'Bearer placeholder';
+  }
+
+  const API_BASE = '/api';
+
+  // Format seconds into a human-readable duration string
+  function formatDuration(seconds) {
+    if (seconds == null || isNaN(seconds)) return '—';
+    if (seconds < 60) return Math.round(seconds) + 's';
+    if (seconds < 3600) return Math.round(seconds / 60) + 'm';
+    if (seconds < 86400) return Math.round(seconds / 3600) + 'h';
+    return Math.round(seconds / 86400) + 'd';
+  }
+
+  // Format an ISO timestamp into a local-readable string
+  function formatTimestamp(isoStr) {
+    if (!isoStr) return '—';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    } catch (_) { return isoStr; }
+  }
+
+  // Determine if a daemon is stale from its record
+  function isStale(daemon) {
+    return daemon.is_stale === true || daemon.is_stale === 'true';
+  }
+
+  // Render the summary cards from a DaemonHealthResponse
+  function renderSummary(summary) {
+    if (!summary) return;
+    const total = document.getElementById('stat-total');
+    const healthy = document.getElementById('stat-healthy');
+    const stale = document.getElementById('stat-stale');
+    if (total) total.textContent = summary.total ?? '—';
+    if (healthy) healthy.textContent = summary.healthy_count ?? '—';
+    if (stale) stale.textContent = summary.stale_count ?? '—';
+  }
+
+  // Build one table row for a daemon
+  function buildDaemonRow(daemon) {
+    const tr = document.createElement('tr');
+    const stale = isStale(daemon);
+
+    const nameTd = document.createElement('td');
+    nameTd.style.fontWeight = '500';
+    nameTd.style.color = '#212529';
+    nameTd.textContent = daemon.name;
+
+    const statusTd = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = `status-badge ${stale ? 'stale' : 'healthy'}`;
+    badge.setAttribute('aria-label', `${daemon.name} is ${stale ? 'stale' : 'healthy'}`);
+    const dot = document.createElement('span');
+    dot.className = 'status-dot';
+    const label = document.createElement('span');
+    label.textContent = stale ? 'Stale' : 'Healthy';
+    badge.appendChild(dot);
+    badge.appendChild(label);
+    statusTd.appendChild(badge);
+
+    const ageTd = document.createElement('td');
+    ageTd.className = `age-cell${stale ? ' stale' : ''}`;
+    ageTd.setAttribute('aria-label', `Age: ${formatDuration(daemon.age_seconds)}`);
+    ageTd.textContent = formatDuration(daemon.age_seconds);
+
+    const thresholdTd = document.createElement('td');
+    thresholdTd.className = 'threshold-cell';
+    thresholdTd.textContent = formatDuration(daemon.threshold_seconds);
+
+    const hbTd = document.createElement('td');
+    hbTd.className = 'last-hb';
+    hbTd.textContent = formatTimestamp(daemon.last_heartbeat);
+
+    const metaTd = document.createElement('td');
+    metaTd.className = 'meta-cell';
+    metaTd.setAttribute('title', daemon.meta || '');
+    metaTd.textContent = daemon.meta || '—';
+
+    tr.appendChild(nameTd);
+    tr.appendChild(statusTd);
+    tr.appendChild(ageTd);
+    tr.appendChild(thresholdTd);
+    tr.appendChild(hbTd);
+    tr.appendChild(metaTd);
+    return tr;
+  }
+
+  // Render the full daemon table from a DaemonHealthResponse
+  function renderTable(data) {
+    const container = document.getElementById('table-container');
+    container.innerHTML = '';
+
+    const daemons = data && data.daemons;
+    if (!daemons || daemons.length === 0) {
+      container.innerHTML = '<div class="empty" role="status" aria-label="No daemon data available">No daemon data available at this time.</div>';
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'daemon-table';
+    table.setAttribute('aria-label', 'Daemon health status table');
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    const headers = [
+      { label: 'Daemon', scope: 'col' },
+      { label: 'Status', scope: 'col' },
+      { label: 'Age', scope: 'col' },
+      { label: 'Threshold', scope: 'col' },
+      { label: 'Last Heartbeat', scope: 'col' },
+      { label: 'Meta', scope: 'col' }
+    ];
+    headers.forEach(h => {
+      const th = document.createElement('th');
+      th.setAttribute('scope', h.scope);
+      th.textContent = h.label;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    daemons.forEach(d => {
+      try { tbody.appendChild(buildDaemonRow(d)); } catch (e) { /* skip malformed row */ }
+    });
+    table.appendChild(tbody);
+
+    // Legend
+    const legend = document.createElement('div');
+    legend.className = 'stale-legend';
+    legend.setAttribute('aria-label', 'Status legend');
+    legend.innerHTML =
+      '<div class="legend-item"><span class="legend-dot healthy"></span>Healthy (within threshold)</div>' +
+      '<div class="legend-item"><span class="legend-dot stale"></span>Stale (heartbeat overdue)</div>';
+
+    container.appendChild(table);
+    container.appendChild(legend);
+  }
+
+  // Update the "as-of" subtitle
+  function updateAsOf() {
+    const el = document.getElementById('as-of');
+    if (el) el.textContent = 'As of: ' + new Date().toLocaleString();
+  }
+
+  function showLoading() {
+    const container = document.getElementById('table-container');
+    container.innerHTML = '<div class="loading" role="status" aria-label="Loading daemon data" aria-live="polite">Loading daemon data…</div>';
+  }
+
+  function showError(msg) {
+    const container = document.getElementById('table-container');
+    container.innerHTML = `<div class="error" role="alert" aria-label="Error loading data">${msg}</div>`;
+  }
+
+  async function fetchData() {
+    const btn = document.getElementById('refresh-btn');
+    if (btn) btn.disabled = true;
+    showLoading();
+    try {
+      const resp = await fetch(API_BASE + '/daemons/health', {
+        method: 'GET',
+        headers: {
+          'Authorization': authState.token,
+          'Accept': 'application/json'
+        }
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + resp.statusText);
+      const json = await resp.json();
+      // Render even if empty
+      renderSummary(json.summary);
+      renderTable(json);
+      updateAsOf();
+    } catch (e) {
+      console.error('[daemon_health_dashboard] fetch error:', e);
+      showError('Unable to load daemon health data. Please try again.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ── SELFTEST ──────────────────────────────────────────────────────────────
+  // Verify render functions handle empty/partial API responses without throwing.
+  (function selfTest() {
+    try {
+      // 1. Full healthy response
+      renderSummary({ total: 3, healthy_count: 3, stale_count: 0 });
+      renderTable({
+        daemons: [
+          { name: 'write_service', is_stale: false, age_seconds: 45, threshold_seconds: 300, last_heartbeat: '2026-08-29T13:00:00Z', status: 'running', meta: 'v1.2' },
+          { name: 'signal_analyser', is_stale: false, age_seconds: 10, threshold_seconds: 120, last_heartbeat: '2026-08-29T13:43:00Z', status: 'running', meta: null },
+          { name: 'gate_orchestrator', is_stale: true, age_seconds: 20000, threshold_seconds: 14400, last_heartbeat: '2026-08-28T13:00:00Z', status: 'stopped', meta: 'slow cycle' }
+        ]
+      });
+
+      // 2. Empty response (no daemons)
+      renderSummary({ total: 0, healthy_count: 0, stale_count: 0 });
+      renderTable({ daemons: [] });
+
+      // 3. Null/undefined summary
+      renderSummary(null);
+      renderTable({ daemons: [] });
+
+      // 4. Missing is_stale field (treat as healthy)
+      renderTable({ daemons: [{ name: 'unknown_daemon', age_seconds: 0, threshold_seconds: 300, last_heartbeat: null }] });
+
+      // 5. Null/missing fields inside daemon
+      renderTable({ daemons: [{ name: null, is_stale: null, age_seconds: null, threshold_seconds: null, last_heartbeat: null, meta: null }] });
+
+      console.info('[SELFTEST] All empty/partial render paths passed — no exceptions thrown.');
+    } catch (e) {
+      console.error('[SELFTEST] FAILED:', e);
+      throw e;
+    }
+  })();
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Kick off initial fetch on page load
+  fetchData();
+</script>
+</body>
+</html>

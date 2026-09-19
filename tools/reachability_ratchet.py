@@ -535,8 +535,10 @@ def main():
     if len(active_deferred) > DEFERRED_REVIEW_CAP:
         print("\n  DEFERRED LIST OVER CAP: %d > %d. Per the 2026-07-21 CofC ruling "
               "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
-              "Route it through peer review (peer_review.py --propose); the cap is "
-              "not to be raised to quieten this line."
+              "The BLOCKING rule is the DERIVATIVE below (DEFERRED NON-INCREASING), "
+              "which fails a PR that grows this list. This line reports a LEVEL: no "
+              "single PR can lower it, so it routes no one. The cap is not to be "
+              "raised to quieten it."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
 
     # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------

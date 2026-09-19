@@ -83,81 +83,64 @@ def _query_mesh(
     return _post_sql(sql, params, timeout)
 
 
-def _post(
-    table: str,
-    rows: Dict[str, Any],
-    timeout: int = 10,
-) -> bool:
-    """POST rows to write_service /write endpoint.
-
-    B608 fix: table name is validated against whitelist before use.
-    Returns True on success, False on error.
-    """
-    if table not in _VALID_TABLES:
-        return False
-    payload = {"table": table, "rows": rows, "wait": True}
-    try:
-        resp = requests.post(
-            f"{_WRITE_SERVICE_URL}/write", json=payload, timeout=timeout
-        )
-        resp.raise_for_status()
-        return True
-    except Exception:
-        return False
-
-
 # --------------------------------------------------------------------------- #
 # Mesh/pipeline data access
 # --------------------------------------------------------------------------- #
 
-def get_signal_scores(mesh_id: str) -> List[Dict[str, Any]]:
+def get_signal_scores(mesh_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Fetch signal scores for a given ``mesh_id`` from ``mcp_signal_scores``."""
-    return _post_query("mcp_signal_scores", {"mesh_id": mesh_id})
+    if mesh_id is not None:
+        return _post_query("mcp_signal_scores", {"mesh_id": mesh_id})
+    return _post_query("mcp_signal_scores")
 
 
-def signal_scores_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
+def signal_scores_endpoint(mesh_id: Optional[str] = None) -> Dict[str, Any]:
     """Return a dict with the mesh_id and its signal scores."""
     rows = get_signal_scores(mesh_id)
-    return {"mesh_id": mesh_id, "scores": rows, "count": len(rows)}
+    mid = mesh_id if mesh_id is not None else "unknown"
+    return {"mesh_id": mid, "scores": rows, "count": len(rows)}
 
 
-def get_mesh_scores(mesh_id: str) -> List[Dict[str, Any]]:
-    """Fetch mesh scores for a given ``mesh_id`` from ``mcp_mesh_scores``."""
-    return _post_query("mcp_mesh_scores", {"mesh_id": mesh_id})
+def get_mesh_scores(mesh_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch mesh scores for a given ``mesh_id`` from ``mcp_signal_scores``."""
+    return get_signal_scores(mesh_id)
 
 
 def mesh_scores(mesh_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Alias for get_mesh_scores for backward compatibility."""
-    mid = mesh_id if mesh_id is not None else ""
-    return _post_query("mcp_signal_scores", {"mesh_id": mid})
+    return get_mesh_scores(mesh_id)
 
 
-def mesh_scores_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
+def mesh_scores_endpoint(mesh_id: Optional[str] = None) -> Dict[str, Any]:
     """Return a dict with the mesh_id and its mesh scores."""
     rows = get_mesh_scores(mesh_id)
-    return {"mesh_id": mesh_id, "scores": rows, "count": len(rows)}
+    mid = mesh_id if mesh_id is not None else "unknown"
+    return {"mesh_id": mid, "scores": rows, "count": len(rows)}
 
 
-def get_mesh_memory(mesh_id: str) -> Dict[str, Any]:
+def get_mesh_memory(mesh_id: Optional[str] = None) -> Dict[str, Any]:
     """Fetch mesh memory for a given ``mesh_id`` from ``mesh_memory``.
     Returns a single row dict or empty dict if not found.
     """
-    rows = _post_query("mesh_memory", {"mesh_id": mesh_id})
+    if mesh_id is not None:
+        rows = _post_query("mesh_memory", {"mesh_id": mesh_id})
+        return rows[0] if rows else {}
+    rows = _post_query("mesh_memory")
     return rows[0] if rows else {}
 
 
-def mesh_memory_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
+def mesh_memory_endpoint(mesh_id: Optional[str] = None) -> Dict[str, Any]:
     """Return a dict with the mesh_id and its mesh memory."""
-    rows = _post_query("mesh_memory", {"mesh_id": mesh_id})
-    return {"mesh_id": mesh_id, "memory": rows[0] if rows else {}, "found": bool(rows)}
+    rows = _post_query("mesh_memory", {"mesh_id": mesh_id} if mesh_id else None)
+    return {"mesh_id": mesh_id or "unknown", "memory": rows[0] if rows else {}, "found": bool(rows)}
 
 
-def mesh_memory_endpoint_get(mesh_id: str = "test") -> Dict[str, Any]:
+def mesh_memory_endpoint_get(mesh_id: Optional[str] = None) -> Dict[str, Any]:
     """GET-variant of mesh_memory_endpoint."""
     return mesh_memory_endpoint(mesh_id)
 
 
-def get_mesh_memory_endpoint(mesh_id: str = "test") -> Dict[str, Any]:
+def get_mesh_memory_endpoint(mesh_id: Optional[str] = None) -> Dict[str, Any]:
     """Return mesh memory for the given mesh_id."""
     return mesh_memory_endpoint(mesh_id)
 
@@ -170,7 +153,7 @@ def get_mesh_memory_by_id(mesh_memory_id: Optional[str] = None) -> Dict[str, Any
             params={"id": mesh_memory_id},
         )
         return rows[0] if rows else {}
-    return {}
+    return get_mesh_memory()
 
 
 # --------------------------------------------------------------------------- #
@@ -306,11 +289,10 @@ def get_server_registries() -> List[Dict[str, Any]]:
 # Self-test
 # --------------------------------------------------------------------------- #
 
-def _run_self_test() -> None:
+def _run_self_test() -> bool:
     """Run a lightweight self-test when the module is executed directly.
     Calls each public function with a dummy mesh_id and ensures no exception
-    propagates. Prints PASS on success.
-    """
+    propagates. Prints PASS on success."""
     dummy_id = "test-self"
     try:
         get_signal_scores(dummy_id)
@@ -344,7 +326,8 @@ def _run_self_test() -> None:
         print("PASS")
     except Exception:
         raise
+    return True
 
 
 if __name__ == "__main__":
-    _run_self_test()
+    assert _run_self_test(), "Self-test failed"

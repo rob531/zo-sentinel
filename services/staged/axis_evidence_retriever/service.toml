@@ -1,0 +1,8 @@
+[service]
+name = "axis_evidence_retriever"
+import_path = "services.active.axis_evidence_retriever.router"
+prefix = "/api"
+tag = "axis_evidence_retriever"
+origin = "service"
+auth = "public"
+needs_data_layer = true

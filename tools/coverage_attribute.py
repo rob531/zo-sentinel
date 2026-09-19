@@ -19,8 +19,13 @@ WHAT IT DOES
 For each missing date it reads the FLEET-WIDE friction ledger and counts how
 many DISTINCT lanes were active that day, then splits the gap three ways:
 
-  FLEET_QUIET  fleet activity that day was far below its own norm -- this lane
-               was one of many that did not run. Not a lane defect.
+  FLEET_QUIET  fleet activity that day was far below its own norm AND a
+               second, independent store agrees -- this lane was one of many
+               that did not run. Not a lane defect.
+  UNCORROBORATED_QUIET
+               the friction ledger was silent but the corroborating store shows
+               the fleet working normally. The zero measures the RECORDER, not
+               the fleet, so the gap has NO established cause.
   LANE_ALONE   fleet activity was normal and this lane alone is missing. That
                is the reading worth investigating.
   UNKNOWN      the date lies outside the friction ledger's observed span, so
@@ -46,9 +51,22 @@ USAGE
     python tools\\coverage_attribute.py --json
     python tools\\coverage_attribute.py --self-test     # R4 both-poles control
 
+CORROBORATION (added 2026-09-19, after this tool published 18 false verdicts)
+---------------------------------------------------------------------------
+The span guard above defends the ledger's EDGES. It does nothing for a zero
+INSIDE the span -- and a zero inside the span has two causes: the fleet did not
+run, or the fleet ran and nobody called the voluntary `friction.record`. Only
+the first is a cause. Measured on 2026-09-19: the ledger showed 0/0/1 lanes on
+2026-09-16/17/18 while 41/43/70 commits landed on origin/main, and 24-109
+commits/day landed across the 14 August dates this tool had been calling quiet.
+So every quiet claim is now defended by a second store written by a different
+mechanism (git: a commit is a side effect of the work, not a voluntary call),
+or it is not made.
+
 EXIT CODES
     0  ran; every gap attributed or honestly UNKNOWN
-    1  at least one gap classified LANE_ALONE (a reading, NOT an alert)
+    1  at least one gap needs a human read -- LANE_ALONE or
+       UNCORROBORATED_QUIET (a reading, NOT an alert, NEVER an email)
     2  could not read an input store
 """
 
@@ -60,10 +78,17 @@ import datetime as _dt
 import json
 import os
 import statistics
+import subprocess
 import sys
 
 STATE_PATH = r"D:\zo\runs\ops_audit_state.json"
 FRICTION_PATH = r"D:\zo\Zocomputer Agents\friction_ledger.jsonl"
+# Second, INDEPENDENT dated store used to corroborate a quiet claim. Chosen
+# because git is written by a different mechanism than `friction.record`:
+# a commit lands as a side effect of the work, while a friction row lands
+# only if a lane voluntarily remembers to call the recorder.
+GIT_REPO = r"D:\zo\_lanes\ops-audit"
+GIT_REF = "origin/main"
 
 # Fraction of the median active-lane count below which a day counts as quiet.
 # Derived-from-distribution, not an absolute lane count -- see module docstring.
@@ -139,7 +164,32 @@ def fleet_activity(friction_path: str = FRICTION_PATH):
     return dict(by_day)
 
 
-def attribute(missing_dates, by_day, quiet_fraction=QUIET_FRACTION_OF_MEDIAN):
+def git_activity(repo: str = GIT_REPO, ref: str = GIT_REF):
+    """Map date -> commit count on `ref`. The CORROBORATING store.
+
+    Returns None (never raises, never {}) when git cannot speak -- an absent
+    corroborator must degrade to "not corroborated", never to "corroborated
+    quiet". Silence from the second store is R6 all over again.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "log", ref, "--date=short", "--pretty=format:%ad"],
+            cwd=repo, capture_output=True, text=True, timeout=120,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if out.returncode != 0:
+        return None
+    counts = collections.Counter()
+    for line in out.stdout.splitlines():
+        line = line.strip()
+        if len(line) == 10 and line[4] == "-":
+            counts[line] += 1
+    return dict(counts) or None
+
+
+def attribute(missing_dates, by_day, quiet_fraction=QUIET_FRACTION_OF_MEDIAN,
+              commits_by_day=None):
     """Classify each missing date. Pure function -- unit-testable without I/O."""
     observed = sorted(by_day)
     span_first, span_last = observed[0], observed[-1]
@@ -162,21 +212,63 @@ def attribute(missing_dates, by_day, quiet_fraction=QUIET_FRACTION_OF_MEDIAN):
             continue
         active = len(by_day.get(date, set()))
         quiet = active < quiet_below
-        results.append({
+        row = {
             "date": date,
             "verdict": "FLEET_QUIET" if quiet else "LANE_ALONE",
             "lanes_active": active,
             "lanes": sorted(by_day.get(date, set())),
+            "corroborated": None,
+            "commits": None,
             "why": (f"{active} lane(s) active vs median {median:g} "
                     f"(quiet below {quiet_below:g})"),
-        })
+        }
+
+        # ------------------------------------------------------------------
+        # R6 GUARD, ONE LEVEL IN (added 2026-09-19 after this tool published
+        # 18 false FLEET_QUIET verdicts). Being INSIDE the ledger's span is
+        # not the same as the ledger COVERING that date. A zero has two
+        # causes -- the fleet did not run, or the fleet ran and nobody called
+        # the voluntary recorder -- and only the first is a cause. Defend a
+        # quiet claim with a second store or do not make it.
+        # ------------------------------------------------------------------
+        if quiet and commits_by_day:
+            g_days = sorted(commits_by_day)
+            g_median = statistics.median([commits_by_day[d] for d in g_days])
+            g_quiet_below = g_median * quiet_fraction
+            if date < g_days[0] or date > g_days[-1]:
+                row["why"] += ("; NOT corroborated -- outside the corroborating "
+                               f"store's span {g_days[0]}..{g_days[-1]}")
+            else:
+                c = commits_by_day.get(date, 0)
+                row["commits"] = c
+                if c < g_quiet_below:
+                    row["corroborated"] = True
+                    row["why"] += (f"; corroborated: {c} commit(s) on {GIT_REF} "
+                                   f"vs median {g_median:g}")
+                else:
+                    row["corroborated"] = False
+                    row["verdict"] = "UNCORROBORATED_QUIET"
+                    row["why"] = (
+                        f"friction ledger shows {active} lane(s), but {c} "
+                        f"commit(s) landed on {GIT_REF} that day (median "
+                        f"{g_median:g}). The zero is a RECORDING outage, not a "
+                        "quiet fleet -- this gap has NO established cause.")
+        elif quiet:
+            row["why"] += "; NOT corroborated -- no second store available"
+        results.append(row)
     return {
         "span": {"first": span_first, "last": span_last, "observed_days": len(observed)},
+        "corroborator": (None if not commits_by_day else
+                         {"store": f"git {GIT_REF}",
+                          "first": min(commits_by_day),
+                          "last": max(commits_by_day)}),
         "median_lanes_active": median,
         "quiet_below": quiet_below,
         "basis": (f"lanes-active per day from friction_ledger.jsonl over "
                   f"{span_first}..{span_last}; quiet threshold = "
-                  f"{quiet_fraction:g} x median, derived at call time"),
+                  f"{quiet_fraction:g} x median, derived at call time; every "
+                  f"quiet claim corroborated against "
+                  f"{'git ' + GIT_REF if commits_by_day else 'NOTHING'}"),
         "gaps": results,
     }
 
@@ -226,13 +318,74 @@ def self_test() -> int:
     if attribute(["2026-09-08"], by_day)["quiet_below"] == attribute(["2026-01-04"], small)["quiet_below"]:
         failures.append("threshold did not move with the population -- it is effectively a constant")
 
+    # Pole 4 (THE MOTIVATING INCIDENT, 2026-09-19): a day the friction ledger
+    # calls empty while the fleet shipped 41-70 commits. Measured live: the
+    # ledger had 0 lanes on 2026-09-16/17 and 1 on 09-18; git had 41/43/70.
+    # Before this branch existed all three published as a confident
+    # FLEET_QUIET -- a cause manufactured out of an unwritten store.
+    busy_git = {"2026-09-%02d" % d: n
+                for d, n in [(1, 40), (2, 45), (3, 50), (4, 44), (5, 17),
+                             (6, 14), (7, 31), (8, 24), (9, 52), (10, 92),
+                             (11, 37), (12, 69), (13, 59), (14, 67), (15, 39),
+                             (16, 41), (17, 43), (18, 70)]}
+    by_day4 = dict(by_day)
+    by_day4["2026-09-16"] = set()
+    by_day4["2026-09-17"] = set()
+    got4 = attribute(["2026-09-16", "2026-09-17"], by_day4, commits_by_day=busy_git)
+    for g in got4["gaps"]:
+        if g["verdict"] != "UNCORROBORATED_QUIET":
+            failures.append("%s: ledger-zero on a %s-commit day must be "
+                            "UNCORROBORATED_QUIET, got %s"
+                            % (g["date"], busy_git[g["date"]], g["verdict"]))
+        if g["corroborated"] is not False:
+            failures.append("%s: corroborated must be False, got %r"
+                            % (g["date"], g["corroborated"]))
+
+    # Pole 5 (NEGATIVE CONTROL for pole 4): the SAME ledger-zero day, but the
+    # corroborator agrees the fleet was down. This MUST stay FLEET_QUIET --
+    # otherwise the new branch is not a detector, it is a blanket refusal that
+    # would score identically on every input.
+    quiet_git = dict(busy_git)
+    quiet_git["2026-09-16"] = 0
+    quiet_git["2026-09-17"] = 1
+    got5 = attribute(["2026-09-16", "2026-09-17"], by_day4, commits_by_day=quiet_git)
+    for g in got5["gaps"]:
+        if g["verdict"] != "FLEET_QUIET":
+            failures.append("%s: ledger-zero + git-zero must stay FLEET_QUIET, "
+                            "got %s" % (g["date"], g["verdict"]))
+        if g["corroborated"] is not True:
+            failures.append("%s: corroborated must be True, got %r"
+                            % (g["date"], g["corroborated"]))
+
+    # Pole 6: a SILENT corroborator must not manufacture corroboration. An
+    # absent second store degrades to "not corroborated", never to "quiet".
+    got6 = attribute(["2026-09-16"], by_day4, commits_by_day=None)
+    g6 = got6["gaps"][0]
+    if g6["verdict"] != "FLEET_QUIET" or g6["corroborated"] is not None:
+        failures.append("silent corroborator must give FLEET_QUIET/corroborated=None, "
+                        "got %s/%r" % (g6["verdict"], g6["corroborated"]))
+    if "NOT corroborated" not in g6["why"]:
+        failures.append("silent corroborator must SAY it did not corroborate")
+
+    # Pole 7: a date outside the CORROBORATOR's span is not corroborated
+    # either -- the same span discipline the primary store already gets.
+    got7 = attribute(["2026-09-16"], by_day4,
+                     commits_by_day={"2026-09-20": 5, "2026-09-21": 6})
+    g7 = got7["gaps"][0]
+    if g7["corroborated"] is not None or "outside the corroborating" not in g7["why"]:
+        failures.append("pre-span corroborator date must be uncorroborated, got %r/%s"
+                        % (g7["corroborated"], g7["why"]))
+
     for f in failures:
         print("FAIL: %s" % f)
     if failures:
         print("\nself-test FAILED (%d assertion(s))" % len(failures))
         return 1
-    print("self-test PASSED: motivating incident split correctly, "
-          "pre-span date refused (R6), threshold tracks the population")
+    print("self-test PASSED (%d assertions): motivating incident split correctly, "
+          "pre-span date refused (R6), threshold tracks the population, "
+          "a ledger-zero on a busy-git day refuses to claim quiet, a "
+          "corroborated quiet day still passes, and a silent or out-of-span "
+          "corroborator never manufactures corroboration" % 13)
     return 0
 
 
@@ -243,6 +396,11 @@ def main() -> int:
     ap.add_argument("--self-test", action="store_true", help="R4 both-poles control")
     ap.add_argument("--state", default=STATE_PATH)
     ap.add_argument("--friction", default=FRICTION_PATH)
+    ap.add_argument("--git-repo", default=GIT_REPO,
+                    help="repo whose commit history corroborates a quiet claim")
+    ap.add_argument("--no-corroborate", action="store_true",
+                    help="skip the second store (every quiet day then reports "
+                         "corroborated=None, never corroborated=True)")
     args = ap.parse_args()
 
     if args.self_test:
@@ -255,7 +413,8 @@ def main() -> int:
         print("UNREADABLE: %s" % exc, file=sys.stderr)
         return 2
 
-    out = attribute(missing, by_day)
+    commits = None if args.no_corroborate else git_activity(args.git_repo)
+    out = attribute(missing, by_day, commits_by_day=commits)
     out["coverage"] = {
         "observed_days": cov.get("observed_days"),
         "first_entry_date": cov.get("first_entry_date"),
@@ -271,8 +430,14 @@ def main() -> int:
               % (c["missing_count"], c["first_entry_date"],
                  c["last_entry_date"], c["observed_days"]))
         print("  basis: %s" % out["basis"])
+        if out.get("corroborator"):
+            print("  corroborator: %s (%s..%s)"
+                  % (out["corroborator"]["store"], out["corroborator"]["first"],
+                     out["corroborator"]["last"]))
+        else:
+            print("  corroborator: NONE -- no quiet claim here is corroborated")
         tally = collections.Counter(g["verdict"] for g in out["gaps"])
-        for verdict in ("LANE_ALONE", "FLEET_QUIET", "UNKNOWN"):
+        for verdict in ("LANE_ALONE", "UNCORROBORATED_QUIET", "FLEET_QUIET", "UNKNOWN"):
             rows = [g for g in out["gaps"] if g["verdict"] == verdict]
             if not rows:
                 continue
@@ -283,8 +448,14 @@ def main() -> int:
         if tally["UNKNOWN"]:
             print("\n  UNKNOWN is not zero: those dates predate the friction "
                   "ledger and carry no cause either way.")
+        if tally["UNCORROBORATED_QUIET"]:
+            print("\n  UNCORROBORATED_QUIET is not FLEET_QUIET: the friction "
+                  "ledger was silent while the fleet shipped commits, so the "
+                  "zero measures the RECORDER, not the fleet. These gaps have "
+                  "no established cause and must not be written off as quiet.")
 
-    return 1 if any(g["verdict"] == "LANE_ALONE" for g in out["gaps"]) else 0
+    needs_read = ("LANE_ALONE", "UNCORROBORATED_QUIET")
+    return 1 if any(g["verdict"] in needs_read for g in out["gaps"]) else 0
 
 
 if __name__ == "__main__":

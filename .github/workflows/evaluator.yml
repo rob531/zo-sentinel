@@ -155,6 +155,7 @@ jobs:
             tests/test_promoter_repair_wiring.py \
             tests/test_canary_classify_smoke.py \
             tests/test_requeue_quarantined.py \
+            tests/test_fu272_active_path_guard.py \
             tests/test_quarantine_topup.py \
             tests/test_architect_domain_map.py \
             tests/test_no_module_scope_test_imports.py \

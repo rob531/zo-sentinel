@@ -267,3 +267,82 @@ def test_enforce_is_the_only_thing_that_makes_a_halt_bite(tmp_path):
     assert h.is_halted("l", halt_dir=d) is False
     h.raise_halt("l", "collapse", mode=h.MODE_ARMED, halt_dir=d)
     assert h.is_halted("l", halt_dir=d) is True
+
+
+# ===========================================================================
+# --enforce-all: the shared-entry-point consumer (FU-253)
+# ===========================================================================
+
+def test_enforce_all_exits_1_when_any_lane_is_halted(tmp_path, monkeypatch):
+    """--enforce-all is the gate for an entry point shared by multiple lanes.
+    A halt on ANY lane must block -- not just the specific lane the caller names.
+    This is the red path that proves the wiring is not decorative."""
+    h = _load("lane_halt")
+    # Use a near-future NOW so the halt is not expired when list_halts() calls _now()
+    near_future = h._now() + dt.timedelta(hours=1)
+    monkeypatch.setattr(h, "HALT_DIR", str(tmp_path))
+    h.raise_halt("builder:manifest", "0/36 valid", mode=h.MODE_ARMED,
+                 now=near_future, halt_dir=str(tmp_path))
+    rc = h.main(["--enforce-all"])
+    assert rc == 1, "enforce-all must exit 1 when an armed halt is active"
+
+
+def test_enforce_all_exits_0_when_no_halts_are_active(tmp_path, monkeypatch):
+    """No sentinel files -> clear. This is the happy path for every PR that runs
+    before the census has ever raised a halt."""
+    h = _load("lane_halt")
+    monkeypatch.setattr(h, "HALT_DIR", str(tmp_path))
+    rc = h.main(["--enforce-all"])
+    assert rc == 0
+
+
+def test_enforce_all_exits_0_when_only_shadow_halts_exist(tmp_path, monkeypatch):
+    """Shadow halts go to a DIFFERENT directory -- is_halted() never reads them.
+    --enforce-all must not read the shadow dir either, or the safety story breaks."""
+    h = _load("lane_halt")
+    armed = str(tmp_path / "armed")
+    shadow = str(tmp_path / "shadow")
+    monkeypatch.setattr(h, "HALT_DIR", armed)
+    monkeypatch.setattr(h, "SHADOW_DIR", shadow)
+    near_future = h._now() + dt.timedelta(hours=1)
+    # write a shadow halt -- should not be visible to --enforce-all
+    h.raise_halt("builder:manifest", "shadow only", mode=h.MODE_SHADOW,
+                 now=near_future, halt_dir=armed, shadow_dir=shadow)
+    rc = h.main(["--enforce-all"])
+    assert rc == 0, "enforce-all must not read the shadow directory"
+
+
+def test_enforce_all_exits_0_when_all_halts_are_expired(tmp_path, monkeypatch):
+    """An expired halt must not block -- enforce-all must agree with is_halted()."""
+    h = _load("lane_halt")
+    monkeypatch.setattr(h, "HALT_DIR", str(tmp_path))
+    # Raise a halt that already expired (decided_at 3h ago, ttl 1h)
+    past = h._now() - dt.timedelta(hours=3)
+    h.raise_halt("builder:manifest", "old", ttl_hours=1, mode=h.MODE_ARMED,
+                 now=past, halt_dir=str(tmp_path))
+    # Confirm it is expired relative to now
+    halts = h.list_halts(halt_dir=str(tmp_path))
+    assert all(h2["expired"] for h2 in halts)
+    rc = h.main(["--enforce-all"])
+    assert rc == 0
+
+
+def test_pr_gates_yml_wires_enforce_all(tmp_path):
+    """Machine-checkable proof that the consumer exists in the CI workflow.
+
+    FU-253 root cause: the sentinel was armed and zero surfaces consulted it.
+    This test is the subscriber the docstring caveat never had -- it fails if
+    someone removes the consultation line from the gate, not just if the code
+    changes.
+
+    Mirrors the pattern of test_the_census_is_ARMED_and_shadow_is_still_reachable,
+    which asserts a live fact about the CI source rather than a unit behaviour."""
+    pr_gates = os.path.join(ROOT, ".github", "workflows", "pr-gates.yml")
+    src = open(pr_gates, encoding="utf-8").read()
+    assert "lane_halt.py" in src, (
+        "pr-gates.yml must reference lane_halt.py -- the sentinel has no consumer"
+    )
+    assert "--enforce-all" in src, (
+        "pr-gates.yml must call --enforce-all -- a reference without the flag "
+        "would be documentation, not enforcement"
+    )

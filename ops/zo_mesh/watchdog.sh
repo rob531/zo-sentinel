@@ -367,6 +367,12 @@ _daemon wisdom_synthesiser.py    wisdom_synthesiser.log   Wisdom          "pytho
 _daemon run_manager.py           manager.log              Manager         "python3 $MESH/run_manager.py daemon"
 _daemon goose_runner.py          goose_runner.log         GooseRunner     "env ZO_ESCALATE=1 python3 $SENTINEL/goose_runner.py"
 _daemon proposed_to_pending_promoter proposed_to_pending_promoter.log PromoterP2P "bash -c 'cd $SENTINEL && exec python3 -m zo_sentinel.promoters.proposed_to_pending_promoter'"
+# Rotator: owns intent_engine_daemon (06:00-21:59 ET) and he_who_comes_next
+# the other eight hours. It was UNDECLARED until 2026-09-15, so the 05:59Z
+# reboot killed it and nothing restarted it -- orphaning BOTH children and
+# filing chairman issue #5103. _daemon defers to the wrapper when one is
+# alive, so this never races the running copy.
+_daemon intent_rotation_service.py intent_rotation_service.log IntentRotation "bash $MESH/daemon_wrapper.sh intent_rotation_service $MESH/intent_rotation_service.py"
 
 # v3.8: build->publish pipeline janitor -- ghost .done sweep + heal the
 # publisher/ingestor/governor `python3 -m` loops when they crash-loop on the

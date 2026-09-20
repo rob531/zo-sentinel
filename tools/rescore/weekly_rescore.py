@@ -131,6 +131,62 @@ def secret(name: str) -> str:
 
 
 # ---------------------------------------------------------------- run state
+_DRIVER_PROV = None
+
+
+def _driver_provenance() -> dict:
+    """Which tree is this code running from? Computed once per process, report-only.
+
+    `HERE` has been resolved at import since the first version of this file and has
+    never once been written down, so no artifact a wave leaves behind says which
+    worktree fired it. The cost of that omission is measurable: "which worktree does
+    `moat-rescore-weekly` actually RUN from?" has been an open question since
+    2026-08-11 and could only ever be answered by ELIMINATION -- on 2026-09-13 a
+    census of 94 rescore trees on the tower could narrow it to 33 and no further.
+    R1 asks every lane to resolve the running artifact from the RUNTIME rather than
+    a repo path; this is the runtime writing its own answer down once, at the moment
+    it matters, instead of thirty-three lanes guessing later.
+
+    Same shape as #4814 (a status the watch loop already held and omitted from the
+    line a human reads) and FU-358 -- a value measured, held, and never published.
+
+    NEVER RAISES. A provenance helper that can kill a paid fire is strictly worse
+    than no helper at all. Every field independently degrades to the string
+    "UNKNOWN": a tree that is not a git checkout, a git that is missing, and a git
+    that times out must all read UNKNOWN and never a plausible-looking default,
+    because unknown is not zero (R6) and a fabricated sha is worse than a blank.
+    """
+    global _DRIVER_PROV
+    if _DRIVER_PROV is not None:
+        return dict(_DRIVER_PROV)
+    prov = {"launch_dir": "UNKNOWN", "git_sha": "UNKNOWN", "dirty": "UNKNOWN",
+            "driver_md5": "UNKNOWN", "host": "UNKNOWN"}
+    try:
+        import hashlib as _hashlib
+        prov["launch_dir"] = str(HERE)
+        prov["driver_md5"] = _hashlib.md5(Path(__file__).resolve().read_bytes()).hexdigest()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        prov["host"] = socket.gethostname()
+    except Exception:  # noqa: BLE001
+        pass
+    for key, argv, conv in (
+        ("git_sha", ["git", "rev-parse", "HEAD"], lambda s: s.strip() or "UNKNOWN"),
+        ("dirty", ["git", "status", "--porcelain"],
+         lambda s: bool([ln for ln in s.splitlines() if ln and not ln.startswith("??")])),
+    ):
+        try:
+            r = subprocess.run(argv, cwd=str(HERE), capture_output=True, text=True,
+                               timeout=30)
+            if r.returncode == 0:
+                prov[key] = conv(r.stdout)
+        except Exception:  # noqa: BLE001
+            pass
+    _DRIVER_PROV = prov
+    return dict(prov)
+
+
 class Run:
     def __init__(self, run_dir: Path):
         self.dir = run_dir
@@ -144,8 +200,28 @@ class Run:
     def done(self, phase: str) -> bool:
         return self.state.get("phases", {}).get(phase) == "done"
 
+    def _record_driver(self) -> None:
+        """Stamp this PROCESS's driver into the run, deduped.
+
+        `driver` is the most recent observation; `driver_seen` accumulates every
+        distinct (launch_dir, git_sha) the run has been touched by. The two differ
+        precisely when a run is fired from one tree and collected from another --
+        which is the failure this exists to make visible, so recording only the
+        first observation would hide the one case worth recording.
+        """
+        try:
+            prov = _driver_provenance()
+            self.state["driver"] = prov
+            seen = self.state.setdefault("driver_seen", [])
+            key = [prov.get("launch_dir"), prov.get("git_sha")]
+            if key not in seen:
+                seen.append(key)
+        except Exception:  # noqa: BLE001
+            pass
+
     def mark(self, phase: str, status: str = "done", **kw) -> None:
         self.state.setdefault("phases", {})[phase] = status
+        self._record_driver()
         self.state.update(kw)
         self.save()
         ledger(f"phase_{phase}_{status}", self.state["run_id"])
@@ -959,6 +1035,7 @@ def _billed_dph(run, args) -> float:
 
 
 WEDGE_GRACE_MIN_DEFAULT = 25
+POD_PROGRESS_EVERY_SECS = 300
 
 
 def _instance_probe(run) -> dict:
@@ -990,6 +1067,88 @@ def _instance_probe(run) -> dict:
         log(f"watch: instance probe failed ({e.__class__.__name__}: {e}); status UNKNOWN")
         return {}
 
+
+
+def _pod_progress(run) -> str:
+    """Last scoring-progress fragment the pod emitted, via the vast logs API.
+
+    Report-only, best effort, never raises: an unreadable API yields "" and the
+    caller says nothing rather than something false (R6 -- unknown is not zero).
+    Cached for POD_PROGRESS_EVERY_SECS so the watch loop does not hammer it.
+    """
+    import hashlib as _hashlib
+    import re as _re
+    now = time.time()
+    last = run.state.get("_pod_progress_at", 0)
+    if now - last < POD_PROGRESS_EVERY_SECS:
+        return run.state.get("_pod_progress", "")
+    iid = run.state.get("instance_id")
+    if not iid:
+        return ""
+    text = ""
+    try:
+        from vastai_sdk import VastAI
+        v = VastAI(api_key=secret("vast"))
+        for call in (lambda: v.logs(INSTANCE_ID=int(iid)),
+                     lambda: v.logs(id=int(iid)),
+                     lambda: v.logs(int(iid))):
+            try:
+                text = call() or ""
+            except TypeError:
+                continue
+            if text:
+                break
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: pod progress unreadable ({e.__class__.__name__}); progress UNKNOWN")
+        text = ""
+    frag = ""
+    for m in _re.finditer(r"(\d+)/(\d+)\s*\[", str(text)):
+        done, total = m.group(1), m.group(2)
+        if total and int(total) > 100:      # the inputs bar, not a 2-shard loader
+            frag = f"{done}/{total}"
+    # The vast logs API can serve a FROZEN snapshot: on instance 50335633 it
+    # returned byte-identical text (md5 0d5d3168, 5642 B) across 5 calls and 12
+    # minutes, tail stuck at `7/28601`, with and without `tail=`. A number
+    # carried forward is indistinguishable from a number measured, so publish
+    # the fragment only while the snapshot is actually moving, and say once
+    # that the instrument is blind rather than printing a comfortable digit.
+    digest = _hashlib.md5(str(text).encode("utf-8", "replace")).hexdigest()
+    if text and digest == run.state.get("_pod_log_md5"):
+        if not run.state.get("_pod_log_frozen_said"):
+            log("watch: vast log snapshot unchanged between polls -- pod progress "
+                "UNAVAILABLE (frozen API, not a stalled pod)")
+            run.state["_pod_log_frozen_said"] = True
+        frag = ""
+    else:
+        run.state["_pod_log_md5"] = digest
+        run.state["_pod_log_frozen_said"] = False
+    run.state["_pod_progress"] = frag
+    run.state["_pod_progress_at"] = now
+    run.save()
+    return frag
+
+
+def _watch_basis(run, probe: dict) -> str:
+    """The status the loop ALREADY holds, rendered into the line a human reads.
+
+    Run 20260909-014759 spent 40 minutes printing "no results yet" while
+    state.json recorded status_seen == [unknown, loading, running] and the pod
+    was 30% through its cohort. Nothing was broken; the reading was simply
+    silent about the one fact that separates a wedge from a slow job. A value
+    measured, stored and then omitted from the only surface anyone reads is
+    this fleet's most expensive recurring shape (cf. FU-358).
+    """
+    if not probe:
+        status = "UNKNOWN (probe unreadable)"
+    elif probe.get("present") is False:
+        status = "absent"
+    else:
+        status = probe.get("actual_status") or "unknown"
+    out = f", status {status}"
+    prog = _pod_progress(run)
+    if prog:
+        out += f", pod {prog}"
+    return out
 
 def _pull_instance_logs(run) -> None:
     """SSH-free forensics BEFORE destroy, via the vast logs API.
@@ -1093,7 +1252,8 @@ def ph_watch_collect(run: Run, args) -> None:
             ledger("deadline_breach", run.state["run_id"], elapsed_h=round(elapsed_h, 2))
             run.mark("watch", "failed", result="deadline")
             break
-        log(f"watch: no results yet (elapsed {elapsed_h:.2f}h, est ${est_cost:.2f})")
+        log(f"watch: no results yet (elapsed {elapsed_h:.2f}h, est ${est_cost:.2f}"
+            f"{_watch_basis(run, probe)})")
         time.sleep(args.poll_secs)
     # COLLECT (forensics ALWAYS -- I3), from ok or fail branch
     url = f"https://x-access-token:{pat}@github.com/{SFT_REPO}.git"

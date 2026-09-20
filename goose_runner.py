@@ -526,7 +526,62 @@ def _lessons_context(directive):
         return ""
 
 
+# (mtime, names) for the app.models roster; see _model_roster().
+_MODEL_ROSTER_MEMO = {"mtime": None, "names": None}
+
+
+def _model_roster():
+    """(names, klass) -- the COMPLETE app.models class roster, from the same
+    schema KL the schema-PRM gate lints against.
+
+    WHY THIS EXISTS. _data_access_context named FOUR model classes as spelling
+    examples and otherwise pointed the model at docs/SCHEMA_TRUTH.md -- a file
+    a single-shot chat completion with no filesystem cannot open. That is the
+    same unfollowable-pointer defect the 2026-08-11 grounding fix removed from
+    the engine prompt, still live in the block that is folded into EVERY build
+    task. Measured on the live runner's log (basis: /home/workspace/logs/
+    goose_runner.log, 2026-09-16T10:58Z..2026-09-20T06:24Z, the window the file
+    covers): 145 ghost-guard give-ups, 95 of them gate=selftest, and 77 lines
+    of the form "'X' is not in 'Y'". The app.models half of those names --
+    ServiceHealth, OrgService, McpRiskRegister, MCPSignalScores, MeshMemory,
+    McpThreatAssociation, McpSignalScore -- are all absent from a 14-class
+    roster. Every one is plausible. None is on the list, and the list was
+    never shown.
+
+    14 names is about 200 characters: the same trade _bus_table_context()
+    already makes for the 45 bus tables, applied to the plane that carries the
+    largest measured share of the failures.
+
+    klass is "ok" or "kl_error" and the roster is NEVER [] with klass "ok".
+    An unreadable KL and a schema with no models are different facts (R6), and
+    a caller must not print "the COMPLETE roster is: <nothing>" when the truth
+    is unknown -- that would assert a falsehood with more authority than the
+    pointer it replaced.
+    """
+    path = PROJECT_DIR / "graphify-out" / "schema_kl.json"
+    try:
+        mtime = path.stat().st_mtime
+    except Exception:                                      # noqa: BLE001
+        mtime = None
+    if (_MODEL_ROSTER_MEMO["names"] is not None
+            and _MODEL_ROSTER_MEMO["mtime"] == mtime):
+        return _MODEL_ROSTER_MEMO["names"], "ok"
+    try:
+        kl, _ = _schema_kl_cached()
+    except Exception:                                      # noqa: BLE001
+        return [], "kl_error"
+    names = sorted(n for n in ((kl or {}).get("models") or {}) if n)
+    if not names:
+        return [], "kl_error"
+    _MODEL_ROSTER_MEMO["mtime"] = mtime
+    _MODEL_ROSTER_MEMO["names"] = names
+    return names, "ok"
+
+
+# Keyed on the rendered roster, not a bare None, so a regenerated KL re-renders
+# instead of serving a stale block for the life of the daemon.
 _DATA_ACCESS_CTX = None
+_DATA_ACCESS_KEY = None
 
 
 def _data_access_context(directive):
@@ -543,10 +598,37 @@ def _data_access_context(directive):
     so it stays real"; it never was, and that sentence is why nobody looked
     for the missing column truth for weeks. Real per-directive columns come
     from _schema_ground_context(); this block carries table/class names and
-    the import contract only."""
-    global _DATA_ACCESS_CTX
-    if _DATA_ACCESS_CTX is not None:
+    the import contract only.
+
+    2026-09-20: the CLASS half of that is now genuinely derived -- the complete
+    app.models roster is inlined from the schema KL by _model_roster(). The
+    docs/SCHEMA_TRUTH.md pointer it replaces named an authority the engine (a
+    single chat completion, no filesystem) cannot consult, and a model sent to
+    fetch truth it cannot reach invents it. The TABLE list in plane (1)/(2)
+    below is still a literal and is still not claimed to be derived."""
+    global _DATA_ACCESS_CTX, _DATA_ACCESS_KEY
+    _roster, _rklass = _model_roster()
+    _key = (_rklass, tuple(_roster))
+    if _DATA_ACCESS_CTX is not None and _DATA_ACCESS_KEY == _key:
         return _DATA_ACCESS_CTX
+    _DATA_ACCESS_KEY = _key
+    # R6: an unreadable KL is not an empty roster. Fall back to the exact text
+    # that shipped before this change -- pointer and all -- rather than telling
+    # the model that no model classes exist.
+    _symbols = (
+        "SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists "
+        "every name that EXISTS -- read it before writing an import. If a model is not in it "
+        "it does not exist: use the nearest real class or flag that the directive needs a "
+        "schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not "
+        "MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. "
+    ) if _rklass != "ok" else (
+        "APP MODEL CLASSES -- the COMPLETE roster of names importable from app.models, read "
+        "from the live schema KL (the same source the schema-PRM gate lints against). A class "
+        "name that is NOT on this list DOES NOT EXIST, however plausible it looks and however "
+        "confidently the directive names it: use the nearest real class, or say the directive "
+        "needs a schema decision. Never invent one, and never pluralise or re-case one (Mcp, "
+        "not MCP). The roster is: " + ", ".join(_roster) + ". "
+    )
     _DATA_ACCESS_CTX = (
         "DATA ACCESS: data lives in databases, never files (no CSV/JSON inputs; CSV is "
         "export-only). TWO PLANES -- (1) APP tables (mcp_server_registry, mcp_llm_axis_scores, "
@@ -562,11 +644,7 @@ def _data_access_context(directive):
         "that_app.dependency_overrides[get_session]. There is NO app.dependency_overrides "
         "module (`app` is the PACKAGE; the instance is app.main:app), and StaticPool is NOT "
         "in app.db (from sqlalchemy.pool import StaticPool). "
-        "SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists "
-        "every name that EXISTS -- read it before writing an import. If a model is not in it "
-        "it does not exist: use the nearest real class or flag that the directive needs a "
-        "schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not "
-        "MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. "
+        + _symbols +
         "The MODULE's OWN data access MUST remain from app.db import get_session + "
         "from app.models import <Model>; a module whose data layer is itself an in-memory/"
         "sqlite store (rather than just the test override) is HOLLOW and REJECTED. "

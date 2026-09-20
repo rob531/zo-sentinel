@@ -16,6 +16,8 @@ import sys
 
 import pytest
 
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+
 _MOD_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "fire_gate.py"
 _spec = importlib.util.spec_from_file_location("fire_gate", _MOD_PATH)
 fire_gate = importlib.util.module_from_spec(_spec)
@@ -272,7 +274,18 @@ def _run_main(monkeypatch, files, dockerfile=REAL_SHAPE):
 
 def test_main_returns_1_when_the_delta_reaches_the_image(monkeypatch):
     """The live negative control, pinned. This is the assertion that was missing."""
-    assert _run_main(monkeypatch, ["app/scoring_consumer.py"]) == 1
+    # The fixture must name a path that REALLY EXISTS in this repo (#3999).
+    # classify() is pure string matching and never stats the path, so a fixture
+    # naming a deleted file keeps this test green while the live observation
+    # recorded above becomes unreproducible -- the HARNESS_DOCTRINE class.
+    # Observed 2026-09-19: with app/scoring_consumer.py deleted and this
+    # assertion absent, the test still PASSED; with it present, it FAILED.
+    fixture = "app/main.py"
+    assert (_REPO_ROOT / fixture).exists(), (
+        f"fixture {fixture!r} names a path that no longer exists -- this test's "
+        "negative control is fictional"
+    )
+    assert _run_main(monkeypatch, [fixture]) == 1
 
 
 def test_main_returns_0_only_when_nothing_reaches_the_image(monkeypatch):

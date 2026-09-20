@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""R4 negative control for the corroboration branch in coverage_attribute.py.
+"""R4 negative control for the corroboration and recency branches in
+coverage_attribute.py.
 
 Mutates the FILE on disk and runs `--self-test` in a SUBPROCESS -- never a
 module object, because the subject reads its own copy off disk. Each mutant
@@ -39,6 +40,27 @@ MUTANTS = [
         "drop the corroborator's own span guard",
         'if date < g_days[0] or date > g_days[-1]:',
         'if False:',
+    ),
+    # ---- recency branch (added 2026-09-20) ----------------------------
+    (
+        "every single-day gap counts as a blackout",
+        'if len(run) < min_days:',
+        'if False:',
+    ),
+    (
+        "every blackout reads as RECENT, however old",
+        'and most_recent["days_ago"] <= recent_window)',
+        'and True)',
+    ),
+    (
+        "no blackout ever reads as RECENT",
+        '    recent = bool(most_recent',
+        '    recent = False and bool(most_recent',
+    ),
+    (
+        "consecutive days never join into a run",
+        '        if runs and day - _dt.date.fromisoformat(runs[-1][-1]) == _dt.timedelta(days=1):',
+        '        if False:',
     ),
 ]
 
@@ -95,7 +117,8 @@ def main():
               % (failures, len(MUTANTS)))
         return 1
     print("all %d mutant(s) observed RED with a named assertion: the "
-          "corroboration branch is GUARDED, not decoration" % len(MUTANTS))
+          "corroboration AND recency branches are GUARDED, not "
+          "decoration" % len(MUTANTS))
     return 0
 
 

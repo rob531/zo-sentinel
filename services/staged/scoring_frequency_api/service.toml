@@ -1,0 +1,8 @@
+[service]
+name = "scoring_frequency_api"
+import_path = "services.active.scoring_frequency_api.router"
+prefix = "/api"
+tag = "scoring_frequency_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

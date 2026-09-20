@@ -283,16 +283,36 @@ jobs:
             fi
           fi
 
+          # Silence must be auditable: say how many PRs the cap EXCLUDED, so
+          # "nothing to reland" and "everything is too old to try" never print
+          # the same thing.
+          MAX_AGE_DAYS="${RELANDER_MAX_AGE_DAYS:-21}"
+          CUTOFF="$(date -u -d "${MAX_AGE_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)"
+          total_open=$(gh pr list -R "$REPO" --state open --label autonomous-build \
+                        --limit 800 --json number -q '. | length' 2>/dev/null || echo "?")
+          over_age=$(gh pr list -R "$REPO" --state open --label autonomous-build \
+                        --limit 800 --json number,createdAt \
+                        -q "[.[] | select(.createdAt <= \"$CUTOFF\")] | length" 2>/dev/null || echo "?")
+          echo "::notice::age cap ${MAX_AGE_DAYS}d (cutoff $CUTOFF): $over_age of $total_open open autonomous-build PR(s) are past it and will NOT be re-fired"
+
           # --- cohort A: stale-but-clean (original failure mode) -------------
           # NOTE: --limit is MANDATORY. gh pr list defaults to 30 rows; without
           # it this sweep was blind past row 30 and silently reported "nothing
           # to reland" while 28 eligible PRs sat outside the page.
           # Never swallow the error text: a failed query and an empty result
           # are different facts and must not print the same thing.
+          # AGE CAP (RELANDER_MAX_AGE_DAYS): a PR this sweep has re-fired
+          # every day for weeks is not going to land because of one more
+          # re-fire. Measured 2026-09-14: 272 open PRs, 192 of them opened
+          # before 2026-09-01, oldest 2026-07-19 -- and ~10 re-runs per
+          # failing branch per day. That is the bulk of the daily red, and
+          # none of it is new information. Past the cap the PR needs a
+          # decision (land it, fix the builder, or close it), not another
+          # identical run.
           if ! stale=$(gh pr list -R "$REPO" --state open \
                     --label autonomous-build --label triage:stale --limit 500 \
-                    --json number,mergeable,isDraft \
-                    -q '.[] | select(.mergeable != "CONFLICTING" and .isDraft == false) | .number' 2>qerr.txt); then
+                    --json number,mergeable,isDraft,createdAt \
+                    -q ".[] | select(.mergeable != \"CONFLICTING\" and .isDraft == false and .createdAt > \"$CUTOFF\") | .number" 2>qerr.txt); then
             echo "::error::cohort A query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)"
             exit 1
           fi
@@ -320,8 +340,8 @@ jobs:
             done
           done <<< "$(gh pr list -R "$REPO" --state open \
                         --label autonomous-build --label triage:solid --limit 500 \
-                        --json number,headRefOid,isDraft \
-                        -q '.[] | "\(.number) \(.headRefOid) \(.isDraft)"' 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
+                        --json number,headRefOid,isDraft,createdAt \
+                        -q ".[] | select(.createdAt > \"$CUTOFF\") | \"\(.number) \(.headRefOid) \(.isDraft)\"" 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
           n_solid=$(echo "$solid" | wc -w | tr -d ' ')
           # Silence must always be auditable: say what was EXAMINED, not just
           # what was selected. "0 selected" and "0 examined" are different bugs.

@@ -273,6 +273,74 @@ def attribute(missing_dates, by_day, quiet_fraction=QUIET_FRACTION_OF_MEDIAN,
     }
 
 
+
+# A daily lane's contract is one run per day, so the largest gap that cadence
+# permits is a SINGLE day. This is that contract expressed as a number, not a
+# tuned constant: two or more CONSECUTIVE missing days is a BLACKOUT.
+BLACKOUT_MIN_DAYS = 2
+# A REPORTING window, not a threshold on measured data: it asks whether the
+# most recent blackout ended recently enough to mean "this lane is failing
+# now" rather than "this lane had a bad month".
+RECENT_WINDOW_DAYS = 7
+
+
+def streaks(missing_dates, last_entry_date=None,
+            min_days=BLACKOUT_MIN_DAYS, recent_window=RECENT_WINDOW_DAYS):
+    """Collapse a flat gap list into dated CONSECUTIVE runs.
+
+    WHY (measured 2026-09-20): `missing_dates` is published flat and bucketed
+    only by cause, so a reader cannot tell a lane that died THIS WEEK from a
+    lane that had a bad month two months ago. The live list that day held
+    2026-09-16/17/18 -- three consecutive days, ended two days earlier -- and
+    the headline "21 missing across 57 days" said nothing about it. This lane
+    is the ONLY writer of entries[], so a consecutive run is a window in which
+    the paid-GPU balance went unread and a stranded rented instance could have
+    burned unobserved.
+
+    Everything is dated against `last_entry_date` -- the last day the lane
+    demonstrably DID run -- never against wall clock, so the reading is
+    deterministic and testable.
+    """
+    dates = sorted({d[:10] for d in missing_dates if d})
+    runs = []
+    for iso in dates:
+        day = _dt.date.fromisoformat(iso)
+        if runs and day - _dt.date.fromisoformat(runs[-1][-1]) == _dt.timedelta(days=1):
+            runs[-1].append(iso)
+        else:
+            runs.append([iso])
+
+    ref = _dt.date.fromisoformat(last_entry_date) if last_entry_date else None
+    blackouts = []
+    for run in runs:
+        if len(run) < min_days:
+            continue
+        row = {"start": run[0], "end": run[-1], "days": len(run), "days_ago": None}
+        if ref is not None:
+            row["days_ago"] = (ref - _dt.date.fromisoformat(run[-1])).days
+        blackouts.append(row)
+
+    most_recent = blackouts[-1] if blackouts else None
+    recent = bool(most_recent
+                  and most_recent["days_ago"] is not None
+                  and most_recent["days_ago"] <= recent_window)
+    return {
+        "blackouts": blackouts,
+        "longest_days": max((len(r) for r in runs), default=0),
+        "single_day_gaps": sum(1 for r in runs if len(r) == 1),
+        "most_recent": most_recent,
+        "recent_blackout": recent,
+        "reference_date": last_entry_date,
+        "basis": ("consecutive runs within coverage.missing_dates; a run of "
+                  "%d+ days is a BLACKOUT (a daily lane's cadence permits a "
+                  "gap of one day, so anything longer is unobserved time); "
+                  "days_ago is counted from %s, the last day this lane "
+                  "demonstrably ran, never from wall clock; RECENT means the "
+                  "most recent blackout ended within %d day(s) of that date"
+                  % (min_days, last_entry_date or "UNKNOWN", recent_window)),
+    }
+
+
 # --------------------------------------------------------------------------
 # R4: a detector's first proof is the incident that motivated it, plus a
 # control that MUST trip. Fixtures agree with the code that wrote them, so
@@ -376,6 +444,85 @@ def self_test() -> int:
         failures.append("pre-span corroborator date must be uncorroborated, got %r/%s"
                         % (g7["corroborated"], g7["why"]))
 
+
+    # ------------------------------------------------------------------
+    # RECENCY POLES (added 2026-09-20). A flat list of 21 dates reads the
+    # same whether this lane died yesterday or had a bad August. It did
+    # not: 2026-09-16/17/18 is a three-day consecutive blackout that ended
+    # two days before this was written. The shape was in every prior run's
+    # output; nothing computed it, so nobody read it.
+    # ------------------------------------------------------------------
+    checks = 13
+
+    # Pole 8 (THE MOTIVATING INCIDENT, the REAL gap list observed live on
+    # 2026-09-20 -- not a fixture invented to agree with the code).
+    live = ["2026-07-31", "2026-08-14", "2026-08-15", "2026-08-16",
+            "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20",
+            "2026-08-21", "2026-08-22", "2026-08-25", "2026-08-26",
+            "2026-08-27", "2026-08-28", "2026-08-29", "2026-08-30",
+            "2026-09-07", "2026-09-08", "2026-09-16", "2026-09-17",
+            "2026-09-18"]
+    s8 = streaks(live, last_entry_date="2026-09-20")
+    checks += 4
+    recent8 = s8["most_recent"]
+    if not recent8 or recent8["end"] != "2026-09-18" or recent8["days"] != 3:
+        failures.append("live gap list: most recent blackout should be 3 days "
+                        "ending 2026-09-18, got %r" % (recent8,))
+    if not recent8 or recent8["days_ago"] != 2:
+        failures.append("a blackout must be dated against the last OBSERVED "
+                        "run (expected days_ago=2), got %r"
+                        % (recent8 or {}).get("days_ago"))
+    if not s8["recent_blackout"]:
+        failures.append("a blackout that ended 2 days ago must read as RECENT")
+    if s8["longest_days"] != 9:
+        failures.append("longest run 2026-08-14..08-22 is 9 days, got %s"
+                        % s8["longest_days"])
+
+    # Pole 9 (NEGATIVE CONTROL): the SAME NUMBER of gaps, none consecutive.
+    # A flag that fires here too is not a detector, it is a constant -- the
+    # failure mode of every guard this ledger has had to retract.
+    scattered = (["2026-08-%02d" % d for d in range(1, 30, 2)][:11]
+                 + ["2026-07-%02d" % d for d in range(1, 21, 2)][:10])
+    s9 = streaks(sorted(scattered), last_entry_date="2026-09-20")
+    checks += 3
+    if s9["blackouts"]:
+        failures.append("21 NON-consecutive gaps must yield no blackout, got %d"
+                        % len(s9["blackouts"]))
+    if s9["recent_blackout"]:
+        failures.append("scattered single-day gaps must not read as a blackout")
+    if s9["single_day_gaps"] != len(scattered):
+        failures.append("every scattered gap should count as a single-day gap, "
+                        "got %s of %s" % (s9["single_day_gaps"], len(scattered)))
+
+    # Pole 10 (NEGATIVE CONTROL for the RECENT branch): an old blackout is
+    # still a blackout but must NOT read as recent. Without this assertion
+    # the recent flag would be decoration -- true of every blackout ever.
+    s10 = streaks(["2026-01-10", "2026-01-11", "2026-01-12"],
+                  last_entry_date="2026-09-20")
+    checks += 2
+    if len(s10["blackouts"]) != 1 or s10["blackouts"][0]["days"] != 3:
+        failures.append("an old 3-day run is still a blackout, got %r"
+                        % s10["blackouts"])
+    if s10["recent_blackout"]:
+        failures.append("a blackout 250+ days old must not read as RECENT")
+
+    # Pole 11 (BOUNDARY): one isolated missing day is a daily lane's
+    # permitted gap, not a blackout.
+    s11 = streaks(["2026-09-18"], last_entry_date="2026-09-20")
+    checks += 2
+    if s11["blackouts"]:
+        failures.append("a single missing day is not a blackout")
+    if s11["longest_days"] != 1:
+        failures.append("longest_days must still report the 1-day run, got %s"
+                        % s11["longest_days"])
+
+    # Pole 12: no gaps at all must be silent, not a zero-length blackout.
+    s12 = streaks([], last_entry_date="2026-09-20")
+    checks += 1
+    if s12["blackouts"] or s12["longest_days"] or s12["recent_blackout"]:
+        failures.append("an empty gap list must produce no blackout reading, "
+                        "got %r" % s12)
+
     for f in failures:
         print("FAIL: %s" % f)
     if failures:
@@ -385,7 +532,9 @@ def self_test() -> int:
           "pre-span date refused (R6), threshold tracks the population, "
           "a ledger-zero on a busy-git day refuses to claim quiet, a "
           "corroborated quiet day still passes, and a silent or out-of-span "
-          "corroborator never manufactures corroboration" % 13)
+          "corroborator never manufactures corroboration; and a "
+          "multi-day blackout is seen, dated, and told apart from "
+          "scattered single-day gaps" % checks)
     return 0
 
 
@@ -421,6 +570,7 @@ def main() -> int:
         "last_entry_date": cov.get("last_entry_date"),
         "missing_count": len(missing),
     }
+    out["streaks"] = streaks(missing, last_entry_date=cov.get("last_entry_date"))
 
     if args.json:
         print(json.dumps(out, indent=2))
@@ -448,6 +598,31 @@ def main() -> int:
         if tally["UNKNOWN"]:
             print("\n  UNKNOWN is not zero: those dates predate the friction "
                   "ledger and carry no cause either way.")
+        s = out["streaks"]
+        if s["blackouts"]:
+            print("\n  BLACKOUTS  (%d run(s) of %d+ consecutive days)"
+                  % (len(s["blackouts"]), BLACKOUT_MIN_DAYS))
+            for b in s["blackouts"]:
+                mark = ""
+                if s["recent_blackout"] and b is s["most_recent"]:
+                    mark = ("   <-- RECENT: blind %d day(s) before the last "
+                            "observed run" % b["days_ago"])
+                print("    %s..%s  %d day(s), ended %s day(s) before the last "
+                      "observed run%s" % (b["start"], b["end"], b["days"],
+                                          b["days_ago"], mark))
+            print("  longest consecutive run %d day(s); %d isolated single-day "
+                  "gap(s)" % (s["longest_days"], s["single_day_gaps"]))
+            print("  basis: %s" % s["basis"])
+        else:
+            print("\n  BLACKOUTS  none -- every gap is an isolated single day "
+                  "(%d of them)" % s["single_day_gaps"])
+        if s["recent_blackout"]:
+            print("\n  A RECENT BLACKOUT IS THE COVERAGE READING A FLAT DATE "
+                  "LIST HIDES: this lane is the ONLY writer of entries[], so a "
+                  "consecutive run is a window in which the paid-GPU balance "
+                  "went unread and a stranded rented instance could have "
+                  "burned unobserved. Still a READING -- not an alert, never "
+                  "an email.")
         if tally["UNCORROBORATED_QUIET"]:
             print("\n  UNCORROBORATED_QUIET is not FLEET_QUIET: the friction "
                   "ledger was silent while the fleet shipped commits, so the "
@@ -455,7 +630,8 @@ def main() -> int:
                   "no established cause and must not be written off as quiet.")
 
     needs_read = ("LANE_ALONE", "UNCORROBORATED_QUIET")
-    return 1 if any(g["verdict"] in needs_read for g in out["gaps"]) else 0
+    needs = any(g["verdict"] in needs_read for g in out["gaps"])
+    return 1 if (needs or out["streaks"]["recent_blackout"]) else 0
 
 
 if __name__ == "__main__":

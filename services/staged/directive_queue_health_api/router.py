@@ -1,150 +1,141 @@
-"""directive_queue_health_api router"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List
 import requests
-
 from app.db import get_session
 
-router = APIRouter(prefix="/api", tags=["directive_queue_health"])
+router = APIRouter()
 
 
-class StaleDaemon(BaseModel):
+class GeneratorHealth(BaseModel):
     name: str
-    age_seconds: int
+    last_heartbeat_age_seconds: int
+    stale: bool
+    pending_directive_count: int
 
 
-class DirectiveQueueHealthResponse(BaseModel):
-    proposed_count: int
-    pending_count: int
-    generator_status: str
-    stale_daemons: List[StaleDaemon]
-    queue_capacity_pct: float
+class QueueHealthResponse(BaseModel):
+    generators: List[GeneratorHealth]
+    overall_healthy: bool
+    stalled_generators: List[str]
 
 
-def query_write_service(sql: str) -> dict:
-    """Query the write_service /query endpoint."""
+def get_stale_threshold() -> int:
+    return 300
+
+
+def get_pending_directives_dir() -> str:
+    return "/var/lib/directives/pending"
+
+
+def get_proposed_directives_dir() -> str:
+    return "/var/lib/directives/proposed"
+
+
+def get_service_health_rows() -> List[dict]:
     response = requests.post(
         "http://127.0.0.1:8772/query",
-        json={"sql": sql},
-        timeout=30
+        json={
+            "sql": "SELECT daemon_name, last_heartbeat, status FROM service_health WHERE service_type = 'directive_generator'",
+            "params": {}
+        },
+        timeout=10
     )
     response.raise_for_status()
-    return response.json()
+    result = response.json()
+    return result.get("rows", [])
 
 
-def get_directive_counts() -> tuple[int, int]:
-    """Get proposed and pending directive counts from write_service."""
-    proposed_sql = "SELECT COUNT(*) as count FROM directives/proposed"
-    pending_sql = "SELECT COUNT(*) as count FROM directives/pending"
-    
-    proposed_result = query_write_service(proposed_sql)
-    pending_result = query_write_service(pending_sql)
-    
-    proposed_count = proposed_result.get("rows", [{}])[0].get("count", 0) if proposed_result.get("rows") else 0
-    pending_count = pending_result.get("rows", [{}])[0].get("count", 0) if pending_result.get("rows") else 0
-    
-    return proposed_count, pending_count
+def get_pending_directive_count(daemon_name: str) -> int:
+    import os
+    pending_dir = get_pending_directives_dir()
+    proposed_dir = get_proposed_directives_dir()
+    count = 0
+    for directory in [pending_dir, proposed_dir]:
+        if os.path.isdir(directory):
+            daemon_dir = os.path.join(directory, daemon_name)
+            if os.path.isdir(daemon_dir):
+                count += len([f for f in os.listdir(daemon_dir) if os.path.isfile(os.path.join(daemon_dir, f))])
+    return count
 
 
-def get_generator_status() -> str:
-    """Get sentinel_directive_generator liveness status."""
-    health_sql = "SELECT status FROM service_health WHERE service_name = 'sentinel_directive_generator'"
-    try:
-        result = query_write_service(health_sql)
-        if result.get("rows"):
-            return result["rows"][0].get("status", "unknown")
-    except Exception:
-        pass
-    return "unknown"
-
-
-def get_stale_daemons() -> List[StaleDaemon]:
-    """Get list of stale daemons from service_health."""
-    stale_sql = """
-        SELECT name, age_seconds 
-        FROM service_health 
-        WHERE age_seconds > 300 AND service_type = 'daemon'
-    """
-    try:
-        result = query_write_service(stale_sql)
-        return [
-            StaleDaemon(name=row["name"], age_seconds=row["age_seconds"])
-            for row in result.get("rows", [])
-        ]
-    except Exception:
-        return []
-
-
-def calculate_queue_capacity(proposed: int, pending: int) -> float:
-    """Calculate queue capacity percentage (assuming max 1000)."""
-    max_capacity = 1000
-    current = proposed + pending
-    return min(100.0, round((current / max_capacity) * 100, 2))
-
-
-@router.get("/internal/directive-queue/health", response_model=DirectiveQueueHealthResponse)
-async def health():
-    """Get directive queue health metrics."""
-    proposed_count, pending_count = get_directive_counts()
-    generator_status = get_generator_status()
-    stale_daemons = get_stale_daemons()
-    queue_capacity_pct = calculate_queue_capacity(proposed_count, pending_count)
-    
-    return DirectiveQueueHealthResponse(
-        proposed_count=proposed_count,
-        pending_count=pending_count,
-        generator_status=generator_status,
-        stale_daemons=stale_daemons,
-        queue_capacity_pct=queue_capacity_pct
+def compute_queue_health() -> QueueHealthResponse:
+    stale_threshold = get_stale_threshold()
+    rows = get_service_health_rows()
+    import time
+    current_time = int(time.time())
+    generators = []
+    stalled = []
+    for row in rows:
+        daemon_name = row.get("daemon_name")
+        last_heartbeat = row.get("last_heartbeat")
+        if last_heartbeat is None:
+            continue
+        heartbeat_age = current_time - int(last_heartbeat)
+        stale = heartbeat_age > stale_threshold
+        pending_count = get_pending_directive_count(daemon_name)
+        generators.append(GeneratorHealth(
+            name=daemon_name,
+            last_heartbeat_age_seconds=heartbeat_age,
+            stale=stale,
+            pending_directive_count=pending_count
+        ))
+        if stale:
+            stalled.append(daemon_name)
+    return QueueHealthResponse(
+        generators=generators,
+        overall_healthy=len(stalled) == 0,
+        stalled_generators=stalled
     )
+
+
+@router.get("/api/directives/queue-health", response_model=QueueHealthResponse)
+def get_queue_health():
+    return compute_queue_health()
 
 
 if __name__ == "__main__":
-    import unittest.mock as mock
-    
+    import sys
+    import time
+    from unittest.mock import patch, MagicMock
+    from fastapi.testclient import TestClient
     from fastapi import FastAPI
-    
-    # Mock write_service responses
-    proposed_response = {"rows": [{"count": 3}]}
-    pending_response = {"rows": [{"count": 2}]}
-    stale_daemons_response = {
+
+    app = FastAPI()
+    app.include_router(router)
+
+    stale_daemon_name = "generator-alpha"
+    healthy_daemon_name = "generator-beta"
+    current_ts = int(time.time())
+    stale_threshold = 300
+
+    mock_service_health_response = {
         "rows": [
-            {"name": "daemon_1", "age_seconds": 600},
-            {"name": "daemon_2", "age_seconds": 900}
+            {"daemon_name": stale_daemon_name, "last_heartbeat": current_ts - 600, "status": "running"},
+            {"daemon_name": healthy_daemon_name, "last_heartbeat": current_ts - 60, "status": "running"},
         ]
     }
-    status_response = {"rows": [{"status": "healthy"}]}
-    
-    def mock_post(url, **kwargs):
-        mock_response = mock.MagicMock()
-        sql = kwargs.get("json", {}).get("sql", "")
-        
-        if "directives/proposed" in sql:
-            mock_response.json.return_value = proposed_response
-        elif "directives/pending" in sql:
-            mock_response.json.return_value = pending_response
-        elif "service_name = 'sentinel_directive_generator'" in sql:
-            mock_response.json.return_value = status_response
-        elif "age_seconds > 300" in sql:
-            mock_response.json.return_value = stale_daemons_response
-        else:
-            mock_response.json.return_value = {"rows": []}
-        
-        mock_response.raise_for_status = mock.MagicMock()
-        return mock_response
-    
-    with mock.patch("requests.post", side_effect=mock_post):
-        app = FastAPI()
-        app.include_router(router)
-        
-        client = app.router  # get test client
-        from fastapi.testclient import TestClient
-        with TestClient(app) as tc:
-            response = tc.get("/api/internal/directive-queue/health")
-            
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-            data = response.json()
-            assert len(data["stale_daemons"]) >= 1, f"Expected stale_daemons >= 1, got {len(data['stale_daemons'])}"
-            
-            print("PASS")
+
+    def mock_post(url, json, timeout=None):
+        resp = MagicMock()
+        if "8772/query" in url:
+            resp.status_code = 200
+            resp.json.return_value = mock_service_health_response
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    mock_os_isdir = MagicMock(return_value=False)
+    mock_os_listdir = MagicMock(return_value=[])
+
+    with patch("requests.post", mock_post):
+        with patch("os.path.isdir", mock_os_isdir):
+            with patch("os.listdir", mock_os_listdir):
+                with patch("os.path.isfile", return_value=False):
+                    client = TestClient(app)
+                    response = client.get("/api/directives/queue-health")
+                    data = response.json()
+
+    assert data["overall_healthy"] is False, f"Expected overall_healthy=False, got {data['overall_healthy']}"
+    assert stale_daemon_name in data["stalled_generators"], f"Expected '{stale_daemon_name}' in stalled_generators, got {data['stalled_generators']}"
+    assert healthy_daemon_name not in data["stalled_generators"], f"Expected '{healthy_daemon_name}' NOT in stalled_generators"
+    print("PASS")

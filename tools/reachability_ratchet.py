@@ -72,8 +72,10 @@ Three integrity checks keep it from becoming the new graveyard:
   * every deferral needs a one-line reason. Reasonless deferrals fail.
   * every exemption in reachability_exempt.json needs a reason too, and
     exempted_count is reported on every run so it can be alarmed on.
-The list is capped by review, not by code: >40 active deferrals is a documented
-reopen trigger for the council, and is printed loudly here.
+The list is capped by review, not by code: >40 active deferrals is printed
+loudly here as an ADVISORY LEVEL. It escalates to no one -- the escalation it
+used to name was retired on 2026-09-13 (PR #5035). What BLOCKS is the
+derivative, DEFERRED NON-INCREASING.
 
 Every run writes artifacts/reachability_ratchet.json: the count, the delta, and
 the full orphan census with the shape of each module (declared prefix, tags,
@@ -90,6 +92,7 @@ import ast
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -101,8 +104,21 @@ ARTIFACT_DIR = os.path.join(ROOT, "artifacts")
 ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "reachability_ratchet.json")
 
 # >40 active deferrals = the hatch has become the new graveyard.
-# Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Do not raise this
-# number to make the warning quiet; escalate to the chairman instead.
+# Documented REOPEN TRIGGER in the 2026-07-21 CofC ruling. Raising this number
+# to quieten the warning is still the wrong move. What changed on 2026-09-13
+# is WHO adjudicates it -- see the retirement note below.
+#
+# MERGE_AUDIT_2026-08-23 G4: this cap was ADVISORY. Being over it printed the
+# reopen trigger inside a check that exited 0, so it appeared in no PR status and
+# blocked nothing -- "an instrument reporting faithfully into a place nobody
+# reads", which is the failure mode this file's own comments keep naming. It is
+# still printed, but the escalation it used to name was RETIRED 2026-09-13 by
+# peer decision deferred-cap-reopen-trigger-is-the-derivative (PR #5035): the
+# adjudicator is peer review, not the chairman, and the thing that BLOCKS is
+# the derivative -- see DEFERRED NON-INCREASING below. The sentence is not
+# reproduced anywhere in this file: to a substring match, a record of a
+# retired rule is indistinguishable from still obeying it, which is exactly
+# what rule_echo matches on.
 DEFERRED_REVIEW_CAP = 40
 
 # A module "exposes a router" if it constructs an APIRouter or decorates one.
@@ -145,8 +161,20 @@ def mount_surface_text():
 def describe(path, src):
     """Shape of a router module -- the design input for a mount declaration."""
     routes, tags, prefix = [], set(), None
-    for m in re.finditer(r"@router\.(get|post|put|delete|patch)\(\s*[\"']([^\"']+)", src):
-        routes.append("%s %s" % (m.group(1).upper(), m.group(2)))
+    # The path is `[^"']*`, NOT `[^"']+`. A zero-length route path is legal and
+    # in use: `@router.get("")` resolves to the router's own prefix. With `+`
+    # the decorator matched nothing at all, so a module declaring every one of
+    # its routes that way measured route_count=0 -- and tools/orphanage.py
+    # classifies route_count==0 as NO_ROUTES, "probably not a service: remit
+    # candidate". audit_log_api.py (APIRouter(prefix="/audit-log"), POST "" at
+    # line 49, GET "" at line 99) was nominated for deletion for having no
+    # routes while serving two. Measured on 335 orphans @ 0f5d7ae0e: 3 modules
+    # undercounted, 1 verdict flipped.
+    #
+    # The empty path is RENDERED as "" rather than as nothing, so a reader of
+    # the census cannot mistake a real empty-path route for a dropped capture.
+    for m in re.finditer(r"@router\.(get|post|put|delete|patch)\(\s*[\"']([^\"']*)", src):
+        routes.append("%s %s" % (m.group(1).upper(), m.group(2) or '""'))
     for m in re.finditer(r"tags\s*=\s*\[([^\]]*)\]", src):
         for t in re.findall(r"[\"']([^\"']+)[\"']", m.group(1)):
             tags.add(t)
@@ -266,14 +294,154 @@ def load_baseline():
         return None
 
 
-def write_baseline(count, note):
+def load_deferred_baseline():
+    """Recorded size of the deferred list. None if the baseline predates it."""
+    if not os.path.exists(BASELINE_PATH):
+        return None
+    try:
+        v = json.load(open(BASELINE_PATH, encoding="utf-8")).get("deferred_count")
+        return None if v is None else int(v)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def deferred_count_at(rev):
+    """Size of the deferred list in <rev>'s COMMITTED copy, or None.
+
+    None whenever the answer cannot be known -- a shallow CI checkout has no
+    HEAD~1, and the file may not have existed yet. None is never treated as
+    zero: an unknown previous size disables this comparison rather than
+    silently asserting the list grew from nothing.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "show", "%s:tools/reachability_deferred.json" % rev],
+            cwd=ROOT, capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    try:
+        return len(_entries(json.loads(out.stdout).get("deferred", {})))
+    except ValueError:
+        return None
+
+
+
+def deferred_rule_line(now_n, refs):
+    """The DEFERRED NON-INCREASING rule's operands, as one line. Never empty.
+
+    `refs` is the list of (count, source) references the rule found. Returns
+    (line, outcome) where outcome is one of SKIPPED / GREW / HELD / SHRANK.
+
+    A pure function on purpose: the rule's legibility is then testable at both
+    poles in milliseconds, without a repo census. Until 2026-09-15 this text was
+    inline in main() and the EQUAL branch printed NOTHING -- so COMPARED-and-held
+    (the rule working) and SKIPPED-for-want-of-a-reference (growth ungated) were
+    indistinguishable in every CI log, which is the opposite reading. R3: a check
+    that goes quiet must still prove it ran.
+    """
+    if not refs:
+        return ("DEFERRED NON-INCREASING: SKIPPED -- now=%d, refs seen: none. "
+                "No reference exists (the baseline file has no deferred_count "
+                "AND HEAD~1 is unreachable -- a shallow CI checkout needs "
+                "fetch-depth >= 2). Growth is UNGATED until a reference exists; "
+                "record one with --update-baseline." % now_n, "SKIPPED")
+    limit_n, src = min(refs)
+    outcome = ("GREW" if now_n > limit_n
+               else "SHRANK" if now_n < limit_n else "HELD")
+    seen = ", ".join("%s=%d" % (s, n) for n, s in refs)
+    return ("DEFERRED NON-INCREASING: COMPARED -- now=%d limit=%d (%s) -> %s. "
+            "refs seen: %s." % (now_n, limit_n, src, outcome, seen), outcome)
+
+
+def _arg_value(flag, argv=None):
+    """Value following `flag` in argv, or None."""
+    argv = argv if argv is not None else sys.argv
+    try:
+        i = argv.index(flag)
+        return argv[i + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def write_baseline(count, note, deferred_count=None, allow_raise=False,
+                   reason=None):
+    """Pin the baseline. TIGHTENS ONLY.  # _RATCHET_NO_RAISE_v1
+
+    A ratchet that can raise its own number is a thermometer. This file's own
+    note records the near-miss: "--update-baseline wanted to RAISE it
+    277 -> 335, which is the exact move this note forbids." A human caught it.
+    An unattended nightly job would not, so the refusal lives here, at the
+    single write point, rather than in the caller's discipline.
+
+    Raising requires allow_raise AND a reason, which is recorded in history so
+    the decision is attributable.
+
+    The existing `note` is PRESERVED, not overwritten: it carries the CofC
+    ruling and the pinning rationale, and replacing it with a one-line
+    changelog throws away the reasoning that makes the number mean anything.
+    """
+    prev = load_baseline_doc()
+    proposed = {"orphan_count": count}
+    if deferred_count is not None:
+        proposed["deferred_count"] = deferred_count
+
+    refused = {}
+    final = {}
+    for key, new_val in proposed.items():
+        old_val = prev.get(key) if prev else None
+        if old_val is None or new_val <= old_val:
+            final[key] = new_val
+        elif allow_raise and reason:
+            final[key] = new_val
+        else:
+            refused[key] = (old_val, new_val)
+            final[key] = old_val
+
+    if refused:
+        for key, (old_val, new_val) in refused.items():
+            sys.stderr.write(
+                "REFUSING TO RAISE %s: baseline=%s current=%s (+%d).\n"
+                "  A ratchet only goes down. Fix the regression, or justify it\n"
+                "  explicitly with --allow-raise --reason '...'.\n"
+                % (key, old_val, new_val, new_val - old_val))
+        if not final:
+            return None
+
+    payload = dict(prev or {})
+    payload.update(final)
+    payload["set_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    # Preserve the accumulated doctrine note; never replace it with a changelog.
+    if prev and prev.get("note"):
+        payload["note"] = prev["note"]
+    else:
+        payload["note"] = note
+    changed = {k: [prev.get(k) if prev else None, v]
+               for k, v in final.items()
+               if not prev or prev.get(k) != v}
+    if changed:
+        hist = list((prev or {}).get("history") or [])
+        hist.append({
+            "at": payload["set_at"],
+            "changes": changed,
+            "reason": reason or "tightened by --update-baseline (measured)",
+        })
+        payload["history"] = hist[-40:]
     with open(BASELINE_PATH, "w", encoding="utf-8") as fh:
-        json.dump({
-            "orphan_count": count,
-            "set_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "note": note,
-        }, fh, indent=2)
+        json.dump(payload, fh, indent=2, sort_keys=True)
         fh.write("\n")
+    return payload
+
+
+def load_baseline_doc():
+    """The whole baseline document (write_baseline needs more than the count)."""
+    try:
+        with open(BASELINE_PATH, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except Exception:
+        return {}
 
 
 def main():
@@ -301,9 +469,23 @@ def main():
         json.dump(data, fh, indent=1)
 
     if update:
-        write_baseline(count, "ratchet updated by --update-baseline")
-        print("baseline updated -> %d" % count)
-        return 0
+        # Report what the baseline ACTUALLY holds after the write, not what we
+        # asked it to hold. write_baseline refuses raises, so echoing the
+        # measured count here would announce a write that did not happen --
+        # the same lying-success-line failure this repo keeps finding.
+        written = write_baseline(
+            count, "ratchet updated by --update-baseline",
+            allow_raise=("--allow-raise" in sys.argv),
+            reason=_arg_value("--reason"),
+            deferred_count=len(active_deferred))
+        written = written or load_baseline_doc()
+        now_orphans = written.get("orphan_count")
+        now_deferred = written.get("deferred_count")
+        held = (now_orphans != count) or (now_deferred != len(active_deferred))
+        print("baseline now -> orphans=%s deferred=%s  (measured orphans=%d deferred=%d)%s"
+              % (now_orphans, now_deferred, count, len(active_deferred),
+                 "  [some values HELD -- see refusals above]" if held else ""))
+        return 1 if held else 0
 
     if not quiet:
         print("\n=== reachability ratchet @ %s ===" % ROOT)
@@ -365,10 +547,76 @@ def main():
               % data["exempted_count"])
 
     if len(active_deferred) > DEFERRED_REVIEW_CAP:
-        print("\n  DEFERRED LIST OVER CAP: %d > %d. Per the 2026-07-21 CofC ruling "
-              "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
-              "Escalate to the chairman; do not raise the cap to make this quiet."
+        # LABEL ONLY (no exit code, threshold or branch changed). This line
+        # used to be titled "... REOPEN TRIGGER", which named an escalation
+        # that was RETIRED on 2026-09-13; it triggers nothing and never did
+        # from inside a check that exits 0. A title that promises an
+        # escalation it cannot perform is the same class of defect as a mute
+        # rule: the log stops describing what the run actually does.
+        print("\n  DEFERRED LEVEL OVER CAP (advisory -- the BLOCKING rule is "
+              "DEFERRED NON-INCREASING below; policy call pending in issue "
+              "#3944): %d > %d. This line reports a LEVEL, from inside a check "
+              "that exits 0: it escalates to no one and no single PR can lower "
+              "it. What actually fails a PR is the DERIVATIVE below, which "
+              "blocks growing this list. The cap is not to be raised to "
+              "quieten it."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
+
+    # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------
+    # The absolute cap of 40 is an arbitrary threshold and, being advisory, it
+    # blocked nothing while the list grew to 63 and reachability_deferred.json
+    # became the single highest-churn file of the whole merge window at 64
+    # touches -- roughly one write per day, each one declaring an orphan rather
+    # than mounting it.
+    #
+    # The rule that actually stops accumulation is on the DERIVATIVE, exactly as
+    # the orphan ratchet already is: the deferred list MAY NOT GROW. That blocks
+    # the next write without requiring the existing 63 to be triaged first, so it
+    # does not hold up unrelated work -- the same reasoning that pinned
+    # orphan_count at its current level instead of an aspirational one.
+    #
+    # Two independent references, and the STRICTER wins: the size recorded in
+    # reachability_baseline.json, and the size in the previous commit. CI checks
+    # out shallow, so HEAD~1 is usually unavailable there and the recorded
+    # baseline carries it; locally both apply. An unknown reference is skipped,
+    # never read as zero.
+    refs = []
+    recorded = load_deferred_baseline()
+    if recorded is not None:
+        refs.append((recorded, "baseline file"))
+    prev_commit = deferred_count_at("HEAD~1")
+    if prev_commit is not None:
+        refs.append((prev_commit, "previous commit"))
+
+    # The operands are printed UNCONDITIONALLY, including when the rule holds.
+    # Until 2026-09-15 the EQUAL case -- which is the steady state, and was the
+    # live state at 62 == 62 -- emitted nothing at all. So no CI log could
+    # distinguish COMPARED-and-held from SKIPPED-for-want-of-a-reference, and
+    # the two have opposite meanings: one is the rule working, the other is
+    # growth ungated. That muteness is the whole of what kept #3944 open for 21
+    # days -- the fetch-depth:2 cure for the shallow-checkout skip landed on
+    # main and could not be verified from any run, because a working rule and a
+    # disabled one printed the same thing: nothing.
+    #
+    # This is not a new gate. No failure condition is added, removed or moved;
+    # `failures` is appended to in exactly the one place it was before. It makes
+    # an existing rule legible. R3: a check that went quiet must still prove it
+    # RAN, because skipped is not passed.
+    now_n = len(active_deferred)
+    line, outcome = deferred_rule_line(now_n, refs)
+    print("\n  %s" % line)
+    if refs:
+        limit_n, src = min(refs)
+        if now_n > limit_n:
+            print("\n  DEFERRED LIST GREW: %d > %d (%s). The deferral hatch is for "
+                  "not blocking a build that structurally cannot mount -- it is not "
+                  "storage. Mount the router, or retire it, or take one off the list "
+                  "to make room." % (now_n, limit_n, src))
+            failures.append("deferred list grew (%d > %d)" % (now_n, limit_n))
+        elif now_n < limit_n:
+            print("  deferred list shrank (%d -> %d vs %s); re-pin with "
+                  "--update-baseline to lock the gain in."
+                  % (limit_n, now_n, src))
 
     if effective > baseline:
         excess = effective - baseline

@@ -1,0 +1,12 @@
+[service]
+name = "server_registry_source_distribution_logic"
+import_path = "services.active.server_registry_source_distribution_logic.router"
+prefix = "/api"
+tag = "server_registry_source_distribution_logic"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

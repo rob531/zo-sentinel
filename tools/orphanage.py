@@ -16,14 +16,25 @@ For every orphan in the census it joins:
                  SUPERSEDED (a mounted sibling shares its route), MOUNTABLE (clean,
                  could be promoted), UNKNOWN.
 
-Output: orphanage/manifest.json (full) + a readable ranked summary. This is the
-input for the chairman's Fable-5 review: LOAD-BEARING / NECESSARY -> keep + mount;
-else -> remit the originating directive. READ-ONLY: mounts nothing, deletes
-nothing, changes no orphan.
+Output: a readable ranked summary, and -- with --refresh -- orphanage/manifest.json.
+This is the input for the chairman's Fable-5 review: LOAD-BEARING / NECESSARY ->
+keep + mount; else -> remit the originating directive. READ-ONLY: mounts nothing,
+deletes nothing, changes no orphan.
 
-    python tools/orphanage.py                 # build manifest + print summary
+READ-ONLY IS NOW TRUE OF THE PROCESS, NOT JUST THE DOCSTRING (2026-09-21)
+------------------------------------------------------------------------
+This paragraph and `--help` both claimed "read-only" while every plain
+`python tools/orphanage.py` OVERWROTE orphanage/manifest.json on disk. So the
+one documented safe way to look at the orphan census mutated the artifact the
+chairman's deletion review reads -- and did it silently, under a promise that
+it would not. A tool whose docstring and behaviour disagree is an instrument
+you cannot use to check anything. The write now needs --refresh; the default
+invocation reads, prints, and touches nothing.
+
+    python tools/orphanage.py                 # summary only -- writes NOTHING
     python tools/orphanage.py --top 25        # longer summary
     python tools/orphanage.py --json          # manifest to stdout
+    python tools/orphanage.py --refresh       # ALSO rewrite orphanage/manifest.json
 """
 from __future__ import annotations
 
@@ -146,15 +157,22 @@ def build():
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Orphan provenance manifest (read-only).")
+    ap = argparse.ArgumentParser(
+        description="Orphan provenance manifest. Read-only by default: pass "
+                    "--refresh to rewrite orphanage/manifest.json.")
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--refresh", action="store_true",
+                    help="rewrite orphanage/manifest.json on disk. This is the "
+                         "ONLY write this tool performs, and it is off by "
+                         "default so that reading the census cannot mutate it.")
     args = ap.parse_args(argv)
 
     man = build()
-    os.makedirs(OUT_DIR, exist_ok=True)
-    with open(OUT, "w", encoding="utf-8") as fh:
-        json.dump(man, fh, indent=2)
+    if args.refresh:
+        os.makedirs(OUT_DIR, exist_ok=True)
+        with open(OUT, "w", encoding="utf-8") as fh:
+            json.dump(man, fh, indent=2)
 
     if args.json:
         print(json.dumps(man, indent=2)); return 0
@@ -172,7 +190,15 @@ def main(argv=None):
         print("   [%-13s] %-42s %s  (%s)"
               % (r["why_unmounted"], r["module"][:42],
                  (og.get("subject") or "origin?")[:46], (og.get("date") or "")[:10]))
-    print("\n  full manifest -> orphanage/manifest.json  (for Fable-5 load-bearing/remit review)")
+    # Say which of the two things actually happened. "full manifest ->
+    # orphanage/manifest.json" printed on every run, including the ones that
+    # did not write it, would be the same lie in the other direction.
+    if args.refresh:
+        print("\n  full manifest REWRITTEN -> orphanage/manifest.json  "
+              "(for Fable-5 load-bearing/remit review)")
+    else:
+        print("\n  read-only run: orphanage/manifest.json was NOT written. "
+              "Pass --refresh to rewrite it, or --json for the manifest on stdout.")
     return 0
 
 

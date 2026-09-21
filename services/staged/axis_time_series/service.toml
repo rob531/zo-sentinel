@@ -1,0 +1,8 @@
+[service]
+name = "axis_time_series"
+import_path = "services.active.axis_time_series.router"
+prefix = "/api"
+tag = "axis_time_series"
+origin = "service"
+auth = "public"
+needs_data_layer = true

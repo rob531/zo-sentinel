@@ -1,0 +1,18 @@
+[service]
+name = "high_risk_server_spotlight_api"
+import_path = "services.active.high_risk_server_spotlight_api.router"
+prefix = "/api"
+tag = "high_risk_server_spotlight_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+fastapi = ">=0.104.0"
+uvicorn = ">=0.24.0"
+pydantic = ">=2.0.0"
+sqlalchemy = ">=2.0.0"
+httpx = ">=0.25.0"
+
+[build]
+entry_point = "router:app"

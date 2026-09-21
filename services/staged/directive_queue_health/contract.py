@@ -1,158 +1,106 @@
-from app.db import get_session
-from fastapi import APIRouter, Depends
+"""directive_queue_health contract"""
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict
+
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.testclient import TestClient
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+import json
+import os
+import tempfile
 
-router = APIRouter(prefix="/api", tags=["directives"])
+router = APIRouter(prefix="/api/directives")
 
-class HandlerDirectiveCount(BaseModel):
-    handler: str
-    count: int
+
+class QueueHealth(BaseModel):
+    total: int
+    by_handler: Dict[str, int]
+
 
 class DirectiveQueueHealthResponse(BaseModel):
-    pending_count: int
-    proposed_count: int
-    avg_wait_seconds: float
-    oldest_pending_minutes: float
-    handlers: list[HandlerDirectiveCount]
+    pending: QueueHealth
+    proposed: QueueHealth
+    generated_at: str
 
-def get_directive_queue_health(session: Session):
-    query = """
-        SELECT 
-            cjr.job as handler,
-            cjr.detail,
-            cjr.started_at,
-            cjr.status
-        FROM cadence_job_runs cjr
-        LEFT JOIN directive_queue_starvation_timeline dst 
-            ON cjr.id = dst.id
-        WHERE cjr.job IS NOT NULL
-        ORDER BY cjr.started_at DESC
-    """
-    
-    try:
-        from services import write_service
-        result = write_service("directive_queue", query, timeout=10)
-        rows = result.get("rows", [])
-    except Exception:
-        rows = []
-    
-    pending_count = 0
-    proposed_count = 0
-    rejected_count = 0
-    handler_counts = {}
-    total_wait = 0.0
-    oldest_ts = None
-    
-    for row in rows:
-        handler = row.get("handler", "unknown")
-        status = row.get("status", "pending")
-        
-        if status == "pending":
-            pending_count += 1
-            handler_counts[handler] = handler_counts.get(handler, 0) + 1
-            started = row.get("started_at")
-            if started:
-                total_wait += 10.0
-                if oldest_ts is None:
-                    oldest_ts = started
-        elif status == "proposed":
-            proposed_count += 1
-            handler_counts[handler] = handler_counts.get(handler, 0) + 1
-        elif status == "rejected":
-            rejected_count += 1
-    
-    oldest_pending_minutes = 0.0
-    if oldest_ts:
-        oldest_pending_minutes = 5.0
-    
-    avg_wait_seconds = total_wait / pending_count if pending_count > 0 else 0.0
-    
-    handlers = [HandlerDirectiveCount(handler=h, count=c) for h, c in handler_counts.items()]
-    
+
+def _count_by_handler(base_path: Path) -> Dict[str, int]:
+    """Count files per handler type in directory tree."""
+    counts = {}
+    if base_path.exists():
+        for entry in os.listdir(base_path):
+            full_path = base_path / entry
+            if full_path.is_dir():
+                counts[entry] = len(os.listdir(full_path))
+    return counts
+
+
+def get_pending_path() -> Path:
+    """Dependency: path to directives/pending/ directory."""
+    return Path("directives/pending")
+
+
+def get_proposed_path() -> Path:
+    """Dependency: path to directives/proposed/ directory."""
+    return Path("directives/proposed")
+
+
+@router.get("/queue-health", response_model=DirectiveQueueHealthResponse)
+def get_directive_queue_health(
+    pending_path: Path = Depends(get_pending_path),
+    proposed_path: Path = Depends(get_proposed_path),
+) -> DirectiveQueueHealthResponse:
+    """Get health metrics for pending and proposed directive queues."""
+    pending_counts = _count_by_handler(pending_path)
+    proposed_counts = _count_by_handler(proposed_path)
+
     return DirectiveQueueHealthResponse(
-        pending_count=pending_count,
-        proposed_count=proposed_count,
-        avg_wait_seconds=avg_wait_seconds,
-        oldest_pending_minutes=oldest_pending_minutes,
-        handlers=handlers
+        pending=QueueHealth(
+            total=sum(pending_counts.values()),
+            by_handler=pending_counts,
+        ),
+        proposed=QueueHealth(
+            total=sum(proposed_counts.values()),
+            by_handler=proposed_counts,
+        ),
+        generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
-@router.get("/directives/queue-health", response_model=DirectiveQueueHealthResponse)
-async def directive_queue_health(session: Session = Depends(get_session)):
-    return get_directive_queue_health(session)
+
+app = FastAPI()
+app.include_router(router)
 
 
 if __name__ == "__main__":
-    import sys
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-    
-    test_app = FastAPI()
-    test_app.include_router(router)
-    
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool
-    )
-    
-    with engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE cadence_job_runs (
-                id INTEGER PRIMARY KEY,
-                job TEXT,
-                status TEXT,
-                detail TEXT,
-                started_at TEXT,
-                finished_at TEXT,
-                rows_affected INTEGER
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE directive_queue_starvation_timeline (
-                id INTEGER PRIMARY KEY,
-                handler TEXT,
-                directive_id TEXT,
-                status TEXT,
-                created_at TEXT,
-                resolved_at TEXT
-            )
-        """))
-        conn.execute(text("""
-            INSERT INTO cadence_job_runs VALUES 
-            (1, 'handler1', 'pending', 'pending', '2024-01-01T00:00:00', NULL, 0),
-            (2, 'handler1', 'pending', 'pending', '2024-01-01T00:01:00', NULL, 0),
-            (3, 'handler2', 'proposed', 'proposed', '2024-01-01T00:02:00', '2024-01-01T00:03:00', 1),
-            (4, 'handler2', 'rejected', 'rejected', '2024-01-01T00:04:00', '2024-01-01T00:05:00', 1),
-            (5, 'handler3', 'pending', 'pending', '2024-01-01T00:06:00', NULL, 0)
-        """))
-        conn.commit()
-    
-    TestingSessionLocal = sessionmaker(bind=engine)
-    
-    def override_get_session():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-    
-    test_app.dependency_overrides[get_session] = override_get_session
-    
-    client = TestClient(test_app)
-    response = client.get("/api/directives/queue-health")
-    
-    try:
-        assert response.status_code == 200
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base = Path(tmpdir)
+
+        # Pending: 3 files (2 build_service, 1 generate_file)
+        pending_dir = base / "pending"
+        pending_dir.mkdir()
+        (pending_dir / "build_service").mkdir()
+        (pending_dir / "build_service" / "d0.json").write_text("{}")
+        (pending_dir / "build_service" / "d1.json").write_text("{}")
+        (pending_dir / "generate_file").mkdir()
+        (pending_dir / "generate_file" / "d0.json").write_text("{}")
+
+        # Proposed: 2 files (run_script)
+        proposed_dir = base / "proposed"
+        proposed_dir.mkdir()
+        (proposed_dir / "run_script").mkdir()
+        (proposed_dir / "run_script" / "d0.json").write_text("{}")
+        (proposed_dir / "run_script" / "d1.json").write_text("{}")
+
+        app.dependency_overrides[get_pending_path] = lambda: base / "pending"
+        app.dependency_overrides[get_proposed_path] = lambda: base / "proposed"
+
+        client = TestClient(app)
+        response = client.get("/api/directives/queue-health")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         data = response.json()
-        assert data["pending_count"] >= 0
-        assert data["oldest_pending_minutes"] >= 0
+        assert data["pending"]["total"] == 3, f"Expected pending total 3, got {data['pending']['total']}"
+        assert data["pending"]["by_handler"]["build_service"] == 2
+        assert data["pending"]["by_handler"]["generate_file"] == 1
+        assert data["proposed"]["total"] == 2, f"Expected proposed total 2, got {data['proposed']['total']}"
+        assert data["proposed"]["by_handler"]["run_script"] == 2
         print("PASS")
-        sys.exit(0)
-    except Exception as e:
-        print(f"FAIL: {e}")
-        sys.exit(1)

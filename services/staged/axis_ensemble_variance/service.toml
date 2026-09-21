@@ -1,0 +1,8 @@
+[service]
+name = "axis_ensemble_variance"
+import_path = "services.active.axis_ensemble_variance.router"
+prefix = "/api"
+tag = "axis_ensemble_variance"
+origin = "service"
+auth = "public"
+needs_data_layer = true

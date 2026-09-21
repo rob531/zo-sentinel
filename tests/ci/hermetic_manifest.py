@@ -62,6 +62,16 @@ IMPORTABLE_MODULES = [
     "zo_sentinel.publisher.publisher",
     # goose build-path glue: complexity->ladder routing + build_artifact schema.
     "zo_sentinel.build_routing",
+    # MERGE_AUDIT_2026-08-23 G1: the ASGI entrypoint. tier4_spine used to skip
+    # its own `import app.main` on failure with the note "owned by tier1" -- but
+    # no module under the `app` package was ever on this list, so nothing owned
+    # it and neither tier tested it. It is owned HERE now, explicitly. Importing
+    # it also pulls the whole generated spine (28 mounts on 2026-08-25), which
+    # is what puts the previously ungated app/ modules under a real assertion.
+    # Portable by the same standard as the rest of this list: no host, no
+    # write_service, no /home/workspace -- include_spine records mount failures
+    # on app.state rather than raising, and tier4 is what judges them.
+    "app.main",
 ]
 
 

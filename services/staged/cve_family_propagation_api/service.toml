@@ -1,0 +1,8 @@
+[service]
+name = "cve_family_propagation_api"
+import_path = "services.active.cve_family_propagation_api.router"
+prefix = "/api"
+tag = "cve_family_propagation_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,16 @@
+[service]
+name = "verdict_review_dashboard_view"
+import_path = "services.active.verdict_review_dashboard_view.router"
+prefix = "/api"
+tag = "verdict_review_dashboard_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true
+
+[acceptance]
+test_command = "python -m services.active.verdict_review_dashboard_view"
+expected_output = "PASS"

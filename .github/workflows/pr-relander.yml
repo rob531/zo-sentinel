@@ -346,6 +346,21 @@ jobs:
           # Silence must always be auditable: say what was EXAMINED, not just
           # what was selected. "0 selected" and "0 examined" are different bugs.
           echo "::notice::cohort B: examined $population triage:solid PR(s), $n_solid missing >=1 required context"
+          # JOIN THE TWO SILENCES. "examined 0" was already auditable; what it
+          # could not distinguish is "there are no solid PRs" from "every solid
+          # PR is older than the age cap". Measured 2026-09-21: all 45 open
+          # triage:solid PRs were past the 21d cap and 0 of the 35 PRs inside it
+          # were solid, so cohort B's two filters were DISJOINT and it selected
+          # nothing while 60 heads sat dammed on a missing required context --
+          # and the run still reported success. The age cap and the cohort-B
+          # population are printed by two notices that nothing multiplied.
+          b_excluded=$(gh pr list -R "$REPO" --state open \
+                        --label autonomous-build --label triage:solid --limit 500 \
+                        --json number,createdAt \
+                        -q "[.[] | select(.createdAt <= \"$CUTOFF\")] | length" 2>/dev/null || echo "?")
+          if [ "$population" = "0" ] && [ "$b_excluded" != "0" ] && [ "$b_excluded" != "?" ]; then
+            echo "::warning::cohort B examined NOTHING because the ${MAX_AGE_DAYS}d age cap excluded all $b_excluded open triage:solid PR(s). An empty COHORT and an empty POPULATION are different bugs. Raise RELANDER_MAX_AGE_DAYS, or drive _tools/pr_relander.py manually against the dam."
+          fi
 
           n_stale=$(echo "$stale" | wc -w | tr -d ' ')
           echo "::notice::cohort A: $n_stale stale-but-clean PR(s)"

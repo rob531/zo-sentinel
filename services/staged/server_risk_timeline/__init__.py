@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 import requests
 from fastapi import Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 def get_mesh_scores(server_id: int) -> Dict[str, Any]:
     """Fetch mesh scores for a given server ID."""
@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     # Create test data
     session = SessionLocal()
-    session.execute("CREATE TABLE mcp_server_registry (id INTEGER PRIMARY KEY, name TEXT)")
-    session.execute("INSERT INTO mcp_server_registry (id, name) VALUES (1, 'Test Server')")
+    session.execute("CREATE TABLE McpServerRegistry (id INTEGER PRIMARY KEY, name TEXT)")
+    session.execute("INSERT INTO McpServerRegistry (id, name) VALUES (1, 'Test Server')")
     session.commit()
 
     # Test get_mesh_scores

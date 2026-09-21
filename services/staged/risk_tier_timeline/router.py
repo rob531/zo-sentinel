@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 
 from app.db import get_session
-from app.models import mcp_server_registry, mcp_llm_axis_scores  # real models
+from app.models import McpServerRegistry, McpLlmAxisScore  # real models
 from .logic import get_risk_tier_timeline  # noqa: F401
 
 router = APIRouter(prefix="/api")
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     # two servers
     test_db.add_all(
         [
-            mcp_server_registry(server_id=1, server_name="alpha"),
-            mcp_server_registry(server_id=2, server_name="beta"),
+            McpServerRegistry(server_id=1, server_name="alpha"),
+            McpServerRegistry(server_id=2, server_name="beta"),
         ]
     )
     # axis scores for two consecutive days for server 1
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     for offset in (0, 1):
         ts = today - timedelta(days=offset)
         test_db.add(
-            mcp_llm_axis_scores(
+            McpLlmAxisScore(
                 server_id=1,
                 axis_name="network",
                 label="low",
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # Monkey‑patch the logic function to produce a deterministic response
     # ------------------------------------------------------------------- #
     def _dummy_get_risk_tier_timeline(db: Session, server_id: int, days: int = 30):
-        server = db.query(mcp_server_registry).filter_by(server_id=server_id).first()
+        server = db.query(McpServerRegistry).filter_by(server_id=server_id).first()
         if not server:
             raise HTTPException(status_code=404, detail="Server not found")
         timeline = []

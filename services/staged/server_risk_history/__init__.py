@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 
 app = FastAPI()
@@ -16,10 +16,10 @@ def get_mcp_score_disputes(db: Session = Depends(get_session)):
     return db.query(McpScoreDispute).all()
 
 def get_orgs(db: Session = Depends(get_session)):
-    return db.query(Orgs).all()
+    return db.query(Org).all()
 
 def get_users(db: Session = Depends(get_session)):
-    return db.query(Users).all()
+    return db.query(User).all()
 
 def query_mesh_data(endpoint: str, timeout: int = 10):
     try:

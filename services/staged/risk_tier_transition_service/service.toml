@@ -1,0 +1,12 @@
+[service]
+name = "risk_tier_transition_service"
+import_path = "services.active.risk_tier_transition_service.router"
+prefix = "/api"
+tag = "risk_tier_transition_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+app.db = { module = "app.db", import = "get_session" }
+app.models = { module = "app.models", import = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"] }

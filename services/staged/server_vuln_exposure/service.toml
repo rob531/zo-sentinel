@@ -1,0 +1,8 @@
+[service]
+name = "server_vuln_exposure"
+import_path = "services.active.server_vuln_exposure.router"
+prefix = "/api"
+tag = "server_vuln_exposure"
+origin = "service"
+auth = "public"
+needs_data_layer = true

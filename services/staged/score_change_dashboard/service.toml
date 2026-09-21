@@ -1,0 +1,8 @@
+[service]
+name = "score_change_dashboard"
+import_path = "services.active.score_change_dashboard.router"
+prefix = "/api"
+tag = "score_change_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

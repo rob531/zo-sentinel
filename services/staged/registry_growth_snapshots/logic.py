@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_session, Base
-from app.models import mcp_server_registry  # type: ignore
+from app.models import McpServerRegistry  # type: ignore
 
 router = APIRouter(prefix="/api")
 
@@ -30,7 +30,7 @@ class SnapshotsResponse(BaseModel):
 
 
 def _compute_snapshots(session: Session) -> List[Snapshot]:
-    rows = session.query(mcp_server_registry).all()
+    rows = session.query(McpServerRegistry).all()
 
     daily_total: defaultdict[date, int] = defaultdict(int)
     daily_sources: defaultdict[date, defaultdict[str, int]] = defaultdict(
@@ -101,14 +101,14 @@ if __name__ == "__main__":
 
         # Day 1
         for i in range(3):
-            row = mcp_server_registry()
+            row = McpServerRegistry()
             row.created_at = datetime.utcnow() - timedelta(days=2)
             row.source = "source_a" if i % 2 == 0 else "source_b"
             test_session.add(row)
 
         # Day 2
         for i in range(2):
-            row = mcp_server_registry()
+            row = McpServerRegistry()
             row.created_at = datetime.utcnow() - timedelta(days=1)
             row.source = "source_a"
             test_session.add(row)

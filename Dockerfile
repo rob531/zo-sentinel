@@ -23,6 +23,15 @@ COPY entity_report_exporter.py org_api_key_manager.py org_entity_search_api.py o
 COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html server_threat_intel_view.html /srv/
 COPY migrations /srv/migrations
 COPY alembic.ini /srv/alembic.ini
+# FU-239: operational tools must be IN the image, not only in the repo.
+# tools/clerk_reconcile.py is the negative control over the live Clerk
+# webhook -- it landed in #2700 and was maintained across #2705 and #2707
+# without ever executing once, because `ls /srv/tools` returned No such
+# file. A merged correctness fix is not a running one. The away window
+# (2026-08-07..08-30) is the whole reason that job exists; without this
+# line it would emit 23 consecutive silent nights, and its own contract
+# reads silence as health.
+COPY tools /srv/tools
 
 # FU-217: the SOA half of the FU-102 class. Every service under services/staged/
 # declares `import_path = services.active.<name>.router`, and until this line

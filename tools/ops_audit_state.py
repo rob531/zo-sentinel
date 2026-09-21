@@ -107,33 +107,96 @@ def save(state: dict, path: Optional[Path] = None) -> Path:
     return path
 
 
+def _in_memory(path, state) -> bool:
+    """True when the caller supplied the state and named no file to write.
+
+    WHY THIS EXISTS (2026-08-06, FU-268, live incident): `record()` and
+    `record_credit()` ended `if path is not False: save(state, path)`, and
+    `save()` resolves `path or DEFAULT_PATH`. So a caller who passed an explicit
+    in-memory `state=` and no `path=` -- the natural way to write a read-only
+    probe -- silently PERSISTED that partial state over the canonical file. It
+    destroyed D:\\zo\\runs\\ops_audit_state.json: 11 balance samples and
+    `schema: 2` deleted, a real top-up re-dated, a fabricated invoice appended,
+    and `budget.level` blinded to UNKNOWN four hours after FU-267 had repaired
+    that very number. The same file had already been clobbered once, on
+    2026-07-28, by a different lane.
+
+    A `path=False` no-write mode already existed, but it is opt-in and invisible
+    in a signature typed `Optional[Path]`. The DESTRUCTIVE behaviour was the
+    DEFAULT and the safe one had to be known in advance. This inverts that:
+    supplying a state means "operate on THIS", and persisting is the thing you
+    ask for, by naming a path.
+
+    Zero existing callers change. At 9e12c062 `git grep record_credit` is 16
+    test calls (all `path=statefile`) plus one CLI call (`path=path`), and every
+    `record()` call site likewise passes `path=`. Nothing in the repo relied on
+    the implicit DEFAULT_PATH write.
+    """
+    return state is not None and path is None
+
+
 def record(balance: float, date: Optional[str] = None,
            path: Optional[Path] = None, state: Optional[dict] = None) -> dict:
-    """Upsert today's balance sample. Same-date re-run replaces, never appends."""
+    """Upsert today's balance sample. Same-date re-run replaces, never appends.
+
+    Persists to `path`, or to DEFAULT_PATH when no `state=` was supplied.
+    Passing `state=` without `path=` is IN-MEMORY and writes nothing (FU-268);
+    `path=False` remains an explicit no-write for callers that pass both.
+    """
+    in_memory = _in_memory(path, state)
     state = state if state is not None else load(path)
     date = date or _today()
     entry = {"date": date, "at": _utcnow(), "balance": float(balance)}
     state["entries"] = [e for e in state.get("entries", []) if e["date"] != date]
     state["entries"].append(entry)
-    if path is not False:
+    if path is not False and not in_memory:
         save(state, path)
     return state
+
+
+def _cid(v):
+    """Normalise a credit id to a comparable form.
+
+    WHY THIS EXISTS (2026-08-06, this lane, live incident): the dedup key was
+    the RAW value, so an id written as int 3148330 by a Python caller did not
+    equal the SAME invoice arriving as str "3148330" from argparse (which has
+    no type=). Vast invoice 3148330 was therefore recorded twice, credits_ever
+    went $25 -> $50, since_funding.spend_usd went $10.23 -> $35.23, and
+    budget.level flipped to a FALSE RED against a $25 budget on an account
+    that has only ever been funded once. Same class as the permission value
+    graded against one literal: a key that is compared must be NORMALISED at
+    both ends, never trusted to arrive in one type.
+    """
+    if v is None:
+        return None
+    v = str(v).strip()
+    return v or None
 
 
 def record_credit(amount: float, date: str, credit_id=None,
                   source: str = "vast_invoice", path: Optional[Path] = None,
                   state: Optional[dict] = None) -> dict:
-    """Record a top-up. Deduped on (id) when known, else (date, amount)."""
+    """Record a top-up. Deduped on (id) when known, else (date, amount).
+
+    The id is compared via _cid() so int and str spellings of the same
+    invoice collapse to one entry. Also self-heals: pre-existing duplicates
+    of the id being recorded are dropped on write.
+
+    Persists to `path`, or to DEFAULT_PATH when no `state=` was supplied.
+    Passing `state=` without `path=` is IN-MEMORY and writes nothing (FU-268).
+    """
+    in_memory = _in_memory(path, state)
     state = state if state is not None else load(path)
-    key = ("id", credit_id) if credit_id is not None else ("da", date, amount)
+    credit_id = _cid(credit_id)
+    key = ("id", credit_id) if credit_id is not None else ("da", date, float(amount))
     def _key(c):
-        return (("id", c["id"]) if c.get("id") is not None
-                else ("da", c["date"], c["amount"]))
+        return (("id", _cid(c.get("id"))) if _cid(c.get("id")) is not None
+                else ("da", c["date"], float(c["amount"])))
     state["credits"] = [c for c in state.get("credits", []) if _key(c) != key]
     state["credits"].append({"date": date, "at": _utcnow(),
                              "amount": float(amount), "id": credit_id,
                              "source": source})
-    if path is not False:
+    if path is not False and not in_memory:
         save(state, path)
     return state
 

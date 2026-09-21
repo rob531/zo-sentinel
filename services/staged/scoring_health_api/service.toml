@@ -1,0 +1,27 @@
+[service]
+name = "scoring_health_api"
+import_path = "services.active.scoring_health_api.router"
+prefix = "/api"
+tag = "scoring_health_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+file = "router.py"
+
+[dependencies]
+fastapi = "*"
+sqlalchemy = "*"
+httpx = "*"
+
+[models]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "Org", "User"]
+
+[pipeline]
+stores = ["mcp_signal_scores", "mesh_memory"]
+query_endpoint = "http://127.0.0.1:8772/query"
+
+[self_test]
+enabled = true
+expected_output = "PASS"

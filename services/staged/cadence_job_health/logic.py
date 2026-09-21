@@ -1,156 +1,122 @@
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from pydantic import BaseModel
-from sqlalchemy import func, and_, or_
-from sqlalchemy.orm import Session
+from datetime import datetime
+from typing import List, Optional
+
 from app.db import get_session
-from app.models import CadenceJobRun, ServiceHealth
+from app.models import CadenceJobRun
+from fastapi import Depends
+from pydantic import BaseModel
+from sqlalchemy import text
 
-class JobStatus(BaseModel):
+
+class JobHealthMetric(BaseModel):
     job: str
-    total_runs_24h: int
-    avg_duration_sec: Optional[float]
-    last_run_at: Optional[datetime]
-    last_status: Optional[str]
-
-class DaemonStatus(BaseModel):
-    name: str
     status: str
-    age_seconds: int
-    is_stale: bool
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    rows_affected: int
 
-class HealthResponse(BaseModel):
-    daemons: List[DaemonStatus]
-    jobs: List[JobStatus]
 
-def get_daemon_statuses(session: Session) -> List[DaemonStatus]:
-    now = datetime.utcnow()
-    stale_threshold = timedelta(minutes=5)
+class JobHealthReport(BaseModel):
+    metrics: List[JobHealthMetric]
 
-    health_records = session.query(ServiceHealth).all()
-    daemons = []
 
-    for record in health_records:
-        last_heartbeat = record.last_heartbeat
-        age = (now - last_heartbeat).total_seconds()
-        is_stale = age > stale_threshold.total_seconds()
+def get_cadence_job_health(
+    job_name: Optional[str] = None,
+    session=Depends(get_session),
+) -> JobHealthReport:
+    where_clause = ""
+    params = {}
+    if job_name:
+        where_clause = "WHERE job = :job_name"
+        params["job_name"] = job_name
 
-        daemon = DaemonStatus(
-            name=record.service,
-            status=record.status,
-            age_seconds=int(age),
-            is_stale=is_stale
+    query = text(f"""
+        SELECT
+            job,
+            status,
+            MIN(started_at) as started_at,
+            MAX(finished_at) as finished_at,
+            SUM(rows_affected) as rows_affected
+        FROM cadence_job_runs
+        {where_clause}
+        GROUP BY job, status
+        ORDER BY job, status
+    """)
+
+    result = session.execute(query, params)
+    rows = result.fetchall()
+
+    metrics = [
+        JobHealthMetric(
+            job=row.job,
+            status=row.status,
+            started_at=row.started_at,
+            finished_at=row.finished_at,
+            rows_affected=row.rows_affected or 0,
         )
-        daemons.append(daemon)
+        for row in rows
+    ]
 
-    return daemons
+    return JobHealthReport(metrics=metrics)
 
-def get_job_statuses(session: Session) -> List[JobStatus]:
-    now = datetime.utcnow()
-    twenty_four_hours_ago = now - timedelta(hours=24)
-
-    job_runs = session.query(CadenceJobRun).filter(
-        CadenceJobRun.started_at >= twenty_four_hours_ago
-    ).all()
-
-    job_stats = {}
-
-    for run in job_runs:
-        if run.job not in job_stats:
-            job_stats[run.job] = {
-                'total_runs': 0,
-                'total_duration': 0,
-                'last_run_at': None,
-                'last_status': None
-            }
-
-        job_stats[run.job]['total_runs'] += 1
-        job_stats[run.job]['total_duration'] += (run.finished_at - run.started_at).total_seconds()
-
-        if run.finished_at > (job_stats[run.job]['last_run_at'] or run.finished_at):
-            job_stats[run.job]['last_run_at'] = run.finished_at
-            job_stats[run.job]['last_status'] = run.status
-
-    jobs = []
-    for job, stats in job_stats.items():
-        avg_duration = stats['total_duration'] / stats['total_runs'] if stats['total_runs'] > 0 else None
-        jobs.append(JobStatus(
-            job=job,
-            total_runs_24h=stats['total_runs'],
-            avg_duration_sec=avg_duration,
-            last_run_at=stats['last_run_at'],
-            last_status=stats['last_status']
-        ))
-
-    return jobs
-
-def get_cadence_health(session: Session) -> HealthResponse:
-    daemons = get_daemon_statuses(session)
-    jobs = get_job_statuses(session)
-    return HealthResponse(daemons=daemons, jobs=jobs)
 
 if __name__ == "__main__":
-    from sqlalchemy import create_engine
+    import pytest
+    from fastapi import FastAPI
+    from sqlalchemy import StaticPool, create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.db import get_session as original_get_session
     from app.models import Base
 
-    # Create in-memory SQLite database for testing
-    engine = create_engine('sqlite:///:memory:')
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    # Override the dependency for testing
-    from app import app
-    app.dependency_overrides[get_session] = lambda: SessionLocal()
+    def override_get_session():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
 
-    # Seed test data
-    session = SessionLocal()
-    try:
-        # Seed service_health data
-        session.add_all([
-            ServiceHealth(service="daemon1", status="healthy", last_heartbeat=datetime.utcnow()),
-            ServiceHealth(service="daemon2", status="running", last_heartbeat=datetime.utcnow() - timedelta(minutes=3)),
-            ServiceHealth(service="daemon3", status="stale", last_heartbeat=datetime.utcnow() - timedelta(minutes=10))
-        ])
+    app = FastAPI()
 
-        # Seed cadence_job_runs data
-        now = datetime.utcnow()
-        session.add_all([
-            CadenceJobRun(
-                job="job1",
-                status="completed",
-                started_at=now - timedelta(hours=1),
-                finished_at=now - timedelta(minutes=50),
-                rows_affected=100,
-                detail={}
-            ),
-            CadenceJobRun(
-                job="job1",
-                status="completed",
-                started_at=now - timedelta(hours=2),
-                finished_at=now - timedelta(hours=1, minutes=50),
-                rows_affected=200,
-                detail={}
-            ),
-            CadenceJobRun(
-                job="job2",
-                status="failed",
-                started_at=now - timedelta(hours=24, minutes=10),
-                finished_at=now - timedelta(hours=23, minutes=50),
-                rows_affected=0,
-                detail={"error": "timeout"}
-            )
-        ])
+    @app.get("/api/cadence/jobs/health")
+    def health_endpoint(job: str = None, session=Depends(get_session)):
+        return get_cadence_job_health(job_name=job, session=session)
 
-        session.commit()
+    with TestingSessionLocal() as db:
+        db.execute(text("""
+            INSERT INTO cadence_job_runs (job, status, started_at, finished_at, rows_affected)
+            VALUES
+                ('test_job_1', 'completed', '2024-01-01 10:00:00', '2024-01-01 10:05:00', 100),
+                ('test_job_1', 'completed', '2024-01-01 11:00:00', '2024-01-01 11:03:00', 150),
+                ('test_job_2', 'failed', '2024-01-01 12:00:00', '2024-01-01 12:01:00', 0)
+        """))
+        db.commit()
 
-        # Test the logic
-        response = get_cadence_health(session)
+    app.dependency_overrides[get_session] = override_get_session
 
-        # Assertions
-        assert len(response.daemons) >= 2
-        assert len(response.jobs) >= 1
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
 
-        print("PASS")
-    finally:
-        session.close()
+    response = client.get("/api/cadence/jobs/health")
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+    data = response.json()
+    metrics = {m["job"] + ":" + m["status"]: m for m in data["metrics"]}
+
+    j1_completed = metrics.get("test_job_1:completed")
+    assert j1_completed is not None, "test_job_1:completed not found"
+    assert j1_completed["rows_affected"] == 250, f"Expected 250, got {j1_completed['rows_affected']}"
+
+    j2_failed = metrics.get("test_job_2:failed")
+    assert j2_failed is not None, "test_job_2:failed not found"
+    assert j2_failed["rows_affected"] == 0, f"Expected 0, got {j2_failed['rows_affected']}"
+
+    print("PASS")

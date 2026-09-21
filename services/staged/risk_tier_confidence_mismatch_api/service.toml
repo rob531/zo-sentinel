@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_confidence_mismatch_api"
+import_path = "services.active.risk_tier_confidence_mismatch_api.router"
+prefix = "/api"
+tag = "risk_tier_confidence_mismatch_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

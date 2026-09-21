@@ -1,0 +1,8 @@
+[service]
+name = "registry_search_view"
+import_path = "services.active.registry_search_view.router"
+prefix = "/api"
+tag = "registry_search_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true

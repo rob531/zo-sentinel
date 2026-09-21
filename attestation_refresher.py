@@ -124,18 +124,17 @@ def get_expiring_attestations():
         SELECT 
             a.attestation_id,
             a.server_id,
-            a.content,
-            a.attested_at,
-            a.expires_at,
-            a.regenerated_at,
-            a.attestor,
+            a.attestation_text AS content,
+            a.generated_at AS attested_at,
+            a.valid_until AS expires_at,
+            a.generated_at AS regenerated_at,
             r.name as server_name,
             r.url as server_url
         FROM mcp_attestations a
         JOIN mcp_server_registry r ON a.server_id = r.server_id
-        WHERE a.expires_at <= (now() + INTERVAL '7 days')
-          AND (a.regenerated_at IS NULL OR a.regenerated_at < (now() - INTERVAL '90 days'))
-        ORDER BY a.expires_at ASC
+        WHERE a.valid_until <= (now() + INTERVAL '7 days')
+          AND (a.generated_at IS NULL OR a.generated_at < (now() - INTERVAL '90 days'))
+        ORDER BY a.valid_until ASC
         LIMIT 100
     """
     return ws_query(sql)
@@ -178,11 +177,9 @@ def regenerate_attestation(server_id, server_name, server_url):
     row = {
         "attestation_id": attestation_id,
         "server_id": server_id,
-        "content": content_json,
-        "attested_at": now,
-        "expires_at": expires_at_str,
-        "regenerated_at": now,
-        "attestor": "attestation_refresher"
+        "attestation_text": content_json,
+        "generated_at": now,
+        "valid_until": expires_at_str,
     }
     
     ws_write("mcp_attestations", [row])

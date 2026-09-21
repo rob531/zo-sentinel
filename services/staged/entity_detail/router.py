@@ -64,7 +64,7 @@ if __name__ == "__main__":
         finally:
             session.close()
 
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
     dependency_overrides[get_session] = get_test_session
 
     # Create test app

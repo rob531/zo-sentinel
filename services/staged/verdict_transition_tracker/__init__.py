@@ -1,0 +1,1 @@
+# Read docs/SCHEMA_TRUTH.md first

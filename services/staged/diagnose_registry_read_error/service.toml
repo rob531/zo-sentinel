@@ -1,0 +1,8 @@
+[service]
+name = "diagnose_registry_read_error"
+import_path = "services.active.diagnose_registry_read_error.router"
+prefix = "/api"
+tag = "diagnose_registry_read_error"
+origin = "service"
+auth = "public"
+needs_data_layer = true

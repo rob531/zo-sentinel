@@ -133,7 +133,11 @@ def get_unscored_servers(limit: int = 50) -> List[Dict[str, Any]]:
 
 
 def fetch_server_tools(server_id: str) -> List[Dict[str, Any]]:
-    sql = f"SELECT server_id, tools FROM mcp_tool_schemas WHERE server_id = '{server_id}'"
+    # `mcp_tool_schemas` exists on no plane. The bus table holding a server's
+    # raw tool list is `mcp_tool_hashes`, whose `tools_raw` column is the same
+    # payload this function's caller already json.loads()es -- so it is aliased
+    # back to `tools` and the caller is unchanged. Refs #4080.
+    sql = f"SELECT server_id, tools_raw AS tools FROM mcp_tool_hashes WHERE server_id = '{server_id}'"
     result = ws_query(sql)
     return result.get("rows", [])
 

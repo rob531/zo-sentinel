@@ -1,0 +1,15 @@
+# service.toml for signal_scores_distribution_router
+[service]
+name = "signal_scores_distribution_router"
+import_path = "services.active.signal_scores_distribution_router.router"
+prefix = "/api"
+tag = "signal_scores_distribution_router"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = "app.main:app"
+
+[scripts]
+test = "python -m services.active.signal_scores_distribution_router"

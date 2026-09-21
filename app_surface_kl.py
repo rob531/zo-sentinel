@@ -228,6 +228,77 @@ def build_routes(census):
     }
 
 
+def detect_mount_mechanism():
+    """Describe how app/main.py ACTUALLY mounts routers, by reading it.
+
+    This field used to be a hardcoded string reading
+
+        "app/main.py :: _OPTIONAL_ROUTERS (import + include_router, failures
+         swallowed by `except Exception: pass` -- see FU-044)"
+
+    which described a mechanism main.py stopped using when the Option-B spine
+    landed (SOA design 2026-07-21). It was stale in the specific way that
+    misleads: it ADVERTISED A BUG THAT HAD ALREADY BEEN FIXED, in an artifact
+    whose whole purpose is to tell a reader what the app does.
+
+    A literal cannot go stale safely, so this derives the answer from the two
+    files that decide it and reports what it actually found -- including
+    "unrecognised", which is the honest answer if the mechanism changes again.
+    """
+    main_src = _read(os.path.join(ROOT, "app", "main.py"))
+    spine_src = _read(os.path.join(ROOT, "app", "_spine_generated.py"))
+
+    if not main_src:
+        return {"kind": "unknown",
+                "detail": "app/main.py could not be read -- mechanism undetermined"}
+
+    if "include_spine" in main_src and spine_src:
+        n_active = 0
+        active = os.path.join(ROOT, "services", "active")
+        if os.path.isdir(active):
+            n_active = sum(1 for d in os.listdir(active)
+                           if os.path.isfile(os.path.join(active, d, "service.toml")))
+        # Does the generated spine record failures rather than swallow them?
+        records = ("spine_mount_failures" in spine_src
+                   and "spine_skipped_no_router" in spine_src)
+        swallows = "except Exception:\n        pass" in spine_src
+        return {
+            "kind": "generated_spine",
+            "entrypoint": "app/main.py :: include_spine(app)",
+            "generated_file": "app/_spine_generated.py",
+            "generator": "tools/generate_spine.py",
+            "source_of_truth": "services/active/*/service.toml (presence == registration)",
+            "active_service_count": n_active,
+            "failure_handling": (
+                "recorded on app.state (spine_mount_failures / "
+                "spine_skipped_no_router) and exposed at /spine/health; prod boots "
+                "anyway, the strict raise is a CI-only gate"
+                if records and not swallows else
+                "UNVERIFIED -- the generated spine does not record the expected "
+                "app.state failure attributes"),
+            "detail": (
+                "app/main.py :: include_spine(app) from the generated "
+                "app/_spine_generated.py, built by tools/generate_spine.py from "
+                "services/active/*/service.toml. A module that declares no router "
+                "is a VISIBLE skip, not a swallow."),
+        }
+
+    if "_OPTIONAL_ROUTERS" in main_src:
+        return {
+            "kind": "optional_routers_list",
+            "entrypoint": "app/main.py :: _OPTIONAL_ROUTERS",
+            "failure_handling": (
+                "swallowed by `except Exception: pass`"
+                if "except Exception" in main_src else "unknown"),
+            "detail": ("app/main.py :: _OPTIONAL_ROUTERS (hand-maintained "
+                       "import + include_router loop) -- the pre-SOA mechanism"),
+        }
+
+    return {"kind": "unrecognised",
+            "detail": ("app/main.py mounts routers by a mechanism this detector "
+                       "does not recognise -- update detect_mount_mechanism()")}
+
+
 def build_mounts(census):
     deferred = {}
     raw = _read(DEFERRED_PATH)
@@ -236,9 +307,10 @@ def build_mounts(census):
             deferred = json.loads(raw).get("deferred", {}) or {}
         except ValueError:
             deferred = {}
+    _mech = detect_mount_mechanism()
     return {
-        "mechanism": "app/main.py :: _OPTIONAL_ROUTERS (import + include_router, "
-                     "failures swallowed by `except Exception: pass` -- see FU-044)",
+        "mechanism": _mech["detail"],
+        "mechanism_detail": _mech,
         "mounted": sorted(census["mounted"]),
         "mounted_count": census["mounted_count"],
         "unmounted": sorted(o["module"] for o in census["orphans"]),

@@ -1,0 +1,8 @@
+[service]
+name = "quarantine_keyspace_collision_probe"
+import_path = "services.active.quarantine_keyspace_collision_probe.router"
+prefix = "/api"
+tag = "quarantine_keyspace_collision_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

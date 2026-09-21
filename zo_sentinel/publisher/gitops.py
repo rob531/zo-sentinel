@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Callable, List, Optional, Protocol
 
 from . import auto_declare
+from . import auto_stage
 
 
 def _repo_relative(file_path: str) -> str:
@@ -209,6 +210,9 @@ class CliGitOps:
         self.author_name = author_name
         self.author_email = author_email
         self.last_error: Optional[str] = None
+        # Every active/ -> staged/ routing this publisher applied, so a run can
+        # be audited for how many builds were mis-targeted.
+        self.staged_redirects: List[tuple] = []
         # Backoff for GitHub secondary-rate-limit on the network steps.
         self.max_retries = max(0, int(max_retries))
         self.backoff_base_sec = float(backoff_base_sec)
@@ -306,6 +310,25 @@ class CliGitOps:
         if _violation is not None:
             return PublishResult(ok=False, branch=plan.branch, permanent=True,
                                  detail=_violation[:300])
+
+        # A builder artifact may EDIT a service that already exists in
+        # services/active/, but it may not CREATE one: the publisher emits a
+        # single file, so a new active/<name>/ arrives with no service.toml and
+        # generate_spine --strict fails it as NO_TOML forever. Route creations
+        # to services/staged/, which is where service_decomposer already puts
+        # built services and where promote_staged_to_active is the gated path
+        # into active/. See zo_sentinel/publisher/auto_stage.py.
+        original_rel_path = rel_path
+        staged_path, stage_reason = auto_stage.redirect(self.clone_dir, rel_path)
+        if stage_reason:
+            rel_path = staged_path
+            # gitops has no logger; it reports through last_error and the
+            # PublishResult detail. Record the redirect there so the decision is
+            # visible in the run rather than silently applied -- a routing
+            # change nobody can see is worse than the failure it prevents.
+            self.staged_redirects.append((original_rel_path, rel_path))
+            self.last_error = "auto-stage: %s -> %s (%s)" % (
+                original_rel_path, rel_path, stage_reason.split(" -- ")[0])
 
         target = self.clone_dir / rel_path
         try:

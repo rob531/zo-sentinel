@@ -1,0 +1,8 @@
+[service]
+name = "trust_verdict_api"
+import_path = "services.active.trust_verdict_api.router"
+prefix = "/api"
+tag = "trust_verdict_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

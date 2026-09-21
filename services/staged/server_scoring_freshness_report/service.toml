@@ -1,0 +1,13 @@
+# service.toml
+[service]
+name = "server_scoring_freshness_report"
+import_path = "services.active.server_scoring_freshness_report.router"
+prefix = "/api"
+tag = "server_scoring_freshness_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependency]
+app_db = true
+write_service = true

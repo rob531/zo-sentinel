@@ -1,167 +1,154 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from pydantic import BaseModel
-from typing import Dict, Optional
-from app.db import get_session
-from app.models import McpLlmAxisScore
+from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-
-router = APIRouter()
+from app.db import get_session
+from app.models import McpServerRegistry, McpLlmAxisScore
+from datetime import datetime
 
 class AxisScore(BaseModel):
     label: str
-    p_top: float
+    score: float
+    label_index: int
 
-class ScoringResponse(BaseModel):
-    axes: Dict[str, AxisScore]
-    overall: float
+class ConsumeRequest(BaseModel):
+    server_id: str
+    axis_scores: List[AxisScore]
+
+class ConsumeResponse(BaseModel):
+    server_id: str
     risk_tier: str
-    criteria_version: str
+    axis_count: int
+    consumed_at: datetime
 
-def determine_risk_tier(axes: Dict[str, AxisScore]) -> str:
-    critical_axes = ['critical_vulnerability', 'critical_misconfiguration']
-    for axis in critical_axes:
-        if axis in axes and axes[axis].p_top > 0.5:
-            return 'CRITICAL'
-    if axes['overall'].p_top > 0.8:
-        return 'HIGH'
-    elif axes['overall'].p_top > 0.6:
-        return 'MEDIUM'
-    elif axes['overall'].p_top > 0.4:
-        return 'LOW'
-    else:
-        return 'MINIMAL'
+class ErrorResponse(BaseModel):
+    error: str
 
-@router.get("/scoring/consumer", response_model=ScoringResponse)
-async def get_scoring_consumer(server_id: int, session: Session = Depends(get_session)) -> ScoringResponse:
-    # Get all axis scores for the server
-    axis_scores = session.query(
-        McpLlmAxisScore.axis,
-        McpLlmAxisScore.label,
-        McpLlmAxisScore.p_top,
-        McpLlmAxisScore.criteria_version
-    ).filter(
-        McpLlmAxisScore.server_id == server_id
-    ).all()
+def determine_risk_tier(axis_scores: List[AxisScore]) -> str:
+    critical_axes = [
+        "auth_strength",
+        "capability_breadth",
+        "data_sensitivity",
+        "network_egress",
+        "maintainer_trust",
+        "exploit_surface"
+    ]
 
-    if not axis_scores:
-        raise HTTPException(status_code=404, detail="Server not found")
+    for axis in axis_scores:
+        if axis.label in critical_axes and axis.score >= 0.8:
+            return "HIGH_RISK_ISOLATED"
 
-    # Group scores by axis
-    axes = {}
-    criteria_version = None
-    for score in axis_scores:
-        axes[score.axis] = AxisScore(label=score.label, p_top=score.p_top)
-        criteria_version = score.criteria_version
-
-    if criteria_version is None:
-        raise HTTPException(status_code=500, detail="Criteria version not found")
-
-    # Calculate overall score
-    overall_score = session.query(
-        func.avg(McpLlmAxisScore.p_top).label('overall')
-    ).filter(
-        McpLlmAxisScore.server_id == server_id
-    ).scalar()
-
-    if overall_score is None:
-        raise HTTPException(status_code=500, detail="Overall score not found")
-
-    # Determine risk tier
-    risk_tier = determine_risk_tier(axes)
-
-    return ScoringResponse(
-        axes=axes,
-        overall=overall_score,
-        risk_tier=risk_tier,
-        criteria_version=criteria_version
+    overall_risk = next(
+        (axis.score for axis in axis_scores if axis.label == "overall_risk"),
+        0.0
     )
+
+    if overall_risk >= 0.8:
+        return "HIGH_RISK_ISOLATED"
+    elif overall_risk >= 0.6:
+        return "HIGH_RISK_MONITORED"
+    elif overall_risk >= 0.4:
+        return "MEDIUM_RISK"
+    elif overall_risk >= 0.2:
+        return "LOW_RISK"
+    else:
+        return "MINIMAL_RISK"
+
+def consume_scoring(
+    request: ConsumeRequest,
+    db: Session = Depends(get_session)
+) -> ConsumeResponse:
+    try:
+        server = db.query(McpServerRegistry).filter(
+            McpServerRegistry.server_id == request.server_id
+        ).first()
+
+        if not server:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Server not found"
+            )
+
+        axis_scores = request.axis_scores
+        risk_tier = determine_risk_tier(axis_scores)
+
+        server.risk_tier = risk_tier
+        db.commit()
+
+        return ConsumeResponse(
+            server_id=request.server_id,
+            risk_tier=risk_tier,
+            axis_count=len(axis_scores),
+            consumed_at=datetime.utcnow()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+app = FastAPI()
+
+app.post("/internal/scoring/consume")(consume_scoring)
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import Base, engine, get_session
-    from app.models import McpLlmAxisScore
+    from sqlalchemy.orm import Session
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models import Base
 
-    # Setup in-memory SQLite for testing
-    test_engine = create_engine("sqlite:///:memory:")
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
+    )
     Base.metadata.create_all(test_engine)
-    TestSession = sessionmaker(bind=test_engine)
 
-    # Override the dependency for testing
-    app.dependency_overrides[get_session] = lambda: TestSession()
+    def override_get_session() -> Session:
+        session = Session(test_engine)
+        try:
+            yield session
+        finally:
+            session.close()
 
-    # Create test data
-    test_session = TestSession()
-    test_server_id = 1
-    test_scores = [
-        McpLlmAxisScore(
-            server_id=test_server_id,
-            axis="critical_vulnerability",
-            label="Critical Vulnerability",
-            p_top=0.6,
-            criteria_version="v1.0"
-        ),
-        McpLlmAxisScore(
-            server_id=test_server_id,
-            axis="critical_misconfiguration",
-            label="Critical Misconfiguration",
-            p_top=0.4,
-            criteria_version="v1.0"
-        ),
-        McpLlmAxisScore(
-            server_id=test_server_id,
-            axis="data_exposure",
-            label="Data Exposure",
-            p_top=0.7,
-            criteria_version="v1.0"
-        ),
-        McpLlmAxisScore(
-            server_id=test_server_id,
-            axis="access_control",
-            label="Access Control",
-            p_top=0.5,
-            criteria_version="v1.0"
-        ),
-        McpLlmAxisScore(
-            server_id=test_server_id,
-            axis="update_status",
-            label="Update Status",
-            p_top=0.3,
-            criteria_version="v1.0"
-        ),
-        McpLlmAxisScore(
-            server_id=test_server_id,
-            axis="network_security",
-            label="Network Security",
-            p_top=0.8,
-            criteria_version="v1.0"
-        ),
-    ]
-    test_session.add_all(test_scores)
-    test_session.commit()
+    app.dependency_overrides[get_session] = override_get_session
 
-    # Create FastAPI app for testing
-    from fastapi import FastAPI
-    app = FastAPI()
-    app.include_router(router)
-
-    # Test the endpoint
     client = TestClient(app)
-    response = client.get(f"/scoring/consumer?server_id={test_server_id}")
-    assert response.status_code == 200
-    data = response.json()
 
-    # Verify the response
-    assert len(data["axes"]) == 6
-    assert "critical_vulnerability" in data["axes"]
-    assert "critical_misconfiguration" in data["axes"]
-    assert "data_exposure" in data["axes"]
-    assert "access_control" in data["axes"]
-    assert "update_status" in data["axes"]
-    assert "network_security" in data["axes"]
-    assert data["risk_tier"] == "CRITICAL"  # Due to critical_vulnerability > 0.5
-    assert data["criteria_version"] == "v1.0"
+    test_server_id = "test-server-123"
+    test_axis_scores = [
+        {"label": "auth_strength", "score": 0.7, "label_index": 0},
+        {"label": "capability_breadth", "score": 0.5, "label_index": 1},
+        {"label": "data_sensitivity", "score": 0.6, "label_index": 2},
+        {"label": "network_egress", "score": 0.4, "label_index": 3},
+        {"label": "maintainer_trust", "score": 0.3, "label_index": 4},
+        {"label": "exploit_surface", "score": 0.2, "label_index": 5},
+        {"label": "overall_risk", "score": 0.5, "label_index": 6}
+    ]
+
+    with Session(test_engine) as session:
+        session.add(McpServerRegistry(
+            server_id=test_server_id,
+            risk_tier="UNKNOWN"
+        ))
+        session.commit()
+
+    response = client.post(
+        "/internal/scoring/consume",
+        json={"server_id": test_server_id, "axis_scores": test_axis_scores}
+    )
+
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["server_id"] == test_server_id
+    assert response_data["risk_tier"] in [
+        "HIGH_RISK_ISOLATED",
+        "HIGH_RISK_MONITORED",
+        "MEDIUM_RISK",
+        "LOW_RISK",
+        "MINIMAL_RISK"
+    ]
+    assert response_data["axis_count"] == len(test_axis_scores)
 
     print("PASS")

@@ -1,0 +1,8 @@
+[service]
+name = "ask_query_expansion_v3"
+import_path = "services.active.ask_query_expansion_v3.router"
+prefix = "/api"
+tag = "ask_query_expansion_v3"
+origin = "service"
+auth = "public"
+needs_data_layer = true

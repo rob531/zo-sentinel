@@ -1,0 +1,12 @@
+[service]
+name = "risk_tier_transitions"
+import_path = "services.active.risk_tier_transitions.router"
+prefix = "/api"
+tag = "risk_tier_transitions"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.test]
+self_test = true
+expected_output = "PASS"

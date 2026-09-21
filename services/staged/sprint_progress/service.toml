@@ -1,0 +1,8 @@
+[service]
+name = "sprint_progress"
+import_path = "services.active.sprint_progress.router"
+prefix = "/api"
+tag = "sprint_progress"
+origin = "service"
+auth = "public"
+needs_data_layer = true

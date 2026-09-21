@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from typing import List
 import requests
 
@@ -15,11 +15,11 @@ def get_llm_axis_scores(session=Depends(get_session)) -> List[McpLlmAxisScore]:
 def get_score_disputes(session=Depends(get_session)) -> List[McpScoreDispute]:
     return session.query(McpScoreDispute).all()
 
-def get_orgs(session=Depends(get_session)) -> List[Orgs]:
-    return session.query(Orgs).all()
+def get_orgs(session=Depends(get_session)) -> List[Org]:
+    return session.query(Org).all()
 
-def get_users(session=Depends(get_session)) -> List[Users]:
-    return session.query(Users).all()
+def get_users(session=Depends(get_session)) -> List[User]:
+    return session.query(User).all()
 
 def query_mesh_data(endpoint: str, params: dict = None) -> dict:
     response = requests.post("http://127.0.0.1:8772/query", json={"endpoint": endpoint, "params": params})
@@ -48,8 +48,8 @@ if __name__ == "__main__":
     test_server = McpServerRegistry(server_id="test", endpoint="http://test.com")
     test_llm = McpLlmAxisScore(score_id="test", axis="test", value=0.5)
     test_dispute = McpScoreDispute(dispute_id="test", score_id="test", reason="test")
-    test_org = Orgs(org_id="test", name="Test Org")
-    test_user = Users(user_id="test", name="Test User")
+    test_org = Org(org_id="test", name="Test Org")
+    test_user = User(user_id="test", name="Test User")
 
     session = next(override_get_session())
     session.add_all([test_server, test_llm, test_dispute, test_org, test_user])

@@ -1,0 +1,8 @@
+[service]
+name = "never_scored_backlog_rollup"
+import_path = "services.active.never_scored_backlog_rollup.router"
+prefix = "/api"
+tag = "never_scored_backlog_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true

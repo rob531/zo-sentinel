@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 try:
     from app.db import get_session
-    from app.models import mcp_llm_axis_scores as mcp_llm_axis_scores_model
+    from app.models import McpLlmAxisScore as mcp_llm_axis_scores_model
 
     _APP_DB_AVAILABLE = True
 except ImportError:
@@ -114,7 +114,7 @@ def setup_database() -> dict[str, Any]:
     try:
         with get_session() as session:
             if hasattr(mcp_llm_axis_scores_model, "__table__"):
-                result["tables"].append("mcp_llm_axis_scores")
+                result["tables"].append("McpLlmAxisScore")
             result["status"] = "initialized"
     except Exception as e:
         result["status"] = "error"
@@ -137,13 +137,13 @@ def reset_server_export_api_quarantine(
 
             if server_id:
                 session.execute(
-                    text("UPDATE mcp_server_registry SET quarantine = false WHERE server_id = :sid"),
+                    text("UPDATE McpServerRegistry SET quarantine = false WHERE server_id = :sid"),
                     {"sid": server_id},
                 )
                 result["server_id"] = server_id
             else:
                 session.execute(
-                    text("UPDATE mcp_server_registry SET quarantine = false WHERE api_type = 'export'")
+                    text("UPDATE McpServerRegistry SET quarantine = false WHERE api_type = 'export'")
                 )
             session.commit()
             result["reset"] = True

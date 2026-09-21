@@ -1,0 +1,12 @@
+[service]
+name = "scoring_consumer_risk_tier"
+import_path = "services.active.scoring_consumer_risk_tier.router"
+prefix = "/api"
+tag = "scoring_consumer_risk_tier"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.scoring_consumer_risk_tier.router"
+expected_output = "PASS"

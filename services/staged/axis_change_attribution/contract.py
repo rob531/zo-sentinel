@@ -1,3 +1,4 @@
+from sqlalchemy.pool import StaticPool
 from typing import List, Dict, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -57,7 +58,7 @@ async def axis_changes(server_id: int, session: Session = Depends(get_session)):
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import StaticPool, get_session
+    from app.db import get_session
     from app.models import McpLlmAxisScore, McpServerRegistry
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

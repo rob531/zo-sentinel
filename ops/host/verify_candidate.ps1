@@ -134,6 +134,41 @@ try {
         Copy-Item $src $verdictPath -Force
         Copy-Item $src (Join-Path $EvidenceDir "verdict_latest.json") -Force
         Say "verdict rescued -> $verdictPath"
+
+        # STAMP THE PRODUCING LANE. $EvidenceDir is SHARED by every lane, and
+        # tools/sentinel_run_ledger.py reads it as though prod-drift owned it.
+        # A shared basename is a shared counter: on 2026-08-02 a sibling lane's
+        # 18:15Z dry-run of THIS script surfaced in prod-drift's ledger as
+        # ORPHAN EVIDENCE, an alarm about a lane that had done nothing wrong.
+        # The artifact is the only party that knows who wrote it, so it is the
+        # party that has to say so. Additive key; no existing field is touched
+        # and any reader that ignores it behaves exactly as before.
+        $lane = $env:ZO_LANE
+        if (-not $lane -and $PSScriptRoot -match '\\_lanes\\([^\\]+)') { $lane = $Matches[1] }
+        if (-not $lane) { $lane = "unattributed" }
+        $stampSrc = @'
+import json, sys
+lane, paths = sys.argv[1], sys.argv[2:]
+for p in paths:
+    try:
+        with open(p, encoding="utf-8") as fh:
+            blob = json.load(fh)
+        if not isinstance(blob, dict):
+            continue
+        blob["produced_by_lane"] = lane
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump(blob, fh, indent=2)
+    except Exception as exc:
+        print("WARN: could not stamp %s: %s" % (p, exc))
+'@
+        $stampFile = Join-Path ([IO.Path]::GetTempPath()) ("stamp_lane_{0}.py" -f [Guid]::NewGuid().ToString("N"))
+        Set-Content -Path $stampFile -Value $stampSrc -Encoding UTF8
+        try {
+            python $stampFile $lane $verdictPath (Join-Path $EvidenceDir "verdict_latest.json")
+            Say "stamped produced_by_lane=$lane"
+        } finally {
+            Remove-Item $stampFile -Force -ErrorAction SilentlyContinue
+        }
     } else {
         Say "WARNING: no verdict artifact at $src -- the verifier did not produce one."
     }

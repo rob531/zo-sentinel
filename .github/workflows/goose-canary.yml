@@ -107,7 +107,7 @@ jobs:
             if [ "$RUNG" = "cerebras" ]; then
               BASE_URL="https://api.cerebras.ai/v1"; KEY="$CEREBRAS_API_KEY"; MODEL="gpt-oss-120b"
             else
-              BASE_URL="https://api.groq.com/openai/v1"; KEY="$GROQ_API_KEY"; MODEL="llama-3.3-70b-versatile"
+              BASE_URL="https://api.groq.com/openai/v1"; KEY="$GROQ_API_KEY"; MODEL="openai/gpt-oss-120b"
             fi
 
             if [ -z "$KEY" ]; then
@@ -123,8 +123,15 @@ jobs:
               goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
                 --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
 
-            python tools/canary/classify_smoke.py --transcript /tmp/smoke.out --nonce "$NONCE"
-            case "$?" in
+            # errexit trap (found 2026-09-06, run 34048327136): GitHub's default
+            # `shell: bash` is `bash -eo pipefail`, and `set -uo pipefail` above
+            # does NOT clear -e. So classify_smoke's exit 2 killed the step
+            # BEFORE `case` ran -- the failover below had never once executed;
+            # cerebras 402 == whole canary red, which is exactly the run that
+            # closed #4077's false lead. Capture the rc instead of reading $?.
+            RC=0
+            python tools/canary/classify_smoke.py --transcript /tmp/smoke.out --nonce "$NONCE" || RC=$?
+            case "$RC" in
               0)
                 echo "SMOKE PASS on rung $RUNG: this goose loads a recipe, drives a model and calls a tool."
                 {
@@ -192,14 +199,25 @@ jobs:
           # is unchanged -- this only exercises the override.
           ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel
           ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp.log
-          # DRIVE THIS STEP ON A NON-REASONING MODEL, and understand why before
-          # changing it back. This canary points goose DIRECTLY at a provider,
-          # whereas the mesh points goose at the ladder shim on :8796. On the
-          # direct path, a multi-turn tool-calling turn against a REASONING model
-          # (cerebras gpt-oss-120b) dies with:
+          # THE REPLAY REJECTION IS NOT AVOIDABLE BY RUNG. This canary points
+          # goose DIRECTLY at a provider, whereas the mesh points goose at the
+          # ladder shim on :8796. On the direct path a multi-turn tool-calling
+          # turn dies with:
           #   400: messages.2.assistant.reasoning_content ... is unsupported
           # because goose preserves reasoning_content across tool-call turns
           # (upstream #10366) and the provider rejects the property on replay.
+          #
+          # CORRECTED 2026-09-19 (run 35426553926, chairman issue #4077). This
+          # block used to read "DRIVE THIS STEP ON A NON-REASONING MODEL" and
+          # attributed the 400 to cerebras gpt-oss-120b specifically, with groq
+          # as the cure. That belief was never tested and is false: the run
+          # above was on groq -- its session header reads
+          #   __( O)>  * new session * openai openai/gpt-oss-120b
+          # -- and it died with the identical 400. gpt-oss emits reasoning on
+          # either rung. Switching rungs cannot fix this, and a comment
+          # asserting it can is how the step spent 13 days looking mitigated.
+          # The rung below is kept for cost/availability reasons only.
+          #
           # PROVEN NOT A VERSION REGRESSION: runs 30262869986 (1.44.0) and
           # 30262977744 (1.43.0 control) fail identically, and 1.43 is what is
           # live today. PROVEN NOT A PRODUCTION BUG EITHER: ladder_shim.py
@@ -208,73 +226,77 @@ jobs:
           # reaches a provider in the real path.
           # The single-turn smoke above is unaffected -- it never replays an
           # assistant turn. See FU-119 for the standing divergence this exposes.
+          #
+          # So the 400 is a standing condition of this tier, not an event. The
+          # probe therefore must NOT depend on a post-tool-call model turn:
+          # classify_namespacing.py harvests goose's own dispatch render as
+          # proof the name resolved, which is all this probe was ever asking.
           OPENAI_BASE_URL: https://api.groq.com/openai/v1
           OPENAI_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GOOSE_MODEL: llama-3.3-70b-versatile
+          GOOSE_MODEL: openai/gpt-oss-120b
         run: |
-          set -euo pipefail
+          set -uo pipefail
           NONCE="ns-$RANDOM-$RANDOM"
           goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
             --params nonce="$NONCE" 2>&1 | tee /tmp/namespacing.out
 
-          if grep -qi "Failed to start extension 'zo_directive_bridge'" /tmp/namespacing.out; then
-            echo "CANARY FAIL (a): EXTENSION_START_FAILURE -- the bridge never initialised."
-            echo "This is NOT a goose namespacing regression; it is our extension being unloadable."
-            echo "Note what goose did: it warned and CONTINUED WITHOUT THE BRIDGE. A bridge that"
-            echo "fails to start on the tower therefore produces a live-looking architect with no"
-            echo "bridge tools -- i.e. +0 -- and goose will not tell you louder than a warning."
-            grep -i "Failed to start extension" -A2 /tmp/namespacing.out || true
-            exit 1
-          fi
-
-          # THREE OUTCOMES, NOT TWO. Until 2026-08-10 this block had a PASS and a
-          # single catch-all FAIL that asserted "genuine rename" for any reason the
-          # nonce failed to appear. Run 31384666172 published exactly that false
-          # verdict -- "DO NOT FLIP", on a version where the name resolved six
-          # times -- because the MODEL emitted `null` args for a zero-argument tool
-          # and the provider then refused the whole function call. A guard that can
-          # only say "renamed" will say "renamed" about a bad afternoon.
+          # The verdict used to live here as four inline `grep` branches and the
+          # third of them was UNFALSIFIABLE: it fired on `grep -q "$VERBATIM"`,
+          # and goose prints the probe recipe's OWN DESCRIPTION -- which names
+          # that tool verbatim -- before it does anything. So the branch matched
+          # on every run. On 2026-09-19 (run 35426553926) it published
+          # `PROBE INCONCLUSIVE` + exit 1 on a transcript containing goose's own
+          # dispatch render for the tool, i.e. proof the name resolved. The probe
+          # failed the build on the evidence it exists to collect.
           #
-          # KEY INSIGHT, and the reason this is not merely a softened assertion:
-          # the -32602 dispatcher error NAMES THE TOOL. goose can only print
-          #   -32602: Tool arguments for zo_directive_bridge__read_protected_files ...
-          # if it RESOLVED that name. So the error line is POSITIVE evidence of
-          # correct namespacing and was being thrown away. We harvest it.
-          VERBATIM="zo_directive_bridge__read_protected_files"
+          # Moved to tools/canary/classify_namespacing.py so the verdict has
+          # tests. tests/test_canary_classify_namespacing.py carries BOTH poles,
+          # and the ordering that makes them poles: tool-not-found is checked
+          # BEFORE dispatch evidence, because goose's not-found error contains
+          # the verbatim name too -- checking dispatch first would read a genuine
+          # rename as a pass, turning a gate that publishes false reds into one
+          # that publishes false greens.
+          #
+          # errexit trap, same as the smoke step above: GitHub's default
+          # `shell: bash` is `bash -eo pipefail` and `set -uo pipefail` does not
+          # clear -e, so a nonzero classifier exit would kill the step before the
+          # `case` below ever ran. Capture the rc; do not read $? across a pipe.
+          RC=0
+          python tools/canary/classify_namespacing.py \
+            --transcript /tmp/namespacing.out --nonce "$NONCE" || RC=$?
 
-          if grep -q "NAMESPACING_OK::$NONCE" /tmp/namespacing.out; then
-            echo "NAMESPACING PASS (direct evidence): $VERBATIM resolved and the call completed."
-            exit 0
-          fi
-
-          if grep -qE -- "-32602: Tool arguments for $VERBATIM" /tmp/namespacing.out; then
-            echo "NAMESPACING PASS (dispatcher evidence): goose RESOLVED $VERBATIM --"
-            echo "it could not have named the tool in a -32602 otherwise. Namespacing is intact."
-            echo
-            echo "SEPARATE DEFECT, do not conflate it with a version verdict: the model emitted"
-            echo "malformed tool arguments (null, for a zero-argument tool) and the provider then"
-            echo "refused the call. That is the #9832 / #10230 class -- and note WHERE it bites:"
-            echo "only on this DIRECT-to-provider tier. The mesh routes through escalation.py,"
-            echo "which salvages exactly this. FU-119's thesis, demonstrated by accident."
-            grep -E -- "-32602|Failed to call a function" /tmp/namespacing.out | head -8
-            exit 0
-          fi
-
-          if grep -q "$VERBATIM" /tmp/namespacing.out; then
-            echo "PROBE INCONCLUSIVE -- NOT A NAMESPACING VERDICT."
-            echo "The verbatim name appears in the transcript but neither the nonce nor a"
-            echo "dispatcher error was seen. Something failed upstream of the tool call"
-            echo "(provider outage, rate limit, truncated turn). Read the log; do not record"
-            echo "a rename, and do not record a pass."
-            tail -40 /tmp/namespacing.out
-            exit 1
-          fi
-
-          echo "CANARY FAIL (b): the architect's hardcoded tool name did NOT resolve, the"
-          echo "bridge DID start, and the name appears NOWHERE in the transcript -- so this"
-          echo "is a genuine rename. The 1.38 starvation shape. DO NOT FLIP."
-          tail -40 /tmp/namespacing.out
-          exit 1
+          case "$RC" in
+            0)
+              echo "NAMESPACING PASS: the architect's hardcoded tool name resolved."
+              echo "See the verdict line above for WHICH evidence carried it (direct nonce,"
+              echo "dispatcher -32602, or goose's dispatch render). R5: the basis is published"
+              echo "with the verdict, never inferred from the exit code alone."
+              exit 0
+              ;;
+            2)
+              echo "PROBE INCONCLUSIVE -- NOT A NAMESPACING VERDICT, AND NOT A PASS."
+              echo "A provider-layer signal was present and no evidence of tool resolution was."
+              echo "The candidate version has been neither cleared nor condemned: do not record"
+              echo "a rename and do not flip. Restore the rung and re-dispatch."
+              echo
+              echo "If the verdict line reads replay:reasoning-content-unsupported, read the env"
+              echo "comment above first -- that 400 is a STANDING condition of this direct tier"
+              echo "(upstream #10366), it is not reachable by changing rungs, and it does not"
+              echo "bite the mesh path. Reaching it here means goose never got as far as"
+              echo "dispatching the tool, which is the part worth looking at."
+              tail -40 /tmp/namespacing.out
+              exit 1
+              ;;
+            *)
+              echo "CANARY FAIL: DO NOT FLIP. Either the bridge never started"
+              echo "(EXTENSION_START_FAILURE -- goose warns and runs on WITHOUT it, producing a"
+              echo "live-looking architect with no bridge tools, i.e. +0) or the architect's"
+              echo "hardcoded tool name did not resolve. The 1.38 starvation shape."
+              echo "The verdict line above says which."
+              tail -40 /tmp/namespacing.out
+              exit 1
+              ;;
+          esac
 
       - name: PreToolUse hooks test (do hooks fire under `goose run`? is deny enforced?)
         run: |

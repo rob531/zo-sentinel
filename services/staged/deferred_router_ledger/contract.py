@@ -1,3 +1,4 @@
+from sqlalchemy.pool import StaticPool
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -47,7 +48,7 @@ router.get("/deferred/routers")(get_deferred_routers)
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import StaticPool
+    
     from app.models import Base
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

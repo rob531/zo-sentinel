@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import requests
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 
 app = FastAPI()
 
@@ -38,7 +38,7 @@ def get_mesh_scores(server_id: int, session: Session = Depends(get_session)) -> 
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_llm_axis_scores WHERE server_id = {server_id}"},
+            json={"query": f"SELECT * FROM McpLlmAxisScore WHERE server_id = {server_id}"},
             timeout=10
         )
         response.raise_for_status()
@@ -53,7 +53,7 @@ def dummy_post_endpoint(data: dict, session: Session = Depends(get_session)) -> 
 def _run_self_test() -> None:
     """Self-test for the module."""
     from app.db import get_session
-    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+    from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -66,8 +66,8 @@ def _run_self_test() -> None:
     McpServerRegistry.metadata.create_all(engine)
     McpLlmAxisScore.metadata.create_all(engine)
     McpScoreDispute.metadata.create_all(engine)
-    Orgs.metadata.create_all(engine)
-    Users.metadata.create_all(engine)
+    Org.metadata.create_all(engine)
+    User.metadata.create_all(engine)
 
     # Test get_mesh_memory
     test_server = McpServerRegistry(server_id=1, name="test_server")

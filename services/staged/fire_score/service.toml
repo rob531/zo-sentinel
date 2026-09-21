@@ -1,0 +1,8 @@
+[service]
+name = "fire_score"
+import_path = "services.active.fire_score.router"
+prefix = "/api"
+tag = "fire_score"
+origin = "service"
+auth = "public"
+needs_data_layer = true

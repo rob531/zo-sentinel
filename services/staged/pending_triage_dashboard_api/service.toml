@@ -1,0 +1,18 @@
+[service]
+name = "pending_triage_dashboard_api"
+import_path = "services.active.pending_triage_dashboard_api.router"
+prefix = "/api"
+tag = "pending_triage_dashboard_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]

@@ -1,0 +1,8 @@
+[service]
+name = "vuln_advisory_analysis"
+import_path = "services.active.vuln_advisory_analysis.router"
+prefix = "/api"
+tag = "vuln_advisory_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,12 @@
+[service]
+name = "scoring_quality_summary"
+import_path = "services.active.scoring_quality_summary.router"
+prefix = "/api"
+tag = "scoring_quality_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.scoring_quality_summary"
+expected_output = "PASS"

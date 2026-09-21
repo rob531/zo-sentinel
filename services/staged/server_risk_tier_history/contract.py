@@ -87,14 +87,14 @@ if __name__ == "__main__":
     with SessionLocal() as db:
         test_server_id = "test_server_123"
 
-        # Insert into mcp_server_registry
+        # Insert into McpServerRegistry
         db.add(McpServerRegistry(
             server_id=test_server_id,
             risk_tier="medium",
             last_assessed=datetime.utcnow()
         ))
 
-        # Insert into mcp_llm_axis_scores
+        # Insert into McpLlmAxisScore
         test_dates = [
             datetime.utcnow() - timedelta(days=2),
             datetime.utcnow() - timedelta(days=1),

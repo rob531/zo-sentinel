@@ -186,18 +186,74 @@ def test_control_line_continuations_are_joined_before_parsing():
     assert set(copy_source_tokens(text)) == {"one.py", "two.py", "three.py"}
 
 
-def test_control_the_real_dockerfile_copies_no_services_tree():
-    """Pins the fact the gate above depends on. If someone adds
-    `COPY services /srv/services`, this fails and forces a deliberate re-read of
-    whether staged code should now be shipping into the prod image."""
+def test_the_real_dockerfile_ships_active_services_and_not_staged():
+    """FU-217: this assertion was INVERTED on 2026-08-01, deliberately.
+
+    It used to read `assert not shipped_services_trees` -- a tripwire whose
+    stated purpose was to fail if anyone added `COPY services /srv/services`
+    and thereby "force a deliberate re-read of whether staged code should now
+    be shipping into the prod image". That re-read happened; this is its
+    outcome, recorded where the tripwire was rather than only in a commit
+    message that nobody reading this file would see.
+
+    THE RE-READ. With no services/ COPY token at any depth, `would_be_shipped`
+    was False for every `services.active.<name>.router`, which is what every
+    staged service declares. The promoter therefore held 267 of 300 candidates
+    (measured 2026-08-01T14:32Z, runtime b1c0d758) and the first autonomous
+    staged->active promotion was unreachable by any amount of builder output,
+    service.toml repair or contract work. The hazard the tripwire named was
+    real; the answer to it is not "never ship services/", it is "ship exactly
+    the half that has passed a liveness gate".
+
+    So the tripwire is not deleted and it is not weakened -- it is made
+    two-sided and permanent. It now pins BOTH facts the gates above depend on:
+    services/active IS carried (or promotion is impossible again) and
+    services/staged is NOT (or un-gated code reaches the prod image). Before
+    this change the second fact held only as a side effect of the first being
+    false; it is now asserted in its own right, which is strictly more than the
+    original tripwire proved.
+    """
     tokens = set(copy_source_tokens(_read_dockerfile()))
-    shipped_services_trees = sorted(
+    services_tokens = sorted(
         t for t in tokens if t == "services" or t.startswith("services/")
     )
-    assert not shipped_services_trees, (
-        "the Dockerfile now COPYs a services/ tree: %s -- re-read "
-        "tools/image_ship_check.py before accepting this" % shipped_services_trees
+
+    assert "services/active" in services_tokens, (
+        "no COPY token carries services/active -- every promoted service is "
+        "imported as services.active.<name>.router and would "
+        "ModuleNotFoundError at mount (FU-217/FU-102). Got: %s" % services_tokens
     )
+
+    staged = sorted(
+        t
+        for t in services_tokens
+        if t == "services"
+        or t == "services/staged"
+        or t.startswith("services/staged/")
+    )
+    assert not staged, (
+        "the Dockerfile now carries staged (liveness-ungated) service code into "
+        "the prod image via %s -- a bare `COPY services` does this too. "
+        "Promotion MOVES a dir staged -> active, so shipping staged buys "
+        "nothing and puts un-gated modules one import away from a mounted app."
+        % staged
+    )
+
+
+def test_control_services_active_coverage_is_segment_matched_not_prefix_matched():
+    """The inversion above must not have been bought with a sloppier matcher.
+
+    `services/active` must cover services/active/<n>/router.py and must NOT be
+    read as covering a sibling whose name merely starts with the same string.
+    This is the negative control for the new COPY token specifically: without
+    it, a prefix-matching regression would make the assertion above pass while
+    silently claiming coverage of services/staged too.
+    """
+    tokens = ["services/__init__.py", "services/active"]
+    assert is_copy_covered("services/active/entity_report/router.py", tokens)
+    assert not is_copy_covered("services/staged/entity_report/router.py", tokens)
+    assert not is_copy_covered("services/activex/router.py", tokens)
+    assert not is_copy_covered("services/other.py", tokens)
 
 
 def test_control_cache_dirs_are_not_mistaken_for_services():

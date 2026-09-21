@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel
 import requests
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from sqlalchemy.orm import Session
 
 app = FastAPI()
@@ -80,7 +80,7 @@ def reset_server_export_api_quarantine(server_id: int, org_id: Optional[int] = N
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
-            json={"query": f"UPDATE mcp_server_registry SET quarantine = false WHERE server_id = {server_id} AND org_id = {org_id}"},
+            json={"query": f"UPDATE McpServerRegistry SET quarantine = false WHERE server_id = {server_id} AND org_id = {org_id}"},
             timeout=10
         )
         response.raise_for_status()

@@ -3,7 +3,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import (Column, DateTime, Float, Integer, String,
+                        create_engine, func, select)
 from sqlalchemy.orm import Session, declarative_base
 
 from app.db import get_session
@@ -32,9 +33,6 @@ class McpLlmAxisScore(Base):
     p_top = Column(Float)
     p_critical = Column(Float)
     p_danger = Column(Float)
-
-
-from sqlalchemy import Column, DateTime, Float, Integer, String
 
 
 class ScoreHistoryResponse(BaseModel):

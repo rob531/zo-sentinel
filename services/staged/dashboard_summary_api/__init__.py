@@ -1,0 +1,1 @@
+# Read schema to understand correct attribute names

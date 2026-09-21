@@ -1,0 +1,8 @@
+[service]
+name = "score_drift_alert"
+import_path = "services.active.score_drift_alert.router"
+prefix = "/api"
+tag = "score_drift_alert"
+origin = "service"
+auth = "public"
+needs_data_layer = true

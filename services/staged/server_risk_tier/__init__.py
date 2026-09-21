@@ -66,7 +66,7 @@ def reset_server_export_api_quarantine(server_id: str, session: Session) -> bool
     """Reset the export API quarantine for a server."""
     try:
         result = session.execute(
-            text("UPDATE mcp_server_registry SET export_quarantined = false WHERE id = :server_id"),
+            text("UPDATE McpServerRegistry SET export_quarantined = false WHERE id = :server_id"),
             {"server_id": server_id}
         )
         session.commit()

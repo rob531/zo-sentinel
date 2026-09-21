@@ -59,34 +59,111 @@ jobs:
       - name: goose --version
         run: goose --version
 
-      - name: Map smoke rung to goose provider env
+      # THREE OUTCOMES, NOT TWO -- and a rung failover. (chairman issue #4077)
+      #
+      # Until 2026-09-02 this was two steps: a `Map smoke rung` step that pinned
+      # ONE provider into $GITHUB_ENV for the whole job, and a smoke step whose
+      # only two verdicts were "nonce echoed" and
+      #     SMOKE FAIL: nonce not echoed -- this goose broke our recipe/tool loop
+      #
+      # Run 33387672279 (2026-08-31) published exactly that sentence about a
+      # transcript reading `Please check your account with your provider to add
+      # more credits`. goose loaded the recipe, opened a session and reached
+      # cerebras; cerebras refused on BILLING. Nothing was learned about the
+      # candidate version, and the canary asserted a version verdict anyway.
+      # That is the FU-108 class (EXTRACTION_FAILURE != DEGENERATE) and R6
+      # (unknown != zero) -- both of which the `namespacing` step below already
+      # respects with its PROBE INCONCLUSIVE branch. The FIRST step, the one
+      # that actually failed, was the one without them.
+      #
+      # tools/canary/classify_smoke.py owns the three-way decision and carries
+      # its negative controls in tests/test_canary_classify_smoke.py (mutating
+      # its phrase patterns to naive keywords turns 7 of them red -- observed,
+      # not assumed). Exit codes: 0 PASS, 1 FAIL, 2 PROVIDER_UNAVAILABLE.
+      #
+      # ONLY a PROVIDER_UNAVAILABLE falls through to the other rung. A FAIL
+      # stops the job on the spot: retrying a genuine loop regression on a
+      # second provider is how a red canary is talked into green, which is the
+      # one failure mode worse than the one being fixed here. The rung that
+      # WINS is the rung written to $GITHUB_ENV, so every later step in this
+      # job runs on a provider proven reachable seconds earlier rather than on
+      # a dead one chosen at dispatch time.
+      - name: Tool-call smoke (recipe load + model + tool call, with rung failover)
+        env:
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PREFERRED_RUNG: ${{ inputs.smoke_rung }}
         run: |
-          set -euo pipefail
-          if [ "${{ inputs.smoke_rung }}" = "cerebras" ]; then
-            echo "OPENAI_BASE_URL=https://api.cerebras.ai/v1" >> "$GITHUB_ENV"
-            echo "OPENAI_API_KEY=${{ secrets.CEREBRAS_API_KEY }}" >> "$GITHUB_ENV"
-            echo "GOOSE_MODEL=gpt-oss-120b" >> "$GITHUB_ENV"
-          elif [ "${{ inputs.smoke_rung }}" = "groq" ]; then
-            echo "OPENAI_BASE_URL=https://api.groq.com/openai/v1" >> "$GITHUB_ENV"
-            echo "OPENAI_API_KEY=${{ secrets.GROQ_API_KEY }}" >> "$GITHUB_ENV"
-            echo "GOOSE_MODEL=llama-3.3-70b-versatile" >> "$GITHUB_ENV"
-          else
-            echo "unknown rung ${{ inputs.smoke_rung }}"; exit 1
-          fi
-          echo "GOOSE_PROVIDER=openai" >> "$GITHUB_ENV"
+          set -uo pipefail
 
-      - name: Tool-call smoke (recipe load + model + tool call)
-        run: |
-          set -euo pipefail
-          NONCE="ci-$RANDOM-$RANDOM"
-          goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
-            --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
-          if grep -q "CANARY_TOOLCALL_OK::$NONCE" /tmp/smoke.out; then
-            echo "SMOKE PASS: new goose loads recipe + drives model + calls a tool"
-          else
-            echo "SMOKE FAIL: nonce not echoed -- this goose broke our recipe/tool loop"
-            exit 1
-          fi
+          case "$PREFERRED_RUNG" in
+            cerebras) RUNGS="cerebras groq" ;;
+            groq)     RUNGS="groq cerebras" ;;
+            *) echo "unknown rung $PREFERRED_RUNG"; exit 1 ;;
+          esac
+
+          UNAVAILABLE_NOTES=""
+          for RUNG in $RUNGS; do
+            if [ "$RUNG" = "cerebras" ]; then
+              BASE_URL="https://api.cerebras.ai/v1"; KEY="$CEREBRAS_API_KEY"; MODEL="gpt-oss-120b"
+            else
+              BASE_URL="https://api.groq.com/openai/v1"; KEY="$GROQ_API_KEY"; MODEL="openai/gpt-oss-120b"
+            fi
+
+            if [ -z "$KEY" ]; then
+              echo "rung $RUNG: no API key configured -- skipping (not a goose verdict)"
+              UNAVAILABLE_NOTES="$UNAVAILABLE_NOTES\n  $RUNG: secret not set"
+              continue
+            fi
+
+            echo "=== smoke on rung: $RUNG ($MODEL) ==="
+            NONCE="ci-$RANDOM-$RANDOM"
+            OPENAI_BASE_URL="$BASE_URL" OPENAI_API_KEY="$KEY" \
+            GOOSE_MODEL="$MODEL" GOOSE_PROVIDER="openai" \
+              goose run --no-session --recipe tools/canary/smoke_recipe.yaml \
+                --params nonce="$NONCE" 2>&1 | tee /tmp/smoke.out
+
+            # errexit trap (found 2026-09-06, run 34048327136): GitHub's default
+            # `shell: bash` is `bash -eo pipefail`, and `set -uo pipefail` above
+            # does NOT clear -e. So classify_smoke's exit 2 killed the step
+            # BEFORE `case` ran -- the failover below had never once executed;
+            # cerebras 402 == whole canary red, which is exactly the run that
+            # closed #4077's false lead. Capture the rc instead of reading $?.
+            RC=0
+            python tools/canary/classify_smoke.py --transcript /tmp/smoke.out --nonce "$NONCE" || RC=$?
+            case "$RC" in
+              0)
+                echo "SMOKE PASS on rung $RUNG: this goose loads a recipe, drives a model and calls a tool."
+                {
+                  echo "OPENAI_BASE_URL=$BASE_URL"
+                  echo "OPENAI_API_KEY=$KEY"
+                  echo "GOOSE_MODEL=$MODEL"
+                  echo "GOOSE_PROVIDER=openai"
+                  echo "CANARY_WINNING_RUNG=$RUNG"
+                } >> "$GITHUB_ENV"
+                exit 0
+                ;;
+              2)
+                echo "rung $RUNG is PROVIDER_UNAVAILABLE -- this says nothing about the candidate goose."
+                UNAVAILABLE_NOTES="$UNAVAILABLE_NOTES\n  $RUNG: provider refused (see verdict line above)"
+                ;;
+              *)
+                echo "SMOKE FAIL on rung $RUNG: goose was driven and the recipe->model->tool loop did not close."
+                echo "No provider-layer signal was present, so this IS a verdict on the candidate version."
+                echo "NOT retrying on another rung: a second provider cannot un-break a broken loop, and"
+                echo "trying would only convert a true red into a green nobody can trust."
+                tail -40 /tmp/smoke.out
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "SMOKE INCONCLUSIVE -- NOT A GOOSE VERDICT, AND NOT A PASS."
+          printf 'Every rung was unavailable at the provider layer:%b\n' "$UNAVAILABLE_NOTES"
+          echo "The candidate version has been neither cleared nor condemned. Restore a rung"
+          echo "(credits/quota/key) and re-dispatch; do not record a version decision from this run."
+          tail -40 /tmp/smoke.out 2>/dev/null || true
+          exit 1
 
       # The bridge needs the MCP SDK. It is NOT declared in any requirements file
       # in this repo -- it exists only in the tower's ambient Python env, which is
@@ -122,14 +199,25 @@ jobs:
           # is unchanged -- this only exercises the override.
           ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel
           ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp.log
-          # DRIVE THIS STEP ON A NON-REASONING MODEL, and understand why before
-          # changing it back. This canary points goose DIRECTLY at a provider,
-          # whereas the mesh points goose at the ladder shim on :8796. On the
-          # direct path, a multi-turn tool-calling turn against a REASONING model
-          # (cerebras gpt-oss-120b) dies with:
+          # THE REPLAY REJECTION IS NOT AVOIDABLE BY RUNG. This canary points
+          # goose DIRECTLY at a provider, whereas the mesh points goose at the
+          # ladder shim on :8796. On the direct path a multi-turn tool-calling
+          # turn dies with:
           #   400: messages.2.assistant.reasoning_content ... is unsupported
           # because goose preserves reasoning_content across tool-call turns
           # (upstream #10366) and the provider rejects the property on replay.
+          #
+          # CORRECTED 2026-09-19 (run 35426553926, chairman issue #4077). This
+          # block used to read "DRIVE THIS STEP ON A NON-REASONING MODEL" and
+          # attributed the 400 to cerebras gpt-oss-120b specifically, with groq
+          # as the cure. That belief was never tested and is false: the run
+          # above was on groq -- its session header reads
+          #   __( O)>  * new session * openai openai/gpt-oss-120b
+          # -- and it died with the identical 400. gpt-oss emits reasoning on
+          # either rung. Switching rungs cannot fix this, and a comment
+          # asserting it can is how the step spent 13 days looking mitigated.
+          # The rung below is kept for cost/availability reasons only.
+          #
           # PROVEN NOT A VERSION REGRESSION: runs 30262869986 (1.44.0) and
           # 30262977744 (1.43.0 control) fail identically, and 1.43 is what is
           # live today. PROVEN NOT A PRODUCTION BUG EITHER: ladder_shim.py
@@ -138,34 +226,77 @@ jobs:
           # reaches a provider in the real path.
           # The single-turn smoke above is unaffected -- it never replays an
           # assistant turn. See FU-119 for the standing divergence this exposes.
+          #
+          # So the 400 is a standing condition of this tier, not an event. The
+          # probe therefore must NOT depend on a post-tool-call model turn:
+          # classify_namespacing.py harvests goose's own dispatch render as
+          # proof the name resolved, which is all this probe was ever asking.
           OPENAI_BASE_URL: https://api.groq.com/openai/v1
           OPENAI_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GOOSE_MODEL: llama-3.3-70b-versatile
+          GOOSE_MODEL: openai/gpt-oss-120b
         run: |
-          set -euo pipefail
+          set -uo pipefail
           NONCE="ns-$RANDOM-$RANDOM"
           goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
             --params nonce="$NONCE" 2>&1 | tee /tmp/namespacing.out
 
-          if grep -qi "Failed to start extension 'zo_directive_bridge'" /tmp/namespacing.out; then
-            echo "CANARY FAIL (a): EXTENSION_START_FAILURE -- the bridge never initialised."
-            echo "This is NOT a goose namespacing regression; it is our extension being unloadable."
-            echo "Note what goose did: it warned and CONTINUED WITHOUT THE BRIDGE. A bridge that"
-            echo "fails to start on the tower therefore produces a live-looking architect with no"
-            echo "bridge tools -- i.e. +0 -- and goose will not tell you louder than a warning."
-            grep -i "Failed to start extension" -A2 /tmp/namespacing.out || true
-            exit 1
-          fi
+          # The verdict used to live here as four inline `grep` branches and the
+          # third of them was UNFALSIFIABLE: it fired on `grep -q "$VERBATIM"`,
+          # and goose prints the probe recipe's OWN DESCRIPTION -- which names
+          # that tool verbatim -- before it does anything. So the branch matched
+          # on every run. On 2026-09-19 (run 35426553926) it published
+          # `PROBE INCONCLUSIVE` + exit 1 on a transcript containing goose's own
+          # dispatch render for the tool, i.e. proof the name resolved. The probe
+          # failed the build on the evidence it exists to collect.
+          #
+          # Moved to tools/canary/classify_namespacing.py so the verdict has
+          # tests. tests/test_canary_classify_namespacing.py carries BOTH poles,
+          # and the ordering that makes them poles: tool-not-found is checked
+          # BEFORE dispatch evidence, because goose's not-found error contains
+          # the verbatim name too -- checking dispatch first would read a genuine
+          # rename as a pass, turning a gate that publishes false reds into one
+          # that publishes false greens.
+          #
+          # errexit trap, same as the smoke step above: GitHub's default
+          # `shell: bash` is `bash -eo pipefail` and `set -uo pipefail` does not
+          # clear -e, so a nonzero classifier exit would kill the step before the
+          # `case` below ever ran. Capture the rc; do not read $? across a pipe.
+          RC=0
+          python tools/canary/classify_namespacing.py \
+            --transcript /tmp/namespacing.out --nonce "$NONCE" || RC=$?
 
-          if grep -q "NAMESPACING_OK::$NONCE" /tmp/namespacing.out; then
-            echo "NAMESPACING PASS: zo_directive_bridge__read_protected_files resolves verbatim under this goose"
-          else
-            echo "CANARY FAIL (b): the architect's hardcoded tool name did NOT resolve, and the"
-            echo "bridge DID start -- so this is a genuine rename. The 1.38 starvation shape."
-            echo "DO NOT FLIP. Tool list the agent reported:"
-            tail -40 /tmp/namespacing.out
-            exit 1
-          fi
+          case "$RC" in
+            0)
+              echo "NAMESPACING PASS: the architect's hardcoded tool name resolved."
+              echo "See the verdict line above for WHICH evidence carried it (direct nonce,"
+              echo "dispatcher -32602, or goose's dispatch render). R5: the basis is published"
+              echo "with the verdict, never inferred from the exit code alone."
+              exit 0
+              ;;
+            2)
+              echo "PROBE INCONCLUSIVE -- NOT A NAMESPACING VERDICT, AND NOT A PASS."
+              echo "A provider-layer signal was present and no evidence of tool resolution was."
+              echo "The candidate version has been neither cleared nor condemned: do not record"
+              echo "a rename and do not flip. Restore the rung and re-dispatch."
+              echo
+              echo "If the verdict line reads replay:reasoning-content-unsupported, read the env"
+              echo "comment above first -- that 400 is a STANDING condition of this direct tier"
+              echo "(upstream #10366), it is not reachable by changing rungs, and it does not"
+              echo "bite the mesh path. Reaching it here means goose never got as far as"
+              echo "dispatching the tool, which is the part worth looking at."
+              tail -40 /tmp/namespacing.out
+              exit 1
+              ;;
+            *)
+              echo "CANARY FAIL: DO NOT FLIP. Either the bridge never started"
+              echo "(EXTENSION_START_FAILURE -- goose warns and runs on WITHOUT it, producing a"
+              echo "live-looking architect with no bridge tools, i.e. +0) or the architect's"
+              echo "hardcoded tool name did not resolve. The 1.38 starvation shape."
+              echo "The verdict line above says which."
+              tail -40 /tmp/namespacing.out
+              exit 1
+              ;;
+          esac
 
       - name: PreToolUse hooks test (do hooks fire under `goose run`? is deny enforced?)
         run: |
@@ -244,6 +375,7 @@ jobs:
           curl -sf http://127.0.0.1:8772/health || { echo "ws failed to start"; cat /tmp/it_ws.log; exit 1; }
           python -m pytest tests/integration -v
 
+
       - name: Logs on failure
         if: failure()
         run: |
@@ -252,3 +384,185 @@ jobs:
           echo "--- hooks ---"; cat /tmp/hook.out 2>/dev/null || true
           echo "--- long shell ---"; cat /tmp/long_shell.out 2>/dev/null || true
           echo "--- write_service ---"; cat /tmp/it_ws.log 2>/dev/null || true
+
+  # ------------------------------------------------------------------
+  # SPLIT OUT OF `canary` ON 2026-08-10. It was appended to that job and
+  # therefore SKIPPED the first time it ran (31384666172, step 9 red) --
+  # a tier that can only execute once every other tier is already green
+  # cannot report on the condition it exists for. `skipped` is not `pass`
+  # (R3), and the whole point of this tier is to see failures the direct
+  # tier cannot. It needs no provider secret, so it has no reason to be
+  # coupled to a job that does.
+  # ------------------------------------------------------------------
+  shim_tier:
+    name: Shim tier (production transport, FU-119)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install candidate goose (Rust CLI, aaif-goose org)
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh \
+            | CONFIGURE=false GOOSE_VERSION="v${{ inputs.goose_version }}" bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install the MCP SDK the bridge imports
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install "mcp>=1.2,<2.0"
+      # ================================================================
+      # TIER 2 -- THE PRODUCTION TRANSPORT (FU-119)
+      #
+      # Every step above drives goose STRAIGHT AT A PROVIDER. The mesh never
+      # does that: the architect and the builder both drive goose at
+      # ladder_shim.py on 127.0.0.1:8796. So everything above is blind to the
+      # shim, the rung rotation, the key hydrator and the tool-call salvage --
+      # which is exactly where our scars live (scar #454, TOOL:-as-prose,
+      # key_hydrator 502s). FU-119, open since 2026-07-27.
+      #
+      # The tier stands the shim up FROM THE CHECKOUT rather than reaching the
+      # tower. A runner cannot reach :8796 on the tower, and it should not want
+      # to: booting from the checkout gates THE SHIM CODE THIS PR CHANGES,
+      # rather than whatever happens to be running elsewhere.
+      #
+      # NO SECRET IS REQUIRED, and that is deliberate. The assertion is about
+      # the REQUEST goose sends, not the RESPONSE a provider returns, so the
+      # ladder is replaced by a recorder (tools/canary/shim_tier_recorder.py).
+      # Zero tokens, zero keys. A tier gated on a secret we are not authorised
+      # to add would skip forever, and a skip that reads as a pass is the
+      # failure class this repo has paid for most.
+      #
+      # WHAT THIS TIER DOES NOT CLAIM: rung rotation, key hydration and real
+      # provider behaviour are NOT exercised here -- they need keys. Do not read
+      # this green as "the ladder works". Read it as "the shim's HTTP surface,
+      # request model and tool passthrough survive this goose version, and
+      # escalation.py still imports".
+      # ================================================================
+
+      - name: Shim tier -- boot ladder_shim.py from the checkout
+        env:
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
+        run: |
+          set -euo pipefail
+          pip install fastapi uvicorn pydantic requests
+          nohup python tools/canary/shim_tier_recorder.py \
+            --port 8796 --record /tmp/shim_tier_requests.json \
+            > /tmp/shim_tier_boot.log 2>&1 &
+          echo $! > /tmp/shim_tier.pid
+
+          # Bounded wait. A shim that never comes up must fail the step with a
+          # NAMED message -- an unbounded wait is how a boot failure becomes a
+          # timeout nobody attributes.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8796/health > /tmp/shim_health.json 2>/dev/null; then
+              echo "SHIM_TIER::health=$(cat /tmp/shim_health.json)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "SHIM TIER FAIL: ladder_shim.py never became healthy on 127.0.0.1:8796 within 30s."
+          echo "This is a BOOT failure, not a goose-version failure. Boot log:"
+          cat /tmp/shim_tier_boot.log || true
+          exit 1
+
+      - name: Shim tier -- drive the candidate goose through :8796
+        env:
+          # THE LINE THIS WHOLE TIER EXISTS FOR. FU-119's predicate asserts on it.
+          OPENAI_BASE_URL: http://127.0.0.1:8796/v1
+          # The shim does not authenticate; goose requires the var to be set.
+          OPENAI_API_KEY: shim-tier-no-auth-required
+          # NOT INHERITED. `GOOSE_PROVIDER=openai` is written to $GITHUB_ENV by the
+          # `canary` job's "Map smoke rung" step; splitting this tier into its own
+          # job left it behind, and the installer runs CONFIGURE=false so there is
+          # no config file to fall back on. goose then exits in 0.03s having sent
+          # nothing -- which run 31385033251 reported, correctly, as requests=0 /
+          # TRANSPORT failure rather than as a rename.
+          GOOSE_PROVIDER: openai
+          GOOSE_MODEL: zo-ladder-v1
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
+          ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp_shim.log
+        run: |
+          set -uo pipefail
+          NONCE="shim-$RANDOM-$RANDOM"
+          # We do NOT assert on the recipe's own output here. The recorder
+          # returns canned text, so the agent never completes a real tool call --
+          # that is the direct tier's job. This tier asserts on the REQUEST.
+          goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
+            --params nonce="$NONCE" 2>&1 | tee /tmp/shim_tier_goose.out || true
+
+          if grep -qi "Failed to start extension 'zo_directive_bridge'" /tmp/shim_tier_goose.out; then
+            echo "SHIM TIER FAIL: EXTENSION_START_FAILURE -- the bridge never initialised."
+            echo "goose warned and CONTINUED WITHOUT IT (FU-117), so the tool list is empty"
+            echo "for a reason that has nothing to do with the transport. Fix the bridge first."
+            exit 1
+          fi
+          echo "SHIM_TIER::goose_run=completed"
+
+      - name: Shim tier -- assert the namespaced tool name arrived UNTRUNCATED
+        run: |
+          set -uo pipefail
+          cat /tmp/shim_tier_requests.json
+          set +e
+          python tools/canary/assert_shim_tool_names.py --record /tmp/shim_tier_requests.json
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            echo "---- goose transcript (the step that failed showed none) ----"
+            cat /tmp/shim_tier_goose.out || echo "(no transcript)"
+            echo "---- shim boot log ----"
+            cat /tmp/shim_tier_boot.log || echo "(no boot log)"
+            exit "$RC"
+          fi
+
+      # NEGATIVE CONTROL. An assertion that has never been observed failing is
+      # not evidence that the transport works; it is evidence that nothing was
+      # measured (R4). This step re-runs the recorder with --truncate-names,
+      # simulating upstream #10659, and REQUIRES the assertion above to go RED.
+      # If this step's inner assertion passes, the guard is vacuous and the
+      # build fails -- which is the correct outcome.
+      - name: Shim tier -- NEGATIVE CONTROL (truncation must turn the assertion RED)
+        env:
+          ZO_SENTINEL_DIR: ${{ runner.temp }}/zo_sentinel_shim
+          OPENAI_BASE_URL: http://127.0.0.1:8796/v1
+          OPENAI_API_KEY: shim-tier-no-auth-required
+          # NOT INHERITED. `GOOSE_PROVIDER=openai` is written to $GITHUB_ENV by the
+          # `canary` job's "Map smoke rung" step; splitting this tier into its own
+          # job left it behind, and the installer runs CONFIGURE=false so there is
+          # no config file to fall back on. goose then exits in 0.03s having sent
+          # nothing -- which run 31385033251 reported, correctly, as requests=0 /
+          # TRANSPORT failure rather than as a rename.
+          GOOSE_PROVIDER: openai
+          GOOSE_MODEL: zo-ladder-v1
+          ZO_DIRECTIVE_MCP_LOG: ${{ runner.temp }}/directive_mcp_neg.log
+        run: |
+          set -uo pipefail
+          kill "$(cat /tmp/shim_tier.pid)" 2>/dev/null || true
+          sleep 2
+          nohup python tools/canary/shim_tier_recorder.py \
+            --port 8796 --record /tmp/shim_tier_neg.json --truncate-names 12 \
+            > /tmp/shim_tier_neg_boot.log 2>&1 &
+          echo $! > /tmp/shim_tier_neg.pid
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8796/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          goose run --no-session --recipe tools/canary/namespacing_probe_recipe.yaml \
+            --params nonce="neg-control" > /tmp/shim_tier_neg_goose.out 2>&1 || true
+
+          set +e
+          python tools/canary/assert_shim_tool_names.py --record /tmp/shim_tier_neg.json
+          RC=$?
+          set -e
+          kill "$(cat /tmp/shim_tier_neg.pid)" 2>/dev/null || true
+
+          if [ "$RC" -eq 0 ]; then
+            echo "NEGATIVE CONTROL FAILED: names truncated to 12 chars and the assertion"
+            echo "still PASSED. The untruncated-name guard is vacuous -- it cannot detect"
+            echo "the thing it was written to detect. Do not trust the green above."
+            exit 1
+          fi
+          echo "SHIM_TIER_VERDICT::negative_control::PASS::assertion went RED under truncation (rc=$RC)"

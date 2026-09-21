@@ -31,9 +31,9 @@ def get_risk_tier_audit(days: int, session: Session = Depends(get_session)) -> R
             r.risk_tier,
             LAG(r.risk_tier) OVER (PARTITION BY s.server_id ORDER BY DATE(s.scored_at)) AS prev_risk_tier
         FROM
-            mcp_llm_axis_scores s
+            McpLlmAxisScore s
         JOIN
-            mcp_server_registry r ON s.server_id = r.server_id
+            McpServerRegistry r ON s.server_id = r.server_id
         WHERE
             DATE(s.scored_at) BETWEEN :start_date AND :end_date
     ),

@@ -1,0 +1,8 @@
+[service]
+name = "risk_trends_dashboard"
+import_path = "services.active.risk_trends_dashboard.router"
+prefix = "/api"
+tag = "risk_trends_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,16 @@
+[service]
+name = "score_freshness_report_api"
+import_path = "services.active.score_freshness_report_api.router"
+prefix = "/api"
+tag = "score_freshness_report_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+system_services = []
+pip_packages = ["httpx"]
+
+[service.resources]
+cpu = "0.25"
+memory = "256Mi"

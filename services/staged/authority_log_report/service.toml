@@ -1,0 +1,8 @@
+[service]
+name = "authority_log_report"
+import_path = "services.active.authority_log_report.router"
+prefix = "/api"
+tag = "authority_log_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

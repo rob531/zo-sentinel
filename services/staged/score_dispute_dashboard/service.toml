@@ -1,0 +1,8 @@
+[service]
+name = "score_dispute_dashboard"
+import_path = "services.active.score_dispute_dashboard.router"
+prefix = "/api"
+tag = "score_dispute_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

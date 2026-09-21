@@ -1,0 +1,14 @@
+[service]
+name = "server_risk_tier_distribution_api"
+import_path = "services.active.server_risk_tier_distribution_api.router"
+prefix = "/api"
+tag = "server_risk_tier_distribution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = "app"
+
+[python]
+path = "services/active/server_risk_tier_distribution_api"

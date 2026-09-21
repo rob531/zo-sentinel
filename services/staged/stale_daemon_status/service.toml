@@ -1,0 +1,12 @@
+[service]
+name = "stale_daemon_status"
+import_path = "services.active.stale_daemon_status.router"
+prefix = "/api"
+tag = "stale_daemon_status"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

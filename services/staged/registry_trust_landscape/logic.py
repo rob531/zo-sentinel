@@ -9,7 +9,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import Base, mcp_llm_axis_scores, mcp_server_registry
+from app.models import Base, McpLlmAxisScore, McpServerRegistry
 
 router = APIRouter(prefix="/api/registry/trust-landscape", tags=["registry_trust_landscape"])
 
@@ -38,8 +38,8 @@ def _aggregate_source(session: Session) -> List[SourceSummary]:
     # Subquery: map each server to its registry source
     srv_src = (
         session.query(
-            mcp_server_registry.server_id.label("server_id"),
-            mcp_server_registry.registry_source.label("registry_source"),
+            McpServerRegistry.server_id.label("server_id"),
+            McpServerRegistry.registry_source.label("registry_source"),
         )
         .subquery()
     )
@@ -49,17 +49,17 @@ def _aggregate_source(session: Session) -> List[SourceSummary]:
         session.query(
             srv_src.c.registry_source,
             srv_src.c.server_id,
-            func.count(mcp_llm_axis_scores.id).label("axis_cnt"),
+            func.count(McpLlmAxisScore.id).label("axis_cnt"),
             func.avg(
                 case(
-                    [(mcp_llm_axis_scores.axis_name == "overall_risk", mcp_llm_axis_scores.score)],
+                    [(McpLlmAxisScore.axis_name == "overall_risk", McpLlmAxisScore.score)],
                     else_=None,
                 )
             ).label("overall_score"),
         )
         .join(
-            mcp_llm_axis_scores,
-            mcp_llm_axis_scores.server_id == srv_src.c.server_id,
+            McpLlmAxisScore,
+            McpLlmAxisScore.server_id == srv_src.c.server_id,
         )
         .group_by(srv_src.c.registry_source, srv_src.c.server_id)
         .subquery()
@@ -87,14 +87,14 @@ def _aggregate_source(session: Session) -> List[SourceSummary]:
     tier_q = (
         session.query(
             srv_src.c.registry_source,
-            mcp_llm_axis_scores.risk_tier,
-            func.count(func.distinct(mcp_llm_axis_scores.server_id)).label("cnt"),
+            McpLlmAxisScore.risk_tier,
+            func.count(func.distinct(McpLlmAxisScore.server_id)).label("cnt"),
         )
         .join(
-            mcp_llm_axis_scores,
-            mcp_llm_axis_scores.server_id == srv_src.c.server_id,
+            McpLlmAxisScore,
+            McpLlmAxisScore.server_id == srv_src.c.server_id,
         )
-        .group_by(srv_src.c.registry_source, mcp_llm_axis_scores.risk_tier)
+        .group_by(srv_src.c.registry_source, McpLlmAxisScore.risk_tier)
         .all()
     )
 
@@ -148,43 +148,43 @@ if __name__ == "__main__":
         # Registry sources
         s.add_all(
             [
-                mcp_server_registry(server_id=1, registry_source="source_A"),
-                mcp_server_registry(server_id=2, registry_source="source_A"),
-                mcp_server_registry(server_id=3, registry_source="source_A"),
-                mcp_server_registry(server_id=4, registry_source="source_B"),
-                mcp_server_registry(server_id=5, registry_source="source_B"),
-                mcp_server_registry(server_id=6, registry_source="source_B"),
+                McpServerRegistry(server_id=1, registry_source="source_A"),
+                McpServerRegistry(server_id=2, registry_source="source_A"),
+                McpServerRegistry(server_id=3, registry_source="source_A"),
+                McpServerRegistry(server_id=4, registry_source="source_B"),
+                McpServerRegistry(server_id=5, registry_source="source_B"),
+                McpServerRegistry(server_id=6, registry_source="source_B"),
             ]
         )
         # Axis scores (overall_risk + other axes)
         scores = [
             # source_A servers
-            mcp_llm_axis_scores(
+            McpLlmAxisScore(
                 server_id=1,
                 axis_name="overall_risk",
                 score=2.0,
                 risk_tier="TRUSTED_GENERAL",
             ),
-            mcp_llm_axis_scores(server_id=1, axis_name="axis1", score=1.0, risk_tier="TRUSTED_GENERAL"),
-            mcp_llm_axis_scores(server_id=1, axis_name="axis2", score=1.0, risk_tier="TRUSTED_GENERAL"),
-            mcp_llm_axis_scores(server_id=1, axis_name="axis3", score=1.0, risk_tier="TRUSTED_GENERAL"),
-            mcp_llm_axis_scores(server_id=1, axis_name="axis4", score=1.0, risk_tier="TRUSTED_GENERAL"),
+            McpLlmAxisScore(server_id=1, axis_name="axis1", score=1.0, risk_tier="TRUSTED_GENERAL"),
+            McpLlmAxisScore(server_id=1, axis_name="axis2", score=1.0, risk_tier="TRUSTED_GENERAL"),
+            McpLlmAxisScore(server_id=1, axis_name="axis3", score=1.0, risk_tier="TRUSTED_GENERAL"),
+            McpLlmAxisScore(server_id=1, axis_name="axis4", score=1.0, risk_tier="TRUSTED_GENERAL"),
             # server 2 – fewer axes
-            mcp_llm_axis_scores(server_id=2, axis_name="overall_risk", score=4.0, risk_tier="UNTRUSTED"),
+            McpLlmAxisScore(server_id=2, axis_name="overall_risk", score=4.0, risk_tier="UNTRUSTED"),
             # server 3 – enough axes, different tier
-            mcp_llm_axis_scores(server_id=3, axis_name="overall_risk", score=3.0, risk_tier="TRUSTED_RESEARCH"),
-            mcp_llm_axis_scores(server_id=3, axis_name="axis1", score=1.0, risk_tier="TRUSTED_RESEARCH"),
-            mcp_llm_axis_scores(server_id=3, axis_name="axis2", score=1.0, risk_tier="TRUSTED_RESEARCH"),
-            mcp_llm_axis_scores(server_id=3, axis_name="axis3", score=1.0, risk_tier="TRUSTED_RESEARCH"),
-            mcp_llm_axis_scores(server_id=3, axis_name="axis4", score=1.0, risk_tier="TRUSTED_RESEARCH"),
+            McpLlmAxisScore(server_id=3, axis_name="overall_risk", score=3.0, risk_tier="TRUSTED_RESEARCH"),
+            McpLlmAxisScore(server_id=3, axis_name="axis1", score=1.0, risk_tier="TRUSTED_RESEARCH"),
+            McpLlmAxisScore(server_id=3, axis_name="axis2", score=1.0, risk_tier="TRUSTED_RESEARCH"),
+            McpLlmAxisScore(server_id=3, axis_name="axis3", score=1.0, risk_tier="TRUSTED_RESEARCH"),
+            McpLlmAxisScore(server_id=3, axis_name="axis4", score=1.0, risk_tier="TRUSTED_RESEARCH"),
             # source_B servers
-            mcp_llm_axis_scores(server_id=4, axis_name="overall_risk", score=5.0, risk_tier="UNTRUSTED"),
-            mcp_llm_axis_scores(server_id=4, axis_name="axis1", score=1.0, risk_tier="UNTRUSTED"),
-            mcp_llm_axis_scores(server_id=4, axis_name="axis2", score=1.0, risk_tier="UNTRUSTED"),
-            mcp_llm_axis_scores(server_id=4, axis_name="axis3", score=1.0, risk_tier="UNTRUSTED"),
-            mcp_llm_axis_scores(server_id=4, axis_name="axis4", score=1.0, risk_tier="UNTRUSTED"),
-            mcp_llm_axis_scores(server_id=5, axis_name="overall_risk", score=1.0, risk_tier="TRUSTED_GENERAL"),
-            mcp_llm_axis_scores(server_id=6, axis_name="overall_risk", score=2.5, risk_tier="UNKNOWN"),
+            McpLlmAxisScore(server_id=4, axis_name="overall_risk", score=5.0, risk_tier="UNTRUSTED"),
+            McpLlmAxisScore(server_id=4, axis_name="axis1", score=1.0, risk_tier="UNTRUSTED"),
+            McpLlmAxisScore(server_id=4, axis_name="axis2", score=1.0, risk_tier="UNTRUSTED"),
+            McpLlmAxisScore(server_id=4, axis_name="axis3", score=1.0, risk_tier="UNTRUSTED"),
+            McpLlmAxisScore(server_id=4, axis_name="axis4", score=1.0, risk_tier="UNTRUSTED"),
+            McpLlmAxisScore(server_id=5, axis_name="overall_risk", score=1.0, risk_tier="TRUSTED_GENERAL"),
+            McpLlmAxisScore(server_id=6, axis_name="overall_risk", score=2.5, risk_tier="UNKNOWN"),
         ]
         s.add_all(scores)
         s.commit()

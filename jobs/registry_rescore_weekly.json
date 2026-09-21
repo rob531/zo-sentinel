@@ -1,8 +1,8 @@
 {
   "name": "registry_rescore_weekly",
-  "description": "Weekly surgical rescore (chairman directive 2026-07-14). Single resumable entrypoint tools/rescore/weekly_rescore.py replaces the manual fire_score.py path. Delta mode: never-scored distinct-URL servers + oldest-scored refresh cohort (cap 20k) => every server refreshed <= ~4 weeks, newest_scored_at advances weekly, ~$0.3-0.6/run. Scheduled as two Claude tasks: weekly-rescore-fire (Tue) + weekly-rescore-collect (Tue +4h).",
+  "description": "Weekly surgical rescore (chairman directive 2026-07-14). Single resumable entrypoint tools/rescore/weekly_rescore.py replaces the manual fire_score.py path. Delta mode: never-scored distinct-URL servers + oldest-scored refresh cohort (cap 20k), newest_scored_at advances weekly, ~$0.3-0.6/run. Driven end-to-end by ONE scheduled task via --run; see scheduled_by and refresh_cycle_weeks below for the two figures this line stated wrongly.",
   "entrypoint": "python tools/rescore/weekly_rescore.py --phase fire-all | collect-all | --run",
-  "cost_cap_usd": 3.00,
+  "cost_cap_usd": 3.0,
   "max_dph": 0.45,
   "deadline_min": 300,
   "adapter_sha256_pinned": "bf842f5450347c19ac195ef32a7298a1579566a7b9b454a5381fda333e7198e3",
@@ -16,5 +16,11 @@
     "I5 adapter sha256 pin verified before every launch"
   ],
   "ledger": "D:/zo/runs/weekly_rescore/ledger.jsonl (vast-jobs-daily-audit live-instance check is the backstop)",
-  "post_steps_automated": ["import (delete+reinsert per returned server)", "apply_risk_tier_backfill --apply (direct stamp ONLY; URL propagation deleted 2026-07-14, CofC FATHER R1)", "postcheck via https://mcprisky.io/freshness"]
+  "post_steps_automated": [
+    "import (delete+reinsert per returned server)",
+    "apply_risk_tier_backfill --apply (direct stamp ONLY; URL propagation deleted 2026-07-14, CofC FATHER R1)",
+    "postcheck via https://mcprisky.io/freshness"
+  ],
+  "scheduled_by": "moat-rescore-weekly, cron `0 2 * * 2`, ONE task, drives `--run` end-to-end. CORRECTED 2026-08-04: this file previously claimed a two-task split (`weekly-rescore-fire` Tue + `weekly-rescore-collect` Tue+4h). NO SUCH TASKS EXIST -- resolved from the RUNTIME scheduler (list_scheduled_tasks), not from prose. `--phase fire-all|collect-all` still work, but nothing schedules them, so anyone who trusted this field and fired `fire-all` alone would leave a PAID instance running with no collector until the I4 deadline reaped it.",
+  "refresh_cycle_weeks": "~14. BASIS: 280,811 scored servers / 20,000 refresh_cap per week, measured 2026-08-04 from https://mcprisky.io/freshness. CORRECTED: the `<= ~4 weeks` claim removed from `description` was calibrated when the moat held ~80k servers and outlived its unit. Corroborated independently by `oldest_scored_at` = 2026-06-24, 5.9 weeks old at time of writing and growing. This does NOT affect `newest_scored_at`, the 7-day SLA metric, which advances on every wave; what stretches is per-SERVER score age."
 }

@@ -1,0 +1,37 @@
+[service]
+name = "server_verdict_timeline_api"
+import_path = "services.active.server_verdict_timeline_api.router"
+prefix = "/api"
+tag = "server_verdict_timeline_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+# App database tables
+app_tables = [
+    "McpServerRegistry",
+    "McpLlmAxisScore",
+    "McpScoreDispute",
+]
+
+# MESH/pipeline tables accessed via ZoComputer store
+mesh_tables = [
+    "mcp_signal_scores",
+    "mesh_memory",
+]
+
+[models]
+imports = [
+    "from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute",
+]
+
+[api]
+endpoints = [
+    "/timeline",
+    "/verdict-history",
+    "/verdict-breakdown",
+]
+
+[main]
+test_command = "python -m services.active.server_verdict_timeline_api"

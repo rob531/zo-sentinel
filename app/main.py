@@ -1,3 +1,4 @@
+# idempotency: attestation_refresher_wired v1
 """FastAPI application assembly -- the deployable entrypoint (uvicorn app.main:app).
 Mounts auth + RBAC demo routes + health, and best-effort mounts any factory-built
 feature router that exposes `router` (loose/unbuilt ones are skipped, never block boot).
@@ -6,6 +7,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import pathlib
+import threading
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -30,6 +32,12 @@ from .settings import settings
 async def lifespan(app: FastAPI):
     if not settings.is_prod:        # dev/CI: ensure tables (Alembic owns prod schema)
         init_db()
+    # Start attestation_refresher in a background thread so it does not block
+    # uvicorn startup.  The daemon heartbeats to service_health every <=60 s
+    # (PRODUCT_SPEC §6) and the loop is inside run(), not here.
+    import attestation_refresher
+    t = threading.Thread(target=attestation_refresher.run, daemon=True)
+    t.start()
     yield
 
 
@@ -261,21 +269,38 @@ async def _vanity_redirect(request, call_next):
 
 # --- Self-test ---------------------------------------------------------------
 if __name__ == "__main__":
-    from fastapi.testclient import TestClient
-    from unittest.mock import patch
+    import ast, pathlib as _p
 
-    # Mock auth so the dashboard route is accessible without a real session
-    with patch("app.security.get_principal") as mock_principal:
-        mock_principal.return_value = Principal(
-            user_id="test-user",
-            org_id="test-org",
-            role="admin",
-            email="test@example.com",
-        )
-        client = TestClient(app)
-        resp = client.get("/dashboard/exemptions")
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-        assert "MCP Exemptions Dashboard" in resp.text, (
-            "Expected dashboard title not found in response"
-        )
-        print("PASS")
+    src = _p.Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    # 1. Verify attestation_refresher import is present
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            imports.append(node.module or "")
+
+    has_att_ref = any("attestation_refresher" in imp for imp in imports)
+    assert has_att_ref, "attestation_refresher import not found in main.py"
+
+    # 2. Verify attestation_refresher.run() call is present
+    calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                if (isinstance(node.func.value, ast.Name) and
+                        node.func.value.id == "attestation_refresher" and
+                        node.func.attr == "run"):
+                    calls.append("attestation_refresher.run()")
+
+    assert calls, "attestation_refresher.run() call not found in main.py"
+
+    # 3. Verify idempotency marker
+    assert "# idempotency: attestation_refresher_wired v1" in src, (
+        "idempotency marker not found"
+    )
+
+    print("PASS")

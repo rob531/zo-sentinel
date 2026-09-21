@@ -16,7 +16,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 RUNGS = {
     # --- new free capacity rungs ---
     "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", "cereb", "gpt-oss-120b", {"reasoning_effort": "medium"}, "oai"),
-    "groq":     ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "groq", "llama-3.3-70b-versatile", {}, "oai"),
+    "groq":     ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "groq", "openai/gpt-oss-120b", {}, "oai"),
     "mistral":  ("https://api.mistral.ai/v1", "MISTRAL_API_KEY", "mistral", "codestral-latest", {}, "oai"),
     "nvidia":   ("https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "nvidia", "mistralai/mistral-nemotron", {}, "oai"),
     # --- older / incumbent rungs ---

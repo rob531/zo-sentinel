@@ -72,8 +72,10 @@ Three integrity checks keep it from becoming the new graveyard:
   * every deferral needs a one-line reason. Reasonless deferrals fail.
   * every exemption in reachability_exempt.json needs a reason too, and
     exempted_count is reported on every run so it can be alarmed on.
-The list is capped by review, not by code: >40 active deferrals is a documented
-reopen trigger for the council, and is printed loudly here.
+The list is capped by review, not by code: >40 active deferrals is printed
+loudly here as an ADVISORY LEVEL. It escalates to no one -- the escalation it
+used to name was retired on 2026-09-13 (PR #5035). What BLOCKS is the
+derivative, DEFERRED NON-INCREASING.
 
 Every run writes artifacts/reachability_ratchet.json: the count, the delta, and
 the full orphan census with the shape of each module (declared prefix, tags,
@@ -159,8 +161,20 @@ def mount_surface_text():
 def describe(path, src):
     """Shape of a router module -- the design input for a mount declaration."""
     routes, tags, prefix = [], set(), None
-    for m in re.finditer(r"@router\.(get|post|put|delete|patch)\(\s*[\"']([^\"']+)", src):
-        routes.append("%s %s" % (m.group(1).upper(), m.group(2)))
+    # The path is `[^"']*`, NOT `[^"']+`. A zero-length route path is legal and
+    # in use: `@router.get("")` resolves to the router's own prefix. With `+`
+    # the decorator matched nothing at all, so a module declaring every one of
+    # its routes that way measured route_count=0 -- and tools/orphanage.py
+    # classifies route_count==0 as NO_ROUTES, "probably not a service: remit
+    # candidate". audit_log_api.py (APIRouter(prefix="/audit-log"), POST "" at
+    # line 49, GET "" at line 99) was nominated for deletion for having no
+    # routes while serving two. Measured on 335 orphans @ 0f5d7ae0e: 3 modules
+    # undercounted, 1 verdict flipped.
+    #
+    # The empty path is RENDERED as "" rather than as nothing, so a reader of
+    # the census cannot mistake a real empty-path route for a dropped capture.
+    for m in re.finditer(r"@router\.(get|post|put|delete|patch)\(\s*[\"']([^\"']*)", src):
+        routes.append("%s %s" % (m.group(1).upper(), m.group(2) or '""'))
     for m in re.finditer(r"tags\s*=\s*\[([^\]]*)\]", src):
         for t in re.findall(r"[\"']([^\"']+)[\"']", m.group(1)):
             tags.add(t)
@@ -533,12 +547,19 @@ def main():
               % data["exempted_count"])
 
     if len(active_deferred) > DEFERRED_REVIEW_CAP:
-        print("\n  DEFERRED LIST OVER CAP: %d > %d. Per the 2026-07-21 CofC ruling "
-              "this is a REOPEN TRIGGER -- the hatch has become the new graveyard. "
-              "The BLOCKING rule is the DERIVATIVE below (DEFERRED NON-INCREASING), "
-              "which fails a PR that grows this list. This line reports a LEVEL: no "
-              "single PR can lower it, so it routes no one. The cap is not to be "
-              "raised to quieten it."
+        # LABEL ONLY (no exit code, threshold or branch changed). This line
+        # used to be titled "... REOPEN TRIGGER", which named an escalation
+        # that was RETIRED on 2026-09-13; it triggers nothing and never did
+        # from inside a check that exits 0. A title that promises an
+        # escalation it cannot perform is the same class of defect as a mute
+        # rule: the log stops describing what the run actually does.
+        print("\n  DEFERRED LEVEL OVER CAP (advisory -- the BLOCKING rule is "
+              "DEFERRED NON-INCREASING below; policy call pending in issue "
+              "#3944): %d > %d. This line reports a LEVEL, from inside a check "
+              "that exits 0: it escalates to no one and no single PR can lower "
+              "it. What actually fails a PR is the DERIVATIVE below, which "
+              "blocks growing this list. The cap is not to be raised to "
+              "quieten it."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
 
     # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------

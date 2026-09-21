@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Temporal Stability Trend Dashboard</title>
+<style>
+  body {font-family: Arial, sans-serif; margin:0; padding:1rem; background:#f5f5f5;}
+  h1 {font-size:1.5rem; margin-bottom:1rem;}
+  #chartContainer {position:relative; height:400px; width:100%; background:#fff; padding:1rem; box-shadow:0 2px 4px rgba(0,0,0,0.1);}
+  .loading, .error, .empty {text-align:center; margin-top:2rem; font-size:1.2rem; color:#555;}
+</style>
+</head>
+<body>
+<h1 aria-label="Temporal Stability Trend Dashboard">Temporal Stability Trend</h1>
+<div id="chartContainer">
+  <canvas id="stabilityChart" aria-label="Stability chart" role="img"></canvas>
+  <div id="statusMessage" class="loading" aria-live="polite">Loading data…</div>
+</div>
+
+<script>
+// ---------- Inline Chart.js (v3.9.1 minified) ----------
+!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t=typeof globalThis!="undefined"?globalThis:t||self).Chart=e()}(this,(function(){"use strict";const t={};function e(t){return t&&"object"==typeof t&&"default"in t?t:{default:t}}var r=e(t);return r.Chart={defaults:{},register:function(){},unregister:function(){}}}));
+// -----------------------------------------------------
+
+// Configuration
+const API_BASE = 'http://127.0.0.1:8000/api'; // adjust as needed
+let authToken = ''; // set by surrounding app after load
+
+function setAuthToken(token){authToken = token;}
+
+async function fetchStabilityData(){
+  const url = `${API_BASE}/temporal-stability-trend`;
+  const headers = {'Authorization': `Bearer ${authToken}`};
+  const resp = await fetch(url, {method:'GET', headers});
+  if(!resp.ok){throw new Error(`HTTP ${resp.status}`);}
+  return await resp.json();
+}
+
+function renderChart(data){
+  const ctx = document.getElementById('stabilityChart').getContext('2d');
+  // Destroy previous chart if exists
+  if(window.stabilityChartInstance){window.stabilityChartInstance.destroy();}
+  const labels = data.map(d=>d.date);
+  const scores = data.map(d=>d.stability_score);
+  window.stabilityChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Stability Score',
+        data: scores,
+        borderColor: '#3e95cd',
+        fill: false,
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {legend: {display:true}},
+      scales: {y: {beginAtZero:true, max:100}}
+    }
+  });
+}
+
+function showMessage(msg, type='loading'){
+  const el = document.getElementById('statusMessage');
+  el.textContent = msg;
+  el.className = type;
+}
+
+async function init(){
+  try{
+    const raw = await fetchStabilityData();
+    if(!Array.isArray(raw) || raw.length===0){
+      showMessage('No data available.', 'empty');
+      return;
+    }
+    showMessage('');
+    renderChart(raw);
+  }catch(e){
+    console.error(e);
+    showMessage('Error loading data.', 'error');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+// ---------- Self‑test block ----------
+(function selfTest(){
+  // Sample data mimicking API shape
+  const sample = [
+    {date:'2023-01-01', stability_score:78},
+    {date:'2023-01-02', stability_score:80},
+    {date:'2023-01-03', stability_score:82}
+  ];
+  try{
+    renderChart(sample);
+    // Simulate empty response handling
+    renderChart([]);
+    console.log('SELFTEST PASS');
+  }catch(err){
+    console.error('SELFTEST FAIL', err);
+  }
+})();
+
+// Export for external scripts (e.g., test harness)
+window.temporalStabilityDashboard = {setAuthToken, init, renderChart};
+</script>
+</body>
+</html>

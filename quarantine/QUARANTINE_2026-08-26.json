@@ -1,0 +1,710 @@
+{
+  "quarantined_at": "2026-08-26",
+  "reason": "pre-2026-08-11 phantom-table backlog (MERGE_AUDIT_2026-08-23 / issue #4032 Phase F)",
+  "grounding_fix": {
+    "pr": 3235,
+    "date": "2026-08-11",
+    "what": "_schema_ground_context inlines REAL SCHEMA into the engine prompt"
+  },
+  "counts": {
+    "pre_grounding_offenders": 81,
+    "quarantined": 69,
+    "excluded_load_bearing": 12,
+    "missing_tables_before": 82,
+    "missing_tables_after": 18
+  },
+  "files": [
+    {
+      "from": "alert_manager.py",
+      "to": "quarantine/alert_manager.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "assessment_auditor.py",
+      "to": "quarantine/assessment_auditor.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "attestation_api.py",
+      "to": "quarantine/attestation_api.py",
+      "first_added_to_main": "2026-06-25",
+      "phantom_tables": [
+        "attestations"
+      ]
+    },
+    {
+      "from": "attestation_dynamic_evidence_check.py",
+      "to": "quarantine/attestation_dynamic_evidence_check.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "attestation_engine"
+      ]
+    },
+    {
+      "from": "check_enrichment_integration.py",
+      "to": "quarantine/check_enrichment_integration.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_signal"
+      ]
+    },
+    {
+      "from": "check_registry_read_error_source.py",
+      "to": "quarantine/check_registry_read_error_source.py",
+      "first_added_to_main": "2026-06-23",
+      "phantom_tables": [
+        "directives_proposed"
+      ]
+    },
+    {
+      "from": "community_signal_enrichment_wiring_verifier.py",
+      "to": "quarantine/community_signal_enrichment_wiring_verifier.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "build_artifact"
+      ]
+    },
+    {
+      "from": "cost_ceiling_headroom_report.py",
+      "to": "quarantine/cost_ceiling_headroom_report.py",
+      "first_added_to_main": "2026-07-18",
+      "phantom_tables": [
+        "system_config"
+      ]
+    },
+    {
+      "from": "daily_digest.py",
+      "to": "quarantine/daily_digest.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "definition_history_gap_diagnostic.py",
+      "to": "quarantine/definition_history_gap_diagnostic.py",
+      "first_added_to_main": "2026-06-18",
+      "phantom_tables": [
+        "monitor_heartbeat"
+      ]
+    },
+    {
+      "from": "diagnose_anti_entropy_stale.py",
+      "to": "quarantine/diagnose_anti_entropy_stale.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "entropy_check_targets"
+      ]
+    },
+    {
+      "from": "diagnose_definition_history_gap_v2.py",
+      "to": "quarantine/diagnose_definition_history_gap_v2.py",
+      "first_added_to_main": "2026-06-18",
+      "phantom_tables": [
+        "mcp_event_queue"
+      ]
+    },
+    {
+      "from": "diagnose_mcp_definition_history_empty_gap.py",
+      "to": "quarantine/diagnose_mcp_definition_history_empty_gap.py",
+      "first_added_to_main": "2026-06-21",
+      "phantom_tables": [
+        "mcp_definitions_raw",
+        "processing_jobs"
+      ]
+    },
+    {
+      "from": "diagnose_self_diagnostics_stale.py",
+      "to": "quarantine/diagnose_self_diagnostics_stale.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "scheduled_run"
+      ]
+    },
+    {
+      "from": "diagnose_smoke_failures_signal.py",
+      "to": "quarantine/diagnose_smoke_failures_signal.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "system_dependencies"
+      ]
+    },
+    {
+      "from": "diagnose_tool_count_signal_discrimination_v3.py",
+      "to": "quarantine/diagnose_tool_count_signal_discrimination_v3.py",
+      "first_added_to_main": "2026-06-23",
+      "phantom_tables": [
+        "mcps"
+      ]
+    },
+    {
+      "from": "diagnose_write_service_stale_check.py",
+      "to": "quarantine/diagnose_write_service_stale_check.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "write_errors"
+      ]
+    },
+    {
+      "from": "e2e_integration_scenario_runner.py",
+      "to": "quarantine/e2e_integration_scenario_runner.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "scanner_jobs"
+      ]
+    },
+    {
+      "from": "e2e_scenarios_integration.py",
+      "to": "quarantine/e2e_scenarios_integration.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_manual_overrides",
+        "mcp_mitigation_actions",
+        "mcp_threat_signals"
+      ]
+    },
+    {
+      "from": "e2e_scenarios_run.py",
+      "to": "quarantine/e2e_scenarios_run.root.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "attestations",
+        "risk_register",
+        "threat_associations"
+      ]
+    },
+    {
+      "from": "email_guid_auth_compact_v2.py",
+      "to": "quarantine/email_guid_auth_compact_v2.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "email_guid_auth"
+      ]
+    },
+    {
+      "from": "enrichment_sparsity_diagnostic.py",
+      "to": "quarantine/enrichment_sparsity_diagnostic.py",
+      "first_added_to_main": "2026-06-18",
+      "phantom_tables": [
+        "mcp_daemon_heartbeats",
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "importlib_import_diagnostic_v2.py",
+      "to": "quarantine/importlib_import_diagnostic_v2.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "build_artifact"
+      ]
+    },
+    {
+      "from": "investigate_definition_history_empty_gap.py",
+      "to": "quarantine/investigate_definition_history_empty_gap.py",
+      "first_added_to_main": "2026-06-29",
+      "phantom_tables": [
+        "mcp_scanner_log",
+        "signal_analyser_output",
+        "trust_synthesiser_output"
+      ]
+    },
+    {
+      "from": "investigate_definition_history_gap_followup.py",
+      "to": "quarantine/investigate_definition_history_gap_followup.py",
+      "first_added_to_main": "2026-06-23",
+      "phantom_tables": [
+        "event_log",
+        "mcp_definition"
+      ]
+    },
+    {
+      "from": "investigate_known_bad_pattern_low_variance.py",
+      "to": "quarantine/investigate_known_bad_pattern_low_variance.py",
+      "first_added_to_main": "2026-06-21",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "investigate_known_bad_pattern_signal_discrimination_v2.py",
+      "to": "quarantine/investigate_known_bad_pattern_signal_discrimination_v2.py",
+      "first_added_to_main": "2026-06-22",
+      "phantom_tables": [
+        "mcp_scanner"
+      ]
+    },
+    {
+      "from": "investigate_tool_count_low_variance.py",
+      "to": "quarantine/investigate_tool_count_low_variance.py",
+      "first_added_to_main": "2026-06-21",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "manual_override_api_v2.py",
+      "to": "quarantine/manual_override_api_v2.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "manual_override_metadata"
+      ]
+    },
+    {
+      "from": "mcp_definition_history_api.py",
+      "to": "quarantine/mcp_definition_history_api.py",
+      "first_added_to_main": "2026-06-16",
+      "phantom_tables": [
+        "analyst_registry"
+      ]
+    },
+    {
+      "from": "mcp_traffic_fingerprints_wiring.py",
+      "to": "quarantine/mcp_traffic_fingerprints_wiring.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_traffic_fingerprints"
+      ]
+    },
+    {
+      "from": "pi_harness_runner.py",
+      "to": "quarantine/pi_harness_runner.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_tool_definitions"
+      ]
+    },
+    {
+      "from": "pipeline_health_cli.py",
+      "to": "quarantine/pipeline_health_cli.py",
+      "first_added_to_main": "2026-06-20",
+      "phantom_tables": [
+        "build_artifact",
+        "pr_published"
+      ]
+    },
+    {
+      "from": "queue_manager.py",
+      "to": "quarantine/queue_manager.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "approval_workflow"
+      ]
+    },
+    {
+      "from": "registry_api_fix.py",
+      "to": "quarantine/registry_api_fix.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_resources",
+        "service_registry"
+      ]
+    },
+    {
+      "from": "score_results_push_verifier.py",
+      "to": "quarantine/score_results_push_verifier.py",
+      "first_added_to_main": "2026-07-17",
+      "phantom_tables": [
+        "scoring_wave_cost_ledger"
+      ]
+    },
+    {
+      "from": "score_run_ledger_writer.py",
+      "to": "quarantine/score_run_ledger_writer.py",
+      "first_added_to_main": "2026-07-20",
+      "phantom_tables": [
+        "mcp_score_runs"
+      ]
+    },
+    {
+      "from": "sentinel_sdk.py",
+      "to": "quarantine/sentinel_sdk.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "assessment_queue"
+      ]
+    },
+    {
+      "from": "sentinel_ui_evidence_drawer_route.py",
+      "to": "quarantine/sentinel_ui_evidence_drawer_route.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "signal_evidence"
+      ]
+    },
+    {
+      "from": "server_risk_tier_detail_api.py",
+      "to": "quarantine/server_risk_tier_detail_api.py",
+      "first_added_to_main": "2026-07-09",
+      "phantom_tables": [
+        "api_usage"
+      ]
+    },
+    {
+      "from": "server_timeline_event_api.py",
+      "to": "quarantine/server_timeline_event_api.py",
+      "first_added_to_main": "2026-07-21",
+      "phantom_tables": [
+        "perspective_event"
+      ]
+    },
+    {
+      "from": "services/staged/axis_evidence/__init__.py",
+      "to": "quarantine/services/staged/axis_evidence/__init__.py",
+      "first_added_to_main": "2026-07-26",
+      "phantom_tables": [
+        "mesh_scores"
+      ]
+    },
+    {
+      "from": "services/staged/axis_scores_api/__init__.py",
+      "to": "quarantine/services/staged/axis_scores_api/__init__.py",
+      "first_added_to_main": "2026-07-28",
+      "phantom_tables": [
+        "mcp_family_coverage",
+        "mcp_overview_dashboard",
+        "mcp_scoring_freshness_dashboard",
+        "mcp_scoring_precision_audit",
+        "mcp_server_risk_detail",
+        "mcp_server_threat_intel",
+        "mcp_trust_override_discrepancy",
+        "mcp_verdict_breakdown",
+        "mcp_verdict_history",
+        "mcp_vuln_advisories"
+      ]
+    },
+    {
+      "from": "services/staged/directive_queue_health_api/logic.py",
+      "to": "quarantine/services/staged/directive_queue_health_api/logic.py",
+      "first_added_to_main": "2026-08-06",
+      "phantom_tables": [
+        "directives"
+      ]
+    },
+    {
+      "from": "services/staged/facet_compile/__init__.py",
+      "to": "quarantine/services/staged/facet_compile/__init__.py",
+      "first_added_to_main": "2026-07-29",
+      "phantom_tables": [
+        "mesh_scores"
+      ]
+    },
+    {
+      "from": "services/staged/overview_dashboard/__init__.py",
+      "to": "quarantine/services/staged/overview_dashboard/__init__.py",
+      "first_added_to_main": "2026-07-28",
+      "phantom_tables": [
+        "mesh_scores"
+      ]
+    },
+    {
+      "from": "services/staged/overview_dashboard/contract.py",
+      "to": "quarantine/services/staged/overview_dashboard/contract.py",
+      "first_added_to_main": "2026-07-28",
+      "phantom_tables": [
+        "mcp_risk_tier_summary",
+        "mcp_risk_tier_trend"
+      ]
+    },
+    {
+      "from": "services/staged/overview_dashboard/logic.py",
+      "to": "quarantine/services/staged/overview_dashboard/logic.py",
+      "first_added_to_main": "2026-07-28",
+      "phantom_tables": [
+        "mcp_risk_tier_summary",
+        "mcp_risk_tier_trend"
+      ]
+    },
+    {
+      "from": "services/staged/perspective_snapshot/__init__.py",
+      "to": "quarantine/services/staged/perspective_snapshot/__init__.py",
+      "first_added_to_main": "2026-07-29",
+      "phantom_tables": [
+        "signal_scores"
+      ]
+    },
+    {
+      "from": "services/staged/risk_summary/__init__.py",
+      "to": "quarantine/services/staged/risk_summary/__init__.py",
+      "first_added_to_main": "2026-07-27",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "services/staged/score_timeline_api/__init__.py",
+      "to": "quarantine/services/staged/score_timeline_api/__init__.py",
+      "first_added_to_main": "2026-07-29",
+      "phantom_tables": [
+        "mcp_mesh_scores"
+      ]
+    },
+    {
+      "from": "services/staged/scoring_freshness_dashboard/__init__.py",
+      "to": "quarantine/services/staged/scoring_freshness_dashboard/__init__.py",
+      "first_added_to_main": "2026-07-28",
+      "phantom_tables": [
+        "mesh_scores"
+      ]
+    },
+    {
+      "from": "services/staged/verdict_view/__init__.py",
+      "to": "quarantine/services/staged/verdict_view/__init__.py",
+      "first_added_to_main": "2026-07-28",
+      "phantom_tables": [
+        "mesh_scores"
+      ]
+    },
+    {
+      "from": "services/staged/vuln_linker_v2/__init__.py",
+      "to": "quarantine/services/staged/vuln_linker_v2/__init__.py",
+      "first_added_to_main": "2026-07-31",
+      "phantom_tables": [
+        "test"
+      ]
+    },
+    {
+      "from": "signal_analyser_v2_enrichment_wiring.py",
+      "to": "quarantine/signal_analyser_v2_enrichment_wiring.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_server_signals"
+      ]
+    },
+    {
+      "from": "signal_drift_detector.py",
+      "to": "quarantine/signal_drift_detector.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "smoke_import_diagnosis.py",
+      "to": "quarantine/smoke_import_diagnosis.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "smoke_test_logs"
+      ]
+    },
+    {
+      "from": "smoke_import_diagnostic.py",
+      "to": "quarantine/smoke_import_diagnostic.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "smoke_test_results"
+      ]
+    },
+    {
+      "from": "snow_connector_integration_test.py",
+      "to": "quarantine/snow_connector_integration_test.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "snow_writes"
+      ]
+    },
+    {
+      "from": "snow_connector_integrator.py",
+      "to": "quarantine/snow_connector_integrator.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "snow_ticket_states"
+      ]
+    },
+    {
+      "from": "snow_connector_webhook_wiring.py",
+      "to": "quarantine/snow_connector_webhook_wiring.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "snow_webhook_events"
+      ]
+    },
+    {
+      "from": "snow_connector_wiring_check.py",
+      "to": "quarantine/snow_connector_wiring_check.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "task_queue"
+      ]
+    },
+    {
+      "from": "sqlite_check.py",
+      "to": "quarantine/sqlite_check.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "memories"
+      ]
+    },
+    {
+      "from": "submission_validator.py",
+      "to": "quarantine/submission_validator.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_servers"
+      ]
+    },
+    {
+      "from": "supervisor_auto_updater_v2.py",
+      "to": "quarantine/supervisor_auto_updater_v2.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "build_artifact"
+      ]
+    },
+    {
+      "from": "tenant_org_model.py",
+      "to": "quarantine/tenant_org_model.py",
+      "first_added_to_main": "2026-06-24",
+      "phantom_tables": [
+        "some_table"
+      ]
+    },
+    {
+      "from": "verdict_explainer.py",
+      "to": "quarantine/verdict_explainer.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "mcp_servers",
+        "scoring_history"
+      ]
+    },
+    {
+      "from": "verify_pattern_learner_wiring_to_signal_analyser.py",
+      "to": "quarantine/verify_pattern_learner_wiring_to_signal_analyser.py",
+      "first_added_to_main": "2026-06-23",
+      "phantom_tables": [
+        "pattern_learner_knowledge"
+      ]
+    },
+    {
+      "from": "wisdom_feed.py",
+      "to": "quarantine/wisdom_feed.py",
+      "first_added_to_main": "2026-05-25",
+      "phantom_tables": [
+        "memories"
+      ]
+    }
+  ],
+  "excluded": {
+    "approval_evidence_bundler.py": [
+      "referenced by ['goose_recipes/directive_architect.yaml']"
+    ],
+    "db_utils.py": [
+      "imported by 11 module(s): ['aidr_verdict_check_wiring.py', 'backup_service.py', 'community_signal_enrichment_integration.py']"
+    ],
+    "enrichments_writer.py": [
+      "imported by 1 module(s): ['supply_chain_enrichment_wiring.py']"
+    ],
+    "lookup.py": [
+      "imported by 1 module(s): ['tests/smoke_test.py']",
+      "referenced by ['.github/workflows/ui-smoke.yml', 'ops/host/deploy_prod.ps1']"
+    ],
+    "mcp_fingerprinter.py": [
+      "imported by 2 module(s): ['fingerprint_activator.py', 'fingerprint_runner_daemon_v3.py']"
+    ],
+    "sentinel_cli.py": [
+      "imported by 1 module(s): ['graphql_schema_builder_v2.py']"
+    ],
+    "snow_connector_approval_integration.py": [
+      "imported by 1 module(s): ['verify_snow_connector_approval_wiring.py']"
+    ],
+    "sq.py": [
+      "referenced by ['.github/workflows/auto-merge.yml', '.github/workflows/deploy-compat.yml']"
+    ],
+    "tool_description_safety_enrichment_v3.py": [
+      "imported by 1 module(s): ['integration_verification_suite.py']"
+    ],
+    "tools/build_app_graph.py": [
+      "referenced by ['.github/workflows/evaluator.yml', '.github/workflows/goose-canary.yml']"
+    ],
+    "tools/governor_explain.py": [
+      "referenced by ['.github/workflows/evaluator.yml', '.github/workflows/goose-canary.yml']"
+    ],
+    "verdict_breakdown_api.py": [
+      "MOUNTED in the spine (services/active import_path)",
+      "imported by 24 module(s): ['ask_answer_api.py', 'ask_corpus_indexer.py', 'cadence_admin_api.py']",
+      "referenced by ['goose_recipes/directive_architect.yaml', 'goose_recipes/module_from_exemplar.yaml']"
+    ]
+  },
+  "re_emission": {
+    "path": "grounded engine path (_schema_ground_context, PR #3235)",
+    "status": "QUEUED -- not auto-triggered",
+    "why_not_auto_triggered": "69 live build directives would open 69 PRs at once. The queue is recorded here as a manifest for a deliberate, rate-limited re-emission rather than dumped into the build queue by this remediation.",
+    "candidates": [
+      "alert_manager.py",
+      "assessment_auditor.py",
+      "attestation_api.py",
+      "attestation_dynamic_evidence_check.py",
+      "check_enrichment_integration.py",
+      "check_registry_read_error_source.py",
+      "community_signal_enrichment_wiring_verifier.py",
+      "cost_ceiling_headroom_report.py",
+      "daily_digest.py",
+      "definition_history_gap_diagnostic.py",
+      "diagnose_anti_entropy_stale.py",
+      "diagnose_definition_history_gap_v2.py",
+      "diagnose_mcp_definition_history_empty_gap.py",
+      "diagnose_self_diagnostics_stale.py",
+      "diagnose_smoke_failures_signal.py",
+      "diagnose_tool_count_signal_discrimination_v3.py",
+      "diagnose_write_service_stale_check.py",
+      "e2e_integration_scenario_runner.py",
+      "e2e_scenarios_integration.py",
+      "e2e_scenarios_run.py",
+      "email_guid_auth_compact_v2.py",
+      "enrichment_sparsity_diagnostic.py",
+      "importlib_import_diagnostic_v2.py",
+      "investigate_definition_history_empty_gap.py",
+      "investigate_definition_history_gap_followup.py",
+      "investigate_known_bad_pattern_low_variance.py",
+      "investigate_known_bad_pattern_signal_discrimination_v2.py",
+      "investigate_tool_count_low_variance.py",
+      "manual_override_api_v2.py",
+      "mcp_definition_history_api.py",
+      "mcp_traffic_fingerprints_wiring.py",
+      "pi_harness_runner.py",
+      "pipeline_health_cli.py",
+      "queue_manager.py",
+      "registry_api_fix.py",
+      "score_results_push_verifier.py",
+      "score_run_ledger_writer.py",
+      "sentinel_sdk.py",
+      "sentinel_ui_evidence_drawer_route.py",
+      "server_risk_tier_detail_api.py",
+      "server_timeline_event_api.py",
+      "services/staged/axis_evidence/__init__.py",
+      "services/staged/axis_scores_api/__init__.py",
+      "services/staged/directive_queue_health_api/logic.py",
+      "services/staged/facet_compile/__init__.py",
+      "services/staged/overview_dashboard/__init__.py",
+      "services/staged/overview_dashboard/contract.py",
+      "services/staged/overview_dashboard/logic.py",
+      "services/staged/perspective_snapshot/__init__.py",
+      "services/staged/risk_summary/__init__.py",
+      "services/staged/score_timeline_api/__init__.py",
+      "services/staged/scoring_freshness_dashboard/__init__.py",
+      "services/staged/verdict_view/__init__.py",
+      "services/staged/vuln_linker_v2/__init__.py",
+      "signal_analyser_v2_enrichment_wiring.py",
+      "signal_drift_detector.py",
+      "smoke_import_diagnosis.py",
+      "smoke_import_diagnostic.py",
+      "snow_connector_integration_test.py",
+      "snow_connector_integrator.py",
+      "snow_connector_webhook_wiring.py",
+      "snow_connector_wiring_check.py",
+      "sqlite_check.py",
+      "submission_validator.py",
+      "supervisor_auto_updater_v2.py",
+      "tenant_org_model.py",
+      "verdict_explainer.py",
+      "verify_pattern_learner_wiring_to_signal_analyser.py",
+      "wisdom_feed.py"
+    ]
+  }
+}

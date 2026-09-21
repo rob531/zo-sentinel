@@ -32,7 +32,7 @@ def search_registry(
     q: str,
     session: Session = Depends(get_session),
 ):
-    """Search the `mcp_server_registry` table for servers whose name or description
+    """Search the `McpServerRegistry` table for servers whose name or description
     contains the supplied query string (case‑insensitive)."""
     if not q:
         raise HTTPException(status_code=400, detail="Query parameter 'q' is required")

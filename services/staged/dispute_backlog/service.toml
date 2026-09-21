@@ -1,0 +1,8 @@
+[service]
+name = "dispute_backlog"
+import_path = "services.active.dispute_backlog.router"
+prefix = "/api"
+tag = "dispute_backlog"
+origin = "service"
+auth = "public"
+needs_data_layer = true

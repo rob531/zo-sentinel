@@ -30,7 +30,7 @@ def compute_risk_distribution(session: Session) -> Dict[str, Any]:
     # Query all servers and their risk_tier values
     query = text("""
         SELECT risk_tier, COUNT(*) as count
-        FROM mcp_server_registry
+        FROM McpServerRegistry
         WHERE risk_tier IS NOT NULL
         GROUP BY risk_tier
         ORDER BY risk_tier
@@ -76,7 +76,7 @@ def run_self_test():
     # Create tables
     with sqlite_engine.connect() as conn:
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS mcp_server_registry (
+            CREATE TABLE IF NOT EXISTS McpServerRegistry (
                 id INTEGER PRIMARY KEY,
                 server_id TEXT,
                 server_name TEXT,
@@ -87,7 +87,7 @@ def run_self_test():
             )
         """))
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS mcp_llm_axis_scores (
+            CREATE TABLE IF NOT EXISTS McpLlmAxisScore (
                 id INTEGER PRIMARY KEY,
                 server_id TEXT,
                 axis_name TEXT,
@@ -116,7 +116,7 @@ def run_self_test():
         for server_id, name, tier, org_id in test_servers:
             conn.execute(
                 text("""
-                    INSERT INTO mcp_server_registry 
+                    INSERT INTO McpServerRegistry 
                     (server_id, server_name, risk_tier, org_id)
                     VALUES (:server_id, :server_name, :risk_tier, :org_id)
                 """),

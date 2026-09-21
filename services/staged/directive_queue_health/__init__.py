@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from typing import List, Optional
 import requests
 from pydantic import BaseModel
@@ -78,8 +78,8 @@ def setup_database():
         McpServerRegistry.__table__.create(session.bind, checkfirst=True)
         McpLlmAxisScore.__table__.create(session.bind, checkfirst=True)
         McpScoreDispute.__table__.create(session.bind, checkfirst=True)
-        Orgs.__table__.create(session.bind, checkfirst=True)
-        Users.__table__.create(session.bind, checkfirst=True)
+        Org.__table__.create(session.bind, checkfirst=True)
+        User.__table__.create(session.bind, checkfirst=True)
         return True
     except Exception:
         return False

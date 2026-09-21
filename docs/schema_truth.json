@@ -1,0 +1,345 @@
+{
+  "generated_by": "tools/emit_schema_truth.py",
+  "sources": [
+    "app/models.py",
+    "app/db.py"
+  ],
+  "app_models": {
+    "count": 14,
+    "classes": [
+      "Org",
+      "User",
+      "ApiKey",
+      "McpServerRegistry",
+      "McpLlmAxisScore",
+      "McpScoreDispute",
+      "Perspective",
+      "PerspectiveSnapshot",
+      "PerspectiveEvent",
+      "AskCorpusDoc",
+      "VulnAdvisory",
+      "VulnLink",
+      "ThreatIntelRef",
+      "CadenceJobRun"
+    ],
+    "detail": [
+      {
+        "class": "Org",
+        "tablename": "orgs",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "name",
+          "created_at"
+        ]
+      },
+      {
+        "class": "User",
+        "tablename": "users",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "email",
+          "password_hash",
+          "org_id",
+          "role",
+          "created_at",
+          "clerk_id",
+          "clerk_synced_via",
+          "clerk_created_at"
+        ]
+      },
+      {
+        "class": "ApiKey",
+        "tablename": "api_keys",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "org_id",
+          "key_hash",
+          "label",
+          "created_at"
+        ]
+      },
+      {
+        "class": "McpServerRegistry",
+        "tablename": "mcp_server_registry",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "server_id",
+          "name",
+          "registry_source",
+          "url",
+          "description",
+          "trust_score",
+          "verdict",
+          "verdict_reasoning",
+          "confidence",
+          "last_assessed",
+          "first_seen",
+          "last_seen",
+          "last_scanned",
+          "scan_count",
+          "risk_tier",
+          "meta"
+        ]
+      },
+      {
+        "class": "McpLlmAxisScore",
+        "tablename": "mcp_llm_axis_scores",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "server_id",
+          "axis_name",
+          "label",
+          "label_index",
+          "probs",
+          "p_top",
+          "p_critical",
+          "p_danger",
+          "escalated",
+          "escalated_to",
+          "decision_rule_version",
+          "model_version",
+          "adapter_sha256",
+          "scored_at"
+        ]
+      },
+      {
+        "class": "McpScoreDispute",
+        "tablename": "mcp_score_disputes",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "server_id",
+          "submitted_by",
+          "proposed_overall_risk",
+          "proposed_axes",
+          "reason_category",
+          "explanation",
+          "status",
+          "admin_note",
+          "created_at",
+          "resolved_at"
+        ]
+      },
+      {
+        "class": "Perspective",
+        "tablename": "perspectives",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "org_id",
+          "name",
+          "description",
+          "facet_filters",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      {
+        "class": "PerspectiveSnapshot",
+        "tablename": "perspective_snapshots",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "perspective_id",
+          "taken_at",
+          "membership"
+        ]
+      },
+      {
+        "class": "PerspectiveEvent",
+        "tablename": "perspective_events",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "perspective_id",
+          "server_id",
+          "change_type",
+          "old_tier",
+          "new_tier",
+          "seen",
+          "created_at"
+        ]
+      },
+      {
+        "class": "AskCorpusDoc",
+        "tablename": "ask_corpus_index",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "server_id",
+          "snippet",
+          "terms",
+          "content_hash",
+          "indexed_at"
+        ]
+      },
+      {
+        "class": "VulnAdvisory",
+        "tablename": "vuln_advisories",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "feed",
+          "summary",
+          "severity",
+          "ecosystem",
+          "package",
+          "affected_ranges",
+          "aliases",
+          "source_url",
+          "published_at",
+          "fetched_at",
+          "identities",
+          "content_hash"
+        ]
+      },
+      {
+        "class": "VulnLink",
+        "tablename": "vuln_links",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "advisory_id",
+          "server_id",
+          "match_basis",
+          "match_value",
+          "match_confidence",
+          "linked_at"
+        ]
+      },
+      {
+        "class": "ThreatIntelRef",
+        "tablename": "threat_intel_refs",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "indicator_type",
+          "indicator_value",
+          "pulse_id",
+          "pulse_name",
+          "pulse_created",
+          "is_aggregator",
+          "source",
+          "source_url",
+          "fetched_at"
+        ]
+      },
+      {
+        "class": "CadenceJobRun",
+        "tablename": "cadence_job_runs",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "id",
+          "job",
+          "status",
+          "started_at",
+          "finished_at",
+          "rows_affected",
+          "detail"
+        ]
+      }
+    ],
+    "public_names": [
+      "ApiKey",
+      "AskCorpusDoc",
+      "Base",
+      "BigInteger",
+      "Boolean",
+      "CadenceJobRun",
+      "DateTime",
+      "Float",
+      "ForeignKey",
+      "Integer",
+      "JSON",
+      "Mapped",
+      "McpLlmAxisScore",
+      "McpScoreDispute",
+      "McpServerRegistry",
+      "Optional",
+      "Org",
+      "Perspective",
+      "PerspectiveEvent",
+      "PerspectiveSnapshot",
+      "String",
+      "Text",
+      "ThreatIntelRef",
+      "UniqueConstraint",
+      "User",
+      "VulnAdvisory",
+      "VulnLink",
+      "datetime",
+      "func",
+      "mapped_column"
+    ]
+  },
+  "app_db": {
+    "public_names": [
+      "Base",
+      "DATABASE_URL",
+      "Session",
+      "SessionLocal",
+      "create_engine",
+      "declarative_base",
+      "engine",
+      "get_session",
+      "init_db",
+      "sessionmaker",
+      "settings"
+    ]
+  },
+  "does_not_exist": [
+    {
+      "written": "app.dependency_overrides",
+      "reds_2026_08_09": 27,
+      "instead": "`app` is the PACKAGE app/. The FastAPI instance is app.main:app -- write `from app.main import app`, then `app.dependency_overrides[get_session] = ...`"
+    },
+    {
+      "written": "from app.db import StaticPool",
+      "reds_2026_08_09": 15,
+      "instead": "StaticPool is a SQLAlchemy pool class: `from sqlalchemy.pool import StaticPool`"
+    },
+    {
+      "written": "from app.models import MCPAxisScores",
+      "reds_2026_08_09": 7,
+      "instead": "the real class is `McpLlmAxisScore` (table mcp_llm_axis_scores)"
+    },
+    {
+      "written": "from app.models import VulnAdvisories",
+      "reds_2026_08_09": 6,
+      "instead": "the real class is `VulnAdvisory` (singular; table vuln_advisories)"
+    }
+  ],
+  "resolved_since": []
+}

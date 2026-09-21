@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier History</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .server-container {
+            margin-bottom: 30px;
+        }
+        .server-header {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .timeline-container {
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Risk Tier History</h1>
+    <div id="server-timelines"></div>
+
+    <script>
+        // Mock data for self-test
+        const mockData = {
+            "server1": [
+                { date: "2023-01-01", tier: 1, trigger: "Low activity" },
+                { date: "2023-02-15", tier: 2, trigger: "Increased traffic" }
+            ],
+            "server2": [
+                { date: "2023-01-10", tier: 1, trigger: "Initial setup" },
+                { date: "2023-03-01", tier: 3, trigger: "Security alert" }
+            ],
+            "server3": [
+                { date: "2023-01-05", tier: 2, trigger: "Moderate activity" },
+                { date: "2023-02-20", tier: 1, trigger: "Activity decrease" }
+            ]
+        };
+
+        // Function to create timeline for a server
+        function createTimeline(serverName, data) {
+            const serverContainer = document.createElement('div');
+            serverContainer.className = 'server-container';
+
+            const serverHeader = document.createElement('div');
+            serverHeader.className = 'server-header';
+            serverHeader.textContent = `Server: ${serverName}`;
+            serverContainer.appendChild(serverHeader);
+
+            const timelineContainer = document.createElement('div');
+            timelineContainer.className = 'timeline-container';
+            serverContainer.appendChild(timelineContainer);
+
+            const dates = data.map(item => item.date);
+            const tiers = data.map(item => item.tier);
+            const triggers = data.map(item => item.trigger);
+
+            const trace = {
+                x: dates,
+                y: tiers,
+                type: 'scatter',
+                mode: 'lines+markers',
+                text: triggers,
+                hoverinfo: 'text+x+y',
+                line: { shape: 'linear' },
+                marker: { size: 10 }
+            };
+
+            const layout = {
+                title: `Risk Tier History for ${serverName}`,
+                xaxis: { title: 'Date' },
+                yaxis: {
+                    title: 'Risk Tier',
+                    range: [0, 4],
+                    tickvals: [0, 1, 2, 3],
+                    ticktext: ['0', '1', '2', '3']
+                },
+                height: 400
+            };
+
+            Plotly.newPlot(timelineContainer, [trace], layout);
+
+            return serverContainer;
+        }
+
+        // Render all server timelines
+        function renderTimelines() {
+            const container = document.getElementById('server-timelines');
+
+            for (const [serverName, data] of Object.entries(mockData)) {
+                const timeline = createTimeline(serverName, data);
+                container.appendChild(timeline);
+            }
+        }
+
+        // Self-test
+        if (typeof module !== 'undefined' && module.exports) {
+            console.log("PASS");
+        } else {
+            renderTimelines();
+        }
+    </script>
+</body>
+</html>

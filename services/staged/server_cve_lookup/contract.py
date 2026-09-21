@@ -2,7 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from app.db import get_session
-from app.models import McpServerRegistry, VulnAdvisories, VulnLinks
+from app.models import McpServerRegistry, VulnAdvisory, VulnLink
 from sqlalchemy.orm import Session
 from sqlalchemy import select, join
 
@@ -28,24 +28,24 @@ def get_server_cves(server_id: int, db: Session = Depends(get_session)) -> Serve
         select(
             McpServerRegistry.id,
             McpServerRegistry.name,
-            VulnAdvisories.id,
-            VulnAdvisories.summary,
-            VulnAdvisories.severity,
-            VulnAdvisories.ecosystem,
-            VulnAdvisories.package,
-            VulnAdvisories.published_at,
-            VulnAdvisories.source_url,
-            VulnLinks.match_confidence
+            VulnAdvisory.id,
+            VulnAdvisory.summary,
+            VulnAdvisory.severity,
+            VulnAdvisory.ecosystem,
+            VulnAdvisory.package,
+            VulnAdvisory.published_at,
+            VulnAdvisory.source_url,
+            VulnLink.match_confidence
         )
         .select_from(
             join(
                 McpServerRegistry,
-                VulnLinks,
-                McpServerRegistry.id == VulnLinks.server_id
+                VulnLink,
+                McpServerRegistry.id == VulnLink.server_id
             )
             .join(
-                VulnAdvisories,
-                VulnAdvisories.id == VulnLinks.advisory_id
+                VulnAdvisory,
+                VulnAdvisory.id == VulnLink.advisory_id
             )
         )
         .where(McpServerRegistry.id == server_id)
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
         # Add test advisories
         test_advisories = [
-            VulnAdvisories(
+            VulnAdvisory(
                 id=1,
                 summary="Test Advisory 1",
                 severity="high",
@@ -117,7 +117,7 @@ if __name__ == "__main__":
                 published_at="2023-01-01",
                 source_url="https://example.com/advisory1"
             ),
-            VulnAdvisories(
+            VulnAdvisory(
                 id=2,
                 summary="Test Advisory 2",
                 severity="medium",
@@ -126,7 +126,7 @@ if __name__ == "__main__":
                 published_at="2023-01-02",
                 source_url="https://example.com/advisory2"
             ),
-            VulnAdvisories(
+            VulnAdvisory(
                 id=3,
                 summary="Test Advisory 3",
                 severity="low",
@@ -140,8 +140,8 @@ if __name__ == "__main__":
 
         # Add test vuln links
         test_links = [
-            VulnLinks(server_id=1, advisory_id=1, match_confidence="high"),
-            VulnLinks(server_id=1, advisory_id=2, match_confidence="medium")
+            VulnLink(server_id=1, advisory_id=1, match_confidence="high"),
+            VulnLink(server_id=1, advisory_id=2, match_confidence="medium")
         ]
         db.add_all(test_links)
         db.commit()

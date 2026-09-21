@@ -1,0 +1,11 @@
+[service]
+name = "wire_has_known_cve_facet_into_compile"
+import_path = "services.active.wire_has_known_cve_facet_into_compile.router"
+prefix = "/api"
+tag = "wire_has_known_cve_facet_into_compile"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

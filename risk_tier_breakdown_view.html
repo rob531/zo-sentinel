@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Breakdown</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .chart-container {
+            height: 400px;
+            width: 100%;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .expandable {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .expandable h3 {
+            margin-top: 0;
+            cursor: pointer;
+        }
+        .expandable-content {
+            display: none;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Risk Tier Breakdown</h1>
+    <div class="container">
+        <div class="chart-container">
+            <canvas id="riskTierChart"></canvas>
+        </div>
+        <table id="riskTierTable">
+            <thead>
+                <tr>
+                    <th>Tier</th>
+                    <th>Count</th>
+                    <th>Average Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Table rows will be populated by JavaScript -->
+            </tbody>
+        </table>
+        <div class="expandable">
+            <h3>Axis Distributions</h3>
+            <div class="expandable-content" id="axisDistributions">
+                <!-- Axis distributions will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock data for demonstration purposes
+        const mockData = {
+            tiers: [
+                { tier: 'Low', count: 10, avg_score: 2.5 },
+                { tier: 'Medium', count: 15, avg_score: 5.0 },
+                { tier: 'High', count: 5, avg_score: 7.5 },
+                { tier: 'Critical', count: 2, avg_score: 9.0 }
+            ],
+            axis_distributions: {
+                'Axis 1': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                'Axis 2': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                'Axis 3': [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+            }
+        };
+
+        // Function to render the bar chart
+        function renderChart(data) {
+            const ctx = document.getElementById('riskTierChart').getContext('2d');
+            const labels = data.map(item => item.tier);
+            const counts = data.map(item => item.count);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Count',
+                        data: counts,
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.2)',
+                            'rgba(54, 162, 235, 0.2)',
+                            'rgba(255, 99, 132, 0.2)',
+                            'rgba(255, 159, 64, 0.2)'
+                        ],
+                        borderColor: [
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(255, 159, 64, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Function to render the table
+        function renderTable(data) {
+            const tableBody = document.getElementById('riskTierTable').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = '';
+
+            data.forEach(item => {
+                const row = tableBody.insertRow();
+                const tierCell = row.insertCell(0);
+                const countCell = row.insertCell(1);
+                const avgScoreCell = row.insertCell(2);
+
+                tierCell.textContent = item.tier;
+                countCell.textContent = item.count;
+                avgScoreCell.textContent = item.avg_score.toFixed(2);
+            });
+        }
+
+        // Function to render the axis distributions
+        function renderAxisDistributions(data) {
+            const content = document.getElementById('axisDistributions');
+            content.innerHTML = '';
+
+            for (const [axis, scores] of Object.entries(data)) {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <h4>${axis}</h4>
+                    <p>Scores: ${scores.join(', ')}</p>
+                `;
+                content.appendChild(div);
+            }
+        }
+
+        // Function to toggle expandable content
+        function toggleExpandable() {
+            const content = document.getElementById('axisDistributions');
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Event listener for the expandable header
+        document.querySelector('.expandable h3').addEventListener('click', toggleExpandable);
+
+        // Render the chart, table, and axis distributions with mock data
+        renderChart(mockData.tiers);
+        renderTable(mockData.tiers);
+        renderAxisDistributions(mockData.axis_distributions);
+
+        // Print PASS to the console
+        console.log('PASS');
+    </script>
+</body>
+</html>

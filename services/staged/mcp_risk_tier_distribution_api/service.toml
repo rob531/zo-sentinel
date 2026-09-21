@@ -1,0 +1,45 @@
+[service]
+name = "mcp_risk_tier_distribution_api"
+import_path = "services.active.mcp_risk_tier_distribution_api.router"
+prefix = "/api"
+tag = "mcp_risk_tier_distribution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[routes]
+[routes.distribution]
+path = "/mcp/risk-tiers/distribution"
+method = "GET"
+summary = "Get overall MCP risk tier distribution"
+
+[routes.distribution_by_org]
+path = "/mcp/risk-tiers/distribution/org/{org_id}"
+method = "GET"
+summary = "Get risk tier distribution for organization"
+
+[routes.distribution_by_llm]
+path = "/mcp/risk-tiers/distribution/llm/{llm_axis}"
+method = "GET"
+summary = "Get risk tier distribution by LLM axis"
+
+[routes.server_tiers]
+path = "/mcp/servers/tiers"
+method = "GET"
+summary = "List servers grouped by risk tier"
+
+[routes.server_tier_detail]
+path = "/mcp/servers/tier/{tier}"
+method = "GET"
+summary = "Get servers in specific risk tier"
+
+[routes.tier_history]
+path = "/mcp/risk-tiers/history"
+method = "GET"
+summary = "Get historical tier distribution data"
+
+[dependencies]
+app_db = true
+mcp_signal_scores = true
+McpServerRegistry = true
+McpLlmAxisScore = true

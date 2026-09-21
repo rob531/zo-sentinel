@@ -1,0 +1,14 @@
+[service]
+name = "daemon_health_dashboard"
+import_path = "services.active.daemon_health_dashboard.router"
+prefix = "/api"
+tag = "daemon_health_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[py_compile]
+files = ["router.py"]
+
+[tests]
+self_test = true

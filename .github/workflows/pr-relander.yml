@@ -155,10 +155,39 @@ jobs:
           # exists for it), so the only live source is the PAT -- and only if it
           # was granted Administration:read. If it was not, we fall to the pinned
           # constant, which is the supported steady state, not an error.
+          # A NON-ZERO rc IS NOT THE ONLY FAILURE MODE, and assuming it was
+          # put an ERROR DOCUMENT into the required-context set. Observed in
+          # run 35615648711 (2026-09-21T14:57Z): this PAT lacks
+          # Administration:read, the API answered 403, and `gh api --jq` left
+          # the JSON error body on STDOUT, so `req` came back NON-EMPTY and
+          # full of punctuation. Two things followed, and the quiet one is the
+          # dangerous one. (1) The staleness guard below compared that document
+          # to the pinned constant and published `REQUIRED_FALLBACK is stale.
+          # live=[access accessible by not personal token","status":"403"} ...`
+          # -- a confident verdict about branch protection derived from a
+          # permission error (R6: unknown is not zero, and here unknown was
+          # rendered as a positive finding). (2) That same string was written
+          # to GITHUB_OUTPUT as `required=` and is what cohort B iterates as
+          # $REQUIRED. While cohort B's population was empty this cost
+          # nothing; the moment the population is not empty, every examined
+          # head "is missing" every JSON fragment and the cohort selects
+          # EVERYTHING, forever, because the condition can never clear.
+          # So: take the rc properly AND validate the shape. A context name
+          # cannot contain JSON punctuation; anything that does is a document,
+          # not a list, and falls to the pinned constant like any other
+          # unreadable read.
           src=""
-          req=$(GH_TOKEN="${PAT:-$GH_TOKEN}" gh api \
+          req=""
+          if req_raw=$(GH_TOKEN="${PAT:-$GH_TOKEN}" gh api \
                   "repos/$REPO/branches/main/protection/required_status_checks" \
-                  --jq '.contexts[]' 2>/dev/null) && src="branch-protection (RELANDER_TOKEN)"
+                  --jq '.contexts[]' 2>/dev/null); then
+            if printf '%s' "$req_raw" | grep -qE '[{}":,]'; then
+              echo "::warning::branch-protection read returned a DOCUMENT, not a context list -- treating as unreadable, not as a live set: $(printf '%s' "$req_raw" | tr -d '\n' | head -c 120)"
+            else
+              req="$req_raw"
+              src="branch-protection (RELANDER_TOKEN)"
+            fi
+          fi
 
           if [ -n "$req" ]; then
             req=$(echo "$req" | tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//')
@@ -293,7 +322,7 @@ jobs:
           over_age=$(gh pr list -R "$REPO" --state open --label autonomous-build \
                         --limit 800 --json number,createdAt \
                         -q "[.[] | select(.createdAt <= \"$CUTOFF\")] | length" 2>/dev/null || echo "?")
-          echo "::notice::age cap ${MAX_AGE_DAYS}d (cutoff $CUTOFF): $over_age of $total_open open autonomous-build PR(s) are past it and will NOT be re-fired"
+          echo "::notice::age cap ${MAX_AGE_DAYS}d (cutoff $CUTOFF): $over_age of $total_open open autonomous-build PR(s) are past it and will NOT be re-fired by cohort A (cohort B is EXEMPT -- see FU-507)"
 
           # --- cohort A: stale-but-clean (original failure mode) -------------
           # NOTE: --limit is MANDATORY. gh pr list defaults to 30 rows; without
@@ -325,6 +354,42 @@ jobs:
           # "no PRs need refreshing" -- the third silent-empty filter in this
           # workflow's history. The check-run diff below is the authoritative
           # signal anyway; mergeStateStatus was never needed.
+          #
+          # THIS COHORT SELECTS ON THE CONDITION, NOT ON A LABEL OR AN AGE.
+          # Both pre-filters it used to carry were measured on 2026-09-21
+          # against a full census of all 198 open non-draft PRs, resolving
+          # every head against /check-runs. 92 heads are missing at least one
+          # required context. Of those 92:
+          #     triage:solid  34   (all 34 past the 21d cap)
+          #     triage:stale  13
+          #     NO triage label at all  45
+          # So the label pre-filter was discarding 58 of the 92 and the age cap
+          # was discarding the other 34 -- between them they left this cohort
+          # selecting ZERO while the sweep reported success four times a day.
+          # The condition that matters is "a required context never attached",
+          # which the check-run diff below computes directly and exactly; a
+          # triage label is a stamp some other sweep did or did not apply, and
+          # is not evidence about whether a gate ran. RESIDUAL, recorded and
+          # not laundered: 7 of the 92 carry no `autonomous-build` label
+          # either, so this query cannot see them at any age -- that is a
+          # labelling defect upstream, tracked separately, NOT cured here.
+          #
+          # THE AGE CAP DOES NOT APPLY TO THIS COHORT, and applying it was
+          # FU-507. The cap's own justification, stated at cohort A above, is
+          # "a PR this sweep has re-fired every day for weeks is not going to
+          # land because of one more re-fire". That is a claim about heads
+          # whose gates RAN and came back red. A cohort-B head is dammed on a
+          # required context that has NEVER ATTACHED -- there is no run to be
+          # green or red -- so the re-fire being proposed here is the FIRST
+          # one, not the thousandth, and the cap's reasoning inverts.
+          # Measured 2026-09-21: all 45 open triage:solid PRs were past the
+          # 21d cap and 0 of the 35 PRs inside it were solid, so the two
+          # filters were DISJOINT and this cohort selected nothing while 60
+          # heads sat dammed -- four green sweeps a day, structurally unable
+          # to touch the population they exist for. A dammed PR is not stale;
+          # it is unexamined, and age is not evidence about it.
+          # RELAND_CAP still bounds the blast radius per run and the self-chain
+          # drains the remainder over subsequent sweeps.
           solid=""
           population=0
           while read -r pr sha draft; do
@@ -339,27 +404,38 @@ jobs:
               fi
             done
           done <<< "$(gh pr list -R "$REPO" --state open \
-                        --label autonomous-build --label triage:solid --limit 500 \
+                        --label autonomous-build --limit 500 \
                         --json number,headRefOid,isDraft,createdAt \
-                        -q ".[] | select(.createdAt > \"$CUTOFF\") | \"\(.number) \(.headRefOid) \(.isDraft)\"" 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
+                        -q ".[] | \"\(.number) \(.headRefOid) \(.isDraft)\"" 2>qerr.txt || { echo "::error::cohort B query FAILED: $(tr -d '\n' < qerr.txt | head -c 300)" >&2; })"
           n_solid=$(echo "$solid" | wc -w | tr -d ' ')
           # Silence must always be auditable: say what was EXAMINED, not just
           # what was selected. "0 selected" and "0 examined" are different bugs.
-          echo "::notice::cohort B: examined $population triage:solid PR(s), $n_solid missing >=1 required context"
-          # JOIN THE TWO SILENCES. "examined 0" was already auditable; what it
-          # could not distinguish is "there are no solid PRs" from "every solid
-          # PR is older than the age cap". Measured 2026-09-21: all 45 open
-          # triage:solid PRs were past the 21d cap and 0 of the 35 PRs inside it
-          # were solid, so cohort B's two filters were DISJOINT and it selected
-          # nothing while 60 heads sat dammed on a missing required context --
-          # and the run still reported success. The age cap and the cohort-B
-          # population are printed by two notices that nothing multiplied.
+          echo "::notice::cohort B: examined $population open autonomous-build PR(s), $n_solid missing >=1 required context"
+          # HISTORY, kept because the number is the evidence for the exemption
+          # above and not because the condition is live. Until FU-507 this
+          # cohort was ALSO age-capped: on 2026-09-21 all 45 open triage:solid
+          # PRs were past the 21d cap and 0 of the 35 PRs inside it were solid,
+          # so the two filters were DISJOINT, this cohort selected nothing, and
+          # the sweep reported success four times a day while 60 heads sat
+          # dammed. The diagnosis at that point stopped at a warning telling a
+          # reader to widen the cap by hand -- which is why the count below is
+          # now an audit line and the cap itself is gone from the query.
           b_excluded=$(gh pr list -R "$REPO" --state open \
-                        --label autonomous-build --label triage:solid --limit 500 \
+                        --label autonomous-build --limit 500 \
                         --json number,createdAt \
                         -q "[.[] | select(.createdAt <= \"$CUTOFF\")] | length" 2>/dev/null || echo "?")
-          if [ "$population" = "0" ] && [ "$b_excluded" != "0" ] && [ "$b_excluded" != "?" ]; then
-            echo "::warning::cohort B examined NOTHING because the ${MAX_AGE_DAYS}d age cap excluded all $b_excluded open triage:solid PR(s). An empty COHORT and an empty POPULATION are different bugs. Raise RELANDER_MAX_AGE_DAYS, or drive _tools/pr_relander.py manually against the dam."
+          # The cap can no longer empty this cohort, so the old warning that
+          # told a reader to raise RELANDER_MAX_AGE_DAYS by hand is retired
+          # along with its cause -- and so is the pointer beside it to
+          # `_tools/pr_relander.py`, which does not exist in this repo or on
+          # the tower and never did. A remedy that names a file nobody can run
+          # is the same defect one layer up: it reads as a cure and is not one.
+          # What remains is the AUDIT: report how many of the PRs this cohort
+          # examined are past cohort A's cap, so the exemption stays visible
+          # in the run log rather than living only in this comment.
+          echo "::notice::cohort B selects on CONDITION, not label or age (FU-507): examined $population open autonomous-build PR(s), of which $b_excluded are past the ${MAX_AGE_DAYS}d cap and were invisible to this cohort before"
+          if [ "$population" = "0" ]; then
+            echo "::warning::cohort B examined ZERO PR(s) with BOTH pre-filters already removed. With no label and no age condition left to blame, this is a query or auth failure, not an empty backlog."
           fi
 
           n_stale=$(echo "$stale" | wc -w | tr -d ' ')

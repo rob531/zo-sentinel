@@ -24,7 +24,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
     resolve_directive_id, tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
-    park_directive,
+    park_directive, unmet_requires,
     output_confirmed, failed_quarantined, workspace_diff_state)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
 from zo_sentinel import undeclared_write_guard  # noqa: E402  # GH #3415 fix 4
@@ -261,9 +261,43 @@ def prune_done_pending():
     return moved
 
 
+def topup_quarantine():
+    """Top the directive queue up from the #4070 quarantine when it runs thin.
+
+    improvement-loop cycle-0087. tools/requeue_quarantined.py implements the
+    paced re-emission for GH #4079 and was measured DARK -- built, CI-tested,
+    and called by NOTHING for 14 days, because its own docstring asked a cron,
+    a lane or a human to remember to run it. This is the remembering, in code.
+
+    Fail-soft and non-blocking by construction: the tool reads the whole repo
+    to decide eligibility (minutes, not seconds), so quarantine_topup spawns it
+    detached and returns at once, and it swallows every exception -- a top-up
+    that can stall or kill the builder is worse than no top-up. Disable with
+    ZO_QUARANTINE_TOPUP=0.
+    """
+    try:
+        # By FILE PATH, not `from tools.quarantine_topup import ...`: this file
+        # already wraps `from tools.uv_gate_runner import run_gates` because
+        # tools/ is NOT importable in every launch context, and a seam that
+        # silently degrades to a no-op is the exact defect this cycle is
+        # closing. Resolved relative to THIS file, so it follows the daemon.
+        import importlib.util as _ilu
+        _src = Path(__file__).resolve().parent / "tools" / "quarantine_topup.py"
+        _spec = _ilu.spec_from_file_location("quarantine_topup", _src)
+        _mod = _ilu.module_from_spec(_spec)
+        sys.modules["quarantine_topup"] = _mod
+        _spec.loader.exec_module(_mod)
+        spawned, why = _mod.topup(PENDING_DIR)
+        if spawned:
+            log(f"quarantine top-up: {why}")
+    except Exception as e:                                      # noqa: BLE001
+        log(f"quarantine top-up unavailable (non-fatal): {e}")
+
+
 def load_directives_from_mesh():
     """Load directives from BOTH mesh_memory DB and pending dir (merged)."""
     prune_done_pending()   # keep pending/ from growing unbounded with done files
+    topup_quarantine()     # keep the queue non-empty from the #4079 backlog
     directives = []
     seen_ids = set()
 
@@ -492,7 +526,62 @@ def _lessons_context(directive):
         return ""
 
 
+# (mtime, names) for the app.models roster; see _model_roster().
+_MODEL_ROSTER_MEMO = {"mtime": None, "names": None}
+
+
+def _model_roster():
+    """(names, klass) -- the COMPLETE app.models class roster, from the same
+    schema KL the schema-PRM gate lints against.
+
+    WHY THIS EXISTS. _data_access_context named FOUR model classes as spelling
+    examples and otherwise pointed the model at docs/SCHEMA_TRUTH.md -- a file
+    a single-shot chat completion with no filesystem cannot open. That is the
+    same unfollowable-pointer defect the 2026-08-11 grounding fix removed from
+    the engine prompt, still live in the block that is folded into EVERY build
+    task. Measured on the live runner's log (basis: /home/workspace/logs/
+    goose_runner.log, 2026-09-16T10:58Z..2026-09-20T06:24Z, the window the file
+    covers): 145 ghost-guard give-ups, 95 of them gate=selftest, and 77 lines
+    of the form "'X' is not in 'Y'". The app.models half of those names --
+    ServiceHealth, OrgService, McpRiskRegister, MCPSignalScores, MeshMemory,
+    McpThreatAssociation, McpSignalScore -- are all absent from a 14-class
+    roster. Every one is plausible. None is on the list, and the list was
+    never shown.
+
+    14 names is about 200 characters: the same trade _bus_table_context()
+    already makes for the 45 bus tables, applied to the plane that carries the
+    largest measured share of the failures.
+
+    klass is "ok" or "kl_error" and the roster is NEVER [] with klass "ok".
+    An unreadable KL and a schema with no models are different facts (R6), and
+    a caller must not print "the COMPLETE roster is: <nothing>" when the truth
+    is unknown -- that would assert a falsehood with more authority than the
+    pointer it replaced.
+    """
+    path = PROJECT_DIR / "graphify-out" / "schema_kl.json"
+    try:
+        mtime = path.stat().st_mtime
+    except Exception:                                      # noqa: BLE001
+        mtime = None
+    if (_MODEL_ROSTER_MEMO["names"] is not None
+            and _MODEL_ROSTER_MEMO["mtime"] == mtime):
+        return _MODEL_ROSTER_MEMO["names"], "ok"
+    try:
+        kl, _ = _schema_kl_cached()
+    except Exception:                                      # noqa: BLE001
+        return [], "kl_error"
+    names = sorted(n for n in ((kl or {}).get("models") or {}) if n)
+    if not names:
+        return [], "kl_error"
+    _MODEL_ROSTER_MEMO["mtime"] = mtime
+    _MODEL_ROSTER_MEMO["names"] = names
+    return names, "ok"
+
+
+# Keyed on the rendered roster, not a bare None, so a regenerated KL re-renders
+# instead of serving a stale block for the life of the daemon.
 _DATA_ACCESS_CTX = None
+_DATA_ACCESS_KEY = None
 
 
 def _data_access_context(directive):
@@ -509,10 +598,37 @@ def _data_access_context(directive):
     so it stays real"; it never was, and that sentence is why nobody looked
     for the missing column truth for weeks. Real per-directive columns come
     from _schema_ground_context(); this block carries table/class names and
-    the import contract only."""
-    global _DATA_ACCESS_CTX
-    if _DATA_ACCESS_CTX is not None:
+    the import contract only.
+
+    2026-09-20: the CLASS half of that is now genuinely derived -- the complete
+    app.models roster is inlined from the schema KL by _model_roster(). The
+    docs/SCHEMA_TRUTH.md pointer it replaces named an authority the engine (a
+    single chat completion, no filesystem) cannot consult, and a model sent to
+    fetch truth it cannot reach invents it. The TABLE list in plane (1)/(2)
+    below is still a literal and is still not claimed to be derived."""
+    global _DATA_ACCESS_CTX, _DATA_ACCESS_KEY
+    _roster, _rklass = _model_roster()
+    _key = (_rklass, tuple(_roster))
+    if _DATA_ACCESS_CTX is not None and _DATA_ACCESS_KEY == _key:
         return _DATA_ACCESS_CTX
+    _DATA_ACCESS_KEY = _key
+    # R6: an unreadable KL is not an empty roster. Fall back to the exact text
+    # that shipped before this change -- pointer and all -- rather than telling
+    # the model that no model classes exist.
+    _symbols = (
+        "SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists "
+        "every name that EXISTS -- read it before writing an import. If a model is not in it "
+        "it does not exist: use the nearest real class or flag that the directive needs a "
+        "schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not "
+        "MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. "
+    ) if _rklass != "ok" else (
+        "APP MODEL CLASSES -- the COMPLETE roster of names importable from app.models, read "
+        "from the live schema KL (the same source the schema-PRM gate lints against). A class "
+        "name that is NOT on this list DOES NOT EXIST, however plausible it looks and however "
+        "confidently the directive names it: use the nearest real class, or say the directive "
+        "needs a schema decision. Never invent one, and never pluralise or re-case one (Mcp, "
+        "not MCP). The roster is: " + ", ".join(_roster) + ". "
+    )
     _DATA_ACCESS_CTX = (
         "DATA ACCESS: data lives in databases, never files (no CSV/JSON inputs; CSV is "
         "export-only). TWO PLANES -- (1) APP tables (mcp_server_registry, mcp_llm_axis_scores, "
@@ -528,11 +644,7 @@ def _data_access_context(directive):
         "that_app.dependency_overrides[get_session]. There is NO app.dependency_overrides "
         "module (`app` is the PACKAGE; the instance is app.main:app), and StaticPool is NOT "
         "in app.db (from sqlalchemy.pool import StaticPool). "
-        "SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists "
-        "every name that EXISTS -- read it before writing an import. If a model is not in it "
-        "it does not exist: use the nearest real class or flag that the directive needs a "
-        "schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not "
-        "MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. "
+        + _symbols +
         "The MODULE's OWN data access MUST remain from app.db import get_session + "
         "from app.models import <Model>; a module whose data layer is itself an in-memory/"
         "sqlite store (rather than just the test override) is HOLLOW and REJECTED. "
@@ -1583,7 +1695,30 @@ def _selftest_gate(directive, directive_id):
         # cwd + the real inherited /pkg/:/root/ -> reproduces production exactly.
         _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": "",
                 "PYTHONPATH": str(PROJECT_DIR) + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
-        proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
+        # FU-459: #2177 cured the `app.*` half of THIS loader (PYTHONPATH) and left
+        # the RELATIVE-import half untouched. Running a file BY PATH can never give
+        # it a parent package, so `from .logic import x` -- correct for a
+        # services/staged/<name>/ package, and the exact form
+        # promote_staged_to_active.py imports SUCCESSFULLY -- raised ImportError and
+        # classify_selftest returned RED. Measured 2026-09-14 on the live runner log:
+        # of the 14 services RED-ed for this in 24h, 6 (43%) imported CLEAN under the
+        # runtime's own loader; the other 7 fail with `cannot import name` and stay
+        # RED via the branch ABOVE the relative-import one, so no true positive is
+        # lost. `python -m` still executes __main__, so the self-test contract holds.
+        # Falls back to the path form for anything not under PROJECT_DIR.
+        _selftest_argv = [_sys.executable, str(out)]
+        _dotted = None
+        try:
+            _rel = _os.path.relpath(str(out), str(PROJECT_DIR))
+            if not _rel.startswith(_os.pardir):
+                _parts = _os.path.splitext(_rel)[0].split(_os.sep)
+                if _parts and all(p.isidentifier() for p in _parts):
+                    _dotted = ".".join(_parts)
+        except Exception:
+            _dotted = None
+        if _dotted:
+            _selftest_argv = [_sys.executable, "-m", _dotted]
+        proc = subprocess.run(_selftest_argv, capture_output=True,
                               text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
@@ -1902,6 +2037,46 @@ def gate_error_text(gate):
     return f"gate={key}: {reason}"
 
 
+def _write_raw_directive(directive, directive_id):
+    """handler=="write_raw": the directive already CARRIES the exact bytes.
+
+    CofC ruling 2026-09-10 (daily-chairman-review). The `handler` field was
+    validated by zo_sentinel/mcp_servers/directive_mcp.py, by
+    zo_sentinel/promoters/proposed_to_pending_promoter.py and by
+    directive_validator.py -- and honoured by NO executor. Every directive,
+    whatever its handler, reached run_goose_task(). So a write_raw scaffold
+    directive handed an LLM the finished file as a task DESCRIPTION and asked it
+    to produce that file; the model wrote its own chat instead. Measured
+    2026-09-10 over all 361 open PRs: 68 carry a services/staged/<n>/service.toml
+    that does not parse, first lines including `[TOOL_CALL]`, `---`, a python
+    triple-quoted assignment, and "Now I'll create the router module:". 0 were
+    unfetchable, so 68 is a direct count. Oldest 2026-07-31; none self-healed.
+
+    Writing the bytes is both the cure and a saving: this class of directive
+    stops spending an LLM invocation to reproduce what it was already given.
+    The gate chain is UNCHANGED and still runs on the result -- no gate is
+    added, none is bypassed (harness doctrine R7: recovery, not restriction).
+
+    Returns True if the declared output landed on disk.
+    """
+    content = directive.get("content")
+    if not isinstance(content, str) or not content:
+        log(f"[write_raw] {directive_id}: no content -> falling through to engine")
+        return False
+    out = declared_output(directive)
+    if out is None:
+        log(f"[write_raw] {directive_id}: no declared output_file -> falling through")
+        return False
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content)
+    except Exception as exc:
+        log(f"[write_raw] {directive_id}: write failed: {exc}")
+        return False
+    log(f"[write_raw] {directive_id}: wrote {len(content)} B verbatim -> {out} (no LLM)")
+    return True
+
+
 def _gate_chain(directive, directive_id, pre_diff_state, engine_ok):
     """Run the completion gate chain, returning (passed, failing_gate).
 
@@ -2061,6 +2236,29 @@ def run():
                     mark_directive_completed(directive)
                     continue
                 
+                # c122 2026-09-21: a directive may declare `requires` -- files
+                # that must ALREADY exist for its own output to be TRUE rather
+                # than merely present. tools/service_decomposer.py stamps it on
+                # service.toml, whose import_path names a router.py that a LATER,
+                # engine-dependent directive is supposed to write. Measured on
+                # origin/main @ 289f1f1ec by running the promoter itself: 1226 of
+                # 1476 staged HOLDs are the one reason "router.py exposes no
+                # router", because the manifest lands deterministically and the
+                # router does not.
+                #
+                # DEFER -- do not fall through. Letting this reach the engine is
+                # precisely the 68-unparseable-service.toml bug the write_raw
+                # dispatch was added to stop. Deferring costs no LLM call, ghosts
+                # nothing, parks nothing, and leaves no FAIL row in the loopback
+                # manifest (this runs BEFORE sl.init_manifest deliberately); the
+                # directive lands by itself on a later pass once the router
+                # exists. Inert for every directive that declares no `requires`.
+                _unmet = unmet_requires(directive, str(PROJECT_DIR))
+                if _unmet:
+                    log(f"[requires] {directive_id}: DEFERRED, still pending -- "
+                        f"absent: {', '.join(_unmet)}")
+                    continue
+
                 log(f"Processing directive: {directive_id} (complexity={complexity})")
                 log_directive_routed(directive_id, source, complexity, "goose_tier1")
                 
@@ -2109,7 +2307,35 @@ def run():
                 # ledger records the real reason instead of a blanket
                 # "output_file was not produced" (chairman review 2026-07-20).
                 _failed_gate = None
-                if goose_installed:
+                # CofC 2026-09-10: handler dispatch, which this executor never
+                # had. A write_raw directive carries its finished bytes; write
+                # them rather than asking a model to re-derive them. Anything
+                # that is not a satisfiable write_raw falls through to exactly
+                # the path it took before.
+                _raw_done = False
+                if directive.get("handler") == "write_raw":
+                    if _write_raw_directive(directive, directive_id):
+                        _ok, _failed_gate = _gate_chain(directive, directive_id,
+                                                        _pre_diff, True)
+                        if _ok:
+                            _complete(directive, directive_id,
+                                      "write_raw: content written verbatim",
+                                      routed_model="write_raw")
+                            # 2026-09-11 daily-chairman-review: without this the
+                            # engine fallback below (`if not produced:`) runs anyway
+                            # and the model writes its chat over the bytes write_raw
+                            # just wrote. Measured: 326 B verbatim at 21:43:45Z ->
+                            # 187 B of prose at 21:44:19Z -> PR #4958 born RED.
+                            # SUCCESS ONLY: a rejected gate chain still falls through.
+                            produced = True
+                        else:
+                            _ghost_or_fail(directive, directive_id,
+                                           routed_model="write_raw",
+                                           gate=_failed_gate)
+                        _raw_done = True
+                if _raw_done:
+                    pass
+                elif goose_installed:
                     result = run_goose_task(directive_id, _task, _routed_env, recipe=_select_recipe(directive), directive_obj=directive)
                     _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
                                                     bool(result.get("success")))

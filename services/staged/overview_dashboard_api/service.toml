@@ -1,0 +1,50 @@
+[project]
+name = "overview_dashboard_api"
+version = "0.1.0"
+description = "Overview dashboard API for aggregated metrics and statistics"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "sqlalchemy>=2.0.0",
+    "httpx>=0.26.0",
+]
+
+[service]
+name = "overview_dashboard_api"
+import_path = "services.active.overview_dashboard_api.router"
+prefix = "/api"
+tag = "overview_dashboard_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.data_sources]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+mesh_endpoint = "http://127.0.0.1:8772/query"
+
+[[service.endpoints]]
+path = "/summary"
+method = "GET"
+description = "Get overall dashboard summary statistics"
+
+[[service.endpoints]]
+path = "/servers"
+method = "GET"
+description = "Get server registry overview"
+
+[[service.endpoints]]
+path = "/scores/distribution"
+method = "GET"
+description = "Get score distribution across axis"
+
+[[service.endpoints]]
+path = "/disputes/recent"
+method = "GET"
+description = "Get recent score disputes"
+
+[[service.endpoints]]
+path = "/signals/overview"
+method = "GET"
+description = "Get signal scores overview from mesh"

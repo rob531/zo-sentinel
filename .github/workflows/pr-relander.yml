@@ -155,10 +155,39 @@ jobs:
           # exists for it), so the only live source is the PAT -- and only if it
           # was granted Administration:read. If it was not, we fall to the pinned
           # constant, which is the supported steady state, not an error.
+          # A NON-ZERO rc IS NOT THE ONLY FAILURE MODE, and assuming it was
+          # put an ERROR DOCUMENT into the required-context set. Observed in
+          # run 35615648711 (2026-09-21T14:57Z): this PAT lacks
+          # Administration:read, the API answered 403, and `gh api --jq` left
+          # the JSON error body on STDOUT, so `req` came back NON-EMPTY and
+          # full of punctuation. Two things followed, and the quiet one is the
+          # dangerous one. (1) The staleness guard below compared that document
+          # to the pinned constant and published `REQUIRED_FALLBACK is stale.
+          # live=[access accessible by not personal token","status":"403"} ...`
+          # -- a confident verdict about branch protection derived from a
+          # permission error (R6: unknown is not zero, and here unknown was
+          # rendered as a positive finding). (2) That same string was written
+          # to GITHUB_OUTPUT as `required=` and is what cohort B iterates as
+          # $REQUIRED. While cohort B's population was empty this cost
+          # nothing; the moment the population is not empty, every examined
+          # head "is missing" every JSON fragment and the cohort selects
+          # EVERYTHING, forever, because the condition can never clear.
+          # So: take the rc properly AND validate the shape. A context name
+          # cannot contain JSON punctuation; anything that does is a document,
+          # not a list, and falls to the pinned constant like any other
+          # unreadable read.
           src=""
-          req=$(GH_TOKEN="${PAT:-$GH_TOKEN}" gh api \
+          req=""
+          if req_raw=$(GH_TOKEN="${PAT:-$GH_TOKEN}" gh api \
                   "repos/$REPO/branches/main/protection/required_status_checks" \
-                  --jq '.contexts[]' 2>/dev/null) && src="branch-protection (RELANDER_TOKEN)"
+                  --jq '.contexts[]' 2>/dev/null); then
+            if printf '%s' "$req_raw" | grep -qE '[{}":,]'; then
+              echo "::warning::branch-protection read returned a DOCUMENT, not a context list -- treating as unreadable, not as a live set: $(printf '%s' "$req_raw" | tr -d '\n' | head -c 120)"
+            else
+              req="$req_raw"
+              src="branch-protection (RELANDER_TOKEN)"
+            fi
+          fi
 
           if [ -n "$req" ]; then
             req=$(echo "$req" | tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//')

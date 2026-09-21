@@ -19,9 +19,39 @@
        commit and had to infer drift from the release timestamp. One forgotten
        flag turned a measured fact into a guess. Here it is not optional.
 
-  AUTHORITY: this script is fired by a human (the chairman). prod-drift-sentinel
-  is Phase 1 and MUST NOT invoke it without -DryRun -- it stages the command, it
-  does not push. Nothing here grants an agent deploy authority.
+    3. The ACCEPTANCE VERDICT IS CODE, NOT PROSE, AND IT LEAVES AN EXIT CODE.
+       This script used to poll inline and then *say* whether it liked what it
+       saw, always exiting 0 -- so a NOT-ACCEPTED deploy was indistinguishable
+       from a clean one to anything reading $LASTEXITCODE. It now delegates to
+       tools/accept_gate.py and exits 0 ACCEPT / 1 REJECT / 2 ERROR. Phase 2
+       promotion is gated on a count of clean staged->fired deploys; a runbook
+       that cannot report its own failure cannot be counted.
+
+  AUTHORITY: READ D:\zo\Zocomputer Agents\authority.json AT RUN TIME. DO NOT TRUST
+  THIS COMMENT AS A GRANT OR A DENIAL -- a docstring cannot be revoked, and this one
+  was wrong for three days.
+
+    Until 2026-08-02 this block read: "this script is fired by a human (the
+    chairman). prod-drift-sentinel is Phase 1 and MUST NOT invoke it without
+    -DryRun." That was the 2026-07-25 CofC Phase 1 rule, and the chairman's
+    2026-07-29 grant retired it BY NAME AND BY LANE:
+      authority.json.supersedes_prose[1] =
+        "prod_drift_sentinel CofC Phase 1 'stage, never fire' (2026-07-25) ..."
+      authority.json.delegated.prod_deploy_fire =
+        { granted: true, mode: FIRE_ON_GREEN, phase: 2 }
+    Nobody updated the prose. The lane kept obeying an instruction its principal
+    had already withdrawn: 20 stages, 0 fires, prod drift 218 -> 402 -> 423 -> 452
+    commits, every stage correctly computed and not one of them actionable. That is
+    a correctly raised alarm with no subscriber. The fix is not another gate; it is
+    that permission lives in ONE machine-readable file and nowhere else.
+
+  So: an agent MAY fire this script when authority.json grants prod_deploy_fire AND
+  all five preconditions hold -- 8/8 gates PASS, fire_gate SAFE rc=0, restore-verified
+  backup < 24h, rollback anchor staged AND PROVEN PULLABLE BEFORE the fire, and
+  accept_gate rc=0 after. Class B (migrations tree object differs between the running
+  sha and the candidate, per `git rev-parse <sha>:migrations`) is ATTENDED-ONLY
+  PERMANENTLY regardless of gates, because of the IRREVERSIBLE EDGE below.
+  First lane-fired release: v66, sha d5cb1d0f, 2026-08-02, accept_gate ACCEPT rc=0.
 
   IRREVERSIBLE EDGE: fly.toml carries `release_command = "alembic upgrade head"`,
   which runs against the prod moat Postgres on every release. There is no true
@@ -30,6 +60,9 @@
 
 .PARAMETER Sha
   Full 40-char commit SHA to deploy. Must be a CI-green origin/main commit.
+  This is no longer prose alone: tools/fire_gate.py consults tools/sha_green.py on
+  the target sha and returns RESTAGE (rc=1) if it is CI-RED. A CI-UNKNOWN target
+  leaves the verdict unchanged and says so -- unknown is not red.
 
 .PARAMETER RollbackImage
   Current prod release image, recorded before the deploy as the rollback anchor
@@ -59,81 +92,32 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Default ERROR. A run that falls over before establishing anything must NOT be
+# readable as success by whatever reads $LASTEXITCODE -- 0 is a claim, and it has
+# to be earned. 0 ACCEPT / 1 REJECT / 2 ERROR, matching tools/accept_gate.py.
+$script:Verdict = 2
+
+# The acceptance gate belongs to the RUNBOOK, not to the deployed tree: the sha
+# being shipped generally predates it (7fc39201 does). Resolve it next to THIS
+# script, never inside $WorktreePath.
+$AcceptGate = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "tools\accept_gate.py"
+
 function Say([string]$m) { Write-Host ("[deploy_prod] " + $m) }
 function Die([string]$m) { Write-Host ("[deploy_prod] FATAL: " + $m) -ForegroundColor Red; exit 1 }
 
-# Native-command stderr becomes a TERMINATING error under $ErrorActionPreference
-# = "Stop". `git worktree remove` on an absent path is expected and harmless, so
-# best-effort git calls go through here. Idempotency requires the cleanup path to
-# survive a state that was never created.
-function Git-BestEffort {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try { & git @GitArgs 2>&1 | Out-Null } catch { } finally { $ErrorActionPreference = $prev }
+# ---------------------------------------------------------------- worktree lifecycle
+# SINGLE SOURCE (FU-157). Reset-DisposableWorktree and Git-BestEffort used to be
+# copied into this file AND into ops/host/verify_candidate.ps1. The copies diverged: the observer
+# learned that an EMPTY leftover directory is harmless (measured) and the actor
+# did not, so the fire path would abort on a condition that blocks nothing.
+# One definition, two callers. What legitimately differs by call site
+# (-MustSucceed, -FatalMessage) is a parameter, not a fork.
+$WorktreeLifecycle = Join-Path $PSScriptRoot "worktree_lifecycle.ps1"
+if (-not (Test-Path $WorktreeLifecycle)) {
+    # An absent guard must never read as a passing one. Name the file and die.
+    Die "worktree_lifecycle.ps1 not found beside this script ($WorktreeLifecycle). Refusing to run without the healed worktree teardown -- that helper IS the guard against the 3,466-file orphan."
 }
-
-# ---------------------------------------------------------------- teardown
-# HEAL, RETRY, VERIFY. `git worktree remove --force` can prune the metadata and
-# still leave the directory on disk: on 2026-07-27 it left 3,466 files behind,
-# `git worktree list` showed nothing, and the NEXT run died on
-# "fatal: '<path>' already exists" -- a state neither `remove` nor `prune` can
-# fix. The old teardown here was `Remove-Item ... -ErrorAction SilentlyContinue`
-# with no check after it, so that failure mode was SILENT in the one path the
-# chairman actually fires.
-#
-# Retry before failing: on Windows a file handle can outlive the process that
-# opened it by a moment, so "cannot delete" is a TIMING fact before it is a
-# FAULT. A closing handle clears in seconds; a wedged process does not. Bounded
-# backoff tells the two apart instead of guessing.
-#
-# MustSucceed differs by call site ON PURPOSE, and this is where this wrapper
-# diverges from verify_candidate.ps1:
-#   * BEFORE the worktree is created -- fatal. A stale path means `worktree add`
-#     cannot pin the sha, so deploying anyway would ship an unknown tree.
-#   * AFTER a deploy has already run -- LOUD WARNING, never fatal. The deploy and
-#     its acceptance gate are the verdict; failing the script over leftover files
-#     would report a successful ship as a failure. Loud, not fatal, not silent.
-function Reset-DisposableWorktree {
-    param(
-        [string]$RepoPath,
-        [string]$Path,
-        [bool]$MustSucceed = $false,
-        [int]$Attempts = 5
-    )
-    for ($i = 1; $i -le $Attempts; $i++) {
-        Push-Location $RepoPath
-        try {
-            Git-BestEffort worktree remove --force $Path
-            Git-BestEffort worktree prune
-            if (Test-Path $Path) {
-                Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            Git-BestEffort worktree prune
-        } finally { Pop-Location }
-
-        if (-not (Test-Path $Path)) {
-            if ($i -gt 1) { Say "worktree path cleared on attempt $i" }
-            Say "worktree path VERIFIED gone: $Path"
-            return $true
-        }
-
-        $left = @(Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue).Count
-        if ($i -lt $Attempts) {
-            $wait = [Math]::Min(8, [Math]::Pow(2, $i - 1))
-            Say "attempt $i/$Attempts left $left file(s) at $Path -- retrying in ${wait}s (handle likely still closing)"
-            Start-Sleep -Seconds $wait
-        } else {
-            Say "attempt $i/$Attempts left $left file(s) at $Path"
-        }
-    }
-
-    if ($MustSucceed) {
-        Die "could not clear $Path after $Attempts attempts -- refusing to deploy from a path that cannot be pinned to $Sha. A process is holding a file open; find it before firing."
-    }
-    Say "WARNING: $Path SURVIVED teardown after $Attempts attempts -- the deploy verdict above still stands, but the next run will inherit this orphan. Clear it by hand: Remove-Item -LiteralPath $Path -Recurse -Force"
-    return $false
-}
+. (Join-Path $PSScriptRoot "worktree_lifecycle.ps1")
 
 if ($Sha -notmatch '^[0-9a-f]{40}$') {
     Die "-Sha must be a full 40-char commit sha (got '$Sha'). Short shas make the deployed identity ambiguous."
@@ -164,7 +148,7 @@ Push-Location $Repo
 Git-BestEffort fetch origin main --quiet
 Pop-Location
 # fatal if it will not clear: see Reset-DisposableWorktree
-[void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true)
+[void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $true -LogPrefix "deploy_prod" -FatalMessage 'refusing to deploy from a path that cannot be pinned to the requested sha. A NON-EMPTY leftover blocks git worktree add (measured: rc=128, already exists), so this is a real wedge, not a closing handle: a process is holding a file open. Find it before firing.')
 Push-Location $Repo
 Say "creating disposable worktree at $WorktreePath pinned to $Sha"
 git worktree add --detach $WorktreePath $Sha
@@ -195,8 +179,16 @@ try {
                 Say ("  {0} -> ERR {1}" -f $p, $_.Exception.Message)
             }
         }
+        if (Test-Path $AcceptGate) {
+            Say "acceptance gate present: $AcceptGate -- probing CURRENT prod through it (expect REJECT while prod is stale; that is the negative control)"
+            & python $AcceptGate --sha $Sha --base-url $BaseUrl --once --rollback-image $RollbackImage
+            Say "accept_gate exit=$LASTEXITCODE (1 = REJECT, expected pre-deploy)"
+        } else {
+            Say "WARNING: acceptance gate NOT FOUND at $AcceptGate -- a real deploy would have no machine verdict."
+        }
         Say "DryRun complete. Nothing was deployed."
-        return
+        $script:Verdict = 0
+        exit 0
     }
 
     # ------------------------------------------------------------ fire
@@ -209,45 +201,39 @@ try {
     # Acceptance: /health 200 AND /version reports OUR sha AND /spine/health 200
     # with ok:true and an EMPTY failures[]. /version is the whole point of the
     # build args: it proves the running image is the tree that was gated.
-    $deadline = (Get-Date).AddSeconds($PollSeconds)
-    $pass = $false
-    $lastSpine = ""
-    $lastVersion = ""
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 10
-        try {
-            $h = Invoke-WebRequest -Uri ($BaseUrl + "/health") -UseBasicParsing -TimeoutSec 20
-            $v = Invoke-WebRequest -Uri ($BaseUrl + "/version") -UseBasicParsing -TimeoutSec 20
-            $s = Invoke-WebRequest -Uri ($BaseUrl + "/spine/health") -UseBasicParsing -TimeoutSec 20
-            $vj = $v.Content | ConvertFrom-Json
-            $sj = $s.Content | ConvertFrom-Json
-            $lastVersion = $v.Content
-            $lastSpine = ("ok={0} services={1} failures={2}" -f $sj.ok, $sj.service_count, @($sj.failures).Count)
-            Say ("  probe: health={0} version.git_sha={1} spine[{2}]" -f $h.StatusCode, $vj.git_sha, $lastSpine)
-            if ($h.StatusCode -eq 200 -and $s.StatusCode -eq 200 -and $vj.git_sha -eq $Sha -and $sj.ok -eq $true -and @($sj.failures).Count -eq 0) {
-                $pass = $true
-                break
-            }
-        } catch {
-            Say ("  probe error: " + $_.Exception.Message)
-        }
+    #
+    # This was 25 lines of inline polling that ended in Write-Host. It is now
+    # tools/accept_gate.py: the same assertions, but unit-tested (22 tests, each
+    # seen RED under mutation) and reusable by prod-drift-sentinel's post-fire
+    # verify, which was re-deriving the same rule from prose.
+    if (-not (Test-Path $AcceptGate)) {
+        # A missing gate is an ERROR, never a pass. The failure mode this whole
+        # file exists to prevent is a check that silently does not run.
+        Say "FATAL: acceptance gate not found at $AcceptGate. The deploy HAS FIRED; it is simply unverified."
+        Say "Verify by hand, then record the outcome:"
+        Say "  curl https://mcprisky.io/version   # git_sha must be $Sha"
+        Say "  curl https://mcprisky.io/spine/health   # ok:true, failures[] empty"
+        Say "ROLLBACK IF WRONG: $rollbackCmd"
+        $script:Verdict = 2
     }
-
-    if ($pass) {
-        Say "ACCEPTED: /health 200, /version git_sha=$Sha, /spine/health ok:true failures[] empty."
-        Say "CAVEAT (FU-114): an empty failures[] means every active service MOUNTED. A service that declares no router mounts clean while serving nothing. Green != serving."
-        Say "Record the accepted sha in D:\zo\Zocomputer Agents\prod_deploy_state.json."
-    } else {
-        Say "NOT ACCEPTED within $PollSeconds s."
-        Say "  last /version : $lastVersion"
-        Say "  last /spine   : $lastSpine"
-        Say "READ BEFORE ROLLING BACK: /spine/health ok:false with a failures[] list is the fail-loud spine WORKING, not an outage -- the app serves 200 and mounted services work. Roll back for 5xx or a wrong git_sha, not for a failures[] list that can be fixed forward."
-        Say "ROLLBACK: $rollbackCmd"
+    else {
+        & python $AcceptGate --sha $Sha --base-url $BaseUrl --timeout-seconds $PollSeconds --rollback-image $RollbackImage
+        $script:Verdict = $LASTEXITCODE
+        switch ($script:Verdict) {
+            0 { Say "ACCEPTED. Record the accepted sha in D:\zo\Zocomputer Agents\prod_deploy_state.json and increment clean_staged_fired_deploys." }
+            1 { Say "REJECTED. Read accept_gate's reasons above BEFORE rolling back -- a populated failures[] is fix-forward, a wrong git_sha is not." ; Say "ROLLBACK: $rollbackCmd" }
+            default { Say "ERROR -- prod could not be read, so NOTHING was established. This is not a red. Re-probe before acting: python $AcceptGate --sha $Sha --once" }
+        }
     }
 }
 finally {
     Pop-Location
     Say "removing disposable worktree $WorktreePath"
     # loud, never fatal: the deploy verdict above is the result, not this
-    [void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $false)
+    [void](Reset-DisposableWorktree -RepoPath $Repo -Path $WorktreePath -MustSucceed $false -LogPrefix "deploy_prod")
 }
+
+# The last word is the verdict, not the teardown. Teardown warns loudly and is
+# deliberately never fatal (see Reset-DisposableWorktree): failing the script over
+# leftover files would report a successful ship as a failure.
+exit $script:Verdict

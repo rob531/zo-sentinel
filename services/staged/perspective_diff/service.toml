@@ -1,0 +1,11 @@
+[service]
+name = "perspective_diff"
+import_path = "services.active.perspective_diff.router"
+prefix = "/api"
+tag = "perspective_diff"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

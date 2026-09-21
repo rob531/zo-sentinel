@@ -1,0 +1,17 @@
+[service]
+name = "axis_score_history"
+import_path = "services.active.axis_score_history.router"
+prefix = "/api"
+tag = "axis_score_history"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { path = "../../app" }
+fastapi = "*"
+sqlalchemy = { version = "2.0" }
+httpx = { version = "0.27" }
+
+[scripts]
+test = "python -m services.active.axis_score_history"

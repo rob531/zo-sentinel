@@ -1,0 +1,8 @@
+[service]
+name = "dashboard_api_for_signal_scores_distribution"
+import_path = "services.active.dashboard_api_for_signal_scores_distribution.router"
+prefix = "/api"
+tag = "dashboard_api_for_signal_scores_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true

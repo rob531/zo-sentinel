@@ -2,6 +2,14 @@ name: no-hollow
 on:
   pull_request:
     branches: [main]
+  # DISPATCHABLE ON PURPOSE. This gate is a REQUIRED status context, and
+  # GITHUB_TOKEN pushes are recursion-guarded, so without a dispatch trigger the
+  # only way to re-run it on an existing PR was a push under a human identity --
+  # i.e. a human-held PAT. That dependency cost four weeks of deadlock and an
+  # evening of secret-handling failures. workflow_dispatch is exempt from the
+  # recursion guard, so pr-relander can now refresh this context with the stock
+  # GITHUB_TOKEN and no credential is required from anyone.
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -17,5 +25,8 @@ jobs:
           python-version: "3.11"
       - name: Reject hollow scaffolds
         env:
-          BASE_REF: origin/${{ github.base_ref }}
+          # github.base_ref is empty on workflow_dispatch. These gates always
+          # diff against main, so default explicitly rather than emitting the
+          # unusable ref "origin/".
+          BASE_REF: origin/${{ github.base_ref || 'main' }}
         run: python tests/ci/no_hollow_scaffold.py

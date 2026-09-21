@@ -1,0 +1,8 @@
+[service]
+name = "entity_report_csv_exporter"
+import_path = "services.active.entity_report_csv_exporter.router"
+prefix = "/api"
+tag = "entity_report_csv_exporter"
+origin = "service"
+auth = "public"
+needs_data_layer = true

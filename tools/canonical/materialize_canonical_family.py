@@ -13,20 +13,25 @@ Usage (tower-side, fly proxy auto-started like the rescore tooling):
   python materialize_canonical_family.py --dsn-file <path> --apply
   python materialize_canonical_family.py --dsn-file <path> --rederive
 """
-import argparse, json, re, socket, subprocess, sys, time
+import argparse, json, os, re, sys
 
-sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from family_rules import derive_family
+
+# FU-151: one shared credential path for every flyctl caller in this repo.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fly_token import ensure_proxy as _ensure_fly_proxy  # noqa: E402
 
 
 def pg_conn(dsn_file, port=15432):
     import psycopg2
-    try:
-        s = socket.create_connection(("127.0.0.1", port), 1); s.close()
-    except Exception:
-        subprocess.Popen(["flyctl", "proxy", "%d:5432" % port, "-a", "mcplookup-db"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(8)
+    # FU-151/FU-133: see delta_report.pg_conn -- same defect, same fix, and the
+    # reason this module is patched in the SAME breath is that shipping the helper
+    # to one caller is exactly what let the 2026-07-28 outage recur the next day.
+    _ensure_fly_proxy(port, "mcplookup-db",
+                      os.path.join(os.environ.get("TEMP", "/tmp"),
+                                   "_flyctl_proxy_canonical_family.err"),
+                      log=lambda m: print(m, file=sys.stderr, flush=True))
     dsn = open(dsn_file).read().strip()
     dsn = re.sub(r"@[^/:@]+(:\d+)?/", "@127.0.0.1:%d/" % port, dsn)
     dsn = re.sub(r"host=\S+", "host=127.0.0.1", dsn)

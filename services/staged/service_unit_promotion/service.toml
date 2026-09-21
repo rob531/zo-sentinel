@@ -1,0 +1,8 @@
+[service]
+name = "service_unit_promotion"
+import_path = "services.active.service_unit_promotion.router"
+prefix = "/api"
+tag = "service_unit_promotion"
+origin = "service"
+auth = "public"
+needs_data_layer = true

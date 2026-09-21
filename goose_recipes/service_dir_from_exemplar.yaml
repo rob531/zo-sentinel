@@ -1,6 +1,6 @@
 title: "Zo Sentinel Service-Dir-from-Exemplar Builder (SOA atomic unit)"
-description: "The autonomous builder's SOA lane: emit ONE self-contained SERVICE DIRECTORY into services/staged/<name>/ by mirroring the canonical service-dir exemplar (services/_exemplar/), ONE FILE PER BOUNDED PASS (logic -> router -> contract -> service.toml), then run the service's own contract.py and require PASS. The atomic unit is the SERVICE; each emission stays single-file-per-concern (the proven module_from_exemplar lane, generalised to a directory). NEVER edits the spine; NEVER promotes -- staged->active is the promoter's gated decision."
-version: "0.1"
+description: "The autonomous builder's SOA lane: emit ONE self-contained SERVICE DIRECTORY into the services/staged/ directory named for the service by mirroring the canonical service-dir exemplar (services/_exemplar/), ONE FILE PER BOUNDED PASS (logic -> router -> contract -> service.toml), then run the service's own contract.py and require PASS. The atomic unit is the SERVICE; each emission stays single-file-per-concern (the proven module_from_exemplar lane, generalised to a directory). NEVER edits the spine; NEVER promotes -- staged->active is the promoter's gated decision."
+version: "0.2"
 
 # WHY THIS EXISTS
 # ---------------
@@ -23,7 +23,7 @@ parameters:
   - key: service_name
     input_type: string
     requirement: required
-    description: "snake_case service name -> services/staged/<service_name>/ (the dir to create)."
+    description: "snake_case service name. The directory to create is services/staged/ + this value, e.g. service_name=cve_feed_ingestion -> services/staged/cve_feed_ingestion/. SUBSTITUTE THE VALUE: never emit a path containing < or > -- those are reserved on Windows and one such path makes every checkout of main fail on the tower (FU-209)."
   - key: service_spec
     input_type: string
     requirement: required
@@ -65,8 +65,39 @@ prompt: |-
     logic.py       data/computation over app.db/app.models -- the REAL layer, no stubs
     router.py      thin APIRouter exposing `router`; RELATIVE intra-imports (from .logic import ...)
     contract.py    acceptance self-test; runnable as `python -m services.staged.{{ service_name }}.contract`
-    service.toml   [service] name/import_path=services.active.{{ service_name }}.router/prefix/tag/auth/needs_data_layer
+    service.toml   THE REGISTRATION MANIFEST. It is TOML, not Python. Copy the
+                   VERBATIM MANIFEST block below byte-for-byte and substitute only
+                   the name. Do NOT compose it from a description of its keys.
   (import_path names services.ACTIVE... deliberately: it is where the file lives AFTER promotion.)
+
+  ===================== VERBATIM MANIFEST (service.toml) =====================
+  service.toml is the ONE file in this lane that is NOT Python. Emit exactly this,
+  with {{ service_name }} substituted and NOTHING else changed:
+
+      [service]
+      name = "{{ service_name }}"
+      import_path = "services.active.{{ service_name }}.router"
+      prefix = "/api"
+      tag = "{{ service_name }}"
+      origin = "service"
+      auth = "public"
+      needs_data_layer = true
+
+  The `[service]` on line 1 is a TOML TABLE HEADER and is LOAD-BEARING, not a label.
+  `promote_staged_to_active.py` reads `_load_toml(path).get("service", {})`. Without
+  that header it gets an empty dict and the service is UNPROMOTABLE FOREVER -- while
+  reporting as ordinary backlog, so nobody notices. On 2026-07-29 all 36 open
+  manifest PRs were defective this way and 7 more had already landed on main.
+
+  FORBIDDEN in service.toml, all observed in real emissions:
+    - `service = { "name": ... }`   (a Python dict literal, not a TOML table)
+    - `True` / `False`             (TOML booleans are lowercase `true` / `false`)
+    - `if __name__ == "__main__": print("PASS")`  (this is a data file; it does not run)
+    - any `import` statement, or every key at top level with no `[service]` header
+
+  Do NOT py_compile this file and do NOT try to make it print PASS. Those steps
+  belong to logic.py / router.py / contract.py ONLY. Applying them here is what
+  produced the Python-in-a-.toml defect.
 
   ===================== WORKFLOW (one bounded pass per file) =====================
   0. READ THE EXEMPLAR: open every file in {{ exemplar_dir }} and study how it
@@ -77,7 +108,15 @@ prompt: |-
   3. Emit router.py ALONE (relative import of .logic). py_compile. Do not proceed until clean.
   4. Emit contract.py ALONE, mirroring the exemplar's self-test 1:1 against {{ service_spec }}'s
      assertions. py_compile.
-  5. Emit service.toml and __init__.py.
+  5. Emit __init__.py (copy the exemplar's one-liner), then emit service.toml
+     ALONE from the VERBATIM MANIFEST block above. Verify it parses AS TOML and
+     carries the [service] table -- this is its gate, and it is not optional:
+        python tools/check_service_manifests.py services/staged/{{ service_name }}/service.toml
+     That must exit 0. (It is the same check CI runs, so a green here is the same
+     evidence the merge gate will demand -- not a proxy for it.)
+     If it fails, REWRITE the file from the verbatim block. Do not proceed
+     until it prints TOML OK. A manifest that does not parse is worse than a
+     missing one, because the promoter reports it as an ordinary hold.
   6. Run `python -m services.staged.{{ service_name }}.contract`. It MUST print PASS (exit 0).
      Fix and re-run (cap ~5). FAIL LOUD -- if it cannot be made to PASS, report
      "CONTRACT_FAIL: <reason>" and STOP; do NOT register, do NOT promote.
@@ -92,7 +131,8 @@ prompt: |-
   (McpServerRegistry: server_id is the only NOT NULL; McpLlmAxisScore: id, server_id,
   axis_name, label, model_version). Copy the exemplar's seed lines verbatim in shape.
 
-  HARD RULE: no success/register unless every file exists, py_compiles, contract.py
+  HARD RULE: no success/register unless every file exists, the four PYTHON files
+  py_compile, service.toml PARSES AS TOML with a [service] table, contract.py
   printed PASS, and the code imports the REAL app.db/app.models (no inline/mock DB).
 
   EXEMPLAR DIR: {{ exemplar_dir }}

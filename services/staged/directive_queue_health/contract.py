@@ -1,124 +1,106 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timedelta
-from app.db import get_session
-from app.models import ServiceHealth
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-import requests
+"""directive_queue_health contract"""
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict
+
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
+import json
+import os
+import tempfile
 
 router = APIRouter(prefix="/api/directives")
 
-class QueueHealthResponse(BaseModel):
+
+class QueueHealth(BaseModel):
     total: int
-    pending_count: int
-    proposed_count: int
-    oldest_pending_age_seconds: Optional[float]
-    oldest_proposed_age_seconds: Optional[float]
-    queue_depth: int
+    by_handler: Dict[str, int]
 
-def read_pending_directives() -> dict:
-    """Mock function to simulate reading pending directives from write_service"""
-    response = requests.post("http://127.0.0.1:8772/query", json={
-        "query": "SELECT * FROM directives WHERE status IN ('pending', 'proposed')"
-    })
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Failed to fetch directives")
-    return response.json()
 
-@router.get("/queue-health", response_model=QueueHealthResponse)
-async def get_queue_health(db: Session = Depends(get_session)):
-    try:
-        directives = read_pending_directives()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class DirectiveQueueHealthResponse(BaseModel):
+    pending: QueueHealth
+    proposed: QueueHealth
+    generated_at: str
 
-    pending = [d for d in directives if d['status'] == 'pending']
-    proposed = [d for d in directives if d['status'] == 'proposed']
 
-    pending_count = len(pending)
-    proposed_count = len(proposed)
-    total = pending_count + proposed_count
+def _count_by_handler(base_path: Path) -> Dict[str, int]:
+    """Count files per handler type in directory tree."""
+    counts = {}
+    if base_path.exists():
+        for entry in os.listdir(base_path):
+            full_path = base_path / entry
+            if full_path.is_dir():
+                counts[entry] = len(os.listdir(full_path))
+    return counts
 
-    oldest_pending = min(pending, key=lambda x: x['created_at'], default=None)
-    oldest_proposed = min(proposed, key=lambda x: x['created_at'], default=None)
 
-    oldest_pending_age = (
-        (datetime.now() - datetime.fromisoformat(oldest_pending['created_at'])).total_seconds()
-        if oldest_pending else None
+def get_pending_path() -> Path:
+    """Dependency: path to directives/pending/ directory."""
+    return Path("directives/pending")
+
+
+def get_proposed_path() -> Path:
+    """Dependency: path to directives/proposed/ directory."""
+    return Path("directives/proposed")
+
+
+@router.get("/queue-health", response_model=DirectiveQueueHealthResponse)
+def get_directive_queue_health(
+    pending_path: Path = Depends(get_pending_path),
+    proposed_path: Path = Depends(get_proposed_path),
+) -> DirectiveQueueHealthResponse:
+    """Get health metrics for pending and proposed directive queues."""
+    pending_counts = _count_by_handler(pending_path)
+    proposed_counts = _count_by_handler(proposed_path)
+
+    return DirectiveQueueHealthResponse(
+        pending=QueueHealth(
+            total=sum(pending_counts.values()),
+            by_handler=pending_counts,
+        ),
+        proposed=QueueHealth(
+            total=sum(proposed_counts.values()),
+            by_handler=proposed_counts,
+        ),
+        generated_at=datetime.now(timezone.utc).isoformat(),
     )
-    oldest_proposed_age = (
-        (datetime.now() - datetime.fromisoformat(oldest_proposed['created_at'])).total_seconds()
-        if oldest_proposed else None
-    )
 
-    # Check service health
-    last_heartbeat = db.query(ServiceHealth).filter(
-        ServiceHealth.service_name == 'directive-generator'
-    ).order_by(ServiceHealth.timestamp.desc()).first()
 
-    if last_heartbeat:
-        heartbeat_age = (datetime.now() - last_heartbeat.timestamp).total_seconds()
-        if heartbeat_age > 300:  # 5 minutes
-            raise HTTPException(
-                status_code=503,
-                detail="Directive generator service is unhealthy"
-            )
+app = FastAPI()
+app.include_router(router)
 
-    return QueueHealthResponse(
-        total=total,
-        pending_count=pending_count,
-        proposed_count=proposed_count,
-        oldest_pending_age_seconds=oldest_pending_age,
-        oldest_proposed_age_seconds=oldest_proposed_age,
-        queue_depth=total
-    )
 
 if __name__ == "__main__":
-    from fastapi import FastAPI
-    from app.db import get_session, Base
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base = Path(tmpdir)
 
-    # Setup test database
-    test_engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(test_engine)
-    TestSession = sessionmaker(bind=test_engine)
+        # Pending: 3 files (2 build_service, 1 generate_file)
+        pending_dir = base / "pending"
+        pending_dir.mkdir()
+        (pending_dir / "build_service").mkdir()
+        (pending_dir / "build_service" / "d0.json").write_text("{}")
+        (pending_dir / "build_service" / "d1.json").write_text("{}")
+        (pending_dir / "generate_file").mkdir()
+        (pending_dir / "generate_file" / "d0.json").write_text("{}")
 
-    # Override dependencies for testing
-    app = FastAPI()
-    app.include_router(router)
-    app.dependency_overrides[get_session] = lambda: TestSession()
+        # Proposed: 2 files (run_script)
+        proposed_dir = base / "proposed"
+        proposed_dir.mkdir()
+        (proposed_dir / "run_script").mkdir()
+        (proposed_dir / "run_script" / "d0.json").write_text("{}")
+        (proposed_dir / "run_script" / "d1.json").write_text("{}")
 
-    # Mock write_service responses
-    def mock_read_pending_directives():
-        return {
-            "data": [
-                {"status": "pending", "created_at": "2023-01-01T00:00:00"},
-                {"status": "proposed", "created_at": "2023-01-02T00:00:00"},
-                {"status": "pending", "created_at": "2023-01-03T00:00:00"}
-            ]
-        }
+        app.dependency_overrides[get_pending_path] = lambda: base / "pending"
+        app.dependency_overrides[get_proposed_path] = lambda: base / "proposed"
 
-    app.dependency_overrides[read_pending_directives] = lambda: mock_read_pending_directives()
-
-    # Add test service health data
-    with TestSession() as session:
-        session.add(ServiceHealth(
-            service_name="directive-generator",
-            timestamp=datetime.now() - timedelta(seconds=10)
-        ))
-        session.commit()
-
-    client = TestClient(app)
-    response = client.get("/api/directives/queue-health")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] >= 0
-    assert isinstance(data["oldest_pending_age_seconds"], (float, type(None)))
-    assert isinstance(data["oldest_proposed_age_seconds"], (float, type(None)))
-
-    print("PASS")
+        client = TestClient(app)
+        response = client.get("/api/directives/queue-health")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        data = response.json()
+        assert data["pending"]["total"] == 3, f"Expected pending total 3, got {data['pending']['total']}"
+        assert data["pending"]["by_handler"]["build_service"] == 2
+        assert data["pending"]["by_handler"]["generate_file"] == 1
+        assert data["proposed"]["total"] == 2, f"Expected proposed total 2, got {data['proposed']['total']}"
+        assert data["proposed"]["by_handler"]["run_script"] == 2
+        print("PASS")

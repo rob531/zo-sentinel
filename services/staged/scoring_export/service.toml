@@ -1,0 +1,8 @@
+[service]
+name = "scoring_export"
+import_path = "services.active.scoring_export.router"
+prefix = "/api"
+tag = "scoring_export"
+origin = "service"
+auth = "public"
+needs_data_layer = true

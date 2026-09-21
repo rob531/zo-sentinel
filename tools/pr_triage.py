@@ -51,6 +51,23 @@ TRIAGE_PREFIX = "triage:"
 DIGEST_ISSUE_LABEL = "pr-triage-digest"
 MIN_SOLID_ADDITIONS = 12  # changes adding fewer lines than this are stub scaffolds
 
+# WALL-CLOCK BUDGET (FU-136). The job running this has `timeout-minutes: 8`, and
+# a job KILLED by that timeout is the worst possible outcome: no labels, no
+# digest, no step summary, and -- because stdout is a pipe and therefore block
+# buffered -- not one line of its own progress. On 2026-07-28T06:11Z and 06:23Z
+# this tool burned 8m16s and 8m09s and left literally zero output both times.
+# So it now stops ITSELF, early, and always reaches the digest.
+DEADLINE_SEC = float(os.environ.get("PR_TRIAGE_DEADLINE_SEC", "390"))  # 6.5 min
+_STARTED = time.monotonic()
+
+
+def _elapsed() -> float:
+    return time.monotonic() - _STARTED
+
+
+def _out_of_time() -> bool:
+    return _elapsed() >= DEADLINE_SEC
+
 # Filenames that are helper/scaffold artifacts, not shippable product features.
 SCAFFOLD_PREFIXES = ("verify_", "test_", "wire_", "_canary", "canary_")
 SCAFFOLD_SUFFIXES = ("_smoke.py", "_test.py", "_integration_smoke.py")
@@ -98,9 +115,21 @@ def _is_rate_limited(stderr: str) -> bool:
     return any(t in e for t in _RATE_LIMITED)
 
 
+# An over-budget GraphQL query does not always come back as a tidy "HTTP 504".
+# MEASURED against the live API 2026-07-28T04:5xZ: the same combined PR query
+# failed three ways in four consecutive attempts --
+#   HTTP 504: 504 Gateway Timeout
+#   HTTP 504: We couldn't respond to your request in time...
+#   stream error: stream ID 1; CANCEL; received from peer
+# The third is GitHub killing the HTTP/2 stream rather than answering, and it
+# matches NONE of the tokens above it. Classifying that as non-transient is how
+# a retry/degrade path silently fails to arm on the very failure it was built
+# for -- so the stream-cancel shapes are named explicitly.
 _TRANSIENT_GH = ("http 502", "http 503", "http 504", "timed out", "timeout",
                  "couldn't respond", "rate limit", "secondary rate", "eof",
-                 "connection reset", "service unavailable", "try again", "bad gateway")
+                 "connection reset", "service unavailable", "try again", "bad gateway",
+                 "stream error", "received from peer", "connection closed",
+                 "unexpected end")
 
 
 def _gh(*args: str, check: bool = False, retries: int = 4) -> subprocess.CompletedProcess:
@@ -138,13 +167,28 @@ def _gh(*args: str, check: bool = False, retries: int = 4) -> subprocess.Complet
 # Check / mergeability interpretation
 # ---------------------------------------------------------------------------
 _PASS = {"SUCCESS", "NEUTRAL", "SKIPPED", "EXPECTED"}
-_FAIL = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
+_FAIL = {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
+# A CANCELLED check is a KILL, not a verdict (FU-141). Nothing about the PR was
+# judged -- the run was stopped, almost always by this very workflow's
+# `concurrency: cancel-in-progress: true` when the next build PR opened. Reading
+# it as a failure condemns a PR for our own scheduling. It is PENDING: revisit.
+_KILLED = {"CANCELLED"}
+
+# ...and never read our OWN check. `triage` is in every PR's statusCheckRollup,
+# so a cancelled sweep left a red `triage` on N PRs, the NEXT sweep read that as
+# gate==failure, labelled them `triage:stale`, and auto-merge (which arms only on
+# `triage:solid`) never fired -- which grew the backlog, which caused more
+# cancellations. A closed positive-feedback loop in which the monitor is the
+# outage. Self-exclusion breaks it. Same family as [[a_monitor_can_drift_on_itself]].
+_SELF_CHECKS = {"triage", "pr-triage", "triage-solid-sweep"}
 
 
 def _gate_state(rollup: list) -> str:
     """Reduce a statusCheckRollup list to 'success' | 'failure' | 'pending'.
 
     Handles both CheckRun (status/conclusion) and StatusContext (state) shapes.
+    Our own triage checks are EXCLUDED and CANCELLED counts as pending -- see
+    _SELF_CHECKS / _KILLED above for why both are required to break FU-141.
     """
     if not rollup:
         return "pending"  # no checks reported yet
@@ -152,6 +196,9 @@ def _gate_state(rollup: list) -> str:
     for c in rollup:
         if not isinstance(c, dict):
             continue
+        name = (c.get("name") or c.get("context") or "").strip().lower()
+        if name in _SELF_CHECKS:
+            continue  # never grade a PR on our own sweep's exit status
         # CheckRun: in-progress until status == COMPLETED, then look at conclusion
         status = (c.get("status") or "").upper()
         conclusion = (c.get("conclusion") or "").upper()
@@ -159,6 +206,9 @@ def _gate_state(rollup: list) -> str:
         verdict = conclusion or state
         if status and status != "COMPLETED" and not verdict:
             any_pending = True
+            continue
+        if verdict in _KILLED:
+            any_pending = True  # a kill is not a verdict; re-triage next run
             continue
         if verdict in _FAIL:
             return "failure"
@@ -308,13 +358,80 @@ def ensure_labels(repo: str) -> None:
         "--color", "ededed", "--description", "Tracking issue for auto-build PR triage digest", "--force")
 
 
-def apply_label(repo: str, number: int, bucket: str) -> None:
-    others = [f"{TRIAGE_PREFIX}{b}" for b in BUCKETS if b != bucket]
-    res = _gh("pr", "edit", str(number), "-R", repo, "--add-label", f"{TRIAGE_PREFIX}{bucket}")
-    if res.returncode != 0:
-        print(f"  warn: could not add label to #{number}: {res.stderr.strip()}", file=sys.stderr)
-    for o in others:
-        _gh("pr", "edit", str(number), "-R", repo, "--remove-label", o)  # tolerant
+def _triage_labels_of(pr: dict):
+    """The triage:* labels GitHub ALREADY has on this PR.
+
+    Free: `labels` is in BOTH _FULL_FIELDS and _CHEAP_FIELDS, so it arrives with
+    the row and costs no extra call. Returns None when the row carries no
+    `labels` key at all -- an UNKNOWN state, which apply_label must handle
+    differently from a known-empty one.
+    """
+    if "labels" not in pr:
+        return None
+    out = set()
+    for lb in (pr.get("labels") or []):
+        name = (lb.get("name") if isinstance(lb, dict) else str(lb)) or ""
+        if name.startswith(TRIAGE_PREFIX):
+            out.add(name)
+    return out
+
+
+def apply_label(repo: str, number: int, bucket: str, current=None) -> int:
+    """Converge PR `number` onto exactly one triage bucket. Returns gh calls made.
+
+    THE SCAR (FU-136): this used to cost FOUR sequential `gh pr edit` calls per
+    PR, unconditionally -- one add plus three blind removes -- whether or not the
+    PR already carried exactly the right label. MEASURED against the live API
+    2026-07-28T07:52Z: 4.06s per PR. At 119 open build PRs that is 483s of pure
+    subprocess round-trip: over the 8-minute job budget ON ITS OWN, before the
+    ~136s the fetch already spends.
+
+    That cost was always there. It was never PAID because every run died in the
+    fetch first. Repairing the fetch (#2172) did not create this -- it EXPOSED
+    it, and #2172's "76.1s live proof" had timed only the half that had ever run.
+
+    The sweep is idempotent by design: it re-derives the same bucket for the same
+    PR every run, so in the steady state EVERY one of those 476 calls was a no-op
+    re-asserting a label already present. The current labels are already in hand,
+    so:
+
+      * already correct  -> ZERO calls
+      * needs a change   -> exactly ONE call, add + removes combined
+      * labels unknown   -> the ORIGINAL shape, unchanged
+
+    Combining add and remove into one invocation is safe ONLY because we remove
+    exclusively labels we have SEEN on the PR: `gh pr edit --remove-label` errors
+    on a label that is not there, and a combined call that errors would lose the
+    ADD with it. That is why the unknown-labels branch keeps the old
+    separate-calls shape rather than guessing -- cheapen the common path, never
+    the correctness.
+    """
+    target = f"{TRIAGE_PREFIX}{bucket}"
+
+    if current is None:
+        others = [f"{TRIAGE_PREFIX}{b}" for b in BUCKETS if b != bucket]
+        res = _gh("pr", "edit", str(number), "-R", repo, "--add-label", target)
+        if res is None or res.returncode != 0:
+            err = res.stderr.strip() if res is not None else "no result from gh"
+            print(f"  warn: could not add label to #{number}: {err}", file=sys.stderr)
+        for o in others:
+            _gh("pr", "edit", str(number), "-R", repo, "--remove-label", o)  # tolerant
+        return 1 + len(others)
+
+    stale = sorted(lb for lb in current if lb != target)
+    if target in current and not stale:
+        return 0  # already converged -- the steady state
+
+    args = ["pr", "edit", str(number), "-R", repo]
+    if target not in current:
+        args += ["--add-label", target]
+    for o in stale:
+        args += ["--remove-label", o]
+    res = _gh(*args)
+    if res is None or res.returncode != 0:
+        err = res.stderr.strip() if res is not None else "no result from gh"
+        print(f"  warn: could not label #{number}: {err}", file=sys.stderr)
+    return 1
 
 
 def build_digest(prs_by_num: dict, buckets: dict, exempted: set | None = None) -> str:
@@ -379,56 +496,265 @@ def upsert_digest_issue(repo: str, body: str) -> None:
             print(f"  warn: could not update digest issue #{num}: {r.stderr.strip()}", file=sys.stderr)
 
 
-def main() -> int:
-    repo = _repo()
+# ---------------------------------------------------------------------------
+# Fetching the open build-PR set
+# ---------------------------------------------------------------------------
+# `files` and `statusCheckRollup` are per-PR GraphQL CONNECTIONS. Asking for
+# both across `--limit 300` builds ONE query whose cost scales with
+# (open PRs x changed files x checks per PR). Past a threshold GitHub answers
+# HTTP 504 *deterministically* -- and because the entire run hangs off that
+# single call, a 504 means ZERO PRs triaged: exactly the total gate outage the
+# rate-limit branch below already has a name for.
+#
+# Exponential backoff cannot fix this. _gh() already retries 504s, and on
+# 2026-07-28T03:33Z it spent five attempts and 71s collecting five 504s from
+# the same query (FU-129). A query that is over budget is over budget on every
+# attempt; it is not intermittently unlucky. Retrying harder only converts a
+# fast failure into a slow one.
+#
+# So: try the combined query first (it is cheap while the backlog is small),
+# and on a TRANSIENT failure DEGRADE to a metadata-only list plus per-PR
+# hydration of the two expensive fields. Many small queries always fit the
+# budget. Cost is O(open PRs) extra calls, paid only when the fast path fails.
+_FULL_FIELDS = "number,title,files,labels,mergeable,statusCheckRollup"
+_CHEAP_FIELDS = "number,title,labels,mergeable"
+_HYDRATE_FIELDS = "files,statusCheckRollup"
+
+# A --limit IS A POPULATION CAP WEARING A COUNT'S CLOTHES.
+#
+# `--limit 300` on the combined query is a deliberate COST control (see the 504
+# note above) -- but it is also a page size, and when the population reaches it
+# the failure is SILENT: gh returns exactly 300 rows with exit 0, this module
+# triages them perfectly, and every PR past the boundary is simply never seen.
+# Nothing goes red. Measured 2026-09-12: the open autonomous-build queue was
+# 296, FOUR below the cap, while the auto-merge workflow's own comment records
+# it growing 276 -> 321 in two days.
+#
+# Raising the number alone would only re-arm the same trap at a larger value AND
+# push the combined query back over the 504 budget. So instead: a full-query
+# result exactly `_FULL_LIMIT` long is treated as a CAP HIT and falls through to
+# the DEGRADED path that already exists -- metadata list at `_CHEAP_LIMIT` plus
+# per-PR hydration, whose many small queries carry no such budget problem.
+#
+# This adds no gate. The run still proceeds on what it fetched; it just stops
+# being able to report a page size as if it were a count.
+_FULL_LIMIT = 300
+_CHEAP_LIMIT = 1000
+
+
+def _capped(rows, where: str, limit: int) -> bool:
+    """True when a result is exactly `limit` long -- a cap, not a count."""
+    if len(rows) >= limit:
+        print(f"::warning title=pr-triage population capped::{where} returned "
+              f"{len(rows)} row(s) against --limit {limit}. A result equal to "
+              f"its own page size is a CAP, not a count: PRs past the boundary "
+              f"were not in this answer.", file=sys.stderr)
+        return True
+    print(f"[basis] {where}: {len(rows)} row(s) of --limit {limit} "
+          f"({limit - len(rows)} headroom)", file=sys.stderr)
+    return False
+
+
+def _is_transient(stderr: str) -> bool:
+    e = (stderr or "").lower()
+    return any(t in e for t in _TRANSIENT_GH)
+
+
+def fetch_open_build_prs(repo: str):
+    """Return (prs, mode, dropped) for every OPEN autonomous-build PR.
+
+    mode is one of:
+      "full"         -- one combined query answered it
+      "degraded"     -- metadata list + per-PR hydration (the 504 fallback)
+      "rate_limited" -- quota exhausted; caller reports a GATE OUTAGE
+      "error"        -- non-transient failure; caller fails the run
+
+    `dropped` lists PR numbers that could not be hydrated. They are EXCLUDED
+    from `prs` rather than classified on missing data: `files` is what drives
+    the dup and scaffold buckets, so a PR judged without it is judged wrongly,
+    and a wrong label is worse than no label. Same fail-closed reflex as
+    _manifest_is_valid -- a gate that cannot read its subject must not judge it.
+    """
+    # retries=1, deliberately. THE DEGRADED PATH IS THE RETRY, and a better one:
+    # re-asking an over-budget query the default four times cost 71s of an
+    # 8-minute job on 2026-07-28T03:33Z and could never have succeeded. One retry
+    # still absorbs a genuine one-off blip; the rest was pure loss.
     res = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
-              "--limit", "300", "--json",
-              "number,title,files,labels,mergeable,statusCheckRollup")
-    if res.returncode != 0:
-        err = (res.stderr or "").strip()
+              "--limit", str(_FULL_LIMIT), "--json", _FULL_FIELDS, retries=1)
+    if res is not None and res.returncode == 0:
+        try:
+            full = json.loads(res.stdout or "[]")
+        except json.JSONDecodeError as e:
+            print(f"ERROR: bad JSON from gh: {e}", file=sys.stderr)
+            return [], "error", []
+        # A cap hit is not an error and not a count -- it is an incomplete
+        # answer that looks complete. Degrade rather than triage a page.
+        if not _capped(full, "combined build-PR query", _FULL_LIMIT):
+            return full, "full", []
+        print("::warning title=pr-triage degraded::combined query hit its page "
+              "size; retrying as metadata list + per-PR hydration so the whole "
+              "population is seen", file=sys.stderr)
+    else:
+        err = (res.stderr or "").strip() if res is not None else "no result from gh"
         if _is_rate_limited(err):
-            # Say what actually happened. An unlabelled run is a gate OUTAGE:
-            # nothing was triaged, so nothing can auto-merge, and any red `triage`
-            # check now sitting on a PR is about this quota -- not about that PR.
-            msg = ("TRIAGE GATE OUTAGE: GitHub API quota exhausted -- ZERO PRs "
-                   "triaged this run. No PR can reach triage:solid, so auto-merge "
-                   "is stalled until the next successful run. This is not a defect "
-                   "in any PR carrying a red `triage` check.")
-            print(f"::error title=Triage gate outage (rate limit)::{msg}",
-                  file=sys.stderr)
-            print(f"ERROR: {msg}\n  gh said: {err}", file=sys.stderr)
-            return 1
-        print(f"ERROR: gh pr list failed: {err}", file=sys.stderr)
-        return 1
+            return [], "rate_limited", []
+        if not _is_transient(err):
+            print(f"ERROR: gh pr list failed: {err}", file=sys.stderr)
+            return [], "error", []
+
+        print("::warning title=pr-triage degraded::combined PR query failed "
+              f"({err[:180]}); retrying as metadata list + per-PR hydration",
+              file=sys.stderr)
+
+    cheap = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
+                "--limit", str(_CHEAP_LIMIT), "--json", _CHEAP_FIELDS)
+    if cheap is None or cheap.returncode != 0:
+        cerr = (cheap.stderr or "").strip() if cheap is not None else "no result from gh"
+        if _is_rate_limited(cerr):
+            return [], "rate_limited", []
+        print(f"ERROR: gh pr list failed on the degraded path too: {cerr}",
+              file=sys.stderr)
+        return [], "error", []
     try:
-        prs = json.loads(res.stdout or "[]")
+        stubs = json.loads(cheap.stdout or "[]")
     except json.JSONDecodeError as e:
         print(f"ERROR: bad JSON from gh: {e}", file=sys.stderr)
+        return [], "error", []
+    _capped(stubs, "degraded build-PR query", _CHEAP_LIMIT)
+
+    prs: list = []
+    dropped: list = []
+    for stub in stubs:
+        n = stub.get("number")
+        one = _gh("pr", "view", str(n), "-R", repo, "--json", _HYDRATE_FIELDS)
+        if one is None or one.returncode != 0:
+            dropped.append(n)
+            continue
+        try:
+            extra = json.loads(one.stdout or "{}")
+        except json.JSONDecodeError:
+            dropped.append(n)
+            continue
+        if "files" not in extra or "statusCheckRollup" not in extra:
+            dropped.append(n)
+            continue
+        merged = dict(stub)
+        merged.update(extra)
+        prs.append(merged)
+
+    if dropped:
+        # Say it out loud. A silently shrunken batch also shrinks the dup
+        # supersede map, so a real duplicate can survive this run unlabelled.
+        # That is recoverable (the next run re-triages everything); pretending
+        # the PR was triaged would not be.
+        visible = sorted(x for x in dropped if x is not None)
+        print(f"  warn: {len(dropped)} PR(s) left UNTRIAGED this run "
+              f"(hydration failed): {visible}", file=sys.stderr)
+    return prs, "degraded", dropped
+
+
+def main() -> int:
+    # Line-buffer the streams. Under Actions these are pipes, so the default
+    # block buffering means a run killed by the job timeout emits NOTHING --
+    # which is exactly how two 8-minute failures on 2026-07-28 became forensic
+    # blackouts. The workflow also passes -u; this is the belt to that braces so
+    # the tool stays diagnosable wherever it is run from.
+    # ...and force UTF-8. The digest is full of emoji bucket headers, and the
+    # final `print(digest)` died with UnicodeEncodeError on a cp1252 Windows
+    # console the first time this was ever run by hand -- AFTER the issue had
+    # been upserted, so the run did its job and then reported a traceback.
+    # A tool that only survives on a UTF-8 runner cannot be exercised where the
+    # operator actually stands.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(line_buffering=True, encoding="utf-8",
+                               errors="replace")
+        except Exception:  # pragma: no cover - very old interpreters
+            pass
+    repo = _repo()
+    prs, mode, dropped = fetch_open_build_prs(repo)
+
+    if mode == "rate_limited":
+        # Say what actually happened. An unlabelled run is a gate OUTAGE:
+        # nothing was triaged, so nothing can auto-merge, and any red `triage`
+        # check now sitting on a PR is about this quota -- not about that PR.
+        msg = ("TRIAGE GATE OUTAGE: GitHub API quota exhausted -- ZERO PRs "
+               "triaged this run. No PR can reach triage:solid, so auto-merge "
+               "is stalled until the next successful run. This is not a defect "
+               "in any PR carrying a red `triage` check.")
+        print(f"::error title=Triage gate outage (rate limit)::{msg}",
+              file=sys.stderr)
+        print(f"ERROR: {msg}", file=sys.stderr)
+        return 1
+    if mode == "error":
         return 1
 
     if not prs:
+        if dropped:
+            # NOT the same fact as "there is nothing to do". Every PR that
+            # exists failed to hydrate, so this run triaged nothing -- report
+            # it as the outage it is instead of exiting 0 on an empty list.
+            msg = (f"TRIAGE GATE OUTAGE: {len(dropped)} open PR(s) found but "
+                   "NONE could be hydrated -- ZERO PRs triaged this run.")
+            print(f"::error title=Triage gate outage (hydration)::{msg}",
+                  file=sys.stderr)
+            print(f"ERROR: {msg}", file=sys.stderr)
+            return 1
         print("No open autonomous-build PRs to triage.")
         return 0
+
+    if mode == "degraded":
+        print(f"NOTE: ran in DEGRADED mode -- {len(prs)} PR(s) hydrated "
+              f"individually, {len(dropped)} left untriaged.", file=sys.stderr)
 
     ensure_labels(repo)
     exempted: set = set()
     buckets = classify(prs, repo, exempted)
     prs_by_num = {pr["number"]: pr for pr in prs}
 
+    calls = 0
+    deferred = []
     for n, b in sorted(buckets.items()):
-        if b:
-            note = " [manifest-exemption]" if n in exempted else ""
-            print(f"#{n}: {b}{note}")
-            apply_label(repo, n, b)
-            if n in exempted:
+        if not b:
+            print(f"#{n}: (pending checks -- no label this run)")
+            continue
+        if _out_of_time():
+            # Stop WRITING, but never skip the digest. Classification already
+            # covers every hydrated PR, so the digest stays complete and correct
+            # even when the label writes do not finish. Labelling is idempotent,
+            # so the next run simply converges the remainder.
+            deferred.append(n)
+            continue
+        note = " [manifest-exemption]" if n in exempted else ""
+        print(f"#{n}: {b}{note}")
+        row = prs_by_num.get(n) or {}
+        current = _triage_labels_of(row)
+        calls += apply_label(repo, n, b, current)
+        if n in exempted:
+            have = {(lb.get("name") if isinstance(lb, dict) else str(lb))
+                    for lb in (row.get("labels") or [])}
+            if "labels" not in row or MANIFEST_MARKER_LABEL not in have:
                 # Audit trail (FATHER directive 4): every merge taken under the
                 # exemption stays separable from an ordinary solid.
                 _gh("pr", "edit", str(n), "-R", repo,
                     "--add-label", MANIFEST_MARKER_LABEL)
-        else:
-            print(f"#{n}: (pending checks — no label this run)")
+                calls += 1
+
+    print(f"label writes: {calls} gh call(s) across {len(buckets)} PR(s), "
+          f"t={_elapsed():.1f}s", file=sys.stderr)
 
     digest = build_digest(prs_by_num, buckets, exempted)
+    if deferred:
+        msg = (f"{len(deferred)} PR(s) classified but NOT relabelled this run -- "
+               f"the {DEADLINE_SEC:.0f}s wall-clock budget was spent. The digest "
+               "is COMPLETE; only the label writes are behind, and they converge "
+               "on the next run.")
+        print(f"::warning title=pr-triage label writes deferred::{msg}",
+              file=sys.stderr)
+        print(f"  warn: {msg} deferred={sorted(deferred, reverse=True)}",
+              file=sys.stderr)
+        digest += ("\n\n> **Label writes deferred.** " + msg + " Deferred: "
+                   + ", ".join(f"#{x}" for x in sorted(deferred, reverse=True)))
     upsert_digest_issue(repo, digest)
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")

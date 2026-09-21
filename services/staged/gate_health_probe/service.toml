@@ -1,0 +1,8 @@
+[service]
+name = "gate_health_probe"
+import_path = "services.active.gate_health_probe.router"
+prefix = "/api"
+tag = "gate_health_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

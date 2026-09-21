@@ -1,0 +1,12 @@
+[service]
+name = "perspective_event_summary"
+import_path = "services.active.perspective_event_summary.router"
+prefix = "/api"
+tag = "perspective_event_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.test]
+command = "python -m services.active.perspective_event_summary"
+expected_output = "PASS"

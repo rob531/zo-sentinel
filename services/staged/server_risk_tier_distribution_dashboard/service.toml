@@ -1,0 +1,8 @@
+[service]
+name = "server_risk_tier_distribution_dashboard"
+import_path = "services.active.server_risk_tier_distribution_dashboard.router"
+prefix = "/api"
+tag = "server_risk_tier_distribution_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

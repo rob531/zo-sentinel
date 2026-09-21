@@ -1,0 +1,8 @@
+[service]
+name = "scoring_trend"
+import_path = "services.active.scoring_trend.router"
+prefix = "/api"
+tag = "scoring_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 import json
 
@@ -17,10 +17,10 @@ def get_mcp_score_disputes(db: Session = Depends(get_session)):
     return db.query(McpScoreDispute).all()
 
 def get_orgs(db: Session = Depends(get_session)):
-    return db.query(Orgs).all()
+    return db.query(Org).all()
 
 def get_users(db: Session = Depends(get_session)):
-    return db.query(Users).all()
+    return db.query(User).all()
 
 def query_mesh_memory(endpoint: str, params: dict):
     try:
@@ -35,7 +35,7 @@ def query_mesh_memory(endpoint: str, params: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
     app.dependency_overrides[get_session] = lambda: get_session()
 
     # Self-test
@@ -48,8 +48,8 @@ if __name__ == "__main__":
         assert McpServerRegistry
         assert McpLlmAxisScore
         assert McpScoreDispute
-        assert Orgs
-        assert Users
+        assert Org
+        assert User
 
         # Test mesh query
         test_params = {"query": "SELECT * FROM mesh_memory LIMIT 1"}

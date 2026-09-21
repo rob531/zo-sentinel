@@ -1,0 +1,12 @@
+[service]
+name = "mcp_risk_tier_detail_dashboard"
+import_path = "services.active.mcp_risk_tier_detail_dashboard.router"
+prefix = "/api"
+tag = "mcp_risk_tier_detail_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

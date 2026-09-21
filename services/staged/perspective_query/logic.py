@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, List, Optional
 from uuid import UUID
 from app.db import get_session
-from app.models import McpLlmAxisScore, McpServerRegistry, PerspectiveSnapshots
+from app.models import McpLlmAxisScore, McpServerRegistry, PerspectiveSnapshot
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -36,22 +36,22 @@ def get_perspective_query(
 ) -> Optional[PerspectiveQueryResponse]:
     # Query the database to get the required data
     query = session.query(
-        PerspectiveSnapshots.perspective_id,
+        PerspectiveSnapshot.perspective_id,
         McpServerRegistry.server_id,
         McpLlmAxisScore.axis_name,
         McpLlmAxisScore.label,
         McpLlmAxisScore.p_top,
         McpLlmAxisScore.p_critical,
         McpLlmAxisScore.p_danger,
-        PerspectiveSnapshots.overall_risk
+        PerspectiveSnapshot.overall_risk
     ).join(
-        McpServerRegistry, PerspectiveSnapshots.server_id == McpServerRegistry.server_id
+        McpServerRegistry, PerspectiveSnapshot.server_id == McpServerRegistry.server_id
     ).join(
         McpLlmAxisScore,
-        (PerspectiveSnapshots.perspective_id == McpLlmAxisScore.perspective_id) &
-        (PerspectiveSnapshots.server_id == McpLlmAxisScore.server_id)
+        (PerspectiveSnapshot.perspective_id == McpLlmAxisScore.perspective_id) &
+        (PerspectiveSnapshot.server_id == McpLlmAxisScore.server_id)
     ).filter(
-        PerspectiveSnapshots.perspective_id == perspective_id,
+        PerspectiveSnapshot.perspective_id == perspective_id,
         McpServerRegistry.server_id == server_id
     ).all()
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     test_session.add(test_server)
     test_session.commit()
 
-    test_perspective = PerspectiveSnapshots(
+    test_perspective = PerspectiveSnapshot(
         perspective_id=UUID("123e4567-e89b-12d3-a456-426614174000"),
         server_id="test_server",
         overall_risk=0.6

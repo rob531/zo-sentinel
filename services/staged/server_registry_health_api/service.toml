@@ -1,0 +1,22 @@
+[service]
+name = "server_registry_health_api"
+import_path = "services.active.server_registry_health_api.router"
+prefix = "/api"
+tag = "server_registry_health_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+internal = ["app"]
+
+[data_access]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute"]
+mesh_endpoint = "http://127.0.0.1:8772/query"
+
+[router]
+module = "services.active.server_registry_health_api.router"
+class = "router"
+
+[tests]
+self_test_module = "services.active.server_registry_health_api"

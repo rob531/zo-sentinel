@@ -1,39 +1,22 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from .logic import get_perspective_servers
+from .logic import get_perspective_snapshots
 
 router = APIRouter(prefix="/api")
 
 
-@router.get("/perspectives/{perspective_id}/servers")
-def perspective_servers(perspective_id: int, db: Session = Depends(get_session)):
-    """
-    Retrieve servers associated with a perspective, applying the perspective's facet filters
-    and returning server risk tier information.
-
-    Returns a JSON structure:
-    {
-        "perspective": {
-            "id": int,
-            "name": str,
-            "description": str,
-            "filters": dict
-        },
-        "servers": [
-            {
-                "server_id": int,
-                "name": str,
-                "risk_tier": str,
-                "change_type": str,
-                "change_date": str
-            },
-            ...
-        ]
-    }
-    """
-    return get_perspective_servers(perspective_id, db)
-
-
-__all__ = ["router"]
+@router.get("/perspectives/{perspective_id}/snapshots")
+def read_perspective_snapshots(
+    perspective_id: str,
+    limit: int = Query(100, ge=1),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+):
+    return get_perspective_snapshots(
+        perspective_id=perspective_id,
+        limit=limit,
+        offset=offset,
+        session=session,
+    )

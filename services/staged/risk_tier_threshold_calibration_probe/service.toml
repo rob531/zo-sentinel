@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_threshold_calibration_probe"
+import_path = "services.active.risk_tier_threshold_calibration_probe.router"
+prefix = "/api"
+tag = "risk_tier_threshold_calibration_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,12 @@
+[service]
+name = "pipeline_health_api"
+import_path = "services.active.pipeline_health_api.router"
+prefix = "/api"
+tag = "pipeline_health_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

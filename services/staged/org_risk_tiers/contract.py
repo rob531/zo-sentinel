@@ -26,7 +26,7 @@ def get_org_risk_tiers(org_id: str, days: int = 30, session: Session = Depends(g
         SELECT 
             r.risk_tier,
             COUNT(*) as count
-        FROM mcp_server_registry r
+        FROM McpServerRegistry r
         WHERE r.org_id = :org_id
           AND r.last_assessed >= datetime('now', '-' || :days || ' days')
         GROUP BY r.risk_tier
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     
     with engine.begin() as conn:
         conn.execute(text("""
-            CREATE TABLE mcp_server_registry (
+            CREATE TABLE McpServerRegistry (
                 server_id TEXT PRIMARY KEY,
                 org_id TEXT NOT NULL,
                 risk_tier TEXT NOT NULL,
@@ -59,7 +59,7 @@ if __name__ == "__main__":
             )
         """))
         conn.execute(text("""
-            CREATE TABLE mcp_llm_axis_scores (
+            CREATE TABLE McpLlmAxisScore (
                 server_id TEXT PRIMARY KEY,
                 axis_name TEXT NOT NULL,
                 p_top REAL NOT NULL,
@@ -79,10 +79,10 @@ if __name__ == "__main__":
         
         for server_id, org_id, risk_tier, last_assessed in servers:
             conn.execute(text(
-                "INSERT INTO mcp_server_registry (server_id, org_id, risk_tier, last_assessed) VALUES (:s, :o, :r, :l)"
+                "INSERT INTO McpServerRegistry (server_id, org_id, risk_tier, last_assessed) VALUES (:s, :o, :r, :l)"
             ), {"s": server_id, "o": org_id, "r": risk_tier, "l": last_assessed})
             conn.execute(text(
-                "INSERT INTO mcp_llm_axis_scores (server_id, axis_name, p_top, scored_at) VALUES (:s, :a, :p, :l)"
+                "INSERT INTO McpLlmAxisScore (server_id, axis_name, p_top, scored_at) VALUES (:s, :a, :p, :l)"
             ), {"s": server_id, "a": "test_axis", "p": 0.5, "l": last_assessed})
     
     TestingSession = sessionmaker(bind=engine)

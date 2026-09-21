@@ -1,0 +1,8 @@
+[service]
+name = "audit_log"
+import_path = "services.active.audit_log.router"
+prefix = "/api"
+tag = "audit_log"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,8 @@
+[service]
+name = "import_row_delta"
+import_path = "services.active.import_row_delta.router"
+prefix = "/api"
+tag = "import_row_delta"
+origin = "service"
+auth = "public"
+needs_data_layer = true

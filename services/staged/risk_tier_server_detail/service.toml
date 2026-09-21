@@ -1,0 +1,12 @@
+[service]
+name = "risk_tier_server_detail"
+import_path = "services.active.risk_tier_server_detail.router"
+prefix = "/api"
+tag = "risk_tier_server_detail"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.test]
+command = "python -m services.active.risk_tier_server_detail.router"
+expected_output = "PASS"

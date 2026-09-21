@@ -1,7 +1,19 @@
 #!/bin/zsh
-# watchdog.v3.10 - autonomous self-healer for ZOMesh
+# watchdog.v3.12 - autonomous self-healer for ZOMesh
 #
-# CHANGELOG vs v3.9 (this change, 2026-08-22, GH #3415 prevention 1 / FU-349):
+# CHANGELOG vs v3.10 (this change, 2026-08-25, MERGE_AUDIT_2026-08-23 B2):
+#   - ADD: _workspace_hygiene, invoked each tick. Asserts the build workspace
+#     at $SENTINEL is (a) exactly origin/main and (b) free of untracked files
+#     under app/. The 2026-08-14..16 stall was an untracked app/routers/__init__.py
+#     shadowing the committed PEP-420 namespace package -- it broke the
+#     media_assets spine mount and every local `import app.*` for three days
+#     while the checkout also sat 26 commits behind. No gate caught it because
+#     no gate looked: CI tests origin/main, the builder runs here. The audit's
+#     point is that the tree DRIFTS UNOBSERVED -- a diverged workspace makes
+#     every local gate result describe a tree that exists nowhere else. Logic in
+#     tools/workspace_hygiene_check.py per the v3.8 janitor precedent.
+#
+# CHANGELOG vs v3.9 (2026-08-22, GH #3415 prevention 1 / FU-349):
 #   - FIX: a restart was recorded as a repair the moment the relaunch command
 #     was issued. During the 2026-08-13..16 outage every restarted promoter
 #     died at package init in <3s and the watchdog faithfully 'repaired' it
@@ -146,6 +158,23 @@ _svc() {
         case $name in
             WriteService) nohup bash $MESH/write_service_wrapper.sh >> $LOGS/write_service.log 2>&1 & ;;
             InfRouter)    nohup python3 $MESH/inference_router_service.py >> $LOGS/inference_router.log 2>&1 & ;;
+            # svc-default-relaunch (2026-09-06, GH #4722): every other _svc entry is a
+            # $SENTINEL/<script>.py API launched by go.sh 12.10/12.10b. This branch was
+            # EMPTY before -- the watchdog pkill'd the service, relaunched nothing, and
+            # logged <name>_restart_FAILED every tick while registration_drift_check
+            # filed issues. Log names mirror go.sh so one service keeps one log.
+            *)  local _lg=${script%.py}
+                case $script in
+                    forensic_detail_api_v2.py) _lg=forensic_detail ;;
+                    bulk_assess_api.py)        _lg=bulk_assess ;;
+                    manual_override_api.py)    _lg=manual_override ;;
+                    approval_workflow.py)      _lg=approval ;;
+                esac
+                if [[ "$script" == *.py && -f "$SENTINEL/$script" ]]; then
+                    nohup python3 $SENTINEL/$script >> $LOGS/sentinel_${_lg}.log 2>&1 &
+                else
+                    log "$name: no launch recipe for $script -- NOT relaunched"
+                fi ;;
         esac
         sleep 3
         HEALTHY=false; ACTIONS+=("${name}_restart")
@@ -164,21 +193,47 @@ _bw_check() {
 
 # v3.4: pgrep + pkill anchored to "python.*<script>" so wrapper bash
 # processes don't count toward the duplicate count or get killed.
+# daemon-wrapper-aware (2026-09-06, GH #4722): two fixes, one function.
+#  (1) The count pattern is anchored to a python EXECUTABLE ("^python..."), so a
+#      `bash -c 'while true; do python3 ...'` launcher no longer counts as a
+#      duplicate of its own child (LoopWatch/GraphRefresh were "deduplicated" --
+#      i.e. killed and relaunched -- EVERY tick because of this).
+#  (2) If go.sh owns the daemon through daemon_wrapper.sh, the wrapper respawns
+#      it; this function must never launch a bare copy beside it. Before: kill
+#      -> wrapper respawns -> bare relaunch -> 2 copies -> next tick dedup ->
+#      forever (registration_drift_check + autopoiesis_bar_tracker SIGTERM'd
+#      every 15 min; the drift check filed the bar tracker as "missing" in the
+#      gap). Now: strays are killed, the wrapper's own child is kept.
 _daemon() {
     local script=$1 logfile=$2 name=$3 start_cmd=$4
-    local count=$(pgrep -c -f "python.*$script" 2>/dev/null)
+    local pat="^python[0-9.]* .*$script"
+    local count=$(pgrep -c -f "$pat" 2>/dev/null)
     count=${count:-0}
+    local wpid=$(pgrep -f "^bash [^ ]*daemon_wrapper.sh [^ ]* .*$script" 2>/dev/null | head -1)
+    if [[ -n "$wpid" ]]; then
+        if [[ "$count" -gt 1 ]]; then
+            local p
+            for p in $(pgrep -f "$pat" 2>/dev/null); do
+                [[ "$(ps -o ppid= -p $p 2>/dev/null | tr -d ' ')" == "$wpid" ]] || kill $p 2>/dev/null
+            done
+            log "$name duplicates ($count) -- killed strays; wrapper $wpid keeps its child"
+            HEALTHY=false; ACTIONS+=("${name}_dedup")
+        elif [[ "$count" -eq 0 ]]; then
+            log "$name down but daemon_wrapper $wpid is alive -- respawn is the wrapper's (backoff <=300s)"
+        fi
+        return
+    fi
     if [[ "$count" -eq 0 ]]; then
         log "$name down -- restarting"
         eval "nohup $start_cmd >> $LOGS/$logfile 2>&1 &"
         HEALTHY=false; ACTIONS+=("${name}_restart")
-        RESTART_VERIFY+=("python.*$script|$name")
+        RESTART_VERIFY+=("$pat|$name")
     elif [[ "$count" -gt 1 ]]; then
         log "$name duplicates ($count) -- deduplicating"
-        pkill -f "python.*$script" 2>/dev/null; sleep 2
+        pkill -f "$pat" 2>/dev/null; sleep 2
         eval "nohup $start_cmd >> $LOGS/$logfile 2>&1 &"
         HEALTHY=false; ACTIONS+=("${name}_dedup")
-        RESTART_VERIFY+=("python.*$script|$name")
+        RESTART_VERIFY+=("$pat|$name")
     fi
 }
 
@@ -245,6 +300,23 @@ _verify_restarts() {
     done
 }
 
+# MERGE_AUDIT_2026-08-23 B2: the build workspace is a mutable tree that no gate
+# observes. On 2026-08-14 it was 26 commits behind main and carried an untracked
+# app/routers/__init__.py that shadowed the committed namespace package, breaking
+# the media_assets spine mount and every local `import app.*` for three days. CI
+# never saw it -- CI tests origin/main; the builder and its self-tests run HERE.
+# A diverged workspace does not just carry defects, it makes every local gate
+# result describe a tree that exists nowhere else. Observed every tick now.
+# Logic lives in tools/ (the v3.8 janitor precedent) so this file stays minimal.
+_workspace_hygiene() {
+    local out
+    out=$(cd $SENTINEL && timeout 60 python3 tools/workspace_hygiene_check.py --quiet 2>&1)
+    if [[ $? -ne 0 ]]; then
+        log "build workspace hygiene FAIL -- ${out//$'\n'/ | }"
+        HEALTHY=false; ACTIONS+=("workspace_hygiene_FAIL")
+    fi
+}
+
 _compact_logs() {
     local max_bytes=$((5 * 1024 * 1024))   # 5 MB
     local keep_lines=10000
@@ -295,6 +367,12 @@ _daemon wisdom_synthesiser.py    wisdom_synthesiser.log   Wisdom          "pytho
 _daemon run_manager.py           manager.log              Manager         "python3 $MESH/run_manager.py daemon"
 _daemon goose_runner.py          goose_runner.log         GooseRunner     "env ZO_ESCALATE=1 python3 $SENTINEL/goose_runner.py"
 _daemon proposed_to_pending_promoter proposed_to_pending_promoter.log PromoterP2P "bash -c 'cd $SENTINEL && exec python3 -m zo_sentinel.promoters.proposed_to_pending_promoter'"
+# Rotator: owns intent_engine_daemon (06:00-21:59 ET) and he_who_comes_next
+# the other eight hours. It was UNDECLARED until 2026-09-15, so the 05:59Z
+# reboot killed it and nothing restarted it -- orphaning BOTH children and
+# filing chairman issue #5103. _daemon defers to the wrapper when one is
+# alive, so this never races the running copy.
+_daemon intent_rotation_service.py intent_rotation_service.log IntentRotation "bash $MESH/daemon_wrapper.sh intent_rotation_service $MESH/intent_rotation_service.py"
 
 # v3.8: build->publish pipeline janitor -- ghost .done sweep + heal the
 # publisher/ingestor/governor `python3 -m` loops when they crash-loop on the
@@ -334,6 +412,7 @@ BYOK=$(grep -rl 'model_name.*byok:' /home/workspace/Skills/ --include='*.ts' --i
 [[ -n "$BYOK" ]] && { log "BYOK ALERT: $BYOK"; HEALTHY=false; ACTIONS+=("byok_alert"); }
 
 _verify_restarts
+_workspace_hygiene
 _compact_logs
 _self_heartbeat
 

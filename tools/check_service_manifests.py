@@ -33,6 +33,8 @@ Exit 0 = every manifest is promotable-shaped. Exit 1 = at least one is not.
 USAGE
     python tools/check_service_manifests.py            # gate the whole repo
     python tools/check_service_manifests.py --fix      # reshape in place
+    python tools/check_service_manifests.py --adopt    # write a manifest for an
+                                                       # orphan service directory
     python tools/check_service_manifests.py path/...   # gate specific files
 """
 from __future__ import annotations
@@ -62,6 +64,19 @@ REQUIRED_PRESENT = ("prefix", "tag")
 REQUIRED_KEYS = REQUIRED_NONEMPTY + REQUIRED_PRESENT
 OPTIONAL_KEYS = ("origin", "auth", "needs_data_layer")
 MANIFEST_GLOB = "services/*/*/service.toml"
+
+# A service directory with CODE but NO manifest is INVISIBLE to MANIFEST_GLOB --
+# there is no file to classify, so absence reads as OK. That is the R6 hole in this
+# gate: `unknown != zero`. Measured on main 2026-09-15: 24 staged services carried a
+# router.py and no service.toml, every one of them unpromotable forever, none of them
+# ever red on any gate. ORPHAN_GLOB finds the directories; --adopt gives them the
+# canonical manifest via the same render() the --fix path uses, so there stays one
+# template and one truth.
+ORPHAN_GLOB = "services/*/*"
+# What makes a directory a SERVICE rather than a stray folder: it carries a module
+# the promoter could import. Deliberately narrow -- adopting a directory that is not
+# a service would mint a manifest for something nothing can mount.
+SERVICE_CODE = ("router.py",)
 
 # Values the builder emits as Python rather than TOML.
 _PY_BOOL = {"True": "true", "False": "false"}
@@ -208,10 +223,57 @@ def render(meta: dict, name_hint: str) -> str:
     )
 
 
+def find_orphans(root: str) -> list[str]:
+    """Service directories carrying SERVICE_CODE but no service.toml.
+
+    Returns repo-relative directory paths, sorted. These are the ones the gate
+    cannot see: it classifies manifests, and these have none.
+    """
+    out = []
+    for d in sorted(glob.glob(os.path.join(root, ORPHAN_GLOB))):
+        if not os.path.isdir(d):
+            continue
+        if os.path.exists(os.path.join(d, "service.toml")):
+            continue
+        if not any(os.path.exists(os.path.join(d, f)) for f in SERVICE_CODE):
+            continue
+        if not IDENT_RE.match(os.path.basename(d)):
+            continue
+        out.append(os.path.relpath(d, root).replace(os.sep, "/"))
+    return out
+
+
+def adopt(root: str, dirs: list[str]) -> list[str]:
+    """Write the canonical manifest for each orphan directory. Idempotent."""
+    written = []
+    for rel in dirs:
+        d = os.path.join(root, rel.replace("/", os.sep))
+        p = os.path.join(d, "service.toml")
+        if os.path.exists(p):
+            continue
+        name = os.path.basename(d)
+        with open(p, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(render({}, name))
+        verdict, detail = classify(p)
+        if verdict != "OK":  # pragma: no cover - render() is proven at both poles
+            os.remove(p)
+            raise SystemExit(
+                "adopt produced a %s manifest for %s (%s); refusing to write it"
+                % (verdict, rel, detail)
+            )
+        written.append(rel + "/service.toml")
+    return written
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="service manifest shape gate")
     ap.add_argument("paths", nargs="*", help="manifests to check (default: whole repo)")
     ap.add_argument("--fix", action="store_true", help="reshape malformed manifests in place")
+    ap.add_argument(
+        "--adopt",
+        action="store_true",
+        help="write the canonical manifest for any service dir that has code but none",
+    )
     args = ap.parse_args(argv)
 
     root = _repo_root()
@@ -248,10 +310,24 @@ def main(argv=None) -> int:
     for rel, verdict, detail in bad:
         print("%-12s %s :: %s" % (verdict, rel, detail))
 
+    # REPORT-ONLY. Orphans are pre-existing debt; failing the build on the LEVEL
+    # would red every PR for a condition none of them introduced -- the same
+    # reasoning that put the reachability ratchet on the derivative. Reported so the
+    # number has a reader from day one, and curable in one command via --adopt.
+    orphans = find_orphans(root) if not args.paths else []
+    adopted = adopt(root, orphans) if (orphans and args.adopt) else []
+    for rel in adopted:
+        print("ADOPTED      %s" % rel)
+    remaining = [o for o in orphans if o + "/service.toml" not in adopted]
+    for rel in remaining:
+        print("ORPHAN-DIR   %s :: has %s, no service.toml -- unpromotable (run --adopt)"
+              % (rel, "/".join(SERVICE_CODE)))
+
     total = len(paths)
     print(
-        "\n%d manifest(s) checked | %d ok | %d fixed | %d BAD"
-        % (total, total - len(bad) - len(fixed), len(fixed), len(bad))
+        "\n%d manifest(s) checked | %d ok | %d fixed | %d BAD | %d adopted | %d orphan dir(s)"
+        % (total, total - len(bad) - len(fixed), len(fixed), len(bad),
+           len(adopted), len(remaining))
     )
     if bad:
         print(

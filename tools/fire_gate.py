@@ -19,8 +19,11 @@ This script answers the real question mechanically, and derives the answer FROM 
 DOCKERFILE AT THE STAGED SHA rather than from a hardcoded list, so it cannot go stale
 when the COPY list changes.
 
-  exit 0  SAFE   -- no path in the delta can reach the image; fire the later sha.
-  exit 1  RESTAGE -- the delta touches the image surface; let the sentinel re-verify.
+  exit 0  SAFE   -- no path in the delta can reach the image AND the target sha is
+                    not CI-red; fire the later sha.
+  exit 1  RESTAGE -- the delta touches the image surface, OR the target sha is CI-RED
+                    on the required contexts (sha_green.py); let the sentinel
+                    re-verify. A CI-UNKNOWN target never produces this on its own.
   exit 2  ERROR  -- could not establish the answer. Never treat as SAFE.
                     (A probe that cannot evaluate is not a green.)
 
@@ -34,6 +37,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import pathlib
 import re
 import subprocess
 import sys
@@ -47,6 +51,9 @@ import sys
 #                     so a change here is intent-drift even before the generated file moves.
 #                     This is the FU-102/v64 class (7 modules imported, none COPYed).
 ALWAYS_SENSITIVE = ("Dockerfile", ".dockerignore", "fly.toml", "services/active/")
+
+_SHA40 = re.compile(r"[0-9a-f]{40}")
+_LOCAL_REMOTE_PREFIXES = ("origin", "upstream")
 
 # Explicitly NOT sensitive: services/staged/ is the builder's scratch surface. Nothing
 # there is copied and nothing there is imported until a promotion moves it to active.
@@ -124,10 +131,131 @@ def classify(path: str, files: set[str], prefixes: set[str]) -> str | None:
     return None
 
 
-def changed_files(repo: str, staged: str, target: str) -> tuple[list[str], int, str]:
-    out = _gh(["api", f"repos/{repo}/compare/{staged}...{target}", "--paginate"])
-    # --paginate concatenates JSON documents; take the first and merge file lists.
-    decoder, idx, files, total, head = json.JSONDecoder(), 0, [], 0, ""
+# GitHub caps compare responses at 300 files. Past that the `files` array is SILENTLY
+# TRUNCATED -- the response still looks well-formed and still returns 200. A surface
+# audit computed from a truncated file list would return SAFE while never having seen
+# the path that mattered, and its exit code is indistinguishable from a real SAFE. So
+# a truncated API answer is never a verdict. (2026-07-29, FU-160.)
+#
+# THAT GUARD FIRED FOR REAL on 2026-08-01T10:52Z: staged ae71dafd vs main 0905b4d4 was
+# 325 files, of which the API showed 300. The cap truncates in SORTED order, so the 25
+# it hid were the alphabetic tail -- `threat_intel_ingestor.py`, `tools/*`, `zo_sentinel/*`.
+#
+# Read the outcome carefully, because it is the opposite of the intuitive one. Audited
+# uncapped, all 325 are OFF the COPY surface and the verdict is SAFE -- the SAME verdict
+# the truncated list would have produced. So the guard did not save a wrong answer this
+# time. It is still right, and this is the whole point: the truncated read would have
+# been correct BY LUCK, and nothing in its output distinguishes lucky from sound. The
+# hidden 25 sit in the alphabetic tail, which is exactly where a new root-level module
+# would land -- `threat_intel_ingestor.py` LOOKS copyable and simply is not in this
+# Dockerfile's 45-file COPY list. Next time the tail could hold one that is.
+#
+# But erroring is a RESTRICTION, and the question is answerable: `git diff --name-only
+# A...B` in a local clone has no cap and uses the same three-dot merge-base semantics
+# as the compare API. So the cap is now a SOURCE SWITCH, not a dead end (R7, prefer
+# RECOVERY over RESTRICTION):
+#
+#     API answers  -> use it        (files_source="github-compare")
+#     API capped   -> use local git (files_source="local-git")
+#     both fail    -> ERROR exit 2  (unchanged; a probe that cannot evaluate is not a green)
+#
+# The ERROR path is deliberately KEPT REACHABLE -- when no local clone holds both
+# objects there is still no answer, and inventing one is the failure this guards.
+# Every verdict now NAMES which source answered, in both output modes, so a future
+# widening of the fallback can never be mistaken for a silencing (FU-218's lesson:
+# an audit must say which store answered).
+COMPARE_FILES_CAP = 300
+
+
+def resolve_head(repo: str, target: str) -> str:
+    """Resolve --target to a concrete 40-char sha BEFORE comparing against it.
+
+    Resolving first, then comparing against the resolved sha, closes two defects:
+
+      * STALE REPORTED HEAD. The previous implementation read the head off the LAST
+        COMMIT OF PAGE ONE of the paginated compare. Compare pages commits 100 at a
+        time, so any delta over 100 commits reported the 100th commit as "the target
+        head". Measured 2026-07-29T04:4xZ on a 124-commit delta: page 1 ended at
+        c1d9917e (01:20Z) while main was actually 77fd0b1b (02:38Z). The VERDICT was
+        unaffected -- the files union across pages is complete -- but every artifact
+        recording "target main @ <sha>" recorded a commit that was not the head, and
+        that sha is the evidence a human reads before firing prod.
+      * TOCTOU. Naming and judging the same sha means the verdict still refers to a
+        real tree even if main advances mid-run.
+    """
+    attempts = [target]
+    if not _SHA40.fullmatch(target) and "/" in target:
+        remote, _, branch = target.partition("/")
+        if branch and remote in _LOCAL_REMOTE_PREFIXES:
+            attempts.append(branch)
+
+    last: Exception | None = None
+    for attempt in attempts:
+        try:
+            sha = _gh(["api", f"repos/{repo}/commits/{attempt}", "--jq", ".sha"]).strip()
+        except Exception as exc:  # noqa: BLE001 -- retried below, re-raised if last
+            last = exc
+            continue
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            if attempt != target:
+                print(
+                    f"note     : --target {target!r} is a LOCAL remote-tracking ref; "
+                    f"GitHub knows the branch as {attempt!r}. Resolved against {attempt!r}.",
+                    file=sys.stderr,
+                )
+            return sha
+        last = RuntimeError(
+            f"could not resolve --target {attempt!r} to a sha (got {sha!r})"
+        )
+
+    raise last if last else RuntimeError(f"could not resolve --target {target!r}")
+
+
+def _git(repo_path: str, args: list[str]) -> str:
+    proc = subprocess.run(
+        ["git", "-C", repo_path, *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git -C {repo_path} {' '.join(args)} failed rc={proc.returncode}: "
+            f"{proc.stderr.strip()[:400]}"
+        )
+    return proc.stdout
+
+
+def _default_repo_path() -> str:
+    """The clone this script itself lives in -- tools/fire_gate.py -> repo root."""
+    return str(pathlib.Path(__file__).resolve().parent.parent)
+
+
+def changed_files_git(repo_path: str, staged: str, target_sha: str) -> tuple[list[str], int]:
+    """Uncapped file list from a local clone.
+
+    `git diff --name-only A...B` is THREE-DOT (diff against the merge base), which is
+    the same semantics GitHub's `compare/A...B` uses -- so this is a drop-in answer to
+    the same question, not a different one. Two-dot would silently answer a different
+    question whenever the branches had diverged.
+
+    Both objects must already be present. This deliberately does NOT fetch: a gate that
+    mutates the tree it is reading is how a shared worktree gets re-pointed underneath a
+    sibling lane. If an object is missing, that is an ERROR for the caller to resolve.
+    """
+    for sha in (staged, target_sha):
+        _git(repo_path, ["cat-file", "-e", f"{sha}^{{commit}}"])
+    out = _git(repo_path, ["diff", "--name-only", f"{staged}...{target_sha}"])
+    uniq = sorted({ln.strip() for ln in out.splitlines() if ln.strip()})
+    n = _git(repo_path, ["rev-list", "--count", f"{staged}..{target_sha}"]).strip()
+    return uniq, int(n or 0)
+
+
+def changed_files(
+    repo: str, staged: str, target_sha: str, repo_path: str | None = None
+) -> tuple[list[str], int, str]:
+    """Returns (files, commit_count, source). `source` is part of the verdict."""
+    out = _gh(["api", f"repos/{repo}/compare/{staged}...{target_sha}", "--paginate"])
+    # --paginate concatenates JSON documents; merge the file lists across ALL of them.
+    decoder, idx, files, total = json.JSONDecoder(), 0, [], 0
     while idx < len(out):
         while idx < len(out) and out[idx].isspace():
             idx += 1
@@ -135,9 +263,208 @@ def changed_files(repo: str, staged: str, target: str) -> tuple[list[str], int, 
             break
         doc, idx = decoder.raw_decode(out, idx)
         total = doc.get("total_commits", total) or total
-        head = head or (doc.get("commits") or [{}])[-1].get("sha", "")
         files.extend(f["filename"] for f in doc.get("files") or [])
-    return sorted(set(files)), total, head
+    uniq = sorted(set(files))
+    if len(uniq) < COMPARE_FILES_CAP:
+        return uniq, total, "github-compare"
+
+    # Capped -> the API cannot answer. Measured 2026-08-01: paging the compare endpoint
+    # does NOT lift this. per_page=100 returned 300 files on page 1 and a degenerate
+    # 1-file array on pages 2..6, for a distinct total of exactly 300 against a true
+    # 325. So pagination is not the fix; a local clone is.
+    capped_msg = (
+        f"compare returned {len(uniq)} files, at or over the GitHub cap of "
+        f"{COMPARE_FILES_CAP} -- the API file list is truncated"
+    )
+    path = repo_path or _default_repo_path()
+    try:
+        g_files, g_total = changed_files_git(path, staged, target_sha)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"{capped_msg}, and the local fallback at {path} could not answer either "
+            f"({exc}). The image surface cannot be audited. Re-stage at a newer sha "
+            f"rather than firing."
+        ) from exc
+    if len(g_files) < len(uniq):
+        # A fallback that sees LESS than the truncated API answer is not a fallback.
+        raise RuntimeError(
+            f"{capped_msg}, and the local clone at {path} returned only "
+            f"{len(g_files)} files -- fewer than the truncated API list. Refusing to "
+            f"audit on the smaller of two incomplete answers."
+        )
+    return g_files, g_total or total, f"local-git ({path})"
+
+
+# --------------------------------------------------------------------------- CI
+# THE TARGET SHA'S CI VERDICT. Until 2026-08-05 this question was asked in PROSE
+# only: ops/host/deploy_prod.ps1 `.PARAMETER Sha` says "Must be a CI-green
+# origin/main commit", and nothing anywhere executed that sentence. `sha_green.py`
+# was written for precisely this question after the 2026-07-30T19:2xZ incident in
+# which the ad-hoc greenness query was pointed at /commits/<sha>/status -- a
+# surface on which all 7 required contexts read ABSENT, with nothing erroring --
+# and then it sat at 20,406 bytes with ZERO callers until the improvement loop's
+# dark-tool census selected it (cycle-0006). A precondition that lives only in a
+# docstring is exactly the failure this apparatus exists to remove.
+#
+# This is NOT a new gate. It is the EXISTING precondition, moved out of a sentence
+# and into the code that computes the fire decision. And it is deliberately
+# ASYMMETRIC, because a symmetric one would be a gate that can stall the pipe:
+#
+#   sha_green RED (rc=1)     -> RESTAGE. Firing a CI-red sha was never permitted,
+#                               by any reading, so this forecloses nothing that was
+#                               previously allowed.
+#   sha_green UNKNOWN (rc=2) -> VERDICT UNCHANGED, reported loudly. Unknown is not
+#                               red (R6). An instrument that cannot answer must not
+#                               convert into a blocker (R7) -- that is how gates
+#                               that "can only go red" get built, and this repo has
+#                               paid for several.
+#   sha_green unavailable    -> identical to UNKNOWN. Never a block, never a silent
+#                               pass, and it always says which of the two it was.
+#
+# --no-ci exists so the delta question stays answerable when GitHub is unreachable:
+# recovery over restriction. It prints that it was used; a skip is never a pass.
+
+
+def target_ci(repo: str, sha: str, branch: str = "main") -> dict:
+    """Ask sha_green whether `sha` is green on the REQUIRED contexts.
+
+    Never raises: an exception here would turn an advisory signal into an outage of
+    the delta check, which is the opposite of the point.
+    """
+    try:
+        here = str(pathlib.Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        from sha_green import judge, resolve_required
+        resolve_required(repo, branch)
+        res = judge(repo, sha)
+        return {"verdict": res["verdict"], "rc": res["rc"],
+                "detail": str(res.get("detail", ""))[:400], "source": "sha_green.judge"}
+    except Exception as exc:  # noqa: BLE001
+        return {"verdict": "UNKNOWN", "rc": 2,
+                "detail": f"sha_green could not be consulted: {exc}",
+                "source": "unavailable"}
+
+
+def apply_ci(verdict: str, ci: dict) -> tuple[str, bool]:
+    """Fold the CI verdict into the delta verdict. Pure, so it is testable without
+    a network, and so the asymmetry above is one readable expression rather than a
+    condition scattered through main()."""
+    if verdict == "SAFE" and ci.get("rc") == 1:
+        return "RESTAGE", True
+    return verdict, False
+
+
+
+# ------------------------------------------------------------------ OWNERSHIP
+# WHO RUNS THE MIGRATION, not what shape it is. `migration_content_class` grades the
+# SQL SHAPE and prints ADVISORY ONLY on its own output; it has no idea which role
+# executes the statement. Those are two different questions:
+#
+#     content class  = is this change SAFE?      (shape)
+#     owner  probe   = is this change PERMITTED? (grantee)
+#
+# fly.toml overrides DATABASE_URL with $OWNER_DATABASE_URL for the release command
+# (role `mcplookup`, since FU-235 option (D) / #2775). A migration targeting a table
+# that role does not own makes `release_command = "alembic upgrade head"` abort with
+# `must be owner of table ...` -- the v61/v67 failure mode, on a candidate every
+# other gate calls green. Nothing in the 8 verification gates, in this file, or in
+# accept_gate asked that question before 2026-09-15.
+#
+# `migration_owner_probe.py` was built 2026-09-14 to answer it and then sat at
+# 19,293 bytes with ZERO callers: `rule_echo --blast migration_owner_probe` returned
+# the tool's own file and one task prompt. That is the SAME situation `sha_green.py`
+# was in above -- 20,406 bytes, zero callers, selected by a dark-tool census -- one
+# tool later. A precondition reachable only from a paragraph is not a precondition,
+# and this lane has now written that sentence about itself twice.
+#
+# ASYMMETRIC, for the same reasons spelled out for CI above:
+#
+#   owner RED (rc=1)      -> RESTAGE. Firing a migration the release role cannot run
+#                            was never permitted -- the release command aborts and
+#                            takes the deploy with it -- so this forecloses nothing
+#                            that previously worked.
+#   owner UNKNOWN (rc=2)  -> VERDICT UNCHANGED, reported loudly. Unknown is not red
+#                            (R6). An instrument that cannot reach the DB must not
+#                            convert into a blocker (R7).
+#   probe unavailable     -> identical to UNKNOWN. Never a block, never a silent
+#                            pass, and it always says which of the two it was.
+#   no migration in delta -> NOT ENGAGED, and said so explicitly. A Class A delta has
+#                            no input to this question, so the verdict path is
+#                            byte-identical to before this block existed. A skip is
+#                            never a pass (R3).
+#
+# --no-owner-probe exists so the delta question stays answerable when the DB or Fly
+# is unreachable: recovery over restriction. It prints that it was used.
+
+# The probe is tower-local (`_tools\` is not a git repo), so it is resolved by path
+# and invoked as a subprocess rather than imported. Absent -> UNKNOWN, never a pass.
+OWNER_PROBE_PATHS = (
+    pathlib.Path(r"D:\zo\Zocomputer Agents\_tools\migration_owner_probe.py"),
+    pathlib.Path(__file__).resolve().parent / "migration_owner_probe.py",
+)
+
+
+def migration_paths_in_delta(changed: list[str]) -> list[str]:
+    """Which delta paths are migration revisions. Engagement condition for the probe."""
+    out = []
+    for p in changed:
+        q = p.replace("\\", "/")
+        if q.startswith("migrations/versions/") and q.endswith(".py"):
+            out.append(p)
+    return out
+
+
+def resolve_owner_probe() -> pathlib.Path | None:
+    for cand in OWNER_PROBE_PATHS:
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def migration_owner(repo_path: str, prod_sha: str, cand_sha: str,
+                    changed: list[str]) -> dict:
+    """Ask migration_owner_probe whether the RELEASE ROLE may run the delta's migrations.
+
+    Never raises: an exception here would turn an advisory signal into an outage of
+    the delta check, which is the opposite of the point.
+    """
+    migs = migration_paths_in_delta(changed)
+    if not migs:
+        return {"verdict": "NOT-ENGAGED", "rc": None, "source": "no-migration-in-delta",
+                "detail": "no migrations/versions/*.py in the delta, so the release "
+                          "role has nothing new to execute", "migrations": []}
+    probe = resolve_owner_probe()
+    if probe is None:
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": "migration_owner_probe.py not found at any known path",
+                "migrations": migs}
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(probe), "--repo", repo_path,
+             "--prod-sha", prod_sha, "--candidate-sha", cand_sha, "--json"],
+            capture_output=True, text=True, timeout=180,
+        )
+        rc = proc.returncode
+        verdict = {0: "GREEN", 1: "RED", 2: "UNKNOWN"}.get(rc, "UNKNOWN")
+        tail = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return {"verdict": verdict, "rc": rc if rc in (0, 1, 2) else 2,
+                "source": str(probe), "detail": tail[-600:], "migrations": migs}
+    except Exception as exc:  # noqa: BLE001
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": f"migration_owner_probe could not be consulted: {exc}",
+                "migrations": migs}
+
+
+def apply_owner(verdict: str, owner: dict) -> tuple[str, bool]:
+    """Fold the ownership verdict into the delta verdict. Pure, so it is testable
+    without a database, and so the asymmetry above is one readable expression."""
+    if verdict == "SAFE" and owner.get("rc") == 1:
+        return "RESTAGE", True
+    return verdict, False
 
 
 def main() -> int:
@@ -146,6 +473,19 @@ def main() -> int:
     ap.add_argument("--target", default="main")
     ap.add_argument("--repo", default="rob531/zo-sentinel")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-ci", action="store_true", dest="no_ci",
+                    help="skip the target sha's CI verdict (sha_green). The\n"
+                         "delta question stays answerable when GitHub is\n"
+                         "unreachable; the output always says the check was skipped.")
+    ap.add_argument("--no-owner-probe", action="store_true", dest="no_owner",
+                    help="skip the migration OWNERSHIP probe. The delta question\n"
+                         "stays answerable when the prod DB is unreachable; the\n"
+                         "output always says the check was skipped.")
+    ap.add_argument(
+        "--repo-path", default=None, dest="repo_path",
+        help="local clone used ONLY when the compare API caps out; "
+             "defaults to the clone this script lives in",
+    )
     a = ap.parse_args()
 
     try:
@@ -154,7 +494,8 @@ def main() -> int:
         if not srcs:
             raise RuntimeError("parsed ZERO COPY sources -- refusing to call anything safe")
         files, prefixes = build_surface(srcs)
-        changed, ncommits, head = changed_files(a.repo, a.staged, a.target)
+        head = resolve_head(a.repo, a.target)
+        changed, ncommits, src = changed_files(a.repo, a.staged, head, a.repo_path)
     except Exception as exc:  # noqa: BLE001
         print(f"FIRE-GATE ERROR: {exc}", file=sys.stderr)
         print("verdict=ERROR -- do NOT read this as SAFE; re-run or let the sentinel re-verify.")
@@ -163,30 +504,90 @@ def main() -> int:
     hits = [(p, why) for p in changed if (why := classify(p, files, prefixes))]
     verdict = "RESTAGE" if hits else "SAFE"
 
+    if a.no_ci:
+        ci = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
+              "detail": "--no-ci: the target sha's CI state was NOT consulted"}
+    else:
+        ci = target_ci(a.repo, head, a.target if not _SHA40.fullmatch(a.target)
+                       else "main")
+    verdict, ci_forced = apply_ci(verdict, ci)
+
+    if a.no_owner:
+        owner = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
+                 "detail": "--no-owner-probe: migration ownership was NOT consulted",
+                 "migrations": migration_paths_in_delta(changed)}
+    else:
+        # The probe's --repo is a local clone PATH, not an owner/name slug. Passing
+        # the slug yielded rc=128 and, before the probe was fixed, a false GREEN.
+        owner_repo_path = a.repo_path or _default_repo_path()
+        owner = migration_owner(owner_repo_path, a.staged, head, changed)
+    verdict, owner_forced = apply_owner(verdict, owner)
+
     if a.json:
         print(json.dumps({
             "verdict": verdict, "staged": a.staged, "target": a.target,
             "target_head": head, "commits_in_delta": ncommits,
-            "files_in_delta": len(changed),
+            "files_in_delta": len(changed), "files_source": src,
             "image_surface_hits": [{"path": p, "why": w} for p, w in hits],
             "copy_files": sorted(files), "copy_prefixes": sorted(prefixes),
+            "target_ci": ci, "restaged_by_ci": ci_forced,
+            "migration_owner": owner, "restaged_by_owner": owner_forced,
         }, indent=2))
     else:
         print(f"staged   : {a.staged}")
-        print(f"target   : {a.target} @ {head or '(no new commits)'}")
+        print(f"target   : {a.target} @ {head}")
         print(f"delta    : {ncommits} commits, {len(changed)} files")
+        print(f"filesrc  : {src}")
         print(f"surface  : {len(files)} COPYed files + {len(prefixes)} COPYed dirs "
               f"+ {len(ALWAYS_SENSITIVE)} contract paths")
+        print(f"target CI: {ci['verdict']} (rc={ci['rc']}) via {ci['source']}")
+        if ci["verdict"] not in ("GREEN", "SKIPPED"):
+            print(f"           {ci['detail'][:200]}")
+        if ci["verdict"] == "UNKNOWN":
+            print("           UNKNOWN IS NOT RED and it is not green: the CI state\n"
+                  "           could not be established, so it has NOT changed the\n"
+                  "           verdict below. Establish it before firing.")
+        print(f"mig owner: {owner['verdict']}"
+              + (f" (rc={owner['rc']})" if owner['rc'] is not None else "")
+              + f" via {owner['source']}")
+        if owner["verdict"] not in ("GREEN", "NOT-ENGAGED"):
+            print(f"           {owner['detail'][:200]}")
+        if owner["verdict"] == "UNKNOWN":
+            print("           UNKNOWN IS NOT RED and it is not green: whether the\n"
+                  "           release role may run this delta's migrations could not\n"
+                  "           be established, so it has NOT changed the verdict\n"
+                  "           below. Establish it before firing -- a release_command\n"
+                  "           that aborts takes the whole deploy with it.")
+        if a.staged == head:
+            print("note     : staged == target head, so the delta is empty BY\n"
+                  "           CONSTRUCTION and a SAFE below is tautological -- the\n"
+                  "           CI line above is the only real signal in this run.")
         if hits:
             print(f"\nVERDICT: RESTAGE -- {len(hits)} path(s) in the delta reach the image:")
             for p, w in hits:
                 print(f"  - {p}   [{w}]")
             print("\nThe staged evidence does NOT cover these. Let the next prod-drift-sentinel")
             print("run re-verify, or fire the ORIGINAL staged sha, which is still vetted.")
+        elif owner_forced:
+            print("\nVERDICT: RESTAGE -- the delta is image-inert and CI-green, but a\n"
+                  "MIGRATION IN IT TARGETS A TABLE THE RELEASE ROLE DOES NOT OWN.\n"
+                  "fly.toml runs `alembic upgrade head` as release_command under\n"
+                  "$OWNER_DATABASE_URL; it will abort with `must be owner of table`\n"
+                  "and fail the release (the v61/v67 class). Fire the ORIGINAL staged\n"
+                  "sha, which is still vetted, or fix the grant first. Detail:")
+            print("  " + owner["detail"][:400].replace("\n", "\n  "))
+        elif ci_forced:
+            print("\nVERDICT: RESTAGE -- the delta is image-inert, but the TARGET SHA\n"
+                  "IS CI-RED on the required contexts. A byte-equivalent image built\n"
+                  "from a red sha is still a red sha; deploy_prod.ps1 has always\n"
+                  "required a CI-green commit. Fire the ORIGINAL staged sha, which is\n"
+                  "still vetted, or wait for main to go green.")
         else:
             print("\nVERDICT: SAFE -- nothing in the delta can reach the image.")
             print(f"Firing {a.target} builds a byte-equivalent image to the staged one.")
-    return 1 if hits else 0
+            if ci["verdict"] == "GREEN":
+                print("The target sha is also CI-GREEN on the required contexts.")
+    return 1 if verdict == "RESTAGE" else 0
 
 
 if __name__ == "__main__":

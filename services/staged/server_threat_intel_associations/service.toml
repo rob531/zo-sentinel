@@ -1,0 +1,8 @@
+[service]
+name = "server_threat_intel_associations"
+import_path = "services.active.server_threat_intel_associations.router"
+prefix = "/api"
+tag = "server_threat_intel_associations"
+origin = "service"
+auth = "public"
+needs_data_layer = true

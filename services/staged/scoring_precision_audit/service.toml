@@ -1,12 +1,8 @@
-service = {
-    "name": "scoring_precision_audit",
-    "import_path": "services.active.scoring_precision_audit.router",
-    "prefix": "/api",
-    "tag": "scoring_precision_audit",
-    "origin": "service",
-    "auth": "public",
-    "needs_data_layer": True,
-}
-
-if __name__ == "__main__":
-    print("PASS")
+[service]
+name = "scoring_precision_audit"
+import_path = "services.active.scoring_precision_audit.router"
+prefix = "/api"
+tag = "scoring_precision_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,8 @@
+[service]
+name = "ghsa_feed_ingestor"
+import_path = "services.active.ghsa_feed_ingestor.router"
+prefix = "/api"
+tag = "ghsa_feed_ingestor"
+origin = "service"
+auth = "public"
+needs_data_layer = true

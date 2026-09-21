@@ -1,0 +1,11 @@
+[service]
+name = "verdict_watchlist_v2"
+import_path = "services.active.verdict_watchlist_v2.router"
+prefix = "/api"
+tag = "verdict_watchlist_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true

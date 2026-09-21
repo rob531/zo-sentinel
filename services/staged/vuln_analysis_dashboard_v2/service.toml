@@ -1,0 +1,12 @@
+[service]
+name = "vuln_analysis_dashboard_v2"
+import_path = "services.active.vuln_analysis_dashboard_v2.router"
+prefix = "/api"
+tag = "vuln_analysis_dashboard_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.vuln_analysis_dashboard_v2.router"
+expected_output = "PASS"

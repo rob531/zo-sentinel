@@ -1,0 +1,12 @@
+[service]
+name = "axis_change_attribution"
+import_path = "services.active.axis_change_attribution.router"
+prefix = "/api"
+tag = "axis_change_attribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[service.dependencies]
+app_db = "app.db"
+app_models = "app.models"

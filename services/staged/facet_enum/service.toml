@@ -1,0 +1,8 @@
+[service]
+        name = "facet_enum"
+        import_path = "services.active.facet_enum.router"
+        prefix = "/api"
+        tag = "facet_enum"
+        origin = "service"
+        auth = "public"
+        needs_data_layer = true

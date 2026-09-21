@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 import requests
 
 def get_mesh_memory() -> Dict[str, Any]:
@@ -35,15 +35,17 @@ def get_app_data(session: Session = Depends(get_session)) -> Dict[str, Any]:
         "servers": session.query(McpServerRegistry).all(),
         "scores": session.query(McpLlmAxisScore).all(),
         "disputes": session.query(McpScoreDispute).all(),
-        "orgs": session.query(Orgs).all(),
-        "users": session.query(Users).all()
+        "orgs": session.query(Org).all(),
+        "users": session.query(User).all()
     }
     return data
 
 if __name__ == "__main__":
     from app.db import get_session
-    from app.dependency_overrides import override_dependencies_for_testing
-    override_dependencies_for_testing()
+    # FU-369: removed an import of `override_dependencies_for_testing` from a module that does
+    # not exist in this tree, together with its call below. The call
+    # installed nothing this file does not already do for itself.
+    # FU-369: call removed with its phantom import (see above).
 
     try:
         mesh_memory = get_mesh_memory()

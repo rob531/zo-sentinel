@@ -1,0 +1,18 @@
+# Runtime deps for the goose stdio bridges in this directory
+# (directive_mcp.py -- the architect's propose_directive surface; builder_mcp.py).
+#
+# WHY THIS FILE EXISTS: until 2026-07-27 the MCP SDK these modules import was
+# declared in NO requirements file anywhere in the repo. It existed only in the
+# tower's ambient Python environment. The first CI run of the goose-canary
+# namespacing probe died on `No module named 'mcp'` -- the dependency was real,
+# load-bearing, and undocumented. Same class as the .gitignore'd adapter that
+# produced a moat of garbage scores: a critical dependency living outside version
+# control is invisible until something tries to reproduce the environment.
+#
+# Nothing installs from this file automatically yet -- it is a DECLARATION of the
+# contract, consumed by goose-canary CI. Wiring it into the tower's daemon
+# bootstrap is a deploy-config change and stays with the chairman.
+#
+# Pins loose-but-bounded, matching tests/ci/requirements-ci.txt philosophy: a
+# surprise major release must not silently change bridge behaviour.
+mcp>=1.2,<2.0

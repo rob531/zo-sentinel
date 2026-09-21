@@ -1,0 +1,8 @@
+[service]
+name = "ghsa_feed_ingestion"
+import_path = "services.active.ghsa_feed_ingestion.router"
+prefix = "/api"
+tag = "ghsa_feed_ingestion"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,162 +1,180 @@
-# services/staged/scorecard_badge/router.py
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
+"""
+Scorecard Badge Router - Thin APIRouter exposing scorecard for a server.
+"""
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+from typing import Literal
 from app.db import get_session
-from .logic import compute_scorecard_badge, ScorecardBadgeResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.models import McpLlmAxisScore, McpServerRegistry
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["scorecard"])
 
 
-@router.get(
-    "/servers/{server_id}/scorecard",
-    response_model=ScorecardBadgeResponse,
-    name="get_scorecard_badge",
-)
-def get_scorecard(
-    server_id: int,
-    db: Session = Depends(get_session),
+RISK_TIER_COLORS = {
+    "TRUSTED_GENERAL": "#22c55e",
+    "TRUSTED_RESEARCH": "#84cc16",
+    "ENTERPRISE_CONTROLLED": "#eab308",
+    "CAUTION_LIMITED": "#f97316",
+    "HIGH_RISK_ISOLATED": "#ef4444",
+    "KNOWN_THREAT": "#000000",
+    "INSUFFICIENT": "#6b7280",
+}
+
+AXIS_NAMES = [
+    "overall_risk",
+    "auth_strength",
+    "capability_breadth",
+    "data_sensitivity",
+    "network_egress",
+    "maintainer_trust",
+    "exploit_surface",
+]
+
+
+class AxisScoreResponse(BaseModel):
+    axis: str
+    label: str
+    p_top: float
+    p_critical: float
+    p_danger: float
+    escalated: bool
+
+
+class OverallBadgeResponse(BaseModel):
+    risk_tier: str
+    color: str
+    name: str
+    verdict: str
+
+
+class ScorecardBadgeResponse(BaseModel):
+    server_id: str
+    axes: list[AxisScoreResponse]
+    overall: OverallBadgeResponse
+
+
+@router.get("/servers/{server_id}/scorecard", response_model=ScorecardBadgeResponse)
+async def get_scorecard_badge(
+    server_id: str,
+    session: AsyncSession = Depends(get_session),
 ) -> ScorecardBadgeResponse:
     """
-    Retrieve the compact trust badge for a given server.
+    Get scorecard badge for a server.
+    Returns per-axis scores and overall composite badge.
     """
-    try:
-        return compute_scorecard_badge(db, server_id)
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=404, detail=str(exc))
+    # Fetch all axis scores for this server
+    result = await session.execute(
+        select(McpLlmAxisScore).where(McpLlmAxisScore.server_id == server_id)
+    )
+    axis_scores = result.scalars().all()
 
+    # Fetch server registry entry
+    reg_result = await session.execute(
+        select(McpServerRegistry).where(McpServerRegistry.server_id == server_id)
+    )
+    server = reg_result.scalar_one_or_none()
 
-# --------------------------------------------------------------------------- #
-# Self‑test (executed when running this module directly)
-# --------------------------------------------------------------------------- #
-if __name__ == "__main__":
-    import sys
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    if server is None:
+        # Return empty response for unknown server
+        return ScorecardBadgeResponse(
+            server_id=server_id,
+            axes=[],
+            overall=OverallBadgeResponse(
+                risk_tier="INSUFFICIENT",
+                color=RISK_TIER_COLORS["INSUFFICIENT"],
+                name="Unknown",
+                verdict="unknown",
+            ),
+        )
 
-    from app.db import Base
-    from app.models import McpServerRegistry, McpLlmAxisScore
-
-    # ------------------------------------------------------------------- #
-    # In‑memory SQLite setup
-    # ------------------------------------------------------------------- #
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    Base.metadata.create_all(bind=engine)
-
-    # ------------------------------------------------------------------- #
-    # Dependency override
-    # ------------------------------------------------------------------- #
-    def _override_get_session():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    # ------------------------------------------------------------------- #
-    # Seed test data
-    # ------------------------------------------------------------------- #
-    def _seed():
-        with TestingSessionLocal() as db:
-            # Server 1 – TRUSTED (all axes >=70, p_critical <=0.3)
-            db.add(McpServerRegistry(server_id=1))
-            for axis in [
-                "confidentiality",
-                "integrity",
-                "availability",
-                "authenticity",
-                "non_repudiation",
-                "privacy",
-                "resilience",
-            ]:
-                db.add(
-                    McpLlmAxisScore(
-                        server_id=1,
-                        axis=axis,
-                        score=80.0,
-                        p_top=0.1,
-                        p_critical=0.1,
-                    )
+    # Build axes list
+    axes_dict = {score.axis: score for score in axis_scores}
+    axes = []
+    for axis_name in AXIS_NAMES:
+        if axis_name in axes_dict:
+            score = axes_dict[axis_name]
+            axes.append(
+                AxisScoreResponse(
+                    axis=axis_name,
+                    label=axis_name.replace("_", " ").title(),
+                    p_top=float(score.p_top or 0.0),
+                    p_critical=float(score.p_critical or 0.0),
+                    p_danger=float(score.p_danger or 0.0),
+                    escalated=bool(score.escalated),
                 )
-
-            # Server 2 – CAUTION (one axis <50 or p_critical >0.3)
-            db.add(McpServerRegistry(server_id=2))
-            for axis in [
-                "confidentiality",
-                "integrity",
-                "availability",
-                "authenticity",
-                "non_repudiation",
-                "privacy",
-                "resilience",
-            ]:
-                score = 45.0 if axis == "integrity" else 75.0
-                p_critical = 0.4 if axis == "integrity" else 0.1
-                db.add(
-                    McpLlmAxisScore(
-                        server_id=2,
-                        axis=axis,
-                        score=score,
-                        p_top=0.2,
-                        p_critical=p_critical,
-                    )
-                )
-
-            # Server 3 – INSUFFICIENT (only 3 axes scored)
-            db.add(McpServerRegistry(server_id=3))
-            for axis in ["confidentiality", "integrity", "availability"]:
-                db.add(
-                    McpLlmAxisScore(
-                        server_id=3,
-                        axis=axis,
-                        score=60.0,
-                        p_top=0.2,
-                        p_critical=0.1,
-                    )
-                )
-            db.commit()
-
-    _seed()
-
-    # ------------------------------------------------------------------- #
-    # FastAPI app wiring
-    # ------------------------------------------------------------------- #
-    app = FastAPI()
-    app.dependency_overrides[get_session] = _override_get_session
-    app.include_router(router)
-
-    client = TestClient(app)
-
-    # ------------------------------------------------------------------- #
-    # Test cases
-    # ------------------------------------------------------------------- #
-    expectations = {
-        1: "TRUSTED",
-        2: "CAUTION",
-        3: "INSUFFICIENT",
-    }
-
-    all_ok = True
-    for srv_id, expected_badge in expectations.items():
-        resp = client.get(f"/api/servers/{srv_id}/scorecard")
-        if resp.status_code != 200:
-            print(f"❌ Server {srv_id}: unexpected status {resp.status_code}", file=sys.stderr)
-            all_ok = False
-            continue
-        data = resp.json()
-        badge = data.get("badge")
-        if badge != expected_badge:
-            print(
-                f"❌ Server {srv_id}: badge {badge!r} != expected {expected_badge!r}",
-                file=sys.stderr,
             )
-            all_ok = False
 
-    if all_ok:
-        print("PASS")
-    else:
-        sys.exit(1)
+    # Build overall badge
+    risk_tier = server.risk_tier or "INSUFFICIENT"
+    color = RISK_TIER_COLORS.get(risk_tier, RISK_TIER_COLORS["INSUFFICIENT"])
+
+    overall = OverallBadgeResponse(
+        risk_tier=risk_tier,
+        color=color,
+        name=server.name or "Unknown",
+        verdict=server.verdict or "unknown",
+    )
+
+    return ScorecardBadgeResponse(
+        server_id=server_id,
+        axes=axes,
+        overall=overall,
+    )
+
+
+# Export for use by other modules
+async def get_server_axis_scores(
+    server_id: str,
+    session: AsyncSession,
+) -> list[AxisScoreResponse]:
+    """Get axis scores for a server."""
+    result = await session.execute(
+        select(McpLlmAxisScore).where(McpLlmAxisScore.server_id == server_id)
+    )
+    axis_scores = result.scalars().all()
+    axes = []
+    for axis_name in AXIS_NAMES:
+        for score in axis_scores:
+            if score.axis == axis_name:
+                axes.append(
+                    AxisScoreResponse(
+                        axis=axis_name,
+                        label=axis_name.replace("_", " ").title(),
+                        p_top=float(score.p_top or 0.0),
+                        p_critical=float(score.p_critical or 0.0),
+                        p_danger=float(score.p_danger or 0.0),
+                        escalated=bool(score.escalated),
+                    )
+                )
+                break
+    return axes
+
+
+async def risk_tier_by_id(
+    server_id: str,
+    session: AsyncSession,
+) -> str:
+    """Get risk tier for a server by ID."""
+    result = await session.execute(
+        select(McpServerRegistry.risk_tier).where(
+            McpServerRegistry.server_id == server_id
+        )
+    )
+    tier = result.scalar_one_or_none()
+    return tier or "INSUFFICIENT"
+
+
+async def get_verdict_summary(
+    server_id: str,
+    session: AsyncSession,
+) -> str:
+    """Get verdict for a server."""
+    result = await session.execute(
+        select(McpServerRegistry.verdict).where(
+            McpServerRegistry.server_id == server_id
+        )
+    )
+    verdict = result.scalar_one_or_none()
+    return verdict or "unknown"

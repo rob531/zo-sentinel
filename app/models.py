@@ -30,6 +30,14 @@ class User(Base):
     org_id: Mapped[str] = mapped_column(String(64), ForeignKey("orgs.id"), index=True)
     role: Mapped[str] = mapped_column(String(32), default="member")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # Clerk identity (migration 0011). Nullable: the password and OAuth-stub
+    # paths have no Clerk id and must keep working untouched.
+    # clerk_synced_via is a NEGATIVE CONTROL, not a label -- see 0011's
+    # docstring. A row the nightly reconcile had to create for a signup that
+    # is already hours old is the evidence that the webhook did not deliver.
+    clerk_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    clerk_synced_via: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    clerk_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class ApiKey(Base):

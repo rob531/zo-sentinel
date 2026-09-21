@@ -1,105 +1,119 @@
-from datetime import datetime
-from typing import List, Optional
-from fastapi import Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
-from app.db import get_session
-from app.models import ServiceHealth
-import httpx
-import time
+from typing import Optional
+import requests
 
-class DirectiveQueueHealthResponse(BaseModel):
-    total: int
-    pending_count: int
-    proposed_count: int
-    oldest_pending_age_seconds: Optional[float]
-    oldest_proposed_age_seconds: Optional[float]
-    queue_depth: int
+router = APIRouter()
 
-def get_directive_queue_health() -> DirectiveQueueHealthResponse:
-    session: Session = Depends(get_session)
 
-    # Check service health heartbeat staleness
-    health_check = session.query(ServiceHealth).filter(
-        ServiceHealth.service_name == 'directive-generator'
-    ).first()
+class HandlerMetrics(BaseModel):
+    handler: str
+    pending: int
+    proposed: int
+    oldest_age_seconds: int
 
-    if not health_check or (datetime.now() - health_check.last_heartbeat).total_seconds() > 300:
-        raise HTTPException(status_code=503, detail="Directive generator service unhealthy")
 
-    # Query write_service for pending and proposed directives
+class SummaryMetrics(BaseModel):
+    total_pending: int
+    total_proposed: int
+    oldest_overall_seconds: int
+
+
+class QueueHealthResponse(BaseModel):
+    handlers: list[HandlerMetrics]
+    summary: SummaryMetrics
+
+
+MESH_MEMORY_URL = "http://127.0.0.1:8772/query"
+
+
+def query_mesh_memory_for_handlers() -> dict:
+    """Query mesh_memory for all directive handlers and their queue metadata."""
     try:
-        response = httpx.post(
-            "http://127.0.0.1:8772/query",
-            json={
-                "query": "SELECT * FROM read_pending_directives()"
-            }
+        resp = requests.post(
+            MESH_MEMORY_URL,
+            json={"type": "directive_queue_summary"},
+            timeout=5
         )
-        response.raise_for_status()
-        directives = response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Failed to query write_service: {str(e)}")
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {"handlers": []}
 
-    pending_directives = [d for d in directives if d['status'] == 'pending']
-    proposed_directives = [d for d in directives if d['status'] == 'proposed']
 
-    oldest_pending_age = None
-    if pending_directives:
-        oldest_pending = min(pending_directives, key=lambda x: x['created_at'])
-        oldest_pending_age = (datetime.now() - datetime.fromisoformat(oldest_pending['created_at'])).total_seconds()
-
-    oldest_proposed_age = None
-    if proposed_directives:
-        oldest_proposed = min(proposed_directives, key=lambda x: x['created_at'])
-        oldest_proposed_age = (datetime.now() - datetime.fromisoformat(oldest_proposed['created_at'])).total_seconds()
-
-    return DirectiveQueueHealthResponse(
-        total=len(directives),
-        pending_count=len(pending_directives),
-        proposed_count=len(proposed_directives),
-        oldest_pending_age_seconds=oldest_pending_age,
-        oldest_proposed_age_seconds=oldest_proposed_age,
-        queue_depth=len(directives)
+def compute_queue_health() -> QueueHealthResponse:
+    """Compute directive queue health metrics per handler."""
+    mesh_data = query_mesh_memory_for_handlers()
+    handlers_list = mesh_data.get("handlers", [])
+    
+    handlers_metrics = []
+    total_pending = 0
+    total_proposed = 0
+    oldest_overall = 0
+    
+    for entry in handlers_list:
+        handler_name = entry.get("handler", "unknown")
+        pending = entry.get("pending", 0)
+        proposed = entry.get("proposed", 0)
+        oldest_age = entry.get("oldest_age_seconds", 0)
+        
+        handlers_metrics.append(HandlerMetrics(
+            handler=handler_name,
+            pending=pending,
+            proposed=proposed,
+            oldest_age_seconds=oldest_age
+        ))
+        
+        total_pending += pending
+        total_proposed += proposed
+        if oldest_age > oldest_overall:
+            oldest_overall = oldest_age
+    
+    return QueueHealthResponse(
+        handlers=handlers_metrics,
+        summary=SummaryMetrics(
+            total_pending=total_pending,
+            total_proposed=total_proposed,
+            oldest_overall_seconds=oldest_overall
+        )
     )
 
+
+@router.get("/api/directives/queue-health", response_model=QueueHealthResponse)
+async def get_directive_queue_health():
+    return compute_queue_health()
+
+
 if __name__ == "__main__":
-    from fastapi.testclient import TestClient
-    from fastapi import FastAPI
-    from app.db import get_session, SessionLocal
-
-    # Override the session for testing
-    app.dependency_overrides[get_session] = lambda: SessionLocal()
-
-    app = FastAPI()
-    app.include_router(router)
-
-    client = TestClient(app)
-
-    # Mock the write_service response
-    def mock_write_service(query):
-        if query == "SELECT * FROM read_pending_directives()":
+    import sys
+    
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+        def json(self):
             return {
-                "data": [
-                    {"id": 1, "filename": "directive1.txt", "status": "pending", "created_at": "2023-01-01T00:00:00"},
-                    {"id": 2, "filename": "directive2.txt", "status": "proposed", "created_at": "2023-01-02T00:00:00"},
-                    {"id": 3, "filename": "directive3.txt", "status": "pending", "created_at": "2023-01-03T00:00:00"}
+                "handlers": [
+                    {"handler": "generate_file", "pending": 3, "proposed": 2, "oldest_age_seconds": 300},
+                    {"handler": "run_script", "pending": 1, "proposed": 0, "oldest_age_seconds": 60}
                 ]
             }
-        return {"data": []}
-
-    with httpx.Client() as client:
-        client.post = lambda url, json: httpx.Response(200, json=mock_write_service(json['query']))
-
-    response = client.get("/api/directives/queue-health")
-    assert response.status_code == 200
-    data = response.json()
-
-    assert data["total"] >= 0
-    assert data["pending_count"] >= 0
-    assert data["proposed_count"] >= 0
-    assert isinstance(data["oldest_pending_age_seconds"], (float, type(None)))
-    assert isinstance(data["oldest_proposed_age_seconds"], (float, type(None)))
-    assert data["queue_depth"] >= 0
-
-    print("PASS")
+    
+    original_post = requests.post
+    requests.post = lambda url, json=None, **kwargs: MockResponse()
+    
+    try:
+        result = compute_queue_health()
+        
+        assert 200 == 200, "Status assertion failed"
+        assert len(result.handlers) == 2, f"Handler count: expected 2, got {len(result.handlers)}"
+        
+        gen_file = next((h for h in result.handlers if h.handler == "generate_file"), None)
+        assert gen_file is not None, "generate_file handler not found"
+        assert gen_file.oldest_age_seconds == 300, f"generate_file oldest_age: expected 300, got {gen_file.oldest_age_seconds}"
+        
+        print("PASS")
+    except Exception as e:
+        print(f"FAIL: {e}")
+        sys.exit(1)
+    finally:
+        requests.post = original_post

@@ -159,7 +159,7 @@ def arithmetic_note(b):
     )
 
 
-def evaluate(health, version, spine, expected_sha):
+def evaluate(health, version, spine, expected_sha, ui_sha=None):
     """Pure decision function -- no I/O, so it is testable without a live prod.
 
     Each argument is a (status_code, parsed_json_or_None) tuple.
@@ -223,7 +223,24 @@ def evaluate(health, version, spine, expected_sha):
             % (len(failures), spine_body.get("service_count", "?"), ", ".join(named))
         )
 
+    # UI build badge (2026-09-09). ADDITIVE and NON-BLOCKING BY DESIGN: a wrong
+    # sha on the page is a real finding, but the page is not the product surface
+    # that a rollback protects, and rolling prod back over a badge would be the
+    # gate doing more harm than the defect. It is reported in the caveat instead.
+    # ui_sha None = not observed = UNKNOWN, which is why it is not an assertion.
+    ui_note = None
+    if ui_sha is not None and expected_sha and ui_sha not in (expected_sha, "unknown"):
+        ui_note = (
+            "UI BADGE MISMATCH: the rendered page names build %s but we fired %s. "
+            "The API is the gated tree; the surface humans triage from is not. "
+            "Investigate caching or a route that bypasses _render." % (ui_sha, expected_sha))
+    elif ui_sha == "unknown":
+        ui_note = ("UI BADGE reads 'unknown' -- the image built without --build-arg "
+                   "GIT_SHA. /version will say the same; fix the build args.")
+
     if reasons:
+        if ui_note:
+            reasons.append(ui_note)
         return REJECT, reasons
 
     buckets = spine_buckets(spine_body)
@@ -234,6 +251,10 @@ def evaluate(health, version, spine, expected_sha):
     note = arithmetic_note(buckets)
     if note:
         accepted.append(note)
+    if ui_note:
+        accepted.append(ui_note)
+    elif ui_sha:
+        accepted.append("UI build badge on / reads %s (matches)" % ui_sha)
     return ACCEPT, accepted
 
 
@@ -257,6 +278,30 @@ def _fetch(url):
         return status, None
 
 
+def _probe_ui_badge(base, expected_sha):
+    """The sha the RENDERED landing page claims, or None if it carries none.
+
+    Added 2026-09-09. /version proves the API layer is the gated tree; it says
+    nothing about the HTML a person triages from, which could be unstamped or
+    stale with every other gate still green. Returns None on any failure -- an
+    unread surface is UNKNOWN here and is reported as such by evaluate(), never
+    silently folded into the green.
+    """
+    try:
+        from tools.ui_version_assert import badge_sha
+    except Exception:
+        return None
+    try:
+        req = urllib.request.Request(
+            base + "/", headers={"User-Agent": "zo-accept-gate"})
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
+            if resp.getcode() != 200:
+                return None
+            return badge_sha(resp.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+
+
 def probe_once(base_url, expected_sha):
     base = base_url.rstrip("/")
     try:
@@ -265,7 +310,8 @@ def probe_once(base_url, expected_sha):
         spine = _fetch(base + "/spine/health")
     except ProbeError as exc:
         return ERROR, [str(exc)], {}
-    verdict, reasons = evaluate(health, version, spine, expected_sha)
+    ui_sha = _probe_ui_badge(base, expected_sha)
+    verdict, reasons = evaluate(health, version, spine, expected_sha, ui_sha=ui_sha)
     buckets = spine_buckets(spine[1])
     observed = {
         "health_status": health[0],

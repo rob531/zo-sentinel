@@ -7,17 +7,5 @@ origin = "service"
 auth = "public"
 needs_data_layer = true
 
-[dependencies]
-app_db = true
-mesh_query = true
-
-[tables.app]
-McpServerRegistry = { read = true }
-McpLlmAxisScore = { read = true }
-McpScoreDispute = { read = true }
-orgs = { read = true }
-users = { read = true }
-
-[tables.mesh]
-mcp_signal_scores = { read = true }
-mesh_memory = { read = true }
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -24,7 +24,7 @@ inform corpus improvements and 7-axis scoring refinement):
 
 Read-only; safe under THE LINE. Run tower-side via fly proxy like family_count.
 """
-import argparse, collections, itertools, json, os, re, socket, subprocess, sys, time
+import argparse, collections, itertools, json, os, re, sys, time
 
 # FU-151: one shared credential path for every flyctl caller in this repo.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

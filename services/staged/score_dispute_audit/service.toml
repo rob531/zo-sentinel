@@ -1,0 +1,11 @@
+[service]
+name = "score_dispute_audit"
+import_path = "services.active.score_dispute_audit.router"
+prefix = "/api"
+tag = "score_dispute_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

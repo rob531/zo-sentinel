@@ -35,7 +35,7 @@ def query_mesh_memory(endpoint: str, params: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
     app.dependency_overrides[get_session] = lambda: get_session()
 
     # Self-test

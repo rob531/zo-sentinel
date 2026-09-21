@@ -1,0 +1,18 @@
+[service]
+name = "risk_tier_axis_consumer"
+import_path = "services.active.risk_tier_axis_consumer.router"
+prefix = "/api"
+tag = "risk_tier_axis_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { version = ">=1.0.0" }
+fastapi = { version = ">=0.104.0" }
+sqlalchemy = { version = ">=2.0.0" }
+httpx = { version = ">=0.25.0" }
+pydantic = { version = ">=2.0.0" }
+
+[build]
+entry_point = "router:app"

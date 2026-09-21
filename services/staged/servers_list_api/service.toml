@@ -1,0 +1,8 @@
+[service]
+name = "servers_list_api"
+import_path = "services.active.servers_list_api.router"
+prefix = "/api"
+tag = "servers_list_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

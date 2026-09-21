@@ -21,7 +21,8 @@ from sqlalchemy.orm import Session
 from app.models import AskCorpusDoc
 from ask_corpus_indexer import tokenize
 
-FIELD_WEIGHTS = {"name": 4.0, "verdict": 3.0, "axes": 2.0, "desc": 1.0}
+FIELD_WEIGHTS = {"name": 4.0, "verdict": 3.0, "axes": 2.0, "cve": 2.0,
+                 "desc": 1.0}  # "cve" emitted only for docs with vuln links (FU-264)
 DEFAULT_K = 10
 CANDIDATE_LIMIT = 5000
 MIN_SCORE = 2.0   # below this the caller must answer INSUFFICIENT, not guess

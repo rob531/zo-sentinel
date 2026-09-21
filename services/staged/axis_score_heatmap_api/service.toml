@@ -1,0 +1,8 @@
+[service]
+name = "axis_score_heatmap_api"
+import_path = "services.active.axis_score_heatmap_api.router"
+prefix = "/api"
+tag = "axis_score_heatmap_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

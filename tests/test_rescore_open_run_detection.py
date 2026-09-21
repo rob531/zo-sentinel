@@ -464,3 +464,36 @@ def test_a_live_proxy_short_circuits_before_spawning_anything(wr, monkeypatch):
 
     monkeypatch.setattr(wr.subprocess, "Popen", boom)
     assert wr.ensure_proxy() is None
+
+# ------------------------------------------------------------------ 2026-08-31
+def test_a_terminal_failure_verdict_with_released_spend_is_not_stranded(wr, tmp_path):
+    """Live shape 20260822-220319: deadline death, destroyed, skipped as terminal.
+
+    `open_run` refused to resume it (`run_skipped_terminal`, via
+    _terminally_finished) while this detector called it STRANDED forever --
+    "deadline" is not an abandonment prefix and `run_skipped_terminal` is not
+    an abort event. Two instruments disagreeing about one word, mirrored from
+    FU-321. Terminal-with-spend-released must be excused like an abort;
+    terminal-with-instance-still-held must stay stranded (the bar is not
+    lowered).
+    """
+    now = datetime(2026, 8, 31, 4, 0, tzinfo=timezone.utc)
+    rid = "20260822-220319"
+    (tmp_path / rid).mkdir()
+    state = {"run_id": rid, "result": "deadline",
+             "instance_id": 48426884, "destroyed": True}
+    (tmp_path / rid / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    p = _ledger(tmp_path, [
+        {"ts": _ts(now - timedelta(hours=198)), "run": rid, "event": "run_opened"},
+        {"ts": _ts(now - timedelta(hours=194)), "run": rid, "event": "phase_destroy_done"},
+        {"ts": _ts(now - timedelta(hours=1)), "run": rid, "event": "run_skipped_terminal"},
+    ])
+    assert wr.open_runs(p, now=now) == []
+    excused = wr.open_runs(p, now=now, include_aborted=True)
+    assert excused and excused[0]["outcome"] == "aborted"
+
+    # negative control: same verdict, instance NOT destroyed -> still stranded
+    state["destroyed"] = False
+    (tmp_path / rid / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    still = wr.open_runs(p, now=now)
+    assert still and still[0]["outcome"] == "stranded" and still[0]["stale"]

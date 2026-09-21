@@ -1,184 +1,162 @@
-"""
-services/staged/directive_queue_health_api/contract.py
-
-FastAPI contract for the Directive Queue Health API.
-Mirrors the structure of services/_exemplar/contract.py.
-"""
-
-from __future__ import annotations
-
-import datetime
+"""Contract self-test for directive_queue_health_api."""
 import json
-from typing import List, Optional
+import os
+import shutil
+import tempfile
+import time
+from pathlib import Path
+from typing import List
 
-import requests
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
-# Real data layer import (required by the no‑hollow gate)
-from app.db import get_session  # noqa: F401  (imported for dependency injection)
-
-
-router = APIRouter(prefix="/api")
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 
-class ByState(BaseModel):
-    pending: int = Field(0, description="Number of pending directives")
-    proposed: int = Field(0, description="Number of proposed directives")
-    rejected: int = Field(0, description="Number of rejected directives")
+class StalledDirective(BaseModel):
+    task: str
+    handler: str
+    mtime_hours_ago: int
 
 
-class DirectiveQueueHealthResponse(BaseModel):
-    total: int = Field(..., description="Total number of directives")
-    by_state: ByState = Field(..., description="Counts per directive state")
-    oldest_pending_age_seconds: Optional[int] = Field(
-        None,
-        description="Age in seconds of the oldest pending directive (None if no pending)",
-    )
-    is_starving: bool = Field(..., description="True if oldest pending > 1 hour")
+class HealthResponse(BaseModel):
+    total_pending: int
+    total_proposed: int
+    by_handler: dict[str, int]
+    stalled: List[StalledDirective]
+    generated_at: str
 
 
-@router.get(
-    "/directives/queue-health",
-    response_model=DirectiveQueueHealthResponse,
-    summary="Health of the directive queue",
-)
-def get_queue_health(session: Session = Depends(get_session)):
-    """
-    Query the write‑service for directives, compute health metrics,
-    and return a structured response.
-    """
-    # The write‑service endpoint – kept as a constant for clarity.
-    WRITE_SERVICE_URL = "http://127.0.0.1:8772/query"
+def _load_directives(base_dir: Path) -> dict:
+    """Load directives from pending and proposed directories."""
+    from collections import defaultdict
 
-    try:
-        resp = requests.post(
-            WRITE_SERVICE_URL,
-            json={"type": "directive"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    pending_dir = base_dir / "directives" / "pending"
+    proposed_dir = base_dir / "directives" / "proposed"
 
-    directives: List[dict] = resp.json()
+    directives = {"pending": [], "proposed": []}
+    by_handler = defaultdict(int)
 
-    # Initialise counters
-    pending_cnt = 0
-    proposed_cnt = 0
-    rejected_cnt = 0
-    oldest_pending_ts: Optional[datetime.datetime] = None
+    for d, lst in [(pending_dir, "pending"), (proposed_dir, "proposed")]:
+        if d.exists():
+            for f in d.glob("*.json"):
+                try:
+                    data = json.loads(f.read_text())
+                    task = data.get("task", f.stem)
+                    handler = data.get("handler", "unknown")
+                    reads = data.get("reads", [])
+                    desc = data.get("description", "")
+                    desc_len = len(desc)
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+                    entry = {
+                        "task": task,
+                        "handler": handler,
+                        "description_length": desc_len,
+                        "reads": reads,
+                    }
+                    directives[lst].append(entry)
+                    by_handler[handler] += 1
+                except Exception:
+                    pass
 
-    for d in directives:
-        state = d.get("state")
-        created_at_str = d.get("created_at")
-        if not state or not created_at_str:
-            continue  # ignore malformed entries
-
-        # Parse ISO‑8601 timestamps; assume they are UTC or contain offset.
-        try:
-            created_at = datetime.datetime.fromisoformat(created_at_str)
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=datetime.timezone.utc)
-        except ValueError:
-            continue  # skip unparsable timestamps
-
-        if state == "pending":
-            pending_cnt += 1
-            if oldest_pending_ts is None or created_at < oldest_pending_ts:
-                oldest_pending_ts = created_at
-        elif state == "proposed":
-            proposed_cnt += 1
-        elif state == "rejected":
-            rejected_cnt += 1
-
-    total = pending_cnt + proposed_cnt + rejected_cnt
-
-    if oldest_pending_ts is not None:
-        oldest_age = int((now - oldest_pending_ts).total_seconds())
-    else:
-        oldest_age = None
-
-    is_starving = (oldest_age or 0) > 3600
-
-    return DirectiveQueueHealthResponse(
-        total=total,
-        by_state=ByState(
-            pending=pending_cnt,
-            proposed=proposed_cnt,
-            rejected=rejected_cnt,
-        ),
-        oldest_pending_age_seconds=oldest_age,
-        is_starving=is_starving,
-    )
+    return {"directives": directives, "by_handler": dict(by_handler)}
 
 
-# --------------------------------------------------------------------------- #
-# Application entry‑point and self‑test
-# --------------------------------------------------------------------------- #
+def _get_stalled_directives(base_dir: Path, stale_hours: int = 72) -> List[dict]:
+    """Get stalled directives (no progress in >stale_hours by mtime)."""
+    pending_dir = base_dir / "directives" / "pending"
+    proposed_dir = base_dir / "directives" / "proposed"
+    stalled = []
+    now = time.time()
 
-app = FastAPI()
-app.include_router(router)
+    for d in [pending_dir, proposed_dir]:
+        if d.exists():
+            for f in d.glob("*.json"):
+                try:
+                    mtime = f.stat().st_mtime
+                    hours_ago = int((now - mtime) / 3600)
+                    if hours_ago > stale_hours:
+                        data = json.loads(f.read_text())
+                        stalled.append({
+                            "task": data.get("task", f.stem),
+                            "handler": data.get("handler", "unknown"),
+                            "mtime_hours_ago": hours_ago,
+                        })
+                except Exception:
+                    pass
+
+    return stalled
 
 
-def _override_get_session():
-    """
-    Provide a throw‑away SQLite session for the self‑test.
-    The real application will use the PostgreSQL session from app.db.
-    """
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+def get_directive_health(base_dir: Path) -> dict:
+    """Compute directive queue health metrics."""
+    from datetime import datetime, timezone
 
-    engine = create_engine("sqlite:///:memory:", future=True)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    return SessionLocal()
+    data = _load_directives(base_dir)
+    stalled = _get_stalled_directives(base_dir)
+
+    return {
+        "total_pending": len(data["directives"]["pending"]),
+        "total_proposed": len(data["directives"]["proposed"]),
+        "by_handler": data["by_handler"],
+        "stalled": stalled,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def create_router(base_dir: Path):
+    """Create router with base_dir injected."""
+    from fastapi import APIRouter
+
+    router = APIRouter()
+
+    @router.get("/api/directives/health")
+    def get_health() -> HealthResponse:
+        return HealthResponse(**get_directive_health(base_dir))
+
+    return router
+
+
+def create_app(base_dir: Path) -> FastAPI:
+    """Create FastAPI app for the service."""
+    app = FastAPI()
+    app.include_router(create_router(base_dir))
+    return app
 
 
 if __name__ == "__main__":
-    # ------------------------------------------------------------------- #
-    # Self‑test (acceptance)
-    # ------------------------------------------------------------------- #
-    from fastapi.testclient import TestClient
-    from unittest.mock import patch
+    tmp = tempfile.mkdtemp()
+    try:
+        pending = Path(tmp) / "directives" / "pending"
+        proposed = Path(tmp) / "directives" / "proposed"
+        pending.mkdir(parents=True)
+        proposed.mkdir(parents=True)
 
-    # Seed data: one very old pending (2 h), one recent pending, one proposed.
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    two_hours_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)).isoformat()
-    recent = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)).isoformat()
+        (pending / "fresh_directive.json").write_text(json.dumps({
+            "task": "test_task",
+            "handler": "TestHandler",
+            "description": "Fresh directive"
+        }))
 
-    seeded_directives = [
-        {"state": "pending", "created_at": two_hours_ago},
-        {"state": "pending", "created_at": recent},
-        {"state": "proposed", "created_at": now_iso},
-    ]
+        old_file = pending / "stale_directive.json"
+        old_file.write_text(json.dumps({
+            "task": "old_task",
+            "handler": "OldHandler",
+            "description": "Stale directive"
+        }))
+        old_mtime = time.time() - (100 * 3600)
+        os.utime(old_file, (old_mtime, old_mtime))
 
-    class _MockResponse:
-        def __init__(self, data):
-            self._data = data
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return self._data
-
-    with patch("requests.post", return_value=_MockResponse(seeded_directives)):
-        # Override the DB session dependency with an in‑memory SQLite session.
-        app.dependency_overrides[get_session] = _override_get_session
-
+        app = create_app(Path(tmp))
         client = TestClient(app)
-        response = client.get("/api/directives/queue-health")
-        assert response.status_code == 200, f"Unexpected status {response.status_code}"
-        payload = response.json()
+        resp = client.get("/api/directives/health")
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 
-        # Verify the starvation logic (oldest pending > 1 h → starving)
-        assert payload["is_starving"] is True, "Starvation flag should be True"
-        # Basic sanity checks
-        assert payload["total"] == 3, "Total count mismatch"
-        assert payload["by_state"]["pending"] == 2, "Pending count mismatch"
-        assert payload["by_state"]["proposed"] == 1, "Proposed count mismatch"
+        data = resp.json()
+        stalled = data.get("stalled", [])
+        assert len(stalled) == 1, f"Expected 1 stalled, got {len(stalled)}"
+        assert "TestHandler" in data.get("by_handler", {}), \
+            f"Expected TestHandler in by_handler, got {data.get('by_handler')}"
 
         print("PASS")
+    finally:
+        shutil.rmtree(tmp)

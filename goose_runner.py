@@ -24,7 +24,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
     resolve_directive_id, tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
-    park_directive,
+    park_directive, unmet_requires,
     output_confirmed, failed_quarantined, workspace_diff_state)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
 from zo_sentinel import undeclared_write_guard  # noqa: E402  # GH #3415 fix 4
@@ -2236,6 +2236,29 @@ def run():
                     mark_directive_completed(directive)
                     continue
                 
+                # c122 2026-09-21: a directive may declare `requires` -- files
+                # that must ALREADY exist for its own output to be TRUE rather
+                # than merely present. tools/service_decomposer.py stamps it on
+                # service.toml, whose import_path names a router.py that a LATER,
+                # engine-dependent directive is supposed to write. Measured on
+                # origin/main @ 289f1f1ec by running the promoter itself: 1226 of
+                # 1476 staged HOLDs are the one reason "router.py exposes no
+                # router", because the manifest lands deterministically and the
+                # router does not.
+                #
+                # DEFER -- do not fall through. Letting this reach the engine is
+                # precisely the 68-unparseable-service.toml bug the write_raw
+                # dispatch was added to stop. Deferring costs no LLM call, ghosts
+                # nothing, parks nothing, and leaves no FAIL row in the loopback
+                # manifest (this runs BEFORE sl.init_manifest deliberately); the
+                # directive lands by itself on a later pass once the router
+                # exists. Inert for every directive that declares no `requires`.
+                _unmet = unmet_requires(directive, str(PROJECT_DIR))
+                if _unmet:
+                    log(f"[requires] {directive_id}: DEFERRED, still pending -- "
+                        f"absent: {', '.join(_unmet)}")
+                    continue
+
                 log(f"Processing directive: {directive_id} (complexity={complexity})")
                 log_directive_routed(directive_id, source, complexity, "goose_tier1")
                 

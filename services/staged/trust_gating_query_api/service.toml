@@ -1,0 +1,8 @@
+[service]
+name = "trust_gating_query_api"
+import_path = "services.active.trust_gating_query_api.router"
+prefix = "/api"
+tag = "trust_gating_query_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

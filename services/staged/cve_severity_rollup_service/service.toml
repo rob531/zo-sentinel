@@ -1,0 +1,8 @@
+[service]
+name = "cve_severity_rollup_service"
+import_path = "services.active.cve_severity_rollup_service.router"
+prefix = "/api"
+tag = "cve_severity_rollup_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true

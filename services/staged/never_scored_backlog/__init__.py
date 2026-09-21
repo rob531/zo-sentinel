@@ -1,0 +1,1 @@
+# Quick probe to understand the codebase structure

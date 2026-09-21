@@ -1,0 +1,348 @@
+[service]
+name = "server_cve_correlation_api"
+import_path = "services.active.server_cve_correlation_api.router"
+prefix = "/api"
+tag = "server_cve_correlation_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[files]
+"services/active/server_cve_correlation_api/__init__.py" = ""
+"services/active/server_cve_correlation_api/router.py" = """
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from typing import Optional
+from pydantic import BaseModel
+
+from app.db import get_session
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory
+
+router = APIRouter()
+
+
+class CVECorrelationRequest(BaseModel):
+    server_id: Optional[int] = None
+    cve_id: Optional[str] = None
+    limit: int = 100
+
+
+class ServerCVESummary(BaseModel):
+    server_id: int
+    server_name: str
+    cve_count: int
+    critical_count: int
+    high_count: int
+    medium_count: int
+    low_count: int
+
+
+class CVEServerMapping(BaseModel):
+    cve_id: str
+    cve_description: str
+    severity: str
+    affected_servers: list[str]
+
+
+@router.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "server_cve_correlation_api"}
+
+
+@router.get("/servers/{server_id}/cves")
+async def get_server_cves(
+    server_id: int,
+    session: Session = Depends(get_session)
+):
+    server = session.query(McpServerRegistry).filter(
+        McpServerRegistry.id == server_id
+    ).first()
+    
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    mesh_data = _query_mesh_for_cves(server_id)
+    
+    cve_summary = ServerCVESummary(
+        server_id=server_id,
+        server_name=server.name,
+        cve_count=mesh_data.get("total_cves", 0),
+        critical_count=mesh_data.get("critical", 0),
+        high_count=mesh_data.get("high", 0),
+        medium_count=mesh_data.get("medium", 0),
+        low_count=mesh_data.get("low", 0)
+    )
+    
+    return cve_summary
+
+
+@router.get("/cves/{cve_id}/servers")
+async def get_cve_affected_servers(
+    cve_id: str,
+    session: Session = Depends(get_session)
+):
+    vuln_advisory = session.query(VulnAdvisory).filter(
+        VulnAdvisory.cve_id == cve_id
+    ).first()
+    
+    if not vuln_advisory:
+        raise HTTPException(status_code=404, detail="CVE not found")
+    
+    affected_servers = _query_mesh_for_affected_servers(cve_id)
+    
+    return CVEServerMapping(
+        cve_id=cve_id,
+        cve_description=vuln_advisory.description,
+        severity=vuln_advisory.severity,
+        affected_servers=affected_servers
+    )
+
+
+@router.post("/correlate")
+async def correlate_server_cve(
+    request: CVECorrelationRequest,
+    session: Session = Depends(get_session)
+):
+    correlation_data = {
+        "server_id": request.server_id,
+        "cve_id": request.cve_id,
+        "matched": False,
+        "correlation_score": 0.0
+    }
+    
+    if request.server_id and request.cve_id:
+        server = session.query(McpServerRegistry).filter(
+            McpServerRegistry.id == request.server_id
+        ).first()
+        
+        vuln = session.query(VulnAdvisory).filter(
+            VulnAdvisory.cve_id == request.cve_id
+        ).first()
+        
+        if server and vuln:
+            correlation_data["matched"] = True
+            correlation_data["correlation_score"] = _calculate_correlation_score(
+                server, vuln
+            )
+    
+    return correlation_data
+
+
+@router.get("/servers/{server_id}/risk-score")
+async def get_server_risk_score(
+    server_id: int,
+    session: Session = Depends(get_session)
+):
+    server = session.query(McpServerRegistry).filter(
+        McpServerRegistry.id == server_id
+    ).first()
+    
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    llm_scores = session.query(McpLlmAxisScore).filter(
+        McpLlmAxisScore.server_id == server_id
+    ).all()
+    
+    mesh_scores = _query_mesh_for_risk_scores(server_id)
+    
+    base_risk = sum(s.security_score or 0 for s in llm_scores) / max(len(llm_scores), 1)
+    
+    combined_risk = (base_risk * 0.6) + (mesh_scores.get("risk_score", 0) * 0.4)
+    
+    return {
+        "server_id": server_id,
+        "base_risk": round(base_risk, 2),
+        "mesh_risk": mesh_scores.get("risk_score", 0),
+        "combined_risk": round(combined_risk, 2),
+        "risk_factors": mesh_scores.get("risk_factors", [])
+    }
+
+
+def _query_mesh_for_cves(server_id: int) -> dict:
+    import requests
+    try:
+        response = requests.post(
+            "http://127.0.0.1:8772/query",
+            json={
+                "table": "mcp_signal_scores",
+                "filters": {"server_id": server_id},
+                "fields": ["cve_data"]
+            },
+            timeout=2
+        )
+        if response.ok:
+            return response.json().get("data", {})
+    except Exception:
+        pass
+    return {"total_cves": 0, "critical": 0, "high": 0, "medium": 0, "low": 0}
+
+
+def _query_mesh_for_affected_servers(cve_id: str) -> list[str]:
+    import requests
+    try:
+        response = requests.post(
+            "http://127.0.0.1:8772/query",
+            json={
+                "table": "mesh_memory",
+                "filters": {"cve_id": cve_id},
+                "fields": ["affected_servers"]
+            },
+            timeout=2
+        )
+        if response.ok:
+            return response.json().get("data", {}).get("affected_servers", [])
+    except Exception:
+        pass
+    return []
+
+
+def _query_mesh_for_risk_scores(server_id: int) -> dict:
+    import requests
+    try:
+        response = requests.post(
+            "http://127.0.0.1:8772/query",
+            json={
+                "table": "mcp_signal_scores",
+                "filters": {"server_id": server_id},
+                "fields": ["risk_score", "risk_factors"]
+            },
+            timeout=2
+        )
+        if response.ok:
+            return response.json().get("data", {})
+    except Exception:
+        pass
+    return {"risk_score": 0, "risk_factors": []}
+
+
+def _calculate_correlation_score(server, vuln) -> float:
+    score = 0.0
+    
+    if hasattr(server, 'version') and hasattr(vuln, 'affected_versions'):
+        if server.version in (vuln.affected_versions or []):
+            score += 0.5
+    
+    if hasattr(vuln, 'severity'):
+        severity_map = {"CRITICAL": 1.0, "HIGH": 0.7, "MEDIUM": 0.4, "LOW": 0.2}
+        score += severity_map.get(vuln.severity, 0.3) * 0.5
+    
+    return min(score, 1.0)
+"""
+
+
+[test]
+module = "services.active.server_cve_correlation_api"
+class = "TestServerCVECorrelation"
+template = """
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from app.db import get_session
+from app.models import Base, McpServerRegistry, VulnAdvisory
+
+def create_test_app():
+    from fastapi import FastAPI
+    from services.active.server_cve_correlation_api.router import router
+    
+    app = FastAPI()
+    app.include_router(router, prefix="/api", tags=["server_cve_correlation_api"])
+    return app
+
+@pytest.fixture
+def test_db():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@pytest.fixture
+def client(test_db):
+    from services.active.server_cve_correlation_api.router import router
+    from fastapi import FastAPI
+    
+    app = FastAPI()
+    app.include_router(router, prefix="/api", tags=["server_cve_correlation_api"])
+    
+    def override_get_session():
+        try:
+            yield test_db
+        finally:
+            pass
+    
+    app.dependency_overrides[get_session] = override_get_session
+    
+    with TestClient(app) as test_client:
+        yield test_client
+
+def test_health_check(client):
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "server_cve_correlation_api"
+
+def test_get_server_cves_not_found(client):
+    response = client.get("/api/servers/9999/cves")
+    assert response.status_code == 404
+
+def test_get_server_cves_found(client, test_db):
+    server = McpServerRegistry(
+        id=1,
+        name="test-server",
+        description="Test MCP Server"
+    )
+    test_db.add(server)
+    test_db.commit()
+    
+    response = client.get("/api/servers/1/cves")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["server_id"] == 1
+    assert data["server_name"] == "test-server"
+    assert "cve_count" in data
+
+def test_correlate_endpoint(client):
+    response = client.post("/api/correlate", json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert "matched" in data
+    assert "correlation_score" in data
+
+def test_get_server_risk_score_not_found(client):
+    response = client.get("/api/servers/9999/risk-score")
+    assert response.status_code == 404
+
+def test_get_server_risk_score_found(client, test_db):
+    server = McpServerRegistry(
+        id=2,
+        name="risk-test-server",
+        description="Test Server"
+    )
+    test_db.add(server)
+    test_db.commit()
+    
+    response = client.get("/api/servers/2/risk-score")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["server_id"] == 2
+    assert "base_risk" in data
+    assert "combined_risk" in data
+"""
+
+[acceptance]
+self_test_command = "python -m services.active.server_cve_correlation_api"
+self_test_expected = "PASS"
+description = "FastAPI service for correlating MCP servers with CVE data. Exposes endpoints for querying server CVE associations, CVE affected servers, risk scoring, and server-CVE correlation analysis. Uses app.db for PostgreSQL access and write_service for mesh data queries."

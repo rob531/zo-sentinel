@@ -78,6 +78,7 @@ EXIT_CANNOT_EVALUATE = 2
 DEFAULT_AGENTS_DIR = Path(os.environ.get("ZO_AGENTS_DIR", r"D:\zo\Zocomputer Agents"))
 BUS_URL = os.environ.get("ZO_GRAPH_BUS", "http://localhost:8772")
 BUS_TIMEOUT_S = float(os.environ.get("ZO_GRAPH_BUS_TIMEOUT", "6"))
+ZO_CALL = os.environ.get("ZO_CALL_PATH", r"C:\Users\robin\zo_call.py")
 
 # A token in ledger prose that looks like a code anchor. Deliberately narrow:
 # over-matching prose turns every entry into a fake subgraph.
@@ -168,36 +169,166 @@ def classify_unresolved(anchors: List[str], root: Path) -> Dict[str, List[str]]:
     return out
 
 
-def bus_neighbors(anchors: List[str]) -> tuple[Any | None, str]:
-    """1-hop expansion over the :8772 DuckDB code_nodes/code_edges bus.
+# The KL schema, pinned. Verified against the live bus 2026-07-30 via
+# `SELECT * FROM code_{nodes,edges} LIMIT 1` (DESCRIBE is rejected -- /query is
+# SELECT-only). code_nodes: repo,id,label,norm_label,file_type,source_file,
+# source_location,community,built_at_commit. code_edges: repo,src,dst,RELATION,
+# weight,confidence,confidence_score,source_file,source_location,built_at_commit.
+#
+# The edge column is `relation`, NOT `rel`. The first version of this file shipped
+# `e.rel` and passed 19 tests plus every CI gate, because the bus was unreachable
+# from the tower so the query was never executed -- an assertion never seen red is
+# not evidence, and neither is a query never run. `neighbor_sql` is split out
+# precisely so the column names can be tested without a bus.
+KL_NODE_COLS = {"repo", "id", "label", "norm_label", "file_type", "source_file",
+                "source_location", "community", "built_at_commit"}
+KL_EDGE_COLS = {"repo", "src", "dst", "relation", "weight", "confidence",
+                "confidence_score", "source_file", "source_location",
+                "built_at_commit"}
 
-    NEVER raises: returns (None, reason) when the bus is unreachable, because an
-    unreachable graph must degrade to a smaller answer rather than an error.
-    """
-    if not anchors:
-        return None, "no anchors to expand"
-    quoted = ",".join("'" + _norm(a).replace("'", "''") + "'" for a in anchors)
-    sql = (
-        "SELECT n.id AS node, n.source_file AS file, e.rel AS rel, "
+
+def neighbor_sql(anchors: List[str], limit: int = 400) -> str:
+    """1-hop query. LIKE, not regexp_extract: a `$` anchor is mangled by the
+    PowerShell -> zo_call -> shell -> python quoting chain and comes back as
+    HTTP 400. LIKE survives every layer and needs no escaping beyond quotes."""
+    preds = []
+    for a in anchors:
+        n = _norm(a).replace("'", "''")
+        preds.append(f"lower(n.source_file) LIKE '%/{n}'")
+        preds.append(f"lower(n.source_file) = '{n}'")
+    where = " OR ".join(preds) or "1=0"
+    return (
+        "SELECT n.id AS node, n.source_file AS file, e.relation AS rel, "
         "m.id AS neighbour, m.source_file AS neighbour_file "
         "FROM code_nodes n "
         "JOIN code_edges e ON e.src = n.id "
         "JOIN code_nodes m ON m.id = e.dst "
-        f"WHERE lower(regexp_extract(n.source_file, '[^/\\\\]+$')) IN ({quoted}) "
-        "LIMIT 400"
+        f"WHERE ({where}) LIMIT {int(limit)}"
     )
-    try:
-        import urllib.request
 
-        req = urllib.request.Request(
-            f"{BUS_URL}/query",
-            data=json.dumps({"sql": sql}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=BUS_TIMEOUT_S) as r:
-            return json.loads(r.read().decode("utf-8")), "ok"
-    except Exception as exc:  # noqa: BLE001 -- any failure degrades, none propagates
-        return None, f"{type(exc).__name__}: {exc}"
+
+_BUS_JSON_RE = re.compile(r"\{\"rows\".*?\}\]?,\s*\"count\":\s*\d+\}", re.DOTALL)
+
+
+def _recover_bus_json(stdout: str) -> Any | None:
+    """Recover the bus's JSON from zo_call stdout at ANY escape depth.
+
+    zo_call returns a small result as a `CmdResult(stdout='...')` repr with bare
+    quotes, but above ~32 KiB it switches to a JSON-encoded form in which every
+    quote is backslash-escaped. A single-shape regex therefore matched only the
+    small form: measured 2026-07-30, FU-110's 34 anchors returned a complete
+    count=174 result in 33,440B that was silently discarded, while the identical
+    query at LIMIT 20 (3,375B) succeeded. The failure surfaced as
+    `kl: unavailable` -- indistinguishable from a refused connection.
+
+    Returns None only when no escape depth yields a dict with a "rows" key, so
+    the caller can report a transport limit instead of blaming the bus.
+    """
+    candidates = [stdout]
+    s = stdout
+    for _ in range(3):
+        nxt = s.replace('\\"', '"').replace("\\n", "\n")
+        if nxt == s:
+            break
+        s = nxt
+        candidates.append(s)
+    for cand in candidates:
+        m = _BUS_JSON_RE.search(cand)
+        if not m:
+            continue
+        for blob in (m.group(0), m.group(0).replace("\\\\", "\\")):
+            try:
+                d = json.loads(blob)
+            except Exception:
+                continue
+            if isinstance(d, dict) and "rows" in d:
+                return d
+    return None
+
+
+def _query_direct(sql: str) -> Any:
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"{BUS_URL}/query",
+        data=json.dumps({"sql": sql}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=BUS_TIMEOUT_S) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def _query_via_zo_call(sql: str) -> Any:
+    """Reach the bus through the ZoComputer bridge.
+
+    :8772 is a LOOPBACK on ZoComputer -- it refuses connections from the tower, so
+    a direct urllib call can never work from here no matter how healthy the bus is.
+    `zo_call.py bash` runs the request on the far side. Payload goes over base64
+    because the SQL crosses four quoting layers.
+    """
+    import base64
+    import subprocess
+
+    script = "\n".join([
+        "import base64,json,urllib.request as u",
+        f'sql=base64.b64decode("{base64.b64encode(sql.encode()).decode()}").decode()',
+        'r=u.Request("http://localhost:8772/query",'
+        ' data=json.dumps({"sql":sql}).encode(),'
+        ' headers={"Content-Type":"application/json"})',
+        "print(u.urlopen(r,timeout=25).read().decode())",
+    ])
+    b64 = base64.b64encode(script.encode()).decode()
+    out = subprocess.run(
+        [sys.executable, ZO_CALL, "bash",
+         f"echo {b64} | base64 -d > /tmp/_fu_ctx_q.py && python3 /tmp/_fu_ctx_q.py"],
+        capture_output=True, text=True, timeout=90,
+    )
+    if out.returncode != 0:
+        raise RuntimeError(f"zo_call rc={out.returncode}: {out.stderr[:200]}")
+    rows = _recover_bus_json(out.stdout)
+    if rows is None:
+        raise RuntimeError(
+            f"payload not recovered from {len(out.stdout)}B of zo_call stdout; "
+            f"the bus ANSWERED -- this is a transport/parse limit, not an "
+            f"unreachable bus: {out.stdout[:160]}")
+    return rows
+
+
+# Descending 1-hop row budgets. zo_call truncates stdout at ~32 KiB and spools
+# the rest to a far-side file, so a wide fan-out must be asked for SMALLER
+# rather than declared unreachable. Measured 2026-07-30: 44 anchors @400 ->
+# 33,440B truncated; @150 -> 26,700B intact. render() only ever displays 40
+# edges, so 150 still over-serves every consumer.
+BUS_LIMIT_LADDER = (400, 150, 60)
+
+
+def bus_neighbors(anchors: List[str]) -> tuple[Any | None, str]:
+    """1-hop expansion over the :8772 DuckDB code_nodes/code_edges bus.
+
+    Tries the direct loopback first (works when run ON ZoComputer), then the
+    zo_call bridge (works from the tower). NEVER raises: returns (None, reason)
+    when every transport fails, because an unreachable graph must degrade to a
+    smaller answer rather than an error.
+    """
+    if not anchors:
+        return None, "no anchors to expand"
+    reasons = []
+    for limit in BUS_LIMIT_LADDER:
+        sql = neighbor_sql(anchors, limit=limit)
+        for name, fn in (("direct", _query_direct),
+                         ("zo_call", _query_via_zo_call)):
+            try:
+                rows = fn(sql)
+            except Exception as exc:  # noqa: BLE001 -- degrade, never propagate
+                # Keep the MESSAGE, not just the class. The class alone is what
+                # made a 32 KiB transport cliff read as an unreachable bus.
+                reasons.append(f"{name}@{limit}: {type(exc).__name__}: "
+                               f"{str(exc)[:90]}")
+                continue
+            cap = "" if limit == BUS_LIMIT_LADDER[0] else \
+                f" (transport-capped at {limit} edges)"
+            return rows, f"ok via {name}{cap}"
+    return None, "; ".join(reasons[:4])
 
 
 def build_context(fu_num: str, extra_anchors: List[str], agents_dir: Path,
@@ -251,9 +382,41 @@ def build_context(fu_num: str, extra_anchors: List[str], agents_dir: Path,
         ctx["subgraph"] = []
     else:
         payload = rows.get("rows", rows) if isinstance(rows, dict) else rows
-        ctx["kl"] = "ok"
+        # Carry the basis, not just the verdict: `why` names the transport and
+        # any row cap, so a capped subgraph can never be read as a complete one.
+        ctx["kl"] = why or "ok"
         ctx["subgraph"] = payload if isinstance(payload, list) else [payload]
     return ctx
+
+
+def _harden_stdout() -> None:
+    """Make stdout able to carry the ledger's Unicode on ANY host.
+
+    The FOLLOWUPS ledger is authored with Unicode -- FU-103's own title contains
+    U+21C4 -- while the tower that runs this tool is Windows, where stdout
+    defaults to cp1252. Rendering FU-103 therefore raised UnicodeEncodeError
+    *after* every anchor had been resolved, exiting rc=1: precisely the "step 6
+    errors, so the lane falls back to grep" failure this file exists to end.
+    Linux CI encodes UTF-8 and could never observe it.
+    """
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
+
+def _emit(text: str) -> None:
+    """print() that cannot raise on a character the stream cannot encode.
+
+    Second line of defence for a stream that refuses reconfigure (a pipe wrapped
+    by a caller, a captured stream in a test). Degrades the glyph to a visible
+    escape rather than losing the whole answer.
+    """
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, "backslashreplace").decode(enc, "replace"))
 
 
 def render(ctx: Dict[str, Any]) -> str:
@@ -285,6 +448,7 @@ def render(ctx: Dict[str, Any]) -> str:
 
 
 def main(argv: List[str] | None = None) -> int:
+    _harden_stdout()
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--fu", required=True, help="FU number, e.g. 181 or 003")
     ap.add_argument("--anchors", default="",
@@ -313,7 +477,7 @@ def main(argv: List[str] | None = None) -> int:
               f"{ledger} (and no anchors supplied)", file=sys.stderr)
         return EXIT_CANNOT_EVALUATE
 
-    print(json.dumps(ctx, indent=2) if a.json else render(ctx))
+    _emit(json.dumps(ctx, indent=2) if a.json else render(ctx))
     return EXIT_OK
 
 

@@ -60,7 +60,9 @@ def test_txn_commits_when_uncontended(ledger):
 
 def test_no_op_transaction_is_a_success(ledger):
     before = open(ledger, encoding="utf-8").read()
-    with fu_lock.ledger_txn(ledger) as txn:
+    # No `as txn`: this test asserts that entering and leaving the transaction
+    # WITHOUT touching it leaves the ledger byte-identical.
+    with fu_lock.ledger_txn(ledger):
         pass
     assert open(ledger, encoding="utf-8").read() == before
 

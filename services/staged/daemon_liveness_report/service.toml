@@ -1,0 +1,8 @@
+[service]
+name = "daemon_liveness_report"
+import_path = "services.active.daemon_liveness_report.router"
+prefix = "/api"
+tag = "daemon_liveness_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

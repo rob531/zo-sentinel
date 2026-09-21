@@ -25,8 +25,8 @@ if __name__ == "__main__":
 
     from app.db import Base
     from app.models import (
-        VulnerabilityAdvisory,
-        VulnerabilityLink,
+        VulnAdvisory,
+        VulnLink,
         McpServerRegistry,
     )
 
@@ -55,17 +55,17 @@ if __name__ == "__main__":
         db.add_all([srv1, srv2, srv3])
 
         # Advisories
-        adv1 = VulnerabilityAdvisory(id=1, severity="CRITICAL")
-        adv2 = VulnerabilityAdvisory(id=2, severity="HIGH")
-        adv3 = VulnerabilityAdvisory(id=3, severity="MEDIUM")
-        adv4 = VulnerabilityAdvisory(id=4, severity="LOW")
+        adv1 = VulnAdvisory(id=1, severity="CRITICAL")
+        adv2 = VulnAdvisory(id=2, severity="HIGH")
+        adv3 = VulnAdvisory(id=3, severity="MEDIUM")
+        adv4 = VulnAdvisory(id=4, severity="LOW")
         db.add_all([adv1, adv2, adv3, adv4])
 
         # Links (advisory -> server)
-        link1 = VulnerabilityLink(id=1, advisory_id=1, server_id=1)  # CRITICAL on srv1
-        link2 = VulnerabilityLink(id=2, advisory_id=2, server_id=1)  # HIGH on srv1
-        link3 = VulnerabilityLink(id=3, advisory_id=3, server_id=2)  # MEDIUM on srv2
-        link4 = VulnerabilityLink(id=4, advisory_id=4, server_id=3)  # LOW on srv3
+        link1 = VulnLink(id=1, advisory_id=1, server_id=1)  # CRITICAL on srv1
+        link2 = VulnLink(id=2, advisory_id=2, server_id=1)  # HIGH on srv1
+        link3 = VulnLink(id=3, advisory_id=3, server_id=2)  # MEDIUM on srv2
+        link4 = VulnLink(id=4, advisory_id=4, server_id=3)  # LOW on srv3
         db.add_all([link1, link2, link3, link4])
 
         db.commit()

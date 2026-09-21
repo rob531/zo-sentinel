@@ -1,3 +1,4 @@
+from sqlalchemy.pool import StaticPool
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -56,7 +57,7 @@ async def get_server_risk_detail(server_id: int, db: Session = Depends(get_sessi
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
-    from app.db import StaticPool, get_session
+    from app.db import get_session
     from app.models import Base, McpServerRegistry, McpLlmAxisScore
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

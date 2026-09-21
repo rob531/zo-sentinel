@@ -1,0 +1,8 @@
+[service]
+name = "risk_threshold_api"
+import_path = "services.active.risk_threshold_api.router"
+prefix = "/api"
+tag = "risk_threshold_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

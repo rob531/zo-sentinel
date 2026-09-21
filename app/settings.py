@@ -22,6 +22,19 @@ class Settings:
 
     CORS_ORIGINS = [o.strip() for o in os.environ.get("APP_CORS_ORIGINS", "*").split(",") if o.strip()]
 
+    # Clerk -- the front door has been Clerk-only in the BROWSER since June;
+    # these are the server-side halves. All default to empty so dev/CI stay
+    # hermetic: with no secret the webhook returns 503 and writes nothing,
+    # which is the correct unconfigured state for an endpoint that touches
+    # `users`. Real values come from AgentVault via Fly secrets, never a file.
+    CLERK_WEBHOOK_SECRET = os.environ.get("CLERK_WEBHOOK_SECRET", "")
+    CLERK_SECRET_KEY = os.environ.get("CLERK_SECRET_KEY", "")
+    CLERK_DEFAULT_ORG = os.environ.get("CLERK_DEFAULT_ORG", "public")
+    # Hours a Clerk signup may be older than its row before the nightly
+    # reconcile calls the webhook dead. 2h is comfortably beyond Svix's retry
+    # schedule, so a slow delivery does not read as an outage.
+    CLERK_WEBHOOK_STALE_HOURS = float(os.environ.get("CLERK_WEBHOOK_STALE_HOURS", "2"))
+
     @property
     def is_prod(self) -> bool:
         return self.ENV.lower() in ("prod", "production")

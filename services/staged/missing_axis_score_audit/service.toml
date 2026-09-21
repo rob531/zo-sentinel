@@ -1,0 +1,8 @@
+[service]
+name = "missing_axis_score_audit"
+import_path = "services.active.missing_axis_score_audit.router"
+prefix = "/api"
+tag = "missing_axis_score_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true

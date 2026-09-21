@@ -1,0 +1,13 @@
+[service]
+name = "high_value_server_report"
+import_path = "services.active.high_value_server_report.router"
+prefix = "/api"
+tag = "high_value_server_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[[test]]
+name = "self_test"
+command = "python -m services.active.high_value_server_report"
+expect = "PASS"

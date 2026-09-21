@@ -1,0 +1,8 @@
+[service]
+name = "scoring_delta_calculation"
+import_path = "services.active.scoring_delta_calculation.router"
+prefix = "/api"
+tag = "scoring_delta_calculation"
+origin = "service"
+auth = "public"
+needs_data_layer = true

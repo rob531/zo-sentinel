@@ -1,0 +1,12 @@
+[service]
+name = "score_audit_trail"
+import_path = "services.active.score_audit_trail.router"
+prefix = "/api"
+tag = "score_audit_trail"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

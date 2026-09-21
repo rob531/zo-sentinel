@@ -92,7 +92,7 @@ if __name__ == "__main__":
         setup_database(session)
         session.execute(
             text(
-                "CREATE TABLE mcp_score_disputes ("
+                "CREATE TABLE McpScoreDispute ("
                 "id INTEGER PRIMARY KEY, status TEXT)"
             )
         )

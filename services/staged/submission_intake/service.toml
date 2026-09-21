@@ -1,0 +1,8 @@
+[service]
+name = "submission_intake"
+import_path = "services.active.submission_intake.router"
+prefix = "/api"
+tag = "submission_intake"
+origin = "service"
+auth = "public"
+needs_data_layer = true

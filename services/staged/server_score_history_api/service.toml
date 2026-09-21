@@ -1,0 +1,32 @@
+[service]
+name = "server_score_history_api"
+import_path = "services.active.server_score_history_api.router"
+prefix = "/api"
+tag = "server_score_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[routes]
+history = { path = "/servers/{server_id}/score-history", method = "GET", summary = "Get server score history" }
+axis_history = { path = "/servers/{server_id}/axis/{axis}/history", method = "GET", summary = "Get axis-specific score history" }
+disputes = { path = "/servers/{server_id}/score-disputes", method = "GET", summary = "Get score disputes for server" }
+
+[data_dependencies]
+app_tables = [
+    "McpServerRegistry",
+    "McpLlmAxisScore",
+    "McpScoreDispute",
+    "orgs",
+    "users"
+]
+mesh_tables = [
+    "mcp_signal_scores",
+    "mesh_memory"
+]
+mesh_endpoint = "http://127.0.0.1:8772/query"
+
+[features]
+paginate = true
+date_range = true
+axis_filter = true

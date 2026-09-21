@@ -1,0 +1,12 @@
+[service]
+name = "server_axis_scores_api"
+import_path = "services.active.server_axis_scores_api.router"
+prefix = "/api"
+tag = "server_axis_scores_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.server_axis_scores_api"
+expected_output = "PASS"

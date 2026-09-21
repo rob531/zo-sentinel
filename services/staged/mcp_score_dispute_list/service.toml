@@ -1,0 +1,8 @@
+[service]
+name = "mcp_score_dispute_list"
+import_path = "services.active.mcp_score_dispute_list.router"
+prefix = "/api"
+tag = "mcp_score_dispute_list"
+origin = "service"
+auth = "public"
+needs_data_layer = true

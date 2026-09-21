@@ -1,0 +1,19 @@
+[service]
+name = "axis_probability_summary"
+import_path = "services.active.axis_probability_summary"
+prefix = "/api"
+tag = "axis_probability_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+fastapi = "*"
+uvicorn = "*"
+sqlalchemy = "*"
+httpx = "*"
+pydantic = "*"
+
+[scripts]
+dev = "uvicorn services.active.axis_probability_summary:app --reload --host 0.0.0.0 --port 8000"
+test = "python -m services.active.axis_probability_summary"

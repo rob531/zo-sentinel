@@ -36,8 +36,8 @@ async def get_risk_tier_audit(days: int, db: Session = Depends(get_session)):
             DATE(s.scored_at) AS day,
             r.risk_tier,
             ROW_NUMBER() OVER (PARTITION BY s.server_id, DATE(s.scored_at) ORDER BY s.scored_at DESC) AS rn
-        FROM mcp_llm_axis_scores s
-        JOIN mcp_server_registry r ON s.server_id = r.server_id
+        FROM McpLlmAxisScore s
+        JOIN McpServerRegistry r ON s.server_id = r.server_id
         WHERE DATE(s.scored_at) BETWEEN :start_date AND :end_date
     ),
     transitions AS (

@@ -35,7 +35,7 @@ def get_freshness_by_source(session: Session = Depends(get_session)):
             SUM(CASE WHEN last_scanned >= CURRENT_DATE - INTERVAL '30 days' THEN 1 ELSE 0 END) as scanned_last_30d,
             SUM(CASE WHEN last_scanned IS NULL THEN 1 ELSE 0 END) as never_scanned,
             AVG(EXTRACT(EPOCH FROM (CURRENT_DATE - last_scanned::date)) / 86400) FILTER (WHERE last_scanned IS NOT NULL) as avg_days_since_scan
-        FROM mcp_server_registry
+        FROM McpServerRegistry
         GROUP BY registry_source
     """)
     result = session.execute(query).fetchall()
@@ -44,7 +44,7 @@ def get_freshness_by_source(session: Session = Depends(get_session)):
     for row in result:
         tier_query = text("""
             SELECT risk_tier, COUNT(*) as cnt
-            FROM mcp_server_registry
+            FROM McpServerRegistry
             WHERE registry_source = :source
             GROUP BY risk_tier
         """)
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     
     conn = sqlite3.connect(":memory:")
     conn.execute("""
-        CREATE TABLE mcp_server_registry (
+        CREATE TABLE McpServerRegistry (
             server_id TEXT PRIMARY KEY,
             registry_source TEXT NOT NULL,
             last_scanned TEXT,
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     
     for srv in servers:
         conn.execute(
-            "INSERT INTO mcp_server_registry (server_id, registry_source, last_scanned, scan_count, risk_tier) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO McpServerRegistry (server_id, registry_source, last_scanned, scan_count, risk_tier) VALUES (?, ?, ?, ?, ?)",
             srv
         )
     conn.commit()

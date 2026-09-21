@@ -1,0 +1,8 @@
+[service]
+name = "admin_exemptions"
+import_path = "services.active.admin_exemptions.router"
+prefix = "/api"
+tag = "admin_exemptions"
+origin = "service"
+auth = "public"
+needs_data_layer = true

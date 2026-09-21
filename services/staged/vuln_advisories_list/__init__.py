@@ -35,22 +35,22 @@ def get_signal_scores(server_id: int, session: Session = Depends(get_session)) -
 
 def setup_database(session: Session = Depends(get_session)) -> None:
     """Ensure database tables exist."""
-    session.execute("CREATE TABLE IF NOT EXISTS mcp_server_registry (id INTEGER PRIMARY KEY, name TEXT)")
-    session.execute("CREATE TABLE IF NOT EXISTS mcp_llm_axis_scores (id INTEGER PRIMARY KEY, server_id INTEGER, score REAL)")
-    session.execute("CREATE TABLE IF NOT EXISTS mcp_score_disputes (id INTEGER PRIMARY KEY, server_id INTEGER, dispute TEXT)")
+    session.execute("CREATE TABLE IF NOT EXISTS McpServerRegistry (id INTEGER PRIMARY KEY, name TEXT)")
+    session.execute("CREATE TABLE IF NOT EXISTS McpLlmAxisScore (id INTEGER PRIMARY KEY, server_id INTEGER, score REAL)")
+    session.execute("CREATE TABLE IF NOT EXISTS McpScoreDispute (id INTEGER PRIMARY KEY, server_id INTEGER, dispute TEXT)")
     session.execute("CREATE TABLE IF NOT EXISTS orgs (id INTEGER PRIMARY KEY, name TEXT)")
     session.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
     session.commit()
 
 def reset_server_export_api_quarantine(session: Session = Depends(get_session)) -> None:
     """Reset server export API quarantine status."""
-    session.execute("UPDATE mcp_server_registry SET quarantine = 0")
+    session.execute("UPDATE McpServerRegistry SET quarantine = 0")
     session.commit()
 
 if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.dependency_overrides import app
+    from app.main import app
 
     # Override the session for self-test
     test_engine = create_engine("sqlite:///:memory:")
@@ -58,9 +58,9 @@ if __name__ == "__main__":
     app.dependency_overrides[get_session] = lambda: test_session()
 
     # Create test tables
-    test_session().execute("CREATE TABLE mcp_server_registry (id INTEGER PRIMARY KEY, name TEXT, quarantine INTEGER)")
-    test_session().execute("CREATE TABLE mcp_llm_axis_scores (id INTEGER PRIMARY KEY, server_id INTEGER, score REAL)")
-    test_session().execute("CREATE TABLE mcp_score_disputes (id INTEGER PRIMARY KEY, server_id INTEGER, dispute TEXT)")
+    test_session().execute("CREATE TABLE McpServerRegistry (id INTEGER PRIMARY KEY, name TEXT, quarantine INTEGER)")
+    test_session().execute("CREATE TABLE McpLlmAxisScore (id INTEGER PRIMARY KEY, server_id INTEGER, score REAL)")
+    test_session().execute("CREATE TABLE McpScoreDispute (id INTEGER PRIMARY KEY, server_id INTEGER, dispute TEXT)")
     test_session().execute("CREATE TABLE orgs (id INTEGER PRIMARY KEY, name TEXT)")
     test_session().execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     test_session().commit()
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     reset_server_export_api_quarantine()
 
     # Mock mesh memory and scores
-    test_session().execute("INSERT INTO mcp_server_registry (id, name) VALUES (1, 'test_server')")
+    test_session().execute("INSERT INTO McpServerRegistry (id, name) VALUES (1, 'test_server')")
     test_session().commit()
 
     mesh_memory = get_mesh_memory(1)

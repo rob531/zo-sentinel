@@ -147,6 +147,33 @@ fi
 OLD_CHILD=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
 WRAPPER=$(pgrep -f "$WRAP_PAT" 2>/dev/null | head -1 || true)
 
+# FU-515: OLD_CHILD is `pgrep | head -1` but every kill below is `pkill -f`,
+# which kills EVERY match. The script therefore REASONS ABOUT ONE PID AND
+# KILLS N. When a daemon has >1 live process (graph_refresh routinely does:
+# one idle, one mid-cycle), a reload aimed at the idle one also destroys the
+# busy one's in-flight work. daemon_staleness.py already computes that
+# BUSY/IDLE split per-pid -- but could only print it as ADVICE, because the
+# remedy it emits is name-scoped and the caller has no way to say "not that
+# one". The distinction was unenforceable at the call site, which is how the
+# 2026-09-22 deploy run killed a graph_refresh the tool had explicitly told it
+# not to touch. Make the distinction enforceable instead of advisory.
+# Default-off: unset => byte-identical behaviour for every existing caller.
+if [ -n "${RELOAD_DAEMON_PROTECT_PID:-}" ]; then
+  _matched=$(pgrep -f "$CHILD_PAT" 2>/dev/null || true)
+  for _p in $(printf '%s' "$RELOAD_DAEMON_PROTECT_PID" | tr ',' ' '); do
+    for _m in $_matched; do
+      if [ "$_p" = "$_m" ]; then
+        echo "REFUSING reload of $NAME: pid $_p is protected (RELOAD_DAEMON_PROTECT_PID)"
+        echo "  and it MATCHES the kill pattern: $CHILD_PAT"
+        echo "  This daemon has more than one live process; a name-scoped pkill"
+        echo "  would take the protected one down with the intended target."
+        echo "  NOTHING WAS KILLED. Re-run once that pid is idle."
+        exit 4
+      fi
+    done
+  done
+fi
+
 if [ -n "$WRAPPER" ]; then
   touch "$MARKER"
   echo "wrapper alive (pid $WRAPPER) -- reload marker set; killing python child (old pid ${OLD_CHILD:-none})"

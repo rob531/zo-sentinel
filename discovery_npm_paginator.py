@@ -13,6 +13,7 @@ import hashlib
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
+import singleton_lock  # identity-verified single-instance lock
 
 SERVICE_NAME = "discovery_npm_paginator"
 STATE_DIR = Path("/home/workspace/zo_sentinel/state")
@@ -118,18 +119,15 @@ def remove_pid_file(path):
         pass
 
 
-def check_single_instance():
-    own_pid = os.getpid()
-    existing_pid = load_pid_file(LOCK_FILE)
-    if existing_pid and existing_pid != own_pid:
-        try:
-            os.kill(existing_pid, 0)
-            log(f"error: another instance already running as PID {existing_pid}")
-            sys.exit(1)
-        except OSError:
-            log(f"info: stale lockfile detected, PID {existing_pid} not running, reclaiming")
-    write_pid_file(LOCK_FILE, own_pid)
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def signal_handler(signum, frame):
     sig_name = {signal.SIGTERM: "SIGTERM", signal.SIGINT: "SIGINT"}.get(signum, str(signum))

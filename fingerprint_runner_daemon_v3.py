@@ -29,6 +29,7 @@ fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 logger.addHandler(fh)
 
 import mcp_fingerprinter
+import singleton_lock  # identity-verified single-instance lock
 
 # Patch (2026-04-27): the actual function in mcp_fingerprinter is
 # generate_fingerprint(server_id), not fingerprint(). It also writes to
@@ -37,24 +38,15 @@ _FP_FN = getattr(mcp_fingerprinter, 'generate_fingerprint', None) \
          or getattr(mcp_fingerprinter, 'fingerprint', None)
 
 
-def check_single_instance():
-    pid = os.getpid()
-    try:
-        with open(PID_FILE, 'r') as f:
-            existing_pid = int(f.read().strip())
-        if existing_pid != pid:
-            try:
-                os.kill(existing_pid, 0)
-                logger.warning(f'Another instance running as PID {existing_pid}, exiting')
-                return False
-            except ProcessLookupError:
-                pass  # stale lockfile
-    except (FileNotFoundError, ValueError):
-        pass
-    with open(PID_FILE, 'w') as f:
-        f.write(str(pid))
-    return True
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def send_heartbeat():
     try:

@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 
 import requests
+import singleton_lock  # identity-verified single-instance lock
 
 # Configuration
 SERVICE_NAME = 'attestation_engine'
@@ -348,32 +349,15 @@ def cycle():
     logger.info(f"Cycle complete. Generated {len(all_attestations)} attestations")
 
 
-def check_single_instance():
-    """Ensure only one instance of daemon runs."""
-    pid_file = f'/var/run/zo/{SERVICE_NAME}.pid'
-    os.makedirs(os.path.dirname(pid_file), exist_ok=True)
-    
-    if os.path.exists(pid_file):
-        with open(pid_file) as f:
-            old_pid = int(f.read().strip())
-        try:
-            os.kill(old_pid, 0)
-            print(f"Already running with PID {old_pid}")
-            sys.exit(1)
-        except OSError:
-            pass
-    
-    with open(pid_file, 'w') as f:
-        f.write(str(os.getpid()))
-    
-    def cleanup():
-        if os.path.exists(pid_file):
-            os.remove(pid_file)
-    
-    import signal
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def run():
     """Main run loop with heartbeat and cycle management."""

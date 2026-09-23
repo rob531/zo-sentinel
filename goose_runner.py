@@ -35,6 +35,7 @@ from zo_sentinel.build_lessons import (  # noqa: E402
 # write_service" per the 2026-05-31 ops note). state_loopback lives beside this
 # file; uv_gate_runner is the isolated Tier-0/1 gate.
 import state_loopback as sl  # noqa: E402
+import singleton_lock  # identity-verified single-instance lock
 try:
     from tools.uv_gate_runner import run_gates  # noqa: E402
 except Exception:  # tools/ not importable in some launch contexts -> gate becomes a no-op
@@ -127,18 +128,15 @@ def heartbeat_loop():
         send_heartbeat()
         time.sleep(HEARTBEAT_INTERVAL)
 
-def check_single_instance():
-    """Ensure only one instance runs."""
-    if PID_FILE.exists():
-        try:
-            pid = int(PID_FILE.read_text().strip())
-            os.kill(pid, 0)
-            log(f"Instance already running with PID {pid} - exiting")
-            sys.exit(0)
-        except (ValueError, OSError):
-            pass
-    PID_FILE.write_text(str(os.getpid()))
-    log(f"PID written: {os.getpid()}")
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
+
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file():
     """Remove PID file on shutdown."""

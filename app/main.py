@@ -6,6 +6,7 @@ feature router that exposes `router` (loose/unbuilt ones are skipped, never bloc
 from __future__ import annotations
 from contextlib import asynccontextmanager
 
+import logging
 import pathlib
 import threading
 
@@ -35,9 +36,26 @@ async def lifespan(app: FastAPI):
     # Start attestation_refresher in a background thread so it does not block
     # uvicorn startup.  The daemon heartbeats to service_health every <=60 s
     # (PRODUCT_SPEC §6) and the loop is inside run(), not here.
-    import attestation_refresher
-    t = threading.Thread(target=attestation_refresher.run, daemon=True)
-    t.start()
+    #
+    # BEST-EFFORT, NEVER FATAL. This module is a host-side daemon and is not in
+    # the Dockerfile COPY list, so `import attestation_refresher` raises
+    # ModuleNotFoundError inside the deployed image. Because the import sat
+    # unguarded in lifespan, an OPTIONAL background task became a MANDATORY
+    # startup import: gunicorn workers exited with code 3, both Fly machines
+    # crash-looped (restart_count=10) and the edge served 502 until the release
+    # was rolled back (v97 -> v98, ~3.7 min outage, 2026-09-22T20:11Z).
+    #
+    # This restores the invariant this module's own docstring states: optional
+    # pieces are skipped, never block boot. It deliberately does NOT decide
+    # WHERE the refresher should run -- see the open question in FOLLOWUPS.md.
+    try:
+        import attestation_refresher
+
+        threading.Thread(target=attestation_refresher.run, daemon=True).start()
+    except Exception:  # noqa: BLE001 -- an optional daemon must never halt the API
+        logging.getLogger(__name__).warning(
+            "attestation_refresher not started; continuing without it", exc_info=True
+        )
     yield
 
 

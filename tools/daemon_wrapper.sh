@@ -80,6 +80,28 @@ log() {
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [${NAME} wrapper] $*" >> "$WRAPPER_LOG"
 }
 
+# --- single-wrapper guard (2026-09-21, gh#5412) --------------------------
+# Seven independent spawners call this script (go.sh, watchdog.sh,
+# watchdog_daemon.py, liveness_probe.py, zo_sentinel_builder.py,
+# interval_runner.sh, resurrect_sentinel_daemons.sh). Each one that saw
+# attestation_engine "down" added ANOTHER respawn loop, so 19 wrappers
+# accumulated against a daemon that could not start. flock is the right
+# primitive here precisely because it CANNOT go stale: the kernel drops it
+# when the holder dies, so unlike a pidfile it never needs a liveness check
+# that can be fooled by PID recycling.
+# Escape hatch for tests/negative controls only: ZO_WRAPPER_ALLOW_DUPLICATE=1
+if [[ "${ZO_WRAPPER_ALLOW_DUPLICATE:-0}" != "1" ]] && command -v flock >/dev/null 2>&1; then
+  WRAPPER_LOCK_DIR="/var/run/zo"
+  mkdir -p "$WRAPPER_LOCK_DIR" 2>/dev/null || WRAPPER_LOCK_DIR="/tmp"
+  WRAPPER_LOCK="${WRAPPER_LOCK_DIR}/wrapper_${NAME}.lock"
+  exec 9>"$WRAPPER_LOCK" 2>/dev/null || true
+  if ! flock -n 9 2>/dev/null; then
+    log "a wrapper for ${NAME} already holds ${WRAPPER_LOCK}; not stacking another (rc=0)"
+    exit 0
+  fi
+fi
+# --- end single-wrapper guard -------------------------------------------
+
 if [[ "$RUN_MODE" == "module" ]]; then
   log "wrapper starting for module $MODULE (args: ${EXTRA_ARGS[*]:-none})"
 else

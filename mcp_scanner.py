@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """
 mcp_scanner.py -- ZO-SENTINEL MCP server registry scanner.
@@ -6,6 +7,7 @@ Sources: npm @modelcontextprotocol scope, Smithery marketplace, GitHub topic:mcp
 import hashlib, json, logging, os, signal, sys, time
 from datetime import datetime, timezone
 import requests
+import singleton_lock  # identity-verified single-instance lock
 
 SERVICE_NAME    = 'mcp_scanner'
 WRITE_SERVICE   = 'http://127.0.0.1:8772'   # base URL only -- no trailing path
@@ -30,24 +32,15 @@ except ImportError:
     log.warning('mcp_traffic_fingerprints not available - protocol confirmation disabled')
 
 
-def check_single_instance():
-    pid_file = f'/tmp/{SERVICE_NAME}.pid'
-    if os.path.exists(pid_file):
-        try:
-            old_pid = int(open(pid_file).read().strip())
-            os.kill(old_pid, 0)
-            log.warning('Already running with PID %d', old_pid)
-            sys.exit(1)
-        except (OSError, ValueError):
-            pass
-    open(pid_file, 'w').write(str(os.getpid()))
-    def cleanup(sig, frame):
-        try: os.remove(pid_file)
-        except Exception: pass
-        sys.exit(0)
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def ws_write(table, row):
     """Write to DuckDB via write_service."""

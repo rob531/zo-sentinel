@@ -477,6 +477,21 @@ else
     [[ "$AW2" == "200" ]] && ok ":8780 approval_workflow started" || warn ":8780 approval_workflow failed ($AW2)"
 fi
 
+hdr "12.10c Sentinel UI (ui_server :8790)"
+# go.sh probes :8790 in --verify and SUMMARY but never launched it: ui_server
+# was only ever registered in start_sentinel_pipeline.sh, which is not the boot
+# path. Result: the UI was dead after every Modal reboot and the zite preview
+# (zite-8790-robinc.zo.computer) returned "refused to connect". A dead :8790 is
+# also what tripped the SUMMARY curl (rc=7) into the ERR-trap boot deadlock.
+UI=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8790/health 2>/dev/null || echo 000)
+if [[ "$UI" == "200" ]]; then
+    ok ":8790 ui_server already running"
+else
+    nohup bash $MESH/daemon_wrapper.sh ui_server $SENTINEL/ui_server.py >> $LOGS/ui_server.log 2>&1 & sleep 4
+    UI2=$(curl -m5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8790/health 2>/dev/null || echo 000)
+    [[ "$UI2" == "200" ]] && ok ":8790 ui_server started" || warn ":8790 ui_server failed ($UI2)"
+fi
+
 hdr "12.10b Sentinel APIs -- revived 2026-06-10 (forensic_v2 :8779, bulk_assess :8784, search :8782, manual_override :8776)"
 # ROOT CAUSE of the dark API services: built but never added to the launcher.
 # These four are real, distinct features -> wired in here. RETIRED (deliberately

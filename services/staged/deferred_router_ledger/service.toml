@@ -1,0 +1,8 @@
+[service]
+name = "deferred_router_ledger"
+import_path = "services.active.deferred_router_ledger.router"
+prefix = "/api"
+tag = "deferred_router_ledger"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -43,12 +43,40 @@ permissions:
 # each job -- do not read a green relander as proof this was the whole cause.
 #
 # Two sweep jobs fire on workflow_run:completed for SIX workflows, so one CI
-# pass over one PR can start six identical sweeps. A cancelled sweep is
-# superseded by an identical newer one, so collapsing a burst loses nothing.
-# Mirrors pr-relander.yml's own `group: pr-relander`.
+# pass over one PR can start six identical sweeps. Mirrors pr-relander.yml's
+# own `group: pr-relander`.
+#
+# FU-448 FIX, 2026-09-24. The line above used to read `cancel-in-progress: true`,
+# justified by "a cancelled sweep is superseded by an identical newer one, so
+# collapsing a burst loses nothing". That is true of ONE cancellation and false
+# in steady state: the successor is itself cancelled before it finishes, so the
+# burst collapses to NOTHING rather than to one sweep.
+#
+# MEASURED 2026-09-24 over 400 auto-merge runs spanning 14.43h (gh run list; the
+# 400 is a CAP, so the window is a FLOOR):
+#   median SUCCESSFUL sweep            49s   (p90 59s)
+#   median inter-trigger interval       4s   (p90 30s), 27.7 triggers/hour
+#   gaps long enough for a sweep       6.0%  <- it completes only in those
+#   median CANCELLED sweep lifetime     8s   <- killed long before the 49s it needs
+#   conclusions: success 20 | cancelled 239 | skipped 141
+# Corroborated by tools/../fu448_verify.py against a different window: 841
+# workflow_run sweeps, 582 cancelled (69%), 27 succeeded.
+#
+# WHY `false` IS SAFE, AND IT IS THE SAME MEASUREMENT: utilisation is
+# 27.7/h * 49s = 0.38. Arrivals are well under service capacity, so the queue is
+# STABLE -- this does not trade starvation for an unbounded backlog. Coalescing
+# is PRESERVED: with cancel-in-progress false GitHub keeps at most one run
+# in progress plus one pending, and a newer trigger supersedes the PENDING one,
+# so a burst still collapses -- but it now collapses to ONE COMPLETED SWEEP
+# instead of to none. This change makes the original comment's claim true for
+# the first time.
+#
+# If utilisation ever approaches 1 (sweep duration up, or triggers up), revisit:
+# the next shape is a per-trigger group, at the cost of ~28 redundant full
+# sweeps/hour against the installation budget FU-406 says pr-relander starves on.
 concurrency:
   group: auto-merge-sweep
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   autonomous-build:
@@ -180,7 +208,25 @@ jobs:
   triage-solid-sweep:
     # Enables auto-merge on the triage bot's solids (pr-triage labels with
     # GITHUB_TOKEN, which can't re-trigger the pull_request_target job above).
-    if: github.event_name == 'workflow_run'
+    # A CANCELLED run is not a verdict.
+    #
+    # `workflow_run: types: [completed]` fires on cancelled and failed runs as
+    # well as successful ones. The six watched workflows all sit in global
+    # concurrency groups with cancel-in-progress, so under PR load they are
+    # cancelled constantly -- and each cancellation started a fresh sweep here,
+    # which queued behind the backlog and was itself cancelled. More queue
+    # pressure produced more cancellations, which produced more sweeps.
+    #
+    # MEASURED 2026-09-15: 200 workflow runs in 10m37s (~1,130/hour, against
+    # the ~21/hour recorded for auto-merge on 2026-09-04); 94 cancelled, 85 of
+    # them auto-merge; 28 queued with 1 job in progress; and ZERO runs in that
+    # window reached success or failure. CI had stopped producing verdicts.
+    #
+    # Both sweeps only act on state a SUCCESSFUL watched run produces -- fresh
+    # triage:solid labels, or a PR newly gone green. A cancelled run has
+    # produced neither, so firing on it can only re-scan unchanged state and
+    # spend installation budget (FU-406).
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Log GraphQL rate-limit budget (FU-406)
@@ -278,7 +324,25 @@ jobs:
     # NOTE: mergeStateStatus is computed LAZILY -- it returns UNKNOWN for every
     # row of a list query and only materialises on a single-PR read. It must be
     # fetched per PR, never filtered in the list.
-    if: github.event_name == 'workflow_run'
+    # A CANCELLED run is not a verdict.
+    #
+    # `workflow_run: types: [completed]` fires on cancelled and failed runs as
+    # well as successful ones. The six watched workflows all sit in global
+    # concurrency groups with cancel-in-progress, so under PR load they are
+    # cancelled constantly -- and each cancellation started a fresh sweep here,
+    # which queued behind the backlog and was itself cancelled. More queue
+    # pressure produced more cancellations, which produced more sweeps.
+    #
+    # MEASURED 2026-09-15: 200 workflow runs in 10m37s (~1,130/hour, against
+    # the ~21/hour recorded for auto-merge on 2026-09-04); 94 cancelled, 85 of
+    # them auto-merge; 28 queued with 1 job in progress; and ZERO runs in that
+    # window reached success or failure. CI had stopped producing verdicts.
+    #
+    # Both sweeps only act on state a SUCCESSFUL watched run produces -- fresh
+    # triage:solid labels, or a PR newly gone green. A cancelled run has
+    # produced neither, so firing on it can only re-scan unchanged state and
+    # spend installation budget (FU-406).
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

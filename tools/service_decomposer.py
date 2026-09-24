@@ -117,15 +117,34 @@ def decompose(name: str, spec: str, prefix: str = "/api", tag: str = "",
                         "is provided verbatim." % (staged, name, staged)),
         "complexity": "low",
     })
+    # c122 2026-09-21: `requires` -- the manifest may not be written before the
+    # module its import_path names. This directive is write_raw and lands every
+    # time; router.py is generate_file and lands ~21% of the time, so without the
+    # dependency the manifest is what makes an empty directory COUNT as a service.
+    # Measured on origin/main @ 289f1f1ec by running tools/promote_staged_to_active.py
+    # itself: candidates 1498, promote-eligible 22, hold 1476 -- and 1226 of those
+    # 1476 HOLDs are the single reason "router.py exposes no router". 1145 of 1499
+    # staged services declare a router that is not on disk; 251 of the 319 created
+    # in the 14d to 2026-09-21, including 20 of 20 on 2026-09-20.
+    #
+    # goose_runner DEFERS a directive with an unmet `requires` (leaves it pending,
+    # no engine call, nothing ghosted or parked), so this orders the emission by
+    # construction rather than adding a gate: the promise cannot outlive the code,
+    # and the manifest lands by itself once router.py exists. Harness doctrine R1
+    # (the inspected artifact must be the one that runs) and R7 (recovery, not
+    # restriction).
     directives.append({
         "task": "scaffold_%s_service_toml" % name,
         "handler": "write_raw",
         "output_file": "%s/service.toml" % staged,
+        "requires": ["%s/router.py" % staged],
         "content": _service_toml(name, prefix, tag),
         "description": ("Create EXACTLY the file %s/service.toml -- this literal "
                         "repo-relative path and no other -- registering service '%s' "
                         "(import_path services.active.%s.router, prefix %s). This is "
-                        "the contract the spine reads after promotion." % (staged, name, name, prefix)),
+                        "the contract the spine reads after promotion. It REQUIRES "
+                        "%s/router.py: the manifest must never name a module that "
+                        "does not exist." % (staged, name, name, prefix, staged)),
         "complexity": "low",
     })
 

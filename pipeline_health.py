@@ -102,10 +102,10 @@ def cycle():
     
     try:
         result = ws_query("""
-            SELECT COUNT(DISTINCT r.id) as cnt 
-            FROM mcp_server_registry r 
-            LEFT JOIN mcp_attestations a ON r.server_id = a.server_id 
-            WHERE a.id IS NULL
+            SELECT COUNT(DISTINCT r.server_id) as cnt
+            FROM mcp_server_registry r
+            LEFT JOIN mcp_attestations a ON r.server_id = a.server_id
+            WHERE a.server_id IS NULL
         """)
         if result and 'results' in result and result['results']:
             no_attestation_count = result['results'][0].get('cnt', 0) or 0
@@ -116,10 +116,10 @@ def cycle():
     
     try:
         result = ws_query("""
-            SELECT COUNT(DISTINCT r.id) as cnt 
-            FROM mcp_server_registry r 
-            LEFT JOIN mcp_threat_associations t ON r.server_id = t.server_id 
-            WHERE t.id IS NULL
+            SELECT COUNT(DISTINCT r.server_id) as cnt
+            FROM mcp_server_registry r
+            LEFT JOIN mcp_threat_associations t ON r.server_id = t.server_id
+            WHERE t.server_id IS NULL
         """)
         if result and 'results' in result and result['results']:
             no_threat_intel_count = result['results'][0].get('cnt', 0) or 0
@@ -130,10 +130,10 @@ def cycle():
     
     try:
         result = ws_query("""
-            SELECT COUNT(DISTINCT r.id) as cnt 
-            FROM mcp_server_registry r 
-            LEFT JOIN mcp_signal_scores s ON r.server_id = s.server_id 
-            WHERE s.id IS NULL
+            SELECT COUNT(DISTINCT r.server_id) as cnt
+            FROM mcp_server_registry r
+            LEFT JOIN mcp_signal_scores s ON r.server_id = s.server_id
+            WHERE s.server_id IS NULL
         """)
         if result and 'results' in result and result['results']:
             zero_signal_count = result['results'][0].get('cnt', 0) or 0

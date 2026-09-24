@@ -246,7 +246,14 @@ def cycle() -> dict:
         "degradation_rate": m["degradation_rate"],
         "orphan_raw": m["orphan_raw"], "orphan_effective": m["orphan_effective"],
         "ratchet_mode": m.get("ratchet_mode"), "basis": m.get("basis"),
-        "staged": m["staged_count"], "active": m["active_count"],
+        "staged": m["staged_count"],
+        # This is the fs writer. It does not measure the graded
+        # (mounted, reachable) number, so it must not publish one:
+        # an fs count emitted as "active" is exactly the 590-vs-33
+        # wrong-definition trend #5026 existed to stop. R6: an
+        # unknown is not a zero and not the other writer's number.
+        "fs_active": m["fs_active_count"],
+        "active": m.get("active_count", "UNKNOWN"),
         "csv": str(CSV_PATH),
     }, indent=2))
     with (LOGS / "autopoiesis_bar_tracker.log").open("a") as fh:

@@ -135,6 +135,7 @@ jobs:
             tests/test_accept_gate.py \
             tests/test_vanity_redirect_webhooks.py \
             tests/test_migration_graph_single_head.py \
+            tests/test_fire_gate_migration_owner.py \
             tests/test_fire_gate.py \
             tests/test_sha_green.py \
             tests/test_ops_audit_state.py \
@@ -154,10 +155,15 @@ jobs:
             tests/test_promoter_repair_wiring.py \
             tests/test_canary_classify_smoke.py \
             tests/test_requeue_quarantined.py \
+            tests/test_fu272_active_path_guard.py \
             tests/test_quarantine_topup.py \
             tests/test_architect_domain_map.py \
             tests/test_no_module_scope_test_imports.py \
             tests/test_edit_fidelity.py \
+            tests/test_auto_stage.py \
+            tests/test_queued_stems_terminal.py \
+            tests/test_handled_tasks_index.py \
+            tests/test_ratchet_no_raise.py \
             -q \
             --junitxml=artifacts/junit.xml
 

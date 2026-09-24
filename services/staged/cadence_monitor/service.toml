@@ -1,0 +1,8 @@
+[service]
+name = "cadence_monitor"
+import_path = "services.active.cadence_monitor.router"
+prefix = "/api"
+tag = "cadence_monitor"
+origin = "service"
+auth = "public"
+needs_data_layer = true

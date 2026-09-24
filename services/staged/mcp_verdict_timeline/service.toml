@@ -1,0 +1,8 @@
+[service]
+name = "mcp_verdict_timeline"
+import_path = "services.active.mcp_verdict_timeline.router"
+prefix = "/api"
+tag = "mcp_verdict_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -24,7 +24,7 @@ from zo_sentinel.build_routing import (  # noqa: E402
     resolve_directive_id, tier_for_complexity)
 from zo_sentinel.build_completion import (  # noqa: E402
     MAX_GHOST_ATTEMPTS, bump_ghost, clear_ghost, declared_output, ghost_attempts,
-    park_directive,
+    park_directive, unmet_requires,
     output_confirmed, failed_quarantined, workspace_diff_state)
 from zo_sentinel.gates.hollow import hollow_scaffold_scan  # noqa: E402
 from zo_sentinel import undeclared_write_guard  # noqa: E402  # GH #3415 fix 4
@@ -35,6 +35,7 @@ from zo_sentinel.build_lessons import (  # noqa: E402
 # write_service" per the 2026-05-31 ops note). state_loopback lives beside this
 # file; uv_gate_runner is the isolated Tier-0/1 gate.
 import state_loopback as sl  # noqa: E402
+import singleton_lock  # identity-verified single-instance lock
 try:
     from tools.uv_gate_runner import run_gates  # noqa: E402
 except Exception:  # tools/ not importable in some launch contexts -> gate becomes a no-op
@@ -127,18 +128,15 @@ def heartbeat_loop():
         send_heartbeat()
         time.sleep(HEARTBEAT_INTERVAL)
 
-def check_single_instance():
-    """Ensure only one instance runs."""
-    if PID_FILE.exists():
-        try:
-            pid = int(PID_FILE.read_text().strip())
-            os.kill(pid, 0)
-            log(f"Instance already running with PID {pid} - exiting")
-            sys.exit(0)
-        except (ValueError, OSError):
-            pass
-    PID_FILE.write_text(str(os.getpid()))
-    log(f"PID written: {os.getpid()}")
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
+
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file():
     """Remove PID file on shutdown."""
@@ -526,7 +524,62 @@ def _lessons_context(directive):
         return ""
 
 
+# (mtime, names) for the app.models roster; see _model_roster().
+_MODEL_ROSTER_MEMO = {"mtime": None, "names": None}
+
+
+def _model_roster():
+    """(names, klass) -- the COMPLETE app.models class roster, from the same
+    schema KL the schema-PRM gate lints against.
+
+    WHY THIS EXISTS. _data_access_context named FOUR model classes as spelling
+    examples and otherwise pointed the model at docs/SCHEMA_TRUTH.md -- a file
+    a single-shot chat completion with no filesystem cannot open. That is the
+    same unfollowable-pointer defect the 2026-08-11 grounding fix removed from
+    the engine prompt, still live in the block that is folded into EVERY build
+    task. Measured on the live runner's log (basis: /home/workspace/logs/
+    goose_runner.log, 2026-09-16T10:58Z..2026-09-20T06:24Z, the window the file
+    covers): 145 ghost-guard give-ups, 95 of them gate=selftest, and 77 lines
+    of the form "'X' is not in 'Y'". The app.models half of those names --
+    ServiceHealth, OrgService, McpRiskRegister, MCPSignalScores, MeshMemory,
+    McpThreatAssociation, McpSignalScore -- are all absent from a 14-class
+    roster. Every one is plausible. None is on the list, and the list was
+    never shown.
+
+    14 names is about 200 characters: the same trade _bus_table_context()
+    already makes for the 45 bus tables, applied to the plane that carries the
+    largest measured share of the failures.
+
+    klass is "ok" or "kl_error" and the roster is NEVER [] with klass "ok".
+    An unreadable KL and a schema with no models are different facts (R6), and
+    a caller must not print "the COMPLETE roster is: <nothing>" when the truth
+    is unknown -- that would assert a falsehood with more authority than the
+    pointer it replaced.
+    """
+    path = PROJECT_DIR / "graphify-out" / "schema_kl.json"
+    try:
+        mtime = path.stat().st_mtime
+    except Exception:                                      # noqa: BLE001
+        mtime = None
+    if (_MODEL_ROSTER_MEMO["names"] is not None
+            and _MODEL_ROSTER_MEMO["mtime"] == mtime):
+        return _MODEL_ROSTER_MEMO["names"], "ok"
+    try:
+        kl, _ = _schema_kl_cached()
+    except Exception:                                      # noqa: BLE001
+        return [], "kl_error"
+    names = sorted(n for n in ((kl or {}).get("models") or {}) if n)
+    if not names:
+        return [], "kl_error"
+    _MODEL_ROSTER_MEMO["mtime"] = mtime
+    _MODEL_ROSTER_MEMO["names"] = names
+    return names, "ok"
+
+
+# Keyed on the rendered roster, not a bare None, so a regenerated KL re-renders
+# instead of serving a stale block for the life of the daemon.
 _DATA_ACCESS_CTX = None
+_DATA_ACCESS_KEY = None
 
 
 def _data_access_context(directive):
@@ -543,10 +596,37 @@ def _data_access_context(directive):
     so it stays real"; it never was, and that sentence is why nobody looked
     for the missing column truth for weeks. Real per-directive columns come
     from _schema_ground_context(); this block carries table/class names and
-    the import contract only."""
-    global _DATA_ACCESS_CTX
-    if _DATA_ACCESS_CTX is not None:
+    the import contract only.
+
+    2026-09-20: the CLASS half of that is now genuinely derived -- the complete
+    app.models roster is inlined from the schema KL by _model_roster(). The
+    docs/SCHEMA_TRUTH.md pointer it replaces named an authority the engine (a
+    single chat completion, no filesystem) cannot consult, and a model sent to
+    fetch truth it cannot reach invents it. The TABLE list in plane (1)/(2)
+    below is still a literal and is still not claimed to be derived."""
+    global _DATA_ACCESS_CTX, _DATA_ACCESS_KEY
+    _roster, _rklass = _model_roster()
+    _key = (_rklass, tuple(_roster))
+    if _DATA_ACCESS_CTX is not None and _DATA_ACCESS_KEY == _key:
         return _DATA_ACCESS_CTX
+    _DATA_ACCESS_KEY = _key
+    # R6: an unreadable KL is not an empty roster. Fall back to the exact text
+    # that shipped before this change -- pointer and all -- rather than telling
+    # the model that no model classes exist.
+    _symbols = (
+        "SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists "
+        "every name that EXISTS -- read it before writing an import. If a model is not in it "
+        "it does not exist: use the nearest real class or flag that the directive needs a "
+        "schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not "
+        "MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. "
+    ) if _rklass != "ok" else (
+        "APP MODEL CLASSES -- the COMPLETE roster of names importable from app.models, read "
+        "from the live schema KL (the same source the schema-PRM gate lints against). A class "
+        "name that is NOT on this list DOES NOT EXIST, however plausible it looks and however "
+        "confidently the directive names it: use the nearest real class, or say the directive "
+        "needs a schema decision. Never invent one, and never pluralise or re-case one (Mcp, "
+        "not MCP). The roster is: " + ", ".join(_roster) + ". "
+    )
     _DATA_ACCESS_CTX = (
         "DATA ACCESS: data lives in databases, never files (no CSV/JSON inputs; CSV is "
         "export-only). TWO PLANES -- (1) APP tables (mcp_server_registry, mcp_llm_axis_scores, "
@@ -562,11 +642,7 @@ def _data_access_context(directive):
         "that_app.dependency_overrides[get_session]. There is NO app.dependency_overrides "
         "module (`app` is the PACKAGE; the instance is app.main:app), and StaticPool is NOT "
         "in app.db (from sqlalchemy.pool import StaticPool). "
-        "SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists "
-        "every name that EXISTS -- read it before writing an import. If a model is not in it "
-        "it does not exist: use the nearest real class or flag that the directive needs a "
-        "schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not "
-        "MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. "
+        + _symbols +
         "The MODULE's OWN data access MUST remain from app.db import get_session + "
         "from app.models import <Model>; a module whose data layer is itself an in-memory/"
         "sqlite store (rather than just the test override) is HOLLOW and REJECTED. "
@@ -1617,7 +1693,30 @@ def _selftest_gate(directive, directive_id):
         # cwd + the real inherited /pkg/:/root/ -> reproduces production exactly.
         _env = {**_os.environ, "DATABASE_URL": "sqlite://", "CLERK_PUBLISHABLE_KEY": "",
                 "PYTHONPATH": str(PROJECT_DIR) + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
-        proc = subprocess.run([_sys.executable, str(out)], capture_output=True,
+        # FU-459: #2177 cured the `app.*` half of THIS loader (PYTHONPATH) and left
+        # the RELATIVE-import half untouched. Running a file BY PATH can never give
+        # it a parent package, so `from .logic import x` -- correct for a
+        # services/staged/<name>/ package, and the exact form
+        # promote_staged_to_active.py imports SUCCESSFULLY -- raised ImportError and
+        # classify_selftest returned RED. Measured 2026-09-14 on the live runner log:
+        # of the 14 services RED-ed for this in 24h, 6 (43%) imported CLEAN under the
+        # runtime's own loader; the other 7 fail with `cannot import name` and stay
+        # RED via the branch ABOVE the relative-import one, so no true positive is
+        # lost. `python -m` still executes __main__, so the self-test contract holds.
+        # Falls back to the path form for anything not under PROJECT_DIR.
+        _selftest_argv = [_sys.executable, str(out)]
+        _dotted = None
+        try:
+            _rel = _os.path.relpath(str(out), str(PROJECT_DIR))
+            if not _rel.startswith(_os.pardir):
+                _parts = _os.path.splitext(_rel)[0].split(_os.sep)
+                if _parts and all(p.isidentifier() for p in _parts):
+                    _dotted = ".".join(_parts)
+        except Exception:
+            _dotted = None
+        if _dotted:
+            _selftest_argv = [_sys.executable, "-m", _dotted]
+        proc = subprocess.run(_selftest_argv, capture_output=True,
                               text=True, timeout=120, cwd=str(PROJECT_DIR), env=_env)
     except Exception as e:
         log(f"[selftest] {directive_id}: could not run ({type(e).__name__}: {e}) -- Tier-0 only")
@@ -2135,6 +2234,29 @@ def run():
                     mark_directive_completed(directive)
                     continue
                 
+                # c122 2026-09-21: a directive may declare `requires` -- files
+                # that must ALREADY exist for its own output to be TRUE rather
+                # than merely present. tools/service_decomposer.py stamps it on
+                # service.toml, whose import_path names a router.py that a LATER,
+                # engine-dependent directive is supposed to write. Measured on
+                # origin/main @ 289f1f1ec by running the promoter itself: 1226 of
+                # 1476 staged HOLDs are the one reason "router.py exposes no
+                # router", because the manifest lands deterministically and the
+                # router does not.
+                #
+                # DEFER -- do not fall through. Letting this reach the engine is
+                # precisely the 68-unparseable-service.toml bug the write_raw
+                # dispatch was added to stop. Deferring costs no LLM call, ghosts
+                # nothing, parks nothing, and leaves no FAIL row in the loopback
+                # manifest (this runs BEFORE sl.init_manifest deliberately); the
+                # directive lands by itself on a later pass once the router
+                # exists. Inert for every directive that declares no `requires`.
+                _unmet = unmet_requires(directive, str(PROJECT_DIR))
+                if _unmet:
+                    log(f"[requires] {directive_id}: DEFERRED, still pending -- "
+                        f"absent: {', '.join(_unmet)}")
+                    continue
+
                 log(f"Processing directive: {directive_id} (complexity={complexity})")
                 log_directive_routed(directive_id, source, complexity, "goose_tier1")
                 

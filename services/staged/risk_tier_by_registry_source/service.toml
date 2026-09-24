@@ -1,0 +1,27 @@
+# service.toml
+[service]
+name = "risk_tier_by_registry_source"
+import_path = "services.active.risk_tier_by_registry_source.router"
+prefix = "/api"
+tag = "risk_tier_by_registry_source"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[acceptance]
+pass_condition = "self-test prints PASS"
+
+[[tables]]
+name = "mcp_server_registry"
+source = "app"
+usage = "read"
+
+[[tables]]
+name = "mcp_signal_scores"
+source = "bus"
+usage = "read"
+
+[[tables]]
+name = "mcp_llm_axis_scores"
+source = "app"
+usage = "read"

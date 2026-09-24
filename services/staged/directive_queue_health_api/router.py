@@ -1,199 +1,141 @@
-"""
-Router for directive_queue_health_api service.
-Exposes health metrics for directive queue processing.
-"""
-import os
-import sys
-import time
-import shutil
-import tempfile
-from pathlib import Path
-from typing import Optional
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from typing import List
 import requests
-
 from app.db import get_session
 
-
-# Default paths for directive directories
-DEFAULT_PENDING_DIR = os.environ.get(
-    "DIRECTIVE_PENDING_DIR",
-    "/home/workspace/zo_sentinel/directives/pending"
-)
-DEFAULT_PROPOSED_DIR = os.environ.get(
-    "DIRECTIVE_PROPOSED_DIR",
-    "/home/workspace/zo_sentinel/directives/proposed"
-)
-
-# Threshold in seconds for marking directives as stale
-STALE_THRESHOLD_SECONDS = 3600.0
+router = APIRouter()
 
 
-class DirectiveQueueHealthResponse(BaseModel):
-    """Response model for directive queue health check."""
-    pending_count: int
-    proposed_count: int
-    oldest_pending_age_seconds: float
-    stale_directives: list[str]
+class GeneratorHealth(BaseModel):
+    name: str
+    last_heartbeat_age_seconds: int
+    stale: bool
+    pending_directive_count: int
 
 
-def check_directive_queue_health(
-    pending_dir: str = DEFAULT_PENDING_DIR,
-    proposed_dir: str = DEFAULT_PROPOSED_DIR,
-    stale_threshold: float = STALE_THRESHOLD_SECONDS,
-) -> DirectiveQueueHealthResponse:
-    """
-    Check health of directive queue by analyzing pending and proposed directories.
-    
-    Reads task names from directives/pending/ and directives/proposed/ directories,
-    counts pending vs proposed directives, computes oldest_pending_age_seconds by
-    parsing mtime on each JSON file, and returns stale_directives list of directive
-    names older than stale_threshold.
-    
-    Args:
-        pending_dir: Path to pending directives directory
-        proposed_dir: Path to proposed directives directory
-        stale_threshold: Age in seconds beyond which a directive is considered stale
-    
-    Returns:
-        DirectiveQueueHealthResponse with counts and staleness info
-    """
-    pending_files = []
-    proposed_files = []
-    
-    if os.path.isdir(pending_dir):
-        pending_files = [
-            f for f in os.listdir(pending_dir)
-            if f.endswith('.json') and os.path.isfile(os.path.join(pending_dir, f))
-        ]
-    
-    if os.path.isdir(proposed_dir):
-        proposed_files = [
-            f for f in os.listdir(proposed_dir)
-            if f.endswith('.json') and os.path.isfile(os.path.join(proposed_dir, f))
-        ]
-    
-    pending_count = len(pending_files)
-    proposed_count = len(proposed_files)
-    
-    oldest_pending_age = 0.0
-    stale_directives = []
-    current_time = time.time()
-    
-    for filename in pending_files:
-        filepath = os.path.join(pending_dir, filename)
-        file_mtime = os.path.getmtime(filepath)
-        age = current_time - file_mtime
-        if age > oldest_pending_age:
-            oldest_pending_age = age
-        if age > stale_threshold:
-            stale_directives.append(filename)
-    
-    return DirectiveQueueHealthResponse(
-        pending_count=pending_count,
-        proposed_count=proposed_count,
-        oldest_pending_age_seconds=oldest_pending_age,
-        stale_directives=stale_directives
+class QueueHealthResponse(BaseModel):
+    generators: List[GeneratorHealth]
+    overall_healthy: bool
+    stalled_generators: List[str]
+
+
+def get_stale_threshold() -> int:
+    return 300
+
+
+def get_pending_directives_dir() -> str:
+    return "/var/lib/directives/pending"
+
+
+def get_proposed_directives_dir() -> str:
+    return "/var/lib/directives/proposed"
+
+
+def get_service_health_rows() -> List[dict]:
+    response = requests.post(
+        "http://127.0.0.1:8772/query",
+        json={
+            "sql": "SELECT daemon_name, last_heartbeat, status FROM service_health WHERE service_type = 'directive_generator'",
+            "params": {}
+        },
+        timeout=10
+    )
+    response.raise_for_status()
+    result = response.json()
+    return result.get("rows", [])
+
+
+def get_pending_directive_count(daemon_name: str) -> int:
+    import os
+    pending_dir = get_pending_directives_dir()
+    proposed_dir = get_proposed_directives_dir()
+    count = 0
+    for directory in [pending_dir, proposed_dir]:
+        if os.path.isdir(directory):
+            daemon_dir = os.path.join(directory, daemon_name)
+            if os.path.isdir(daemon_dir):
+                count += len([f for f in os.listdir(daemon_dir) if os.path.isfile(os.path.join(daemon_dir, f))])
+    return count
+
+
+def compute_queue_health() -> QueueHealthResponse:
+    stale_threshold = get_stale_threshold()
+    rows = get_service_health_rows()
+    import time
+    current_time = int(time.time())
+    generators = []
+    stalled = []
+    for row in rows:
+        daemon_name = row.get("daemon_name")
+        last_heartbeat = row.get("last_heartbeat")
+        if last_heartbeat is None:
+            continue
+        heartbeat_age = current_time - int(last_heartbeat)
+        stale = heartbeat_age > stale_threshold
+        pending_count = get_pending_directive_count(daemon_name)
+        generators.append(GeneratorHealth(
+            name=daemon_name,
+            last_heartbeat_age_seconds=heartbeat_age,
+            stale=stale,
+            pending_directive_count=pending_count
+        ))
+        if stale:
+            stalled.append(daemon_name)
+    return QueueHealthResponse(
+        generators=generators,
+        overall_healthy=len(stalled) == 0,
+        stalled_generators=stalled
     )
 
 
-def create_router() -> APIRouter:
-    """Create and configure the APIRouter for directive queue health."""
-    router = APIRouter()
-    
-    @router.get(
-        "/health",
-        response_model=DirectiveQueueHealthResponse,
-        summary="Get directive queue health metrics"
-    )
-    async def get_health() -> DirectiveQueueHealthResponse:
-        """
-        Get health metrics for the directive queue.
-        
-        Returns counts of pending and proposed directives, age of oldest
-        pending directive, and list of stale directives.
-        """
-        health_data = check_directive_queue_health()
-        
-        # Read sentinel_directive_generator daemon health from write_service
-        try:
-            resp = requests.get(
-                "http://127.0.0.1:8772/health",
-                timeout=2
-            )
-            if resp.status_code == 200:
-                health_data_dict = resp.json()
-                health_data_dict["sentinel_directive_generator_age_seconds"] = health_data_dict.get("age_seconds", -1)
-        except Exception:
-            pass
-        
-        return health_data
-    
-    return router
-
-
-def get_router() -> APIRouter:
-    """Public interface to get the configured router."""
-    return create_router()
+@router.get("/api/directives/queue-health", response_model=QueueHealthResponse)
+def get_queue_health():
+    return compute_queue_health()
 
 
 if __name__ == "__main__":
-    # Self-test: create temp JSON files in mock pending/proposed dirs,
-    # call the health function, assert results
-    
-    pending_dir = tempfile.mkdtemp(prefix="directive_pending_")
-    proposed_dir = tempfile.mkdtemp(prefix="directive_proposed_")
-    
-    # Store original paths to restore later
-    original_pending_dir = DEFAULT_PENDING_DIR
-    original_proposed_dir = DEFAULT_PROPOSED_DIR
-    
-    # Patch the defaults for testing
-    os.environ["DIRECTIVE_PENDING_DIR"] = pending_dir
-    os.environ["DIRECTIVE_PROPOSED_DIR"] = proposed_dir
-    
-    # Create test files
-    pending_file1 = os.path.join(pending_dir, "test_dir1.json")
-    pending_file2 = os.path.join(pending_dir, "test_dir2.json")
-    proposed_file = os.path.join(proposed_dir, "test_dir3.json")
-    
-    Path(pending_file1).write_text('{"directive": "test_dir1"}')
-    Path(pending_file2).write_text('{"directive": "test_dir2"}')
-    Path(proposed_file).write_text('{"directive": "test_dir3"}')
-    
-    # Make pending files stale (older than 3600s)
-    old_time = time.time() - 7200
-    os.utime(pending_file1, (old_time, old_time))
-    os.utime(pending_file2, (old_time, old_time))
-    
-    try:
-        # Re-import to pick up new defaults
-        from importlib import reload
-        import router as router_module
-        reload(router_module)
-        
-        result = router_module.check_directive_queue_health(
-            pending_dir=pending_dir,
-            proposed_dir=proposed_dir
-        )
-        
-        # Assertions
-        assert result.pending_count == 2, f"Expected pending_count==2, got {result.pending_count}"
-        assert result.proposed_count == 1, f"Expected proposed_count==1, got {result.proposed_count}"
-        assert "test_dir1.json" in result.stale_directives, f"test_dir1.json not in stale_directives: {result.stale_directives}"
-        assert "test_dir2.json" in result.stale_directives, f"test_dir2.json not in stale_directives: {result.stale_directives}"
-        
-        # Restore environment
-        os.environ["DIRECTIVE_PENDING_DIR"] = original_pending_dir
-        os.environ["DIRECTIVE_PROPOSED_DIR"] = original_proposed_dir
-        
-        print("PASS")
-    except AssertionError as e:
-        print(f"FAIL: {e}")
-        sys.exit(1)
-    finally:
-        # Cleanup
-        shutil.rmtree(pending_dir, ignore_errors=True)
-        shutil.rmtree(proposed_dir, ignore_errors=True)
+    import sys
+    import time
+    from unittest.mock import patch, MagicMock
+    from fastapi.testclient import TestClient
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(router)
+
+    stale_daemon_name = "generator-alpha"
+    healthy_daemon_name = "generator-beta"
+    current_ts = int(time.time())
+    stale_threshold = 300
+
+    mock_service_health_response = {
+        "rows": [
+            {"daemon_name": stale_daemon_name, "last_heartbeat": current_ts - 600, "status": "running"},
+            {"daemon_name": healthy_daemon_name, "last_heartbeat": current_ts - 60, "status": "running"},
+        ]
+    }
+
+    def mock_post(url, json, timeout=None):
+        resp = MagicMock()
+        if "8772/query" in url:
+            resp.status_code = 200
+            resp.json.return_value = mock_service_health_response
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    mock_os_isdir = MagicMock(return_value=False)
+    mock_os_listdir = MagicMock(return_value=[])
+
+    with patch("requests.post", mock_post):
+        with patch("os.path.isdir", mock_os_isdir):
+            with patch("os.listdir", mock_os_listdir):
+                with patch("os.path.isfile", return_value=False):
+                    client = TestClient(app)
+                    response = client.get("/api/directives/queue-health")
+                    data = response.json()
+
+    assert data["overall_healthy"] is False, f"Expected overall_healthy=False, got {data['overall_healthy']}"
+    assert stale_daemon_name in data["stalled_generators"], f"Expected '{stale_daemon_name}' in stalled_generators, got {data['stalled_generators']}"
+    assert healthy_daemon_name not in data["stalled_generators"], f"Expected '{healthy_daemon_name}' NOT in stalled_generators"
+    print("PASS")

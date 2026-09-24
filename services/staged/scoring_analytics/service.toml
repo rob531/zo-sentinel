@@ -1,0 +1,30 @@
+[service]
+name = "scoring_analytics"
+import_path = "services.active.scoring_analytics.router"
+prefix = "/api"
+tag = "scoring_analytics"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+write_service = true
+
+[app_tables]
+McpServerRegistry = "read"
+McpLlmAxisScore = "read"
+McpScoreDispute = "read"
+orgs = "read"
+users = "read"
+
+[bus_tables]
+mcp_signal_scores = "read"
+mesh_memory = "read"
+
+[tests]
+self_test_module = "services.active.scoring_analytics.self_test"
+
+[acceptance]
+self_test_cmd = "python -m services.active.scoring_analytics.self_test"
+self_test_output_contains = "PASS"

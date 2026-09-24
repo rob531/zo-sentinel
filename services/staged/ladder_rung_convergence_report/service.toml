@@ -1,0 +1,25 @@
+[service]
+name = "ladder_rung_convergence_report"
+import_path = "services.active.ladder_rung_convergence_report.router"
+prefix = "/api"
+tag = "ladder_rung_convergence_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[[tables]]
+source = "app"
+tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+
+[[tables]]
+source = "bus"
+tables = ["mcp_signal_scores", "mesh_memory"]
+
+[router]
+module = "services.active.ladder_rung_convergence_report"
+
+[dependencies]
+internal_services = []
+
+[testing]
+requires_auth = false

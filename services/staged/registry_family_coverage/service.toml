@@ -1,0 +1,8 @@
+[service]
+name = "registry_family_coverage"
+import_path = "services.active.registry_family_coverage.router"
+prefix = "/api"
+tag = "registry_family_coverage"
+origin = "service"
+auth = "public"
+needs_data_layer = true

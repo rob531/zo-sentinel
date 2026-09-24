@@ -89,6 +89,21 @@ def analyse(lines):
             errors.append({"code": code, "fu": fu.id, "line": fu.start + 1,
                            "message": msg, "fixable": fixable})
 
+        # E10 must come first: it explains the E1/E2/E3 that follow it. An entry
+        # whose keys were written as BARE LINES (`status: open`) instead of
+        # `- ` bullets still matches HEAD_RE, still increments the entry count,
+        # and still passes a heading-form check -- but KEY_RE never matches, so
+        # `fu.keys` is empty, there is no `verify_cmd`, and fu_verify has
+        # nothing to execute. Measured 2026-09-13: 2 of 446 entries (FU-451,
+        # FU-452), both carrying a real predicate that had never once run,
+        # against 375 entries merely missing SOME key. Those are different
+        # things and only one of them is a defect, so they get different codes.
+        if not fu.keys:
+            err("E10", "entry parsed with NO keys at all -- its keys are not `- key: value` "
+                       "bullets, so KEY_RE never matched them. The heading is fine and the "
+                       "entry counts, and its `verify:` will never be executed. Rewrite the "
+                       "keys as `- ` bullets, or file it through fu_append_log.py --new-fu")
+
         for req in REQUIRED:
             if req not in fu.keys:
                 err({"date": "E1", "detail": "E2", "resolution": "E3"}[req],
@@ -133,6 +148,11 @@ def repair(lines, entries):
     """Apply the fixable classes bottom-up so earlier indices stay valid."""
     fixed = {"E3": [], "E5": [], "E6": [], "E8": []}
     for fu in sorted(entries, key=lambda f: f.start, reverse=True):
+        # E10: a keyless entry needs its FORM repaired (bare lines -> bullets).
+        # Inserting individual keys here would leave the inert ones in place and
+        # make the entry look repaired while its `verify:` still never runs.
+        if not fu.keys:
+            continue
         if "resolution" not in fu.keys:
             pos = fu.end
             while pos - 1 > fu.start and lines[pos - 1].strip() in ("", "---"):
@@ -141,11 +161,19 @@ def repair(lines, entries):
             fixed["E3"].append(fu.id)
 
     for fu in sorted(fu_ledger.parse(lines), key=lambda f: f.start, reverse=True):
+        # keyless (E10): FORM repair is owed, not key insertion -- see repair()'s
+        # first loop. Guarding only one of these four loops still injects keys.
+        if not fu.keys:
+            continue
         if not fu.fu_class:
             fu_ledger.insert_key(lines, fu, "class", infer_class(fu), before="detail")
             fixed["E5"].append(fu.id)
 
     for fu in sorted(fu_ledger.parse(lines), key=lambda f: f.start, reverse=True):
+        # keyless (E10): FORM repair is owed, not key insertion -- see repair()'s
+        # first loop. Guarding only one of these four loops still injects keys.
+        if not fu.keys:
+            continue
         cls = fu.fu_class or infer_class(fu)
         if cls != "defect":
             continue
@@ -157,6 +185,10 @@ def repair(lines, entries):
             fixed["E6"].append(fu.id)
 
     for fu in sorted(fu_ledger.parse(lines), key=lambda f: f.start, reverse=True):
+        # keyless (E10): FORM repair is owed, not key insertion -- see repair()'s
+        # first loop. Guarding only one of these four loops still injects keys.
+        if not fu.keys:
+            continue
         if fu.verify_cmd and "verify_seen_red" not in fu.keys:
             fu_ledger.insert_key(lines, fu, "verify_seen_red", fu_ledger.NEVER_RED,
                                  before="log")

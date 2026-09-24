@@ -1,0 +1,12 @@
+[service]
+name = "axis_score_to_verdict_consumer"
+import_path = "services.active.axis_score_to_verdict_consumer.router"
+prefix = "/api"
+tag = "axis_score_to_verdict_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[scripts]
+start = "python -m services.active.axis_score_to_verdict_consumer"
+test = "python -m services.active.axis_score_to_verdict_consumer"

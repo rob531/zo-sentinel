@@ -1,0 +1,8 @@
+[service]
+name = "supply_chain_enrichment"
+import_path = "services.active.supply_chain_enrichment.router"
+prefix = "/api"
+tag = "supply_chain_enrichment"
+origin = "service"
+auth = "public"
+needs_data_layer = true

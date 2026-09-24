@@ -87,6 +87,18 @@ INFORMATION_SCHEMA_SQL = (
     "ORDER BY table_name, ordinal_position"
 )
 
+# The bus (:8772/query) silently caps a result set. Measured on the LIVE runtime
+# 2026-09-04: this statement returned 200 rows against a `count(*)` of 373, so
+# the committed DB_SCHEMA.md / duckdb_schema.json were generated from the first
+# 200 columns only -- every table sorting after `mcp_ecosystems_metadata` was
+# absent from the canonical doc, and the committed schema hash was a hash of a
+# partial read. The response's `count` field equals len(rows) on every query
+# and so cannot flag truncation (#3997). Paging does not need it: request pages
+# and stop at the first short one. `(table_name, ordinal_position)` is a total
+# order, so LIMIT/OFFSET is stable across pages.
+BUS_PAGE_ROWS = 200
+BUS_MAX_PAGES = 200
+
 
 # ---------------------------------------------------------------------------
 # Schema hash -- duplicated here so this script stays stdlib + requests only
@@ -109,14 +121,39 @@ def compute_schema_hash(rows: List[Dict[str, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def fetch_duckdb_rows() -> List[Dict[str, str]]:
-    resp = requests.post(
-        f"{WRITE_SERVICE}/query",
-        json={"sql": INFORMATION_SCHEMA_SQL},
-        timeout=QUERY_TIMEOUT,
+def _fetch_all_information_schema_rows() -> List[Dict[str, Any]]:
+    """Read every information_schema row, paging past the bus row cap.
+
+    Stops on the first short page. A full-length page is indistinguishable from
+    a capped one, so it is always followed by another request.
+    """
+    rows: List[Dict[str, Any]] = []
+    for page in range(BUS_MAX_PAGES):
+        offset = page * BUS_PAGE_ROWS
+        resp = requests.post(
+            f"{WRITE_SERVICE}/query",
+            json={
+                "sql": (
+                    f"{INFORMATION_SCHEMA_SQL} "
+                    f"LIMIT {BUS_PAGE_ROWS} OFFSET {offset}"
+                )
+            },
+            timeout=QUERY_TIMEOUT,
+        )
+        resp.raise_for_status()
+        page_rows = resp.json().get("rows") or []
+        rows.extend(page_rows)
+        if len(page_rows) < BUS_PAGE_ROWS:
+            return rows
+    raise RuntimeError(
+        "information_schema paging exceeded %d pages (%d rows) -- refusing to "
+        "loop; the bus is likely ignoring OFFSET"
+        % (BUS_MAX_PAGES, len(rows))
     )
-    resp.raise_for_status()
-    raw = resp.json().get("rows", [])
+
+
+def fetch_duckdb_rows() -> List[Dict[str, str]]:
+    raw = _fetch_all_information_schema_rows()
     # Normalise type-string and drop skip tables -- match the historical
     # transformation so committed hashes stay comparable.
     return [

@@ -9,7 +9,6 @@ import statistics
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
-from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -98,6 +97,7 @@ def get_cadence_job_sla(
 # Self‑test (run with: python -m services.staged.cadence_job_sla_report.contract)
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool

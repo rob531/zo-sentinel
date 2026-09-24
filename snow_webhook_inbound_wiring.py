@@ -158,7 +158,7 @@ def ensure_submissions_table() -> None:
 
 
 def submission_exists(ticket_id: str) -> bool:
-    sql = f"SELECT COUNT(*) as cnt FROM mcp_submissions WHERE ticket_id = '{ticket_id.replace('\'', '\'\'')}'"
+    sql = f"SELECT COUNT(*) as cnt FROM mcp_submissions WHERE ticket_id = '{ticket_id.replace(chr(39), chr(39)+chr(39))}'"
     try:
         rows = ws_query(sql)
         return bool(rows and rows[0].get('cnt', 0) > 0)
@@ -174,18 +174,18 @@ def upsert_submission(row: dict) -> None:
         description, submitted_by, ticket_id, snow_state,
         snow_state_label, approval_status, submission_ts, updated_at, raw_payload
     ) VALUES (
-        '{row['submission_id'].replace('\'', '\'\'')}',
-        '{row.get('server_id', '').replace('\'', '\'\'')}',
-        '{row.get('source', 'snow').replace('\'', '\'\'')}',
-        '{row.get('mcp_name', '').replace('\'', '\'\'')}',
-        '{row.get('mcp_url', '').replace('\'', '\'\'')}',
-        '{row.get('description', '').replace('\'', '\'\'')}',
-        '{row.get('submitted_by', '').replace('\'', '\'\'')}',
-        '{row['ticket_id'].replace('\'', '\'\'')}',
-        '{row.get('snow_state', '').replace('\'', '\'\'')}',
-        '{row.get('snow_state_label', '').replace('\'', '\'\'')}',
-        '{row.get('approval_status', 'pending').replace('\'', '\'\'')}',
-        '{row.get('submission_ts', utc_now_iso()).replace('\'', '\'\'')}',
+        '{row['submission_id'].replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('server_id', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('source', 'snow').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('mcp_name', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('mcp_url', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('description', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('submitted_by', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row['ticket_id'].replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('snow_state', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('snow_state_label', '').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('approval_status', 'pending').replace(chr(39), chr(39)+chr(39))}',
+        '{row.get('submission_ts', utc_now_iso()).replace(chr(39), chr(39)+chr(39))}',
         '{utc_now_iso()}',
         '''{payload_json.replace(chr(39), chr(39)+chr(39))}'''
     )

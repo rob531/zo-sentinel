@@ -108,6 +108,22 @@ INFORMATION_SCHEMA_SQL = (
     "ORDER BY table_name, ordinal_position"
 )
 
+# The bus (:8772/query) silently caps a result set. Measured on the LIVE runtime
+# 2026-09-04: the unpaginated statement above returned exactly 200 rows while
+# `count(*)` over the same predicate returned 373 -- so this drift probe was
+# blind to 173 of 373 columns, every column of every table sorting after
+# `mcp_ecosystems_metadata`. It never reported drift there, and a probe that
+# cannot see a region does not report "unknown" for it; it reports "no drift".
+#
+# The response DOES carry a `count` field, but it equals len(rows) on every
+# query (7 for a 7-row read, 200 for the truncated read), so it cannot
+# distinguish "capped at 200" from "there were exactly 200". That is the gap
+# #3997 exists to close. Paging does NOT need it: ask for pages and stop when
+# one comes back short. `(table_name, ordinal_position)` is a total order, so
+# LIMIT/OFFSET is stable across pages.
+BUS_PAGE_ROWS = 200
+BUS_MAX_PAGES = 200  # 40k columns; a runaway loop is a bug, not a big schema
+
 SKIP_TABLES = {
     "agent_outputs",
     "agent_runs",
@@ -298,16 +314,43 @@ def check_uptime() -> Tuple[bool, float, Optional[str]]:
 # ---------------------------------------------------------------------------
 
 
+def _fetch_all_information_schema_rows() -> List[Dict[str, Any]]:
+    """Read every information_schema row, paging past the bus row cap.
+
+    Stops on the first short page. A page that comes back exactly
+    ``BUS_PAGE_ROWS`` long is indistinguishable from a capped one, so it is
+    always followed by another request -- the extra round trip is the price of
+    not being able to ask the bus whether it truncated.
+    """
+    rows: List[Dict[str, Any]] = []
+    for page in range(BUS_MAX_PAGES):
+        offset = page * BUS_PAGE_ROWS
+        r = requests.post(
+            f"{WRITE_SERVICE_URL}/query",
+            json={
+                "sql": (
+                    f"{INFORMATION_SCHEMA_SQL} "
+                    f"LIMIT {BUS_PAGE_ROWS} OFFSET {offset}"
+                )
+            },
+            timeout=QUERY_TIMEOUT,
+        )
+        r.raise_for_status()
+        page_rows = r.json().get("rows") or []
+        rows.extend(page_rows)
+        if len(page_rows) < BUS_PAGE_ROWS:
+            return rows
+    raise RuntimeError(
+        "information_schema paging exceeded %d pages (%d rows) -- refusing to "
+        "loop; the bus is likely ignoring OFFSET"
+        % (BUS_MAX_PAGES, len(rows))
+    )
+
+
 def fetch_live_duckdb_columns() -> List[Dict[str, str]]:
     """Query the live information_schema. Returns the list of column rows
     suitable for ``compute_schema_hash``."""
-    r = requests.post(
-        f"{WRITE_SERVICE_URL}/query",
-        json={"sql": INFORMATION_SCHEMA_SQL},
-        timeout=QUERY_TIMEOUT,
-    )
-    r.raise_for_status()
-    rows = r.json().get("rows", [])
+    rows = _fetch_all_information_schema_rows()
     # Apply the same SKIP_TABLES filter the refresh script uses, so hashes
     # are comparable.
     return [

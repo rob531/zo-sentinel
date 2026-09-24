@@ -442,7 +442,7 @@ def detect_impersonation(server_id: str, threshold: float = 0.8) -> List[Dict[st
         SELECT msr.server_id, msr.name,
                fp.tool_name_hash, fp.description_tokens,
                fp.permission_scope_hash, fp.domain_fingerprint,
-               fp.version_string, fp.created_at
+               fp.version_string, fp.computed_at AS created_at
         FROM mcp_server_registry msr
         INNER JOIN mcp_fingerprints fp ON msr.server_id = fp.server_id
         WHERE fp.server_id != ?

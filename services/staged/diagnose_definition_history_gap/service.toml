@@ -1,0 +1,8 @@
+[service]
+name = "diagnose_definition_history_gap"
+import_path = "services.active.diagnose_definition_history_gap.router"
+prefix = "/api"
+tag = "diagnose_definition_history_gap"
+origin = "service"
+auth = "public"
+needs_data_layer = true

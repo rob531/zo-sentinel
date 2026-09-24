@@ -1,0 +1,22 @@
+[service]
+name = "risk_tier_trend_summary"
+import_path = "services.active.risk_tier_trend_summary.router"
+prefix = "/api"
+tag = "risk_tier_trend_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+class_name = "router"
+module_path = "services.active.risk_tier_trend_summary"
+
+[dependencies]
+app_db = true
+write_service = true
+
+[app_tables]
+primary = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes"]
+
+[mesh_tables]
+primary = ["mcp_signal_scores", "mcp_risk_register", "mcp_risk_timeline"]

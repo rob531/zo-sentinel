@@ -5,6 +5,7 @@ import signal
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
+import singleton_lock  # identity-verified single-instance lock
 
 LOG_DIR = os.environ.get('ZO_SENTINEL_LOGS', '/home/workspace/zo_sentinel/logs')
 LOG_FILE = os.path.join(LOG_DIR, 'signal_bridge.log')
@@ -100,7 +101,7 @@ def write_discrimination_floor_breach(signal_name: str, server_id: str, score: f
 def get_unbridged_enrichments() -> List[Dict[str, Any]]:
     excluded = ', '.join([f"'{k}'" for k in ENRICHMENT_TO_SIGNAL.keys()])
     result = ws_query(f"""
-        SELECT e.server_id, e.signal_type, e.score, e.computed_at, e.evidence
+        SELECT e.server_id, e.signal_type, e.score, e.computed_at, e.evidence_blob AS evidence
         FROM mcp_signal_enrichments e
         WHERE e.signal_type IN ({excluded})
           AND e.server_id NOT LIKE '__harness_%'
@@ -160,26 +161,15 @@ def write_scores(entries: List[Dict[str, Any]]) -> int:
     return 0
 
 
-def check_single_instance() -> bool:
-    if os.path.exists(PID_FILE):
-        try:
-            with open(PID_FILE, 'r') as f:
-                old_pid = int(f.read().strip())
-            try:
-                os.kill(old_pid, 0)
-                log.error(f"Already running as PID {old_pid}")
-                return False
-            except OSError:
-                pass
-        except (ValueError, IOError):
-            pass
-    try:
-        with open(PID_FILE, 'w') as f:
-            f.write(str(os.getpid()))
-    except IOError:
-        pass
-    return True
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file():
     try:

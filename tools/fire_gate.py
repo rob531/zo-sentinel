@@ -53,6 +53,7 @@ import sys
 ALWAYS_SENSITIVE = ("Dockerfile", ".dockerignore", "fly.toml", "services/active/")
 
 _SHA40 = re.compile(r"[0-9a-f]{40}")
+_LOCAL_REMOTE_PREFIXES = ("origin", "upstream")
 
 # Explicitly NOT sensitive: services/staged/ is the builder's scratch surface. Nothing
 # there is copied and nothing there is imported until a promotion moves it to active.
@@ -182,10 +183,32 @@ def resolve_head(repo: str, target: str) -> str:
       * TOCTOU. Naming and judging the same sha means the verdict still refers to a
         real tree even if main advances mid-run.
     """
-    sha = _gh(["api", f"repos/{repo}/commits/{target}", "--jq", ".sha"]).strip()
-    if not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise RuntimeError(f"could not resolve --target {target!r} to a sha (got {sha!r})")
-    return sha
+    attempts = [target]
+    if not _SHA40.fullmatch(target) and "/" in target:
+        remote, _, branch = target.partition("/")
+        if branch and remote in _LOCAL_REMOTE_PREFIXES:
+            attempts.append(branch)
+
+    last: Exception | None = None
+    for attempt in attempts:
+        try:
+            sha = _gh(["api", f"repos/{repo}/commits/{attempt}", "--jq", ".sha"]).strip()
+        except Exception as exc:  # noqa: BLE001 -- retried below, re-raised if last
+            last = exc
+            continue
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            if attempt != target:
+                print(
+                    f"note     : --target {target!r} is a LOCAL remote-tracking ref; "
+                    f"GitHub knows the branch as {attempt!r}. Resolved against {attempt!r}.",
+                    file=sys.stderr,
+                )
+            return sha
+        last = RuntimeError(
+            f"could not resolve --target {attempt!r} to a sha (got {sha!r})"
+        )
+
+    raise last if last else RuntimeError(f"could not resolve --target {target!r}")
 
 
 def _git(repo_path: str, args: list[str]) -> str:
@@ -332,6 +355,209 @@ def apply_ci(verdict: str, ci: dict) -> tuple[str, bool]:
     return verdict, False
 
 
+
+# ------------------------------------------------------------------ OWNERSHIP
+# WHO RUNS THE MIGRATION, not what shape it is. `migration_content_class` grades the
+# SQL SHAPE and prints ADVISORY ONLY on its own output; it has no idea which role
+# executes the statement. Those are two different questions:
+#
+#     content class  = is this change SAFE?      (shape)
+#     owner  probe   = is this change PERMITTED? (grantee)
+#
+# fly.toml overrides DATABASE_URL with $OWNER_DATABASE_URL for the release command
+# (role `mcplookup`, since FU-235 option (D) / #2775). A migration targeting a table
+# that role does not own makes `release_command = "alembic upgrade head"` abort with
+# `must be owner of table ...` -- the v61/v67 failure mode, on a candidate every
+# other gate calls green. Nothing in the 8 verification gates, in this file, or in
+# accept_gate asked that question before 2026-09-15.
+#
+# `migration_owner_probe.py` was built 2026-09-14 to answer it and then sat at
+# 19,293 bytes with ZERO callers: `rule_echo --blast migration_owner_probe` returned
+# the tool's own file and one task prompt. That is the SAME situation `sha_green.py`
+# was in above -- 20,406 bytes, zero callers, selected by a dark-tool census -- one
+# tool later. A precondition reachable only from a paragraph is not a precondition,
+# and this lane has now written that sentence about itself twice.
+#
+# ASYMMETRIC, for the same reasons spelled out for CI above:
+#
+#   owner RED (rc=1)      -> RESTAGE. Firing a migration the release role cannot run
+#                            was never permitted -- the release command aborts and
+#                            takes the deploy with it -- so this forecloses nothing
+#                            that previously worked.
+#   owner UNKNOWN (rc=2)  -> VERDICT UNCHANGED, reported loudly. Unknown is not red
+#                            (R6). An instrument that cannot reach the DB must not
+#                            convert into a blocker (R7).
+#   probe unavailable     -> identical to UNKNOWN. Never a block, never a silent
+#                            pass, and it always says which of the two it was.
+#   no migration in delta -> NOT ENGAGED, and said so explicitly. A Class A delta has
+#                            no input to this question, so the verdict path is
+#                            byte-identical to before this block existed. A skip is
+#                            never a pass (R3).
+#
+# --no-owner-probe exists so the delta question stays answerable when the DB or Fly
+# is unreachable: recovery over restriction. It prints that it was used.
+
+# The probe is tower-local (`_tools\` is not a git repo), so it is resolved by path
+# and invoked as a subprocess rather than imported. Absent -> UNKNOWN, never a pass.
+OWNER_PROBE_PATHS = (
+    pathlib.Path(r"D:\zo\Zocomputer Agents\_tools\migration_owner_probe.py"),
+    pathlib.Path(__file__).resolve().parent / "migration_owner_probe.py",
+)
+
+
+def migration_paths_in_delta(changed: list[str]) -> list[str]:
+    """Which delta paths are migration revisions. Engagement condition for the probe."""
+    out = []
+    for p in changed:
+        q = p.replace("\\", "/")
+        if q.startswith("migrations/versions/") and q.endswith(".py"):
+            out.append(p)
+    return out
+
+
+def resolve_owner_probe() -> pathlib.Path | None:
+    for cand in OWNER_PROBE_PATHS:
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def migration_owner(repo_path: str, prod_sha: str, cand_sha: str,
+                    changed: list[str]) -> dict:
+    """Ask migration_owner_probe whether the RELEASE ROLE may run the delta's migrations.
+
+    Never raises: an exception here would turn an advisory signal into an outage of
+    the delta check, which is the opposite of the point.
+    """
+    migs = migration_paths_in_delta(changed)
+    if not migs:
+        return {"verdict": "NOT-ENGAGED", "rc": None, "source": "no-migration-in-delta",
+                "detail": "no migrations/versions/*.py in the delta, so the release "
+                          "role has nothing new to execute", "migrations": []}
+    probe = resolve_owner_probe()
+    if probe is None:
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": "migration_owner_probe.py not found at any known path",
+                "migrations": migs}
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(probe), "--repo", repo_path,
+             "--prod-sha", prod_sha, "--candidate-sha", cand_sha, "--json"],
+            capture_output=True, text=True, timeout=180,
+        )
+        rc = proc.returncode
+        verdict = {0: "GREEN", 1: "RED", 2: "UNKNOWN"}.get(rc, "UNKNOWN")
+        tail = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return {"verdict": verdict, "rc": rc if rc in (0, 1, 2) else 2,
+                "source": str(probe), "detail": tail[-600:], "migrations": migs}
+    except Exception as exc:  # noqa: BLE001
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": f"migration_owner_probe could not be consulted: {exc}",
+                "migrations": migs}
+
+
+def apply_owner(verdict: str, owner: dict) -> tuple[str, bool]:
+    """Fold the ownership verdict into the delta verdict. Pure, so it is testable
+    without a database, and so the asymmetry above is one readable expression."""
+    if verdict == "SAFE" and owner.get("rc") == 1:
+        return "RESTAGE", True
+    return verdict, False
+
+
+
+# ------------------------------------------------------------------ BOOT PROOF
+# HAS THIS IMAGE-REACHING CODE EVER BEEN PROVEN TO BUILD AND BOOT, not just to
+# parse. Nothing in the 8 verification gates builds an image: `dockerfile-copy-list`
+# is twelve pytest text assertions over COPY tokens, and `smoke-ladder` Tier 4
+# imports app.main without ever RUNNING its lifespan. The only thing in this repo
+# that runs `docker build` is deploy-compat.yml, `cron: 0 8 * * 1` -- weekly.
+#
+# v97 (2026-09-22) is the measured cost. Its Dockerfile blob was BYTE-IDENTICAL to
+# the last build, so the blob comparison this file's callers were told to make said
+# nothing; the image could not boot (`ModuleNotFoundError: attestation_refresher`
+# raised INSIDE the lifespan), the release was rolled back four minutes later, and
+# prod sat 82 commits behind for another day.
+#
+# `boot_proof.py` was built 2026-09-23T11:35Z to answer this and recorded its own
+# gap in the same breath: "NO CALLER ON THE FIRE PATH ... reachable (unblock) and
+# named (staged file, ledger FU-522), which is strictly better than a dark tower
+# script." Strictly better is not wired. At 19:57Z the same day it returned
+# UNATTESTED rc=1 on a candidate that was 8/8 PASS, 0 skipped, and CI-GREEN on all
+# 8 required contexts -- caught only because a human-read paragraph said to run it.
+# That is the third time this lane has written that a precondition reachable only
+# from a paragraph is not a precondition. This is the fix, in the same host and the
+# same shape as the OWNERSHIP fold above.
+#
+# ASYMMETRIC, on the same reasoning as CI and OWNERSHIP:
+#
+#   boot UNATTESTED (rc=1) -> RESTAGE. This is a DEFINITE reading, not an absence of
+#                             one: the probe positively established that no
+#                             successful deploy-compat run covers this surface. The
+#                             remediation is $0 and ~50s (`gh workflow run
+#                             deploy-compat.yml`), so this is recovery, not
+#                             restriction (R7) -- it names a cure rather than a wall.
+#   boot UNKNOWN (rc=2)    -> VERDICT UNCHANGED, reported loudly. No gh, no runs in
+#                             the window, no Dockerfile. Unknown is not red (R6).
+#   probe unavailable      -> identical to UNKNOWN. Never a block, never a silent
+#                             pass, and it always says which of the two it was.
+#
+# There is no NOT-ENGAGED branch: EVERY fire builds an image, so unlike the
+# ownership question this one always has an input. --no-boot-proof exists for an
+# unreachable GitHub and always prints that it was used (a skip is not a pass, R3).
+
+BOOT_PROOF_PATHS = (
+    pathlib.Path(r"D:\zo\Zocomputer Agents\_tools\boot_proof.py"),
+    pathlib.Path(__file__).resolve().parent / "boot_proof.py",
+)
+
+
+def resolve_boot_proof() -> "pathlib.Path | None":
+    for cand in BOOT_PROOF_PATHS:
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def boot_proof(repo_path: str, cand_sha: str) -> dict:
+    """Ask boot_proof whether cand_sha's image-reaching surface has been BUILT AND BOOTED.
+
+    Never raises, for the same reason migration_owner does not: an exception here
+    would turn an advisory signal into an outage of the delta check.
+    """
+    probe = resolve_boot_proof()
+    if probe is None:
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": "boot_proof.py not found at any known path"}
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(probe), "--candidate", cand_sha,
+             "--worktree", repo_path],
+            capture_output=True, text=True, timeout=240,
+        )
+        rc = proc.returncode
+        verdict = {0: "PROVEN", 1: "UNATTESTED", 2: "UNKNOWN"}.get(rc, "UNKNOWN")
+        tail = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return {"verdict": verdict, "rc": rc if rc in (0, 1, 2) else 2,
+                "source": str(probe), "detail": tail[-900:]}
+    except Exception as exc:  # noqa: BLE001
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": f"boot_proof could not be consulted: {exc}"}
+
+
+def apply_boot(verdict: str, boot: dict) -> "tuple[str, bool]":
+    """Fold the boot verdict into the delta verdict. Pure, so it is testable without
+    GitHub, and so the asymmetry above is one readable expression."""
+    if verdict == "SAFE" and boot.get("rc") == 1:
+        return "RESTAGE", True
+    return verdict, False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--staged", required=True, help="the vetted/staged SHA (40 chars)")
@@ -342,6 +568,14 @@ def main() -> int:
                     help="skip the target sha's CI verdict (sha_green). The\n"
                          "delta question stays answerable when GitHub is\n"
                          "unreachable; the output always says the check was skipped.")
+    ap.add_argument("--no-boot-proof", action="store_true", dest="no_boot",
+                    help="skip the BOOT PROOF probe. The delta question stays\n"
+                         "answerable when GitHub is unreachable; the output\n"
+                         "always says the check was skipped.")
+    ap.add_argument("--no-owner-probe", action="store_true", dest="no_owner",
+                    help="skip the migration OWNERSHIP probe. The delta question\n"
+                         "stays answerable when the prod DB is unreachable; the\n"
+                         "output always says the check was skipped.")
     ap.add_argument(
         "--repo-path", default=None, dest="repo_path",
         help="local clone used ONLY when the compare API caps out; "
@@ -373,6 +607,26 @@ def main() -> int:
                        else "main")
     verdict, ci_forced = apply_ci(verdict, ci)
 
+    if a.no_owner:
+        owner = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
+                 "detail": "--no-owner-probe: migration ownership was NOT consulted",
+                 "migrations": migration_paths_in_delta(changed)}
+    else:
+        # The probe's --repo is a local clone PATH, not an owner/name slug. Passing
+        # the slug yielded rc=128 and, before the probe was fixed, a false GREEN.
+        owner_repo_path = a.repo_path or _default_repo_path()
+        owner = migration_owner(owner_repo_path, a.staged, head, changed)
+    verdict, owner_forced = apply_owner(verdict, owner)
+
+    if a.no_boot:
+        boot = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
+                "detail": "--no-boot-proof: the candidate's boot proof was NOT consulted"}
+    else:
+        # The sha that will actually be DEPLOYED is the target head, not the staged
+        # sha -- deploy_prod.ps1 builds from whatever it is handed. Ask about that.
+        boot = boot_proof(a.repo_path or _default_repo_path(), head)
+    verdict, boot_forced = apply_boot(verdict, boot)
+
     if a.json:
         print(json.dumps({
             "verdict": verdict, "staged": a.staged, "target": a.target,
@@ -381,6 +635,8 @@ def main() -> int:
             "image_surface_hits": [{"path": p, "why": w} for p, w in hits],
             "copy_files": sorted(files), "copy_prefixes": sorted(prefixes),
             "target_ci": ci, "restaged_by_ci": ci_forced,
+            "migration_owner": owner, "restaged_by_owner": owner_forced,
+            "boot_proof": boot, "restaged_by_boot": boot_forced,
         }, indent=2))
     else:
         print(f"staged   : {a.staged}")
@@ -396,6 +652,25 @@ def main() -> int:
             print("           UNKNOWN IS NOT RED and it is not green: the CI state\n"
                   "           could not be established, so it has NOT changed the\n"
                   "           verdict below. Establish it before firing.")
+        print(f"mig owner: {owner['verdict']}"
+              + (f" (rc={owner['rc']})" if owner['rc'] is not None else "")
+              + f" via {owner['source']}")
+        if owner["verdict"] not in ("GREEN", "NOT-ENGAGED"):
+            print(f"           {owner['detail'][:200]}")
+        if owner["verdict"] == "UNKNOWN":
+            print("           UNKNOWN IS NOT RED and it is not green: whether the\n"
+                  "           release role may run this delta's migrations could not\n"
+                  "           be established, so it has NOT changed the verdict\n"
+                  "           below. Establish it before firing -- a release_command\n"
+                  "           that aborts takes the whole deploy with it.")
+        print(f"bootproof: {boot['verdict']}"
+              + (f" (rc={boot['rc']})" if boot['rc'] is not None else "")
+              + f" via {boot['source']}")
+        if boot["verdict"] == "UNKNOWN":
+            print("           UNKNOWN IS NOT RED and it is not green: whether this\n"
+                  "           candidate's image-reaching code has ever been built and\n"
+                  "           booted could not be established, so it has NOT changed\n"
+                  "           the verdict below. Establish it before firing.")
         if a.staged == head:
             print("note     : staged == target head, so the delta is empty BY\n"
                   "           CONSTRUCTION and a SAFE below is tautological -- the\n"
@@ -406,6 +681,26 @@ def main() -> int:
                 print(f"  - {p}   [{w}]")
             print("\nThe staged evidence does NOT cover these. Let the next prod-drift-sentinel")
             print("run re-verify, or fire the ORIGINAL staged sha, which is still vetted.")
+        elif owner_forced:
+            print("\nVERDICT: RESTAGE -- the delta is image-inert and CI-green, but a\n"
+                  "MIGRATION IN IT TARGETS A TABLE THE RELEASE ROLE DOES NOT OWN.\n"
+                  "fly.toml runs `alembic upgrade head` as release_command under\n"
+                  "$OWNER_DATABASE_URL; it will abort with `must be owner of table`\n"
+                  "and fail the release (the v61/v67 class). Fire the ORIGINAL staged\n"
+                  "sha, which is still vetted, or fix the grant first. Detail:")
+            print("  " + owner["detail"][:400].replace("\n", "\n  "))
+        elif boot_forced:
+            print("\nVERDICT: RESTAGE -- the delta is image-inert, CI-green and\n"
+                  "ownership-clear, but THIS CANDIDATE'S IMAGE-REACHING CODE HAS\n"
+                  "NEVER BEEN BUILT AND BOOTED. No successful deploy-compat run\n"
+                  "covers this surface. A Dockerfile-blob comparison will NOT catch\n"
+                  "this: v97's Dockerfile was byte-identical to the last build and\n"
+                  "the image still could not boot. The cure is $0 and ~50s:\n"
+                  "  gh workflow run deploy-compat.yml --repo rob531/zo-sentinel --ref main\n"
+                  "Then prove it RAN (R3), not skipped: grep the log for `exporting to\n"
+                  "image`, the in-image `Running upgrade`, and `DEPLOY SMOKE PASS`.\n"
+                  "Detail:")
+            print("  " + boot["detail"][-500:].replace("\n", "\n  "))
         elif ci_forced:
             print("\nVERDICT: RESTAGE -- the delta is image-inert, but the TARGET SHA\n"
                   "IS CI-RED on the required contexts. A byte-equivalent image built\n"

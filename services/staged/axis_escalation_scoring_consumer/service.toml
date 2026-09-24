@@ -1,0 +1,8 @@
+[service]
+name = "axis_escalation_scoring_consumer"
+import_path = "services.active.axis_escalation_scoring_consumer.router"
+prefix = "/api"
+tag = "axis_escalation_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

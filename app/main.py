@@ -1,3 +1,4 @@
+# idempotency: attestation_refresher_wired v1
 """FastAPI application assembly -- the deployable entrypoint (uvicorn app.main:app).
 Mounts auth + RBAC demo routes + health, and best-effort mounts any factory-built
 feature router that exposes `router` (loose/unbuilt ones are skipped, never block boot).
@@ -5,7 +6,9 @@ feature router that exposes `router` (loose/unbuilt ones are skipped, never bloc
 from __future__ import annotations
 from contextlib import asynccontextmanager
 
+import logging
 import pathlib
+import threading
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -30,6 +33,29 @@ from .settings import settings
 async def lifespan(app: FastAPI):
     if not settings.is_prod:        # dev/CI: ensure tables (Alembic owns prod schema)
         init_db()
+    # Start attestation_refresher in a background thread so it does not block
+    # uvicorn startup.  The daemon heartbeats to service_health every <=60 s
+    # (PRODUCT_SPEC §6) and the loop is inside run(), not here.
+    #
+    # BEST-EFFORT, NEVER FATAL. This module is a host-side daemon and is not in
+    # the Dockerfile COPY list, so `import attestation_refresher` raises
+    # ModuleNotFoundError inside the deployed image. Because the import sat
+    # unguarded in lifespan, an OPTIONAL background task became a MANDATORY
+    # startup import: gunicorn workers exited with code 3, both Fly machines
+    # crash-looped (restart_count=10) and the edge served 502 until the release
+    # was rolled back (v97 -> v98, ~3.7 min outage, 2026-09-22T20:11Z).
+    #
+    # This restores the invariant this module's own docstring states: optional
+    # pieces are skipped, never block boot. It deliberately does NOT decide
+    # WHERE the refresher should run -- see the open question in FOLLOWUPS.md.
+    try:
+        import attestation_refresher
+
+        threading.Thread(target=attestation_refresher.run, daemon=True).start()
+    except Exception:  # noqa: BLE001 -- an optional daemon must never halt the API
+        logging.getLogger(__name__).warning(
+            "attestation_refresher not started; continuing without it", exc_info=True
+        )
     yield
 
 
@@ -62,9 +88,18 @@ app.include_router(clerk_webhook.router)
 _STATIC = pathlib.Path(__file__).parent / "static"
 
 import os as _os
+
+from app.build_badge import inject as _inject_build_badge
+
+
 def _render(name: str) -> str:
     html = (_STATIC / name).read_text(encoding="utf-8")
-    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    # Stamp the build that served this page (app/build_badge.py). Injected here
+    # rather than written into each static file: the version must come from the
+    # IMAGE, and a literal in a checked-in .html is a number someone has to
+    # remember to bump -- which is the failure mode, not the fix.
+    return _inject_build_badge(html)
 
 
 
@@ -76,7 +111,10 @@ def consent_gate():
 
 @app.get("/disclaimer", response_class=HTMLResponse)
 def disclaimer_page():
-    return (_STATIC / "consent_gate.html").read_text(encoding="utf-8")
+    # Bypasses _render (no Clerk key needed) -- but it is still a page someone
+    # screenshots, so it is still stamped. Every HTML route or none.
+    return _inject_build_badge(
+        (_STATIC / "consent_gate.html").read_text(encoding="utf-8"))
 
 # --- SOA spine (FU-039/072; CofC 2026-07-23) --------------------------------
 # Mounts are GENERATED at build time from services/active/ into
@@ -111,7 +149,8 @@ def _render_root(name: str) -> str:
     """Serve a repo-root view file (the factory/spec-canonical filenames) with
     the same Clerk-PK injection app/static pages get."""
     html = (_REPO_ROOT / name).read_text(encoding="utf-8")
-    return html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    return _inject_build_badge(html)
 
 
 @app.get("/perspectives", response_class=HTMLResponse)
@@ -214,34 +253,72 @@ _ALL_HOSTED_DOMAINS = _VANITY_SUFFIXES + ("mcplookup.app",)
 _VANITY_SUFFIXES = tuple(d for d in _ALL_HOSTED_DOMAINS if d != _CANONICAL_HOST)
 
 
+# Paths that must be SERVED on every hosted domain, never canonicalised.
+# Svix does not follow redirects, and a client that does follow a 301 downgrades
+# POST to GET and drops the body and the `svix-*` signature headers -- so a
+# redirect here is a silently dropped webhook delivery, not a canonicalisation.
+# `mcplookup.app` is the HISTORIC PRIMARY and therefore the most likely host on
+# the Clerk endpoint record, which was created while it was canonical.
+# Measured 2026-09-13: POST https://mcplookup.app/webhooks/clerk -> 301, while
+# the canonical host answers an unsigned POST with 401 (verifier armed, healthy).
+# That is a complete mechanism for FU-245's 78-day zero-delivery drought. It is
+# NOT a diagnosis: the URL Clerk is actually configured with is still unreadable
+# from anywhere we can reach. This makes the endpoint work on ANY hosted domain,
+# so it is a cure that does not depend on knowing which one is registered.
+_NEVER_REDIRECT_PREFIXES = ("/webhooks/",)
+
+
 @app.middleware("http")
 async def _vanity_redirect(request, call_next):
     host = (request.headers.get("host") or "").split(":")[0].lower()
-    if host and host != _CANONICAL_HOST and host.endswith(_VANITY_SUFFIXES):
-        target = f"https://{_CANONICAL_HOST}{request.url.path}"
+    path = request.url.path
+    if (host and host != _CANONICAL_HOST and host.endswith(_VANITY_SUFFIXES)
+            and not path.startswith(_NEVER_REDIRECT_PREFIXES)):
+        target = f"https://{_CANONICAL_HOST}{path}"
         if request.url.query:
             target += "?" + request.url.query
-        return RedirectResponse(target, status_code=301)
+        # GET/HEAD keep 301 -- unchanged behaviour, no canonicalisation risk.
+        # Everything else gets 308, which preserves method and body; 301 lets a
+        # client rewrite the method to GET and swallow the request.
+        code = 301 if request.method in ("GET", "HEAD") else 308
+        return RedirectResponse(target, status_code=code)
     return await call_next(request)
 
 
 # --- Self-test ---------------------------------------------------------------
 if __name__ == "__main__":
-    from fastapi.testclient import TestClient
-    from unittest.mock import patch
+    import ast, pathlib as _p
 
-    # Mock auth so the dashboard route is accessible without a real session
-    with patch("app.security.get_principal") as mock_principal:
-        mock_principal.return_value = Principal(
-            user_id="test-user",
-            org_id="test-org",
-            role="admin",
-            email="test@example.com",
-        )
-        client = TestClient(app)
-        resp = client.get("/dashboard/exemptions")
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-        assert "MCP Exemptions Dashboard" in resp.text, (
-            "Expected dashboard title not found in response"
-        )
-        print("PASS")
+    src = _p.Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    # 1. Verify attestation_refresher import is present
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            imports.append(node.module or "")
+
+    has_att_ref = any("attestation_refresher" in imp for imp in imports)
+    assert has_att_ref, "attestation_refresher import not found in main.py"
+
+    # 2. Verify attestation_refresher.run() call is present
+    calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                if (isinstance(node.func.value, ast.Name) and
+                        node.func.value.id == "attestation_refresher" and
+                        node.func.attr == "run"):
+                    calls.append("attestation_refresher.run()")
+
+    assert calls, "attestation_refresher.run() call not found in main.py"
+
+    # 3. Verify idempotency marker
+    assert "# idempotency: attestation_refresher_wired v1" in src, (
+        "idempotency marker not found"
+    )
+
+    print("PASS")

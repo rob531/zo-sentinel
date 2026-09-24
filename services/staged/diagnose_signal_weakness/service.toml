@@ -1,0 +1,8 @@
+[service]
+name = "diagnose_signal_weakness"
+import_path = "services.active.diagnose_signal_weakness.router"
+prefix = "/api"
+tag = "diagnose_signal_weakness"
+origin = "service"
+auth = "public"
+needs_data_layer = true

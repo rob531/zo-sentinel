@@ -1,0 +1,8 @@
+[service]
+name = "perspective_event_retriever"
+import_path = "services.active.perspective_event_retriever.router"
+prefix = "/api"
+tag = "perspective_event_retriever"
+origin = "service"
+auth = "public"
+needs_data_layer = true

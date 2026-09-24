@@ -1,0 +1,39 @@
+[service]
+name = "cve_risk_tier_severity_matrix"
+import_path = "services.active.cve_risk_tier_severity_matrix.router"
+prefix = "/api"
+tag = "cve_risk_tier_severity_matrix"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+services = ["service_decomposer"]
+
+[data_access]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+
+[[endpoints]]
+path = "/severity-matrix"
+method = "GET"
+description = "Get the complete CVE severity to risk tier mapping matrix"
+
+[[endpoints]]
+path = "/severity-matrix/{severity}"
+method = "GET"
+description = "Get risk tier for a specific CVSS severity score"
+
+[[endpoints]]
+path = "/severity-matrix/tier/{tier}"
+method = "GET"
+description = "Get all severity ranges for a specific risk tier"
+
+[[endpoints]]
+path = "/server/{server_id}/cve-risk"
+method = "GET"
+description = "Get CVE risk assessment for a specific MCP server"
+
+[[endpoints]]
+path = "/axis-scores/{axis_type}"
+method = "GET"
+description = "Get axis scores by type for risk tier assignment"

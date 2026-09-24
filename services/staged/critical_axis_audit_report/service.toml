@@ -1,0 +1,11 @@
+[service]
+name = "critical_axis_audit_report"
+import_path = "services.active.critical_axis_audit_report.router"
+prefix = "/api"
+tag = "critical_axis_audit_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

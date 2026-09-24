@@ -1,0 +1,20 @@
+[service]
+name = "server_compare_dashboard_api"
+import_path = "services.active.server_compare_dashboard_api.router"
+prefix = "/api"
+tag = "server_compare_dashboard_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+app_models = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "Org", "User"]
+bus_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[router]
+file = "services/active/server_compare_dashboard_api/router.py"
+
+[acceptance]
+self_test = "PASS"
+description = "Dashboard API returns server comparison data with scores and signal enrichment"

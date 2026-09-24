@@ -1,0 +1,23 @@
+# service.toml - server_risk_axis_timeline service
+
+[service]
+name = "server_risk_axis_timeline"
+import_path = "services.active.server_risk_axis_timeline.router"
+prefix = "/api"
+tag = "server_risk_axis_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { version = ">=1.0.0", source = "internal" }
+fastapi = { version = ">=0.104.0", source = "pypi" }
+sqlalchemy = { version = ">=2.0.0", source = "pypi" }
+httpx = { version = ">=0.25.0", source = "pypi" }
+
+[build]
+entry = "services.active.server_risk_axis_timeline:app"
+
+[test]
+self_test = true
+expected_output = "PASS"

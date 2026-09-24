@@ -1,0 +1,8 @@
+[service]
+name = "app_spine_wiring"
+import_path = "services.active.app_spine_wiring.router"
+prefix = "/api"
+tag = "app_spine_wiring"
+origin = "service"
+auth = "public"
+needs_data_layer = true

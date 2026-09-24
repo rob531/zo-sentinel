@@ -1570,6 +1570,65 @@ def refresh_yield(state: dict) -> dict | None:
     }
 
 
+
+def zero_yield_streak(runs_root=None) -> dict:
+    """How many CONSECUTIVE landed waves ended with a dead refresh half?
+
+    Derived, never restated. Until 2026-09-22 the postcheck carried this as
+    literal prose -- "Three landed waves in a row ... (07-30, 08-04, 08-31)" --
+    and by the time anyone read it again the true count was SIX. A number a
+    human is asked to act on cannot live in an f-string that no run updates.
+
+    The per-wave verdict comes from refresh_yield(), the SAME function the
+    postcheck's own headline verdict comes from, so the streak and the headline
+    can never disagree (one extractor, the FU-108 lesson). Waves with no
+    refresh half (refresh_yield -> None) are SKIPPED rather than counted as
+    breaks: they had nothing to be zero about. An `unmeasured` wave BREAKS the
+    streak, because R6 -- we never asked, so we cannot claim it read zero.
+
+    Returns {"streak", "dates", "basis"}. streak 0 when nothing can be read,
+    which is honest rather than reassuring.
+    """
+    root = RUNS_ROOT if runs_root is None else Path(runs_root)
+    try:
+        rids = sorted((p.name for p in root.iterdir() if p.is_dir()), reverse=True)
+    except OSError as e:                                      # noqa: BLE001
+        # Same keys as the success exit below. ph_postcheck reads
+        # `skipped_unmeasured` unconditionally, so an error dict missing it turns
+        # the branch that exists to say UNKNOWN into a KeyError -- which is how
+        # this shipped red. 0 here means NOTHING WAS SCANNED, not "nothing was
+        # skipped"; `basis` is what distinguishes the two.
+        return {"streak": 0, "dates": [], "skipped_unmeasured": 0,
+                "basis": f"runs root unreadable ({e}) -- UNKNOWN, not zero"}
+    streak, dates, scanned, skipped = 0, [], 0, 0
+    for rid in rids:
+        try:
+            st = json.loads((root / rid / "state.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        ry = refresh_yield(st)
+        if ry is None:
+            continue                      # no refresh half: nothing to judge
+        if ry["verdict"] == "unmeasured":
+            # A wedged/abandoned wave never LANDED, so it is not a
+            # counterexample to "N consecutive landed waves produced nothing"
+            # -- it is not in the population. Breaking here would UNDERSTATE
+            # the streak, which is the defect this function replaced. R6 is
+            # satisfied by never claiming it read zero, and by publishing the
+            # skip count rather than hiding it.
+            skipped += 1
+            continue
+        scanned += 1
+        if ry["verdict"] != "zero_yield":
+            break                         # a PRODUCTIVE wave ends the streak
+        streak += 1
+        dates.append(rid[4:6] + "-" + rid[6:8])
+    return {"streak": streak, "dates": dates, "skipped_unmeasured": skipped,
+            "basis": f"refresh_yield() over each run's own state.json, newest "
+                     f"first, under {root}; {scanned} landed wave(s) with a "
+                     f"refresh half inspected, {skipped} unmeasured wave(s) "
+                     f"skipped (never landed, so not a counterexample)"}
+
 def ph_postcheck(run: Run, args) -> None:
     if run.done("postcheck"):
         return
@@ -1599,14 +1658,18 @@ def ph_postcheck(run: Run, args) -> None:
             f"taken from the import phase's direct DB read (basis=db_import)")
     ry = refresh_yield(run.state)
     if ry and ry["verdict"] == "zero_yield":
+        zs = zero_yield_streak()
         log(f"POSTCHECK: REFRESH HALF PRODUCED NOTHING -- {ry['changed']} of "
             f"{ry['refresh_servers']} refreshed servers changed on any axis "
             f"({ry['rate']:.4%}). The never-scored half is where this wave's "
-            f"value came from. Three landed waves in a row have now read this "
-            f"way (07-30, 08-04, 08-31); if this is the fourth, the refresh cap "
-            f"is buying nothing and the cohort budget belongs elsewhere -- that "
-            f"is a peer-review decision, not an abort.")
-        ledger("refresh_zero_yield", run.state["run_id"], **ry)
+            f"value came from. This is CONSECUTIVE ZERO-YIELD WAVE "
+            f"#{zs['streak']} ({', '.join(zs['dates']) or 'none recorded'}"
+            f"{'; %d unmeasured wave(s) skipped' % zs['skipped_unmeasured'] if zs['skipped_unmeasured'] else ''}) -- "
+            f"streak DERIVED, not restated ({zs['basis']}). The refresh cap is "
+            f"buying nothing and the cohort budget belongs elsewhere -- that is "
+            f"a peer-review decision, not an abort.")
+        ledger("refresh_zero_yield", run.state["run_id"],
+               consecutive=zs["streak"], streak_dates=zs["dates"], **ry)
     elif ry and ry["verdict"] == "unmeasured":
         log(f"POSTCHECK: refresh half UNMEASURED ({ry['basis']}). "
             f"Not a reading of zero.")

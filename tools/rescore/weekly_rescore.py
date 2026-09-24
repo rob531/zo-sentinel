@@ -1570,6 +1570,61 @@ def refresh_yield(state: dict) -> dict | None:
     }
 
 
+
+def zero_yield_streak(ledger_path: Path | None = None) -> tuple[int, str]:
+    """How many landed waves IN A ROW, before this one, read zero_yield?
+
+    Derived from the ledger at call time. This replaces a literal ("Three landed
+    waves in a row ... 07-30, 08-04, 08-31") that was measured on 2026-09-01 and
+    then restated on every run afterwards. By 2026-09-22 the ledger held six
+    zero_yield events and the sentence still said three, still asked whether this
+    might be "the fourth", and still named three dates that were no longer the
+    most recent three. HARNESS_DOCTRINE R5: a number goes out with its basis, or
+    it goes stale silently and nobody can see that it has.
+
+    A `productive` verdict is never written to the ledger, so the streak is
+    reconstructed from the runs that CLOSED: walk `run_closed` newest-first and
+    count how many of those run_ids also carry a `refresh_zero_yield` event. The
+    first closed run without one ends the streak. Counting the zero_yield events
+    alone would be wrong -- six of them in a row is not a streak if a productive
+    wave landed between two of them.
+
+    Returns (streak, basis). R6: an unreadable ledger returns 0 with a basis that
+    SAYS it is unreadable, never a bare 0 that reads as "no streak".
+    """
+    path = LEDGER if ledger_path is None else ledger_path
+    try:
+        raw = path.read_text(encoding="utf-8").splitlines()
+    except OSError as e:
+        return 0, f"ledger unreadable ({e.__class__.__name__}) -- streak UNKNOWN, not zero"
+
+    closed: list[str] = []
+    zero: set[str] = set()
+    for line in raw:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        ev, rid = rec.get("event"), rec.get("run")
+        if not rid:
+            continue
+        if ev == "run_closed":
+            closed.append(rid)
+        elif ev == "refresh_zero_yield":
+            zero.add(rid)
+
+    streak = 0
+    for rid in reversed(closed):
+        if rid in zero:
+            streak += 1
+        else:
+            break
+    return streak, (f"{len(closed)} closed run(s) in {path.name}, walked newest-first; "
+                    f"streak ends at the first closed run with no refresh_zero_yield event")
+
 def ph_postcheck(run: Run, args) -> None:
     if run.done("postcheck"):
         return
@@ -1599,13 +1654,14 @@ def ph_postcheck(run: Run, args) -> None:
             f"taken from the import phase's direct DB read (basis=db_import)")
     ry = refresh_yield(run.state)
     if ry and ry["verdict"] == "zero_yield":
+        prior, basis = zero_yield_streak()
         log(f"POSTCHECK: REFRESH HALF PRODUCED NOTHING -- {ry['changed']} of "
             f"{ry['refresh_servers']} refreshed servers changed on any axis "
             f"({ry['rate']:.4%}). The never-scored half is where this wave's "
-            f"value came from. Three landed waves in a row have now read this "
-            f"way (07-30, 08-04, 08-31); if this is the fourth, the refresh cap "
-            f"is buying nothing and the cohort budget belongs elsewhere -- that "
-            f"is a peer-review decision, not an abort.")
+            f"value came from. Counting this wave, that is {prior + 1} landed "
+            f"wave(s) in a row reading zero_yield (basis: {basis}). The refresh "
+            f"cap is buying nothing at this streak length and the cohort budget "
+            f"belongs elsewhere -- that is a peer-review decision, not an abort.")
         ledger("refresh_zero_yield", run.state["run_id"], **ry)
     elif ry and ry["verdict"] == "unmeasured":
         log(f"POSTCHECK: refresh half UNMEASURED ({ry['basis']}). "

@@ -1593,7 +1593,12 @@ def zero_yield_streak(runs_root=None) -> dict:
     try:
         rids = sorted((p.name for p in root.iterdir() if p.is_dir()), reverse=True)
     except OSError as e:                                      # noqa: BLE001
-        return {"streak": 0, "dates": [],
+        # Same keys as the success exit below. ph_postcheck reads
+        # `skipped_unmeasured` unconditionally, so an error dict missing it turns
+        # the branch that exists to say UNKNOWN into a KeyError -- which is how
+        # this shipped red. 0 here means NOTHING WAS SCANNED, not "nothing was
+        # skipped"; `basis` is what distinguishes the two.
+        return {"streak": 0, "dates": [], "skipped_unmeasured": 0,
                 "basis": f"runs root unreadable ({e}) -- UNKNOWN, not zero"}
     streak, dates, scanned, skipped = 0, [], 0, 0
     for rid in rids:

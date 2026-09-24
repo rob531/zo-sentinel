@@ -5,14 +5,14 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MCPRisky">
 <meta property="og:title" content="MCPRisky -- is that MCP server risky?">
-<meta property="og:description" content="Automated risk intelligence for the Model Context Protocol. On the road to 200K MCP servers scored across 7 risk axes. Know before you connect.">
+<meta property="og:description" content="Automated risk intelligence for the Model Context Protocol. 314,000+ MCP servers scored across 7 risk axes. Know before you connect.">
 <meta property="og:url" content="https://mcprisky.io/">
 <meta property="og:image" content="https://mcprisky.io/static/media/mcprisky_200k_robot_still.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="720">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="MCPRisky -- is that MCP server risky?">
-<meta name="twitter:description" content="Automated risk intelligence for MCP. 200K servers being scored across 7 risk axes. Know before you connect.">
+<meta name="twitter:description" content="Automated risk intelligence for MCP. 314,000+ servers scored across 7 risk axes. Know before you connect.">
 <meta name="twitter:image" content="https://mcprisky.io/static/media/mcprisky_200k_robot_still.png">
 <title>MCPRisky — automated MCP risk intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,7 +42,7 @@
 <body>
 <div class="card">
   <h1>MCP<span>Risky</span></h1>
-  <p class="sub">// automated risk intelligence for the Model Context Protocol — 65,000+ servers scored</p>
+  <p class="sub">// automated risk intelligence for the Model Context Protocol — <span id="scored-count">314,429</span> servers scored</p>
 
   <div id="gate">
     <div class="notice">
@@ -107,5 +107,22 @@ function loadClerk(){
   document.head.appendChild(s);
 }
 if(/(^|;\s*)consent_ack=1/.test(document.cookie) && CLERK_PK.indexOf("pk_")===0){ proceed(); }
+</script>
+<!-- live scored count: /freshness is the single source; the literal above is only the no-JS fallback -->
+<script>
+(function(){
+  // This line carried "65,000+" against a true 314,429. A hardcoded literal
+  // has no way to learn that the world moved. /freshness already serves the
+  // real counter live, so read it rather than restate it.
+  var el = document.getElementById("scored-count");
+  if (!el) { return; }
+  fetch("/freshness", {cache: "no-store"})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var n = (d && typeof d.scored_servers === "number") ? d.scored_servers : null;
+      if (n && n > 0) { el.textContent = n.toLocaleString("en-US"); }
+    })
+    .catch(function(){ /* keep the server-rendered fallback */ });
+})();
 </script>
 </body></html>

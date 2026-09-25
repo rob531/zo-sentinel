@@ -269,10 +269,82 @@ def attribute(missing_dates, by_day, quiet_fraction=QUIET_FRACTION_OF_MEDIAN,
                   f"{quiet_fraction:g} x median, derived at call time; every "
                   f"quiet claim corroborated against "
                   f"{'git ' + GIT_REF if commits_by_day else 'NOTHING'}"),
-        "gaps": results,
+        "gaps": _apply_ledger_causes(results),
     }
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# THIRD STORE -- does a sibling lane already record a CAUSE for this gap?
+#
+# FU-517. This tool's two stores can only ever measure ACTIVITY:
+#
+#   friction_ledger.jsonl   voluntary   -- a lane chose to call record()
+#   git origin/main         involuntary -- a commit is a side effect of work
+#
+# Neither can carry a CAUSE, so UNCORROBORATED_QUIET used to end with "this
+# gap has NO established cause" -- an absolute asserted from two stores that
+# structurally cannot hold the answer. It was false when written: FU-054 and
+# FU-413 already recorded 2026-09-16..09-18 as STARVED (the account refused
+# across the slot), measured by discovery-harvest-daily three days earlier.
+#
+# FOLLOWUPS.md is the third store and the only DELIBERATE one: a lane writes a
+# diagnosis there on purpose. An unavailable third store yields
+# ledger_cause=None with a stated reason -- never a silent "no cause", which
+# is the false zero this whole family is made of (R6).
+# ---------------------------------------------------------------------------
+
+CAUSE_TOOL = r"D:\zo\Zocomputer Agents\_tools\cause_attribute.py"
+
+
+def _ledger_causes(dates):
+    """{date: row} from cause_attribute, or ({}, reason) if unreachable."""
+    if not dates:
+        return {}, None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("cause_attribute", CAUSE_TOOL)
+        if spec is None or spec.loader is None:
+            return {}, "third store tool not importable at %s" % CAUSE_TOOL
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with open(mod.LEDGER, "r", encoding="utf-8-sig", errors="replace") as fh:
+            text = fh.read()
+        rep = mod.attribute(sorted(set(dates)), text)
+        return {r["date"]: r for r in rep["dates"]}, None
+    except Exception as exc:  # noqa: BLE001 -- best effort by design
+        return {}, "third store unavailable: %s: %s" % (type(exc).__name__, exc)
+
+
+def _apply_ledger_causes(results):
+    """Attach ledger_cause to every gap and retract the false absolute."""
+    dates = [r["date"] for r in results]
+    causes, reason = _ledger_causes(dates)
+    for row in results:
+        c = causes.get(row["date"])
+        if c is None:
+            row["ledger_cause"] = None
+            row["ledger_cause_unavailable"] = reason or "date not classified"
+            continue
+        row["ledger_cause"] = {
+            "verdict": c["verdict"],
+            "fu": c.get("fu"),
+            "heading": c.get("heading"),
+            "line_no": c.get("line_no"),
+            "snippet": c.get("snippet"),
+        }
+        if c["verdict"] == "CAUSE_FOUND":
+            row["why"] = row["why"].replace(
+                "this gap has NO established cause.",
+                "a sibling lane DID record a cause: %s -- see FOLLOWUPS.md L%s."
+                % (c.get("fu") or "(unnumbered)", c.get("line_no")),
+            )
+            if "sibling lane DID record" not in row["why"]:
+                row["why"] += ("; sibling-recorded cause: %s (FOLLOWUPS.md L%s)"
+                               % (c.get("fu") or "(unnumbered)", c.get("line_no")))
+    return results
 
 # A daily lane's contract is one run per day, so the largest gap that cadence
 # permits is a SINGLE day. This is that contract expressed as a number, not a

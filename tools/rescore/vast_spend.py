@@ -485,6 +485,50 @@ def selftest() -> None:
           "where the delta method reported $0.00; every failure path raises)")
 
 
+WEDGE_AGE_H = 1.5          # 'loading' for longer than this is a wedge
+
+
+# --- FU192_RENTAL_AGE_V1 ----------------------------------------------------------
+def rental_age_h(r):
+    """How long has THIS RENTAL been alive, and on what basis? (id, basis).
+
+    THE FIELD THIS USED TO READ DOES NOT MEAN WHAT ITS NAME SAYS. Measured
+    2026-09-25, both API paths asked for instance 52595485 in the same second:
+
+        fetch_instances()          duration = 8,655,077.9 s  -> 2404.19 h
+        vastai_sdk.show_instances()  duration =       444.1 s  ->    0.12 h
+        start_date = 1790342528.51 (IDENTICAL in both)        ->    0.123 h
+
+    The REST path's `duration` is machine-scale (~100 days); only the SDK's is
+    the rental. The wedge guard reads the REST path, so it declared
+    `WEDGED >90min in 'loading'` for a pod SEVEN MINUTES old -- a live
+    Qwen2.5-3B Phase-2 training rental belonging to another lane -- and handed
+    the caller a destroy command for it. A false RED on a detector whose only
+    action is irreversible is worse than no detector.
+
+    `start_date` is present, identical and epoch-seconds on BOTH paths, so it is
+    the basis with a stated meaning and it is the one used here. `duration` is
+    accepted only when start_date is absent AND it is small enough to be a
+    rental rather than a machine lifetime; the caller is told which it got.
+
+    R6: a row carrying neither is (None, "unknown"), never (0, ...) and never
+    an age that happens to clear the threshold. The caller must not wedge on it.
+    """
+    import time
+    sd = r.get("start_date")
+    if isinstance(sd, (int, float)) and sd > 0:
+        age = (time.time() - float(sd)) / 3600.0
+        if age >= 0:
+            return round(age, 3), "start_date"
+    d = r.get("duration")
+    if isinstance(d, (int, float)) and 0 <= d < MAX_PLAUSIBLE_RENTAL_S:
+        return round(d / 3600.0, 3), "duration"
+    return None, "unknown"
+
+
+MAX_PLAUSIBLE_RENTAL_S = 30 * 24 * 3600   # 30d; beyond this `duration` is not a rental
+
+
 # --- FU192_DISCRIMINATOR_V1 -------------------------------------------------------
 def auth_discriminator(key=None):
     """One authenticated session: instances + credit + settled credits.
@@ -504,6 +548,7 @@ def auth_discriminator(key=None):
     out = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "auth_proven": False, "credit": None, "instances_count": None,
            "instances": [], "credit_rows": None, "wedged": [],
+           "unwedgeable": [],
            "verdict": "UNKNOWN", "error": None}
     try:
         key = key or api_key()
@@ -522,15 +567,21 @@ def auth_discriminator(key=None):
         rows = fetch_instances(key=key)
         out["instances_count"] = len(rows)
         for r in rows:
-            up_h = None
-            if isinstance(r.get("duration"), (int, float)):
-                up_h = round(r["duration"] / 3600.0, 2)
+            up_h, basis = rental_age_h(r)
             rec = {"id": r.get("id"), "dph": r.get("dph_total"),
                    "status": r.get("actual_status") or r.get("cur_state"),
-                   "uptime_h": up_h, "label": r.get("label")}
+                   "uptime_h": up_h, "age_basis": basis,
+                   "label": r.get("label")}
             out["instances"].append(rec)
-            # wedge guard, scar 2026-07-17: loading for >90min is RED
-            if str(rec["status"]).lower() == "loading" and (up_h or 0) > 1.5:
+            # wedge guard, scar 2026-07-17: loading for >90min is RED.
+            # It may only fire on an age whose basis is KNOWN. An instance whose
+            # rental age cannot be derived is UNKNOWN, not old (R6), and lands in
+            # `unwedgeable` so the caller can see it was never judged.
+            if str(rec["status"]).lower() != "loading":
+                continue
+            if basis == "unknown":
+                out["unwedgeable"].append(rec)
+            elif (up_h or 0) > WEDGE_AGE_H:
                 rec["destroy_cmd"] = (
                     "python tools\\vast_job_runner.py destroy %s" % rec["id"])
                 out["wedged"].append(rec)

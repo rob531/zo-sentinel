@@ -330,18 +330,50 @@ class CliGitOps:
             self.last_error = "auto-stage: %s -> %s (%s)" % (
                 original_rel_path, rel_path, stage_reason.split(" -- ")[0])
 
-        target = self.clone_dir / rel_path
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(plan.content, encoding="utf-8")
-        except Exception as e:
-            return PublishResult(ok=False, branch=plan.branch, permanent=True,
-                                 detail=f"write {rel_path}: {e}")
+        # A NEW root-level router goes to services/staged/<stem>/ with a
+        # [service] manifest instead of landing at the root and being
+        # auto-declared deferred (autopoietic_grant G09). stage_root_router
+        # returns None for everything else, so this is additive.
+        writes = [(rel_path, plan.content)]
+        root_files, root_reason = auto_stage.stage_root_router(
+            self.clone_dir, rel_path, plan.content)
+        if root_files:
+            self.staged_redirects.append((rel_path, root_files[0][0]))
+            self.last_error = "auto-stage: %s -> %s (root router)" % (
+                rel_path, root_files[0][0])
+            writes = root_files
+            rel_path = root_files[0][0]
+        else:
+            # A router already routed to services/staged/<name>/ (the active/
+            # redirect above, or a direct staged build) arrives without its
+            # manifest and becomes an ORPHAN-DIR the promoter can never read.
+            writes += auto_stage.staged_companions(
+                self.clone_dir, rel_path, plan.content)
 
-        add = self._git("add", rel_path)
-        if add.returncode != 0:
-            return PublishResult(ok=False, branch=plan.branch, permanent=True,
-                                 detail=(add.stderr or "git add failed")[:300])
+        for w_rel, w_text in writes:
+            target = self.clone_dir / w_rel
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(w_text, encoding="utf-8")
+            except Exception as e:
+                return PublishResult(ok=False, branch=plan.branch, permanent=True,
+                                     detail=f"write {w_rel}: {e}")
+
+        manifests = [w for w, _ in writes if w.endswith("/service.toml")]
+        if manifests:
+            # Run the repo's own shape gate with --fix on what we just wrote, so
+            # the manifest that lands is the one the promoter will accept.
+            fix_ok, fix_detail = auto_stage.fix_manifests(self.clone_dir, manifests)
+            if not fix_ok:
+                # Non-fatal, like auto-declare: the manifest gate in CI will
+                # flag the PR loudly. Losing the artifact would not be better.
+                self.last_error = "manifest --fix: %s" % fix_detail[:200]
+
+        for w_rel, _ in writes:
+            add = self._git("add", w_rel)
+            if add.returncode != 0:
+                return PublishResult(ok=False, branch=plan.branch, permanent=True,
+                                     detail=(add.stderr or "git add failed")[:300])
 
         # Declare-or-mount (CofC 2026-07-21). The reachability ratchet enforces
         # that a PR adding an unmounted router either mounts it or names it in

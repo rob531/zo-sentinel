@@ -1,0 +1,11 @@
+[service]
+name = "published_overall_risk"
+import_path = "services.active.published_overall_risk.router"
+prefix = "/api"
+tag = "published_overall_risk"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

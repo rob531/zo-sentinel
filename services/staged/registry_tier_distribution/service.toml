@@ -1,0 +1,10 @@
+name = "registry_tier_distribution"
+import_path = "services.active.registry_tier_distribution.router"
+prefix = "/api"
+tag = "registry_tier_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = True
+
+if __name__ == "__main__":
+    print("PASS")

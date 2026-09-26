@@ -140,6 +140,13 @@ def build_gates():
             needs=["tools/reachability_ratchet.py"],
         ),
         Gate(
+            "lane-halt-check",
+            "pr-gates.yml",
+            [PY, "-u", "tools/lane_halt.py", "--enforce-all"],
+            timeout=60,
+            needs=["tools/lane_halt.py"],
+        ),
+        Gate(
             "no-hollow",
             "no-hollow.yml",
             [PY, "-u", "tests/ci/no_hollow_scaffold.py"],

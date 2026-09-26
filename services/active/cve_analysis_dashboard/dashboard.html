@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CVE Analysis Dashboard</title>
+<style>
+  body {font-family: Arial, sans-serif; margin:0; padding:20px; background:#f5f5f5;}
+  h1 {font-size:1.5rem; margin-bottom:1rem;}
+  .container {background:#fff; padding:1rem; border-radius:4px; max-width:800px; margin:auto;}
+  .axis {display:flex; justify-content:space-between; margin:0.5rem 0;}
+  .axis-label {font-weight:bold;}
+  .axis-value {font-weight:normal;}
+  .overall {font-size:1.2rem; margin-top:1rem;}
+  .error, .loading, .empty {color:#d00; font-style:italic;}
+</style>
+</head>
+<body>
+<div class="container" role="region" aria-label="CVE Analysis Dashboard">
+  <h1 id="title">CVE Analysis Dashboard</h1>
+  <div id="content">
+    <p class="loading" id="loading">Loading data...</p>
+    <p class="error" id="error" style="display:none;">Failed to load data.</p>
+    <p class="empty" id="empty" style="display:none;">No data available.</p>
+    <div id="dashboard" style="display:none;">
+      <div class="overall" id="overall-score">Overall Score: <span></span></div>
+      <div class="axes" id="axes"></div>
+      <div class="criteria" id="criteria-version">Criteria Version: <span></span></div>
+    </div>
+  </div>
+</div>
+<script>
+// In‑memory auth state (placeholder token)
+const AUTH_TOKEN = '';
+const API_BASE = '/api/cve_analysis_dashboard';
+
+function renderDashboard(data) {
+  const dashboard = document.getElementById('dashboard');
+  const overall = document.getElementById('overall-score').querySelector('span');
+  const axesDiv = document.getElementById('axes');
+  const criteria = document.getElementById('criteria-version').querySelector('span');
+
+  overall.textContent = data.overall_score.toFixed(1);
+  criteria.textContent = data.criteria_version;
+
+  // Clear previous axes
+  axesDiv.innerHTML = '';
+  data.axes.forEach(ax => {
+    const div = document.createElement('div');
+    div.className = 'axis';
+    const label = document.createElement('div');
+    label.className = 'axis-label';
+    label.textContent = ax.name;
+    const value = document.createElement('div');
+    value.className = 'axis-value';
+    value.textContent = ax.score.toFixed(1);
+    div.appendChild(label);
+    div.appendChild(value);
+    axesDiv.appendChild(div);
+  });
+}
+
+function fetchData() {
+  const loading = document.getElementById('loading');
+  const error = document.getElementById('error');
+  const empty = document.getElementById('empty');
+  const dashboard = document.getElementById('dashboard');
+
+  loading.style.display = '';
+  error.style.display = 'none';
+  empty.style.display = 'none';
+  dashboard.style.display = 'none';
+
+  fetch(`${API_BASE}/summary`, {
+    method: 'GET',
+    headers: {
+      'Authorization': AUTH_TOKEN ? `Bearer ${AUTH_TOKEN}` : '',
+      'Accept': 'application/json'
+    }
+  })
+  .then(resp => {
+    if (!resp.ok) throw new Error('Network response was not ok');
+    return resp.json();
+  })
+  .then(data => {
+    loading.style.display = 'none';
+    if (!data || !data.axes || data.axes.length === 0) {
+      empty.style.display = '';
+      return;
+    }
+    dashboard.style.display = '';
+    renderDashboard(data);
+  })
+  .catch(err => {
+    loading.style.display = 'none';
+    error.style.display = '';
+    console.error(err);
+  });
+}
+
+// Self‑test: ensure renderDashboard handles empty data without throwing
+(function selfTest(){
+  try {
+    renderDashboard({overall_score:0, criteria_version:'', axes:[]});
+  } catch(e) {
+    console.error('Self‑test failed', e);
+  }
+})();
+
+// Initial load
+fetchData();
+</script>
+</body>
+</html>

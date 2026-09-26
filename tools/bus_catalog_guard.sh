@@ -112,14 +112,31 @@ else
 fi
 
 # --- heartbeat, written on EVERY path including the no-op ------------------
+# THE HEARTBEAT RECORDS WHETHER THE SNAPSHOT MOVED, NOT ONLY THE EXIT CODE.
+# This heartbeat exists so a dead refresher is visible as a field that stopped
+# moving rather than as a red gate a fortnight later. It recorded the refresh's
+# exit code -- which was 0 on the path where the refresher opened a PR nothing
+# merged -- so from 2026-09-19 to 09-26 it reported success through 169
+# consecutive hourly runs while the snapshot on main never advanced by one
+# second. An exit code is the subject's own opinion of itself;
+# snapshot_age_hours_after is a measurement of origin/main. Keep both, and keep
+# them distinguishable.
+git -C "$REPO" fetch -q origin main 2>/dev/null || true
+AGE_AFTER="$(age_hours)"
 mkdir -p "$(dirname "$HEARTBEAT")" 2>/dev/null
-python3 - "$HEARTBEAT" "$AGE" "$NEED" "$REASON" "$RC" <<'PY'
+python3 - "$HEARTBEAT" "$AGE" "$NEED" "$REASON" "$RC" "$AGE_AFTER" <<'PY'
 import json, sys
 from datetime import datetime, timezone
-path, age, need, reason, rc = sys.argv[1:6]
+path, age, need, reason, rc, age_after = sys.argv[1:7]
+before, after = float(age), float(age_after)
+# UNKNOWN IS NOT ZERO (R6). -1 means the snapshot was missing or unreadable,
+# which is not an advance and must never be read as one.
+advanced = after >= 0 and (before < 0 or after < before)
 json.dump({
     "last_run_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    "snapshot_age_hours": float(age),
+    "snapshot_age_hours": before,
+    "snapshot_age_hours_after": after,
+    "snapshot_advanced": advanced,
     "action_taken": need == "1",
     "reason": reason,
     "refresh_exit_code": int(rc),

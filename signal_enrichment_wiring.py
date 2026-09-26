@@ -145,13 +145,14 @@ def signal_handler(signum: int, frame) -> None:
 def ensure_enrichments_table() -> bool:
     sql = """
     CREATE TABLE IF NOT EXISTS mcp_signal_enrichments (
+        id BIGINT,
         server_id VARCHAR,
-        enrichment_type VARCHAR,
+        signal_type VARCHAR,
+        dimension VARCHAR,
         score DOUBLE,
-        evidence VARCHAR,
+        evidence_blob VARCHAR,
         computed_at TIMESTAMPTZ,
-        metadata VARCHAR,
-        PRIMARY KEY (server_id, enrichment_type)
+        expires_at TIMESTAMPTZ
     )
     """
     return ws_execute(sql)
@@ -160,15 +161,16 @@ def ensure_enrichments_table() -> bool:
 def get_unscored_servers(signal_type: str) -> List[Dict[str, Any]]:
     sql = f"""
     SELECT r.server_id, r.name, r.description, r.registry_source,
-           r.Trust_Score, r.first_seen, r.last_updated,
-           r.stars, r.forks, r.contributors,
-           e.manifest_tools, e.tool_count, e.manifest_permissions,
-           e.ecosystem, e.download_count, e.dependency_count,
-           e.publisher_verified, e.age_days
+           r.trust_score, r.confidence, r.risk_tier, r.verdict,
+           r.first_seen, r.last_seen, r.last_assessed, r.scan_count,
+           r.metadata,
+           e.downloads, e.package_count, e.dominant_ecosystem, e.ecosystems,
+           e.latest_release_age_days, e.latest_version, e.github_repo,
+           e.npm_name, e.pypi_name, e.fetched_at
     FROM mcp_server_registry r
     LEFT JOIN mcp_ecosystems_metadata e ON r.server_id = e.server_id
     LEFT JOIN mcp_signal_enrichments enf ON r.server_id = enf.server_id
-        AND enf.enrichment_type = '{signal_type}'
+        AND enf.signal_type = '{signal_type}'
     WHERE enf.server_id IS NULL
       AND r.registry_source IS NOT NULL
     LIMIT {BATCH_SIZE}
@@ -179,15 +181,14 @@ def get_unscored_servers(signal_type: str) -> List[Dict[str, Any]]:
 def get_all_servers_for_enrichment() -> List[Dict[str, Any]]:
     sql = """
     SELECT r.server_id, r.name, r.description, r.registry_source,
-           r.trust_score, r.first_seen, r.last_updated,
-           r.stars, r.forks, r.contributors,
-           e.manifest_tools, e.tool_count, e.manifest_permissions,
-           e.ecosystem, e.download_count, e.dependency_count,
-           e.publisher_verified, e.age_days,
-           e.update_frequency, e.release_cadence,
-           e.maintenance_engagement, e.contributor_diversity,
-           e.issue_resolution_time, e.recent_activity_ratio,
-           f.fingerprint_hash, f.tool_signatures
+           r.trust_score, r.confidence, r.risk_tier, r.verdict,
+           r.first_seen, r.last_seen, r.last_assessed, r.scan_count,
+           r.metadata,
+           e.downloads, e.package_count, e.dominant_ecosystem, e.ecosystems,
+           e.latest_release_age_days, e.latest_version, e.github_repo,
+           e.npm_name, e.pypi_name, e.fetched_at,
+           f.tool_name_hash, f.permission_scope_hash, f.domain_fingerprint,
+           f.description_tokens, f.version_string
     FROM mcp_server_registry r
     LEFT JOIN mcp_ecosystems_metadata e ON r.server_id = e.server_id
     LEFT JOIN mcp_fingerprints f ON r.server_id = f.server_id
@@ -245,10 +246,10 @@ def compute_permission_scope(metadata: Dict[str, Any]) -> Optional[float]:
                     perms_list = json.loads(manifest_perms) if isinstance(manifest_perms, str) else manifest_perms
                     if isinstance(perms_list, list):
                         normalized = [pse_module.normalize_permission_name(p) for p in perms_list]
-                        return sum(normalized) / len(normalized) if normalized else 50.0
+                        return sum(normalized) / len(normalized) if normalized else None
                 except:
                     pass
-            return 75.0
+            return None
     except Exception as e:
         log.debug(f"Permission scope compute error: {e}")
     return None
@@ -272,7 +273,7 @@ def compute_temporal_stability(metadata: Dict[str, Any]) -> Optional[float]:
                     return tse_module.score_age_days(age_val)
                 except:
                     pass
-            return 50.0
+            return None
     except Exception as e:
         log.debug(f"Temporal stability compute error: {e}")
     return None
@@ -318,14 +319,15 @@ def process_enrichment_batch(servers: List[Dict[str, Any]]) -> int:
             
             rows.append({
                 'server_id': server_id,
-                'enrichment_type': enrichment_type,
+                'signal_type': enrichment_type,
+                'dimension': enrichment_type,
                 'score': round(score, 4),
-                'evidence': json.dumps(evidence),
-                'computed_at': ts,
-                'metadata': json.dumps({
+                'evidence_blob': json.dumps({
+                    **evidence,
                     'version': signal_info.get('version', 'unknown'),
-                    'module': signal_info.get('module', enrichment_type)
-                })
+                    'module': signal_info.get('module', enrichment_type),
+                }),
+                'computed_at': ts,
             })
     
     if rows:

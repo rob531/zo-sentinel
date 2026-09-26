@@ -25,6 +25,11 @@ if ! type _free_port >/dev/null 2>&1 || ! type _port_holders >/dev/null 2>&1; th
     exit 2
 fi
 
+# watchdog_daemon.py invokes watchdog.sh with /bin/zsh, not bash. A green run
+# under bash says nothing about the shell that actually runs it, so the run
+# names its own interpreter rather than letting the reader assume one.
+echo "shell under test: $(ps -o comm= -p $$ 2>/dev/null || echo unknown)"
+
 fail=0
 
 # A wrapper that spawns the real listener, exactly like write_service_wrapper.sh.

@@ -146,6 +146,49 @@ TRUST_PIPELINE=(
     attestation_engine.py
 )
 
+# svc-free-the-port (2026-09-26, GH #5580)
+#
+# `pkill -f "$script"` cannot kill what is actually wedged. For WriteService
+# $script is write_service_wrapper.sh -- the WRAPPER -- while the process
+# holding :8772 and the duckdb lock is write_service.py. On 2026-09-26 a hung
+# WriteService (TCP accepting, /health never answering) survived every restart
+# for ~45 minutes: the watchdog killed the wrapper, relaunched it, and each new
+# child died on "address already in use" plus "Conflicting lock is held ...
+# (PID 1125)", once a minute, "attempt 9" and climbing -- while
+# registration_drift_check filed #5580 reporting the service as not running.
+# Killing the launcher is not freeing the port. Ask the PORT who holds it.
+#
+# Idempotent: rc 0 no-op when nothing is listening. Latched: re-reads the port
+# after each signal instead of assuming the kill worked.
+_port_holders() {
+    local port=$1
+    ss -lntp 2>/dev/null | awk -v p=":$port" '$4 ~ (p "$")' \
+        | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
+}
+
+_free_port() {
+    local port=$1 name=$2 pid sig held i
+    for sig in TERM KILL; do
+        held=0
+        for pid in $(_port_holders "$port"); do
+            if [ "$pid" = "1" ] || [ "$pid" = "$$" ]; then continue; fi
+            held=1
+            log "$name: pid $pid still holds :$port -- SIG$sig"
+            kill -"$sig" "$pid" 2>/dev/null || true
+        done
+        if [ "$held" = "0" ]; then return 0; fi
+        i=0
+        while [ "$i" -lt 5 ]; do
+            if [ -z "$(_port_holders "$port")" ]; then return 0; fi
+            sleep 1
+            i=$((i+1))
+        done
+    done
+    if [ -z "$(_port_holders "$port")" ]; then return 0; fi
+    log "$name: :$port STILL held after SIGKILL -- relaunch will fail"
+    return 1
+}
+
 _svc() {
     local script=$1 port=$2 name=$3
     local code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
@@ -153,6 +196,7 @@ _svc() {
     if [[ "$code" != "200" ]]; then
         log "$name down (code=$code) -- restarting"
         pkill -f "$script" 2>/dev/null || true
+        _free_port "$port" "$name"
         rm -f $LOGS/write_service_DEAD
         sleep 2
         case $name in

@@ -164,6 +164,7 @@ jobs:
             tests/test_queued_stems_terminal.py \
             tests/test_handled_tasks_index.py \
             tests/test_ratchet_no_raise.py \
+            tests/test_bus_catalog_refresher_closes_its_loop.py \
             -q \
             --junitxml=artifacts/junit.xml
 

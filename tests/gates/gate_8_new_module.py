@@ -444,6 +444,44 @@ class Gate8NewModule(Gate):
               f"quarantined={len(final_state.get('quarantined', {}))}")
 
     # -----------------------------------------------------------------
+    # c143 2026-09-26: carry the REASON, not the cohort label.
+    #
+    # `_files_this_run_bad` is declared `{filename: first_error_str}` and was
+    # assigned in exactly one place -- _cohort_bump's setdefault -- to
+    # `f'failed in {cohort_label}'`. That string is what gqs.record_failure()
+    # persists, what the retry ledger carries to quarantine at 3 attempts, and
+    # what directive_knowledge_sources injects into the quality map under the
+    # instruction "If proposing a rebuild, you MUST reference the listed
+    # last_error". Measured on the tower 2026-09-26: 44 of 44 file_retries
+    # entries read `failed in cohort_N_nM` -- 12 distinct values, every one a
+    # cohort label, not one diagnosis. So the rebuild instruction was
+    # unfollowable and the tripped breaker could not be reasoned about by a
+    # lane or a human: the evidence needed to clear it was never written down.
+    #
+    # The reason was never missing -- Gate.check() already has check_name,
+    # error_class, expected and actual, and PRINTS them. It was discarded on
+    # the one path that reaches the ledger. Doctrine R6: an unknown was being
+    # published as a diagnosis. This override is the smallest point at which
+    # the value still exists; it records the FIRST failing check per file and
+    # leaves _cohort_bump's cohort-label setdefault in place as the backstop
+    # for a file counted failed with no check naming it.
+    def check(self, check_name: str, condition: bool, *args, **kwargs):
+        result = super().check(check_name, condition, *args, **kwargs)
+        if not condition:
+            key = getattr(self, "_current_key", None)
+            bad = getattr(self, "_files_this_run_bad", None)
+            if key and bad is not None:
+                error_class = kwargs.get("error_class")
+                if error_class is None and args:
+                    error_class = args[0]
+                actual = str(kwargs.get("actual", "") or "").strip()
+                reason = "%s [%s]" % (check_name, error_class or "assertion_failed")
+                if actual:
+                    reason = "%s: %s" % (reason, actual[:180])
+                bad.setdefault(key, reason)
+        return result
+
+    # -----------------------------------------------------------------
     def _cohort_bump(self, cohort_label: str, failed: bool, filename: str):
         t = self._cohort_totals.setdefault(cohort_label,
             {'size_files': set(), 'files_failed': set()})
@@ -460,6 +498,9 @@ class Gate8NewModule(Gate):
         key = _identity_key(build)
         task = build.get("task", "?")
         prefix = f"gate_8: {key}"
+        # c143: the check() override above attributes a failing check to this
+        # key. Set before any check runs; cleared by the next _evaluate_file.
+        self._current_key = key
         # Track this file in the cohort even if every check passes.
         # KEY, not basename: this is a SET, so keying it on a name shared by
         # every service collapsed a cohort of N services into size=1.

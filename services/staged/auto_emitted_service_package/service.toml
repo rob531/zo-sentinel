@@ -1,0 +1,8 @@
+[service]
+name = "auto_emitted_service_package"
+import_path = "services.active.auto_emitted_service_package.router"
+prefix = "/api"
+tag = "auto_emitted_service_package"
+origin = "service"
+auth = "public"
+needs_data_layer = true

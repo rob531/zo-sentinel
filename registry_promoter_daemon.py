@@ -31,6 +31,7 @@ import logging
 import threading
 import requests
 from datetime import datetime, timezone
+import singleton_lock  # identity-verified single-instance lock
 
 SERVICE_NAME = "registry_promoter_daemon"
 WRITE_SERVICE_URL = "http://127.0.0.1:8772"
@@ -100,30 +101,15 @@ def heartbeat_loop() -> None:
         send_heartbeat()
 
 
-def check_single_instance() -> bool:
-    pid = os.getpid()
-    if os.path.exists(LOCK_FILE):
-        try:
-            with open(LOCK_FILE, "r") as f:
-                existing_pid = int(f.read().strip())
-            if existing_pid != pid:
-                try:
-                    os.kill(existing_pid, 0)
-                    log.error(f"Another instance running PID {existing_pid}")
-                    return False
-                except OSError:
-                    log.warning(f"Stale lockfile from PID {existing_pid}; reclaiming")
-        except (ValueError, IOError) as e:
-            log.warning(f"Could not read lockfile: {e}")
-    try:
-        with open(LOCK_FILE, "w") as f:
-            f.write(str(pid))
-        log.info(f"Acquired lockfile {LOCK_FILE} with PID {pid}")
-        return True
-    except IOError as e:
-        log.error(f"Could not write lockfile: {e}")
-        return False
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file() -> None:
     try:

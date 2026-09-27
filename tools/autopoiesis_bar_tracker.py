@@ -53,10 +53,21 @@ LOGS = Path(os.environ.get("ZO_LOGS", WORKSPACE / "logs"))
 CSV_PATH = Path(os.environ.get("ZO_BAR_CSV", WORKSPACE / "autopoiesis_bar.csv"))
 HEARTBEAT = LOGS / "autopoiesis_bar_heartbeat.json"
 
+# Two writers share this CSV and `phase` says which one wrote a row.
+# They do NOT measure the same thing, so they may not share column names
+# (CofC 2026-09-13). The MACHINE writer (phase=MEASURED-ONLY) counts
+# directories on disk -- the vanity metric the doctrine forbids grading on --
+# and writes the fs_* columns. The GRADED writer measures spineful emission
+# (mounted, live, reachable) and keeps the bare names, which are what T1/T2/T3
+# read. Each writer leaves the other's columns EMPTY: an empty cell is honest,
+# a wrong-definition number reads as a trend. Measured 2026-09-13, same day:
+# active_count 590 vs 33, expanded_total 7296 vs 1470, build_service 7418 vs 7.
 COLUMNS = ["date", "phase", "expanded_total", "redirects_total",
            "build_service_directives", "degradation_rate", "casing_repairs_24h",
            "staged_count", "active_count", "orphan_raw", "orphan_effective",
-           "T1", "T2", "T3", "actions_taken"]
+           "T1", "T2", "T3", "actions_taken",
+           "fs_expanded_total", "fs_build_service_directives",
+           "fs_active_count"]
 
 DEFAULT_INTERVAL = 86400  # daily, matching the original task's cadence
 
@@ -88,7 +99,8 @@ def measure() -> dict:
 
     # 2. EMISSION UPTAKE
     prop = SENTINEL / "directives" / "proposed"
-    m["expanded_total"] = len(list(prop.glob("*.expanded"))) if prop.is_dir() else 0
+    m["fs_expanded_total"] = (len(list(prop.glob("*.expanded")))
+                              if prop.is_dir() else 0)
     red = prop / ".service_redirects.jsonl"
     m["redirects_total"] = (sum(1 for _ in red.open()) if red.exists() else 0)
     n = 0
@@ -96,7 +108,7 @@ def measure() -> dict:
         dd = SENTINEL / "directives" / d
         if dd.is_dir():
             n += sum(1 for f in dd.iterdir() if "build_service" in f.name)
-    m["build_service_directives"] = n
+    m["fs_build_service_directives"] = n
 
     # 3. FU-031 degradation + autonomous casing heals
     rc, out = sh([sys.executable, "tools/builder_selftest_integrity_report.py",
@@ -117,7 +129,9 @@ def measure() -> dict:
 
     # 4. SPINEFUL YIELD
     m["staged_count"] = _count_dir(SENTINEL / "services" / "staged")
-    m["active_count"] = _count_dir(SENTINEL / "services" / "active")
+    # Directories on disk, NOT liveness. Named fs_ so no reader can
+    # mistake it for the graded ship-gate number.
+    m["fs_active_count"] = _count_dir(SENTINEL / "services" / "active")
 
     # 5. CENSUS
     m["orphan_raw"] = m["orphan_effective"] = "UNKNOWN"
@@ -188,6 +202,14 @@ def write_row(m: dict) -> str:
             rd = list(csv.reader(fh))
         if rd:
             header = rd[0]
+            # A header read off disk that predates a COLUMNS addition would
+            # silently drop every new field (the row is built from `header`).
+            # Upgrade it and pad old rows so the new columns are EMPTY, not
+            # absent -- unknown is not zero.
+            missing = [c for c in COLUMNS if c not in header]
+            if missing:
+                header = header + missing
+                rd[1:] = [r + [""] * (len(header) - len(r)) for r in rd[1:] if r]
             same = [r for r in rd[1:] if r and r[0] == m["date"]]
             if m.get("phase") == "MEASURED-ONLY" and any(
                     len(r) > 1 and r[1] != "MEASURED-ONLY" for r in same):
@@ -224,7 +246,14 @@ def cycle() -> dict:
         "degradation_rate": m["degradation_rate"],
         "orphan_raw": m["orphan_raw"], "orphan_effective": m["orphan_effective"],
         "ratchet_mode": m.get("ratchet_mode"), "basis": m.get("basis"),
-        "staged": m["staged_count"], "active": m["active_count"],
+        "staged": m["staged_count"],
+        # This is the fs writer. It does not measure the graded
+        # (mounted, reachable) number, so it must not publish one:
+        # an fs count emitted as "active" is exactly the 590-vs-33
+        # wrong-definition trend #5026 existed to stop. R6: an
+        # unknown is not a zero and not the other writer's number.
+        "fs_active": m["fs_active_count"],
+        "active": m.get("active_count", "UNKNOWN"),
         "csv": str(CSV_PATH),
     }, indent=2))
     with (LOGS / "autopoiesis_bar_tracker.log").open("a") as fh:

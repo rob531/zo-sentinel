@@ -41,10 +41,25 @@ def log(msg):
     except Exception:
         pass
 
-def ws_query(sql: str):
+def ws_query(sql: str, params=None):
+    """Query write_service. `params` binds ? placeholders.
+
+    2026-09-24 (autopoiesis-bar-tracker): this signature used to be `(sql)` while
+    THREE call sites already passed `params=[...]` -- /api/servers, the
+    /api/servers/{id} detail route and its signals query. Every one of them raised
+    TypeError AT THE CALL SITE, before entering this function, so the except below
+    never saw it and could not log it; uvicorn recorded a bare 500 with no
+    traceback. Two endpoints had been dead for as long as those call sites existed
+    and the access log could not say why. write_service /query accepts a `params`
+    array -- verified live: {"sql":"... WHERE verdict = ?","params":["..."]}
+    returns rows -- so the callers were right and the helper was wrong.
+    """
     try:
         import requests
-        r = requests.post(QUERY_URL, json={"sql": sql}, timeout=15)
+        body = {"sql": sql}
+        if params:
+            body["params"] = list(params)
+        r = requests.post(QUERY_URL, json=body, timeout=15)
         return r.json()
     except Exception as e:
         log(f"ws_query error: {e}")
@@ -168,6 +183,45 @@ def auth_middleware(request: Request, call_next):
     request.state.token_data = token_data
     return call_next(request)
 
+
+def _canonical_key(row):
+    """One key per SERVER, not per registry ingest.
+
+    URL first -- it is the only field two ingests of the same repo reliably share.
+    Strips scheme, www., a trailing .git and trailing slashes, and lowercases; an
+    npm package page and its GitHub repo are NOT merged, because they are genuinely
+    different artefacts a reader may want to tell apart. Falls back to a normalised
+    name when a row has no url (the registry has such rows; `url` is nullable).
+    """
+    import re as _re
+    u = (row.get("url") or "").strip().lower()
+    if u:
+        u = _re.sub(r"^https?://", "", u)
+        u = _re.sub(r"^www\.", "", u)
+        u = u.rstrip("/")
+        u = _re.sub(r"\.git$", "", u)
+        return "u:" + u
+    n = (row.get("name") or "").strip().lower()
+    n = _re.sub(r"^io\.github\.", "", n)
+    n = _re.sub(r"[^a-z0-9]+", "-", n).strip("-")
+    return "n:" + (n or "?")
+
+
+def _prefer(a, b):
+    """Keep the better-evidenced duplicate. Returns (keep, drop).
+
+    A scored row beats an unscored one -- that is the whole point: the tier exists,
+    it just was not on the row the user happened to land on. Then higher scan_count,
+    then higher trust_score. Deterministic on ties so paging does not shuffle.
+    """
+    def rank(r):
+        return (1 if r.get("risk_tier") else 0,
+                1 if r.get("verdict") else 0,
+                r.get("scan_count") or 0,
+                r.get("trust_score") or 0,
+                str(r.get("server_id") or ""))
+    return (a, b) if rank(a) >= rank(b) else (b, a)
+
 def create_app():
     app = FastAPI(title="Zo Sentinel UI Server", version="2.0.0")
     
@@ -290,25 +344,79 @@ def create_app():
     
     @app.get("/api/servers")
     async def get_servers(request: Request):
-        limit = request.query_params.get("limit", 50)
-        offset = request.query_params.get("offset", 0)
+        # 2026-09-24 (autopoiesis-bar-tracker), two defects in one handler:
+        #
+        # (1) 500 ON EVERY REQUEST. The SELECT asked for `last_scan`; the column is
+        #     `last_scanned`. DuckDB answers "Binder Error: Referenced column
+        #     \"last_scan\" not found... Candidate bindings: \"last_scanned\"" -- so
+        #     this endpoint had been dead for every query including no-params, and the
+        #     uvicorn access log recorded a bare 500 with no traceback, which is why
+        #     it read as intermittent rather than total.
+        #
+        # (2) DUPLICATES REACH THE USER. A search for a server family returns one row
+        #     per registry INGEST, not one per server: 8 rows for `knowbe4-mcp`, of
+        #     which 4 shared github.com/wyre-technology/knowbe4-mcp and 2 shared
+        #     mirage-security/knowbe4-mcp-server. Worse, the SCORED row and its
+        #     unscored duplicates sat side by side, so the product spec's primary user
+        #     -- a CISO looking an MCP up by name -- could land on a blank-tier row for
+        #     a server this system HAS assessed. Collapse on a canonical URL key and
+        #     keep the best-evidenced member. `_normalize_name()` already exists in
+        #     registry_family_dedup_report.py but that module is an orphan nothing
+        #     mounts, so the logic is reimplemented here rather than imported from a
+        #     module the app cannot reach.
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
         verdict = request.query_params.get("verdict")
-        
-        where_clause = ""
-        params = []
+        q = (request.query_params.get("q") or "").strip()
+        collapse = request.query_params.get("collapse", "1") != "0"
+
+        where, params = [], []
         if verdict:
-            where_clause = "WHERE verdict = ?"
-            params = [verdict]
-        
+            where.append("verdict = ?"); params.append(verdict)
+        if q:
+            where.append("(lower(name) LIKE ? OR lower(url) LIKE ?)")
+            params += ["%" + q.lower() + "%"] * 2
+        where_clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+        # Over-fetch when collapsing so the page still fills after duplicates merge.
+        fetch = (limit + offset) * 4 + 50 if collapse else limit
+        skip = 0 if collapse else offset
         sql = f"""
-            SELECT server_id, name, url, description, trust_score, verdict, registry_source, scan_count, last_scan
+            SELECT server_id, name, url, description, trust_score, verdict,
+                   registry_source, scan_count, last_scanned, risk_tier, last_assessed
             FROM mcp_server_registry
             {where_clause}
             ORDER BY trust_score DESC
-            LIMIT {int(limit)} OFFSET {int(offset)}
+            LIMIT {int(fetch)} OFFSET {int(skip)}
         """
         result = ws_query(sql, params=params)
-        return {"servers": result.get("rows", []), "count": result.get("count", 0)}
+        rows = result.get("rows", [])
+        if not collapse:
+            return {"servers": rows, "count": result.get("count", 0),
+                    "collapsed": False}
+
+        merged, order = {}, []
+        for r in rows:
+            key = _canonical_key(r)
+            if key not in merged:
+                merged[key] = dict(r); merged[key]["duplicate_of"] = []; order.append(key)
+                continue
+            keep, drop = _prefer(merged[key], r)
+            keep["duplicate_of"] = merged[key].get("duplicate_of", []) + [
+                {"server_id": drop.get("server_id"), "name": drop.get("name")}]
+            merged[key] = keep
+        out = []
+        for k in order:
+            r = merged[k]
+            # An unscored row must not read as a safe one: say so rather than blank.
+            if not r.get("risk_tier"):
+                r["risk_tier_display"] = "not yet assessed"
+            r["duplicate_count"] = len(r.get("duplicate_of", []))
+            r["canonical_key"] = k
+            out.append(r)
+        page = out[offset:offset + limit]
+        return {"servers": page, "count": len(out), "collapsed": True,
+                "rows_before_collapse": len(rows)}
     
     @app.get("/api/servers/{server_id}")
     async def get_server_detail(request: Request, server_id: str):

@@ -41,6 +41,7 @@ from datetime import datetime, timedelta, timezone as _tz
 from email.utils import parsedate_to_datetime as _parse_dt
 from pathlib import Path
 import requests as _req
+import singleton_lock  # identity-verified single-instance lock
 
 # ---------------------------------------------------------------
 # Rate budget configuration (token-bucket style)
@@ -357,19 +358,15 @@ def signal_handler(signum, frame):
     sys.exit(0)
 
 
-def check_single_instance():
-    pid_file = Path(PID_FILE)
-    if pid_file.exists():
-        try:
-            old_pid = int(pid_file.read_text().strip())
-            os.kill(old_pid, 0)
-            log(f"Already running as PID {old_pid}, exiting.")
-            sys.exit(0)
-        except (ProcessLookupError, ValueError, PermissionError):
-            log(f"Stale PID file, removing.")
-            pid_file.unlink(missing_ok=True)
-    pid_file.write_text(str(os.getpid()))
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file():
     try:

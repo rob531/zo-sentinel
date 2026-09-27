@@ -26,7 +26,14 @@ set -euo pipefail
 
 REPO="${ZO_REPO:-/home/workspace/zo_sentinel}"
 WORK="${ZO_CATALOG_WORKTREE:-/home/workspace/.catalog_refresh_wt}"
-HEARTBEAT_DAYS="${HEARTBEAT_DAYS:-7}"
+HEARTBEAT_DAYS="${HEARTBEAT_DAYS:-5}"   # 5, not 7: referent_verify.py WARNs at
+                                        # 7d and STALE-REDs at 14d, so a push
+                                        # trigger of 7 fires at the exact hour the
+                                        # checker starts complaining -- no margin
+                                        # at all for the merge to land. Measured
+                                        # 2026-09-26: the snapshot sat 7.06d old
+                                        # and WARNing while this refresher was
+                                        # behaving exactly as written.
 BRANCH="auto/catalog/bus-catalog-refresh"
 # Overridable so the refresher can be exercised end-to-end before it is on main.
 BASE_REF="${ZO_CATALOG_BASE_REF:-origin/main}"
@@ -35,6 +42,57 @@ DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
 
 log() { echo "[catalog-refresh] $*"; }
+
+# AN OPEN PULL REQUEST IS NOT A REFRESHED SNAPSHOT EITHER.
+#
+# The tail of this script used to end at `log "pr_opened=..."` with `exit 0`. It
+# had correctly worked out that a PUSHED BRANCH is not an arming and added the
+# PR-open -- and then stopped one notch short of the very mistake it had just
+# named, because nothing merged the PR. Measured on the host 2026-09-26: 169
+# consecutive hourly guard runs wrote `refresh_exit_code: 0` to the heartbeat
+# while origin/main:schema/bus_catalog.json stayed frozen at
+# 2026-09-19T11:07:06Z -- 7.06d old, WARNing, and 6.9d from the 14d budget at
+# which referent-verify turns STALE-RED and blocks every pull request on this
+# repository, including the one that would have fixed it.
+#
+# So the refresher arms auto-merge and then MEASURES main. This is `repo_prs`
+# (delegated: merging a self-authored green PR) and rule 2 (merge on green CI is
+# delegated, not a second approval). GitHub holds the merge until the required
+# contexts pass, so "merge on the COUNT, never the colour" stays enforced by the
+# required pytest context rather than by this script's opinion of itself.
+#
+# IDEMPOTENT: --auto on a PR that already has auto-merge enabled is a no-op.
+finish_with_automerge() {
+    local pr="$1" rc=0
+    if gh pr merge "$pr" --squash --auto >/dev/null 2>&1; then
+        log "automerge_armed=#$pr"
+    else
+        log "automerge_failed=#$pr -- the PR is open but nothing will land it"
+        rc=5
+    fi
+    # THE VERDICT IS RESOLVED FROM origin/main, NEVER FROM WHAT gh PRINTED (R1).
+    # `landed_age_hours` is the only honest success signal: did captured_at on
+    # main actually advance? A URL in the log proved nothing for seven days.
+    git fetch -q origin main 2>/dev/null || true
+    local landed
+    landed="$(git show origin/main:"$SNAP" 2>/dev/null | python3 -c '
+import json, sys
+from datetime import datetime, timezone
+try:
+    d = json.load(sys.stdin)
+    ts = datetime.fromisoformat(d["captured_at"])
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    print(f"{(datetime.now(timezone.utc) - ts).total_seconds()/3600:.2f}")
+except Exception:
+    print("-1")
+')"
+    log "landed_age_hours=${landed:--1}"
+    # Non-zero so bus_catalog_guard.sh records refresh_exit_code != 0 in the
+    # heartbeat. A PR that nothing will merge is the defect this file is a cure
+    # for; it must never again be reported as a success.
+    exit "$rc"
+}
 
 cd "$REPO"
 git fetch -q origin
@@ -174,7 +232,7 @@ fi
 EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
 if [ -n "$EXISTING" ]; then
     log "pr_already_open=#$EXISTING (force-push updated it in place)"
-    exit 0
+    finish_with_automerge "$EXISTING"
 fi
 
 if PR_URL=$(gh pr create --head "$BRANCH" --base main \
@@ -187,6 +245,7 @@ Reason: **${REASON}** (committed snapshot was ${AGE_DAYS}d old; heartbeat window
 
 Opened by \`tools/bus_catalog_refresh.sh\`. Refs #4032, #4080." 2>&1); then
     log "pr_opened=$PR_URL"
+    finish_with_automerge "$(printf '%s' "$PR_URL" | sed 's#.*/##')"
 else
     log "pr_open_failed=$PR_URL -- $BRANCH is pushed but unmerged"
     exit 4

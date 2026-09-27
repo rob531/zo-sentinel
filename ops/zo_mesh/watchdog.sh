@@ -146,6 +146,49 @@ TRUST_PIPELINE=(
     attestation_engine.py
 )
 
+# svc-free-the-port (2026-09-26, GH #5580)
+#
+# `pkill -f "$script"` cannot kill what is actually wedged. For WriteService
+# $script is write_service_wrapper.sh -- the WRAPPER -- while the process
+# holding :8772 and the duckdb lock is write_service.py. On 2026-09-26 a hung
+# WriteService (TCP accepting, /health never answering) survived every restart
+# for ~45 minutes: the watchdog killed the wrapper, relaunched it, and each new
+# child died on "address already in use" plus "Conflicting lock is held ...
+# (PID 1125)", once a minute, "attempt 9" and climbing -- while
+# registration_drift_check filed #5580 reporting the service as not running.
+# Killing the launcher is not freeing the port. Ask the PORT who holds it.
+#
+# Idempotent: rc 0 no-op when nothing is listening. Latched: re-reads the port
+# after each signal instead of assuming the kill worked.
+_port_holders() {
+    local port=$1
+    ss -lntp 2>/dev/null | awk -v p=":$port" '$4 ~ (p "$")' \
+        | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
+}
+
+_free_port() {
+    local port=$1 name=$2 pid sig held i
+    for sig in TERM KILL; do
+        held=0
+        for pid in $(_port_holders "$port"); do
+            if [ "$pid" = "1" ] || [ "$pid" = "$$" ]; then continue; fi
+            held=1
+            log "$name: pid $pid still holds :$port -- SIG$sig"
+            kill -"$sig" "$pid" 2>/dev/null || true
+        done
+        if [ "$held" = "0" ]; then return 0; fi
+        i=0
+        while [ "$i" -lt 5 ]; do
+            if [ -z "$(_port_holders "$port")" ]; then return 0; fi
+            sleep 1
+            i=$((i+1))
+        done
+    done
+    if [ -z "$(_port_holders "$port")" ]; then return 0; fi
+    log "$name: :$port STILL held after SIGKILL -- relaunch will fail"
+    return 1
+}
+
 _svc() {
     local script=$1 port=$2 name=$3
     local code=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:$port/health 2>/dev/null)
@@ -153,6 +196,7 @@ _svc() {
     if [[ "$code" != "200" ]]; then
         log "$name down (code=$code) -- restarting"
         pkill -f "$script" 2>/dev/null || true
+        _free_port "$port" "$name"
         rm -f $LOGS/write_service_DEAD
         sleep 2
         case $name in
@@ -367,6 +411,64 @@ _daemon wisdom_synthesiser.py    wisdom_synthesiser.log   Wisdom          "pytho
 _daemon run_manager.py           manager.log              Manager         "python3 $MESH/run_manager.py daemon"
 _daemon goose_runner.py          goose_runner.log         GooseRunner     "env ZO_ESCALATE=1 python3 $SENTINEL/goose_runner.py"
 _daemon proposed_to_pending_promoter proposed_to_pending_promoter.log PromoterP2P "bash -c 'cd $SENTINEL && exec python3 -m zo_sentinel.promoters.proposed_to_pending_promoter'"
+# Rotator: owns intent_engine_daemon (06:00-21:59 ET) and he_who_comes_next
+# the other eight hours. It was UNDECLARED until 2026-09-15, so the 05:59Z
+# reboot killed it and nothing restarted it -- orphaning BOTH children and
+# filing chairman issue #5103. _daemon defers to the wrapper when one is
+# alive, so this never races the running copy.
+_daemon intent_rotation_service.py intent_rotation_service.log IntentRotation "bash $MESH/daemon_wrapper.sh intent_rotation_service $MESH/intent_rotation_service.py"
+
+# gh5601-supervise-go-sh-only-daemons (2026-09-27, GH #5601): four daemons were declared in go.sh
+# ONLY. The 2026-09-26T22:16Z host restart took them out and NOTHING retried
+# them: measured 8h later, pgrep found 0 children and 0 `while true` wrappers,
+# and 32 watchdog ticks had passed without a single restart line for any of
+# them, because this file had never been told they exist. go.sh:574 calls the
+# first two "self-looping, crash-respawn" -- but the respawner is a bash
+# wrapper that does not survive the event recovery is for. Identity here is the
+# script PATH inside the cmd (registration_drift_check._key), so these join
+# go.sh's declarations instead of creating phantom CamelCase halves, and
+# one_sided falls by 4 on the instrument that already reports it.
+# _daemon defers to a live daemon_wrapper, so this never races go.sh's copy.
+_daemon loop_watch.py             loop_watch.log            LoopWatch      "bash -c 'while true; do python3 $SENTINEL/loop_watch.py --interval 1800; sleep 30; done'"
+_daemon graph_refresh.py          graph_refresh.log         GraphRefresh   "bash -c 'while true; do python3 $SENTINEL/tools/graph_refresh.py --interval 900; sleep 30; done'"
+_daemon world_article_feeder.py   world_article_feeder.log  WorldArticles  "python3 $MESH/world_article_feeder.py"
+_daemon autopoiesis_bar_tracker.py autopoiesis_bar_tracker.log AutopoiesisBar "env ZO_DAEMON=1 bash $MESH/daemon_wrapper.sh autopoiesis_bar_tracker $SENTINEL/tools/autopoiesis_bar_tracker.py"
+
+# gh5601-restore-22-dropped-supervisor-entries (2026-09-27, GH #5601, cycle-0147)
+#
+# MEASURED, not inferred: watchdog.sh.bak-20260915-063106 carries 33 supervisor
+# entries; the live file as of mtime 2026-09-26T18:41:33Z carried 12. ONE edit
+# dropped 22 of them (33 baseline + IntentRotation added since, minus the 12 that survived), and left their justification comments behind (the
+# RegistrationDriftCheck block below still explains an entry that was gone),
+# which is how we know it was a rewrite accident and not a pruning decision.
+# The 22:16Z reboot then killed the four that nothing else kept alive (#5601);
+# the other 17 survived only by not having crashed yet. registration_drift_check
+# -- the instrument that FILES these findings -- was among the dropped and was
+# measured DEAD (pgrep 0) for the whole window, so the surface that would have
+# reported this loss was itself part of it.
+#
+# Restored verbatim from that backup, deduplicated by script token, so this is
+# idempotent: every entry whose daemon is already running is a no-op on the very
+# first tick (_daemon returns when count==1), and only the genuinely-down ones
+# are relaunched. Every script path was confirmed to exist before restoring.
+_daemon registration_drift_check.py registration_drift_check.log RegistrationDrift "env ZO_DAEMON=1 python3 $SENTINEL/tools/registration_drift_check.py"
+_svc registry_api.py            8781 RegistryApi
+_svc approval_workflow.py       8780 ApprovalWorkflow
+_svc forensic_detail_api_v2.py  8779 ForensicDetail
+_svc bulk_assess_api.py         8784 BulkAssess
+_svc search_api.py              8782 SearchApi
+_svc manual_override_api.py     8776 ManualOverride
+_daemon ladder_shim.py                        ladder_shim.log                        LadderShim      "python3 $SENTINEL/ladder_shim.py"
+_daemon gate_scheduler.py                     gate_scheduler.log                     GateScheduler   "python3 $SENTINEL/gate_scheduler.py"
+_daemon sentinel_directive_generator_goose.py sentinel_directive_generator_goose.log DirectiveGen    "python3 $SENTINEL/sentinel_directive_generator_goose.py"
+_daemon signal_bridge.py                      signal_bridge.log                      SignalBridge    "python3 $SENTINEL/signal_bridge.py"
+_daemon ecosystems_metadata_fetcher.py        ecosystems_metadata_fetcher.log        EcosystemsMeta  "python3 $SENTINEL/ecosystems_metadata_fetcher.py"
+_daemon candidate_github_promoter.py          candidate_github_promoter.log          CandGithubProm  "python3 $SENTINEL/candidate_github_promoter.py"
+_daemon discovery_npm_paginator.py            discovery_npm_paginator.log            DiscNpmPage     "python3 $SENTINEL/discovery_npm_paginator.py"
+_daemon discovery_github_paginator.py         discovery_github_paginator.log         DiscGhPage      "python3 $SENTINEL/discovery_github_paginator.py"
+_daemon liveness_probe.py                     liveness_probe.log                     LivenessProbe   "python3 $MESH/liveness_probe.py"
+_daemon trigger_watcher.py                    trigger_watcher.log                    TriggerWatcher  "python3 $MESH/trigger_watcher.py"
+_daemon zo_sentinel_builder.py                zo_sentinel_builder.log                SentinelBuilder "python3 $MESH/zo_sentinel_builder.py"
 
 # v3.8: build->publish pipeline janitor -- ghost .done sweep + heal the
 # publisher/ingestor/governor `python3 -m` loops when they crash-loop on the

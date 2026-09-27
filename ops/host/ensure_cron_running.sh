@@ -32,6 +32,19 @@
 #   ages past referent-verify's budget. That alarm cannot be silenced by the
 #   thing it is watching, which is the property the host half can never have.
 #
+# IF CRON CANNOT BE STARTED (FU-389)
+#   On some substrate revisions /usr/sbin/cron exists but the container's
+#   entrypoint never starts it; /etc/init.d/cron start silently no-ops. In that
+#   case register the guard as a supervisord program instead:
+#
+#     bash tools/install_catalog_supervisord.sh
+#     supervisorctl -c /etc/zo/supervisord-user.conf reread
+#     supervisorctl -c /etc/zo/supervisord-user.conf update
+#
+#   tools/install_catalog_supervisord.sh is the supervisord counterpart to
+#   tools/install_catalog_cron.sh. It writes a [program:bus-catalog-guard]
+#   block using the while/sleep pattern already present for temporal-context-writer.
+#
 # Usage:  ops/host/ensure_cron_running.sh [--quiet]
 set -uo pipefail
 

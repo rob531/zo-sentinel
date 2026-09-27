@@ -56,6 +56,24 @@ async def register_build(target_file: str, context_type: str) -> str:
         target_file: Path written, relative to /home/workspace/zo_sentinel/
         context_type: 'enricher', 'daemon', 'schema', 'utility'
     """
+    # FU-272: the service.toml `import_path` field contains `services.active.<name>.router`
+    # as a FORWARD REFERENCE to where the file lives AFTER promotion -- NOT the write
+    # destination. LLM agents running service_dir_from_exemplar.yaml confuse this and
+    # call register_build with target_file under services/active/ instead of services/staged/.
+    # The publisher then opens a PR into services/active/ with no service.toml, which
+    # triggers capmap-check STRICT failures and a broken active registry entry.
+    # CORRECT WRITE DESTINATION: always services/staged/<name>/<file>.
+    # The promoter (promote_staged_to_active.py) handles the staged->active move.
+    _norm = target_file.replace("\\", "/")
+    if _norm.startswith("services/active/"):
+        return (
+            f"REGISTER_ERROR: target_file {target_file!r} is under services/active/ -- "
+            "new service files must be written to services/staged/<name>/<file> instead. "
+            "The import_path in service.toml names services.active.<name>.router as a "
+            "FORWARD REFERENCE (where the file lives after promotion), not the write "
+            "destination. Write to services/staged/ and let promote_staged_to_active.py "
+            "handle the move. (FU-272)"
+        )
     out = f"/home/workspace/zo_sentinel/{target_file}"
     if not os.path.exists(out):
         return f"REGISTER_ERROR: {target_file} not on disk -- write it first."

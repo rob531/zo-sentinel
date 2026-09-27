@@ -124,3 +124,125 @@ def test_router_detection_matches_the_ratchet_shapes():
     assert auto_declare.is_router_module("a_api.py", "router = APIRouter()")
     assert auto_declare.is_router_module("a_api.py", "@router.post('/x')\ndef x(): ...")
     assert not auto_declare.is_router_module("a_api.py", "def x(): return 1")
+
+
+# --- G09: a NEW root-level router is STAGED, not declared ---------------------
+#
+# The deferred list stood at 62 against a cap of 40 and nothing drained it: a
+# root-level router has no manifest and no promotion path. The publisher now
+# routes a NEW root-level router into services/staged/<stem>/ with a [service]
+# manifest (zo_sentinel/publisher/auto_stage.stage_root_router), so the promoter
+# decides on evidence. Declaration remains the fallback for everything the
+# redirect refuses. These pin both halves.
+
+import shutil  # noqa: E402
+
+from zo_sentinel.publisher import auto_stage  # noqa: E402
+
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import check_service_manifests as csm  # noqa: E402
+
+
+def _files(result):
+    files, _reason = result
+    return dict(files or [])
+
+
+def test_new_root_router_is_staged_with_a_valid_manifest(tmp_path):
+    c = _clone(tmp_path)
+    files = _files(auto_stage.stage_root_router(c, "thing_api.py", ROUTER_SRC))
+    assert files["services/staged/thing_api/router.py"] == ROUTER_SRC
+    toml = files["services/staged/thing_api/service.toml"]
+    verdict, detail = csm.classify_source(toml, "thing_api")
+    assert verdict == "OK", detail
+    assert 'import_path = "services.active.thing_api.router"' in toml
+    assert 'prefix = "/api/x"' in toml, "the router's own prefix is carried over"
+    assert "services/staged/thing_api/__init__.py" in files
+
+
+def test_staged_router_is_never_declared(tmp_path):
+    """Once staged, the path is not root-level, so the ratchet's scope and the
+    deferred file are both untouched -- the graveyard stops growing."""
+    c = _clone(tmp_path)
+    changed, detail = auto_declare.declare(
+        c, "services/staged/thing_api/router.py", ROUTER_SRC)
+    assert not changed and _read(tmp_path) == {}
+
+
+def test_manifest_without_router_prefix_defaults_to_api(tmp_path):
+    src = "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    files = _files(auto_stage.stage_root_router(_clone(tmp_path), "bare_api.py", src))
+    assert 'prefix = "/api"' in files["services/staged/bare_api/service.toml"]
+
+
+def test_existing_root_module_is_an_edit_not_staged(tmp_path):
+    c = _clone(tmp_path)
+    (c / "thing_api.py").write_text("old", encoding="utf-8")
+    files, reason = auto_stage.stage_root_router(c, "thing_api.py", ROUTER_SRC)
+    assert files is None and "edit" in reason
+
+
+def test_mounted_root_router_is_not_staged(tmp_path):
+    files, reason = auto_stage.stage_root_router(
+        _clone(tmp_path), "mounted_thing_api.py", ROUTER_SRC)
+    assert files is None and "app/" in reason
+
+
+def test_active_name_collision_is_not_staged(tmp_path):
+    c = _clone(tmp_path)
+    (c / "services" / "active" / "thing_api").mkdir(parents=True)
+    files, reason = auto_stage.stage_root_router(c, "thing_api.py", ROUTER_SRC)
+    assert files is None and "collide" in reason
+
+
+def test_non_router_and_nested_paths_are_not_staged(tmp_path):
+    c = _clone(tmp_path)
+    assert auto_stage.stage_root_router(c, "plain.py", "def f(): return 1\n")[0] is None
+    assert auto_stage.stage_root_router(c, "app/routers/x.py", ROUTER_SRC)[0] is None
+    assert auto_stage.stage_root_router(c, "view.html", ROUTER_SRC)[0] is None
+
+
+def test_existing_staged_manifest_is_not_overwritten(tmp_path):
+    c = _clone(tmp_path)
+    d = c / "services" / "staged" / "thing_api"
+    d.mkdir(parents=True)
+    (d / "service.toml").write_text("human", encoding="utf-8")
+    files = _files(auto_stage.stage_root_router(c, "thing_api.py", ROUTER_SRC))
+    assert "services/staged/thing_api/service.toml" not in files
+    assert "services/staged/thing_api/router.py" in files
+
+
+def test_stage_root_router_never_raises():
+    files, reason = auto_stage.stage_root_router(None, None, None)
+    assert files is None and isinstance(reason, str)
+
+
+def test_staged_router_gets_its_missing_manifest(tmp_path):
+    c = _clone(tmp_path)
+    out = dict(auto_stage.staged_companions(
+        c, "services/staged/risk_axis/router.py", ROUTER_SRC))
+    verdict, detail = csm.classify_source(
+        out["services/staged/risk_axis/service.toml"], "risk_axis")
+    assert verdict == "OK", detail
+    assert auto_stage.staged_companions(c, "services/active/x/router.py", ROUTER_SRC) == []
+    assert auto_stage.staged_companions(c, "services/staged/x/models.py", ROUTER_SRC) == []
+
+
+def test_fix_manifests_runs_the_real_gate(tmp_path):
+    c = _clone(tmp_path)
+    shutil.copy(os.path.join(ROOT, "tools", "check_service_manifests.py"),
+                str(c / "tools" / "check_service_manifests.py"))
+    d = c / "services" / "staged" / "flat_svc"
+    d.mkdir(parents=True)
+    # FLAT: valid TOML, no [service] header -- the shape --fix reshapes.
+    (d / "service.toml").write_text(
+        'name = "flat_svc"\nimport_path = "services.active.flat_svc.router"\n'
+        'prefix = "/api"\ntag = "flat_svc"\n', encoding="utf-8")
+    ok, detail = auto_stage.fix_manifests(c, ["services/staged/flat_svc/service.toml"])
+    assert ok, detail
+    assert csm.classify(str(d / "service.toml"))[0] == "OK"
+
+
+def test_fix_manifests_skips_cleanly_without_the_tool(tmp_path):
+    ok, detail = auto_stage.fix_manifests(tmp_path, ["services/staged/x/service.toml"])
+    assert ok and "skipped" in detail

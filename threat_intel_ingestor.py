@@ -7,6 +7,7 @@ import hashlib
 import re
 import traceback
 from datetime import datetime, timedelta
+import singleton_lock  # identity-verified single-instance lock
 
 SERVICE_NAME = 'threat_intel_ingestor'
 SERVICE_PORT = 8788
@@ -91,19 +92,15 @@ def ws_execute(sql):
 def send_heartbeat():
     ws_write('service_health', {'service': SERVICE_NAME, 'last_heartbeat': datetime.utcnow().isoformat()})
 
-def check_single_instance():
-    pid = os.getpid()
-    if os.path.exists(PID_FILE):
-        old_pid = int(open(PID_FILE).read().strip())
-        if old_pid != pid:
-            try:
-                os.kill(old_pid, 0)
-                log(f'Instance already running with PID {old_pid}, exiting')
-                sys.exit(1)
-            except OSError:
-                log(f'Stale PID file, overwriting')
-    with open(PID_FILE, 'w') as f:
-        f.write(str(pid))
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
+
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file():
     if os.path.exists(PID_FILE):

@@ -298,24 +298,51 @@ def load_catalog() -> tuple[dict, dict, str | None]:
         try:
             tree = ast.parse(MODELS.read_text(encoding="utf-8"), str(MODELS))
             n = 0
+            n_cols = 0
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ClassDef):
                     continue
                 tname, cols = None, set()
                 for stmt in node.body:
-                    if not isinstance(stmt, ast.Assign) or not stmt.targets:
+                    # BOTH declarative forms, because app/models.py uses the
+                    # annotated one and reading only the first made this plane
+                    # 97% blind:
+                    #   1.x  id = Column(Integer, ...)                -> ast.Assign
+                    #   2.0  id: Mapped[int] = mapped_column(...)     -> ast.AnnAssign
+                    # Measured on 2026-09-22 against app/models.py: Assign
+                    # yielded 4 column names and AnnAssign yielded 121 that were
+                    # dropped on the floor. A column the extractor never read is
+                    # not a column that does not exist -- but the column check
+                    # reported it as MISSING, which is FAIL ("checked, absent")
+                    # standing in for UNKNOWN ("could not be checked"). That is
+                    # the exact substitution this tool exists to make impossible,
+                    # committed inside the tool itself, and it is why the missing-
+                    # column count GREW (115 -> 145) as annotated models were
+                    # added: every new call site against a 2.0-style model minted
+                    # a fresh false FAIL. See gh#4080.
+                    if isinstance(stmt, ast.Assign) and stmt.targets:
+                        tgt = stmt.targets[0]
+                    elif isinstance(stmt, ast.AnnAssign):
+                        tgt = stmt.target
+                    else:
                         continue
-                    tgt = stmt.targets[0]
                     if not isinstance(tgt, ast.Name):
                         continue
                     if tgt.id == "__tablename__" and isinstance(stmt.value, ast.Constant):
                         tname = stmt.value.value
+                    elif tgt.id.startswith("__"):
+                        # __table_args__ / __mapper_args__ are configuration, not
+                        # columns. Admitting them would let a query naming
+                        # `__table_args__` resolve, which is a false PASS.
+                        continue
                     else:
                         cols.add(tgt.id)
                 if tname:
                     tables.setdefault(tname, set()).update(cols)
                     n += 1
+                    n_cols += len(cols)
             meta["planes"].append(f"app_models:{n}")
+            meta["app_model_columns"] = n_cols
         except Exception:                          # noqa: BLE001
             meta["planes"].append("app_models:UNPARSEABLE")
 

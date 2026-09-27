@@ -24,6 +24,21 @@ WRITE_URL = f'{WRITE_SERVICE}/write'
 QUERY_URL = f'{QUERY_SERVICE}/query'
 EXECUTE_URL = f'{EXECUTE_SERVICE}/execute'
 POLL_SECS = 30
+
+# Rescore cadence.
+#
+# These signals are deterministic functions of static registry fields (name,
+# url, description, registry_source, metadata). Rescoring an unchanged row
+# cannot change its score, so the old 1-hour TTL rewrote the entire registry
+# roughly every 35 minutes and grew mcp_signal_scores to 2.4M rows for 3,173
+# servers -- an average of 778 identical rows each.
+#
+# RESCORE_TTL_HOURS is the soft floor; INPUT_HASH is the real gate. MAX_AGE_DAYS
+# guarantees every server is eventually refreshed even if its inputs never
+# change, so a scoring-logic change still propagates.
+RESCORE_TTL_HOURS = 24
+MAX_AGE_DAYS = 7
+HASH_FIELDS = ('name', 'url', 'description', 'registry_source', 'metadata')
 LOG_FILE = '/home/workspace/logs/signal_analyser.log'
 
 VERDICT_THRESHOLDS = {
@@ -173,9 +188,9 @@ def ensure_tables() -> None:
 
 
 def compute_url_safety_score(server: Dict[str, Any]) -> Dict[str, Any]:
-    url = server.get('url', '')
-    description = server.get('description', '')
-    name = server.get('name', '')
+    url = (server.get('url') or '')
+    description = (server.get('description') or '')
+    name = (server.get('name') or '')
     
     score = 70.0
     evidence_parts = []
@@ -220,7 +235,7 @@ def compute_tool_security_score(server: Dict[str, Any]) -> Dict[str, Any]:
         ev_str = '; '.join(evid[:3]) if isinstance(evid, list) else str(evid)[:200]
         return {'signal_name': 'tool_security', 'score': float(result['score']), 'evidence': ev_str}
     # Fallback: legacy logic
-    description = server.get('description', '')
+    description = (server.get('description') or '')
     tools = []  # tools column not in registry schema
     score = 70.0
     evidence_parts = []
@@ -258,9 +273,13 @@ def compute_tool_security_score(server: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def compute_supply_chain_score(server: Dict[str, Any]) -> Dict[str, Any]:
-    url = server.get('url', '')
-    scan_count = server.get('scan_count', 0)
-    registry_source = server.get('registry_source', '')
+    url = (server.get('url') or '')
+    # `.get(k, 0)` returns 0 only when the key is ABSENT. scan_count is a
+    # nullable column, so the key is present with value None and the default
+    # never applies -- which raised TypeError on the comparisons below for
+    # ~38% of every cycle (7,199 logged before this fix).
+    scan_count = server.get('scan_count') or 0
+    registry_source = (server.get('registry_source') or '')
     
     score = 70.0
     evidence_parts = []
@@ -296,9 +315,9 @@ def compute_supply_chain_score(server: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def compute_reputation_score(server: Dict[str, Any]) -> Dict[str, Any]:
-    name = server.get('name', '')
-    description = server.get('description', '')
-    trust_score = server.get('trust_score', 0)
+    name = (server.get('name') or '')
+    description = (server.get('description') or '')
+    trust_score = (server.get('trust_score') or 0)
     
     score = 70.0
     evidence_parts = []
@@ -333,8 +352,8 @@ def compute_reputation_score(server: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def compute_domain_trust_score(server: Dict[str, Any]) -> Dict[str, Any]:
-    url = server.get('url', '')
-    registry_source = server.get('registry_source', '')
+    url = (server.get('url') or '')
+    registry_source = (server.get('registry_source') or '')
     
     score = 70.0
     evidence_parts = []
@@ -417,8 +436,56 @@ def compute_composite_score(signals: List[Dict[str, Any]]) -> float:
     return weighted_sum / total_weight
 
 
+def sql_quote(value: str) -> str:
+    """Escape a value for single-quoted SQL. server_ids are registry-supplied
+    and contain slashes and, occasionally, quotes."""
+    return str(value).replace("'", "''")
+
+
+def input_hash(server: Dict[str, Any]) -> str:
+    """Fingerprint the fields the signals actually read.
+
+    If this is unchanged since the last scoring pass, recomputing the signals
+    is guaranteed to produce the same numbers, so the pass is skipped.
+    """
+    material = json.dumps(
+        {k: server.get(k) for k in HASH_FIELDS}, sort_keys=True, default=str
+    )
+    return hashlib.sha256(material.encode('utf-8')).hexdigest()[:16]
+
+
+def last_score_state(server_id: str) -> Dict[str, Any]:
+    """Return {input_hash, scored_at} from this server's most recent composite."""
+    rows = ws_query(f"""
+        SELECT evidence, scored_at
+        FROM mcp_signal_scores
+        WHERE server_id = '{sql_quote(server_id)}' AND signal_name = 'composite'
+        ORDER BY scored_at DESC
+        LIMIT 1
+    """)
+    if not rows:
+        return {}
+    try:
+        ev = json.loads(rows[0].get('evidence') or '{}')
+    except (ValueError, TypeError):
+        ev = {}
+    return {'input_hash': ev.get('input_hash'), 'scored_at': rows[0].get('scored_at')}
+
+
 def get_servers_needing_signals() -> List[Dict[str, Any]]:
-    servers = ws_query('''
+    """Servers whose scores are missing or past the TTL.
+
+    There is deliberately NO unconditional fallback here. The previous version
+    fell through to `ORDER BY latest_score ASC NULLS FIRST LIMIT 50` with no
+    WHERE clause, so an empty result from the staleness query still returned 50
+    servers to rescore. "Nothing to do" was treated as "do the oldest anyway",
+    the idle branch in run() became unreachable (measured: 0 occurrences of
+    "No servers need signal processing" against 209 "Processing 50 servers"),
+    and the daemon rewrote the registry continuously.
+
+    An empty list is now a real answer, and the caller idles on it.
+    """
+    return ws_query(f'''
         SELECT r.server_id, r.name, r.url, r.description, r.trust_score,
                r.registry_source, r.scan_count, r.verdict, r.metadata
         FROM mcp_server_registry r
@@ -428,45 +495,42 @@ def get_servers_needing_signals() -> List[Dict[str, Any]]:
             GROUP BY server_id
         ) latest ON r.server_id = latest.server_id
         WHERE r.verdict IS NULL
-           OR r.verdict = ''
+           OR r.verdict = \'\'
            OR latest.latest_score IS NULL
-           OR latest.latest_score < CURRENT_TIMESTAMP - INTERVAL '1 hour'
+           OR latest.latest_score < CURRENT_TIMESTAMP - INTERVAL \'{RESCORE_TTL_HOURS} hour\'
+        ORDER BY latest.latest_score ASC NULLS FIRST
         LIMIT 50
     ''')
-    
-    if not servers:
-        servers = ws_query('''
-            SELECT r.server_id, r.name, r.url, r.description, r.trust_score,
-                   r.registry_source, r.scan_count, r.verdict, r.metadata
-            FROM mcp_server_registry r
-            LEFT JOIN (
-                SELECT server_id, MAX(scored_at) as latest_score
-                FROM mcp_signal_scores
-                GROUP BY server_id
-            ) latest ON r.server_id = latest.server_id
-            ORDER BY latest.latest_score ASC NULLS FIRST
-            LIMIT 50
-        ''')
-    
-    return servers
 
 
-def process_server(server: Dict[str, Any]) -> None:
-    server_id = server.get('server_id', '')
+def process_server(server: Dict[str, Any]) -> str:
+    """Score one server. Returns 'scored', 'skipped' or 'noop'."""
+    server_id = (server.get('server_id') or '')
     if not server_id:
-        return
-    
+        return 'noop'
+
+    # Skip when the inputs the signals read have not changed. Without this the
+    # TTL alone decides cadence, and a TTL is a guess about how often facts
+    # change; the hash is a measurement of whether they did.
+    current_hash = input_hash(server)
+    prev = last_score_state(server_id)
+    if prev.get('input_hash') and prev['input_hash'] == current_hash:
+        scored_at = prev.get('scored_at')
+        if scored_at and not _older_than_days(scored_at, MAX_AGE_DAYS):
+            return 'skipped'
+
     signals = []
-    
+
     signals.append(compute_url_safety_score(server))
     signals.append(compute_tool_security_score(server))
     signals.append(compute_supply_chain_score(server))
     signals.append(compute_reputation_score(server))
     signals.append(compute_domain_trust_score(server))
-    
+
     composite = compute_composite_score(signals)
     verdict = score_to_verdict(composite)
-    
+
+    now = datetime.utcnow().isoformat()
     rows_to_write = []
     for signal in signals:
         rows_to_write.append({
@@ -475,27 +539,55 @@ def process_server(server: Dict[str, Any]) -> None:
             'signal_name': signal['signal_name'],
             'score': signal['score'],
             'evidence': signal['evidence'],
-            'scored_at': datetime.utcnow().isoformat()
+            'scored_at': now
         })
-    
+
     rows_to_write.append({
         'id': uuid.uuid4().int % (2**63),
-            'server_id': server_id,
+        'server_id': server_id,
         'signal_name': 'composite',
         'score': composite,
-        'evidence': json.dumps({'verdict': verdict, 'signal_count': len(signals)}),
-        'scored_at': datetime.utcnow().isoformat()
+        'evidence': json.dumps({
+            'verdict': verdict,
+            'signal_count': len(signals),
+            'input_hash': current_hash,
+        }),
+        'scored_at': now
     })
-    
+
+    # Replace, do not append. One row per server per signal per day. The old
+    # code appended on every pass with a fresh uuid, which is how this table
+    # reached 2.4M rows for 3,173 servers. Day-granularity keeps a usable
+    # history for drift work without unbounded growth.
+    ws_execute(f"""
+        DELETE FROM mcp_signal_scores
+        WHERE server_id = '{sql_quote(server_id)}'
+          AND scored_at >= CAST(current_date AS TIMESTAMP WITH TIME ZONE)
+    """)
+
     ws_write('mcp_signal_scores', rows_to_write)
-    
+
     ws_execute(f'''
         UPDATE mcp_server_registry
-        SET trust_score = {composite}, verdict = '{verdict}', last_assessed = '{datetime.utcnow().isoformat()}'
-        WHERE server_id = '{server_id}'
+        SET trust_score = {composite}, verdict = '{sql_quote(verdict)}', last_assessed = '{now}'
+        WHERE server_id = '{sql_quote(server_id)}'
     ''')
-    
+
     log(f"Processed {server_id}: verdict={verdict}, score={composite:.1f}, signals={len(signals)}")
+    return 'scored'
+
+
+def _older_than_days(scored_at: Any, days: int) -> bool:
+    """True when scored_at is older than `days`, or unparseable (fail toward
+    rescoring rather than toward silently never refreshing)."""
+    try:
+        text = str(scored_at).replace('Z', '+00:00')
+        ts = datetime.fromisoformat(text)
+        if ts.tzinfo is not None:
+            ts = ts.replace(tzinfo=None)
+        return (datetime.utcnow() - ts) > timedelta(days=days)
+    except (ValueError, TypeError):
+        return True
 
 
 def run() -> None:
@@ -517,12 +609,18 @@ def run() -> None:
             servers = get_servers_needing_signals()
             
             if servers:
-                log(f"Processing {len(servers)} servers")
+                scored = skipped = 0
                 for server in servers:
                     try:
-                        process_server(server)
+                        outcome = process_server(server)
+                        if outcome == 'scored':
+                            scored += 1
+                        elif outcome == 'skipped':
+                            skipped += 1
                     except Exception as e:
                         log(f"Error processing server {server.get('server_id')}: {e}")
+                log(f"Cycle: {len(servers)} candidates, {scored} scored, "
+                    f"{skipped} unchanged (inputs identical)")
             else:
                 log("No servers need signal processing")
             

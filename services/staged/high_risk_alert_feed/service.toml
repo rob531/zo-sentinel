@@ -1,0 +1,11 @@
+[service]
+name = "high_risk_alert_feed"
+import_path = "services.active.high_risk_alert_feed.router"
+prefix = "/api"
+tag = "high_risk_alert_feed"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

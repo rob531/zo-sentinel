@@ -1,0 +1,11 @@
+[service]
+name = "corpus_drift"
+import_path = "services.active.corpus_drift.router"
+prefix = "/api"
+tag = "corpus_drift"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

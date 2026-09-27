@@ -1,0 +1,8 @@
+[service]
+name = "tool_count_enrichment"
+import_path = "services.active.tool_count_enrichment.router"
+prefix = "/api"
+tag = "tool_count_enrichment"
+origin = "service"
+auth = "public"
+needs_data_layer = true

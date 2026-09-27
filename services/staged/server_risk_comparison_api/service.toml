@@ -1,0 +1,12 @@
+[service]
+name = "server_risk_comparison_api"
+import_path = "services.active.server_risk_comparison_api.router"
+prefix = "/api"
+tag = "server_risk_comparison_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_trend_verification"
+import_path = "services.active.risk_tier_trend_verification.router"
+prefix = "/api"
+tag = "risk_tier_trend_verification"
+origin = "service"
+auth = "public"
+needs_data_layer = true

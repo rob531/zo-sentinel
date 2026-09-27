@@ -1,0 +1,11 @@
+[service]
+name = "overview_dashboard_service"
+import_path = "services.active.overview_dashboard_service.router"
+prefix = "/api"
+tag = "overview_dashboard_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

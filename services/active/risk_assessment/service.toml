@@ -1,0 +1,8 @@
+[service]
+name = "risk_assessment"
+import_path = "services.active.risk_assessment.router"
+prefix = "/api"
+tag = "risk_assessment"
+origin = "service"
+auth = "public"
+needs_data_layer = true

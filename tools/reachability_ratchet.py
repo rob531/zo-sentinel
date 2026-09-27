@@ -448,6 +448,27 @@ def main():
     quiet = "--quiet" in sys.argv
     enforce = "--enforce" in sys.argv
     update = "--update-baseline" in sys.argv
+    # --enforce-level: OPT the LEVEL rule into the existing enforce machinery.
+    # DEFAULT OFF, AND DELIBERATELY NOT WIRED INTO CI. Issue #3944 has been open since
+    # 2026-08-25 asking one question -- should the over-cap LEVEL block the builder
+    # queue -- and the 2026-09-21 chairman ruling answers it precisely:
+    #
+    #   "What the fleet does absent a ruling: completes the re-derivation on the fixed
+    #    counter and builds the RED-OBSERVING FIXTURE, and stops there. It will not arm
+    #    the trigger, will not raise or lower the cap, will not edit the baseline."
+    #
+    # and names precondition 3 as the binding one:
+    #
+    #   "A fixture that OBSERVES the trigger exit non-zero. ... A check never seen RED
+    #    is unproven, and this one has been unproven for 26 days."
+    #
+    # This flag exists so that sentence can stop being true. It makes the level rule
+    # OBSERVABLE-RED in a test, under an explicit opt-in, while changing nothing about
+    # what any PR or any workflow actually runs. Arming it is a POLICY CALL that belongs
+    # to #3944 and to no lane; tests/test_ratchet_level_trigger.py pins that it is absent
+    # from .github/workflows/, so arming it later cannot happen by accident -- it has to
+    # break a named test first.
+    enforce_level = "--enforce-level" in sys.argv
 
     data = census()
     count = data["orphan_count"]
@@ -561,6 +582,13 @@ def main():
               "blocks growing this list. The cap is not to be raised to "
               "quieten it."
               % (len(active_deferred), DEFERRED_REVIEW_CAP))
+        if enforce_level:
+            # The ONLY line in this file that can turn the LEVEL into an exit code, and
+            # it is unreachable unless a caller passes --enforce-level explicitly. No CI
+            # workflow does. See the note on the flag above: this is the fixture's
+            # handle, not an arming.
+            failures.append("deferred level over cap (%d > %d)"
+                            % (len(active_deferred), DEFERRED_REVIEW_CAP))
 
     # --- DEFERRED NON-INCREASING (MERGE_AUDIT_2026-08-23 G4) ----------------
     # The absolute cap of 40 is an arbitrary threshold and, being advisory, it

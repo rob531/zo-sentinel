@@ -50,6 +50,10 @@ COPY tools /srv/tools
 # carries the promoted service and nothing else. `services/__init__.py` is
 # copied on its own so that `services` is an importable package without
 # `services.staged` existing in the image.
+# --- mounted from the deferred list by tools/mount_deferred_router.py
+# A service.toml without a COPY is a ModuleNotFoundError on prod at mount time
+COPY axis_change_attribution_probe.py axis_score_variance_report.py axis_scores_query_api.py cve_detail_api.py never_scored_backlog_api.py orphan_router_caller_probe.py scoring_axis_criteria_api.py scoring_wave_summary_api.py server_registry_search_api.py server_scorecard_api.py server_verdict_router.py /srv/
+
 COPY services/__init__.py /srv/services/
 COPY services/active /srv/services/active
 # Build identity for /version (runtime_deploy_info_endpoint): pass

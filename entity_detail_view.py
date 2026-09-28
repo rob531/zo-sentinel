@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from verdict_breakdown_api import require_admin
 from typing import List, Dict, Optional
 from datetime import datetime
 from pydantic import BaseModel
@@ -6,7 +7,8 @@ from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
 from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/entity", tags=["entity"])
+# #4005: admin-only until the chairman rules on public exposure (lookup-cap / dispute-PII model in verdict_breakdown_api / score_dispute_api).
+router = APIRouter(prefix="/entity", tags=["entity"], dependencies=[Depends(require_admin)])
 
 class AxisScore(BaseModel):
     axis_name: str

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from verdict_breakdown_api import require_admin
 from typing import List, Optional
 from app.db import get_session
 from app.models import McpScoreDispute
 from sqlalchemy.orm import Session
 import requests
 
-router = APIRouter()
+# #4005: admin-only until the chairman rules on public exposure (lookup-cap / dispute-PII model in verdict_breakdown_api / score_dispute_api).
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 def get_dispute(server_id: str, status: Optional[str] = None, limit: int = 100, offset: int = 0, db: Session = Depends(get_session)) -> List[dict]:
     query = db.query(McpScoreDispute).filter(McpScoreDispute.server_id == server_id)

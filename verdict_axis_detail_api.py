@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from verdict_breakdown_api import require_admin
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,7 +23,8 @@ from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
 from trust_gating_override import trust_gate
 
-router = APIRouter(tags=["verdict"])
+# #4005: admin-only until the chairman rules on public exposure (lookup-cap / dispute-PII model in verdict_breakdown_api / score_dispute_api).
+router = APIRouter(tags=["verdict"], dependencies=[Depends(require_admin)])
 
 AXES = (
     "overall_risk",

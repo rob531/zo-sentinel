@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header
+from verdict_breakdown_api import require_admin
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,7 +18,8 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.models import McpScoreDispute, McpServerRegistry
 
-router = APIRouter(prefix="/disputes", tags=["disputes"])
+# #4005: admin-only until the chairman rules on public exposure (lookup-cap / dispute-PII model in verdict_breakdown_api / score_dispute_api).
+router = APIRouter(prefix="/disputes", tags=["disputes"], dependencies=[Depends(require_admin)])
 
 _USER_ID_HEADER = os.getenv("USER_ID_HEADER", "X-User-ID")
 

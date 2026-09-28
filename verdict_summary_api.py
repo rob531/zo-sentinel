@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from verdict_breakdown_api import require_admin
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
 from datetime import datetime
 
-router = APIRouter()
+# #4005: admin-only until the chairman rules on public exposure (lookup-cap / dispute-PII model in verdict_breakdown_api / score_dispute_api).
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 def get_verdict_summary(server_id: str, session: Session = Depends(get_session)) -> Dict[str, Any]:
     # Fetch server registry data

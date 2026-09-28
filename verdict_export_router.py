@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.testclient import TestClient
+from verdict_breakdown_api import require_admin
 from pydantic import BaseModel
 from typing import List, Optional
 import csv
@@ -8,7 +8,8 @@ from app.db import get_session
 from app.models import McpLlmAxisScore
 from app import dependency_overrides
 
-router = APIRouter()
+# #4005: admin-only until the chairman rules on public exposure (lookup-cap / dispute-PII model in verdict_breakdown_api / score_dispute_api).
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 class AxisScore(BaseModel):
     axis_name: str
@@ -59,6 +60,7 @@ def get_verdict_export(server_id: str, include_headers: bool = True) -> Response
 router.get("/export/{server_id}")(get_verdict_export)
 
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient
     from fastapi import FastAPI
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

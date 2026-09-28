@@ -69,6 +69,8 @@ from typing import Any, Dict, List, Optional, Tuple
 # requests is already a tower dep (refresh_schema_doc.py imports it).
 import requests
 
+from zo_sentinel import bus
+
 # Loader lives in the same repo; import via package path so this script
 # works whether invoked as `python -m zo_sentinel.probes.duckdb_schema_uptime_probe`
 # or via supervisord's full module path.
@@ -317,33 +319,23 @@ def check_uptime() -> Tuple[bool, float, Optional[str]]:
 def _fetch_all_information_schema_rows() -> List[Dict[str, Any]]:
     """Read every information_schema row, paging past the bus row cap.
 
-    Stops on the first short page. A page that comes back exactly
-    ``BUS_PAGE_ROWS`` long is indistinguishable from a capped one, so it is
-    always followed by another request -- the extra round trip is the price of
-    not being able to ask the bus whether it truncated.
+    Delegates to ``zo_sentinel.bus.query_all``, which is the single paging
+    implementation in this tree. It stops on the first short page AND then
+    proves the assembled count against ``count(*)`` -- the step the inlined
+    version here could not do, and the reason a page size equal to the server
+    cap was unsafe on its own (see the negative control in
+    tests/test_bus_read_constructor.py).
+
+    ``BUS_PAGE_ROWS`` / ``BUS_MAX_PAGES`` stay module-level and are read at call
+    time, so they remain the knobs for this probe.
     """
-    rows: List[Dict[str, Any]] = []
-    for page in range(BUS_MAX_PAGES):
-        offset = page * BUS_PAGE_ROWS
-        r = requests.post(
-            f"{WRITE_SERVICE_URL}/query",
-            json={
-                "sql": (
-                    f"{INFORMATION_SCHEMA_SQL} "
-                    f"LIMIT {BUS_PAGE_ROWS} OFFSET {offset}"
-                )
-            },
-            timeout=QUERY_TIMEOUT,
-        )
-        r.raise_for_status()
-        page_rows = r.json().get("rows") or []
-        rows.extend(page_rows)
-        if len(page_rows) < BUS_PAGE_ROWS:
-            return rows
-    raise RuntimeError(
-        "information_schema paging exceeded %d pages (%d rows) -- refusing to "
-        "loop; the bus is likely ignoring OFFSET"
-        % (BUS_MAX_PAGES, len(rows))
+    return bus.query_all(
+        INFORMATION_SCHEMA_SQL,
+        url="%s/query" % WRITE_SERVICE_URL,
+        timeout=QUERY_TIMEOUT,
+        page_rows=BUS_PAGE_ROWS,
+        max_pages=BUS_MAX_PAGES,
+        what="information_schema",
     )
 
 

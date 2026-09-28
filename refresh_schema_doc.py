@@ -32,7 +32,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-import requests
+# Kept although this module no longer calls requests directly: the bus reads
+# below go through zo_sentinel.bus, which posts via this same `requests`
+# module object, and tests/test_information_schema_pagination.py patches
+# `refresh_schema_doc.requests.post` to intercept them. Removing the import
+# would silently break that interception rather than fail loudly.
+import requests  # noqa: F401
+
+from zo_sentinel import bus
 
 
 # ---------------------------------------------------------------------------
@@ -124,31 +131,18 @@ def compute_schema_hash(rows: List[Dict[str, str]]) -> str:
 def _fetch_all_information_schema_rows() -> List[Dict[str, Any]]:
     """Read every information_schema row, paging past the bus row cap.
 
-    Stops on the first short page. A full-length page is indistinguishable from
-    a capped one, so it is always followed by another request.
+    Delegates to ``zo_sentinel.bus.query_all`` -- one paging implementation for
+    the tree, with the ``count(*)`` reconciliation this inlined copy lacked. The
+    committed schema doc and its hash are generated from this, so a partial read
+    here is a confidently-wrong canonical artefact; query_all raises instead.
     """
-    rows: List[Dict[str, Any]] = []
-    for page in range(BUS_MAX_PAGES):
-        offset = page * BUS_PAGE_ROWS
-        resp = requests.post(
-            f"{WRITE_SERVICE}/query",
-            json={
-                "sql": (
-                    f"{INFORMATION_SCHEMA_SQL} "
-                    f"LIMIT {BUS_PAGE_ROWS} OFFSET {offset}"
-                )
-            },
-            timeout=QUERY_TIMEOUT,
-        )
-        resp.raise_for_status()
-        page_rows = resp.json().get("rows") or []
-        rows.extend(page_rows)
-        if len(page_rows) < BUS_PAGE_ROWS:
-            return rows
-    raise RuntimeError(
-        "information_schema paging exceeded %d pages (%d rows) -- refusing to "
-        "loop; the bus is likely ignoring OFFSET"
-        % (BUS_MAX_PAGES, len(rows))
+    return bus.query_all(
+        INFORMATION_SCHEMA_SQL,
+        url="%s/query" % WRITE_SERVICE,
+        timeout=QUERY_TIMEOUT,
+        page_rows=BUS_PAGE_ROWS,
+        max_pages=BUS_MAX_PAGES,
+        what="information_schema",
     )
 
 

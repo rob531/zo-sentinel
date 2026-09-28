@@ -77,10 +77,27 @@ class FakeCappedBus:
         self.rows = _corpus() if rows is None else rows
         self.cap = cap
         self.calls: list[str] = []
+        self.count_calls = 0
+
+    @property
+    def data_calls(self) -> int:
+        """Requests that asked for ROWS, excluding reconciliation counts."""
+        return len(self.calls) - self.count_calls
 
     def __call__(self, url, json=None, timeout=None, **kw):
         sql = (json or {}).get("sql", "")
         self.calls.append(sql)
+
+        # The real bus answers count(*), and the answer is NOT capped -- verified
+        # live 2026-09-28: 373 while the unpaginated read returns 200. That is
+        # what makes it usable as the reconciliation oracle the readers now use.
+        if "count(*)" in sql.lower():
+            self.count_calls += 1
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.raise_for_status = MagicMock()
+            resp.json = MagicMock(return_value={"rows": [{"n": len(self.rows)}], "count": 1})
+            return resp
 
         limit = offset = None
         m = re.search(r"\bLIMIT\s+(\d+)", sql, re.I)
@@ -129,14 +146,14 @@ class TestProbePagesPastCap:
         with patch.object(probe.requests, "post", new=bus):
             rows = probe.fetch_live_duckdb_columns()
         assert len(rows) == CAP
-        assert len(bus.calls) == 2, "must confirm the cap was not hit"
+        assert bus.data_calls == 2, "must confirm the cap was not hit"
 
     def test_empty_schema_terminates(self):
         bus = FakeCappedBus(rows=[])
         with patch.object(probe.requests, "post", new=bus):
             rows = probe.fetch_live_duckdb_columns()
         assert rows == []
-        assert len(bus.calls) == 1
+        assert bus.data_calls == 1
 
     def test_skip_tables_filter_still_applies(self):
         rows_in = _corpus() + [

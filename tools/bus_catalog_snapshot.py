@@ -37,6 +37,12 @@ from pathlib import Path
 
 import requests
 
+# Run as `python3 tools/bus_catalog_snapshot.py`, so sys.path[0] is tools/ and
+# the repo root is not importable without this.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from zo_sentinel import bus  # noqa: E402
+
 BUS = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772")
 PAGE = 150          # deliberately below the 200-row cap
 TIMEOUT = 30
@@ -66,30 +72,27 @@ def _scalar_count(table_expr: str) -> int:
 def _paginated(select: str, from_expr: str, order: str) -> list[dict]:
     """Read every row of `from_expr`, then prove none were dropped.
 
-    The proof is the point. Without it this function cannot tell 355 rows from
-    the first 200 of 355, and neither can anything downstream.
-    """
-    expected = _scalar_count(from_expr)
-    out: list[dict] = []
-    offset = 0
-    while True:
-        page = _query(
-            f"SELECT {select} FROM {from_expr} ORDER BY {order} "
-            f"LIMIT {PAGE} OFFSET {offset}"
-        )
-        out.extend(page)
-        if len(page) < PAGE:
-            break
-        offset += PAGE
-        if offset > 200_000:                      # runaway guard
-            raise BusError("pagination exceeded 200k rows; refusing to continue")
+    The proof is the point. Without it this function cannot tell 373 rows from
+    the first 200 of 373, and neither can anything downstream.
 
-    if len(out) != expected:
-        raise BusError(
-            f"pagination mismatch on {from_expr}: assembled {len(out)}, "
-            f"bus reports {expected}. Refusing to write a partial snapshot."
+    The implementation now lives in ``zo_sentinel.bus`` -- this was the best of
+    five private copies in the tree and became the constructor. Behaviour is
+    unchanged: same page size, same reconciliation, same refusal to publish a
+    partial snapshot. Every failure mode is still reported as ``BusError`` so
+    main() keeps returning 2 on an unreadable bus.
+    """
+    sql = "SELECT %s FROM %s ORDER BY %s" % (select, from_expr, order)
+    try:
+        return bus.query_all(
+            sql,
+            url="%s/query" % BUS,
+            timeout=TIMEOUT,
+            page_rows=PAGE,
+            count_sql="SELECT count(*) AS n FROM %s" % from_expr,
+            what=from_expr,
         )
-    return out
+    except (bus.BusError, ValueError, RuntimeError) as exc:
+        raise BusError(str(exc)) from None
 
 
 def capture() -> dict:

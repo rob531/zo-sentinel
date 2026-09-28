@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import requests
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScores
+from app.models import McpServerRegistry, McpLlmAxisScore
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import statistics
@@ -38,10 +38,10 @@ def calculate_risk_tier(variance: float, threshold: float) -> str:
     else:
         return "low"
 
-def get_axis_scores(db: Session, server_id: str, axis_name: str) -> List[McpLlmAxisScores]:
-    return db.query(McpLlmAxisScores).filter(
-        McpLlmAxisScores.server_id == server_id,
-        McpLlmAxisScores.axis_name == axis_name
+def get_axis_scores(db: Session, server_id: str, axis_name: str) -> List[McpLlmAxisScore]:
+    return db.query(McpLlmAxisScore).filter(
+        McpLlmAxisScore.server_id == server_id,
+        McpLlmAxisScore.axis_name == axis_name
     ).all()
 
 def get_server_metadata(db: Session, server_id: str) -> McpServerRegistry:
@@ -59,11 +59,11 @@ async def get_axis_score_variance_report(
     try:
         # Get all unique server_id and axis_name combinations
         servers_axes = db.query(
-            McpLlmAxisScores.server_id,
-            McpLlmAxisScores.axis_name
+            McpLlmAxisScore.server_id,
+            McpLlmAxisScore.axis_name
         ).group_by(
-            McpLlmAxisScores.server_id,
-            McpLlmAxisScores.axis_name
+            McpLlmAxisScore.server_id,
+            McpLlmAxisScore.axis_name
         ).all()
 
         servers = []
@@ -146,31 +146,31 @@ if __name__ == "__main__":
     test_session.commit()
 
     test_scores = [
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-1",
             axis_name="test-axis-1",
             p_top=0.8,
             scored_at=datetime.now()
         ),
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-1",
             axis_name="test-axis-1",
             p_top=0.85,
             scored_at=datetime.now()
         ),
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-1",
             axis_name="test-axis-1",
             p_top=0.9,
             scored_at=datetime.now()
         ),
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-1",
             axis_name="test-axis-2",
             p_top=0.7,
             scored_at=datetime.now()
         ),
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-1",
             axis_name="test-axis-2",
             p_top=0.75,

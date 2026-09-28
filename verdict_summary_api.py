@@ -2,19 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from app.db import get_session
-from app.models import MCPServerRegistry, MCPLLMAxisScores
+from app.models import McpServerRegistry, McpLlmAxisScore
 from datetime import datetime
 
 router = APIRouter()
 
 def get_verdict_summary(server_id: str, session: Session = Depends(get_session)) -> Dict[str, Any]:
     # Fetch server registry data
-    server_registry = session.query(MCPServerRegistry).filter(MCPServerRegistry.server_id == server_id).first()
+    server_registry = session.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first()
     if not server_registry:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Fetch axis scores
-    axis_scores = session.query(MCPLLMAxisScores).filter(MCPLLMAxisScores.server_id == server_id).all()
+    axis_scores = session.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).all()
 
     # Prepare axes data
     axes = {}
@@ -44,7 +44,7 @@ router.get("/verdict_summary/{server_id}")(get_verdict_summary)
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import get_session
-    from app.models import MCPServerRegistry, MCPLLMAxisScores
+    from app.models import McpServerRegistry, McpLlmAxisScore
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -54,8 +54,8 @@ if __name__ == "__main__":
     test_session = TestSession()
 
     # Create tables
-    MCPServerRegistry.__table__.create(test_engine)
-    MCPLLMAxisScores.__table__.create(test_engine)
+    McpServerRegistry.__table__.create(test_engine)
+    McpLlmAxisScore.__table__.create(test_engine)
 
     # Override dependency for testing
     app.dependency_overrides[get_session] = lambda: test_session
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     # Insert test data
     test_server_id = "test_server_123"
-    test_server = MCPServerRegistry(
+    test_server = McpServerRegistry(
         server_id=test_server_id,
         verdict="malicious",
         risk_tier="high",
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     test_session.add(test_server)
 
     test_axes = [
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="axis1",
             label="Label 1",
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             model_version="1.0",
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id=test_server_id,
             axis_name="axis2",
             label="Label 2",

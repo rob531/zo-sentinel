@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 import httpx
 from sqlalchemy.orm import Session
 from sqlalchemy import asc, nullslast
@@ -54,14 +54,14 @@ async def get_servers_ranked_by_risk(
     risk_tier: Optional[str] = None,
     session: Session = Depends(get_session)
 ):
-    query = session.query(MCPServerRegistry)
+    query = session.query(McpServerRegistry)
 
     if risk_tier:
-        query = query.filter(MCPServerRegistry.risk_tier == risk_tier)
+        query = query.filter(McpServerRegistry.risk_tier == risk_tier)
 
     servers = query.order_by(
-        asc(nullslast(MCPServerRegistry.trust_score)),
-        MCPServerRegistry.risk_tier
+        asc(nullslast(McpServerRegistry.trust_score)),
+        McpServerRegistry.risk_tier
     ).limit(limit).offset(offset).all()
 
     total = query.count()
@@ -98,14 +98,14 @@ if __name__ == "__main__":
 
     # Seed test data
     test_session = TestSession()
-    test_server1 = MCPServerRegistry(
+    test_server1 = McpServerRegistry(
         name="Test Server 1",
         url="http://test1.example.com",
         trust_score=0.8,
         risk_tier="low",
         last_scanned="2023-01-01"
     )
-    test_server2 = MCPServerRegistry(
+    test_server2 = McpServerRegistry(
         name="Test Server 2",
         url="http://test2.example.com",
         trust_score=0.3,

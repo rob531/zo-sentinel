@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import httpx
 from app.db import get_session
-from app.models import MCPServerRegistry, MCPLLMAxisScores, MCPScoreDisputes
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute
 from datetime import datetime
 
 router = APIRouter()
@@ -44,8 +44,8 @@ async def query_write_service(query: str, params: list = None):
         return response.json()
 
 async def get_server_metadata(session, server_id: str):
-    server = session.query(MCPServerRegistry).filter(
-        MCPServerRegistry.server_id == server_id
+    server = session.query(McpServerRegistry).filter(
+        McpServerRegistry.server_id == server_id
     ).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -71,9 +71,9 @@ async def get_cve_exposure(server_id: str):
     return result[0] if result else {"count": 0, "top_severity": None}
 
 async def has_open_dispute(session, server_id: str):
-    dispute = session.query(MCPScoreDisputes).filter(
-        MCPScoreDisputes.server_id == server_id,
-        MCPScoreDisputes.status != "resolved"
+    dispute = session.query(McpScoreDispute).filter(
+        McpScoreDispute.server_id == server_id,
+        McpScoreDispute.status != "resolved"
     ).first()
     return bool(dispute)
 

@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 
 router = APIRouter()
 
@@ -11,7 +11,7 @@ class UncalledRouterResponse(BaseModel):
     uncalled_routers: List[str]
 
 def get_routing_registry(db: Session = Depends(get_session)):
-    return db.query(MCPServerRegistry).all()
+    return db.query(McpServerRegistry).all()
 
 def get_call_graph(db: Session = Depends(get_session)):
     # In a real implementation, this would query the call graph from the database
@@ -43,17 +43,17 @@ async def get_uncalled_routers(db: Session = Depends(get_session)):
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import Base, engine
-    from app.models import MCPServerRegistry
+    from app.models import McpServerRegistry
 
     # Create a test database
     Base.metadata.create_all(bind=engine)
 
     # Add test data
     test_routers = [
-        MCPServerRegistry(name="router1"),
-        MCPServerRegistry(name="router2"),
-        MCPServerRegistry(name="router3"),
-        MCPServerRegistry(name="router4"),
+        McpServerRegistry(name="router1"),
+        McpServerRegistry(name="router2"),
+        McpServerRegistry(name="router3"),
+        McpServerRegistry(name="router4"),
     ]
 
     from app.db import SessionLocal

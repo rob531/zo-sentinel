@@ -1,17 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from app.db import get_session
-from app.models import MCPScoreDispute
+from app.models import McpScoreDispute
 from sqlalchemy.orm import Session
 import requests
 
 router = APIRouter()
 
 def get_dispute(server_id: str, status: Optional[str] = None, limit: int = 100, offset: int = 0, db: Session = Depends(get_session)) -> List[dict]:
-    query = db.query(MCPScoreDispute).filter(MCPScoreDispute.server_id == server_id)
+    query = db.query(McpScoreDispute).filter(McpScoreDispute.server_id == server_id)
 
     if status:
-        query = query.filter(MCPScoreDispute.status == status)
+        query = query.filter(McpScoreDispute.status == status)
 
     disputes = query.limit(limit).offset(offset).all()
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     # Add test data
     session = SessionLocal()
-    test_dispute = MCPScoreDispute(
+    test_dispute = McpScoreDispute(
         server_id="test123",
         submitted_by="test_user",
         proposed_overall_risk=0.5,

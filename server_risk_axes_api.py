@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Dict, Optional
 import httpx
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 
 router = APIRouter()
 
@@ -61,7 +61,7 @@ async def read_server_risk_axes(
     db_session=Depends(get_session)
 ):
     # Verify server exists in registry
-    if not db_session.query(MCPServerRegistry).filter(MCPServerRegistry.server_id == server_id).first():
+    if not db_session.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first():
         raise HTTPException(status_code=404, detail="Server not found")
 
     return get_server_risk_axes(server_id, version)
@@ -69,7 +69,7 @@ async def read_server_risk_axes(
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import get_session
-    from app.models import MCPServerRegistry, MCPLLMAxisScores
+    from app.models import McpServerRegistry, McpLlmAxisScore
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -79,15 +79,15 @@ if __name__ == "__main__":
     test_session = TestSession()
 
     # Create tables
-    MCPServerRegistry.__table__.create(test_engine)
-    MCPLLMAxisScores.__table__.create(test_engine)
+    McpServerRegistry.__table__.create(test_engine)
+    McpLlmAxisScore.__table__.create(test_engine)
 
     # Add test data
-    test_server = MCPServerRegistry(server_id="abc123", name="Test Server")
+    test_server = McpServerRegistry(server_id="abc123", name="Test Server")
     test_session.add(test_server)
 
     test_axes = [
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="overall_risk",
             label="Overall Risk",
@@ -97,7 +97,7 @@ if __name__ == "__main__":
             escalated=True,
             decision_rule_version="1.0"
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="auth_strength",
             label="Authentication Strength",
@@ -107,7 +107,7 @@ if __name__ == "__main__":
             escalated=False,
             decision_rule_version="1.0"
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="capability_breadth",
             label="Capability Breadth",
@@ -117,7 +117,7 @@ if __name__ == "__main__":
             escalated=False,
             decision_rule_version="1.0"
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="data_sensitivity",
             label="Data Sensitivity",
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             escalated=False,
             decision_rule_version="1.0"
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="network_egress",
             label="Network Egress",
@@ -137,7 +137,7 @@ if __name__ == "__main__":
             escalated=False,
             decision_rule_version="1.0"
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="maintainer_trust",
             label="Maintainer Trust",
@@ -147,7 +147,7 @@ if __name__ == "__main__":
             escalated=False,
             decision_rule_version="1.0"
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="abc123",
             axis_name="exploit_surface",
             label="Exploit Surface",

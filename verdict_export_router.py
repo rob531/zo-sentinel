@@ -5,8 +5,8 @@ from typing import List, Optional
 import csv
 from io import StringIO
 from app.db import get_session
-from app.models import MCPLLMAxisScores
-from app.dependency_overrides import dependency_overrides
+from app.models import McpLlmAxisScore
+from app import dependency_overrides
 
 router = APIRouter()
 
@@ -24,8 +24,8 @@ def get_verdict_export(server_id: str, include_headers: bool = True) -> Response
     session = next(get_session())
 
     try:
-        scores = session.query(MCPLLMAxisScores).filter(
-            MCPLLMAxisScores.server_id == server_id
+        scores = session.query(McpLlmAxisScore).filter(
+            McpLlmAxisScore.server_id == server_id
         ).all()
 
         if not scores:
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     with TestSession() as session:
         test_server_id = "test-server-123"
         test_scores = [
-            MCPLLMAxisScores(
+            McpLlmAxisScore(
                 server_id=test_server_id,
                 axis_name="overall_risk",
                 label="Overall Risk",
@@ -94,7 +94,7 @@ if __name__ == "__main__":
                 p_critical=0.8,
                 p_danger=0.7
             ),
-            MCPLLMAxisScores(
+            McpLlmAxisScore(
                 server_id=test_server_id,
                 axis_name="auth_strength",
                 label="Auth Strength",

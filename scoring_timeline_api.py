@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from app.db import get_session
-from app.models import McpLlmAxisScores
+from app.models import McpLlmAxisScore
 from sqlalchemy.orm import Session
 import requests
 from fastapi.testclient import TestClient

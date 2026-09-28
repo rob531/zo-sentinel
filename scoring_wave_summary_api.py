@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime
 import requests
 from app.db import get_session
-from app.models import cadence_job_runs
+from app.models import CadenceJobRun
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -67,7 +67,7 @@ async def scoring_wave_summary(db: Session = Depends(get_session)):
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import get_session
-    from app.models import cadence_job_runs
+    from app.models import CadenceJobRun
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -77,11 +77,11 @@ if __name__ == "__main__":
     test_db = test_session()
 
     # Create test table
-    cadence_job_runs.__table__.create(test_engine)
+    CadenceJobRun.__table__.create(test_engine)
 
     # Add test data
     test_data = [
-        cadence_job_runs(
+        CadenceJobRun(
             id=1,
             job="score_wave_1",
             status="completed",
@@ -90,7 +90,7 @@ if __name__ == "__main__":
             rows_affected=100,
             detail={"cost_usd": 1.50}
         ),
-        cadence_job_runs(
+        CadenceJobRun(
             id=2,
             job="score_wave_2",
             status="failed",
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             rows_affected=50,
             detail={"cost_usd": 0.75}
         ),
-        cadence_job_runs(
+        CadenceJobRun(
             id=3,
             job="scoring_batch",
             status="completed",
@@ -108,7 +108,7 @@ if __name__ == "__main__":
             rows_affected=200,
             detail={"cost_usd": 3.00}
         ),
-        cadence_job_runs(
+        CadenceJobRun(
             id=4,
             job="score_wave_3",
             status="completed",
@@ -117,7 +117,7 @@ if __name__ == "__main__":
             rows_affected=75,
             detail={"cost_usd": 1.12}
         ),
-        cadence_job_runs(
+        CadenceJobRun(
             id=5,
             job="score_wave_4",
             status="failed",

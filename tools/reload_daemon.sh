@@ -17,6 +17,18 @@
 #      rc. A post-verify + cold-relaunch fallback makes the script converge
 #      even under an UNPATCHED wrapper (defense in depth), and it exits
 #      NONZERO if the daemon is still down -- no more trusting "OK" lines.
+#   3. THE SURVIVOR TRAP (root-caused 2026-09-28): the cold-relaunch fallback
+#      accepted ANY pid matching the child pattern, including the old process
+#      it had failed to kill -- so it printed "OK: ... running (pid 4602)" and
+#      exited 0 for a daemon that was never reloaded and was still STALE. The
+#      post-verify loop had always required a CHANGED pid; the fallback did
+#      not. Now it does, and refuses with rc=5 rather than publishing an
+#      arming that never happened. Regression test:
+#      tests/deploy/test_reload_daemon_cold_relaunch_guard.py
+#
+# Exit codes: 0 running on fresh code · 1 down · 2 refused (bad resolution, or
+#      a module-mode cold relaunch the wrapper cannot serve) · 4 mid-cycle,
+#      nothing killed · 5 cold relaunch did not replace the old pid.
 #
 # Usage:
 #   bash tools/reload_daemon.sh goose_runner
@@ -207,6 +219,15 @@ if [ -z "$NEW" ]; then
     exit 2
   fi
   echo "child did not respawn -- cold-relaunching a fresh wrapper"
+  # FU-558: record the pid that is running BEFORE the cold relaunch. The
+  # post-verify loop above required a pid DIFFERENT from the one it killed;
+  # the fallback loop below did not, so a surviving old process was reported
+  # as "OK" and rc=0. Measured live 2026-09-28: pid 4602
+  # (sentinel_directive_generator_goose, started 04:21:09, pre-ff) survived
+  # both pkills, the script printed "OK: ... running (pid 4602)" and exited 0,
+  # and daemon_staleness.py still called it STALE two minutes later. An OK is
+  # not an arming (R2).
+  PRE_COLD=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
   rm -f "$MARKER"
   pkill -f "$WRAP_PAT" 2>/dev/null || true
   pkill -f "$CHILD_PAT" 2>/dev/null || true
@@ -222,9 +243,18 @@ if [ -z "$NEW" ]; then
   fi
   for _ in $(seq 1 20); do
     sleep 1
-    NEW=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
-    [ -n "$NEW" ] && break
+    P=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
+    if [ -n "$P" ] && [ "$P" != "${PRE_COLD:-__none__}" ]; then NEW="$P"; break; fi
   done
+  if [ -z "$NEW" ] && [ -n "${PRE_COLD:-}" ] && kill -0 "$PRE_COLD" 2>/dev/null; then
+    echo "FAIL: cold relaunch did NOT replace pid $PRE_COLD -- that same process is"
+    echo "  still the running child, so it is still on the OLD code. It survived both"
+    echo "  pkills (pattern miss, or an unkillable / uninterruptible state)."
+    echo "  Refusing to print OK: a success line here would publish an arming that"
+    echo "  never happened. Inspect: ps -o pid,lstart,args -p $PRE_COLD"
+    echo "  and $LOGS/wrapper_${NAME}.log"
+    exit 5
+  fi
 fi
 
 # Tidy: if the wrapper respawned without passing its exit branch, the marker

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScores
+from app.models import McpServerRegistry, McpLlmAxisScore
 
 router = APIRouter()
 
@@ -67,7 +67,7 @@ def get_risk_detail(
     server_id: int, db: Session = Depends(get_session)
 ) -> ServerRiskDetailResponse:
     scores = (
-        db.query(McpLlmAxisScores).filter(McpLlmAxisScores.server_id == server_id).first()
+        db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).first()
     )
     if not scores:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -136,10 +136,10 @@ if __name__ == "__main__":
     # three servers
     db.add_all([McpServerRegistry(server_id=1), McpServerRegistry(server_id=2), McpServerRegistry(server_id=3)])
 
-    def make_score(sid: int, composite: float) -> McpLlmAxisScores:
+    def make_score(sid: int, composite: float) -> McpLlmAxisScore:
         # distribute composite equally across the six axes via p_top only
         p_top = composite / 6.0
-        return McpLlmAxisScores(
+        return McpLlmAxisScore(
             server_id=sid,
             overall_risk_label="LOW",
             overall_risk_label_index=0,

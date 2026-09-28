@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -29,12 +29,12 @@ def get_servers(
     if limit > 100:
         raise HTTPException(status_code=400, detail="Limit cannot exceed 100")
 
-    query = select(MCPServerRegistry)
+    query = select(McpServerRegistry)
 
     if cursor:
-        query = query.where(MCPServerRegistry.id > cursor)
+        query = query.where(McpServerRegistry.id > cursor)
 
-    query = query.order_by(MCPServerRegistry.id).limit(limit)
+    query = query.order_by(McpServerRegistry.id).limit(limit)
 
     result = db.execute(query)
     servers = result.scalars().all()
@@ -54,7 +54,7 @@ def get_servers(
     if len(server_list) == limit:
         next_cursor = server_list[-1]["server_id"]
 
-    total = db.execute(select([func.count()]).select_from(MCPServerRegistry)).scalar()
+    total = db.execute(select([func.count()]).select_from(McpServerRegistry)).scalar()
 
     return ServerListResponse(
         servers=server_list,

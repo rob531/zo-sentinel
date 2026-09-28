@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import MCPLLMAxisScore
+from app.models import McpLlmAxisScore
 
 router = APIRouter()
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
             {"axis_name": "exploit_surface", "p_top": 1.0},
         ]
         for data in test_data:
-            session.add(MCPLLMAxisScore(**data))
+            session.add(McpLlmAxisScore(**data))
         session.commit()
 
     client = TestClient(app)

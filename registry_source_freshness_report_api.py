@@ -5,7 +5,7 @@ from statistics import mean
 from typing import List, Optional
 import requests
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 
 router = APIRouter()
 
@@ -28,7 +28,7 @@ def get_stale_threshold_days(stale_threshold_days: Optional[int] = Query(30)) ->
 def calculate_days_since_last_scan(last_scanned: datetime) -> int:
     return (datetime.utcnow() - last_scanned).days
 
-def get_registry_data(session=Depends(get_session)) -> List[MCPServerRegistry]:
+def get_registry_data(session=Depends(get_session)) -> List[McpServerRegistry]:
     try:
         response = requests.post(
             "http://127.0.0.1:8772/query",
@@ -115,14 +115,14 @@ async def get_freshness_report(
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import get_session
-    from app.models import MCPServerRegistry
+    from app.models import McpServerRegistry
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
     # Setup test database
     test_engine = create_engine("sqlite:///:memory:")
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-    MCPServerRegistry.metadata.create_all(test_engine)
+    McpServerRegistry.metadata.create_all(test_engine)
 
     # Override the get_session dependency for testing
     app.dependency_overrides[get_session] = lambda: TestSessionLocal()
@@ -134,23 +134,23 @@ if __name__ == "__main__":
     # Seed test data
     test_session = TestSessionLocal()
     test_data = [
-        MCPServerRegistry(
+        McpServerRegistry(
             registry_source="source1",
             last_scanned=(datetime.utcnow() - timedelta(days=1)).isoformat()
         ),
-        MCPServerRegistry(
+        McpServerRegistry(
             registry_source="source1",
             last_scanned=(datetime.utcnow() - timedelta(days=5)).isoformat()
         ),
-        MCPServerRegistry(
+        McpServerRegistry(
             registry_source="source2",
             last_scanned=(datetime.utcnow() - timedelta(days=40)).isoformat()
         ),
-        MCPServerRegistry(
+        McpServerRegistry(
             registry_source="source2",
             last_scanned=(datetime.utcnow() - timedelta(days=45)).isoformat()
         ),
-        MCPServerRegistry(
+        McpServerRegistry(
             registry_source="source3",
             last_scanned=(datetime.utcnow() - timedelta(days=20)).isoformat()
         )

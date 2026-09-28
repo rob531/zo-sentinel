@@ -220,7 +220,6 @@ def _decide(name, deferred, census, served):
                 "route(s) already served: "
                 + ", ".join("%s (by %s)" % (p, w) for p, w in sorted(clash.items())),
                 probe)
-    entry = census.get(name, {})
     return "MOUNT", "%d route(s): %s" % (len(probe["paths"]),
                                          ", ".join(probe["paths"])[:200]), probe
 

@@ -172,6 +172,25 @@ def _mk_query_response(rows: list) -> MagicMock:
     return resp
 
 
+def _mk_bus(rows: list):
+    """A requests.post side_effect that also answers ``count(*)``.
+
+    The drift read pages through ``zo_sentinel.bus`` and reconciles the assembled
+    row count against ``count(*)``, so a fixture that answers every request with
+    the same row list cannot model the bus. Measured live 2026-09-28: the count
+    answer is NOT subject to the 200-row cap, which is what makes it usable as
+    the reconciliation oracle.
+    """
+
+    def _post(url, json=None, timeout=None, **kw):
+        sql = ((json or {}).get("sql") or "").lower()
+        if "count(*)" in sql:
+            return _mk_query_response([{"n": len(rows)}])
+        return _mk_query_response(rows)
+
+    return _post
+
+
 class TestDriftStaging:
     def test_drift_writes_to_pending_not_canonical(self, tmp_path, monkeypatch):
         # Redirect both canonical and pending paths into tmp_path
@@ -209,7 +228,7 @@ class TestDriftStaging:
             {"table_name": "t", "column_name": "y", "data_type": "BIGINT"},
         ]
         with patch.object(probe.requests, "post") as mock_post:
-            mock_post.return_value = _mk_query_response(live_rows)
+            mock_post.side_effect = _mk_bus(live_rows)
             result = probe.check_duckdb_drift(dry_run=False)
 
         assert result["drift"] is True
@@ -246,7 +265,7 @@ class TestDriftStaging:
         )
 
         with patch.object(probe.requests, "post") as mock_post:
-            mock_post.return_value = _mk_query_response(same_rows)
+            mock_post.side_effect = _mk_bus(same_rows)
             result = probe.check_duckdb_drift(dry_run=False)
 
         assert result["drift"] is False

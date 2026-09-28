@@ -577,7 +577,13 @@ def _terminator_class(text: str, n_lines: int) -> str:
         return "LF"
     if crlf == n_lines:
         return "CRLF"
-    return "MIXED:%d/%d" % (crlf, n_lines)
+    # MIXED is keyed on the count of NON-CRLF lines only. Embedding the total
+    # (the pre-2026-09-28 form "MIXED:crlf/total") made the class move on every
+    # append, so ONE bare-LF line anywhere made the ledger unwritable through
+    # the sanctioned writer (FU-540 log 2026-09-28: FU-557 landed with LF and
+    # every append_log thereafter failed-and-restored). Appending CRLF lines
+    # leaves this count fixed; a terminator REWRITE still moves it.
+    return "MIXED:non_crlf=%d" % (n_lines - crlf)
 
 
 def _write_through(fn, path, mutate, if_absent=None) -> int:

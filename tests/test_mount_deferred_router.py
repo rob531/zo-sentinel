@@ -113,3 +113,32 @@ def test_no_module_is_both_mounted_and_deferred():
     assert both == [], (
         "registered in services/active/ AND still deferred: %r -- run "
         "tools/mount_deferred_router.py --all-mountable --apply to heal" % both)
+
+
+def test_every_mounted_deferral_is_carried_by_the_image(tool):
+    """A registration is not a deployment.
+
+    The FU-102 gate (tests/test_dockerfile_copy_covers_active_services.py) owns
+    this assertion for ALL active services and was observed RED against this
+    tool's own first PR -- 11 correct registrations, 11 missing COPYs. This test
+    is the narrower latch on the tool's side, so the repair is attributed here
+    rather than rediscovered as a mystery deploy failure: every module this tool
+    mounted must read as shipped through the gate's own oracle.
+    """
+    deferred = json.load(open(os.path.join(ROOT, "tools", "reachability_deferred.json"),
+                              encoding="utf-8"))["deferred"]
+    active = os.path.join(ROOT, "services", "active")
+    dockerfile = tool._dockerfile_text()
+    oracle = tool._ship_oracle()
+    unshipped = []
+    for d in sorted(os.listdir(active)):
+        toml = os.path.join(active, d, "service.toml")
+        if not os.path.isfile(toml) or d in deferred:
+            continue
+        import_path = oracle.read_import_path(toml) or d
+        verdict, detail = oracle.shippability(ROOT, import_path, dockerfile)
+        if verdict == "NOT_SHIPPED":
+            unshipped.append("%s: %s" % (d, detail))
+    assert unshipped == [], (
+        "registered in services/active/ but absent from the image -- these "
+        "ModuleNotFoundError on prod at mount time:\n  " + "\n  ".join(unshipped))

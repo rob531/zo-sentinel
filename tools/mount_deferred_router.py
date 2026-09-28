@@ -28,6 +28,16 @@ the pole that failed.
 
 WHAT A MOUNT IS
 ---------------
+A registration is not a deployment. `tests/test_dockerfile_copy_covers_active_services
+.py` (FU-102) exists because `app/main.py` mounts everything under `services/active/`
+while the Dockerfile COPY-list is hand-maintained: a service.toml with no COPY is a
+`ModuleNotFoundError` on prod at mount time while CI stays green, because CI runs
+against the repo tree where the file exists. Observed again on this tool's own first
+PR (#5689): 11 correct registrations, 11 missing COPYs, one red gate. So the tool that
+registers a router also SHIPS it, using that gate's own oracle
+(`tools.image_ship_check.shippability`) rather than a second regex of its own -- two
+readings of the Dockerfile that can disagree is the defect, not the fix.
+
 `tools/generate_spine.py`: "source of truth : services/active/*/service.toml
 (presence == registration)". So one mount == one `service.toml` + removing the
 deferral. `app/_spine_generated.py` calls `app.include_router(router)` with no
@@ -188,6 +198,83 @@ def _mounted_route_paths(verbose=True):
 
 # ---------------------------------------------------------------------- verdict
 
+DOCKERFILE_PATH = os.path.join(ROOT, "Dockerfile")
+COPY_MARKER = "# --- mounted from the deferred list by tools/mount_deferred_router.py"
+
+
+def _ship_oracle():
+    """The COPY gate's OWN oracle, imported by file path.
+
+    Deliberately not a second regex over the Dockerfile: the FU-102 gate and this
+    tool must not be able to disagree about what the image carries.
+    """
+    import importlib.util
+    path = os.path.join(ROOT, "tools", "image_ship_check.py")
+    spec = importlib.util.spec_from_file_location("_image_ship_check_probe", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _dockerfile_text():
+    with open(DOCKERFILE_PATH, encoding="utf-8", errors="replace") as fh:
+        return fh.read()
+
+
+def _is_shipped(name, oracle=None, dockerfile=None):
+    """True when the image carries the module the spine will import."""
+    oracle = oracle or _ship_oracle()
+    verdict, detail = oracle.shippability(ROOT, name,
+                                          dockerfile if dockerfile is not None
+                                          else _dockerfile_text())
+    return verdict != "NOT_SHIPPED", detail
+
+
+def _ensure_shipped(names):
+    """Add `names` to the tool-owned COPY line. Idempotent: a module already
+    carried by ANY COPY directive is not added again, and re-running with the
+    same names rewrites nothing."""
+    oracle = _ship_oracle()
+    with open(DOCKERFILE_PATH, "rb") as fh:
+        raw = fh.read()
+    newline = "\r\n" if b"\r\n" in raw else "\n"
+    lines = raw.decode("utf-8").splitlines()
+
+    marker_at = next((i for i, l in enumerate(lines) if l.startswith(COPY_MARKER)), None)
+    owned = []
+    if marker_at is not None:
+        owned = [t for t in lines[marker_at + 2].split()
+                 if t.endswith(".py")]
+
+    text = "\n".join(lines)
+    missing = []
+    for n in names:
+        if n + ".py" in owned:
+            continue
+        shipped, _ = _is_shipped(n, oracle, text)
+        if not shipped:
+            missing.append(n)
+    if not missing:
+        return []
+
+    mods = sorted(set(owned) | {n + ".py" for n in missing})
+    block = [
+        COPY_MARKER,
+        "# A service.toml without a COPY is a ModuleNotFoundError on prod at mount time",
+        "COPY " + " ".join(mods) + " /srv/",
+    ]
+    if marker_at is not None:
+        lines[marker_at:marker_at + 3] = block
+    else:
+        at = next((i for i, l in enumerate(lines)
+                   if l.startswith("COPY services/__init__.py")), len(lines))
+        lines[at:at] = block + [""]
+    with open(DOCKERFILE_PATH, "w", encoding="utf-8", newline=newline) as fh:
+        fh.write("\n".join(lines) + "\n")
+    return missing
+
+
 def _toml_path(name):
     return os.path.join(ACTIVE_DIR, name, "service.toml")
 
@@ -220,8 +307,10 @@ def _decide(name, deferred, census, served):
                 "route(s) already served: "
                 + ", ".join("%s (by %s)" % (p, w) for p, w in sorted(clash.items())),
                 probe)
-    return "MOUNT", "%d route(s): %s" % (len(probe["paths"]),
-                                         ", ".join(probe["paths"])[:200]), probe
+    shipped, ship_detail = _is_shipped(name)
+    return "MOUNT", "%d route(s): %s%s" % (
+        len(probe["paths"]), ", ".join(probe["paths"])[:200],
+        "" if shipped else "  [NOT IN THE IMAGE -- a COPY will be added: %s]" % ship_detail[:120]), probe
 
 
 def _apply(name, verdict, probe, deferred, census):
@@ -302,6 +391,17 @@ def main(argv=None):
             print("  %-24s %s" % (verdict, name))
             print("        %s" % detail[:220])
 
+        mounted_now = [r["module"] for r in results
+                       if r["verdict"] in ("MOUNTED", "HEALED_DEFERRAL", "HEALED_TOML",
+                                           "ALREADY_MOUNTED")]
+        if args.apply and not args.list and mounted_now:
+            added = _ensure_shipped(mounted_now)
+            if added:
+                changed.append("Dockerfile (+%d COPY: %s)"
+                               % (len(added), ", ".join(added)))
+                print("\n  SHIPPED: added %d module(s) to the Dockerfile COPY-list -- "
+                      "a registration without one is a ModuleNotFoundError at mount "
+                      "time (FU-102)" % len(added))
         if args.apply and not args.list and changed:
             _save_deferred(deferred_doc, newline)
             print("\nwrote %d path(s); deferred list is now %d (was %d)"

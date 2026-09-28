@@ -198,3 +198,30 @@ def test_failed_verify_restores_the_ledger(fu_ledger, monkeypatch, tmp_path):
         fu_ledger._write_through("append_log", p, corrupt)
     assert "RESTORED" in str(exc.value)
     assert read(p) == before, "a failed write was not rolled back"
+
+
+def test_mixed_ledger_accepts_an_append(fu_ledger, tmp_path):
+    """2026-09-28: a ledger with ONE bare-LF line refused every append_log,
+    because the MIXED class embedded the line total. Appending must work."""
+    mixed = LEDGER_CRLF.replace("- date: 2026-01-01 - status: OPEN\r\n",
+                                "- date: 2026-01-01 - status: OPEN\n")
+    p = ledger(tmp_path, mixed)
+    fu_ledger.append_log(p, 395, "2026-09-28 " + MARK)
+    after = read(p)
+    assert MARK in after
+    assert after.count("\n") - after.count("\r\n") == 1, "bare-LF count moved"
+
+
+def test_mixed_ledger_still_refuses_a_terminator_rewrite(fu_ledger, tmp_path):
+    """The other pole: the guard must still catch a write that flips EOLs."""
+    mixed = LEDGER_CRLF.replace("- date: 2026-01-01 - status: OPEN\r\n",
+                                "- date: 2026-01-01 - status: OPEN\n")
+    p = ledger(tmp_path, mixed)
+
+    def flip(lines, entries):
+        lines[0] = lines[0].replace("\r\n", "\n")
+        return 0
+
+    with pytest.raises(fu_ledger.LedgerWriteFailed):
+        fu_ledger._write_through("probe", str(p), flip)
+    assert read(p) == mixed, "a refused write was not restored"

@@ -1,0 +1,11 @@
+[service]
+name = "audit_log_view"
+import_path = "services.active.audit_log_view.router"
+prefix = "/api"
+tag = "audit_log_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

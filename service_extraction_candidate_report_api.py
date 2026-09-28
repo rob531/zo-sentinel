@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore
+from app.models import MCPServerRegistry, MCPLLMAxisScores
 
 router = APIRouter()
 
@@ -31,16 +31,16 @@ async def get_service_extraction_candidates(
     min_risk_score: Optional[float] = Query(None, ge=0, le=1),
     max_days_since_assessment: Optional[int] = Query(None, ge=0)
 ):
-    query = session.query(McpServerRegistry).options(
-        joinedload(McpServerRegistry.llm_axis_scores)
+    query = session.query(MCPServerRegistry).options(
+        joinedload(MCPServerRegistry.llm_axis_scores)
     )
 
     if min_risk_score is not None:
-        query = query.filter(McpServerRegistry.risk_score >= min_risk_score)
+        query = query.filter(MCPServerRegistry.risk_score >= min_risk_score)
 
     if max_days_since_assessment is not None:
         cutoff_date = datetime.now() - timedelta(days=max_days_since_assessment)
-        query = query.filter(McpServerRegistry.last_assessment_date >= cutoff_date)
+        query = query.filter(MCPServerRegistry.last_assessment_date >= cutoff_date)
 
     total = query.count()
     servers = query.limit(limit).offset(offset).all()
@@ -81,19 +81,19 @@ if __name__ == "__main__":
 
     # Seed test data
     test_session = TestSession()
-    test_server1 = McpServerRegistry(
+    test_server1 = MCPServerRegistry(
         hostname="server1.example.com",
         ip_address="192.168.1.1",
         last_assessment_date=datetime.now() - timedelta(days=5),
         risk_score=0.8
     )
-    test_server2 = McpServerRegistry(
+    test_server2 = MCPServerRegistry(
         hostname="server2.example.com",
         ip_address="192.168.1.2",
         last_assessment_date=datetime.now() - timedelta(days=15),
         risk_score=0.6
     )
-    test_server3 = McpServerRegistry(
+    test_server3 = MCPServerRegistry(
         hostname="server3.example.com",
         ip_address="192.168.1.3",
         last_assessment_date=datetime.now() - timedelta(days=2),
@@ -103,17 +103,17 @@ if __name__ == "__main__":
     test_session.commit()
 
     # Add some LLM axis scores
-    test_axis1 = McpLlmAxisScore(
+    test_axis1 = MCPLLMAxisScores(
         server_id=test_server1.id,
         axis_name="security",
         score=0.7
     )
-    test_axis2 = McpLlmAxisScore(
+    test_axis2 = MCPLLMAxisScores(
         server_id=test_server1.id,
         axis_name="performance",
         score=0.8
     )
-    test_axis3 = McpLlmAxisScore(
+    test_axis3 = MCPLLMAxisScores(
         server_id=test_server2.id,
         axis_name="security",
         score=0.5

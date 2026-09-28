@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, List
 from app.db import get_session
-from app.models import McpServerRegistry
+from app.models import MCPServerRegistry
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -16,8 +16,8 @@ async def get_risk_tiers_by_source(db: Session = Depends(get_session)):
     try:
         # Query the database to get all server registries with their risk tiers
         registries = db.query(
-            McpServerRegistry.source,
-            McpServerRegistry.risk_tier
+            MCPServerRegistry.source,
+            MCPServerRegistry.risk_tier
         ).all()
 
         # Aggregate the results by source and risk tier
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.main import app
     from app.db import Base, engine
-    from app.models import McpServerRegistry
+    from app.models import MCPServerRegistry
     from sqlalchemy.orm import Session
 
     # Override the database session for testing
@@ -58,27 +58,27 @@ if __name__ == "__main__":
     # Seed test data
     with Session(test_engine) as session:
         session.add_all([
-            McpServerRegistry(
+            MCPServerRegistry(
                 source="source1",
                 risk_tier="low"
             ),
-            McpServerRegistry(
+            MCPServerRegistry(
                 source="source1",
                 risk_tier="medium"
             ),
-            McpServerRegistry(
+            MCPServerRegistry(
                 source="source1",
                 risk_tier="high"
             ),
-            McpServerRegistry(
+            MCPServerRegistry(
                 source="source2",
                 risk_tier="low"
             ),
-            McpServerRegistry(
+            MCPServerRegistry(
                 source="source2",
                 risk_tier="low"
             ),
-            McpServerRegistry(
+            MCPServerRegistry(
                 source="source2",
                 risk_tier="medium"
             ),

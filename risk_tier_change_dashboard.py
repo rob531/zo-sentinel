@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from app.db import get_session
-from app.models import McpServerRegistry, MCPRiskRegister
+from app.models import MCPServerRegistry, MCPRiskRegister
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -17,7 +17,7 @@ class RiskTierChange(BaseModel):
 
 @router.get("/risk-tier-changes", response_model=List[RiskTierChange])
 async def get_risk_tier_changes(server_id: int, db: Session = Depends(get_session)):
-    server = db.query(McpServerRegistry).filter(McpServerRegistry.id == server_id).first()
+    server = db.query(MCPServerRegistry).filter(MCPServerRegistry.id == server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     test_client = TestClient(app)
 
     with SessionLocal() as session:
-        server = McpServerRegistry(id=1, name="Test Server")
+        server = MCPServerRegistry(id=1, name="Test Server")
         session.add(server)
         session.commit()
 

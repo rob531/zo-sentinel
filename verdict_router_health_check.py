@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 import requests
 from app.db import get_session
-from app.models import McpLlmAxisScore, McpServerRegistry, ServiceHealth
+from app.models import MCPLLMAxisScores, MCPServerRegistry, ServiceHealth
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ def get_daemon_health() -> List[Dict[str, str]]:
         return []
 
 def get_last_scored_at(session: Session) -> Optional[datetime]:
-    last_score = session.query(McpLlmAxisScore.timestamp).order_by(McpLlmAxisScore.timestamp.desc()).first()
+    last_score = session.query(MCPLLMAxisScores.timestamp).order_by(MCPLLMAxisScores.timestamp.desc()).first()
     return last_score[0] if last_score else None
 
 @router.get("/health/verdict")
@@ -29,8 +29,8 @@ async def health_check(
     session: Session = Depends(get_session)
 ) -> Dict:
     checks = {
-        "axis_scores_count": session.query(McpLlmAxisScore).count(),
-        "registry_count": session.query(McpServerRegistry).count(),
+        "axis_scores_count": session.query(MCPLLMAxisScores).count(),
+        "registry_count": session.query(MCPServerRegistry).count(),
         "last_scored_at": get_last_scored_at(session),
         "daemon_health": get_daemon_health()
     }

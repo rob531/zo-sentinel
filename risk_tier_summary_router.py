@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpLlmAxisScore
+from app.models import MCPLLMAxisScore
 from typing import List, Dict
 
 router = APIRouter()
@@ -12,16 +12,16 @@ def get_risk_tier_summary(db: Session = Depends(get_session)) -> Dict[str, int]:
     and counting servers in each tier.
     """
     results = db.query(
-        McpLlmAxisScore.risk_tier,
-        McpLlmAxisScore.server_id
+        MCPLLMAxisScore.risk_tier,
+        MCPLLMAxisScore.server_id
     ).group_by(
-        McpLlmAxisScore.risk_tier
+        MCPLLMAxisScore.risk_tier
     ).all()
 
     summary = {}
     for tier, _ in results:
-        count = db.query(McpLlmAxisScore).filter(
-            McpLlmAxisScore.risk_tier == tier
+        count = db.query(MCPLLMAxisScore).filter(
+            MCPLLMAxisScore.risk_tier == tier
         ).count()
         summary[tier] = count
 
@@ -44,14 +44,14 @@ if __name__ == "__main__":
     app.dependency_overrides[get_session] = lambda: TestSession()
 
     # Create test data
-    from app.models import McpLlmAxisScore
+    from app.models import MCPLLMAxisScore
     test_session = TestSession()
     test_session.add_all([
-        McpLlmAxisScore(server_id=1, risk_tier="TRUSTED_GENERAL"),
-        McpLlmAxisScore(server_id=2, risk_tier="TRUSTED_GENERAL"),
-        McpLlmAxisScore(server_id=3, risk_tier="HIGH_RISK_ISOLATED"),
-        McpLlmAxisScore(server_id=4, risk_tier="HIGH_RISK_ISOLATED"),
-        McpLlmAxisScore(server_id=5, risk_tier="HIGH_RISK_ISOLATED"),
+        MCPLLMAxisScore(server_id=1, risk_tier="TRUSTED_GENERAL"),
+        MCPLLMAxisScore(server_id=2, risk_tier="TRUSTED_GENERAL"),
+        MCPLLMAxisScore(server_id=3, risk_tier="HIGH_RISK_ISOLATED"),
+        MCPLLMAxisScore(server_id=4, risk_tier="HIGH_RISK_ISOLATED"),
+        MCPLLMAxisScore(server_id=5, risk_tier="HIGH_RISK_ISOLATED"),
     ])
     test_session.commit()
 

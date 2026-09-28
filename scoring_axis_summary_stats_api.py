@@ -7,7 +7,7 @@ from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore
+from app.models import MCPServerRegistry, MCPLLMAxisScores
 
 router = APIRouter()
 
@@ -31,64 +31,64 @@ class ScoringAxisSummaryResponse(BaseModel):
 
 def get_axis_stats(session: Session, server_id: Optional[str] = None, axis_name: Optional[str] = None, min_scored_at: Optional[datetime] = None):
     query = session.query(
-        McpLlmAxisScore.axis_name,
-        func.avg(McpLlmAxisScore.p_top).label('avg_p_top'),
-        func.avg(McpLlmAxisScore.p_critical).label('avg_p_critical'),
-        func.stddev(McpLlmAxisScore.p_top).label('p_top_stddev'),
-        func.count(McpLlmAxisScore.server_id).label('servers_scored'),
+        MCPLLMAxisScores.axis_name,
+        func.avg(MCPLLMAxisScores.p_top).label('avg_p_top'),
+        func.avg(MCPLLMAxisScores.p_critical).label('avg_p_critical'),
+        func.stddev(MCPLLMAxisScores.p_top).label('p_top_stddev'),
+        func.count(MCPLLMAxisScores.server_id).label('servers_scored'),
         func.sum(func.case([
-            (McpLlmAxisScore.risk_tier == 'escalated', 1)
+            (MCPLLMAxisScores.risk_tier == 'escalated', 1)
         ], else_=0)).label('servers_escalated')
     ).join(
-        McpServerRegistry,
-        McpLlmAxisScore.server_id == McpServerRegistry.server_id
+        MCPServerRegistry,
+        MCPLLMAxisScores.server_id == MCPServerRegistry.server_id
     ).group_by(
-        McpLlmAxisScore.axis_name
+        MCPLLMAxisScores.axis_name
     )
 
     if server_id:
-        query = query.filter(McpLlmAxisScore.server_id == server_id)
+        query = query.filter(MCPLLMAxisScores.server_id == server_id)
     if axis_name:
-        query = query.filter(McpLlmAxisScore.axis_name == axis_name)
+        query = query.filter(MCPLLMAxisScores.axis_name == axis_name)
     if min_scored_at:
-        query = query.filter(McpLlmAxisScore.scored_at >= min_scored_at)
+        query = query.filter(MCPLLMAxisScores.scored_at >= min_scored_at)
 
     return query.all()
 
 def get_tier_distribution(session: Session, server_id: Optional[str] = None, axis_name: Optional[str] = None, min_scored_at: Optional[datetime] = None):
     query = session.query(
-        McpLlmAxisScore.risk_tier,
-        func.count(McpLlmAxisScore.server_id).label('count')
+        MCPLLMAxisScores.risk_tier,
+        func.count(MCPLLMAxisScores.server_id).label('count')
     ).join(
-        McpServerRegistry,
-        McpLlmAxisScore.server_id == McpServerRegistry.server_id
+        MCPServerRegistry,
+        MCPLLMAxisScores.server_id == MCPServerRegistry.server_id
     ).group_by(
-        McpLlmAxisScore.risk_tier
+        MCPLLMAxisScores.risk_tier
     )
 
     if server_id:
-        query = query.filter(McpLlmAxisScore.server_id == server_id)
+        query = query.filter(MCPLLMAxisScores.server_id == server_id)
     if axis_name:
-        query = query.filter(McpLlmAxisScore.axis_name == axis_name)
+        query = query.filter(MCPLLMAxisScores.axis_name == axis_name)
     if min_scored_at:
-        query = query.filter(McpLlmAxisScore.scored_at >= min_scored_at)
+        query = query.filter(MCPLLMAxisScores.scored_at >= min_scored_at)
 
     return query.all()
 
 def get_last_updated(session: Session, server_id: Optional[str] = None, axis_name: Optional[str] = None, min_scored_at: Optional[datetime] = None):
     query = session.query(
-        func.max(McpLlmAxisScore.scored_at)
+        func.max(MCPLLMAxisScores.scored_at)
     ).join(
-        McpServerRegistry,
-        McpLlmAxisScore.server_id == McpServerRegistry.server_id
+        MCPServerRegistry,
+        MCPLLMAxisScores.server_id == MCPServerRegistry.server_id
     )
 
     if server_id:
-        query = query.filter(McpLlmAxisScore.server_id == server_id)
+        query = query.filter(MCPLLMAxisScores.server_id == server_id)
     if axis_name:
-        query = query.filter(McpLlmAxisScore.axis_name == axis_name)
+        query = query.filter(MCPLLMAxisScores.axis_name == axis_name)
     if min_scored_at:
-        query = query.filter(McpLlmAxisScore.scored_at >= min_scored_at)
+        query = query.filter(MCPLLMAxisScores.scored_at >= min_scored_at)
 
     last_updated = query.scalar()
     return last_updated.isoformat() if last_updated else None
@@ -150,15 +150,15 @@ if __name__ == "__main__":
     # Populate test data
     with SessionLocal(bind=test_engine) as session:
         # Add test servers
-        server1 = McpServerRegistry(server_id="server1", name="Test Server 1")
-        server2 = McpServerRegistry(server_id="server2", name="Test Server 2")
+        server1 = MCPServerRegistry(server_id="server1", name="Test Server 1")
+        server2 = MCPServerRegistry(server_id="server2", name="Test Server 2")
         session.add_all([server1, server2])
 
         # Add test scores
         from datetime import datetime, timedelta
         now = datetime.now()
         scores = [
-            McpLlmAxisScore(
+            MCPLLMAxisScores(
                 server_id="server1",
                 axis_name="axis1",
                 p_top=0.9,
@@ -166,7 +166,7 @@ if __name__ == "__main__":
                 risk_tier="safe",
                 scored_at=now - timedelta(days=1)
             ),
-            McpLlmAxisScore(
+            MCPLLMAxisScores(
                 server_id="server1",
                 axis_name="axis2",
                 p_top=0.8,
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                 risk_tier="escalated",
                 scored_at=now - timedelta(days=1)
             ),
-            McpLlmAxisScore(
+            MCPLLMAxisScores(
                 server_id="server2",
                 axis_name="axis1",
                 p_top=0.7,
@@ -182,7 +182,7 @@ if __name__ == "__main__":
                 risk_tier="safe",
                 scored_at=now
             ),
-            McpLlmAxisScore(
+            MCPLLMAxisScores(
                 server_id="server2",
                 axis_name="axis2",
                 p_top=0.6,

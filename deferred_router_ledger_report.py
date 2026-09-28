@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
 from app.db import get_session
-from app.models import McpServerRegistry
+from app.models import MCP_Server_Registry
 
 router = APIRouter()
 
@@ -14,7 +14,7 @@ class RouterReportItem(BaseModel):
 
 @router.get("/reports/routers/deferred", response_model=List[RouterReportItem])
 def get_deferred_routers_report(db: Session = Depends(get_session)):
-    deferred_routers = db.query(McpServerRegistry).filter(McpServerRegistry.is_mounted == False).all()
+    deferred_routers = db.query(MCP_Server_Registry).filter(MCP_Server_Registry.is_mounted == False).all()
     return [
         RouterReportItem(name=r.name, last_heartbeat=r.last_heartbeat) 
         for r in deferred_routers
@@ -47,9 +47,9 @@ if __name__ == "__main__":
 
     # Seed data
     with TestingSessionLocal() as session:
-        session.add(McpServerRegistry(name="router-alpha", is_mounted=True, last_heartbeat=datetime.now()))
-        session.add(McpServerRegistry(name="router-beta", is_mounted=False, last_heartbeat=datetime.now()))
-        session.add(McpServerRegistry(name="router-gamma", is_mounted=False, last_heartbeat=None))
+        session.add(MCP_Server_Registry(name="router-alpha", is_mounted=True, last_heartbeat=datetime.now()))
+        session.add(MCP_Server_Registry(name="router-beta", is_mounted=False, last_heartbeat=datetime.now()))
+        session.add(MCP_Server_Registry(name="router-gamma", is_mounted=False, last_heartbeat=None))
         session.commit()
 
     response = client.get("/reports/routers/deferred")

@@ -7,7 +7,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import McpLlmAxisScore, McpServerRegistry
+from app.models import MCPLLMAxisScore, MCPServerRegistry
 
 router = APIRouter()
 
@@ -36,19 +36,19 @@ def get_server_scoring_status(
     server_id: str,
     session: Session = Depends(get_session)
 ) -> ServerScoringStatus:
-    server = session.query(McpServerRegistry).filter_by(server_id=server_id).first()
+    server = session.query(MCPServerRegistry).filter_by(server_id=server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Get scoring status for each axis
     axis_scores = session.query(
-        McpLlmAxisScore.axis_name,
-        func.count(McpLlmAxisScore.id).label('score_count'),
-        func.max(McpLlmAxisScore.created_at).label('latest_score_at')
+        MCPLLMAxisScore.axis_name,
+        func.count(MCPLLMAxisScore.id).label('score_count'),
+        func.max(MCPLLMAxisScore.created_at).label('latest_score_at')
     ).filter(
-        McpLlmAxisScore.server_id == server_id
+        MCPLLMAxisScore.server_id == server_id
     ).group_by(
-        McpLlmAxisScore.axis_name
+        MCPLLMAxisScore.axis_name
     ).all()
 
     axes = {
@@ -90,7 +90,7 @@ def get_unscored_servers(
     session: Session = Depends(get_session)
 ) -> List[ServerScoringStatus]:
     # Get all servers
-    servers = session.query(McpServerRegistry).all()
+    servers = session.query(MCPServerRegistry).all()
 
     unscored_servers = []
     for server in servers:
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     # Create test data
     test_session = TestSession()
-    test_server = McpServerRegistry(
+    test_server = MCPServerRegistry(
         server_id="test_server",
         name="Test Server",
         scan_count=5,

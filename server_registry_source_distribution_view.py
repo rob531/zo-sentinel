@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry
+from app.models import MCPServerRegistry
 from pydantic import BaseModel
 from typing import Dict
 
@@ -12,7 +12,7 @@ class SourceDistribution(BaseModel):
 
 @router.get("/registry/source-distribution", response_model=SourceDistribution)
 def get_source_distribution(db: Session = Depends(get_session)):
-    query = db.query(McpServerRegistry.source, McpServerRegistry.id).all()
+    query = db.query(MCPServerRegistry.source, MCPServerRegistry.id).all()
     distribution = {}
     for source, _ in query:
         distribution[source] = distribution.get(source, 0) + 1
@@ -21,7 +21,7 @@ def get_source_distribution(db: Session = Depends(get_session)):
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import Base, engine
-    from app.models import McpServerRegistry
+    from app.models import MCPServerRegistry
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -33,10 +33,10 @@ if __name__ == "__main__":
 
     # Seed test data
     test_data = [
-        McpServerRegistry(source="source1"),
-        McpServerRegistry(source="source2"),
-        McpServerRegistry(source="source1"),
-        McpServerRegistry(source="source3"),
+        MCPServerRegistry(source="source1"),
+        MCPServerRegistry(source="source2"),
+        MCPServerRegistry(source="source1"),
+        MCPServerRegistry(source="source3"),
     ]
     test_session.add_all(test_data)
     test_session.commit()

@@ -338,6 +338,36 @@ def _apply(name, verdict, probe, deferred, census):
 
 # ------------------------------------------------------------------------- main
 
+
+def _emit_spine(runner=None):
+    """Regenerate app/_spine_generated.py from services/active/*/service.toml.
+
+    A registration that is NOT in the spine is a HALF-APPLIED mount: the module
+    has left tools/reachability_deferred.json while nothing under app/ imports
+    it, so reachability_ratchet counts it as an UNDECLARED NEW ORPHAN and
+    pr-gates goes red.  That state was produced for real on 2026-09-29
+    (cycle-0156): --apply printed
+
+        NEXT (not run for you -- the generator is the spine's own oracle):
+          python tools/generate_spine.py --emit .
+
+    and the very next ratchet run failed with "12 new unmounted router(s)
+    neither mounted nor declared".  A printed instruction is not a step.  The
+    generator is still the spine's ONLY oracle -- this calls it, it does not
+    re-implement it, and re-emitting a clean tree is a no-op, so the call is
+    idempotent and heals drift instead of duplicating work.
+
+    runner is injectable so both poles (emit ok / emit refused) are observable
+    without a broken generator on disk.
+    """
+    argv = [sys.executable,
+            os.path.join(ROOT, "tools", "generate_spine.py"), "--emit", "."]
+    run = runner or (lambda a: subprocess.run(
+        a, cwd=ROOT, capture_output=True, text=True, timeout=900))
+    p = run(argv)
+    return p.returncode == 0, (p.stdout or "") + (p.stderr or "")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--module", action="append", default=[],
@@ -408,9 +438,21 @@ def main(argv=None):
                   % (len(changed), len(deferred), len(deferred)
                      + sum(1 for r in results
                            if r["verdict"] in ("MOUNTED", "HEALED_DEFERRAL"))))
-            print("NEXT (not run for you -- the generator is the spine's own oracle):")
-            print("  python tools/generate_spine.py --emit .")
-            print("  python tools/reachability_ratchet.py --enforce")
+        emit_failed = False
+        if args.apply and not args.list and mounted_now:
+            ok_emit, emit_out = _emit_spine()
+            if ok_emit:
+                tail = [l for l in emit_out.splitlines() if l.strip()]
+                print("  SPINE EMITTED: %s"
+                      % (tail[0].strip() if tail else "generate_spine.py rc=0"))
+            else:
+                emit_failed = True
+                print("  SPINE EMIT FAILED -- this mount is HALF-APPLIED. The module has\n"
+                      "  left tools/reachability_deferred.json but nothing under app/\n"
+                      "  imports it, so the ratchet counts it as an UNDECLARED orphan and\n"
+                      "  pr-gates goes RED. Re-run this exact command -- it is idempotent\n"
+                      "  and will re-emit.")
+                print(emit_out[-1500:])
 
         refused = [r for r in results if r["verdict"].startswith("REFUSED")]
         if args.json:
@@ -418,7 +460,7 @@ def main(argv=None):
                               "deferred_now": len(deferred)}, indent=2))
         print("\n%d requested / %d refused / %d actionable"
               % (len(results), len(refused), len(results) - len(refused)))
-        return 1 if refused else 0
+        return 1 if (refused or emit_failed) else 0
     finally:
         pass
 

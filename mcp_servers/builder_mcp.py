@@ -41,12 +41,52 @@ async def _emit_build_artifact(client, target_file, content, context_type,
         pass
 
 
+def _reject_unparseable_py(target_file: str, content: str) -> str:
+    """Return a REGISTER_ERROR string if a .py artifact does not parse, else "".
+
+    FU-565. register_build's docstring has always ASKED the caller to register
+    a file "ONLY after ... `python -m py_compile` passed". It was asked and not
+    done. Measured 2026-09-29 on the live build host: 20 of 458 .py files in
+    the promoted tier do not parse, and 15 of those are HTML documents saved
+    under a .py name -- `<!DOCTYPE html>` as the first bytes of router.py.
+    They were registered through this hook and published into that tier, which
+    is the source of truth app/_spine_generated.py is generated from.
+
+    A sentence asking an agent to verify is not a verification, so the check
+    lives here, at the one choke point every build artifact passes through.
+    Pure function -- no I/O, no network -- so a test can exec this source with
+    the stdlib alone and observe it reject a real payload.
+    """
+    norm = target_file.replace("\\", "/")
+    if not norm.endswith(".py"):
+        return ""
+    try:
+        compile(content, norm, "exec")
+    except (SyntaxError, ValueError) as exc:
+        head = " ".join(content.lstrip()[:80].split())
+        lineno = getattr(exc, "lineno", None)
+        where = f"line {lineno}: " if lineno else ""
+        if head[:1] == "<":
+            hint = ("The first bytes are markup, not Python -- if this is a "
+                    "dashboard or a view, write the HTML to a template file and "
+                    "have router.py serve it. Do not save markup under a .py "
+                    "name. ")
+        else:
+            hint = ("Run `python -m py_compile` on the file and fix the syntax "
+                    "error before registering it. ")
+        return (f"REGISTER_ERROR: {target_file} does not parse as Python "
+                f"({where}{exc}). First bytes: {head[:80]!r}. " + hint +
+                "A .py artifact is not registered until it compiles. (FU-565)")
+    return ""
+
+
 @mcp.tool()
 async def register_build(target_file: str, context_type: str) -> str:
     """Record a goose-built file as a build_artifact (provenance for the
     ingestor / governor / publisher). Call this ONCE, at the END of a build,
     ONLY after YOU (goose) wrote the file with the developer extension AND
-    `python -m py_compile` passed.
+    `python -m py_compile` passed. Since FU-565 the compile is ENFORCED here
+    for .py targets, not merely requested: an unparseable .py is refused.
 
     This is the Phase 1 provenance hook: goose writes the file itself and
     verifies it, then registers the verified file so the ingestor/publisher
@@ -82,6 +122,13 @@ async def register_build(target_file: str, context_type: str) -> str:
     if len(content.strip()) < 32:
         return (f"REGISTER_ERROR: {target_file} is {len(content)}b -- too small to be a "
                 "real build; do not register a stub.")
+    # FU-565: enforce the py_compile the docstring above only ASKS for. 15 HTML
+    # documents reached the promoted tier as router.py through this hook.
+    # (Keep the literal path out of this comment: the FU-272 negative control
+    # in tests/ greps register_build's whole body for it and would go vacuous.)
+    _bad_py = _reject_unparseable_py(target_file, content)
+    if _bad_py:
+        return _bad_py
     tier = os.environ.get("ZO_BUILD_TIER", "zo-ladder-low")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

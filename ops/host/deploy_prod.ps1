@@ -143,6 +143,27 @@ if (-not $RollbackImage) { Die "no rollback anchor resolved -- refusing to deplo
 $rollbackCmd = "flyctl deploy --app $App --image $RollbackImage --yes"
 Say "ROLLBACK ANCHOR: $rollbackCmd"
 
+# ---------------------------------------------------------------- rollback anchor PROOF
+# authority.json precondition 4: rollback staged AND PROVEN runnable BEFORE the fire.
+# Until 2026-09-29 this script only NAMED the anchor; the proof lived in prose and
+# each lane re-derived it by hand. tools/rollback_anchor_probe.py (FU-191) asks the
+# REGISTRY for the manifest with a discriminating 404 control:
+# 0 PULLABLE / 1 MISSING / 2 UNKNOWN. Only 0 may fire; UNKNOWN is not a proof (R6).
+# Resolved next to THIS script (runbook tree), like accept_gate, never the worktree.
+$AnchorProbe = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "tools\rollback_anchor_probe.py"
+if (-not (Test-Path $AnchorProbe)) {
+    if ($DryRun) { Say "rollback_anchor_probe.py not found at $AnchorProbe (DryRun: reporting only)" }
+    else { Die "rollback_anchor_probe.py not found at $AnchorProbe -- refusing to fire without proving the anchor" }
+} else {
+    & python $AnchorProbe --app $App --image $RollbackImage
+    $anchorRc = $LASTEXITCODE
+    Say "rollback_anchor_probe exit=$anchorRc (0 PULLABLE / 1 MISSING / 2 UNKNOWN)"
+    if ($anchorRc -ne 0) {
+        if ($DryRun) { Say "DryRun: anchor NOT proven -- a real fire would refuse here" }
+        else { Die "rollback anchor NOT proven pullable (rc=$anchorRc) -- precondition 4 unmet, refusing to fire" }
+    }
+}
+
 # ---------------------------------------------------------------- clean worktree
 Push-Location $Repo
 Git-BestEffort fetch origin main --quiet

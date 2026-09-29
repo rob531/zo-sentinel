@@ -52,7 +52,7 @@ COPY tools /srv/tools
 # `services.staged` existing in the image.
 # --- mounted from the deferred list by tools/mount_deferred_router.py
 # A service.toml without a COPY is a ModuleNotFoundError on prod at mount time
-COPY axis_change_attribution_probe.py axis_score_variance_report.py axis_scores_query_api.py cve_detail_api.py never_scored_backlog_api.py orphan_router_caller_probe.py scoring_axis_criteria_api.py scoring_wave_summary_api.py server_registry_search_api.py server_scorecard_api.py server_verdict_router.py /srv/
+COPY axis_change_attribution_probe.py axis_score_variance_report.py axis_scores_query_api.py cve_detail_api.py dispute_detail_api.py entity_detail_view.py never_scored_backlog_api.py orphan_router_caller_probe.py registry_freshness_api.py registry_source_freshness_report_api.py registry_source_health_report.py risk_tier_summary_dashboard.py risk_tier_threshold_calibration_probe.py score_dispute_router.py scoring_axis_criteria_api.py scoring_timeline_api.py scoring_wave_summary_api.py server_axis_score_distribution_api.py server_composite_risk_ranking_api.py server_registry_search_api.py server_risk_axes_api.py server_scorecard_api.py server_verdict_router.py verdict_axis_detail_api.py verdict_export_router.py verdict_summary_api.py /srv/
 
 COPY services/__init__.py /srv/services/
 COPY services/active /srv/services/active

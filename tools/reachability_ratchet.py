@@ -328,6 +328,29 @@ def deferred_count_at(rev):
 
 
 
+
+def deferred_level_line(now_n, cap=None):
+    """(text, over) for the DEFERRED LEVEL line.  Pure: no census, no I/O.
+
+    Extracted 2026-09-29 (cycle-0156) for one reason: the level fell 51 -> 36
+    and the line stopped printing.  A bucket that goes to ZERO must prove the
+    CHECK RAN (HARNESS_DOCTRINE R3) -- otherwise "the line is gone" and "the
+    branch was removed" read identically in a log.  This makes the branch
+    observable at both poles in a unit test.  No threshold, branch or exit code
+    is changed by the extraction.
+    """
+    cap = DEFERRED_REVIEW_CAP if cap is None else cap
+    if now_n <= cap:
+        return None, False
+    return ("\n  DEFERRED LEVEL OVER CAP (advisory -- the BLOCKING rule is "
+            "DEFERRED NON-INCREASING below; policy call pending in issue "
+            "#3944): %d > %d. This line reports a LEVEL, from inside a check "
+            "that exits 0: it escalates to no one and no single PR can lower "
+            "it. What actually fails a PR is the DERIVATIVE below, which "
+            "blocks growing this list. The cap is not to be raised to "
+            "quieten it." % (now_n, cap)), True
+
+
 def deferred_rule_line(now_n, refs):
     """The DEFERRED NON-INCREASING rule's operands, as one line. Never empty.
 
@@ -567,21 +590,12 @@ def main():
               "2026-07-21). Exemptions are alarmed on by the daily trend check."
               % data["exempted_count"])
 
-    if len(active_deferred) > DEFERRED_REVIEW_CAP:
-        # LABEL ONLY (no exit code, threshold or branch changed). This line
-        # used to be titled "... REOPEN TRIGGER", which named an escalation
-        # that was RETIRED on 2026-09-13; it triggers nothing and never did
-        # from inside a check that exits 0. A title that promises an
-        # escalation it cannot perform is the same class of defect as a mute
-        # rule: the log stops describing what the run actually does.
-        print("\n  DEFERRED LEVEL OVER CAP (advisory -- the BLOCKING rule is "
-              "DEFERRED NON-INCREASING below; policy call pending in issue "
-              "#3944): %d > %d. This line reports a LEVEL, from inside a check "
-              "that exits 0: it escalates to no one and no single PR can lower "
-              "it. What actually fails a PR is the DERIVATIVE below, which "
-              "blocks growing this list. The cap is not to be raised to "
-              "quieten it."
-              % (len(active_deferred), DEFERRED_REVIEW_CAP))
+    _lvl_text, _lvl_over = deferred_level_line(len(active_deferred))
+    if _lvl_over:
+        # LABEL ONLY (no exit code, threshold or branch changed). The text now
+        # comes from deferred_level_line() so the branch is observable at both
+        # poles in tests -- see R3 in HARNESS_DOCTRINE.md.
+        print(_lvl_text)
         if enforce_level:
             # The ONLY line in this file that can turn the LEVEL into an exit code, and
             # it is unreachable unless a caller passes --enforce-level explicitly. No CI

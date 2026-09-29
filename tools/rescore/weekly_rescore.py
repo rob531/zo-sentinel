@@ -37,6 +37,11 @@ NO-LOSS INVARIANTS (enforced, run aborts loudly on breach):
 
 COST GUARDS: MAX_DPH ceiling on offer selection; COST_CAP_USD hard ceiling
 (estimated dph * elapsed); DEADLINE_MIN wall clock. All overridable per run.
+--cap-usd (authority ceiling, red team F8): the caller's per-wave dollar grant.
+ENFORCED by this job, not estimated by the proposer: spend-since-launch is
+MEASURED from vast (credit at launch minus credit now, floored by the billed-dph
+estimate) every watch poll; at >= cap the instance is destroyed and CAP_HIT is
+printed. A cap that is only logged is not a cap.
 
 Scheduling shape (two Claude scheduled tasks, mirrors the 7/3 fire+collect
 pattern): weekly-rescore-fire runs `--phase fire-all`; weekly-rescore-collect
@@ -937,6 +942,7 @@ def ph_fire(run: Run, args) -> None:
     if not best:
         raise SystemExit("ABORT: no eligible GPU offer under price/geo guard")
     dph = float(best["dph_total"])
+    launch_credit = _read_launch_credit(args)   # BEFORE the rental starts billing
     resp = v.create_instance(
         id=best["id"], image=IMAGE, disk=50,
         env={"RUnpodGHAPI": secret("github"),
@@ -944,6 +950,9 @@ def ph_fire(run: Run, args) -> None:
              "RESULTS_BRANCH": run.state["results_branch"]},
         onstart_cmd=ONSTART, runtype="ssh", label="zo-sentinel-score")
     iid = resp.get("new_contract") or resp.get("contract_id") or resp.get("id")
+    run.state["credit_at_launch"] = launch_credit
+    if getattr(args, "cap_usd", None) is not None:
+        run.state["cap_usd"] = float(args.cap_usd)   # a later collect-all still enforces it
     run.mark("fire", instance_id=iid, dph=dph, gpu=best.get("gpu_name"),
              machine_id=best.get("machine_id"), fired_at=utcnow())
     log(f"fire OK: instance={iid} {best.get('gpu_name')} ${dph}/hr "
@@ -996,6 +1005,46 @@ def _eff_deadline(run, args):
     if getattr(args, "deadline_min", None) is not None:
         return args.deadline_min
     return run.state.get("deadline_scaled", DEADLINE_MIN_DEFAULT)
+
+
+def _eff_cap_usd(run, args):
+    """Authority ceiling (F8): CLI --cap-usd, else the value stamped at fire. None = no grant cap."""
+    if getattr(args, "cap_usd", None) is not None:
+        return float(args.cap_usd)
+    cap = run.state.get("cap_usd")
+    return float(cap) if cap is not None else None
+
+
+def _vast_credit() -> float:
+    from vast_spend import remaining_credit
+    return remaining_credit()
+
+
+def _read_launch_credit(args):
+    """Account credit just before the rental. None when unreadable -- the watch
+    loop then falls back to the billed-dph estimate, so the cap still binds."""
+    if getattr(args, "cap_usd", None) is None:
+        return None
+    try:
+        return _vast_credit()
+    except Exception as e:  # noqa: BLE001 -- a spend READ must never block a launch
+        log(f"cap: launch credit unreadable ({e.__class__.__name__}: {e}); "
+            f"cap will be enforced on the billed-dph estimate")
+        return None
+
+
+def _spent_since_launch(run, est_cost: float) -> tuple[float, str]:
+    """(spend, basis). MEASURED credit delta when readable, never below the estimate."""
+    c0 = run.state.get("credit_at_launch")
+    if c0 is not None:
+        try:
+            measured = round(float(c0) - _vast_credit(), 4)
+            if measured >= est_cost:
+                return measured, "vast_credit_delta"
+            return est_cost, "billed_dph_estimate(>credit_delta)"
+        except Exception as e:  # noqa: BLE001
+            log(f"cap: credit read failed ({e.__class__.__name__}); using estimate")
+    return est_cost, "billed_dph_estimate"
 
 
 def _billed_dph(run, args) -> float:
@@ -1244,6 +1293,17 @@ def ph_watch_collect(run: Run, args) -> None:
                            elapsed_h=round(elapsed_h, 2))
                     run.mark("watch", "failed", result="wedge")
                     break
+        cap_usd = _eff_cap_usd(run, args)
+        if cap_usd is not None:
+            spent, basis = _spent_since_launch(run, est_cost)
+            if spent >= cap_usd:
+                print(f"CAP_HIT run={run.state['run_id']} spent=${spent:.2f} "
+                      f"cap=${cap_usd:.2f} basis={basis} -- destroying instance",
+                      flush=True)
+                ledger("cap_hit", run.state["run_id"], spent=round(spent, 4),
+                       cap_usd=cap_usd, basis=basis)
+                run.mark("watch", "failed", result="cap_hit", spent_usd=round(spent, 4))
+                break
         if est_cost >= _eff_cost_cap(run, args):
             ledger("cost_ceiling_breach", run.state["run_id"], est=est_cost)
             run.mark("watch", "failed", result="cost_breach")
@@ -1281,7 +1341,7 @@ def ph_watch_collect(run: Run, args) -> None:
         # remaining evidence and destroy erases it. Pull it via the API first.
         _pull_instance_logs(run)
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.
-    if run.state.get("result") in ("ok", "fail", "cost_breach", "deadline",
+    if run.state.get("result") in ("ok", "fail", "cost_breach", "cap_hit", "deadline",
                                    "wedge", "vanished"):
         _destroy(run, run.state.get("result", "unknown"))
         run.mark("destroy")
@@ -1717,6 +1777,9 @@ def main() -> None:
     ap.add_argument("--max-dph", type=float, default=MAX_DPH_DEFAULT)
     ap.add_argument("--cost-cap", type=float, default=None,
                     help="override the FU-090 size-scaled cap (default: scaled)")
+    ap.add_argument("--cap-usd", type=float, default=None,
+                    help="authority per-wave ceiling (F8): measured vast spend since "
+                         "launch >= this destroys the instance and prints CAP_HIT")
     ap.add_argument("--deadline-min", type=int, default=None,
                     help="override the FU-090 size-scaled deadline (default: scaled)")
     ap.add_argument("--poll-secs", type=int, default=120)
@@ -1726,6 +1789,8 @@ def main() -> None:
     args = ap.parse_args()
     if args.check_open_runs:
         raise SystemExit(check_open_runs())
+    if args.cap_usd is not None and not args.cap_usd > 0:
+        ap.error("--cap-usd must be > 0 (a zero or negative grant is a refusal, not a cap)")
     if not (args.run or args.phase):
         ap.error("need --run, --phase or --check-open-runs")
     mode = "full" if args.full else "delta"

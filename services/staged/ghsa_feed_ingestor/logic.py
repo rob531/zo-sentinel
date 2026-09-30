@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import VulnAdvisories
+from app.models import VulnAdvisory
 from pydantic import BaseModel
 import requests
 import json
@@ -43,7 +43,7 @@ def import_ghsa_feed(db: Session = Depends(get_session), feed_url: str = "https:
     processed_advisories = process_advisories(advisories)
 
     for advisory in processed_advisories:
-        db_advisory = VulnAdvisories(**advisory)
+        db_advisory = VulnAdvisory(**advisory)
         db.add(db_advisory)
 
     db.commit()

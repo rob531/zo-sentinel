@@ -93,6 +93,27 @@ jobs:
           # in the tower-side verifier, so they gated nothing a human merges,
           # while the class they catch (FU-102) had already killed 7 prod
           # services on v64. All three are stdlib-only text/graph checks.
+          # 2026-09-30 (cycle-0160): three more files ADDED below --
+          # test_fu568_register_build_phantom_columns.py,
+          # test_c159_bad_toml_is_not_no_toml.py, test_c160_arm_guard.py.
+          # None was collected here, so cycle-0158, cycle-0159 and cycle-0160
+          # each reported a negative-control suite as evidence on a green this
+          # check had never executed -- the same class the 2026-09-01 note above
+          # records, which was cured then by adding six filenames BY HAND. That
+          # is why it recurred. Census at c355fc557: 192 tests/test_*.py on
+          # disk, 71 collected, 121 never run by the gate that blocks merges.
+          # Collecting them found cycle-0159's control had INVERTED: it loaded
+          # origin/main:tools/generate_spine.py, a moving ref, so once its own
+          # cure merged (#5773) it asserted the CURED code still conflates.
+          # A parity check between tests/ and this list is the real cure and
+          # needs its own cycle -- switching on 121 files will surface failures
+          # that need triage, not a merge.
+          # NOTE ON PLACEMENT: a `#` comment must never go between two
+          # backslash-continued lines below. The `\` joins the next line, so the
+          # comment swallows its own continuation and TERMINATES this command --
+          # the first draft of this commit did exactly that: pytest ran the old
+          # list and still printed `974 passed`, then the three filenames
+          # executed as shell commands (Permission denied, exit 126).
           python -m pytest \
             tests/test_registration_drift_debounce.py \
             tests/test_registration_drift_rotation.py \
@@ -165,17 +186,6 @@ jobs:
             tests/test_handled_tasks_index.py \
             tests/test_ratchet_no_raise.py \
             tests/test_bus_catalog_refresher_closes_its_loop.py \
-            # 2026-09-30 (cycle-0160): the three files below were on disk and
-            # NOT collected here. This list is hand-maintained, so a new test
-            # file is invisible to the REQUIRED pytest check until someone adds
-            # it -- and the 2026-09-01 comment above records this exact class
-            # ('caught by the count, not the colour'). It recurred: cycle-0158
-            # (FU-568), cycle-0159 (FU-570) and cycle-0160 each shipped a
-            # negative-control suite that this check never ran. cycle-0160's own
-            # test_the_guard_is_not_a_gate FAILED locally while this check
-            # reported `974 passed` -- the same number as without it.
-            # Census at that commit: 192 tests/test_*.py on disk, 71 collected,
-            # 121 never run by the gate that blocks merges.
             tests/test_fu568_register_build_phantom_columns.py \
             tests/test_c159_bad_toml_is_not_no_toml.py \
             tests/test_c160_arm_guard.py \

@@ -55,6 +55,9 @@ def test_control_passes_on_the_real_guard(evid, control_name):
     fn, _ = evid.CONTROLS[control_name]
     with tempfile.TemporaryDirectory() as td:
         ok, why = fn(GUARD, Path(td))
+    if ok is evid.UNAVAILABLE:
+        pytest.skip(f"{control_name} could not be measured here: {why}")
+    assert ok is not evid.UNAVAILABLE
     assert ok, f"{control_name} failed on the real guard: {why}"
 
 
@@ -82,25 +85,50 @@ def test_the_mutant_is_observed_red(evid, control_name):
         mpath = Path(td) / "mutant.sh"
         mpath.write_text(mutated)
         ok, why = fn(mpath, Path(td))
+    if ok is evid.UNAVAILABLE:
+        pytest.skip(f"mutant '{mutant_key}' could not be measured here: {why}")
     assert not ok, (
         f"mutant '{mutant_key}' ({desc}) PASSED control '{control_name}' -- "
         f"the control does not measure what it claims"
     )
 
 
+def _code_lines(path: Path) -> str:
+    """Executable lines only. The first build of the not-a-gate test grepped
+    the whole file and failed on the word 'block' inside the sentence
+    'Blocks nothing' -- a test that reads documentation as behaviour."""
+    out = []
+    for ln in path.read_text().splitlines():
+        stripped = ln.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        out.append(ln.split(" #", 1)[0] if " #" in ln else ln)
+    return "\n".join(out)
+
+
 def test_the_guard_is_not_a_gate(evid):
     """META CAP: this file gives an existing repair a trigger. If it ever grows
     the power to refuse something, that is a different object needing a
-    different justification."""
-    src = GUARD.read_text()
-    for forbidden in ("exit 1", "--enforce", "required", "block"):
-        assert forbidden not in src, (
-            f"arm_guard.sh contains {forbidden!r} -- it is becoming a gate"
+    different justification.
+
+    'Gate' means: refuses on a judgement of its own. The guard's exit codes are
+    0 armed/current, 2 could-not-measure, 3 ff-refused -- all reports about the
+    ff, none a verdict on anybody's work. exit 1 is reserved for 'this tool
+    disapproves' and must never appear.
+    """
+    code = _code_lines(GUARD)
+    assert "exit 1" not in code, "arm_guard.sh exits 1 -- it is passing judgement"
+    for forbidden in ("--enforce", "--strict", "gh pr", "exit 4"):
+        assert forbidden not in code, (
+            f"arm_guard.sh executable code contains {forbidden!r} -- it is becoming a gate"
         )
 
 
 def test_it_is_a_noop_when_current(evid):
     """Idempotence by character: re-running an armed host changes nothing."""
+    usable, why = evid.bash_usable()
+    if not usable:
+        pytest.skip(f"cannot execute the guard here: {why}")
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         _, runtime = evid.build_fixture(tmp, behind=False)
@@ -112,3 +140,23 @@ def test_it_is_a_noop_when_current(evid):
         assert second.returncode == 0
         head2 = evid.sh(["git", "-C", str(runtime), "rev-parse", "HEAD"]).stdout
         assert head1 == head2, "a second run moved HEAD on an already-current repo"
+
+
+def test_a_skip_is_not_a_pass(evid):
+    """The hole this suite shipped with, pinned.
+
+    evid.UNAVAILABLE is a non-empty string, so `assert ok` on it is TRUTHY.
+    Every control call above must therefore test for UNAVAILABLE *identity*
+    before asserting truthiness -- a control that could not run must skip, not
+    pass. R3: a bucket that passed has to prove the check ran.
+    """
+    assert bool(evid.UNAVAILABLE) is True, (
+        "if UNAVAILABLE ever becomes falsy this test is the thing protecting "
+        "the suite, and it must be rewritten rather than deleted"
+    )
+    src = Path(__file__).read_text()
+    guarded = src.count("is evid.UNAVAILABLE")
+    assert guarded >= 3, (
+        f"only {guarded} UNAVAILABLE identity guards in this file -- a control "
+        f"that cannot measure would report GREEN"
+    )

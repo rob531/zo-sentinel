@@ -57,140 +57,42 @@ jobs:
           fi
 
       - name: Run pytest (Goose-T2 cheap evaluator)
-        # Canonical targets, picked because they import cleanly outside the
-        # /home/workspace/zo_sentinel layout:
-        #   tests/test_scoring.py       - pure scoring boundary tests
-        #   tests/test_evaluator_smoke.py - reverse-feed fetcher smoke
-        #   tests/test_proposed_to_pending_promoter.py - Step 4b promoter
-#   tests/test_hollow_gate.py   - the anti-hollow rule + every seam that calls it
-#   tests/test_park_hollow.py   - parking a refused build (durable, not re-admitted)
-        # Other tests (test_wiring, smoke_test, test_known_threats) require
-        # the live ZoComputer host or have pre-existing failures unrelated
-        # to this PR; they are intentionally not in the evaluator scope.
-        # 2026-08-05: test_fire_gate.py and test_sha_green.py ADDED. They were
-        # never in scope, so the fire-decision path -- the code deploy_prod.ps1
-        # names as a precondition -- has been merging on a green that never
-        # collected it, and main carried 2 failing tests there under a green
-        # pytest. Both are network-free; the 2 failures are repaired in the same
-        # commit, which is what makes adding them here safe rather than red.
+        # The target set is CONSTRUCTED, not hand-listed. tools/ci_pytest.py
+        # collects every tests/test_*.py on disk MINUS the entries in
+        # tests/ci/pytest_quarantine.txt, each of which must state a reason.
+        #
+        # 2026-09-30 (improvement-loop cycle-0162, FU-572). Until this commit
+        # this step named 74 files by hand while 192 sat on disk: 118 were never
+        # run by a REQUIRED check. Not a theoretical gap -- cycles 0158, 0159
+        # and 0160 each shipped a negative-control suite this step never
+        # executed and published the resulting green as evidence. The
+        # 2026-09-01 note this replaces recorded the same class ("577 passed" on
+        # a PR that added ten tests, the same number as the day before) and was
+        # cured by adding six filenames BY HAND, which is why it recurred inside
+        # the month. A list someone must remember to extend is the prose remedy
+        # rule 1 exists to replace. Adding a test file is now sufficient.
+        #
+        # The prior list and its per-file rationale are preserved in git history
+        # at 17be6e4d2 and summarised in tools/ci_pytest.py.
+        #
+        # The quarantine was SEEDED with exactly the 118 files this step already
+        # did not run, so this commit changes the MECHANISM and not one test
+        # result. Emptying it is incremental and needs no edit here:
+        # `python tools/ci_pytest.py --triage` runs each one alone and prints
+        # which now pass; deleting those lines is the whole change.
+        #
+        # tests/test_c162_ci_target_parity.py -- collected by this very step --
+        # goes red if a hand-listed path returns, if a quarantine entry goes
+        # stale or loses its reason, or if an empty target set ever exits 0.
+        #
+        # The old backslash-continuation hazard noted here (a `#` between two
+        # continued lines silently terminated the command and the filenames ran
+        # as shell commands) is now structurally absent: there is one line.
         # Junit XML is the structured artifact that gh_actions_fetcher.py
         # parses when reverse-feeding failures into mesh_memory.
         run: |
           mkdir -p artifacts
-          # 2026-09-01: the five tests/test_rescore_*.py files and the
-          # vast_spend self-test ADDED. Until today NONE of them was collected
-          # here, so every change to the weekly moat rescore -- the harness that
-          # rents paid GPUs and writes the production corpus -- merged on a
-          # green that had never run one of its tests. Caught by the count, not
-          # the colour: this check reported `577 passed` on a PR that added ten
-          # tests, which is exactly the same number it reported the day before.
-          # All six are network-free (stdlib imports at module scope; psycopg2
-          # and vastai_sdk are imported inside functions, and the one socket
-          # touched is 127.0.0.1:9, whose REFUSAL is the assertion).
-          # The last three are DEPLOY-SAFETY gates: Dockerfile COPY coverage,
-          # the prod deploy wrapper's invariants, and the alembic revision
-          # graph. Until 2026-07-27 none of them ran on a PR -- they lived only
-          # in the tower-side verifier, so they gated nothing a human merges,
-          # while the class they catch (FU-102) had already killed 7 prod
-          # services on v64. All three are stdlib-only text/graph checks.
-          # 2026-09-30 (cycle-0160): three more files ADDED below --
-          # test_fu568_register_build_phantom_columns.py,
-          # test_c159_bad_toml_is_not_no_toml.py, test_c160_arm_guard.py.
-          # None was collected here, so cycle-0158, cycle-0159 and cycle-0160
-          # each reported a negative-control suite as evidence on a green this
-          # check had never executed -- the same class the 2026-09-01 note above
-          # records, which was cured then by adding six filenames BY HAND. That
-          # is why it recurred. Census at c355fc557: 192 tests/test_*.py on
-          # disk, 71 collected, 121 never run by the gate that blocks merges.
-          # Collecting them found cycle-0159's control had INVERTED: it loaded
-          # origin/main:tools/generate_spine.py, a moving ref, so once its own
-          # cure merged (#5773) it asserted the CURED code still conflates.
-          # A parity check between tests/ and this list is the real cure and
-          # needs its own cycle -- switching on 121 files will surface failures
-          # that need triage, not a merge.
-          # NOTE ON PLACEMENT: a `#` comment must never go between two
-          # backslash-continued lines below. The `\` joins the next line, so the
-          # comment swallows its own continuation and TERMINATES this command --
-          # the first draft of this commit did exactly that: pytest ran the old
-          # list and still printed `974 passed`, then the three filenames
-          # executed as shell commands (Permission denied, exit 126).
-          python -m pytest \
-            tests/test_registration_drift_debounce.py \
-            tests/test_registration_drift_rotation.py \
-            tests/test_fu_ledger_read_shape.py \
-            tests/test_fu_ledger_fu_arg_shape.py \
-            tests/test_fu_ledger_write_path_shape.py \
-            tests/test_scoring.py \
-            tests/test_evaluator_smoke.py \
-            tests/test_schema_loader.py \
-            tests/test_duckdb_schema_uptime_probe.py \
-            tests/test_proposed_to_pending_promoter.py \
-          tests/test_hollow_gate.py \
-          tests/test_park_hollow.py \
-            tests/test_sft_ingest.py \
-            tests/test_artifact_ingestor.py \
-            tests/test_ingestor_governor.py \
-            tests/test_breaker_autorecover.py \
-            tests/test_breaker_retire.py \
-            tests/test_ladder_routing.py \
-            tests/test_pr_publisher.py \
-            tests/test_build_routing.py \
-            tests/test_queue_janitor.py \
-            tests/test_engine_build.py \
-            tests/test_anchor_refill.py \
-            tests/test_policy.py \
-            tests/test_policy_chain_integration.py \
-            tests/test_directive_simplifier.py \
-            tests/test_perspectives_ask.py \
-            tests/test_vast_jobs.py \
-            tests/test_vuln_and_scan.py \
-            tests/test_vuln_enrich_otx.py \
-            tests/test_glama_counts.py \
-            tests/test_tier_backfill_trust_cap.py \
-            tests/test_vuln_surfacing.py \
-            tests/test_freshness_metadata.py \
-            tests/test_cadence_admin.py \
-            tests/test_dockerfile_copy_covers_active_services.py \
-            tests/test_deploy_prod_script.py \
-            tests/test_ui_version_badge.py \
-            tests/test_accept_gate.py \
-            tests/test_vanity_redirect_webhooks.py \
-            tests/test_migration_graph_single_head.py \
-            tests/test_fire_gate_migration_owner.py \
-            tests/test_fire_gate.py \
-            tests/test_sha_green.py \
-            tests/test_ops_audit_state.py \
-            tests/test_schema_truth_current.py \
-            tests/test_queue_census.py \
-            tests/test_graph_gap_directives_wired.py \
-            tests/test_undeclared_write_guard.py \
-            tests/test_rescore_billed_dph.py \
-            tests/test_rescore_lstree_parse.py \
-            tests/test_rescore_open_run_detection.py \
-            tests/test_rescore_trust_priority.py \
-            tests/test_rescore_refresh_yield.py \
-            tests/test_rescore_watch_status.py \
-            tests/test_rescore_driver_provenance.py \
-            tests/test_vast_spend_selftest.py \
-            tests/test_cadence_health_selftest.py \
-            tests/test_promoter_repair_wiring.py \
-            tests/test_canary_classify_smoke.py \
-            tests/test_requeue_quarantined.py \
-            tests/test_fu272_active_path_guard.py \
-            tests/test_quarantine_topup.py \
-            tests/test_architect_domain_map.py \
-            tests/test_no_module_scope_test_imports.py \
-            tests/test_edit_fidelity.py \
-            tests/test_auto_stage.py \
-            tests/test_queued_stems_terminal.py \
-            tests/test_handled_tasks_index.py \
-            tests/test_ratchet_no_raise.py \
-            tests/test_bus_catalog_refresher_closes_its_loop.py \
-            tests/test_fu568_register_build_phantom_columns.py \
-            tests/test_c159_bad_toml_is_not_no_toml.py \
-            tests/test_c160_arm_guard.py \
-            -q \
-            --junitxml=artifacts/junit.xml
+          python tools/ci_pytest.py -q --junitxml=artifacts/junit.xml
 
       - name: Halt shadow report (REPORT-ONLY -- what the ARMED halt would do)
         # NOT a new blocking gate. The machine-checkable claim this report carries

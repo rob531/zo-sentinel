@@ -148,13 +148,37 @@ def test_strict_still_exits_1_on_real_unlisted_debt(spine_at):
 # NEGATIVE CONTROL -- the pre-fix bytes, on the same fixture, must go RED.
 # --------------------------------------------------------------------------
 
+# The pre-fix bytes of tools/generate_spine.py, PINNED BY BLOB HASH.
+#
+# 2026-09-30 (cycle-0160): this control originally read
+# `origin/main:tools/generate_spine.py`. origin/main is a MOVING REF, and the
+# cure merged into it as #5773 (e9557bd12) -- so from that moment the control
+# loaded the CURED code and asserted it still conflates. It inverted from
+# "proves the defect was real" to "fails forever", and nobody saw it, because
+# this file was never collected by the required pytest check (192 test files on
+# disk, 71 collected). A negative control aimed at a moving ref stops being a
+# control the instant its own fix lands.
+#
+# A blob hash is immutable, so this loads the same bytes in a year. It is
+# e9557bd12^:tools/generate_spine.py -- verified to contain zero BAD_TOML
+# occurrences, where the cured file has three.
+PRE_FIX_BLOB = "58d3b6f30031f96bd429e8fb83f048b1805bf8b7"
+
+
 def _load_old_module(tmp_path):
-    """The origin/main copy of tools/generate_spine.py, loaded under its own name."""
+    """The PRE-FIX copy of tools/generate_spine.py, loaded under its own name."""
     blob = subprocess.run(
-        ["git", "show", "origin/main:tools/generate_spine.py"],
+        ["git", "cat-file", "blob", PRE_FIX_BLOB],
         cwd=str(REPO_ROOT), capture_output=True, timeout=120)
     if blob.returncode != 0:
-        pytest.skip("origin/main not fetched in this checkout")
+        pytest.skip(f"pre-fix blob {PRE_FIX_BLOB[:12]} unreachable in this checkout")
+    if b"BAD_TOML" in blob.stdout:
+        # The control is only a control if these bytes lack the cure. If this
+        # ever trips, the hash is wrong -- fail loudly rather than "prove" that
+        # cured code conflates.
+        raise AssertionError(
+            f"blob {PRE_FIX_BLOB[:12]} CONTAINS BAD_TOML -- it is not the "
+            f"pre-fix artifact, so this negative control measures nothing")
     old = tmp_path / "generate_spine_OLD.py"
     old.write_bytes(blob.stdout)
     spec = importlib.util.spec_from_file_location("generate_spine_OLD", str(old))

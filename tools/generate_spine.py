@@ -90,12 +90,22 @@ ROUTE_DECOR = re.compile(re.escape(_ROUTER_DECORATOR) + r"(get|post|put|delete|p
 PREFIX_DECL = re.compile(re.escape(_APIROUTER_MARK) + r"[^)]*prefix\s*=\s*[\"']([^\"']+)[\"']", re.S)
 
 
-def _read(path):
+class KnownIssuesUnreadable(RuntimeError):
+    """The --strict allowlist did not load. A verdict computed without it is not
+    a verdict (R6: unknown is not zero)."""
+
+
+def _read2(path):
+    """(text, error_or_None). An UNREADABLE file is not an EMPTY one."""
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
-            return fh.read()
-    except OSError:
-        return ""
+            return fh.read(), None
+    except OSError as exc:
+        return "", "%s: %s" % (type(exc).__name__, exc)
+
+
+def _read(path):
+    return _read2(path)[0]
 
 
 def _module_file(import_path):
@@ -103,14 +113,29 @@ def _module_file(import_path):
     return os.path.join(ROOT, import_path.replace(".", os.sep) + ".py")
 
 
-def _load_toml(path):
+def _load_toml2(path):
+    """(table, error_or_None).
+
+    A MALFORMED service.toml is a registration that EXISTS and is CORRUPT. Until
+    c159 this returned {} both for that case and for "there is no file", so both
+    surfaced as NO_TOML -- and the two remedies are opposite (write a
+    registration vs repair the one already there). Measured on the live build
+    host 2026-09-30: services/active carried 72 service.toml, 1 of which
+    (perspective_diff_api) does not parse, because the emitter appended the
+    directive prose block after the [service] table. It had been reported as
+    never registered.
+    """
     if tomllib is None:
-        return {}
+        return {}, None
     try:
         with open(path, "rb") as fh:
-            return tomllib.load(fh)
-    except (OSError, ValueError):
-        return {}
+            return tomllib.load(fh), None
+    except (OSError, ValueError) as exc:
+        return {}, "%s: %s" % (type(exc).__name__, exc)
+
+
+def _load_toml(path):
+    return _load_toml2(path)[0]
 
 
 def load_known_issues():
@@ -118,9 +143,13 @@ def load_known_issues():
     if not os.path.exists(KNOWN_ISSUES_PATH):
         return {}
     try:
-        data = json.load(open(KNOWN_ISSUES_PATH, encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+        with open(KNOWN_ISSUES_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise KnownIssuesUnreadable(
+            "%s did not load (%s: %s) -- refusing to publish a spine verdict "
+            "computed with an allowlist that silently emptied"
+            % (KNOWN_ISSUES_PATH, type(exc).__name__, exc)) from exc
     out = {}
     for e in data.get("known", []):
         svc, st = e.get("service"), e.get("status")
@@ -144,8 +173,11 @@ def scan_active():
                             "tag": None, "origin": "unknown", "needs_data_layer": None,
                             "auth": None, "_no_toml": True})
             continue
-        meta = _load_toml(toml_path).get("service", {})
+        table, toml_err = _load_toml2(toml_path)
+        meta = table.get("service", {}) if isinstance(table, dict) else {}
         entries.append({
+            "_toml_error": toml_err,
+            "_toml_has_service": bool(meta),
             "name": meta.get("name", name),
             "import_path": meta.get("import_path"),
             "prefix": meta.get("prefix"),
@@ -170,7 +202,12 @@ def _declared_routes(import_path):
 def validate(entries):
     """Static validation of every active entry. No import -- cannot degrade.
 
-    status per entry: ok | NO_TOML | MISSING | NO_ROUTER | DUPLICATE_ROUTE
+    status per entry: ok | NO_TOML | BAD_TOML | NO_SERVICE_TABLE | MISSING
+                      | UNREADABLE | NO_ROUTER | DUPLICATE_ROUTE
+
+    NO_TOML means no registration was ever written. BAD_TOML / NO_SERVICE_TABLE
+    mean one WAS written and is unusable -- a different defect with a different
+    remedy, conflated into NO_TOML until c159.
     """
     seen, dup_paths = {}, set()
     for e in entries:
@@ -184,25 +221,37 @@ def validate(entries):
     out = []
     for e in entries:
         ip = e.get("import_path")
-        if e.get("_no_toml") or not ip:
+        if e.get("_no_toml"):
             status = "NO_TOML"
+        elif e.get("_toml_error"):
+            status = "BAD_TOML"
+        elif not e.get("_toml_has_service", True):
+            status = "NO_SERVICE_TABLE"
+        elif not ip:
+            status = "NO_SERVICE_TABLE" if "_toml_has_service" in e else "NO_TOML"
         else:
             path = _module_file(ip)
             if not os.path.isfile(path):
                 status = "MISSING"
             else:
-                src = _read(path)
-                has_router = (_APIROUTER_MARK[:-1] in src) or (_ROUTER_DECORATOR in src)
-                routes = _declared_routes(ip)
-                if not has_router:
-                    status = "NO_ROUTER"
-                elif any(r in dup_paths for r in routes):
-                    status = "DUPLICATE_ROUTE"
+                src, read_err = _read2(path)
+                if read_err:
+                    status = "UNREADABLE"
                 else:
-                    status = "ok"
+                    has_router = (_APIROUTER_MARK[:-1] in src) or (_ROUTER_DECORATOR in src)
+                    routes = _declared_routes(ip)
+                    if not has_router:
+                        status = "NO_ROUTER"
+                    elif any(r in dup_paths for r in routes):
+                        status = "DUPLICATE_ROUTE"
+                    else:
+                        status = "ok"
         rec = dict(e)
         rec["status"] = status
+        rec["toml_error"] = e.get("_toml_error")
         rec.pop("_no_toml", None)
+        rec.pop("_toml_error", None)
+        rec.pop("_toml_has_service", None)
         out.append(rec)
     return out
 
@@ -357,7 +406,11 @@ def main(argv=None):
         if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
             emit_root = os.path.abspath(argv[i + 1])
 
-    manifest = build_manifest()
+    try:
+        manifest = build_manifest()
+    except KnownIssuesUnreadable as exc:
+        print("SPINE: %s" % exc)
+        return 2
     svc = manifest["services"]
 
     if do_emit:
@@ -367,7 +420,7 @@ def main(argv=None):
                   % (os.path.relpath(gen, emit_root), len(svc), os.path.relpath(art, emit_root)))
 
     if not quiet and not do_emit:
-        print("\n=== spine (AUTHORITATIVE, Option B) src=services/active/ ===")
+        print("\n=== spine (AUTHORITATIVE, Option B) src=%s ===" % ACTIVE_DIR)
         print("  services: %d  | ok: %d  | broken: %d (known: %d, unlisted: %d)"
               % (manifest["service_count"], manifest["ok_count"], manifest["broken_count"],
                  manifest["known_broken_count"], len(manifest["unlisted_broken"])))

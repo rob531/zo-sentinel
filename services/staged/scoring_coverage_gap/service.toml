@@ -1,0 +1,11 @@
+[service]
+name = "scoring_coverage_gap"
+import_path = "services.active.scoring_coverage_gap.router"
+prefix = "/api"
+tag = "scoring_coverage_gap"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

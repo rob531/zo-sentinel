@@ -24,7 +24,7 @@ if __name__ == "__main__":
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.db import get_session
-    from app.models import VulnAdvisories
+    from app.models import VulnAdvisory
     from sqlalchemy.orm import Session
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     app.dependency_overrides[get_session] = lambda: TestSession()
 
     # Create tables
-    VulnAdvisories.__table__.create(test_engine)
+    VulnAdvisory.__table__.create(test_engine)
 
     # Mock the OSV feed response
     mock_osv_feed = {
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     # Mock the fetch_and_parse_osv_advisories function
     async def mock_fetch_and_parse_osv_advisories(session: Session):
         for advisory in mock_osv_feed["advisories"]:
-            adv = VulnAdvisories(
+            adv = VulnAdvisory(
                 id=advisory["id"],
                 published=datetime.fromisoformat(advisory["published"].replace("Z", "+00:00")),
                 aliases=advisory["aliases"],

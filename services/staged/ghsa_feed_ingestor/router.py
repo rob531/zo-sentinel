@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List
 
 from app.db import get_session
-from app.models import VulnAdvisories
+from app.models import VulnAdvisory
 
 from .logic import import_ghsa_feed
 

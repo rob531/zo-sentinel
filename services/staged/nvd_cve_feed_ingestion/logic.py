@@ -14,7 +14,7 @@ from app.db import get_session, Base  # real app DB session & Base
 # Model import – try common names, fallback to a minimal definition
 # ----------------------------------------------------------------------
 try:
-    from app.models import VulnerabilityAdvisory as Advisory  # primary guess
+    from app.models import VulnAdvisory as Advisory  # primary guess
 except Exception:  # pragma: no cover
     try:
         from app.models import VulnAdvisory as Advisory

@@ -60,7 +60,9 @@ def sh(cmd, cwd=None, env=None):
     e.setdefault("GIT_COMMITTER_EMAIL", "c160@example.invalid")
     if env:
         e.update(env)
-    return subprocess.run(cmd, cwd=cwd, env=e, shell=isinstance(cmd, str),
+    if isinstance(cmd, str):                     # no shell, ever (bandit B602)
+        raise TypeError("sh() takes an argv list, not a shell string")
+    return subprocess.run(cmd, cwd=cwd, env=e, shell=False,
                           capture_output=True, text=True, timeout=180)
 
 
@@ -188,13 +190,18 @@ def control_no_call_site(guard, tmp):
     """The control this cycle exists to satisfy: a guard nothing invokes is
     the same dark tool safe_ff.sh already was. Checked against the LIVE host
     crontab, not against a repo path (R1)."""
-    r = sh("crontab -l 2>/dev/null | grep -c zo_arm_guard")
-    n = (r.stdout or "0").strip() or "0"
-    try:
-        n = int(n)
-    except ValueError:
-        n = 0
-    return n > 0, f"{n} crontab line(s) invoke arm_guard"
+    if not shutil.which("crontab"):
+        return UNAVAILABLE, "no crontab binary on this machine"
+    r = sh(["crontab", "-l"])
+    if r.returncode != 0:
+        # R6: a crontab we could not read is UNKNOWN, not zero. The piped
+        # `crontab -l | grep -c` this replaced printed 0 in exactly this case,
+        # which would have reported "the guard has no call site" about a
+        # crontab that was never read.
+        return UNAVAILABLE, f"crontab -l failed (rc={r.returncode}) -- not read, not empty"
+    lines = [ln for ln in (r.stdout or "").splitlines()
+             if "zo_arm_guard" in ln and not ln.lstrip().startswith("#")]
+    return len(lines) > 0, f"{len(lines)} active crontab line(s) invoke arm_guard"
 
 
 CONTROLS = {

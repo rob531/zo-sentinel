@@ -47,6 +47,13 @@ one line --
 nothing more. Saying "the halt is armed" without saying that would be exactly the
 "a merge is not an arming" defect this repo keeps paying for.
 
+Use `--enforce-all` to gate an entry point that should respect halts on ANY
+builder lane (e.g. the PR gate that runs on every autonomous-build PR). It exits 1
+if at least one unexpired armed halt exists, printing each blocked lane.
+
+USAGE
+    python tools/lane_halt.py --enforce-all   # for CI/PR gates
+
 USAGE
     python tools/lane_halt.py --status                       # all lanes
     python tools/lane_halt.py --raise builder:manifest --reason "..." --sha abc123
@@ -204,6 +211,8 @@ def main(argv=None) -> int:
                     help="actually halt (default is shadow, which cannot block)")
     ap.add_argument("--enforce", dest="enforce_lane",
                     help="exit 1 if this lane is halted -- the one-line gate a\nlane calls on itself before doing work")
+    ap.add_argument("--enforce-all", action="store_true",
+                    help="exit 1 if ANY unexpired armed halt exists -- the gate for\nan entry point shared by multiple lanes (e.g. pr-gates.yml)")
     ap.add_argument("--clear", dest="clear_lane")
     ap.add_argument("--who", default="")
     a = ap.parse_args(argv)
@@ -215,6 +224,15 @@ def main(argv=None) -> int:
                   % (a.enforce_lane, rec.get("reason", ""), rec.get("expires_at")))
             return 1
         print("clear: %s" % a.enforce_lane)
+        return 0
+    if a.enforce_all:
+        active = [h for h in list_halts() if not h["expired"]]
+        if active:
+            for h in active:
+                print("HALTED %s: %s (expires %s)"
+                      % (h["lane"], h.get("reason", ""), h.get("expires_at")))
+            return 1
+        print("clear: no active lane halts")
         return 0
     if a.clear_lane:
         print("cleared" if clear(a.clear_lane, a.who) else "no active halt")

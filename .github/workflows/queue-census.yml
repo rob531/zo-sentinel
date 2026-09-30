@@ -1,0 +1,87 @@
+name: queue-census
+
+# The scheduled producer for the lane halt sentinel (FU-253).
+#
+# queue_census.py measures the health of each builder lane (depth, validity rate,
+# silence, drain), raises a VALIDITY_COLLAPSE alarm when a lane emits mostly-invalid
+# output, and writes an armed per-lane halt sentinel to artifacts/lane_halts/ when
+# it does.
+#
+# The armed sentinel is the RECORD. The consumer that makes the record bite is the
+# "Lane halt check" step in pr-gates.yml, which calls `lane_halt.py --enforce-all`
+# on every PR and exits 1 if any active halt exists.
+#
+# WITHOUT THIS WORKFLOW the sentinel is never raised:
+#   --halt-mode armed is the default since 2026-07-30 (queue_census.py:505), but
+#   a default on a switch nobody flips is not an arming of the system -- it is an
+#   arming of the flag. This workflow is the switch.
+#
+# Runs every 4h on a staggered minute offset to avoid colliding with pr-triage
+# (17 */6) and pr-relander (47 */6). The halt TTL in lane_halt.py is 12h, so two
+# census runs are guaranteed to observe a sustained VALIDITY_COLLAPSE before the
+# sentinel would naturally lapse even if the very first run missed it.
+#
+# Artifacts are uploaded so the halt_shadow_report step in evaluator.yml can read
+# the latest census snapshot (tools/halt_shadow_report.py reads
+# artifacts/queue_census/latest.json, written by queue_census.py --no-validate).
+#
+# ROLLBACK: disable this workflow (Actions UI -> disable workflow) or delete it.
+# The sentinel files in artifacts/lane_halts/ expire on their own TTL; no manual
+# cleanup is needed.
+
+on:
+  schedule:
+    - cron: "37 */4 * * *"   # every 4h; offset from pr-triage (17) and pr-relander (47)
+  workflow_dispatch:           # on-demand for chairman review or testing
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyGithub requests
+
+      - name: Run queue census (--no-validate for speed; armed halt mode)
+        # --no-validate skips per-PR diff fetches and only measures depth/rates.
+        # Validity-based alarms (VALIDITY_COLLAPSE) require diff data, so a full
+        # census run is also dispatched weekly by hand for the chairman review.
+        # The rate-based alarms (UNDRAINED, LANE_SILENT, DIVERGING) are collected
+        # on every run and still gate the halt decision.
+        #
+        # --halt-mode armed is the default; stated explicitly here so the comment
+        # above is the complete truth: this is the switch that is actually flipped.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts/lane_halts artifacts/queue_census
+          python tools/queue_census.py \
+            --no-validate \
+            --halt-mode armed \
+            2>&1 | tee artifacts/queue_census/run.txt
+        continue-on-error: true  # census alarm does not fail the *census* job; the
+                                  # pr-gates consumer is the blocker that counts.
+
+      - name: Upload census artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: queue-census
+          path: |
+            artifacts/queue_census/
+            artifacts/lane_halts/
+          if-no-files-found: warn
+          retention-days: 7

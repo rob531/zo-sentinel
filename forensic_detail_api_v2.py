@@ -11,6 +11,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from zo_sentinel import bus, signal_reads
+
 SERVICE_NAME = "forensic_detail_api_v2"
 SERVICE_PORT = 8779
 WRITE_SERVICE_URL = "http://localhost:8772"
@@ -31,13 +33,17 @@ app = FastAPI(title="Forensic Detail API v2", version="2.0.0")
 
 
 def ws_query(sql: str, params: Optional[list] = None) -> list:
-    payload = {"sql": sql}
-    if params:
-        payload["params"] = params
-    resp = requests.post(QUERY_URL, json=payload, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("rows", [])
+    """Read the bus, COMPLETE -- never a silently capped page (#4003).
+
+    The bus caps a result set at 200 rows and, since #3997 went live 2026-09-28,
+    says so. This helper used to return ``data["rows"]`` from a single request,
+    so every statement in this module was capped at 200 and nothing here could
+    tell. Delegating to the one paging door cures each call site at once,
+    including statements added after this edit.
+    """
+    return bus.query_complete(
+        sql, params=params, url=QUERY_URL, timeout=30, what="forensic rows"
+    )
 
 
 def ws_write(table: str, rows: list) -> None:
@@ -129,13 +135,15 @@ def get_registry_record(server_id: str) -> Optional[dict]:
 
 
 def get_signal_scores(server_id: str) -> list:
-    sql = """
-    SELECT server_id, signal_name, score, evidence, scored_at
-    FROM mcp_signal_scores
-    WHERE server_id = ?
-    ORDER BY signal_name
+    """The CURRENT score of every signal -- one row per signal_name (#4003).
+
+    The statement this used to send read the whole rescore HISTORY. Measured LIVE
+    2026-10-01 for '@goke/mcp': 12,834 rows, of which the bus returned 200, all
+    of them the single signal 'composite' -- 11 of 12 signals were missing from
+    this endpoint's evidence pane, for 88% of the registry. Paging 12,834 rows
+    here would be correct and useless; the latest row per signal is 12 rows.
     """
-    return ws_query(sql, [server_id])
+    return signal_reads.latest_signal_scores(server_id, url=QUERY_URL)
 
 
 def get_threat_associations(server_id: str) -> list:

@@ -77,6 +77,7 @@ __all__ = [
     "count_of",
     "query",
     "query_all",
+    "query_complete",
     "query_url",
 ]
 
@@ -283,3 +284,95 @@ def query_all(
             "hand back a partial read." % (what, len(rows), expected)
         )
     return rows
+
+
+def _derived_total_order(sql: str, rows: List[Dict[str, Any]]) -> str:
+    """Wrap ``sql`` in a subquery ordered by EVERY column it actually returned.
+
+    Used only when the bus DECLARED the result truncated and the statement
+    carries no ORDER BY of its own. Ordering by every projected column is a total
+    order up to exact duplicate rows, which are interchangeable, so a
+    LIMIT/OFFSET walk over it cannot drop or duplicate a distinguishable row.
+    The column names come from the page the bus just returned -- never from a
+    guess about the schema.
+    """
+    if not rows:
+        raise BusPaginationError(
+            "the bus declared this result truncated but returned no rows, so "
+            "there are no column names to build a stable order from: " + sql[:160]
+        )
+    cols = ", ".join(
+        '_zo_ord."%s"' % str(col).replace('"', '""') for col in rows[0].keys()
+    )
+    return "SELECT * FROM (%s) AS _zo_ord ORDER BY %s" % (sql, cols)
+
+
+def query_complete(
+    sql: str,
+    params: Optional[list] = None,
+    url: Optional[str] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    page_rows: int = DEFAULT_PAGE_ROWS,
+    max_pages: int = DEFAULT_MAX_PAGES,
+    what: str = "rows",
+) -> List[Dict[str, Any]]:
+    """Every row, with ONE request in the common case. The delegation target.
+
+    #4003 counts "583 unbounded row reads across 313 files". That is not 583
+    defects: ``def ws_query`` -- the un-paginated single-request read -- is
+    copy-pasted into 1909 files of the live runtime. A caller swaps that helper's
+    BODY for a call to this and every statement in that module is cured at once,
+    including ones added later. Editing three SQL strings is a patch; moving the
+    helper onto this door is the cure.
+
+    Behaviour, and why each branch is shaped this way:
+
+    * the bus declares ``truncated=false`` -> return the rows. One request, no
+      ``count(*)`` round trip. Post-#3997 (live 2026-09-28) this is the common
+      case and it costs a paginating caller nothing.
+    * the bus declares ``truncated=true``  -> page to completion via
+      :func:`query_all`, deriving a total order if the statement lacks one.
+    * the bus says NOTHING (pre-#3997, or an older write_service) -> absence is
+      UNKNOWN, not False (R6). A full first page is treated as suspect and paged
+      with reconciliation; a short one is complete and returned.
+
+    Paging relies on the declared flag rather than on reconciliation when the
+    flag is present, deliberately: these tables are written continuously, so a
+    strict ``count(*)`` equality check against a hot relation fails for a reason
+    that has nothing to do with truncation. With the flag live, every page goes
+    through :func:`query` and a capped page RAISES, so "a page came back short"
+    cannot be fooled by a cap below ``page_rows``.
+
+    Raises rather than return a short answer. A statement that carries its own
+    LIMIT/OFFSET and is ALSO capped by the server cannot be paged from here --
+    that is :class:`BusTruncated`, for the caller to page explicitly.
+    """
+    body = _post(sql, params=params, url=url, timeout=timeout)
+    rows = list(body.get("rows") or [])
+    declared = _declared_truncation(body)
+
+    if declared is False:
+        return rows
+    if declared is None and len(rows) < OBSERVED_ROW_CAP:
+        return rows
+    if not rows:
+        return rows
+
+    if _LIMIT_RE.search(sql) or _OFFSET_RE.search(sql):
+        raise BusTruncated(
+            "this statement carries its own LIMIT/OFFSET and the server ALSO "
+            "capped it, so it cannot be paged from here -- page it explicitly: "
+            + sql[:160]
+        )
+
+    stmt = sql if _ORDER_BY_RE.search(sql) else _derived_total_order(sql, rows)
+    return query_all(
+        stmt,
+        params=params,
+        url=url,
+        timeout=timeout,
+        page_rows=page_rows,
+        max_pages=max_pages,
+        reconcile=declared is None,
+        what=what,
+    )

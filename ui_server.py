@@ -53,16 +53,23 @@ def ws_query(sql: str, params=None):
     and the access log could not say why. write_service /query accepts a `params`
     array -- verified live: {"sql":"... WHERE verdict = ?","params":["..."]}
     returns rows -- so the callers were right and the helper was wrong.
+
+    2026-10-01 (improvement-loop, #4003): the body now reads through the one
+    paging door. The bus caps a result set at 200 rows and declares it since
+    #3997 went live 2026-09-28; this helper returned a single request's JSON, so
+    every statement in this module was capped at 200 and nothing here could tell.
+    The return SHAPE is unchanged -- callers read ``["rows"]`` -- and the ``count``
+    is now the assembled row count rather than one page's length.
     """
     try:
-        import requests
-        body = {"sql": sql}
-        if params:
-            body["params"] = list(params)
-        r = requests.post(QUERY_URL, json=body, timeout=15)
-        return r.json()
+        from zo_sentinel import bus
+        rows = bus.query_complete(
+            sql, params=list(params) if params else None, url=QUERY_URL,
+            timeout=15, what="ui rows",
+        )
+        return {"rows": rows, "count": len(rows)}
     except Exception as e:
-        log(f"ws_query error: {e}")
+        log(f"ws_query {type(e).__name__}: {e}")
         return {"rows": [], "count": 0}
 
 def ws_write(table: str, rows: list):
@@ -427,14 +434,18 @@ def create_app():
         if not rows:
             raise HTTPException(status_code=404, detail="Server not found")
         
-        signals = ws_query(
-            "SELECT signal_name, score, evidence, scored_at FROM mcp_signal_scores WHERE server_id = ?",
-            params=[server_id]
-        )
-        
+        # The CURRENT score of every signal -- one row per signal_name (#4003).
+        # The statement this replaced read the whole rescore HISTORY with no
+        # ORDER BY at all: measured LIVE 2026-10-01, 12,834 rows for '@goke/mcp'
+        # of which the bus returned 200, all one signal ('composite') out of 12.
+        # 88% of the registry is over the cap, so this route was serving an
+        # arbitrary slice of one signal's history as "the signals".
+        from zo_sentinel import signal_reads
+        signals = signal_reads.latest_signal_scores(server_id, url=QUERY_URL)
+
         return {
             "server": rows[0],
-            "signals": signals.get("rows", [])
+            "signals": signals
         }
     
     @app.get("/api/dashboard/summary")

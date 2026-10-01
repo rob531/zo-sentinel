@@ -21,6 +21,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from zo_sentinel import signal_reads
+
 log = logging.getLogger(__name__)
 WRITE_SERVICE = "http://127.0.0.1:8772"
 PORT          = 8780
@@ -102,18 +104,21 @@ def get_intelligence_brief(mcp_identifier: str) -> dict:
     rec = rows[0]
     server_id = rec.get("server_id", "")
 
-    # Fetch signal scores
-    signals = ws_query(
-        f"SELECT signal_name, score, evidence FROM mcp_signal_scores "
-        f"WHERE server_id = '{server_id}' ORDER BY scored_at DESC LIMIT 12"
+    # The CURRENT score of every signal -- one row per signal_name (#4003).
+    #
+    # What this replaced was bounded and still wrong: `ORDER BY scored_at DESC
+    # LIMIT 12` takes the 12 NEWEST rows, and mcp_signal_scores is a rescore
+    # HISTORY -- measured LIVE 2026-10-01, '@goke/mcp' holds 12,834 rows across
+    # 12,716 distinct scored_at values for just 12 signals. The 12 newest rows
+    # come from one rescore wave, so the dedup below collapsed them to whichever
+    # two or three signals that wave happened to touch and this summary reported
+    # the rest as absent. Taking the latest row PER signal is the bound that is
+    # both correct and under the bus's 200-row cap by construction.
+    deduped = signal_reads.latest_signal_scores(
+        server_id,
+        columns=("signal_name", "score", "evidence"),
+        url=f"{WRITE_SERVICE}/query",
     )
-
-    # Dedup signals (keep most recent per signal_name)
-    seen, deduped = set(), []
-    for s in signals:
-        if s["signal_name"] not in seen:
-            seen.add(s["signal_name"])
-            deduped.append(s)
 
     age_str = "unknown"
     if rec.get("last_assessed"):

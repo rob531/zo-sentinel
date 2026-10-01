@@ -1,0 +1,8 @@
+[service]
+name = "threat_intel_overlap"
+import_path = "services.active.threat_intel_overlap.router"
+prefix = "/api"
+tag = "threat_intel_overlap"
+origin = "service"
+auth = "public"
+needs_data_layer = true

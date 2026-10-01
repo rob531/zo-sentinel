@@ -1,0 +1,11 @@
+[service]
+name = "perspective_diff_api"
+import_path = "services.active.perspective_diff_api.router"
+prefix = "/api"
+tag = "perspective_diff_api"
+origin = "service"
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.
+
+DATA ACCESS: data lives in databases, never files (no CSV/JSON inputs; CSV is export-only). TWO PLANES -- (1) APP tables (mcp_server_registry, mcp_llm_axis_scores, mcp_score_disputes, orgs, users) are authoritative in the app Postgres: read via the app.db SQLAlchemy session -- import it VERBATIM: from app.db import get_session and from app.models import <Model>, use Depends(get_session). Do NOT define your own session/engine/models or an in-memory DB: a FastAPI module with no from app.db import is a HOLLOW build and is REJECTED by the no-hollow gate (mirror verdict_breakdown_api.py). Do not read app tables off :8772 (stale partial copy). (2) MESH/pipeline tables (mcp_signal_scores, mesh_memory) live in the ZoComputer store: read via write_service POST http://127.0.0.1:8772/query. SELF-TEST vs DATA LAYER: if a directive's acceptance mentions an 'in-memory store', that applies ONLY to the __main__ self-test -- build a LOCAL FastAPI() there and set that_app.dependency_overrides[get_session]. There is NO app.dependency_overrides module (`app` is the PACKAGE; the instance is app.main:app), and StaticPool is NOT in app.db (from sqlalchemy.pool import StaticPool). SYMBOL TABLE: docs/SCHEMA_TRUTH.md, generated from app/models.py + app/db.py, lists every name that EXISTS -- read it before writing an import. If a model is not in it it does not exist: use the nearest real class or flag that the directive needs a schema decision, never invent one. Spelling is the commonest miss -- prefix Mcp not MCP, never plural: McpServerRegistry, McpLlmAxisScore, McpScoreDispute, VulnAdvisory. The MODULE's OWN data access MUST remain from app.db import get_session + from app.models import <Model>; a module whose data layer is itself an in-memory/sqlite store (rather than just the test override) is HOLLOW and REJECTED. Keep output lean: minimal comments, no narration.

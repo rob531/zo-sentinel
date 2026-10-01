@@ -1,0 +1,1 @@
+# deps: fastapi, pydantic, requests

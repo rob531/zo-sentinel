@@ -1,0 +1,8 @@
+[service]
+name = "perspective_analysis"
+import_path = "services.active.perspective_analysis.router"
+prefix = "/api"
+tag = "perspective_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,57 +1,65 @@
 """
-publisher.py -- watch build_artifact rows, open a gated PR per new artifact.
+publisher.py -- the PRODUCER publishes its own builds through git (RCA 2026-10 Fix 3).
 
-Flow (per build_artifact mesh row):
-  1. dedup     -- skip artifacts already published (dedup_key in mesh state)
-  2. resolve   -- read the artifact's source (host file, or injected in tests)
-  3. pre-gate  -- static safety scan (no DROP/DELETE on protected core tables);
-                  the DEEP validation is the PR's own E2E gates (smoke/ruff/fe)
-  4. plan      -- branch + title + body carrying goose provenance (tier/task)
-  5. publish   -- via GitOps (FakeGitOps dry-run when dormant; CliGitOps live)
+WHAT CHANGED, AND WHY (RCA cross-cycle-2026-10, fault F3)
+---------------------------------------------------------
+The component that wrote host state was not the one that versioned it.
+goose_runner.py wrote generated files into the runtime tree and had ZERO git
+call sites; this module was a SEPARATE path that read build_artifact rows out
+of the mesh store behind a WATERMARK and pushed each one as a PR. Six outcomes
+(hollow_blocked / duplicate_module / saturated_family / blocked / quarantined /
+"content unresolved") advanced the watermark and were never retried -- and
+every one left the file sitting in the runtime tree, unversioned, forever.
+Measured 2026-09-27 (FU-555): host services/active 504 vs origin/main 42, 462
+(92%) missing, oldest 63 days; the spine is generated from that host tree.
 
-Dormant by design: when not enabled, run_once() returns the plans it WOULD
-publish (action="dry_run") and writes nothing. Enabled only when
-`.pr_publisher_enabled` exists or PR_PUBLISHER_ENABLED is truthy.
+So the watermark path is RETIRED (removed, not wrapped). In its place one owner,
+ProducerCommit, called by the producer at the moment a build completes:
 
-Rate governance (the repo is PRIVATE -- 2000 GitHub Actions min/month, and every
-PR fires pr-gates.yml on hosted runners ~8-10 min each):
-  - WATERMARK   -- reads only build_artifacts with created_at > watermark, via the
-                   store's read_build_artifacts_since (the plain read ignores the
-                   bound and would replay the oldest window forever). Advances the
-                   watermark as it goes, so it never re-scans the backlog. Seed it
-                   to "now" before enabling (tools/seed_publisher_watermark.py) so
-                   the historical backlog is skipped entirely.
-  - DAILY CAP   -- at most `daily_cap` PRs per UTC day (default 100; the repo is
-                   PUBLIC so Actions minutes are unlimited -- the cap is now only a
-                   runaway safety valve, not a budget limit). Cap-deferred artifacts
-                   are NOT skipped: the watermark is not advanced past them, so they
-                   publish next day.
-  - PR SPACING  -- a sleep between PRs so a burst doesn't trip GitHub's secondary
-                   (abuse) rate limits. GitOps adds Retry-After backoff on top.
+  1. enqueue    -- a durable LOCAL outbox entry (outside the git tree, survives
+                   `git clean`; never the write_service mesh store, which drops
+                   writes). Nothing is "advanced past": an entry leaves the outbox
+                   only on a terminal outcome.
+  2. refuse     -- the SAME pre-PR rules as before (static safety, hollow
+                   scaffold, saturated family, duplicate module). A refused build
+                   is EVICTED from the runtime tree: a tracked path is restored to
+                   HEAD, an untracked one is moved to the durable quarantine. The
+                   bytes are kept for inspection; the runtime tree no longer
+                   carries code no gate will ever see. Hollow builds are also
+                   parked, exactly as before.
+  3. publish    -- the same GitOps seam (CliGitOps in its own clone; never the
+                   live tree). published / noop -> done, and the runtime copy is
+                   set aside (tracked: restored to HEAD; untracked: moved to the
+                   durable in_flight store) so the file re-enters the runtime tree
+                   ONLY through the merged ref -- the deploy ff then cannot abort on
+                   it, and nothing unmerged runs. A PERMANENT failure ->
+                   evicted + quarantined. A TRANSIENT failure stays pending and
+                   is retried by drain() -- never dropped.
 
-Reuses zo_sentinel.ingestor: the MeshStore seam, BuildArtifact, classify(),
-and static_safety_scan().
+So for every file the builder writes, the runtime tree ends in one of two
+states: on its way to origin/main through a gated PR, or not in the tree.
+`tools/staged_repo_reconcile.py` (census) is the detector; `backfill()` feeds the
+historical host-only files through the same path.
+
+Dormant by design: unless `.pr_publisher_enabled` exists (or PR_PUBLISHER_ENABLED
+is truthy) nothing is published -- builds are enqueued and wait, never lost.
+Rate governance (daily cap + PR spacing) is unchanged.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import subprocess
 from typing import Callable, List, Optional
 
 from zo_sentinel.ingestor.contracts import static_safety_scan
-from zo_sentinel.ingestor.model import BuildArtifact
-from zo_sentinel.ingestor.store import MeshStore
-from zo_sentinel.publisher.gitops import FakeGitOps, GitOps, PublishPlan
+from zo_sentinel.publisher.gitops import GitOps, PublishPlan
 
 PUBLISHER_AGENT_ID = "zo_sentinel.pr_publisher"
-PR_PUBLISHED_TYPE = "pr_published"          # mesh row holding the published dedup_keys
-WATERMARK_TYPE = "pr_publish_watermark"     # highest built_at scanned (ISO string)
-BUDGET_TYPE = "pr_publish_budget"           # {"day": "YYYY-MM-DD", "count": N}
 SENTINEL_NAME = ".pr_publisher_enabled"
 DEFAULT_HOME = "/home/workspace/zo_sentinel"
 DEFAULT_BRANCH_PREFIX = "auto/build"
@@ -89,16 +97,6 @@ def _within_days(earlier_iso: Optional[str], later_iso: Optional[str], days: int
     if b.tzinfo is None:
         b = b.replace(tzinfo=timezone.utc)
     return abs((b - a).total_seconds()) <= days * 86400
-
-
-def _max_iso(a: Optional[str], b: Optional[str]) -> Optional[str]:
-    """The later of two ISO timestamps (lexicographic == chronological for ISO);
-    tolerates either being None/empty."""
-    if not b:
-        return a
-    if not a or b > a:
-        return b
-    return a
 
 
 
@@ -145,34 +143,58 @@ def saturated_family_scan(file_path: str) -> Optional[str]:
     return None
 
 
-class Publisher:
-    def __init__(self, store: MeshStore, gitops: Optional[GitOps] = None,
-                 home: str = DEFAULT_HOME,
-                 content_resolver: Optional[Callable[[BuildArtifact], Optional[str]]] = None,
-                 repo_url: str = "https://github.com/rob531/zo-sentinel",
+
+DEFAULT_OUTBOX = "/home/workspace/zo_sentinel_state/producer_outbox.json"
+BACKFILL_SENTINEL = ".pr_backfill_enabled"
+TERMINAL = ("published", "noop", "refused", "quarantined", "lost")
+
+
+def plan_for(file: str, content: str, *, task: str = "", phase: str = "",
+             interface: str = "", built_at: str = "", tier: str = "unknown",
+             dedup_key: str = "") -> PublishPlan:
+    """The PR a build becomes. Same branch/title/body/labels as the retired path."""
+    branch = f"{DEFAULT_BRANCH_PREFIX}/{_slug(task or file)}-{_slug(built_at, 16)}"
+    title = f"build: {task or file}"
+    body = (
+        f"Autonomous build artifact published for E2E gating.\n\n"
+        f"- **file**: `{file}`\n"
+        f"- **task**: {task or '(none)'}\n"
+        f"- **phase**: {phase or '(none)'}\n"
+        f"- **interface**: {interface or '(none)'}\n"
+        f"- **built_at**: {built_at or '(none)'}\n"
+        f"- **bytes**: {len(content.encode('utf-8'))}\n"
+        f"- **ladder tier**: {tier}\n\n"
+        f"This PR runs the standard E2E gates (ruff / smoke-ladder / frontend). "
+        f"Opened by `{PUBLISHER_AGENT_ID}` from the producer's own outbox.\n"
+    )
+    labels = [DEFAULT_LABEL]
+    if tier and tier != "unknown":
+        labels.append(f"ladder:{_slug(tier, 24)}")
+    return PublishPlan(branch=branch, title=title, body=body, file_path=file,
+                       content=content, dedup_key=dedup_key or f"{file}@{built_at}",
+                       labels=labels)
+
+
+class ProducerCommit:
+    """The single owner of 'the bytes the builder wrote == the bytes in origin/main'."""
+
+    def __init__(self, gitops: Optional[GitOps] = None, home: str = DEFAULT_HOME,
+                 outbox: Optional[str] = None, quarantine_dir: Optional[str] = None,
                  enabled_override: Optional[bool] = None,
                  daily_cap: int = DEFAULT_DAILY_CAP,
                  pr_spacing_sec: float = DEFAULT_PR_SPACING_SEC,
                  clock: Optional[Callable[[], datetime]] = None,
                  sleep: Optional[Callable[[float], None]] = None,
-                 state_file: Optional[str] = None,
                  dup_file_window_days: Optional[int] = None,
-                 quarantine_dir: Optional[str] = None):
-        self.store = store
-        # Local durable state file (watermark/dedup/budget). When set it is the
-        # AUTHORITATIVE store for the publisher's own bookkeeping so a dropped
-        # write_service write can't freeze the watermark (the 2026-06-23 stall).
-        # None (default, incl. all unit tests) -> legacy store-only behaviour.
-        self._state_file = state_file
-        self.gitops = gitops or FakeGitOps(repo_url)
+                 git: Optional[Callable[..., "subprocess.CompletedProcess"]] = None):
+        # gitops=None means "no real clone": entries are ENQUEUED and left pending.
+        # There is deliberately no FakeGitOps fallback here -- a fake that reports
+        # ok is how the retired path once marked real builds published (2026-06-15).
+        self.gitops = gitops
         self.home = Path(home)
-        # Directive sentinels live under the publisher's OWN home (injectable, so a
-        # test never writes into a real /home/workspace), and the durable park store
-        # sits outside the git tree so git clean cannot un-park (council 2026-06-20).
-        self._directives_dir = self.home / "directives"
+        self.outbox = Path(outbox or os.environ.get("PRODUCER_OUTBOX", DEFAULT_OUTBOX))
         self._quarantine_dir = Path(quarantine_dir or DURABLE_QUARANTINE_DIR)
-        self.repo_url = repo_url.rstrip("/")
-        self._resolver = content_resolver or self._read_from_home
+        self._directives_dir = self.home / "directives"
         self._enabled_override = enabled_override
         self.daily_cap = max(0, int(daily_cap))
         self.pr_spacing_sec = max(0.0, float(pr_spacing_sec))
@@ -180,12 +202,13 @@ class Publisher:
         self._sleep = sleep or time.sleep
         if dup_file_window_days is None:
             try:
-                dup_file_window_days = int(
-                    os.environ.get("PR_DUP_FILE_WINDOW_DAYS",
-                                   DEFAULT_DUP_FILE_WINDOW_DAYS))
+                dup_file_window_days = int(os.environ.get(
+                    "PR_DUP_FILE_WINDOW_DAYS", DEFAULT_DUP_FILE_WINDOW_DAYS))
             except ValueError:
                 dup_file_window_days = DEFAULT_DUP_FILE_WINDOW_DAYS
         self.dup_file_window_days = max(0, int(dup_file_window_days))
+        self._git = git or (lambda *a: subprocess.run(
+            ["git", "-C", str(self.home), *a], capture_output=True, text=True))
 
     # --- dormancy -----------------------------------------------------------
     def is_enabled(self) -> bool:
@@ -196,330 +219,232 @@ class Publisher:
             return env.strip().lower() in ("1", "true", "yes", "on")
         return (self.home / SENTINEL_NAME).exists()
 
-    # --- content resolution -------------------------------------------------
-    def _read_from_home(self, art: BuildArtifact) -> Optional[str]:
-        """Default resolver: read the built file off the host. Path may be
-        absolute or relative to the sentinel home."""
-        p = Path(art.file)
-        if not p.is_absolute():
-            p = self.home / art.file
-        try:
-            return p.read_text(encoding="utf-8")
-        except Exception:
-            return None
+    # --- durable outbox (local file, locked; never the mesh store) ----------
+    def _lock(self):
+        import contextlib
+        import fcntl
 
-    # --- local durable state (drop-proof; survives git clean) ---------------
-    def _state_load(self) -> dict:
-        if not self._state_file:
-            return {}
-        try:
-            return json.loads(Path(self._state_file).read_text(encoding="utf-8")) or {}
-        except Exception:
-            return {}
-
-    def _state_update(self, **kw) -> None:
-        if not self._state_file:
-            return
-        data = self._state_load()
-        data.update(kw)
-        try:
-            p = Path(self._state_file)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p.with_name(p.name + ".tmp")
-            tmp.write_text(json.dumps(data), encoding="utf-8")
-            tmp.replace(p)
-        except Exception as e:
-            sys.stderr.write(f"[publisher] WARN: state file write failed: {e}\n")
-            sys.stderr.flush()
-
-    # --- dedup state --------------------------------------------------------
-    def _published_files(self) -> dict:
-        """{file_path: iso_ts} of recently published module files. Guards the
-        same-module/two-directives hole (2026-07-10: #1397 + #1398 were both
-        `server_risk_delta_timeline_api.py` from two different directives, so
-        their dedup_keys differed and both merged). State-file only -- on a
-        cold start the map is empty and the guard simply passes; it converges
-        after the first publish."""
-        if self._state_file:
-            _pf = self._state_load().get("published_files")
-            if isinstance(_pf, dict):
-                return _pf
-        return {}
-
-    def _already_published(self) -> set:
-        if self._state_file:
-            _pub = self._state_load().get("published")
-            if _pub is not None:
-                return set(_pub)
-        raw = self.store.read_latest(PR_PUBLISHED_TYPE, PUBLISHER_AGENT_ID)
-        if not raw:
-            return set()
-        try:
-            data = json.loads(raw)
-            return set(data) if isinstance(data, list) else set()
-        except (json.JSONDecodeError, TypeError):
-            return set()
-
-    # --- watermark + daily budget ------------------------------------------
-    def _write_durable(self, table: str, row: dict, attempts: int = 3) -> bool:
-        """store.write, retried a few times. The state writes (watermark / dedup
-        / budget) MUST land or the publisher loses its place and re-attempts
-        already-open PRs next cycle -- and write_service (:8772) drops writes
-        intermittently. store.write returns False on a dropped write; retry."""
-        for i in range(max(1, attempts)):
-            if self.store.write(table, row):
-                return True
-            if i + 1 < attempts:
-                self._sleep(1.0)   # let a flaky write_service recover
-        # All attempts failed. Surface WHY -- these writes were failing silently,
-        # so the watermark never persisted while the publisher kept publishing.
-        # store.last_error (set by HttpMeshStore._post) is the actual reason.
-        sys.stderr.write(
-            f"[publisher] WARN: durable write to {table} "
-            f"(memory_type={row.get('memory_type')}) failed after {attempts} attempts: "
-            f"{getattr(self.store, 'last_error', '?')}\n")
-        sys.stderr.flush()
-        return False
-
-    def _load_watermark(self) -> Optional[str]:
-        if self._state_file:
-            _wm = self._state_load().get("watermark")
-            if _wm:
-                return _wm
-        return self.store.read_latest(WATERMARK_TYPE, PUBLISHER_AGENT_ID) or None
-
-    def _save_watermark(self, value: str) -> None:
-        self._state_update(watermark=value)
-        self._write_durable("mesh_memory", {
-            "agent_id": PUBLISHER_AGENT_ID,
-            "memory_type": WATERMARK_TYPE,
-            "content": value,
-            "importance": 0.3,
-        })
-
-    def _load_budget(self) -> tuple:
-        """(day, count) for the persisted daily budget; ('', 0) if none."""
-        if self._state_file:
-            _b = self._state_load().get("budget")
-            if isinstance(_b, dict):
+        @contextlib.contextmanager
+        def _cm():
+            self.outbox.parent.mkdir(parents=True, exist_ok=True)
+            with open(str(self.outbox) + ".lock", "a+") as fh:
+                fcntl.flock(fh, fcntl.LOCK_EX)
                 try:
-                    return str(_b.get("day", "")), int(_b.get("count", 0) or 0)
-                except (TypeError, ValueError):
-                    pass
-        raw = self.store.read_latest(BUDGET_TYPE, PUBLISHER_AGENT_ID)
-        if not raw:
-            return "", 0
+                    yield
+                finally:
+                    fcntl.flock(fh, fcntl.LOCK_UN)
+        return _cm()
+
+    def _load(self) -> dict:
         try:
-            d = json.loads(raw)
-            return str(d.get("day", "")), int(d.get("count", 0) or 0)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            return "", 0
+            d = json.loads(self.outbox.read_text(encoding="utf-8")) or {}
+        except Exception:
+            d = {}
+        d.setdefault("entries", {})
+        d.setdefault("published_files", {})
+        d.setdefault("budget", {"day": "", "count": 0})
+        return d
 
-    def _save_budget(self, day: str, count: int) -> None:
-        self._state_update(budget={"day": day, "count": count})
-        self._write_durable("mesh_memory", {
-            "agent_id": PUBLISHER_AGENT_ID,
-            "memory_type": BUDGET_TYPE,
-            "content": json.dumps({"day": day, "count": count}),
-            "importance": 0.3,
-        })
+    def _save(self, d: dict) -> None:
+        self.outbox.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.outbox.with_name(self.outbox.name + ".tmp")
+        tmp.write_text(json.dumps(d, indent=1, sort_keys=True), encoding="utf-8")
+        tmp.replace(self.outbox)
 
-    # --- planning -----------------------------------------------------------
-    @staticmethod
-    def _tier_of(raw) -> str:
-        """Goose provenance: which ladder tier/backend produced this artifact.
-        build_artifact rows don't carry it yet (populated once goose_runner
-        records the recipe alias / x_zo_task); read defensively."""
-        if isinstance(raw, str):
-            try:
-                raw = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                raw = {}
-        if not isinstance(raw, dict):
-            return "unknown"
-        return str(raw.get("tier") or raw.get("task_tier")
-                   or raw.get("backend") or raw.get("model") or "unknown")
+    def _now(self) -> str:
+        return self._clock().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def plan(self, art: BuildArtifact, content: str, tier: str = "unknown") -> PublishPlan:
-        branch = f"{DEFAULT_BRANCH_PREFIX}/{_slug(art.task or art.file)}-{_slug(art.built_at, 16)}"
-        title = f"build: {art.task or art.file}"
-        body = (
-            f"Autonomous build artifact published for E2E gating.\n\n"
-            f"- **file**: `{art.file}`\n"
-            f"- **task**: {art.task or '(none)'}\n"
-            f"- **phase**: {art.phase or '(none)'}\n"
-            f"- **interface**: {art.interface or '(none)'}\n"
-            f"- **built_at**: {art.built_at or '(none)'}\n"
-            f"- **bytes**: {art.bytes}\n"
-            f"- **ladder tier**: {tier}\n\n"
-            f"This PR runs the standard E2E gates (ruff / smoke-ladder / frontend). "
-            f"Opened by `{PUBLISHER_AGENT_ID}`.\n"
-        )
-        labels = [DEFAULT_LABEL]
-        if tier and tier != "unknown":
-            labels.append(f"ladder:{_slug(tier, 24)}")
-        return PublishPlan(branch=branch, title=title, body=body,
-                           file_path=art.file, content=content,
-                           dedup_key=art.dedup_key, labels=labels)
+    # --- the refusal rules (unchanged in substance; one copy) ---------------
+    def refusal(self, rel: str, content: str, built_at: str,
+                published_files: dict) -> Optional[tuple]:
+        seen = published_files.get(rel)
+        if seen and _within_days(seen, built_at, self.dup_file_window_days):
+            return ("duplicate_module",
+                    f"same file published {seen}; window {self.dup_file_window_days}d")
+        sat = saturated_family_scan(rel)
+        if sat:
+            return ("saturated_family", sat)
+        safety = static_safety_scan(content)
+        if safety:
+            return ("blocked", safety)
+        hollow = hollow_scaffold_scan(rel, content)
+        if hollow:
+            return ("hollow_blocked", hollow)
+        return None
 
-    # --- main pass ----------------------------------------------------------
-    def run_once(self, limit: int = 20) -> List[dict]:
-        enabled = self.is_enabled()
-        published = self._already_published()
-        published_files = dict(self._published_files())
-        watermark = self._load_watermark()
+    # --- eviction: the runtime tree never keeps code no gate will see -------
+    def evict(self, rel: str, why: str, bucket: str = "evicted") -> dict:
+        src = self.home / rel
+        stamp = self._now().replace(":", "")
+        dest = self._quarantine_dir / bucket / stamp / rel
+        out = {"evicted": False, "restored_to_head": False, "kept_at": None}
+        try:
+            if src.is_file():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(src.read_bytes())
+                (dest.parent / (dest.name + ".why")).write_text(why, encoding="utf-8")
+                out["kept_at"] = str(dest)
+            tracked = self._git("ls-files", "--error-unmatch", "--", rel).returncode == 0
+            if tracked:
+                r = self._git("checkout", "HEAD", "--", rel)
+                out["restored_to_head"] = out["evicted"] = (r.returncode == 0)
+            elif src.is_file():
+                src.unlink()
+                out["evicted"] = True
+            else:
+                out["evicted"] = True     # nothing on disk: already consistent
+        except Exception as e:  # never let bookkeeping crash the producer
+            out["error"] = repr(e)[:200]
+        return out
 
-        # Daily budget (UTC day). Reset the in-memory count when the day rolls,
-        # so the cap is per-calendar-day. Dormant dry-runs don't consume budget.
-        today = self._clock().strftime("%Y-%m-%d")
-        bud_day, bud_count = self._load_budget()
-        if bud_day != today:
-            bud_count = 0
-        remaining = max(0, self.daily_cap - bud_count)
+    # --- entry points -------------------------------------------------------
+    def commit(self, rel: str, *, task: str = "", phase: str = "", interface: str = "",
+               built_at: str = "", tier: str = "unknown", source: str = "producer") -> dict:
+        """Called by the PRODUCER when a build completes. Enqueue, then attempt now."""
+        built_at = built_at or self._now()
+        with self._lock():
+            d = self._load()
+            e = d["entries"].get(rel)
+            if e and e.get("status") == "pending" and e.get("source") == source:
+                e.update(task=task or e.get("task", ""), built_at=built_at, tier=tier)
+            else:
+                d["entries"][rel] = {"file": rel, "task": task, "phase": phase,
+                                     "interface": interface, "built_at": built_at,
+                                     "tier": tier, "source": source,
+                                     "status": "pending", "attempts": 0,
+                                     "enqueued_at": self._now()}
+            self._save(d)
+        return self._attempt(rel)
 
-        results: List[dict] = []
-        new_keys: List[str] = []
-        advance_wm = watermark
-        published_now = 0
-
-        for row_id, raw, created_at in self.store.read_build_artifacts_since(watermark, limit):
-            art = BuildArtifact.from_mesh_content(raw, row_id)
-            if art is None:
-                continue
-            if art.dedup_key in published:
-                advance_wm = _max_iso(advance_wm, created_at)   # already done; skip past it
-                continue
-            # Same-module guard: a DIFFERENT directive rebuilding the SAME file
-            # within the window is churn, not an update (byte-identical rebuilds
-            # already no-op at gitops; failed builds never enter published_files).
-            _seen = published_files.get(art.file)
-            if _seen and _within_days(_seen, created_at, self.dup_file_window_days):
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "duplicate_module",
-                                "detail": f"same file published {_seen}; "
-                                          f"window {self.dup_file_window_days}d"})
-                new_keys.append(art.dedup_key)   # never re-attempt this artifact
-                advance_wm = _max_iso(advance_wm, created_at)
-                continue
-            saturated = saturated_family_scan(art.file)
-            if saturated:
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "saturated_family", "detail": saturated})
-                new_keys.append(art.dedup_key)   # never re-attempt this artifact
-                advance_wm = _max_iso(advance_wm, created_at)
-                continue
-            content = self._resolver(art)
-            if not content:
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "skip", "detail": "content unresolved/empty"})
-                advance_wm = _max_iso(advance_wm, created_at)
-                continue
-            safety = static_safety_scan(content)
-            if safety:
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "blocked", "detail": safety})
-                advance_wm = _max_iso(advance_wm, created_at)
-                continue
-            hollow = hollow_scaffold_scan(art.file, content)
-            if hollow:
-                # Deterministic on these bytes: retrying the SAME artifact can
-                # never pass, so mark + advance past it (mirror the safety
-                # "blocked" path). A future FIXED rebuild is a NEW artifact
-                # (new built_at/dedup_key) and publishes normally.
-                #
-                # PARK the directive too. The build stamped <task>.done.json when
-                # it completed -- but done != merged, and we are refusing the PR,
-                # so that sentinel is now asserting a success that will never land.
-                # Left alone it makes is_goose_eligible skip the directive forever
-                # and silently swallow any same-name reseed (the *_v2 tax). Parking
-                # writes .failed (durable) and clears the false .done: loud, and
-                # NOT re-admitted -- a hollow build re-admitted just rebuilds hollow
-                # ("clearing first just re-ghosts them", 2026-06-13).
-                if art.task:
-                    park_directive(art.task, f"publisher refused a hollow build: {hollow}",
-                                   self._clock().isoformat(),
-                                   self._directives_dir, self._quarantine_dir)
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "hollow_blocked", "detail": hollow,
-                                "parked": bool(art.task)})
-                advance_wm = _max_iso(advance_wm, created_at)
-                continue
-            tier = self._tier_of(raw)
-            plan = self.plan(art, content, tier)
-            if not enabled:
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "dry_run", "branch": plan.branch, "tier": tier})
-                continue
-            if remaining <= 0:
-                # Daily cap hit. Do NOT advance the watermark past this artifact
-                # (or it'd be lost); stop so the next day resumes from here.
-                results.append({"dedup_key": art.dedup_key, "file": art.file,
-                                "action": "deferred_cap",
-                                "detail": f"daily cap {self.daily_cap} reached"})
+    def drain(self, limit: int = 50) -> List[dict]:
+        """Retry every pending entry (oldest first). Stops on a transient failure
+        or the daily cap -- the entry stays pending; nothing is skipped past."""
+        d = self._load()
+        pend = sorted((e for e in d["entries"].values() if e.get("status") == "pending"),
+                      key=lambda e: e.get("enqueued_at", ""))
+        results = []
+        for e in pend[:max(0, limit)]:
+            r = self._attempt(e["file"])
+            results.append(r)
+            if r["action"] in ("transient", "deferred_cap", "dormant", "no_clone"):
                 break
-            res = self.gitops.publish(plan)
-            noop = bool(getattr(res, "noop", False))
-            action = "noop" if (res.ok and noop) else ("published" if res.ok else "failed")
-            results.append({"dedup_key": art.dedup_key, "file": art.file,
-                            "action": action,
-                            "pr_url": res.pr_url, "detail": res.detail, "tier": tier})
-            if not res.ok:
-                if getattr(res, "permanent", False):
-                    # DETERMINISTIC failure (bad path, unwritable, malformed) --
-                    # retrying can't fix it. QUARANTINE: mark, advance past it, and
-                    # keep going, so one poison artifact can't head-of-line-block
-                    # every newer PR forever (the absolute-path stall, 2026-06-08).
-                    results[-1]["action"] = "quarantined"
-                    advance_wm = _max_iso(advance_wm, created_at)
-                    continue
-                # Transient (network / rate-limit even after GitOps backoff).
-                # Stop and do NOT advance past it, so we retry it next cycle.
-                break
-            # Dedup + advance past this artifact whether it opened a PR or was a
-            # no-op (content already on base). A no-op MUST advance too -- otherwise
-            # an artifact goose rebuilt byte-identically head-of-line blocks the
-            # queue forever (the bug that stalled every PR behind OPERATIONS.md).
-            new_keys.append(art.dedup_key)
-            advance_wm = _max_iso(advance_wm, created_at)
-            # Remember the target file (noop included: content is on base either
-            # way) so a different directive rebuilding it soon gets skipped.
-            published_files[art.file] = created_at or self._clock().isoformat()
-            if noop:
-                # Nothing was opened: don't consume a daily-cap slot or PR spacing.
-                continue
-            remaining -= 1
-            bud_count += 1
-            published_now += 1
-            if self.pr_spacing_sec and remaining > 0:
+            if r["action"] == "published" and self.pr_spacing_sec:
                 self._sleep(self.pr_spacing_sec)
-
-        if enabled:
-            if new_keys:
-                # Prune the file map so the state file stays bounded: anything
-                # older than 10x the guard window can never match again.
-                _now = self._clock().isoformat()
-                _keep = self.dup_file_window_days * 10 or 30
-                published_files = {f: ts for f, ts in published_files.items()
-                                   if _within_days(ts, _now, _keep)}
-                self._state_update(published=sorted(published | set(new_keys)),
-                                   published_files=published_files)
-                self._write_durable("mesh_memory", {
-                    "agent_id": PUBLISHER_AGENT_ID,
-                    "memory_type": PR_PUBLISHED_TYPE,
-                    "content": json.dumps(sorted(published | set(new_keys))),
-                    "importance": 0.3,
-                })
-                self.store.write("audit_log", {
-                    "event_type": "PR_PUBLISHED",
-                    "actor": PUBLISHER_AGENT_ID,
-                    "outcome": "ok",
-                    "details_json": json.dumps({"count": len(new_keys), "keys": new_keys}),
-                })
-            if published_now:
-                self._save_budget(today, bud_count)
-            # advance_wm only ever covers rows we published or definitively
-            # skipped -- never a cap-deferred/failed row (we break before
-            # updating it), so those re-surface on the next pass.
-            if advance_wm and advance_wm != watermark:
-                self._save_watermark(advance_wm)
         return results
+
+    def backfill(self, missing: List[str], limit: int = 20) -> List[dict]:
+        """Feed historical host-only files (staged_repo_reconcile census) through
+        the SAME path. Refused ones are held (status 'held'), not evicted: deleting
+        old host files that may be serving is the chairman's call -- pass them to
+        evict_held() once ruled."""
+        out = []
+        d = self._load()
+        for rel in missing:
+            if len(out) >= limit:
+                break
+            if rel in d["entries"]:
+                continue
+            out.append(self.commit(rel, task="", built_at=self._now(), source="backfill"))
+        return out
+
+    def evict_held(self) -> List[dict]:
+        out = []
+        with self._lock():
+            d = self._load()
+            for e in d["entries"].values():
+                if e.get("status") == "held":
+                    ev = self.evict(e["file"], e.get("detail", "held"))
+                    e.update(status="refused", eviction=ev, closed_at=self._now())
+                    out.append({"file": e["file"], **ev})
+            self._save(d)
+        return out
+
+    def status(self) -> dict:
+        d = self._load()
+        counts: dict = {}
+        for e in d["entries"].values():
+            counts[e.get("status")] = counts.get(e.get("status"), 0) + 1
+        return {"outbox": str(self.outbox), "enabled": self.is_enabled(),
+                "gitops": type(self.gitops).__name__ if self.gitops else None,
+                "counts": counts, "budget": d.get("budget")}
+
+    # --- one attempt on one entry, under the lock ---------------------------
+    def _attempt(self, rel: str) -> dict:
+        with self._lock():
+            d = self._load()
+            e = d["entries"].get(rel)
+            if not e or e.get("status") != "pending":
+                return {"file": rel, "action": (e or {}).get("status", "absent")}
+            res = self._attempt_locked(d, e)
+            self._save(d)
+            return res
+
+    def _close(self, e: dict, status: str, detail: str = "", **kw) -> None:
+        e.update(status=status, detail=detail, closed_at=self._now(), **kw)
+
+    def _attempt_locked(self, d: dict, e: dict) -> dict:
+        rel = e["file"]
+        e["attempts"] = int(e.get("attempts", 0)) + 1
+        e["last_attempt"] = self._now()
+        p = self.home / rel
+        try:
+            content = p.read_text(encoding="utf-8")
+        except Exception:
+            content = None
+        if not content:
+            self._close(e, "lost", "file not on disk at publish time -- nothing to "
+                        "version and nothing to evict (tree already consistent)")
+            return {"file": rel, "action": "lost"}
+        why = self.refusal(rel, content, e.get("built_at", ""), d["published_files"])
+        if why:
+            action, detail = why
+            if e.get("source") == "backfill":
+                self._close(e, "held", f"{action}: {detail}", refusal=action)
+                return {"file": rel, "action": "held", "refusal": action}
+            parked = False
+            if action == "hollow_blocked" and e.get("task"):
+                parked = park_directive(e["task"],
+                                        f"producer refused a hollow build: {detail}",
+                                        self._clock().isoformat(), self._directives_dir,
+                                        self._quarantine_dir)
+            ev = self.evict(rel, f"{action}: {detail}")
+            self._close(e, "refused", f"{action}: {detail}", refusal=action,
+                        eviction=ev, parked=bool(parked))
+            return {"file": rel, "action": action, "evicted": ev["evicted"],
+                    "parked": bool(parked)}
+        if not self.is_enabled():
+            return {"file": rel, "action": "dormant"}
+        if self.gitops is None:
+            e["last_error"] = "no clone dir -- pending until CliGitOps has a clone"
+            return {"file": rel, "action": "no_clone"}
+        today = self._clock().strftime("%Y-%m-%d")
+        bud = d["budget"] if d["budget"].get("day") == today else {"day": today, "count": 0}
+        if bud["count"] >= self.daily_cap:
+            return {"file": rel, "action": "deferred_cap"}
+        plan = plan_for(rel, content, task=e.get("task", ""), phase=e.get("phase", ""),
+                        interface=e.get("interface", ""), built_at=e.get("built_at", ""),
+                        tier=e.get("tier", "unknown"))
+        res = self.gitops.publish(plan)
+        if res.ok:
+            noop = bool(getattr(res, "noop", False))
+            d["published_files"][rel] = e.get("built_at") or self._now()
+            if not noop:
+                bud["count"] += 1
+                d["budget"] = bud
+            # The runtime copy steps aside too. It arrives back through the merged
+            # ref (deploy ff), so the tree only ever runs bytes a gate has seen --
+            # and an untracked copy left here makes that ff ABORT ("untracked
+            # working tree files would be overwritten"), the R01 failure that
+            # stalled the _tools ff for 9 ticks. Measured by this module's own
+            # two-pole test before this line existed.
+            ev = self.evict(rel, f"in flight: {res.pr_url or 'noop'}", bucket="in_flight")
+            self._close(e, "noop" if noop else "published", res.detail or "",
+                        pr_url=res.pr_url, eviction=ev)
+            return {"file": rel, "action": "noop" if noop else "published",
+                    "pr_url": res.pr_url}
+        if getattr(res, "permanent", False):
+            ev = self.evict(rel, f"permanent publish failure: {res.detail}")
+            self._close(e, "quarantined", res.detail or "", eviction=ev)
+            return {"file": rel, "action": "quarantined", "evicted": ev["evicted"]}
+        e["last_error"] = (res.detail or "")[:300]
+        return {"file": rel, "action": "transient", "detail": res.detail}

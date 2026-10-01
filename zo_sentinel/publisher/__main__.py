@@ -1,36 +1,36 @@
 """
-CLI for the PR publisher.
+CLI for the producer's publish path (RCA 2026-10 Fix 3; the watermark path is retired).
 
-    python -m zo_sentinel.publisher status     # enabled? how many unpublished?
-    python -m zo_sentinel.publisher run-once   # one pass (dry-run unless enabled)
+    python -m zo_sentinel.publisher status        # outbox counts, enabled?, clone?
+    python -m zo_sentinel.publisher run-once      # drain pending builds (+ backfill if enabled)
+    python -m zo_sentinel.publisher census        # host tree vs origin/main (rc 1 = gap)
+    python -m zo_sentinel.publisher evict-held    # chairman-ruled: evict refused backlog files
 
-Live runs use HttpMeshStore (write_service) + CliGitOps against a host clone set
-via PR_PUBLISHER_CLONE_DIR (defaulting to /home/workspace/zo_sentinel_pub_clone).
-Dormant unless `.pr_publisher_enabled` exists.
+`run-once` keeps its name so tools/run_publisher_daemon.sh needs no edit: the
+daemon loop now drains the producer's durable outbox instead of reading build
+rows behind a watermark. With no real clone it REFUSES (rc 2) and leaves every
+entry pending -- the FakeGitOps fallback that once marked real builds published
+is gone.
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
+from pathlib import Path
 
-from zo_sentinel.ingestor.store import HttpMeshStore
-from zo_sentinel.publisher.gitops import CliGitOps, FakeGitOps
-from zo_sentinel.publisher.publisher import Publisher
+from zo_sentinel.publisher.gitops import CliGitOps
+from zo_sentinel.publisher.publisher import (
+    BACKFILL_SENTINEL,
+    DEFAULT_HOME,
+    ProducerCommit,
+)
 
-# Standard host clone for REAL (CliGitOps) publishing. Used when
-# PR_PUBLISHER_CLONE_DIR is unset so a bare relaunch (the janitor/launcher runs
-# `python3 -m zo_sentinel.publisher run-once` with no env) still publishes REAL
-# PRs instead of silently degrading to FakeGitOps -- the fake-mode regression
-# that opened pull/FAKE URLs, advanced the publish watermark, and SILENTLY LOST
-# build_artifacts (real PRs stalled at #172 on 2026-06-15 until the publisher was
-# relaunched with the env). A hardcoded default cannot "drop" on relaunch.
 DEFAULT_CLONE_DIR = "/home/workspace/zo_sentinel_pub_clone"
 
 
-def _resolve_clone_dir() -> str | None:
-    """Clone dir for CliGitOps: explicit env wins; else the standard host clone
-    if it exists; else None (caller falls back to FakeGitOps, loudly)."""
+def resolve_clone_dir() -> str | None:
+    """Explicit env wins; else the standard host clone if it exists; else None."""
     clone = os.environ.get("PR_PUBLISHER_CLONE_DIR")
     if clone:
         return clone
@@ -39,54 +39,73 @@ def _resolve_clone_dir() -> str | None:
     return None
 
 
-def _make_publisher() -> Publisher:
-    store = HttpMeshStore()
-    clone = _resolve_clone_dir()
-    if clone:
-        gitops = CliGitOps(clone)
-    else:
-        # No clone dir anywhere -> FakeGitOps would open fake PRs AND advance the
-        # watermark (silent artifact loss). Keep the fallback so the process does
-        # not crash-loop, but make the degraded state LOUD instead of silent.
-        sys.stderr.write(
-            "[publisher] WARN: no clone dir -- PR_PUBLISHER_CLONE_DIR unset and "
-            f"default {DEFAULT_CLONE_DIR} missing. Using FakeGitOps (DRY-RUN, NO "
-            "real PRs). Set PR_PUBLISHER_CLONE_DIR or create the clone.\n")
-        sys.stderr.flush()
-        gitops = FakeGitOps()
-    cap = int(os.environ.get("PR_PUBLISHER_DAILY_CAP", "100"))
-    spacing = float(os.environ.get("PR_PUBLISHER_PR_SPACING_SEC", "5"))
-    state_file = os.environ.get("PR_PUBLISHER_STATE_FILE",
-                                "/home/workspace/.pr_publisher_state.json")
-    return Publisher(store, gitops=gitops, daily_cap=cap, pr_spacing_sec=spacing,
-                     state_file=state_file)
+def make_producer(home: str = DEFAULT_HOME) -> ProducerCommit:
+    clone = resolve_clone_dir()
+    return ProducerCommit(
+        gitops=CliGitOps(clone) if clone else None,
+        home=home,
+        daily_cap=int(os.environ.get("PR_PUBLISHER_DAILY_CAP", "100")),
+        pr_spacing_sec=float(os.environ.get("PR_PUBLISHER_PR_SPACING_SEC", "5")),
+    )
+
+
+def _census(home: str) -> dict | None:
+    sys.path.insert(0, str(Path(home) / "tools"))
+    import staged_repo_reconcile as srr
+    from staged_repo_reconcile import DEFAULT_EXTS, DEFAULT_ROOTS
+    return srr.measure(home, "origin/main", list(DEFAULT_ROOTS), list(DEFAULT_EXTS))
+
+
+def _backfill_enabled(home: str) -> bool:
+    env = os.environ.get("PR_BACKFILL_ENABLED")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    return (Path(home) / BACKFILL_SENTINEL).exists()
 
 
 def main(argv=None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     cmd = argv[0] if argv else "status"
-    pub = _make_publisher()
+    home = os.environ.get("ZO_SENTINEL_HOME", DEFAULT_HOME)
+    pc = make_producer(home)
 
     if cmd == "status":
-        results = pub.run_once()  # dry-run when dormant; reports plans
-        enabled = pub.is_enabled()
-        bud_day, bud_count = pub._load_budget()
-        print(f"enabled:           {enabled}")
-        print(f"gitops:            {type(pub.gitops).__name__}")
-        print(f"watermark:         {pub._load_watermark() or '(unset -- seed before enabling)'}")
-        print(f"daily_cap:         {pub.daily_cap}  (used today {bud_day}: {bud_count})")
-        print(f"pr_spacing_sec:    {pub.pr_spacing_sec}")
-        print(f"unpublished/plans: {len(results)}")
-        for r in results[:10]:
-            print(f"  [{r['action']}] {r.get('file')}  tier={r.get('tier','-')}")
+        print(json.dumps(pc.status(), indent=2))
         return 0
+
+    if cmd == "census":
+        res = _census(home)
+        if res is None:
+            print("UNKNOWN: origin/main did not resolve -- never a pass")
+            return 2
+        if "--list" not in argv:
+            res.pop("missing", None)
+        print(json.dumps(res, indent=2))
+        return 1 if res["missing_from_ref"] else 0
 
     if cmd == "run-once":
-        results = pub.run_once()
-        print(json.dumps(results, indent=2))
+        if pc.gitops is None:
+            print("REFUSED: no publish clone (PR_PUBLISHER_CLONE_DIR unset and "
+                  f"{DEFAULT_CLONE_DIR} missing). Every entry stays PENDING -- nothing "
+                  "is marked published that was not.", file=sys.stderr)
+            print(json.dumps(pc.status(), indent=2))
+            return 2
+        out = {"drained": pc.drain()}
+        if _backfill_enabled(home):
+            res = _census(home)
+            if res is not None:
+                out["backfill"] = pc.backfill(res["missing"],
+                                              limit=int(os.environ.get("PR_BACKFILL_LIMIT", "20")))
+        out["status"] = pc.status()
+        print(json.dumps(out, indent=2))
         return 0
 
-    print(f"unknown command: {cmd!r} (use: status | run-once)", file=sys.stderr)
+    if cmd == "evict-held":
+        print(json.dumps(pc.evict_held(), indent=2))
+        return 0
+
+    print(f"unknown command: {cmd!r} (use: status | run-once | census | evict-held)",
+          file=sys.stderr)
     return 2
 
 

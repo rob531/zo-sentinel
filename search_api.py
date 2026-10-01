@@ -15,6 +15,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from zo_sentinel import bus, signal_reads
+
 SERVICE_NAME = "search_api"
 WRITE_SERVICE_URL = "http://127.0.0.1:8772"
 EXECUTE_URL = "http://127.0.0.1:8772"
@@ -34,17 +36,26 @@ app.add_middleware(
 
 
 def ws_query(sql: str, params: Optional[list] = None) -> list:
-    """Execute SQL query against DuckDB via write_service."""
+    """Read the bus, COMPLETE -- never a silently capped page (#4003).
+
+    The bus caps a result set at 200 rows and, since #3997 went live 2026-09-28,
+    declares it. This helper used to return one request's ``rows``, so every
+    statement in this module was capped at 200 with nothing able to notice.
+    Delegating to the one paging door cures each call site at once.
+
+    The except clause is kept as it was -- including that it answers an
+    unreadable bus with ``[]``, which is R6's unknown-is-not-zero and is NOT
+    fixed here -- so that this change is only about truncation. It now logs the
+    exception TYPE, because a BusPaginationError and a dead socket were
+    previously indistinguishable in this log line.
+    """
     try:
-        payload = {"sql": sql}
-        if params:
-            payload["params"] = params
-        resp = requests.post(f"{EXECUTE_URL}/query", json=payload, timeout=30)
-        resp.raise_for_status()
-        result = resp.json()
-        return result.get("rows", [])
-    except requests.RequestException as e:
-        log.error(f"ws_query error: {e}")
+        return bus.query_complete(
+            sql, params=params, url=f"{EXECUTE_URL}/query", timeout=30,
+            what="search rows",
+        )
+    except (requests.RequestException, bus.BusError) as e:
+        log.error(f"ws_query {type(e).__name__}: {e}")
         return []
 
 
@@ -187,18 +198,16 @@ def mcp_detail(server_id: str):
     
     registry = registry_rows[0]
     
-    signals = ws_query(
-        """
-        SELECT 
-            signal_name,
-            score,
-            evidence,
-            scored_at
-        FROM mcp_signal_scores
-        WHERE server_id = ?
-        ORDER BY score DESC
-        """,
-        [server_id],
+    # The CURRENT score of every signal -- one row per signal_name (#4003). The
+    # statement this replaced read the whole rescore HISTORY: measured LIVE
+    # 2026-10-01 that is 12,834 rows for '@goke/mcp', of which the bus returned
+    # 200 and all 200 were the single signal 'composite'. Ordering by score DESC
+    # made it worse than the other two call sites, not better: it served the 200
+    # highest historical scores a server had ever been given.
+    signals = signal_reads.latest_signal_scores(
+        server_id,
+        columns=("signal_name", "score", "evidence", "scored_at"),
+        url=f"{EXECUTE_URL}/query",
     )
     
     threats = ws_query(

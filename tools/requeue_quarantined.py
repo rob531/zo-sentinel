@@ -51,6 +51,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,6 +76,16 @@ MAX_IN_FLIGHT = 6
 _NOT_A_REFERENCE = ("quarantine/", ".patch_backups/", "__pycache__/")
 
 ID_PREFIX = "reemit_"
+
+# A retry attempt gets its own stable id so the collision-refusal in emit()
+# still holds per attempt rather than being defeated by the retry.
+RETRY_SUFFIX = "__r"
+
+# Bound on re-emission attempts per candidate. Without a bound, "a failed
+# emission is re-eligible" is an infinite builder loop; with it, a candidate
+# the builder cannot build becomes a NAMED terminal state instead of a silent
+# skip or an endless retry.
+MAX_EMISSION_ATTEMPTS = 2
 
 
 # ---------------------------------------------------------------- manifest ---
@@ -197,24 +208,83 @@ def reference_counts(repo: Path, candidates) -> dict:
 
 # ------------------------------------------------------------ live checks ---
 
+def landed_state(repo: Path, candidate: str) -> str:
+    """'landed' | 'untracked' | 'absent' -- resolved from GIT, not the filesystem.
+
+    THE BUG THIS REPLACES (#4079, measured on the live box 2026-10-01 by
+    cycle-0166). The old test was `(repo / candidate).is_file()`. All 29
+    re-emitted modules satisfied it and all 29 were UNTRACKED on branch main --
+    generated, never added, never committed, never pushed. So the tool reported
+    "already back on main" and eligible_now: 0 for work that existed on one box
+    and in no repository, and the issue was told "zero re-emitted" for 21 days.
+
+    Presence on a disk is not presence in a repo. R1: resolve the artifact that
+    MATTERS, and for a re-emission that is a tracked file, not an inode.
+    """
+    p = Path(repo) / candidate
+    if not p.is_file():
+        return "absent"
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "--error-unmatch", "--",
+             candidate],
+            capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        # UNKNOWN is not 'landed' and not 'untracked' -- but refusing to answer
+        # would stall the run, and the safe reading of "I could not check" is
+        # the one that does NOT claim success. (R6: unknown != zero, and it
+        # certainly != done.)
+        return "untracked"
+    return "landed" if r.returncode == 0 else "untracked"
+
+
 def already_back(repo: Path, candidate: str) -> bool:
-    """The file exists again at its original path -- re-emission landed."""
-    return (repo / candidate).is_file()
+    """Re-emission LANDED: the file is back at its original path AND tracked."""
+    return landed_state(repo, candidate) == "landed"
 
 
-def existing_directive_paths(directives_dir: Path, did: str):
-    """Every path in the directives tree that already carries this id."""
+def attempt_paths(directives_dir: Path, did: str):
+    """Every directive path for this candidate -- base attempt AND retries."""
     d = Path(directives_dir)
     if not d.is_dir():
         return []
-    found = []
+    out = []
     for p in d.rglob("*.json"):
-        name = p.name
-        if name == "%s.json" % did or name == "%s.done.json" % did:
-            found.append(p)
-        elif name.endswith("_%s.json" % did):
-            found.append(p)
-    return found
+        n = p.name
+        stem = (n[:-len(".done.json")] if n.endswith(".done.json")
+                else n[:-len(".json")])
+        if stem == did or stem.startswith(did + RETRY_SUFFIX):
+            out.append(p)
+        elif stem.endswith("_%s" % did):
+            out.append(p)
+    return out
+
+
+def directive_state(directives_dir: Path, did: str):
+    """('none'|'pending'|'done', attempts, paths).
+
+    'done' means every attempt reached .done -- the builder is finished with
+    this candidate and will produce nothing further on its own. Combined with
+    already_back() being False, that is a FAILED emission, which is NOT the
+    same thing as a handled one.
+    """
+    paths = attempt_paths(directives_dir, did)
+    if not paths:
+        return "none", 0, []
+    d = Path(directives_dir)
+    pending = []
+    for p in paths:
+        if p.name.endswith(".done.json"):
+            continue
+        stem = p.name[:-len(".json")]
+        if (d / ("%s.done.json" % stem)).exists():
+            continue
+        if "done" in p.relative_to(d).parts:
+            continue
+        pending.append(p)
+    if pending:
+        return "pending", len(paths), paths
+    return "done", len([p for p in paths if p.name.endswith(".done.json")]), paths
 
 
 def in_flight(directives_dir: Path):
@@ -238,14 +308,15 @@ def in_flight(directives_dir: Path):
 # ------------------------------------------------------------- selection ----
 
 def plan(repo: Path, manifest: dict, directives_dir: Path,
-         limit: int = 3, policy: str = "referenced") -> dict:
+         limit: int = 3, policy: str = "referenced",
+         retry_failed: bool = False) -> dict:
     """Decide the batch. Pure: reads the world, writes nothing."""
     cands = list(manifest["re_emission"]["candidates"])
     by_file = {f.get("from"): f for f in (manifest.get("files") or [])
                if isinstance(f, dict)}
     refs = reference_counts(repo, cands)
 
-    rows, skipped = [], []
+    rows, skipped, failed, not_landed = [], [], [], []
     for c in cands:
         meta = by_file.get(c, {})
         ev = refs[c]
@@ -259,15 +330,62 @@ def plan(repo: Path, manifest: dict, directives_dir: Path,
             "phantom_tables": meta.get("phantom_tables", []),
             "first_added_to_main": meta.get("first_added_to_main"),
         }
-        if already_back(repo, c):
+        where = landed_state(repo, c)
+        row["landed_state"] = where
+        if where == "landed":
             row["skip"] = "already back on main"
             skipped.append(row)
             continue
-        held = existing_directive_paths(directives_dir, row["directive_id"])
-        if held:
-            row["skip"] = "directive exists: %s" % held[0].name
+        if where == "untracked":
+            # Regenerated and then stranded. This is REPORT-ONLY and must stay
+            # that way: making these eligible would have the topup seam re-emit
+            # them, and emitting is `builder_directive_emit`, which
+            # authority.py reports as UNKNOWN ACTION rc=2. The remedy is a
+            # commit and a PR -- `repo_prs`, which IS delegated -- taken by
+            # someone who has reviewed the generated code, not by this tool.
+            row["skip"] = ("regenerated but NOT LANDED -- file present, "
+                           "UNTRACKED in git (exists on this box, in no repo)")
+            not_landed.append(row)
             skipped.append(row)
             continue
+        # THE BUG THIS REPLACES (#4079, measured 2026-10-01 by cycle-0166).
+        # The old test was "a directive carrying this id exists" -> skip. It did
+        # not ask whether that directive had PRODUCED anything. 29 reemit_*
+        # directives were emitted from 2026-09-10, every one reached .done, and
+        # ZERO output files landed on main. Each .done marker then suppressed
+        # its own candidate permanently, so the tool reported eligible_now: 0 --
+        # a zero that proved only that the check never looked at the output.
+        # Doctrine R3: a bucket that went to ZERO must prove the check RAN.
+        state, attempts, held = directive_state(directives_dir,
+                                                row["directive_id"])
+        row["attempts"] = attempts
+        if state == "pending":
+            row["skip"] = "directive in flight: %s" % held[0].name
+            skipped.append(row)
+            continue
+        if state == "done":
+            # already_back() was False above, so the builder finished and
+            # produced no file. That is a FAILURE, and it gets a name.
+            row["failed_attempts"] = attempts
+            if attempts >= MAX_EMISSION_ATTEMPTS:
+                row["skip"] = ("emission FAILED %d/%d attempts -- builder "
+                               "consumed the directive and produced no file"
+                               % (attempts, MAX_EMISSION_ATTEMPTS))
+                failed.append(row)
+                skipped.append(row)
+                continue
+            if not retry_failed:
+                # Re-arming emission is the action authority.py reports as
+                # UNKNOWN (builder_directive_emit), so the default stays
+                # REPORT-ONLY: the failure is visible, nothing is re-fired.
+                row["skip"] = ("emission FAILED %d attempt(s) -- retry NOT "
+                               "armed (pass --retry-failed)" % attempts)
+                failed.append(row)
+                skipped.append(row)
+                continue
+            row["retry_of_attempts"] = attempts
+            row["directive_id"] = "%s%s%d" % (row["directive_id"],
+                                              RETRY_SUFFIX, attempts + 1)
         if policy == "referenced" and ev["kind"] == "unmeasurable":
             # UNKNOWN, not zero -- reported as its own bucket so it can never
             # be read as "we checked and nothing uses it".
@@ -292,6 +410,8 @@ def plan(repo: Path, manifest: dict, directives_dir: Path,
     return {
         "eligible": rows,
         "skipped": skipped,
+        "failed": failed,
+        "not_landed": not_landed,
         "batch": batch,
         "in_flight": [p.name for p in flying],
         "caps": {"limit": cap, "max_per_run": MAX_PER_RUN,
@@ -406,6 +526,12 @@ def main(argv=None) -> int:
                     help="actually write directives (default is a dry run)")
     ap.add_argument("--no-bus", action="store_true",
                     help="write the directive file only, skip the mesh_memory row")
+    ap.add_argument("--retry-failed", action="store_true",
+                    help="re-emit candidates whose previous directive reached "
+                         ".done without producing its output_file (bounded to "
+                         "%d attempts). OFF by default: re-arming emission is "
+                         "builder_directive_emit, which authority.py reports "
+                         "as UNKNOWN." % MAX_EMISSION_ATTEMPTS)
     ap.add_argument("--status", action="store_true",
                     help="counts only; never selects or emits")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
@@ -419,18 +545,23 @@ def main(argv=None) -> int:
 
     repo = Path(args.repo)
     ddir = Path(args.directives_dir)
-    p = plan(repo, manifest, ddir, limit=args.limit, policy=args.policy)
+    p = plan(repo, manifest, ddir, limit=args.limit, policy=args.policy,
+             retry_failed=args.retry_failed)
 
     total = len(manifest["re_emission"]["candidates"])
     done = [r for r in p["skipped"] if r["skip"] == "already back on main"]
-    held = [r for r in p["skipped"] if r["skip"].startswith("directive exists")]
+    held = [r for r in p["skipped"] if r["skip"].startswith("directive in flight")]
     dead = [r for r in p["skipped"] if r["skip"].startswith("no live referrer")]
     unk = [r for r in p["skipped"] if r["skip"].startswith("references unmeasurable")]
 
     summary = {
         "candidates": total,
         "back_on_main": len(done),
-        "directive_already_queued": len(held),
+        "directive_in_flight": len(held),
+        "emission_failed": len(p["failed"]),
+        "regenerated_not_landed": len(p["not_landed"]),
+        "regenerated_not_landed_files": [r["candidate"] for r in p["not_landed"]],
+        "emission_failed_files": [r["candidate"] for r in p["failed"]],
         "no_live_referrer": len(dead),
         "references_unmeasurable": len(unk),
         "eligible_now": len(p["eligible"]),
@@ -457,7 +588,11 @@ def main(argv=None) -> int:
     print("quarantine re-emission (#4079) -- manifest %s" % args.manifest)
     print("  candidates                %d" % total)
     print("  already back on main      %d" % len(done))
-    print("  directive already queued  %d" % len(held))
+    print("  directive in flight       %d" % len(held))
+    print("  emission FAILED           %d   (.done directive, NO output file "
+          "-- not the same as handled)" % len(p["failed"]))
+    print("  regenerated NOT LANDED    %d   (file on disk, UNTRACKED in git "
+          "-- in no repository)" % len(p["not_landed"]))
     print("  no live referrer (skipped)%d   [policy=%s]" % (len(dead), args.policy))
     print("  refs UNMEASURABLE         %d   (generic module name -- UNKNOWN, not zero)"
           % len(unk))
@@ -473,6 +608,18 @@ def main(argv=None) -> int:
                  r["ref_count"], r["refs"][:2]))
     for path in summary["emitted"]:
         print("  wrote %s" % path)
+    for r in p["failed"][:10]:
+        print("    FAILED   %-52s attempts=%d" % (r["candidate"],
+                                                  r.get("failed_attempts", 0)))
+    for r in p["not_landed"][:40]:
+        print("    NOT LANDED %-50s (untracked)" % r["candidate"])
+    if p["not_landed"]:
+        print("  %d module(s) were regenerated and never committed. Landing "
+              "them is a commit + PR (repo_prs, delegated); re-emitting them "
+              "is NOT needed and is not offered here." % len(p["not_landed"]))
+    if p["failed"] and not args.retry_failed:
+        print("  %d candidate(s) are held by a FAILED emission, not by having "
+              "been handled." % len(p["failed"]))
     if not args.emit:
         print("  (dry run -- pass --emit to write these)")
     return 0

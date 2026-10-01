@@ -9,7 +9,6 @@ repo tree) and it does NOT re-admit the directive to the builder.
 """
 import json
 
-import pytest
 
 from zo_sentinel.build_completion import failed_quarantined, park_directive
 
@@ -51,43 +50,9 @@ def test_park_never_raises_on_an_unwritable_dir(tmp_path):
     assert park_directive("build_x", "why", WHEN, tmp_path / "nope" / "deep") in (True, False)
 
 
-def test_publisher_parks_the_directive_when_it_refuses_a_hollow_build(tmp_path):
-    from tests.test_pr_publisher import InMemoryMeshStore, _artifact
-    from zo_sentinel.publisher.publisher import Publisher
-
-    home, durable = tmp_path / "home", tmp_path / "quarantine"
-    (home / "directives").mkdir(parents=True)
-    (home / "directives" / "build_x.done.json").write_text("{}", encoding="utf-8")
-
-    pub = Publisher(InMemoryMeshStore(artifacts=[_artifact("hollow_api.py")]),
-                    home=str(home), quarantine_dir=str(durable))
-    pub._resolver = lambda art: "from fastapi import FastAPI\napp = FastAPI()\n"
-    res = pub.run_once()
-
-    assert res[0]["action"] == "hollow_blocked"
-    assert res[0]["parked"] is True
-    assert failed_quarantined("build_x", home / "directives", durable)
-    assert not (home / "directives" / "build_x.done.json").exists()
-
-
-def test_publisher_does_not_park_a_hollow_build_it_cannot_attribute(tmp_path):
-    """No task on the artifact -> we do not know WHICH directive to park, and
-    parking the wrong one would silence a healthy directive. Refuse the PR, park
-    nothing."""
-    from tests.test_pr_publisher import InMemoryMeshStore, _artifact
-    from zo_sentinel.publisher.publisher import Publisher
-
-    home, durable = tmp_path / "home", tmp_path / "quarantine"
-    (home / "directives").mkdir(parents=True)
-
-    pub = Publisher(InMemoryMeshStore(artifacts=[_artifact("hollow_api.py", task="")]),
-                    home=str(home), quarantine_dir=str(durable))
-    pub._resolver = lambda art: "from fastapi import FastAPI\napp = FastAPI()\n"
-    res = pub.run_once()
-
-    assert res[0]["action"] == "hollow_blocked"
-    assert res[0]["parked"] is False
-    assert not list(durable.iterdir()) if durable.exists() else True
+# The two publisher-refusal cases (park with a task, park nothing without one)
+# moved with the refusal itself to the producer: tests/test_producer_commit.py
+# test_hollow_build_parks_its_directive / test_hollow_build_without_a_task_parks_nothing.
 
 
 def test_parked_directive_is_not_re_admitted_to_the_builder(tmp_path):

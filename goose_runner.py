@@ -1479,6 +1479,46 @@ def _emit_build_artifact_for(directive):
             f"{directive.get('directive_id') or directive.get('id')}: {e}")
 
 
+def _commit_build_for(directive):
+    """The PRODUCER versions what it writes (RCA cross-cycle-2026-10, Fix 3).
+
+    Until this, this file held no git code at all: a confirmed build landed in
+    the runtime tree and a SEPARATE publisher, reading build_artifact rows
+    behind a watermark, decided later whether it ever reached a PR. Six skip
+    outcomes advanced the watermark with the file still on disk -- 462 of 504
+    host services/active files (92%) were in no commit on 2026-09-27 (FU-555).
+
+    Now the build is handed straight to ProducerCommit: a durable local outbox
+    entry, the same pre-PR refusal rules, and a gated PR through the publish
+    clone (never this tree). A refused or permanently-failed build is EVICTED
+    from the runtime tree; a transient failure stays pending for the drain.
+    Bookkeeping never fails the build: an exception here is logged and the
+    entry (if written) stays pending.
+
+    Edit-class directives (declared_output None) carry multi-file diffs and are
+    not handled here -- the same scope the build_artifact row has always had."""
+    out = declared_output(directive)
+    if out is None or not out.is_file():
+        return None
+    try:
+        if not str(out).startswith(str(PROJECT_DIR) + os.sep):
+            log(f"[producer-commit] {out} is outside {PROJECT_DIR}; not versionable here")
+            return None
+        from zo_sentinel.publisher.__main__ import make_producer
+        res = make_producer(str(PROJECT_DIR)).commit(
+            str(out.relative_to(PROJECT_DIR)),
+            task=resolve_directive_id(directive),
+            phase=str(directive.get("phase", "")),
+            interface=str(directive.get("interface") or directive.get("context_type") or ""),
+            built_at=get_utc_now(),
+            tier=tier_for_complexity(directive.get("complexity")))
+        log(f"[producer-commit] {out.name}: {res}")
+        return res
+    except Exception as e:
+        log(f"[producer-commit] FAILED for {out}: {e!r} -- outbox entry (if any) stays pending")
+        return None
+
+
 def _record_build_provenance(directive, success, smoke_result, attempt,
                              rescue_count, routed_model="", error=""):
     """Write one build_provenance row per ATTEMPT -- the failure-matrix substrate
@@ -1914,7 +1954,7 @@ def _complete(directive, directive_id, result_text, fallback_used=False,
     """A directive's declared output IS on disk AND passed the Tier-0 gate ->
     record + mark done for real."""
     write_result(directive_id, True, result_text, fallback_used=fallback_used)
-    _emit_build_artifact_for(directive)   # restore publisher feed (#73 dropped this)
+    _emit_build_artifact_for(directive)   # the build record (ingestor/governor read it)
     mark_directive_completed(directive)
     # Closed-loop: a green build on this target auto-resolves any open lesson.
     try:
@@ -1945,6 +1985,10 @@ def _complete(directive, directive_id, result_text, fallback_used=False,
             sl.commit_checkpoint(f"chore(state): {directive_id} complete")
     except Exception as e:
         log(f"[loopback] checkpoint failed for {directive_id}: {e}")
+    # RCA 2026-10 Fix 3: write + version, one owner. LAST, because publishing moves
+    # the runtime copy aside (it re-enters through the merged ref) and everything
+    # above still reads the file in place.
+    _commit_build_for(directive)
 
 def _mark_directive_failed(directive, directive_id, reason):
     """Give up after repeated ghost builds: write a .failed sentinel (so the

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
+from sqlalchemy.pool import StaticPool
 
 router = APIRouter(prefix="/api", tags=["verdict_detail_view"])
 

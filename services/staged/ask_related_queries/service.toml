@@ -1,0 +1,11 @@
+[service]
+name = "ask_related_queries"
+import_path = "services.active.ask_related_queries.router"
+prefix = "/api"
+tag = "ask_related_queries"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -165,7 +165,7 @@ def self_test() -> int:
     with tempfile.TemporaryDirectory() as d:
         f = Path(d) / "go.sh"
         f.write_text(reverted, encoding="utf-8")
-        os.chmod(f, 0o750)
+        os.chmod(f, 0o700)   # differs from mkstemp's 0o600, so preservation is observable
         rc_red = run(f, check_only=True, log=quiet)
         miss_red = missing(reverted)
         checks.append(("RED: a reset-reverted go.sh fails --check (rc 1), naming what is gone",
@@ -180,7 +180,7 @@ def self_test() -> int:
                        and not re.search(r"curl -s\b", patched)
                        and harden_go_sh.SEEN_GATE in patched and supervise_go_sh.BEGIN in patched))
         checks.append(("atomic: new inode, mode kept, a running reader still sees the OLD script",
-                       f.stat().st_ino != ino and (f.stat().st_mode & 0o777) == 0o750
+                       f.stat().st_ino != ino and (f.stat().st_mode & 0o777) == 0o700
                        and held.read() == reverted))
         held.close()
         baks = sorted(Path(d).glob("go.sh.bak.2*"))

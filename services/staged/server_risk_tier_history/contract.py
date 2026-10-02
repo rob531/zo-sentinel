@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, create_engine
 
 router = APIRouter(prefix="/api")
 

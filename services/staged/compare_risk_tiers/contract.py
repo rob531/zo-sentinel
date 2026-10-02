@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional
@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi.limiting import RateLimitExceeded, RateLimiter
 from fastapi.limiting.utils import get_client_ip
 import logging
+from sqlalchemy.pool import StaticPool
 
 logger = logging.getLogger(__name__)
 

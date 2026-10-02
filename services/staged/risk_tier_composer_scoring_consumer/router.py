@@ -8,6 +8,7 @@ import logging
 
 from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
+from sqlalchemy import or_
 
 logger = logging.getLogger(__name__)
 

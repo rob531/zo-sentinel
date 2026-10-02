@@ -5,6 +5,7 @@ from typing import Optional, List
 from app.db import get_session
 from app.models import CadenceJobRun
 import sqlglot
+from sqlalchemy.pool import StaticPool
 
 
 app = FastAPI()

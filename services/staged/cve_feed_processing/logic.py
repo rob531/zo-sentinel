@@ -9,6 +9,7 @@ import requests
 from pydantic import BaseModel
 from fastapi.testclient import TestClient
 from unittest.mock import patch
+from sqlalchemy import func
 
 class CVEFeedSummary(BaseModel):
     total: int

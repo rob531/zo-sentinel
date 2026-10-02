@@ -6,6 +6,7 @@ from app.db import get_session
 from app.models import VulnAdvisory
 
 from .logic import import_ghsa_feed
+from sqlalchemy import create_engine
 
 router = APIRouter(prefix="/api")
 

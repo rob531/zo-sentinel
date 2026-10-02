@@ -70,14 +70,30 @@ SEEN_GATE = "3b. WriteService readiness gate"
 # and re-runs are no-ops. (Previously these were str.replace(old, new, 1) guarded
 # by `if seen in out: skip`, so once ONE call was timed the patcher skipped the
 # rest -- leaving go.sh's second full_schema_bootstrap.py bare. See module docs.)
+# A call that already carries ANY `timeout N ` (an upstream `timeout 180`, say) is
+# left alone -- the old fixed-width lookbehind only recognised its own N and
+# produced `timeout 180 timeout 120 ...`.
 PREFIX_PATCHES = [
     ("git clone timeout",
-     re.compile(r"(?<!timeout 60 )git clone https://github\.com/rob531/zo-sentinel"),
-     "timeout 60 git clone https://github.com/rob531/zo-sentinel"),
+     re.compile(r"(timeout \d+ )?(git clone https://github\.com/rob531/zo-sentinel)(?![\w-])"),
+     "timeout 60 "),
     ("bootstrap timeout",
-     re.compile(r"(?<!timeout 120 )python3 \$SENTINEL/full_schema_bootstrap\.py 2>&1"),
-     "timeout 120 python3 $SENTINEL/full_schema_bootstrap.py 2>&1"),
+     re.compile(r"(timeout \d+ )?(python3 \$SENTINEL/full_schema_bootstrap\.py 2>&1)"),
+     "timeout 120 "),
 ]
+
+
+def _prefix_untimed(rx, prefix, text):
+    """-> (text, n): prefix every match of rx that is not already timed."""
+    n = 0
+
+    def sub(m):
+        nonlocal n
+        if m.group(1):
+            return m.group(0)
+        n += 1
+        return prefix + m.group(2)
+    return rx.sub(sub, text), n
 
 # match a bare `curl -s` (word boundary so `curl -m5 -s`/`curl -m3 -s` -- which
 # do not contain the substring "curl -s" -- are NOT matched: idempotent)
@@ -106,8 +122,8 @@ def harden_text(src: str):
         skipped.append("3b readiness gate (anchor NOT found -- version drift?)")
 
     # 3-4: prefix timeouts on EVERY un-timed occurrence (idempotent)
-    for name, rx, repl in PREFIX_PATCHES:
-        out, k = rx.subn(repl, out)
+    for name, rx, prefix in PREFIX_PATCHES:
+        out, k = _prefix_untimed(rx, prefix, out)
         if k:
             applied.append(f"{name} (x{k})")
         else:
@@ -146,6 +162,9 @@ def self_test() -> int:
     checks.append(("idempotent re-run (no change)", out2 == out))
     checks.append(("no doubled timeout prefix",
                    "timeout 120 timeout 120" not in out2 and "timeout 60 timeout 60" not in out2))
+    up = "timeout 180 python3 $SENTINEL/full_schema_bootstrap.py 2>&1 | tee c.log\n"
+    checks.append(("an upstream `timeout 180` is respected, not double-wrapped",
+                   harden_text(up)[0] == up))
     for name, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
     npass = sum(o for _, o in checks)

@@ -1,0 +1,11 @@
+[service]
+name = "servers_by_axis_critical"
+import_path = "services.active.servers_by_axis_critical.router"
+prefix = "/api"
+tag = "servers_by_axis_critical"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

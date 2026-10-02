@@ -565,7 +565,11 @@ hdr "12.7b DuckDB Schema Uptime Probe"
 # the process was running unmanaged and would not have survived the next Modal
 # reboot (temporal_checks failure mode #7: anything not launched by go.sh dies
 # and does not come back).
-nohup bash -c "while true; do python3 -m zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300; sleep 30; done" \\
+# 2026-10-02: this line ended in `\\` (an escaped backslash, NOT a continuation), so the
+# loop ran in the FOREGROUND and every boot since 2026-09-14 wedged here; PYTHONPATH
+# added because `python3 -m zo_sentinel.probes...` cannot import from /home/workspace.
+pgrep -f "duckdb_schema_uptime_probe --interval" >/dev/null 2>&1 || \
+    nohup env PYTHONPATH="$SENTINEL" bash -c "while true; do python3 -m zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300; sleep 30; done" \
     >> $LOGS/duckdb_schema_uptime_probe.log 2>&1 &
 sleep 2
 DSP=$(pgrep -f 'duckdb_schema_uptime_probe' 2>/dev/null | head -1)
@@ -577,11 +581,13 @@ hdr "12.8 Monitors (loop_watch + graph_refresh -- self-looping, crash-respawn)"
 # Both self-loop via --interval; the bash while-wrapper respawns on crash. We do NOT
 # use daemon_wrapper.sh here because it does not forward trailing args (--interval);
 # this is the same direct-nohup loop pattern the publisher/governor use (12.6b).
-nohup bash -c "while true; do python3 $SENTINEL/loop_watch.py --interval 1800; sleep 30; done" >> $LOGS/loop_watch.log 2>&1 &
+pgrep -f "loop_watch.py --interval" >/dev/null 2>&1 || \
+    nohup bash -c "while true; do python3 $SENTINEL/loop_watch.py --interval 1800; sleep 30; done" >> $LOGS/loop_watch.log 2>&1 &
 sleep 2
 LW=$(pgrep -f 'loop_watch.py' 2>/dev/null | head -1)
 [[ -n "$LW" ]] && ok "LoopWatch PID $LW" || warn "LoopWatch failed"
-nohup bash -c "while true; do python3 $SENTINEL/tools/graph_refresh.py --interval 900; sleep 30; done" >> $LOGS/graph_refresh.log 2>&1 &
+pgrep -f "graph_refresh.py --interval" >/dev/null 2>&1 || \
+    nohup bash -c "while true; do python3 $SENTINEL/tools/graph_refresh.py --interval 900; sleep 30; done" >> $LOGS/graph_refresh.log 2>&1 &
 sleep 2
 GRF=$(pgrep -f 'graph_refresh.py' 2>/dev/null | head -1)
 [[ -n "$GRF" ]] && ok "GraphRefresh PID $GRF" || warn "GraphRefresh failed"

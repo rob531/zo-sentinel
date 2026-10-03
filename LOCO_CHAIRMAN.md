@@ -338,8 +338,18 @@ changed (spineful emission). *Kill:* interrogative 8 asked explicitly in
 review: "what one change makes this class impossible?" — and that change
 scheduled, or its absence justified in writing.
 
-When a new shape appears that none of these fit, **add GC-13** with its
-canonical instance and kill. A gap class without a name will be rediscovered;
+**GC-14 · The many-writer fact.**
+One fact written by several writers into several stores, none marked as
+derived. The copies drift, the total outgrows anyone's review, and recall
+answers from whichever copy it hits first. *Canonical:* 2026-10-02: one FU
+lived in the ledger, its MEM explode copy, a graphify anchor, a `CYCLE_*` doc,
+a scar, a friction row and an issue. 17 of 37 lane prompts ordered six or more
+of those writes. *Kill:* one writer per fact (§11.3). Every other store is
+derived from that writer or points to it, and a gate counts the write targets
+in the emitter (the lane prompt).
+
+When a new shape appears that none of these fit, **add the next GC number** with its
+canonical instance and kill (GC-13 lives in §13). A gap class without a name will be rediscovered;
 that is this project's most reliably reproduced experimental result.
 
 ---
@@ -423,11 +433,15 @@ Seeded 2026-08-29 from the measured record:
 | GR-8 | `model_import_linter --fix` corrupts SQL table names in string literals; blocks 34 of 63 triage decisions | GC-12 (blocker breeding blockers) | **C0** | C3 | [#4000](https://github.com/rob531/zo-sentinel/issues/4000), [#4004](https://github.com/rob531/zo-sentinel/issues/4004) | 2026-08-29 |
 | GR-9 | Builder-lane contention: two lanes contesting the same directives; archival record says retired, retirement never took effect | GC-8 (record ≠ referent) | **C0** | C4 | `docs/FINDINGS_2026-08-23.md` §1.4–1.8 | 2026-08-29 |
 | GR-10 | 6 `dependency_overrides` sites import a callable that exists nowhere; 25 staged services fail dry-run import | GC-4 | **C0** | C3 | [#4001](https://github.com/rob531/zo-sentinel/issues/4001), [#4002](https://github.com/rob531/zo-sentinel/issues/4002) | 2026-08-29 |
-| GR-11 | No push alert channel: every fleet monitor writes state nobody reads; a dead ZoChainTick (RCA fixes + `_tools` ff-pull) is silent | GC-10 | **C2** — alerter + bot relay + dead-man merged; never run on the tower | C4 (ZoAlertWatch armed, dead-man live; its silence alerts) | [zo-fleet-tools#20](https://github.com/rob531/zo-fleet-tools/pull/20); arming steps in its body | 2026-10-02 |
+| GR-11 | No push alert channel: every fleet monitor writes state nobody reads; a dead ZoChainTick (RCA fixes + `_tools` ff-pull) is silent | GC-10 | **C2** — alerter + bot relay + dead-man merged; never run on the tower | C4 (ZoAlertWatch armed, dead-man live; its silence alerts) | [zo-fleet-tools#20](https://github.com/rob531/zo-fleet-tools/pull/20); arming steps in its body. 2026-10-03: two dead checks were permanent false criticals (`gosh:last_zm_go` read a 2026-04-26 file, #23; `link:syncthing` 3122h stale, #25) — switched off, alerts retire on the next run | 2026-10-03 |
 | GR-12 | go.sh section 1 kills every `daemon_wrapper.sh` but only some daemons -> 5 orphans re-parented by hand 2026-10-01 | GC-10 | **C2** — `tools/supervise_go_sh.py` merged; not yet applied to the live go.sh | C4 (`daemon_supervision` orphaned=0 alerting via GR-11) | [#5947](https://github.com/rob531/zo-sentinel/pull/5947) | 2026-10-02 |
 | GR-13 | `REFRESH_MODE=reset` silently reverts go.sh host patches (the 2026-10-01 2.4h wedge ran on a reverted go.sh) | GC-5 | **C2** — `tools/restore_host_patches.py` merged; the tick watcher (check-only) is in held zo-fleet-tools#21 | C4 (tick rc=1 alerts; opt-in apply) | [#5948](https://github.com/rob531/zo-sentinel/pull/5948), [zo-fleet-tools#21](https://github.com/rob531/zo-fleet-tools/pull/21) | 2026-10-02 |
 | GR-14 | c167 (zo-fleet-tools#19) transport regressions: the default spawn tag repeats across days (a constant script on a fixed tick gets a day-old reply as live); `daemon_supervision` was rc 2 every run | GC-8 | **C1** — `daemon_supervision` fixed (#20, `--sync`); single-use tags in held zo-fleet-tools#21 | C3 (every zo_call caller swept) | zo-fleet-tools#20, #21 | 2026-10-02 |
 | GR-15 | Chairman-issue verdicts: attributing a CLOSED issue (by-hand or PR close) to one of several cycles is unsettled -- 5 review rounds kept finding false-VERIFIED paths | GC-9 | **C0** — decision owed (Robin); chairman cure discovery OFF, closer rule guards explicit cures | C4 | zo-fleet-tools#21 body + round-5 findings | 2026-10-02 |
+| GR-19 | One fact, 5–7 stores (ledger → MEM explode → graphify anchor → `CYCLE_*` doc → scar → friction → issue); 17 of 37 lane prompts order ≥ 6 writes | GC-14 | **C0** — root cause named: the prompts are the emitter. §11.3 adopted; gate `lane_prompt_audit.py` built, unmerged and never run on the tower | C4 (`--gate` rc 0 on every enabled prompt, read by a fleet check) | `docs/FINDINGS_2026-10-02_store_overlap.md` | 2026-10-03 |
+| GR-20 | Lane prompts grow and never shrink: average 42.6k chars, stacked dated addenda, a shared charter inlined per prompt; `graphify-kl-daily-refresh` duplicates the zo `graph_refresh` cron | GC-14, GC-12 | **C0** — `lane_prompt_audit.py --dupes/--plan` give the extraction plan; no prompt rewritten yet (they live on the tower) | C4 (≤ 12k-char gate; charter by pointer; duplicate lane retired) | same | 2026-10-03 |
+| GR-21 | Spend has no red line: $250 cloud credit expires 2026-10-08, spend never recorded; Anthropic ≈ $1 and vast ≈ $5.5 against reserved E14b $6 / E16 $1.50 / moat $3 per week | GC-1 | **C0** — `chairman/CREDIT_LEDGER.md` started; `creds_runway.py` built (rc 1 SHORT/EXPIRING, rc 2 no ledger), unmerged | C4 (runway in the daily brief; rc ≠ 0 alerts) | `chairman/CREDIT_LEDGER.md`; Decision Dock "Funding" | 2026-10-03 |
+| GR-22 | `explode_followups_to_memory.py` is a load-bearing writer outside git: it rewrites every FU node per run (579 in 24h), lanes re-run it after every write, and 34 MEM nodes are hand-written | GC-5, GC-8 | **C0** — `fu_memory_sync.py` built (no-op on unchanged ledger, unchanged nodes keep mtime, hand-node census), unmerged | C3 (exploder under git; sync once daily; hand nodes migrated; no prompt calls the exploder) | same | 2026-10-03 |
 
 Grades above are conservative on purpose: several of these have had work
 merged since their source audits, but **per §3 a grade is claimed with
@@ -449,6 +463,7 @@ older than 14 days in its summary, restating the measured cost of deferral.
 | `app/scoring_consumer.py` — no callers, delete? ([#3999](https://github.com/rob531/zo-sentinel/issues/3999)) | 2026-08-23 | operator | Dead matter accrues; the janitor doctrine (`AUTOPOIESIS.md`) says retire it |
 | Triage the 63 deferrals — 12 RETIRE need approval ([#4004](https://github.com/rob531/zo-sentinel/issues/4004), [#4005](https://github.com/rob531/zo-sentinel/issues/4005)) | 2026-08-23 | operator | Cap breached by 23; every week the graveyard normalises further |
 | ~~Add a `RELANDER_TOKEN` repo secret~~ — **DECIDED: deferred** (operator, 2026-08-29, mobile-only; a per-doctrine "no", not rot). Dispatch-mode is the accepted steady state: relanded heads report the five required contexts only. **Tripwire — re-raise this decision if:** a relanded PR stalls specifically on `no-hollow`/`schema-prm` (or any non-dispatchable check) being demanded, gate coverage questions arise on relanded heads, or a future required context lives in a PR-context-only workflow. The fix then: fine-grained PAT (this repo only, Contents rw + Pull-requests rw) added as Actions secret `RELANDER_TOKEN` — the relander detects it automatically, no redeploy | 2026-08-29 | operator (re-ask only on tripwire) | Accepted: two non-required checks unreported on relanded heads |
+| Funding: top up Anthropic ~$20 and vast ~$25 *only* to finish E14b/E16 and keep the weekly moat wave, or let those chains record STOP (finding 2026-10-02 item 6) | 2026-10-02 | Robin | E14b cannot run (Anthropic ≈ $1 < $6). vast ≈ $5.5 covers E16 plus one wave, then nothing. Cloud credit expires 2026-10-08 with spend unmeasured. Live figure: `python creds_runway.py` |
 
 ---
 
@@ -599,7 +614,14 @@ at the start of any session that will make structural claims, or mark those
 claims `UNKNOWN (no graph)` with an age budget per GC-1. A graph-derived
 claim must state the graph's build time; reasoning over a week-old graph about
 today's diff is echo verification. This absent-by-default instrument is
-itself registered as **GR-11**.
+itself registered as **GR-16**.
+
+**Scope (2026-10-03, §11.3):** graphify KL is the builder's code graph
+(imports, anchor drift, spine), not a memory. Measured 2026-10-02: 602,970
+nodes from builder output, "FU-" occurs 220 times in 636 MB, and 130 of the
+194 FU anchors in `_fu_index.json` had drifted. Use it for structure. Do not
+ask it what the fleet knows. The `graphify-kl-daily-refresh` lane duplicates
+the zo `graph_refresh` cron and is to shrink to it (GR-20).
 
 ### 11.2 Memory — three planes, one write-through order
 
@@ -613,9 +635,10 @@ itself registered as **GR-11**.
    generator can read chairman state without a git checkout. Written second,
    best-effort, through `ws_write` like everything else. Subject to G6
    honesty: any read back must check `truncated`.
-3. **A memory MCP server, when connected** — for cross-session recall of
-   observations too granular for the register (an odd log line, a hunch, a
-   provider quirk). **Not connected in this session** (verified against the
+3. **A memory MCP server, when connected**: a *derived read index* (§11.3).
+   It is never written by hand. An observation too granular for the register
+   (an odd log line, a hunch, a provider quirk) goes into the ledger as one
+   log line, and MEM indexes it from there. **Not connected in this session** (verified against the
    live tool roster 2026-08-29); when it is, it joins as plane 3, never
    plane 1.
 
@@ -624,6 +647,32 @@ the read rule is GC-8's: memory of any plane is a *pointer to evidence*, not
 evidence. A remembered number gets re-measured before it appears in a grade
 claim; the memory tells you which command to re-run, and that is its whole
 job.
+
+### 11.3 Store roles: one writer per fact
+
+Adopted 2026-10-03 from `docs/FINDINGS_2026-10-02_store_overlap.md` (GR-19..22,
+class GC-14). Each fact has exactly one writer. Every other store is derived
+from that writer or points to it.
+
+| Store | Role | Written by | Lanes |
+|---|---|---|---|
+| Ledger (`FOLLOWUPS.md`) | The only record of fact. Log line ≤ 600 chars. | lanes, through the sanctioned writer (`fu_ledger.append_log`) | write |
+| `friction_ledger.jsonl` | Hazards only | lanes, via `friction.py` | write (hazards) |
+| MEM MCP | Derived index of ledger + project docs + transcripts | `fu_memory_sync.py`, once daily, incremental | read |
+| graphify KL | Builder code graph (§11.1) | zo `graph_refresh` | read |
+| Project docs, project memory | Chairman-facing; fed by the daily brief | chairman sessions | read |
+| Issues, `AUTOPOIESIS.md`, `peer_decisions` | Their own mechanisms (alerts, doctrine, peer gate), not run records | their tools | read |
+
+1. A lane prompt names one write target (the ledger), plus friction for
+   hazards. `lane_prompt_audit.py --gate` (zo-fleet-tools) is the check: write
+   targets ⊆ {ledger, friction} and prompt ≤ 12,000 chars. This is K1, and
+   it is also the output budget.
+2. A cycle narrative is a ledger log line, not a project doc or a scar.
+3. Shared lane doctrine lives in one file that prompts point to. Prompts do
+   not inline it. A dated CORRECTION appended to a prompt is folded into the
+   prompt body or deleted, never stacked.
+4. A derived store names its writer. Hand-editing a derived copy is GC-5,
+   because the next regeneration erases the edit without a trace.
 
 ## 12. Beyond the prosaic past — the dev-driven future of the builder
 
@@ -664,7 +713,7 @@ not marathons of hope.
 over a maintained structural model of the system, not over grep output.
 *Seed:* the app-surface KL, `schema_kl.json`, the census/spine machinery —
 autopoiesis already defines self-description as the loop's first organ.
-*Next rung:* the graph is rebuilt by CI on every merge (killing GR-11's
+*Next rung:* the graph is rebuilt by CI on every merge (killing GR-16's
 staleness by construction), and directive emission consumes graph deltas —
 "what changed structurally since the last emission" becomes an input, so the
 architect proposes from the system's *current* body, not its remembered one.
@@ -772,12 +821,15 @@ Rules, binding on every session:
    stripping the freeze-hold, no closing another lane's PR to tidy a number.
    The chain's gates are the product's honesty (§5, S0).
 
-*Register addendum, seeded with the sections above:*
+*Register addendum, seeded with the sections above.* Renumbered 2026-10-03:
+these rows were seeded as GR-11/12/13 on 2026-08-29, and §6.1 reused those IDs
+for different gaps on 2026-10-02. Two gaps with one name is GC-8. The 10-02 rows
+keep their IDs because in-flight work cites them; these take GR-16/17/18.
 
 | ID | Gap | Class | Grade | Cap | Evidence trail | Last touched |
 |---|---|---|---|---|---|---|
-| GR-11 | Graphify graph absent in fresh clones — structural instrument errors until regenerated; no staleness budget on graph-derived claims | GC-1, GC-8 | **C0** | C4 (CI-rebuilt graph per F4 + build-time stamped claims) | `graph_stats` error measured 2026-08-29; `.gitignore:20`, `.graphifyignore` | 2026-08-29 |
-| GR-12 | Chairman state has no bus mirror — host-side daemons cannot read governance state | GC-4 | **C0** | C2 (`mesh_memory` write-through per §11.2) | §11.2; `CLAUDE.md` mesh_memory reference | 2026-08-29 |
-| GR-13 | Open-PR graveyard: stale-from-base PRs never re-tested after main recovers; hand PRs have no landing path | GC-13, GC-7 | **C3** — drain measured 2026-08-30T00:10Z: 9 fresh builder PRs auto-merged unattended in 5.5h (#4247–#4259, 20:12–23:30Z), all 10 rescued PRs relabeled `triage:solid`, 37 solid total. Two edges found and killed en route: (a) GITHUB_TOKEN recursion guard (run #1: 10 updated, 0 gates fired — ghost `action_required` runs, a GC-8) → v2 dispatches `pr-gates`+`evaluator` per relanded head; (b) `workflow_dispatch` is evaluated against the workflow file ON THE TARGET REF, so pre-v2 heads reject an `evaluator` dispatch until update-branch merges main in — v2's update-then-dispatch order self-heals this; the 10 pre-v2 rescued heads needed one real-user branch update (done 00:13Z, full native suites fired). Remaining to C4: link-ownership test; known design note: relander picks the newest 10 of the stale listing per run — oldest-stale starvation possible while emission outpaces drain (158 stale, 293 open builder PRs at measurement) | C4 | `tools/pr_triage.py:179`; relander run 33266596401; merged set #4247–#4259; measurement queries 2026-08-30T00:10Z | 2026-08-30 |
+| GR-16 (was GR-11) | Graphify graph absent in fresh clones — structural instrument errors until regenerated; no staleness budget on graph-derived claims | GC-1, GC-8 | **C0** | C4 (CI-rebuilt graph per F4 + build-time stamped claims) | `graph_stats` error measured 2026-08-29; `.gitignore:20`, `.graphifyignore`; scope narrowed to builder code graph 2026-10-03 (§11.1) | 2026-10-03 |
+| GR-17 (was GR-12) | Chairman state has no bus mirror — host-side daemons cannot read governance state | GC-4 | **C0** | C2 (`mesh_memory` write-through per §11.2) | §11.2; `CLAUDE.md` mesh_memory reference | 2026-08-29 |
+| GR-18 (was GR-13) | Open-PR graveyard: stale-from-base PRs never re-tested after main recovers; hand PRs have no landing path | GC-13, GC-7 | **C3** — drain measured 2026-08-30T00:10Z: 9 fresh builder PRs auto-merged unattended in 5.5h (#4247–#4259, 20:12–23:30Z), all 10 rescued PRs relabeled `triage:solid`, 37 solid total. Two edges found and killed en route: (a) GITHUB_TOKEN recursion guard (run #1: 10 updated, 0 gates fired — ghost `action_required` runs, a GC-8) → v2 dispatches `pr-gates`+`evaluator` per relanded head; (b) `workflow_dispatch` is evaluated against the workflow file ON THE TARGET REF, so pre-v2 heads reject an `evaluator` dispatch until update-branch merges main in — v2's update-then-dispatch order self-heals this; the 10 pre-v2 rescued heads needed one real-user branch update (done 00:13Z, full native suites fired). Remaining to C4: link-ownership test; known design note: relander picks the newest 10 of the stale listing per run — oldest-stale starvation possible while emission outpaces drain (158 stale, 293 open builder PRs at measurement) | C4 | `tools/pr_triage.py:179`; relander run 33266596401; merged set #4247–#4259; measurement queries 2026-08-30T00:10Z | 2026-08-30 |
 
 — the chairman's locum, seeded 2026-08-29

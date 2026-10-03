@@ -1,6 +1,6 @@
 name: pr-relander
 
-# The missing half of the landing chain (LOCO_CHAIRMAN.md §13, gap GR-13).
+# The missing half of the landing chain (LOCO_CHAIRMAN.md §13, gap GR-18, formerly GR-13).
 #
 # Chain today: builder opens auto/build/* PRs -> pr-triage labels exactly one
 # of triage:{solid,dup,scaffold,stale} -> auto-merge lands the solids. Two

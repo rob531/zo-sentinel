@@ -63,3 +63,15 @@ Baseline numbers: 293 open autonomous-build, 158 triage:stale, 37 triage:solid.
 Design note for the mission session: relander takes the newest 10 stale per
 run — oldest-stale starvation is possible while emission outpaces drain.
 Routes: none (governance docs)
+
+## 2026-10-03T02:00:00Z
+Finding 2026-10-02 (store overlap) taken on. §11.3 adopted: one writer per
+fact. The ledger is the only record; MEM MCP is a derived index; graphify is
+the builder code graph; lane prompts get one write target. New class GC-14,
+rows GR-19..22, Decision Dock "Funding". `chairman/CREDIT_LEDGER.md` started.
+GR-11/12/13 were defined twice (2026-08-29 addendum vs 2026-10-02 alerting).
+The addendum rows are now GR-16/17/18 (GR-13 in SESSION_LOG lines above =
+GR-18), and `tests/test_gap_register_ids_unique.py` gates duplicates (red on
+the pre-fix HEAD). Tools in zo-fleet-tools: dead alert checks off,
+lane_prompt_audit, fu_memory_sync, creds_runway, one-page brief.
+Routes: none (governance docs)

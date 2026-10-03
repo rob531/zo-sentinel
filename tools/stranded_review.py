@@ -211,11 +211,29 @@ def main(argv=None) -> int:
 
     repo = Path(args.repo).resolve()
     tools = Path(args.tools_from).resolve() if args.tools_from else repo / "tools"
+
+    # referent_verify FIRST and alone: the control must be runnable from a copy
+    # of this file sitting outside any repo, which is how R1 says to run it --
+    # fetch the branch's bytes, drop them in /tmp, point --repo at the box. The
+    # first version loaded both modules up front, so `--self-test` from /tmp
+    # died on /tmp/tools/requeue_quarantined.py and the control was unreachable
+    # exactly where it mattered.
     try:
-        rq = load_module(tools / "requeue_quarantined.py", "requeue_quarantined")
         rv = load_module(tools / "referent_verify.py", "referent_verify")
     except Exception as exc:                                    # noqa: BLE001
-        print("REFUSED: cannot import the repo's own instruments from %s (%s: %s)"
+        print("REFUSED: cannot import referent_verify from %s (%s: %s). Pass "
+              "--tools-from <repo>/tools when running this file from outside "
+              "the repo." % (tools, type(exc).__name__, exc))
+        return 2
+
+    catalog, cat_meta, cat_unknown = rv.load_catalog()
+    if args.self_test:
+        return self_test(rv, catalog, cat_unknown)
+
+    try:
+        rq = load_module(tools / "requeue_quarantined.py", "requeue_quarantined")
+    except Exception as exc:                                    # noqa: BLE001
+        print("REFUSED: cannot import requeue_quarantined from %s (%s: %s)"
               % (tools, type(exc).__name__, exc))
         return 2
     if not hasattr(rq, "landed_state"):
@@ -224,10 +242,6 @@ def main(argv=None) -> int:
               "reads an untracked file as landed -- the #4079 defect itself."
               % tools)
         return 2
-
-    catalog, cat_meta, cat_unknown = rv.load_catalog()
-    if args.self_test:
-        return self_test(rv, catalog, cat_unknown)
 
     man_path = Path(args.manifest) if args.manifest else newest_manifest(repo)
     if man_path is None or not man_path.is_file():

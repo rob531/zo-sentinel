@@ -121,3 +121,30 @@ def test_main_report_only_on_the_live_repo_is_rc0():
     """Report-only must never block, even with PHANTOM rows present."""
     rc = sr.main(["--repo", str(ROOT)])
     assert rc == 0
+
+
+def test_self_test_via_main_does_not_need_requeue(tmp_path):
+    """The control must run from a copy outside any repo (R1).
+
+    The first version loaded requeue_quarantined up front, so `--self-test`
+    run from /tmp refused on /tmp/tools/requeue_quarantined.py -- the control
+    was unreachable in the one place the doctrine says to run it: against the
+    branch's own bytes, on the box that holds the files.
+
+    The fixture is a tools/ with referent_verify and a bus catalog and NO
+    requeue_quarantined. If the import order regresses, this goes red.
+    """
+    stub_tools = tmp_path / "tools"
+    stub_tools.mkdir()
+    (stub_tools / "referent_verify.py").write_text(
+        (TOOLS / "referent_verify.py").read_text(encoding="utf-8"),
+        encoding="utf-8")
+    src_cat = ROOT / "schema" / "bus_catalog.json"
+    if not src_cat.is_file():
+        pytest.skip("no bus catalog in this checkout -- UNKNOWN, not a pass")
+    (tmp_path / "schema").mkdir()
+    (tmp_path / "schema" / "bus_catalog.json").write_text(
+        src_cat.read_text(encoding="utf-8"), encoding="utf-8")
+    assert not (stub_tools / "requeue_quarantined.py").exists()
+    assert sr.main(["--self-test", "--tools-from", str(stub_tools),
+                    "--repo", str(tmp_path)]) == 0

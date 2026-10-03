@@ -64,7 +64,7 @@ through them. The tools live in zo-fleet-tools, and the prompts live on the towe
 
 ## 0d. GR-19 / GR-20: rewrite the enabled lane prompts to one write target
 - grade C0 -> target C4 | class GC-14
-- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\lane_prompt_audit.py" --enabled-only --gate`
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\lane_prompt_audit.py" --enabled-only --gate` (`lane_roster.json` goes stale on 2026-10-04 and then reads rc 2 UNKNOWN: run `roster_refresh.py` first)
 - then: `--dupes` (move the shared charter to one file the prompts point to), `--plan <task>` for each red prompt, rewrite with `task_edit.py --set-prompt`, and re-run `--gate` until rc 0. Retire `graphify-kl-daily-refresh` into the zo `graph_refresh` cron.
 - evidence for move: `--gate` rc 0 on every enabled prompt (C3). C4 when a fleet check reads it and goes red.
 

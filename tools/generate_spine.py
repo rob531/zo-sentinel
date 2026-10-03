@@ -70,6 +70,11 @@ import re
 import sys
 import time
 
+try:  # run as `python tools/generate_spine.py` -- sys.path[0] is tools/
+    from bounded import sample as _sample
+except ImportError:  # imported as `tools.generate_spine` from the repo root
+    from tools.bounded import sample as _sample
+
 try:
     import tomllib  # py3.11+
 except ModuleNotFoundError:  # pragma: no cover - CI pins 3.11
@@ -431,15 +436,22 @@ def main(argv=None):
 
     rc = 0
     if strict and manifest["unlisted_broken"]:
+        # BOUNDED BY BYTES, not by the caller's `| head -N`, which cannot bound a
+        # one-line payload (friction line-count-bound-on-a-oneline-payload).
         print("\nSTRICT: %d UNLISTED broken active service(s) (add to services/active/ fix, "
               "or tools/spine_known_issues.json with a reason): %s"
               % (len(manifest["unlisted_broken"]),
-                 ", ".join("%s=%s" % (b["name"], b["status"]) for b in manifest["unlisted_broken"])))
+                 _sample(manifest["unlisted_broken"],
+                         render=lambda b: "%s=%s" % (b["name"], b["status"]),
+                         where="artifacts/spine_manifest.json .unlisted_broken "
+                               "(write it with: python tools/generate_spine.py --emit .)")))
         rc = 1
     if strict and manifest["stale_known"]:
         print("\nSTRICT: %d STALE known-issue(s) -- now healthy/absent, remove from "
               "spine_known_issues.json: %s"
-              % (len(manifest["stale_known"]), manifest["stale_known"]))
+              % (len(manifest["stale_known"]),
+                 _sample(manifest["stale_known"],
+                         where="artifacts/spine_manifest.json .stale_known")))
         rc = 1
     if check and not check_in_sync(manifest):
         print("\nCHECK: app/_spine_generated.py is STALE vs services/active/. "

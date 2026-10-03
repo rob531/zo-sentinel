@@ -58,6 +58,26 @@ set and an organism (chairman assessment, 2026-08-29 EOD).
 
 ---
 
+**STORE ROLES, 2026-10-03.** From `docs/FINDINGS_2026-10-02_store_overlap.md`.
+These outrank the numbered backlog because every lane's output volume flows
+through them. The tools live in zo-fleet-tools, and the prompts live on the tower.
+
+## 0d. GR-19 / GR-20: rewrite the enabled lane prompts to one write target
+- grade C0 -> target C4 | class GC-14
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\lane_prompt_audit.py" --enabled-only --gate` (`lane_roster.json` goes stale on 2026-10-04 and then reads rc 2 UNKNOWN: run `roster_refresh.py` first)
+- then: `--dupes` (move the shared charter to one file the prompts point to), `--plan <task>` for each red prompt, rewrite with `task_edit.py --set-prompt`, and re-run `--gate` until rc 0. Retire `graphify-kl-daily-refresh` into the zo `graph_refresh` cron.
+- evidence for move: `--gate` rc 0 on every enabled prompt (C3). C4 when a fleet check reads it and goes red.
+
+## 0e. GR-22: MEM MCP derived-only
+- grade C0 -> target C3 | classes GC-5, GC-8
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\fu_memory_sync.py" --dry-run`, then `--hand-nodes`
+- evidence for move: the exploder committed to zo-fleet-tools; sync scheduled once daily in place of the full explode; `--check` GREEN on two consecutive days; the 34 hand nodes migrated through the ledger writer.
+
+## 0f. GR-21: money has a red line
+- grade C0 -> target C4 | class GC-1 | Decision Dock "Funding" (Robin)
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\creds_runway.py"` after re-measuring the balances in `chairman/CREDIT_LEDGER.md`
+- evidence for move: runway shown in `chairman_daily_brief.py --one-page`; rc != 0 reaches the alert channel.
+
 ## 1. GR-8 — linter --fix corrupts SQL names (unblocks 34 downstream decisions)
 - grade C0 -> target C3 | class GC-12
 - first command: `grep -rn "def .*fix" tools/model_import_linter* 2>/dev/null || find . -name "*model_import_linter*" -not -path './.git/*'`
@@ -88,7 +108,7 @@ set and an organism (chairman assessment, 2026-08-29 EOD).
 - first command: `sed -n '390,410p' tests/ci/smoke_ladder.py`
 - evidence for move: single declared owner; a test asserting every declared surface has exactly one owning gate; G1's defect-injection repro now caught.
 
-## 7. GR-11 — graphify graph absent in fresh clones; structural claims unbudgeted
+## 7. GR-16 — graphify graph absent in fresh clones; structural claims unbudgeted
 - grade C0 -> target C4 | classes GC-1, GC-8
 - first command: `ls graphify-out/ && grep -rn graphify .github/workflows/ | head`
 - evidence for move: graph rebuilt by CI on merge (F4); graph-derived claims carry build-time stamps.
@@ -113,12 +133,12 @@ set and an organism (chairman assessment, 2026-08-29 EOD).
 - first command: `ls tools/reachability_deferred.json 2>/dev/null; grep -n "over_review_cap" PRODUCT_SPEC.md | head -3`
 - evidence for move: breach auto-fires the escalation; aging report on cadence; count under cap.
 
-## 12. GR-12 — chairman state has no bus mirror
+## 12. GR-17 — chairman state has no bus mirror
 - grade C0 -> target C2 | class GC-4
 - first command: `grep -n "mesh_memory" CLAUDE.md`
 - evidence for move: write-through repo->bus per §11.2 implemented in the session-end protocol.
 
-## 13. GR-13 — landing chain: verify the relander drains the backlog
+## 13. GR-18 — landing chain: verify the relander drains the backlog
 - grade C2 -> target C3/C4 | class GC-13
 - first command: `gh` unavailable in-session; check https://github.com/rob531/zo-sentinel/actions/workflows/pr-relander.yml runs + open-PR count vs the 117 baseline
 - evidence for move: C3 = backlog measurably draining (open count + oldest-age down across two governance sessions); C4 = a test asserting each §13 chain link has an owner (workflow exists, label wiring intact — the #4128 disarm-hardening pattern for the landing chain).

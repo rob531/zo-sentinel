@@ -31,6 +31,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:  # run as `python tools/fu568_emission_gate_evidence.py`
+    from bounded import sample as _sample
+except ImportError:  # imported as a module from the repo root
+    from tools.bounded import sample as _sample
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "mcp_servers" / "builder_mcp.py"
 RV = ROOT / "tools" / "referent_verify.py"
@@ -218,7 +223,10 @@ def blast_radius(days: int, judge_json: str | None) -> int:
         print("\nAGREEMENT WITH referent_verify (%s):" % jp.name)
         print("  flagged here ......... %d" % len(flagged))
         print("  also flagged by judge  %d" % len(flagged & judged))
-        print("  FALSE POSITIVES ...... %d %s" % (len(fp), fp))
+        # BOUNDED BY BYTES: the false-positive set is as large as the judge
+        # disagreement, which this tool does not control.
+        print("  FALSE POSITIVES ...... %d %s"
+              % (len(fp), _sample(fp, where=str(jp))))
         if fp:
             rc = 1
     else:

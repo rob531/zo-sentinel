@@ -61,6 +61,11 @@ import os
 import subprocess
 import sys
 
+try:  # run as `python tools/ci_pytest.py` -- sys.path[0] is tools/
+    from bounded import sample as _sample
+except ImportError:  # imported as `tools.ci_pytest` from the repo root
+    from tools.bounded import sample as _sample
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 QUARANTINE = os.path.join(ROOT, "tests", "ci", "pytest_quarantine.txt")
@@ -166,9 +171,11 @@ def main(argv=None):
     if r["stale"]:
         # Loud in every mode: a quarantined path that no longer exists means a
         # test was renamed or deleted and the exclusion silently widened.
+        # BOUNDED BY BYTES: a quarantine file can go stale wholesale, and a
+        # line-count guard downstream cannot bound one line.
         print(
             "ci_pytest: WARNING -- %d STALE quarantine entry(ies), no such file: %s"
-            % (len(r["stale"]), ", ".join(r["stale"])),
+            % (len(r["stale"]), _sample(r["stale"], where=str(args.quarantine))),
             file=sys.stderr,
         )
 

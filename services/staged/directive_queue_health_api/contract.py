@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 
@@ -124,6 +123,7 @@ def create_app(base_dir: Path) -> FastAPI:
 
 
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient  # test-only: never at module scope (prod spine import)
     tmp = tempfile.mkdtemp()
     try:
         pending = Path(tmp) / "directives" / "pending"

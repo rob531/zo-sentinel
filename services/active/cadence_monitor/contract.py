@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from fastapi import FastAPI, Depends, Query
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -55,6 +54,7 @@ def get_cadence_job_runs(
 
 
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient  # test-only: never at module scope (prod spine import)
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},

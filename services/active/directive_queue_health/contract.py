@@ -4,9 +4,7 @@ from pathlib import Path
 from typing import Dict
 
 from fastapi import APIRouter, Depends, FastAPI
-from fastapi.testclient import TestClient
 from pydantic import BaseModel
-import json
 import os
 import tempfile
 
@@ -72,6 +70,7 @@ app.include_router(router)
 
 
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient  # test-only: never at module scope (prod spine import)
     with tempfile.TemporaryDirectory() as tmpdir:
         base = Path(tmpdir)
 

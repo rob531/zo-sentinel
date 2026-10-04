@@ -59,6 +59,16 @@ from pathlib import Path
 
 REPO_SLUG = "rob531/zo-sentinel"
 
+# This module is one of the quarantine manifest's MANAGERS, not a consumer of
+# the modules it names. tools/requeue_quarantined.py reads the marker below and
+# excludes this file from its live-referrer corpus. Without it, the self-test
+# fixture further down -- which quotes two candidate filenames verbatim out of a
+# CI log -- made one withdrawn module look WANTED and moved that tool's
+# no_live_referrer count 45 -> 44, measured 2026-10-04 (cycle-0177) with a
+# two-pole control on one tree: clean main passed, the same tree plus this file
+# failed `assert 44 >= 45`.
+QUARANTINE_MANAGER_MARK = "QUARANTINE-MANAGER: names candidates to manage them, not to use them"
+
 # --limit may LOWER these. Nothing in this file may raise them, and --limit is
 # clamped rather than honoured when it tries (self-test pole P2).
 MAX_PER_RUN = 8

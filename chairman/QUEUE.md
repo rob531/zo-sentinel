@@ -85,6 +85,13 @@ through them. The tools live in zo-fleet-tools, and the prompts live on the towe
 - before the first worker batch: prove zo reaches the prod DB (one read, one idempotent write on a scratch table) and record the commands in HANDOFF.md
 - evidence for move: C2 when the decomposer stops landing manifest-only dirs (teach the emitter: `requires` honoured or manifest emitted last); C3 when `remaining` in the daily line is 0 (every dir in one of the four states); C4 when the ledger-freshness check is red on a staged dir without a row and `builder_exclusions.json` is read by the live architect (log line on the host)
 
+## 0h. GR-24: arm the historical-events store on the tower
+- grade C1 -> target C4 | classes GC-9, GC-10 | plan of record: zo-fleet-tools `EVENTS_STORE.md`
+- first command (tower): `python -m pip install duckdb`, then `python "D:\zo\Zocomputer Agents\_tools\events_store.py" --self-test` (expect PASS, rc 0)
+- then: the baseline `tick` with `--bus`, `--ledger` and `--backup-dir` (exact line in EVENTS_STORE.md "Deploy on the Tower"); register ZoEventsTick daily; add `--probe-tls` once the baseline is green; put `events_store.py check --sources bus,ledger` in the alert path
+- decisions owed (Robin): the IPQS and Clef $ budgets proposed 2026-10-03 (not recovered) as Reserved rows in `chairman/CREDIT_LEDGER.md`; the IPQS population (remote endpoints or egress domains, not listing URLs); the ZoComputer backup destination (`--push-cmd`)
+- evidence for move: C3 when the first baseline run row is `ok` with n_seen equal to the registry count; C4 when a stale store (no run for >26h) turns into a red alert
+
 ## 1. GR-8 — linter --fix corrupts SQL names (unblocks 34 downstream decisions)
 - grade C0 -> target C3 | class GC-12
 - first command: `grep -rn "def .*fix" tools/model_import_linter* 2>/dev/null || find . -name "*model_import_linter*" -not -path './.git/*'`

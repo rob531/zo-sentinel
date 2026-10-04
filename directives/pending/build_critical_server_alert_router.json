@@ -1,0 +1,31 @@
+{
+  "task": "build_critical_server_alert_router",
+  "handler": "generate_file",
+  "recipe": "service_dir_from_exemplar",
+  "output_file": "services/staged/critical_server_alert/router.py",
+  "exemplar_file": "services/_exemplar/router.py",
+  "reads": [
+    "services/_exemplar/router.py"
+  ],
+  "description": "Build services/staged/critical_server_alert/router.py for service 'critical_server_alert' by MIRRORING services/_exemplar/router.py. Role: thin APIRouter exposing `router`, RELATIVE `from .logic import ...`, Depends(get_session). Single-file only; import the REAL data layer; no stub DB. Service spec: Repair of an existing staged service, not a new one. The directory already holds: __init__.py, contract.py, logic.py, service.toml. Gate failure (verbatim): router.py exposes no router -- logic imports but nothing serves it and it has no entrypoint: an api scaffold stopped at logic.py. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/critical_server_alert (service.toml valid, router.py exposes a router, `python -m services.staged.critical_server_alert.router` imports, `python -m services.staged.critical_server_alert.contract` exits 0). Then `python tools/staging_drain/census.py --only critical_server_alert --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/critical_server_alert/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "complexity": "medium",
+  "source": "staging_drain",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "summary": "critical_server_alert: router.py is missing; the gate holds it at 'lib_no_router'",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "router.py exposes no router -- logic imports but nothing serves it and it has no entrypoint: an api scaffold stopped at logic.py",
+    "failure_class": "lib_no_router",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "write services/staged/critical_server_alert/router.py mirroring services/_exemplar/router.py",
+  "details": {
+    "family": "critical_server_alert",
+    "version": 1,
+    "runtime_class": "lib"
+  }
+}

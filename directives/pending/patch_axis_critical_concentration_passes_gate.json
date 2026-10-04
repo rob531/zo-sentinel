@@ -1,0 +1,38 @@
+{
+  "task": "patch_axis_critical_concentration_passes_gate",
+  "directive_id": "patch_axis_critical_concentration_passes_gate",
+  "id": "patch_axis_critical_concentration_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/axis_critical_concentration/__init__.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'axis_critical_concentration' (services/staged/axis_critical_concentration; family axis_critical_concentration v1; runtime class lib) so it passes the promotion gate. GATE FAILURE (verbatim): source import FAILED: services.staged.axis_critical_concentration.logic: NameError: name 'services' is not defined. Fix the quoted gate failure. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/axis_critical_concentration (service.toml valid, router.py exposes a router, `python -m services.staged.axis_critical_concentration.router` imports, `python -m services.staged.axis_critical_concentration.contract` exits 0). Then `python tools/staging_drain/census.py --only axis_critical_concentration --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/axis_critical_concentration/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/axis_critical_concentration/__init__.py",
+    "services/staged/axis_critical_concentration/logic.py",
+    "services/staged/axis_critical_concentration/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "axis_critical_concentration fails the promotion gate: import_undefined_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "source import FAILED: services.staged.axis_critical_concentration.logic: NameError: name 'services' is not defined",
+    "failure_class": "import_undefined_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the quoted gate failure.",
+  "details": {
+    "family": "axis_critical_concentration",
+    "version": 1,
+    "runtime_class": "lib",
+    "files": [
+      "__init__.py",
+      "logic.py",
+      "service.toml"
+    ]
+  }
+}

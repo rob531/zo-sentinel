@@ -1,0 +1,42 @@
+{
+  "task": "patch_cadence_job_health_passes_gate",
+  "directive_id": "patch_cadence_job_health_passes_gate",
+  "id": "patch_cadence_job_health_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/cadence_job_health/contract.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'cadence_job_health' (services/staged/cadence_job_health; family cadence_job_health v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): hollow member(s): services/staged/cadence_job_health/contract.py -- hollow service member: zero top-level statements -- the file is comment/docstring only, so importing it can never fail and its exit-0 is a liveness proof of the interpreter, not of the service. The named member has zero top-level statements. Give it a real body or delete it from the service and fix every import of it. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/cadence_job_health (service.toml valid, router.py exposes a router, `python -m services.staged.cadence_job_health.router` imports, `python -m services.staged.cadence_job_health.contract` exits 0). Then `python tools/staging_drain/census.py --only cadence_job_health --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/cadence_job_health/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/cadence_job_health/__init__.py",
+    "services/staged/cadence_job_health/contract.py",
+    "services/staged/cadence_job_health/logic.py",
+    "services/staged/cadence_job_health/router.py",
+    "services/staged/cadence_job_health/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "cadence_job_health fails the promotion gate: hollow_member",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "hollow member(s): services/staged/cadence_job_health/contract.py -- hollow service member: zero top-level statements -- the file is comment/docstring only, so importing it can never fail and its exit-0 is a liveness proof of the interpreter, not of the service",
+    "failure_class": "hollow_member",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "The named member has zero top-level statements. Give it a real body or delete it from the service and fix every import of it.",
+  "details": {
+    "family": "cadence_job_health",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

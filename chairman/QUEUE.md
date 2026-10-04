@@ -78,6 +78,13 @@ through them. The tools live in zo-fleet-tools, and the prompts live on the towe
 - first command (tower): `python "D:\zo\Zocomputer Agents\_tools\creds_runway.py"` after re-measuring the balances in `chairman/CREDIT_LEDGER.md`
 - evidence for move: runway shown in `chairman_daily_brief.py --one-page`; rc != 0 reaches the alert channel.
 
+## 0g. GR-23: staging_drain — run the tick on the tower, finish batch 1 with prod evidence
+- grade C1 -> target C4 | classes GC-12, GC-7, GC-5 | chairman direction 2026-10-03 ("push out everything in staging; repair everything else")
+- first command (tower, zo-sentinel checkout at origin/main after the segments PR merges): `python tools/staging_drain/chain_tick.py --measure-wall --budget-mb <Fly machine MiB>`; then register it with ZoChainTick daily and make its `rc != 0` reach the alert channel (GR-11)
+- then (S4, batch 1 PR `staging-drain/s4-batch-1`): merge only after the Fly image boots (`fly deploy` of the candidate tree, `/spine/health` ok:true, prod-drift check green); record each service in `chairman/staging_drain/promotions.json` with the deploy id + probe output -- that file is the ONLY thing that turns `promotable` into `promoted`
+- before the first worker batch: prove zo reaches the prod DB (one read, one idempotent write on a scratch table) and record the commands in HANDOFF.md
+- evidence for move: C2 when the decomposer stops landing manifest-only dirs (teach the emitter: `requires` honoured or manifest emitted last); C3 when `remaining` in the daily line is 0 (every dir in one of the four states); C4 when the ledger-freshness check is red on a staged dir without a row and `builder_exclusions.json` is read by the live architect (log line on the host)
+
 ## 1. GR-8 — linter --fix corrupts SQL names (unblocks 34 downstream decisions)
 - grade C0 -> target C3 | class GC-12
 - first command: `grep -rn "def .*fix" tools/model_import_linter* 2>/dev/null || find . -name "*model_import_linter*" -not -path './.git/*'`

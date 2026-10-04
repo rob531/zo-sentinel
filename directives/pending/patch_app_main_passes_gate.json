@@ -1,0 +1,38 @@
+{
+  "task": "patch_app_main_passes_gate",
+  "directive_id": "patch_app_main_passes_gate",
+  "id": "patch_app_main_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/app_main/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'app_main' (services/staged/app_main; family app_main v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): IMPORT FAILED (would ModuleNotFoundError at spine mount): ImportError: Failed to import ROUTERS from app_router_registry. Fix the import-time failure quoted above. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/app_main (service.toml valid, router.py exposes a router, `python -m services.staged.app_main.router` imports, `python -m services.staged.app_main.contract` exits 0). Then `python tools/staging_drain/census.py --only app_main --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/app_main/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/app_main/logic.py",
+    "services/staged/app_main/router.py",
+    "services/staged/app_main/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "app_main fails the promotion gate: import_other",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "IMPORT FAILED (would ModuleNotFoundError at spine mount): ImportError: Failed to import ROUTERS from app_router_registry",
+    "failure_class": "import_other",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the import-time failure quoted above.",
+  "details": {
+    "family": "app_main",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

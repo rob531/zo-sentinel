@@ -1,0 +1,42 @@
+{
+  "task": "patch_osv_feed_ingestion_v2_passes_gate",
+  "directive_id": "patch_osv_feed_ingestion_v2_passes_gate",
+  "id": "patch_osv_feed_ingestion_v2_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/osv_feed_ingestion_v2/logic.py",
+  "complexity": "medium",
+  "phase": "staging_drain.S5",
+  "priority": 0.9,
+  "description": "REPAIR staged service 'osv_feed_ingestion_v2' (services/staged/osv_feed_ingestion_v2; family osv_feed_ingestion v2; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): IMPORT FAILED (would ModuleNotFoundError at spine mount): ImportError: cannot import name 'fetch_and_parse_osv_advisories' from 'services.staged.osv_feed_ingestion_v2.logic' (/home/user/zo-sentinel/services/staged/osv_feed_ingestion_v2/logic.py). The name has NO referent in app/models.py (family B of tools/repair_staged_model_names.py): either use the model that really exists for this data, or, if the table truly does not exist, this service is unbuildable as specified -- say so in the PR and stop. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/osv_feed_ingestion_v2 (service.toml valid, router.py exposes a router, `python -m services.staged.osv_feed_ingestion_v2.router` imports, `python -m services.staged.osv_feed_ingestion_v2.contract` exits 0). Then `python tools/staging_drain/census.py --only osv_feed_ingestion_v2 --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/osv_feed_ingestion_v2/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/osv_feed_ingestion_v2/__init__.py",
+    "services/staged/osv_feed_ingestion_v2/contract.py",
+    "services/staged/osv_feed_ingestion_v2/logic.py",
+    "services/staged/osv_feed_ingestion_v2/router.py",
+    "services/staged/osv_feed_ingestion_v2/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "osv_feed_ingestion_v2 fails the promotion gate: import_model_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "IMPORT FAILED (would ModuleNotFoundError at spine mount): ImportError: cannot import name 'fetch_and_parse_osv_advisories' from 'services.staged.osv_feed_ingestion_v2.logic' (/home/user/zo-sentinel/services/staged/osv_feed_ingestion_v2/logic.py)",
+    "failure_class": "import_model_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "The name has NO referent in app/models.py (family B of tools/repair_staged_model_names.py): either use the model that really exists for this data, or, if the table truly does not exist, this service is unbuildable as specified -- say so in the PR and stop.",
+  "details": {
+    "family": "osv_feed_ingestion",
+    "version": 2,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

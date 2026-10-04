@@ -450,6 +450,13 @@ def _starvation_floor() -> int:
         exclude = ar._disk_names(SENTINEL_DIR) | _existing_anywhere()
         stems = _queued_stems()
         exclude |= stems | {s + ".py" for s in stems}
+        # staging_drain S7: families already live or superseded (one writer:
+        # tools/staging_drain/exclusions.py -> directives/builder_exclusions.json).
+        try:
+            from zo_sentinel.builder_exclusions import excluded_names
+            exclude |= excluded_names()
+        except Exception as e:  # pragma: no cover -- excluding nothing is visible, not fatal
+            log.warning("builder exclusions unavailable (%s); excluding nothing", e)
         terminal = ar._terminal_stems(SENTINEL_DIR / "directives", None)
         cands = ar.mine_candidates(sources, exclude, terminal)
     except Exception as e:

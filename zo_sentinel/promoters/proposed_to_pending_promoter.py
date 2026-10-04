@@ -263,6 +263,20 @@ def _service_name_of(d: dict) -> "tuple[str, str]":
     return "", ""
 
 
+def _excluded_family_reason(name: str):
+    """Reason the service's family is on the builder exclusion list, else None.
+    Never raises: an unreadable list excludes nothing (and says so in its status)."""
+    if not name:
+        return None
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from zo_sentinel.builder_exclusions import excluded_reason
+        return excluded_reason(name)
+    except Exception as e:  # pragma: no cover -- a missing reader must not stop the drain
+        log.warning("builder exclusions unavailable (%s); excluding nothing", e)
+        return None
+
+
 def _expand_service_directives(proposed_dir: Path) -> int:
     if os.environ.get("ZO_SERVICE_UNIT_EXPANSION", "1") == "0":
         return 0
@@ -282,6 +296,20 @@ def _expand_service_directives(proposed_dir: Path) -> int:
             continue
         name, name_src = _service_name_of(d)
         spec = str(d.get("spec") or d.get("description") or "").strip()
+        # staging_drain S7: a family that is already live (active / promoted) or
+        # superseded must not be fanned out into five more scaffold directives --
+        # that regeneration is how services/staged grew from ~426 to 1,776. The
+        # exclusion input is derived from the chain ledger by one writer
+        # (tools/staging_drain/exclusions.py); this is one of its two readers.
+        excl = _excluded_family_reason(name)
+        if excl:
+            log.warning("build_service %s: family of %r is excluded by %s -> .excluded",
+                        p.name, name, excl)
+            try:
+                os.replace(p, p.with_name(p.name + ".excluded"))
+            except OSError:
+                pass
+            continue
         if not name or len(spec) < 50:
             # Name the FAILING condition. "missing service_name OR spec<50" is an
             # ambiguous OR: it cost a day of reading 207 .rejected files to learn

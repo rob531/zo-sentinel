@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
-from typing import List, Optional
+from typing import Optional
 import requests
 from pydantic import BaseModel
 
@@ -87,7 +87,6 @@ def setup_database():
         session.close()
 
 if __name__ == "__main__":
-    import pytest
     from app.db import get_session
     from app.models import Base
 

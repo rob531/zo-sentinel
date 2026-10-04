@@ -1,0 +1,36 @@
+{
+  "task": "patch_cve_feed_processing_passes_gate",
+  "directive_id": "patch_cve_feed_processing_passes_gate",
+  "id": "patch_cve_feed_processing_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/cve_feed_processing/logic.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.9,
+  "description": "REPAIR staged service 'cve_feed_processing' (services/staged/cve_feed_processing; family cve_feed_processing v1; runtime class lib) so it passes the promotion gate. GATE FAILURE (verbatim): source import FAILED: services.staged.cve_feed_processing.logic: ModuleNotFoundError: No module named 'celery'. The import names a module that is absent. If it is a third-party package, it is NOT in app/requirements.txt and cannot be added by this directive: rewrite without it. If it is an intra-service module, write it. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/cve_feed_processing (service.toml valid, router.py exposes a router, `python -m services.staged.cve_feed_processing.router` imports, `python -m services.staged.cve_feed_processing.contract` exits 0). Then `python tools/staging_drain/census.py --only cve_feed_processing --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/cve_feed_processing/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/cve_feed_processing/logic.py",
+    "services/staged/cve_feed_processing/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "cve_feed_processing fails the promotion gate: import_module_not_found",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "source import FAILED: services.staged.cve_feed_processing.logic: ModuleNotFoundError: No module named 'celery'",
+    "failure_class": "import_module_not_found",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "The import names a module that is absent. If it is a third-party package, it is NOT in app/requirements.txt and cannot be added by this directive: rewrite without it. If it is an intra-service module, write it.",
+  "details": {
+    "family": "cve_feed_processing",
+    "version": 1,
+    "runtime_class": "lib",
+    "files": [
+      "logic.py",
+      "service.toml"
+    ]
+  }
+}

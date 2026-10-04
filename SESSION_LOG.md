@@ -75,3 +75,30 @@ GR-18), and `tests/test_gap_register_ids_unique.py` gates duplicates (red on
 the pre-fix HEAD). Tools in zo-fleet-tools: dead alert checks off,
 lane_prompt_audit, fu_memory_sync, creds_runway, one-page brief.
 Routes: none (governance docs)
+
+## 2026-10-04T21:30:00Z
+Chain `staging_drain` (chairman direction 2026-10-03) built as repo code
+(`tools/staging_drain/`, one CLI per segment + `chain_tick.py`) and run on main.
+Re-measured, not relabelled: 1,784 staged dirs (not ~426), 1,259 with no source
+(manifest-only scaffolds), 25 pass the promoter's gate, 8 also survive a real-router
+mount probe, 0 live in prod. Daily line (third tick):
+`promoted 0 · superseded 22 · repairing 200 · retired 1259 · remaining 303 ·
+wall: 8 api services import to 68 MiB in one process (budget unknown)`.
+CI on the S4 batch taught the census three pre-move checks (test-only imports at
+module scope; a real-router mount probe; contract shape): 24 of 25 gate-green
+contracts never import their own `.router` (GC-8), 6 handlers call write_service
+at 127.0.0.1:8772 which the Fly image cannot reach; batch 1 shrank 10 -> 7.
+S2 harvest = 0 bytes: the promoter's `casing_autofixed` reports 165 "fixes"
+that change nothing (GC-5 flag inversion), and all three mechanical repair
+scripts refuse every remaining site (family B model names, no-provenance
+names). 200 builder directives emitted into directives/pending/ over two ticks (282
+deferred by the per-tick cap), each quoting the gate failure verbatim with acceptance =
+passes the gate. S7: `directives/builder_exclusions.json` (71 families) read by
+the proposal fan-out and the architect floor. S4 batch 1 (7 api services, 2
+vulnerability) moved staged->active on branch `staging-drain/s4-batch-1` as
+DRAFT PR #6154: spine --check/--strict clean, 0 route duplicates,
+verify_deploy_candidate 8/8, no boot test or prod evidence possible from the
+cloud, so nothing is "promoted". GR-23 opened
+at C1. `add_repo` for zo-fleet-tools was denied, so the one-pager section is a
+recorded command in chairman/staging_drain/HANDOFF.md, not a PR.
+Routes: none in ui_server.py (services/active +10 on the S4 branch only)

@@ -28,3 +28,4 @@ check. Every cloud session appends one row to Sessions before it ends, with
 | date (UTC) | provider | spend_usd | session | what |
 |---|---|---|---|---|
 | 2026-10-03 | claude-cloud-credit | ? | session_01To4EdKyYczpEpTZv3Wa465 | store roles (GR-19..22), dead alert checks, credit ledger; three sub-agents |
+| 2026-10-04 | claude-cloud-credit | ? | session_01EV4jnhYUdG3pyWDEjRgPAN | staging_drain chain S1-S7 (GR-23); no vast, no paid API calls; no sub-agents |

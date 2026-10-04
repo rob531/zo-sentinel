@@ -1,0 +1,40 @@
+{
+  "task": "patch_ask_query_expansion_v3_passes_gate",
+  "directive_id": "patch_ask_query_expansion_v3_passes_gate",
+  "id": "patch_ask_query_expansion_v3_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/ask_query_expansion_v3/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'ask_query_expansion_v3' (services/staged/ask_query_expansion_v3; family ask_query_expansion v3; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): IMPORT FAILED (would ModuleNotFoundError at spine mount): ModuleNotFoundError: No module named 'elasticsearch'. The import names a module that is absent. If it is a third-party package, it is NOT in app/requirements.txt and cannot be added by this directive: rewrite without it. If it is an intra-service module, write it. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/ask_query_expansion_v3 (service.toml valid, router.py exposes a router, `python -m services.staged.ask_query_expansion_v3.router` imports, `python -m services.staged.ask_query_expansion_v3.contract` exits 0). Then `python tools/staging_drain/census.py --only ask_query_expansion_v3 --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/ask_query_expansion_v3/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/ask_query_expansion_v3/contract.py",
+    "services/staged/ask_query_expansion_v3/logic.py",
+    "services/staged/ask_query_expansion_v3/router.py",
+    "services/staged/ask_query_expansion_v3/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "ask_query_expansion_v3 fails the promotion gate: import_module_not_found",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "IMPORT FAILED (would ModuleNotFoundError at spine mount): ModuleNotFoundError: No module named 'elasticsearch'",
+    "failure_class": "import_module_not_found",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "The import names a module that is absent. If it is a third-party package, it is NOT in app/requirements.txt and cannot be added by this directive: rewrite without it. If it is an intra-service module, write it.",
+  "details": {
+    "family": "ask_query_expansion",
+    "version": 3,
+    "runtime_class": "api",
+    "files": [
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

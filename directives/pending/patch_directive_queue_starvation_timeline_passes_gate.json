@@ -1,0 +1,42 @@
+{
+  "task": "patch_directive_queue_starvation_timeline_passes_gate",
+  "directive_id": "patch_directive_queue_starvation_timeline_passes_gate",
+  "id": "patch_directive_queue_starvation_timeline_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/directive_queue_starvation_timeline/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'directive_queue_starvation_timeline' (services/staged/directive_queue_starvation_timeline; family directive_queue_starvation_timeline v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): mount probe FAILED (real router on the exemplar harness): GET /api/directives/starvation -> 500 over an empty data layer: FileNotFoundError: [Errno 2] No such file or directory: 'directives/proposed'. If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, which the Fly image cannot reach -- read through app.db (SQLAlchemy session via app.db.get_session) or declare the service a zo-side job. Otherwise: the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the exemplar contract's harness), failed as quoted. Fix the router/logic so every parameterless GET answers < 500 on an empty data layer, and make contract.py import THIS service's router (`from .router import router`) and assert it -- no re-implemented handler, no MagicMock router. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/directive_queue_starvation_timeline (service.toml valid, router.py exposes a router, `python -m services.staged.directive_queue_starvation_timeline.router` imports, `python -m services.staged.directive_queue_starvation_timeline.contract` exits 0). Then `python tools/staging_drain/census.py --only directive_queue_starvation_timeline --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/directive_queue_starvation_timeline/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/directive_queue_starvation_timeline/__init__.py",
+    "services/staged/directive_queue_starvation_timeline/contract.py",
+    "services/staged/directive_queue_starvation_timeline/logic.py",
+    "services/staged/directive_queue_starvation_timeline/router.py",
+    "services/staged/directive_queue_starvation_timeline/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "directive_queue_starvation_timeline fails the promotion gate: mount_probe_failed",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /api/directives/starvation -> 500 over an empty data layer: FileNotFoundError: [Errno 2] No such file or directory: 'directives/proposed'",
+    "failure_class": "mount_probe_failed",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, which the Fly image cannot reach -- read through app.db (SQLAlchemy session via app.db.get_session) or declare the service a zo-side job. Otherwise: the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the exemplar contract's harness), failed as quoted. Fix the router/logic so every parameterless GET answers < 500 on an empty data layer, and make contract.py import THIS service's router (`from .router import router`) and assert it -- no re-implemented handler, no MagicMock router.",
+  "details": {
+    "family": "directive_queue_starvation_timeline",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

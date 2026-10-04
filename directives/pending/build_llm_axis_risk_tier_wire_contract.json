@@ -1,0 +1,31 @@
+{
+  "task": "build_llm_axis_risk_tier_wire_contract",
+  "handler": "generate_file",
+  "recipe": "service_dir_from_exemplar",
+  "output_file": "services/staged/llm_axis_risk_tier_wire/contract.py",
+  "exemplar_file": "services/_exemplar/contract.py",
+  "reads": [
+    "services/_exemplar/contract.py"
+  ],
+  "description": "Build services/staged/llm_axis_risk_tier_wire/contract.py for service 'llm_axis_risk_tier_wire' by MIRRORING services/_exemplar/contract.py. Role: acceptance self-test runnable as `python -m services.staged.llm_axis_risk_tier_wire.contract`, TestClient + dependency_overrides + SQLite StaticPool, prints PASS/exit 0. Single-file only; import the REAL data layer; no stub DB. Service spec: Repair of an existing staged service, not a new one. The directory already holds: __init__.py, router.py, service.toml. Gate failure (verbatim): contract FAILED: exit=1 /usr/local/bin/python3: No module named services.staged.llm_axis_risk_tier_wire.contract. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/llm_axis_risk_tier_wire (service.toml valid, router.py exposes a router, `python -m services.staged.llm_axis_risk_tier_wire.router` imports, `python -m services.staged.llm_axis_risk_tier_wire.contract` exits 0). Then `python tools/staging_drain/census.py --only llm_axis_risk_tier_wire --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/llm_axis_risk_tier_wire/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "complexity": "medium",
+  "source": "staging_drain",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "summary": "llm_axis_risk_tier_wire: contract.py is missing; the gate holds it at 'contract_missing'",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "contract FAILED: exit=1 /usr/local/bin/python3: No module named services.staged.llm_axis_risk_tier_wire.contract",
+    "failure_class": "contract_missing",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "write services/staged/llm_axis_risk_tier_wire/contract.py mirroring services/_exemplar/contract.py",
+  "details": {
+    "family": "llm_axis_risk_tier_wire",
+    "version": 1,
+    "runtime_class": "api"
+  }
+}

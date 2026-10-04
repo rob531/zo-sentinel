@@ -1,0 +1,42 @@
+{
+  "task": "patch_perspective_events_passes_gate",
+  "directive_id": "patch_perspective_events_passes_gate",
+  "id": "patch_perspective_events_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/perspective_events/contract.py",
+  "complexity": "medium",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'perspective_events' (services/staged/perspective_events; family perspective_events v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): contract FAILED: exit=1 line 88, in _run_code\n  File \"/home/user/zo-sentinel/services/staged/perspective_events/contract.py\", line 100, in <module>\n    router.dependency_overrides[get_session] = override_get_session\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'APIRouter' object has no attribute 'dependency_overrides'. contract.py runs but fails: fix the ROUTE or the LOGIC so the contract's assertions hold over the real data layer; do not weaken the contract to pass. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/perspective_events (service.toml valid, router.py exposes a router, `python -m services.staged.perspective_events.router` imports, `python -m services.staged.perspective_events.contract` exits 0). Then `python tools/staging_drain/census.py --only perspective_events --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/perspective_events/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/perspective_events/__init__.py",
+    "services/staged/perspective_events/contract.py",
+    "services/staged/perspective_events/logic.py",
+    "services/staged/perspective_events/router.py",
+    "services/staged/perspective_events/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "perspective_events fails the promotion gate: contract_failed",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "contract FAILED: exit=1 line 88, in _run_code\n  File \"/home/user/zo-sentinel/services/staged/perspective_events/contract.py\", line 100, in <module>\n    router.dependency_overrides[get_session] = override_get_session\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'APIRouter' object has no attribute 'dependency_overrides'",
+    "failure_class": "contract_failed",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "contract.py runs but fails: fix the ROUTE or the LOGIC so the contract's assertions hold over the real data layer; do not weaken the contract to pass.",
+  "details": {
+    "family": "perspective_events",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

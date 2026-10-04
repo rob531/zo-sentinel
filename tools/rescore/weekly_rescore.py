@@ -670,6 +670,87 @@ GROUP BY scored_at, axis_name, label
 """
 
 
+# Histogram of ONE server set (the residue a cap-cut would leave in a cohort).
+# server_id is PK -> indexed; the set is at most one cohort's tail.
+SQL_RESIDUE_HIST = """
+SELECT axis_name, label, count(*)
+FROM mcp_llm_axis_scores
+WHERE model_version=%s AND server_id = ANY(%s)
+GROUP BY axis_name, label
+"""
+
+
+def residue_verdict(conn, sids, model_version: str = MODEL_VERSION) -> str:
+    """Verdict the SAME gate would give the servers `sids` if they were a cohort."""
+    from score_validity import validate_run_from_histogram
+    cur = conn.cursor()
+    cur.execute(SQL_RESIDUE_HIST, (model_version, list(sids)))
+    axes: dict = {}
+    for axis, label, n in cur.fetchall():
+        axes.setdefault(axis, {})[label] = int(n)
+    cur.close()
+    return validate_run_from_histogram(axes)["verdict"]
+
+
+# A cap cut INSIDE a cohort leaves a residue that cohort_trust judges on its
+# own. Measured 2026-10-04 (FU-175 class): the 10-03 wave at --refresh-cap
+# 140000 took 116811 of the 117916-server 2026-07-27 cohort; the 1105 left
+# behind -- the same rows that were VALID the day before as part of the whole
+# -- came back DEGENERATE (too few on-ladder rows for the declared exception),
+# so DISTRUSTED_REMAINING went 0 -> 1105 with no new score written. At the
+# 20000 default against ~22k cohorts this recurs EVERY week: each wave heals
+# last week's residue and manufactures the next. Bound the overshoot so the
+# snap can never double a wave's cost; when the only way out is a residue the
+# gate would condemn, say so loudly rather than silently leave it.
+SNAP_MAX_OVERSHOOT = 0.25
+
+
+def snap_refresh_to_cohort(refresh_rows, cap, scored_at, judge,
+                           max_overshoot: float = SNAP_MAX_OVERSHOOT):
+    """Return refresh_rows[:k] with k chosen so the cut does not strand a residue
+    the gate would DISTRUST. `judge(sids) -> verdict` is the gate itself.
+
+    Rules, in order:
+      * cut falls on a cohort boundary (or cap >= len)      -> plain slice
+      * residue of the cut cohort judged PASSING/INSUFFICIENT -> plain slice
+        (INSUFFICIENT is unevaluated, not distrusted -- FU-175 keeps the buckets apart)
+      * residue DISTRUSTED and residue <= max_overshoot*cap -> extend to the whole cohort
+      * else retreat to the cohort's start, unless that empties the slice
+        (FU-181: an unpadded wave aborts) -> plain slice + RESIDUE_WARNING
+    Returns (rows, note) where note is a one-line reason for the log.
+    """
+    from score_validity import DEGENERATE, SCHEMA_VIOLATION
+    n = len(refresh_rows)
+    if cap >= n or cap <= 0:
+        return refresh_rows[:cap], "snap: cap >= rows, no cut"
+    cut = scored_at[refresh_rows[cap - 1][0]]
+    if scored_at[refresh_rows[cap][0]] != cut:
+        return refresh_rows[:cap], "snap: cut on cohort boundary"
+    j = cap
+    while j < n and scored_at[refresh_rows[j][0]] == cut:
+        j += 1
+    residue = [r[0] for r in refresh_rows[cap:j]]
+    verdict = judge(residue)
+    if verdict not in (DEGENERATE, SCHEMA_VIOLATION):
+        return (refresh_rows[:cap],
+                f"snap: residue {len(residue)} of cohort {cut} judged {verdict}, plain slice")
+    if len(residue) <= int(max_overshoot * cap):
+        return (refresh_rows[:j],
+                f"snap: residue {len(residue)} of cohort {cut} would be {verdict} -> "
+                f"EXTENDED cap {cap} -> {j} (whole cohort)")
+    i = cap - 1
+    while i >= 0 and scored_at[refresh_rows[i][0]] == cut:
+        i -= 1
+    if i + 1 == 0:
+        return (refresh_rows[:cap],
+                f"snap: RESIDUE_WARNING residue {len(residue)} of cohort {cut} would be "
+                f"{verdict}; overshoot {j - cap} > {max_overshoot:.0%} of cap and retreating "
+                f"empties the refresh lane (FU-181) -> plain slice, residue WILL be distrusted")
+    return (refresh_rows[:i + 1],
+            f"snap: residue {len(residue)} of cohort {cut} would be {verdict}; overshoot "
+            f"{j - cap} > {max_overshoot:.0%} of cap -> RETREATED cap {cap} -> {i + 1}")
+
+
 def cohort_trust(conn, model_version: str = MODEL_VERSION):
     """Which scored_at cohorts already in the moat are NOT trustworthy?
 
@@ -769,7 +850,15 @@ def ph_export(run: Run, args) -> None:
     refresh_rows.sort(key=lambda r: (scored_at[r[0]] not in distrusted,
                                      scored_at[r[0]]))
     if run.state["mode"] != "full":
-        refresh_rows = refresh_rows[:args.refresh_cap]
+        try:
+            refresh_rows, note = snap_refresh_to_cohort(
+                refresh_rows, args.refresh_cap, scored_at,
+                lambda sids: residue_verdict(conn, sids))
+        except Exception as exc:      # FAIL-SAFE: never block an export
+            refresh_rows = refresh_rows[:args.refresh_cap]
+            note = f"snap: FAILED ({exc.__class__.__name__}: {exc}) -- plain slice"
+        log(f"export: {note}")
+        run.state["refresh_snap"] = note
     uniq = new_rows + refresh_rows
     cohort_sids = [r[0] for r in uniq]
 

@@ -122,6 +122,67 @@ def partition(rows):
     return landed, eligible, refused, absent
 
 
+def pkg_key(candidate: str) -> str:
+    """The unit a landing must be atomic in.
+
+    `services/staged/<name>/anything.py` is a PACKAGE: landing `contract.py`
+    without the `__init__.py` beside it puts a half-package in the repo, which
+    is an import error wearing a merge. Everything else is its own unit."""
+    parts = candidate.split("/")
+    if len(parts) >= 3 and parts[0] == "services" and parts[1] == "staged":
+        return "/".join(parts[:3])
+    return candidate
+
+
+def group_units(rows):
+    """Group the untracked rows into atomic units and decide each unit WHOLE.
+
+    A unit is eligible only if EVERY untracked member of it grades CLEAN. One
+    PHANTOM member refuses the whole unit: landing a package's clean half and
+    leaving its phantom half behind is the 'one door of eight' shape, and it
+    would also hand CI a package whose siblings are missing.
+
+    Returns (units, refused_units) where each is a list of
+    {"key", "rels", "bytes", "verdicts"} sorted by total bytes ascending."""
+    buckets: dict[str, list] = {}
+    for r in rows:
+        if r.get("landed_state") != "untracked":
+            continue
+        buckets.setdefault(pkg_key(r["candidate"]), []).append(r)
+    ok, bad = [], []
+    for key, members in buckets.items():
+        verdicts = sorted({m.get("verdict") for m in members})
+        unit = {
+            "key": key,
+            "rels": sorted(m["candidate"] for m in members),
+            "bytes": sum(m.get("bytes") or 0 for m in members),
+            "verdicts": verdicts,
+        }
+        (bad if any(v in BAD_VERDICTS for v in verdicts) else ok).append(unit)
+    ok.sort(key=lambda u: (u["bytes"], u["key"]))
+    bad.sort(key=lambda u: u["key"])
+    return ok, bad
+
+
+def take_batch(units, budget: int):
+    """Fill the batch with WHOLE units and never a fraction of one.
+
+    A unit bigger than the whole budget is taken alone rather than skipped
+    forever -- skipping it would starve it out of every future run, which is a
+    rate limit that has quietly become a refusal."""
+    batch, used = [], 0
+    for u in units:
+        n = len(u["rels"])
+        if used and used + n > budget:
+            continue
+        if not used and n > budget:
+            return [u]
+        if used + n <= budget:
+            batch.append(u)
+            used += n
+    return batch
+
+
 # ------------------------------------------------------------------ the stager
 
 def stage_exact(clone: Path, rels):
@@ -213,6 +274,52 @@ def self_test() -> int:
     pole("P2 --limit cannot raise MAX_PER_RUN",
          clamp(99) == MAX_PER_RUN and clamp(3) == 3 and clamp(0) == 0,
          "clamp(99)=%d clamp(3)=%d" % (clamp(99), clamp(3)))
+
+    # P7 -- a package is atomic. The naive byte-sorted FLAT batch is observed
+    # splitting services/staged/overview_dashboard (RED); the grouped batch is
+    # observed keeping it whole. This is the live shape from #4079: contract.py
+    # is 5454B and sorts into the first 8 while its __init__.py (7643B) does not.
+    pkg_rows = [
+        {"candidate": "services/staged/overview_dashboard/contract.py",
+         "landed_state": "untracked", "verdict": "CLEAN", "bytes": 5454},
+        {"candidate": "services/staged/overview_dashboard/__init__.py",
+         "landed_state": "untracked", "verdict": "CLEAN", "bytes": 7643},
+        {"candidate": "services/staged/overview_dashboard/logic.py",
+         "landed_state": "untracked", "verdict": "CLEAN", "bytes": 9288},
+        {"candidate": "a1.py", "landed_state": "untracked", "verdict": "CLEAN", "bytes": 100},
+        {"candidate": "a2.py", "landed_state": "untracked", "verdict": "CLEAN", "bytes": 200},
+        {"candidate": "a3.py", "landed_state": "untracked", "verdict": "CLEAN", "bytes": 300},
+        {"candidate": "a4.py", "landed_state": "untracked", "verdict": "CLEAN", "bytes": 400},
+        {"candidate": "a5.py", "landed_state": "untracked", "verdict": "CLEAN", "bytes": 500},
+        {"candidate": "a6.py", "landed_state": "untracked", "verdict": "CLEAN", "bytes": 600},
+        {"candidate": "services/staged/half_phantom/__init__.py",
+         "landed_state": "untracked", "verdict": "PHANTOM", "bytes": 10},
+        {"candidate": "services/staged/half_phantom/logic.py",
+         "landed_state": "untracked", "verdict": "CLEAN", "bytes": 10},
+    ]
+    _, flat_eligible, _, _ = partition(pkg_rows)
+    flat = [r["candidate"] for r in flat_eligible[:8]]
+    flat_split = ("services/staged/overview_dashboard/contract.py" in flat and
+                  "services/staged/overview_dashboard/__init__.py" not in flat)
+
+    units, bad_units = group_units(pkg_rows)
+    batch = take_batch(units, 8)
+    rels = sorted(x for u in batch for x in u["rels"])
+    od = [x for x in rels if x.startswith("services/staged/overview_dashboard/")]
+    whole_or_absent = len(od) in (0, 3)
+    pole("P7 package kept whole where a flat byte sort splits it",
+         flat_split and whole_or_absent and len(rels) <= 8,
+         "flat took %s ; grouped took %s" % (flat, rels))
+
+    pole("P7b a unit with one PHANTOM member is refused WHOLE",
+         [u["key"] for u in bad_units] == ["services/staged/half_phantom"] and
+         not any(x.startswith("services/staged/half_phantom/") for u in units for x in u["rels"]),
+         "refused units=%s" % [u["key"] for u in bad_units])
+
+    pole("P7c a unit larger than the budget is taken alone, never starved",
+         [u["key"] for u in take_batch(units, 2)] != [] and
+         len(take_batch([u for u in units if u["key"].endswith("overview_dashboard")], 2)) == 1,
+         "budget-2 batch=%s" % [u["key"] for u in take_batch(units, 2)])
 
     # P5 -- THE negative control. A decoy beside an intended file must not be
     # staged. `git add -A` is observed picking it up (RED) first, so the pass
@@ -327,11 +434,20 @@ def main(argv=None) -> int:
     print("  in-flight [stranded-land] PRs %s (ceiling %d)"
           % ("UNREADABLE: %s" % nf_err if nf < 0 else str(nf), MAX_IN_FLIGHT))
 
-    batch = eligible[:want]
-    rels = [r["candidate"] for r in batch]
+    units, bad_units = group_units(rows)
+    batch_units = take_batch(units, want)
+    rels = sorted(x for u in batch_units for x in u["rels"])
+    bl = {r["candidate"]: r for r in rows}
     print("")
-    for r in batch:
-        print("  batch: %-60s %6dB %4d lines" % (r["candidate"], r.get("bytes") or 0, r.get("lines") or 0))
+    print("  atomic units eligible  %4d   (a services/staged/<name>/ package lands whole or not at all)"
+          % len(units))
+    print("  units refused whole    %4d   %s" % (len(bad_units), [u["key"] for u in bad_units]))
+    print("")
+    for u in batch_units:
+        print("  unit: %s  (%d file(s), %dB)" % (u["key"], len(u["rels"]), u["bytes"]))
+        for x in u["rels"]:
+            r = bl.get(x, {})
+            print("        %-58s %6dB %4d lines" % (x, r.get("bytes") or 0, r.get("lines") or 0))
 
     if a.json_out:
         Path(a.json_out).write_text(json.dumps({
@@ -339,9 +455,11 @@ def main(argv=None) -> int:
             "eligible": len(eligible), "refused": len(refused), "absent": len(absent)},
             "refused": [r["candidate"] for r in refused],
             "batch": rels, "in_flight": nf,
+            "units": [u["key"] for u in units],
+            "units_refused_whole": [u["key"] for u in bad_units],
         }, indent=2), encoding="utf-8")
 
-    if not eligible:
+    if not units:
         print("\nNOTHING ELIGIBLE. rc=0.")
         return 0
     if nf < 0:

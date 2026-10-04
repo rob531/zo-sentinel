@@ -40,6 +40,16 @@ EXECUTE_URL = 'http://127.0.0.1:8772/execute'
 QUERY_URL = 'http://127.0.0.1:8772/query'
 HEARTBEAT_INTERVAL = 60
 CYCLE_INTERVAL = 21600  # 6 hours
+# Backoff after a cycle that FAILED or whose writes could not be verified.
+# Measured 2026-10-04 on this daemon's own log: of the four cycles that day,
+# two died inside 180s on a transient write_service restart (ConnectionReset
+# at 14:51:21, ReadTimeout at 04:48:51) and run() then slept the full
+# CYCLE_INTERVAL, so a sub-minute bus outage cost the fleet a six-hour cycle.
+# The work queue is `server_id NOT IN (valid attestations)`, which is
+# self-healing, so an early retry re-attempts exactly the servers that were
+# missed and is idempotent by construction.
+RETRY_INTERVAL = int(os.environ.get('ZO_ATTESTATION_RETRY_INTERVAL', '300'))
+RETRY_BACKOFF_MAX = CYCLE_INTERVAL
 # Env-overridable so a test (or a second checkout) never writes into the live
 # service's log and report paths. The defaults are unchanged for the daemon.
 LOG_DIR = os.environ.get('ZO_ATTESTATION_LOG_DIR',
@@ -454,10 +464,64 @@ def get_all_servers_needing_attestation() -> list:
         raise
 
 
+class AttestationWritesLost(RuntimeError):
+    """The bus acknowledged attestation writes that the table does not hold.
+
+    Not a hypothetical. 2026-10-04, this daemon's own log and the live bus:
+
+        10:51 .. 11:49  1062 writes, each a 2xx {"ok":true,"queued":1}
+        11:49:33        [write_wrapper] Starting WriteService (restart)
+        12:07:22        [write_wrapper] Stale WAL (1072s old) -- removing
+        18:25           SELECT count(*) FROM mcp_attestations  ->  28
+                        max(generated_at)                      -> 2026-06-09
+
+    Every one of the 1062 was acknowledged and none was stored. The engine had
+    already logged "Cycle complete. Generated 1062 attestations" -- a count of
+    HTTP responses presented as a count of rows -- and slept six hours. R3/R6:
+    a 2xx is not a row, and a daemon must re-derive its own output from the
+    store before it reports it.
+    """
+
+
+def count_attestations_since(since_iso: str) -> Optional[int]:
+    """Rows in mcp_attestations with generated_at >= since_iso, FROM THE BUS.
+
+    Returns None for UNKNOWN. R6 -- a read that failed is not the value 0, and
+    this number decides whether writes were lost, so returning 0 on a network
+    blip would invent a data-loss alarm. The statement is an aggregate, so the
+    200-row page cap cannot reach it (gh#4003).
+    """
+    sql = ("SELECT count(*) AS n FROM mcp_attestations "
+           "WHERE generated_at >= '%s'" % since_iso)
+    try:
+        resp = requests.post(QUERY_URL, json={'sql': sql}, timeout=30)
+        resp.raise_for_status()
+        body = resp.json()
+    except Exception as exc:
+        logger.warning("UNKNOWN, not zero: could not verify stored "
+                       "attestations: %s", exc)
+        return None
+    rows = body.get('rows') if isinstance(body, dict) else body
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        logger.warning("UNKNOWN, not zero: verification query returned no "
+                       "usable count: %r", body)
+        return None
+    value = rows[0].get('n')
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        logger.warning("UNKNOWN, not zero: verification query returned no "
+                       "usable count: %r", rows[0])
+        return None
+    return int(value)
+
+
 def cycle():
     """Main work cycle - generate attestations for servers."""
     logger.info("Starting attestation cycle")
-    
+
+    # The lower bound of the verification window, taken BEFORE any write, so
+    # every row this cycle creates satisfies generated_at >= cycle_started.
+    cycle_started = datetime.now(timezone.utc).isoformat()
+
     # Ensure table exists
     create_attestations_table()
     
@@ -487,7 +551,20 @@ def cycle():
     if all_attestations:
         generate_report(all_attestations)
     
-    logger.info(f"Cycle complete. Generated {len(all_attestations)} attestations")
+    acknowledged = len(all_attestations)
+    stored = count_attestations_since(cycle_started) if acknowledged else None
+
+    # R5 -- publish the BASIS with the number. The line this replaces said
+    # "Generated 1062 attestations" on a day the table gained zero rows,
+    # because `acknowledged` counts 2xx responses and nothing re-read the
+    # store. Both numbers are now named, and so is where each came from.
+    logger.info(
+        "Cycle complete. Generated %d attestations "
+        "(acknowledged=%d stored=%s | basis: acknowledged=2xx from %s, "
+        "stored=count(*) on mcp_attestations where generated_at >= %s)",
+        acknowledged, acknowledged,
+        'UNKNOWN' if stored is None else stored,
+        WRITE_SERVICE_URL, cycle_started)
 
     if servers and not all_attestations:
         # The condition nobody saw from 2026-06-09 to 2026-10-04: a cycle that
@@ -502,7 +579,25 @@ def cycle():
             "ATTESTATION CYCLE PRODUCED NOTHING: attempted=%d written=0 "
             "failed=%d first_failure=%s: %s",
             len(servers), len(failures), first_id, first_err)
-    return len(all_attestations)
+
+    if acknowledged and stored == 0:
+        # Proven loss: the bus answered the count and the answer was zero.
+        # Raised rather than logged, so run() treats the cycle as failed and
+        # retries on the short backoff instead of sleeping six hours over a
+        # fleet whose attestations were just discarded.
+        raise AttestationWritesLost(
+            "the bus acknowledged %d attestation write(s) and "
+            "mcp_attestations holds 0 row(s) with generated_at >= %s -- "
+            "acknowledged is not stored" % (acknowledged, cycle_started))
+
+    if acknowledged and stored is not None and stored < acknowledged:
+        logger.error(
+            "ATTESTATION WRITES PARTIALLY LOST: acknowledged=%d stored=%d "
+            "since=%s -- the %d missing server(s) remain in the "
+            "NOT IN (valid attestations) queue and are retried next cycle",
+            acknowledged, stored, cycle_started, acknowledged - stored)
+
+    return acknowledged
 
 
 def check_single_instance(*_args, **_kwargs):
@@ -521,15 +616,23 @@ def run():
     logger.info(f"{SERVICE_NAME} starting")
     
     send_heartbeat()
-    
+
+    backoff = RETRY_INTERVAL
     while True:
         try:
             cycle()
+            backoff = RETRY_INTERVAL
+            sleep_for = CYCLE_INTERVAL
         except Exception as e:
             logger.error(f"Error in cycle: {e}")
-        
+            # R7 -- prefer RECOVERY over RESTRICTION. Sleeping the full
+            # CYCLE_INTERVAL after a failure is what turned two sub-minute
+            # bus restarts into two lost six-hour cycles on 2026-10-04.
+            sleep_for = backoff
+            backoff = min(backoff * 2, RETRY_BACKOFF_MAX)
+
         send_heartbeat()
-        time.sleep(CYCLE_INTERVAL)
+        time.sleep(sleep_for)
 
 
 if __name__ == '__main__':

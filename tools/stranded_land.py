@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -215,6 +216,74 @@ def copy_in(runtime: Path, clone: Path, rels):
         shutil.copyfile(src, dst)
         done.append(rel)
     return done, missing
+
+
+# ------------------------------------------------------------------- the gate
+
+GATE_REL = "tests/ci/no_hollow_scaffold.py"
+
+
+def run_gate(clone: Path):
+    """Ask the REPO'S OWN added-file gate about the commit that now exists.
+
+    This is here because of what #6106 measured: tools/stranded_review.py grades
+    a file CLEAN when every table it names resolves on one of four catalog
+    planes (63 tables). The repo's blocking gates ask different questions --
+    no_hollow_scaffold asks whether the module has a real data layer, and
+    capmap-check resolves tables against app.sql, not the planes. So a CLEAN
+    grade is NOT a landability grade, and the first batch of 8 proved it: 2 were
+    rejected (manual_override_api_v2.py, sentinel_ui_evidence_drawer_route.py)
+    and took the other 6 down with them.
+
+    The gate reads `git diff --diff-filter=A <BASE>...HEAD`, so it can only be
+    asked AFTER the commit exists -- which is why this runs post-commit and the
+    batch is rebuilt rather than un-staged.
+
+    Returns (rc, rejected_rels, text). rc=2 means the gate was not resolvable,
+    which is UNKNOWN and never a pass (R6)."""
+    if not (clone / GATE_REL).is_file():
+        return 2, [], "gate script absent at %s -- UNKNOWN, not clean" % GATE_REL
+    env = dict(os.environ, BASE_REF="origin/main")
+    r = subprocess.run([sys.executable, GATE_REL], cwd=clone,
+                       capture_output=True, env=env, timeout=600)
+    text = (r.stdout + r.stderr).decode("utf-8", "replace")
+    return r.returncode, parse_gate_rejects(text), text
+
+
+def parse_gate_rejects(text: str):
+    """Pull the rejected paths out of no_hollow_scaffold's own report lines.
+
+    Its format, verbatim from the #6106 run:
+        FAIL  [scaffold]  manual_override_api_v2.py  -- hollow scaffold: ...
+    The bracketed rule name is skipped; the first path-looking token wins."""
+    out = []
+    for line in text.splitlines():
+        t = line.strip()
+        if not t.startswith("FAIL"):
+            continue
+        for tok in t.split():
+            if tok.endswith(".py") and not tok.startswith("["):
+                out.append(tok)
+                break
+    return sorted(set(out))
+
+
+def build_commit(clone: Path, runtime: Path, branch: str, rels, msg: str):
+    """Put exactly `rels` on a fresh `branch` off origin/main and commit.
+
+    Re-callable: it resets the branch to origin/main first, so dropping a
+    gate-rejected file is a rebuild, not an amend on top of a bad tree."""
+    sh(["git", "checkout", "-q", "-B", branch, "origin/main"], cwd=clone)
+    sh(["git", "clean", "-qfd"], cwd=clone, check=False)
+    copied, missing = copy_in(runtime, clone, rels)
+    if missing:
+        return None, "candidate(s) vanished from the runtime between grading and copy: %s" % missing
+    staged, rc = stage_exact(clone, copied)
+    if rc:
+        return None, ("the index does not equal the intended set -- NOT committing.\n"
+                      "  intended: %s\n  staged:   %s" % (sorted(copied), staged))
+    sh(["git", "commit", "-q", "-m", msg], cwd=clone)
+    return staged, None
 
 
 # --------------------------------------------------------------------- in flight
@@ -418,6 +487,36 @@ def self_test() -> int:
     finally:
         shutil.rmtree(tmp8, ignore_errors=True)
 
+    # P9 -- the gate consult. Its parser is fed the REAL text #6106's no-hollow
+    # job printed today, so the pole fails if the report format moves under us.
+    real = (
+        "HOLLOW FILE(S) DETECTED -- added modules that are not real:\n"
+        "  FAIL  [scaffold]  manual_override_api_v2.py  -- hollow scaffold: standalone API"
+        " with no real data layer (app.db/app.models) (no-hollow CI would reject)\n"
+        "  FAIL  [scaffold]  sentinel_ui_evidence_drawer_route.py  -- hollow scaffold:"
+        " standalone API with no real data layer (app.db/app.models) (no-hollow CI would reject)\n"
+        "Real modules import the app data layer (app.db/app.models) and use no mock DB.\n")
+    pole("P9 gate report parsed into exactly the two files it named",
+         parse_gate_rejects(real) == ["manual_override_api_v2.py",
+                                      "sentinel_ui_evidence_drawer_route.py"],
+         "parsed %s" % parse_gate_rejects(real))
+
+    pole("P9b a clean gate report yields no rejects",
+         parse_gate_rejects("all added modules look real\nOK\n") == [],
+         "parsed %s" % parse_gate_rejects("all added modules look real\nOK\n"))
+
+    # P9c -- RED pole: an ABSENT gate is rc=2 UNKNOWN, never a silent pass. A
+    # lander that treats a missing gate as clean would push exactly the batch
+    # #6106 pushed.
+    tmp9 = Path(tempfile.mkdtemp(prefix="stranded_land_p9_"))
+    try:
+        grc, rej, gtxt = run_gate(tmp9)
+        pole("P9c an absent gate is rc=2, not clean",
+             grc == 2 and rej == [] and GATE_REL in gtxt,
+             "rc=%s text=%s" % (grc, gtxt[:90]))
+    finally:
+        shutil.rmtree(tmp9, ignore_errors=True)
+
     # P6 -- no grader => CANNOT EVALUATE, never a pass.
     g, err = grade(Path("."), Path(tempfile.gettempdir()) / "definitely_no_grader_here.py", None)
     pole("P6 missing grader is rc=2 CANNOT EVALUATE, not 0",
@@ -556,49 +655,81 @@ def main(argv=None) -> int:
         branch = BRANCH_PREFIX + base
         sh(["git", "checkout", "-q", "-B", branch], cwd=clone)
 
-        copied, missing = copy_in(runtime, clone, rels)
-        if missing:
-            print("\nREFUSED: %d candidate(s) vanished from the runtime between grading and copy: %s"
-                  % (len(missing), missing))
-            return 2
-        staged, rc = stage_exact(clone, copied)
-        if rc:
-            print("\nREFUSED: the index does not equal the intended set -- NOT committing.")
-            print("  intended: %s" % sorted(copied))
-            print("  staged:   %s" % staged)
-            return 1
-        print("\nindex verified: %d path(s), exactly the intended set" % len(staged))
+        def message(n, dropped):
+            m = ("land stranded re-emissions: %d CLEAN module(s) from #4079\n\n"
+                 "These files were regenerated by the quarantine re-emission (#4070 -> #4625)\n"
+                 "and have been sitting UNTRACKED on %s since 2026-09-10..09-15 -- present on\n"
+                 "a disk, in no repository (established by cycle-0166, #5922).\n\n"
+                 "Each one is graded CLEAN by tools/stranded_review.py (#6077): it parses, and\n"
+                 "every table it names resolves on some catalog plane. Graded against %s,\n"
+                 "catalog %s. The %d PHANTOM candidate(s) in the same bucket are NOT here and\n"
+                 "are refused by the lander by construction.\n\n"
+                 "Staged by explicit pathspec and the index asserted equal to the intended set;\n"
+                 "nothing was committed from the runtime tree, which carries ~18.5k untracked files.\n"
+                 % (n, runtime, basis.get("repo_head"),
+                    ",".join(basis.get("catalog_planes") or []), len(refused)))
+            if dropped:
+                m += ("\nDROPPED by %s before the push, because a CLEAN grade is not a\n"
+                      "landability grade -- the grader resolves tables against 4 catalog planes\n"
+                      "and this gate asks whether the module has a real data layer:\n%s\n"
+                      % (GATE_REL, "".join("  - %s\n" % d for d in dropped)))
+            return m
 
-        msg = ("land stranded re-emissions: %d CLEAN module(s) from #4079\n\n"
-               "These files were regenerated by the quarantine re-emission (#4070 -> #4625)\n"
-               "and have been sitting UNTRACKED on %s since 2026-09-10..09-15 -- present on\n"
-               "a disk, in no repository (established by cycle-0166, #5922).\n\n"
-               "Each one is graded CLEAN by tools/stranded_review.py (#6077): it parses, and\n"
-               "every table it names resolves on some catalog plane. Graded against %s,\n"
-               "catalog %s. The %d PHANTOM candidate(s) in the same bucket are NOT in this PR\n"
-               "and are refused by the lander by construction.\n\n"
-               "Staged by explicit pathspec and the index asserted equal to the intended set;\n"
-               "nothing was committed from the runtime tree, which carries ~18.5k untracked files.\n"
-               % (len(staged), runtime, basis.get("repo_head"),
-                  ",".join(basis.get("catalog_planes") or []), len(refused)))
-        sh(["git", "commit", "-q", "-m", msg], cwd=clone)
+        want_rels, dropped, gate_text = list(rels), [], ""
+        for attempt in (1, 2):
+            staged, why = build_commit(clone, runtime, branch, want_rels, message(len(want_rels), dropped))
+            if staged is None:
+                print("\nREFUSED: %s" % why)
+                return 1 if "index" in why else 2
+            print("\nindex verified: %d path(s), exactly the intended set" % len(staged))
+            grc, rej, gate_text = run_gate(clone)
+            print("gate %s (attempt %d): rc=%d, rejects %s" % (GATE_REL, attempt, grc, rej or "nothing"))
+            if grc == 0:
+                break
+            if grc == 2:
+                print("\nREFUSED: %s" % gate_text.strip()[:400])
+                print("An unrun gate is UNKNOWN, not clean (R6). rc=2.")
+                return 2
+            if not rej:
+                print("\nREFUSED: the gate is RED but named no file, so there is nothing to drop.")
+                print(gate_text.strip()[-800:])
+                return 1
+            inside = [r for r in rej if r in want_rels]
+            if not inside:
+                print("\nREFUSED: the gate rejects %s, which this batch did not add. Not ours to fix." % rej)
+                return 1
+            dropped += inside
+            want_rels = [r for r in want_rels if r not in inside]
+            if not want_rels:
+                print("\nREFUSED: every file in this batch is rejected by %s. Nothing to land." % GATE_REL)
+                print("  rejected: %s" % dropped)
+                return 1
+            print("  dropping %s and rebuilding the batch from origin/main" % inside)
+        else:
+            print("\nREFUSED: %s still RED after dropping %s. Not pushing a red batch." % (GATE_REL, dropped))
+            print(gate_text.strip()[-800:])
+            return 1
+
+        msg = message(len(staged), dropped)
         sh(["git", "push", "-q", "-u", "origin", branch], cwd=clone)
 
-        title = "%s land %d CLEAN stranded re-emission(s) (#4079)" % (PR_MARKER, len(staged))
+        title = "%s land %d stranded re-emission(s), gate-cleared (#4079)" % (PR_MARKER, len(staged))
         body_path = work / "body.md"
         body_path.write_text(
             msg + "\nFiles:\n" + "".join("- `%s`\n" % p for p in staged) +
             "\nRefused in the same bucket (PHANTOM, named a table on no plane):\n" +
             "".join("- `%s`\n" % r["candidate"] for r in refused) +
+            ("\nDropped before the push by `%s`:\n" % GATE_REL) +
+            ("".join("- `%s`\n" % d for d in dropped) if dropped else "- none\n") +
             "\nOpened by `tools/stranded_land.py` (cycle-0177). The lander never grades, never\n"
-            "deletes, never merges, and never force-pushes. `--self-test` carries six poles,\n"
-            "including a decoy file that `git add -A` is observed catching and the explicit\n"
-            "stager is observed excluding.\n", encoding="utf-8")
+            "deletes, never merges, and never force-pushes. It asks the repo's own added-file\n"
+            "gate BEFORE pushing and drops what that gate rejects, because a CLEAN referent\n"
+            "grade is not a landability grade -- #6106 measured that.\n", encoding="utf-8")
         _, out = sh(["gh", "pr", "create", "-R", REPO_SLUG, "--base", "main", "--head", branch,
                      "--title", title, "--body-file", str(body_path)])
         print(out.strip())
-        print("\nLANDED-AS-PR: %d file(s) on %s. Merge on green CI; %d eligible remain."
-              % (len(staged), branch, len(eligible) - len(staged)))
+        print("\nLANDED-AS-PR: %d file(s) on %s (dropped %d by the gate). Merge on green CI; "
+              "%d eligible remain." % (len(staged), branch, len(dropped), len(eligible) - len(staged)))
         return 0
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         print("\nAPPLY FAILED (nothing merged, nothing deleted): %s: %s" % (type(exc).__name__, exc))

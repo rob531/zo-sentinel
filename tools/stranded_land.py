@@ -48,6 +48,7 @@ commit, the runtime tree it copied from, and the counts with their window.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -517,6 +518,19 @@ def self_test() -> int:
     finally:
         shutil.rmtree(tmp9, ignore_errors=True)
 
+    # P10 -- the branch name must track the batch CONTENT. Naming it after the
+    # base commit alone is what made the rebuilt 6-file batch collide with the
+    # already-pushed 8-file branch and get refused at the push (observed on the
+    # live run, 2026-10-04). Same batch -> same branch (idempotent no-op);
+    # different batch -> different branch.
+    def _d(rels):
+        return hashlib.sha256("\n".join(sorted(rels)).encode()).hexdigest()[:8]
+    eight = ["a.py", "b.py", "c.py", "d.py", "e.py", "f.py", "g.py", "h.py"]
+    six = eight[:6]
+    pole("P10 branch digest is stable for one batch and differs across batches",
+         _d(eight) == _d(list(reversed(eight))) and _d(eight) != _d(six),
+         "d8=%s d8rev=%s d6=%s" % (_d(eight), _d(list(reversed(eight))), _d(six)))
+
     # P6 -- no grader => CANNOT EVALUATE, never a pass.
     g, err = grade(Path("."), Path(tempfile.gettempdir()) / "definitely_no_grader_here.py", None)
     pole("P6 missing grader is rc=2 CANNOT EVALUATE, not 0",
@@ -652,8 +666,6 @@ def main(argv=None) -> int:
             sh(["git", "config", k, v], cwd=clone)
         _, base = sh(["git", "rev-parse", "--short", "HEAD"], cwd=clone)
         base = base.strip()
-        branch = BRANCH_PREFIX + base
-        sh(["git", "checkout", "-q", "-B", branch], cwd=clone)
 
         def message(n, dropped):
             m = ("land stranded re-emissions: %d CLEAN module(s) from #4079\n\n"
@@ -677,7 +689,8 @@ def main(argv=None) -> int:
 
         want_rels, dropped, gate_text = list(rels), [], ""
         for attempt in (1, 2):
-            staged, why = build_commit(clone, runtime, branch, want_rels, message(len(want_rels), dropped))
+            staged, why = build_commit(clone, runtime, "_stranded_land_wip", want_rels,
+                                       message(len(want_rels), dropped))
             if staged is None:
                 print("\nREFUSED: %s" % why)
                 return 1 if "index" in why else 2
@@ -711,6 +724,26 @@ def main(argv=None) -> int:
             return 1
 
         msg = message(len(staged), dropped)
+
+        # The branch name tracks the batch CONTENT, not just the base commit.
+        # The first version named it after the base alone, so when the gate
+        # dropped two files and rebuilt the batch, the push landed on a branch
+        # that already carried the 8-file commit and was REFUSED -- correctly,
+        # because this tool never force-pushes. A different batch is a different
+        # branch; the SAME batch is the same branch, which keeps re-running a
+        # no-op instead of opening a duplicate PR.
+        digest = hashlib.sha256("\n".join(sorted(staged)).encode()).hexdigest()[:8]
+        branch = "%s%s-%s" % (BRANCH_PREFIX, base, digest)
+        sh(["git", "branch", "-q", "-M", branch], cwd=clone)
+
+        _, lsr = sh(["git", "ls-remote", "--heads", "origin", branch], cwd=clone, check=False)
+        if branch in lsr:
+            print("\nALREADY PUSHED: origin/%s exists and this tool never force-pushes." % branch)
+            print("  This exact batch is already on the remote -- idempotent no-op, not a failure.")
+            _, pl = sh(["gh", "pr", "list", "-R", REPO_SLUG, "--head", branch, "--state", "all",
+                        "--json", "number,state,url"], cwd=clone, check=False)
+            print("  its PR(s): %s" % pl.strip())
+            return 1
         sh(["git", "push", "-q", "-u", "origin", branch], cwd=clone)
 
         title = "%s land %d stranded re-emission(s), gate-cleared (#4079)" % (PR_MARKER, len(staged))

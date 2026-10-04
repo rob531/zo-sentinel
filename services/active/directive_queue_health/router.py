@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from app.db import get_session
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -7,7 +7,6 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
-from fastapi.testclient import TestClient
 
 router = APIRouter()
 
@@ -63,6 +62,7 @@ def directive_queue_health() -> DirectiveQueueHealthResponse:
 
 
 if __name__ == "__main__":
+    from fastapi.testclient import TestClient  # test-only: never at module scope (prod spine import)
     proposed_temp = tempfile.mkdtemp()
     pending_temp = tempfile.mkdtemp()
 

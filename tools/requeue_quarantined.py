@@ -75,6 +75,24 @@ MAX_IN_FLIGHT = 6
 # Directories whose contents are not evidence that a module is still wanted.
 _NOT_A_REFERENCE = ("quarantine/", ".patch_backups/", "__pycache__/")
 
+# A file that DECLARES itself a manager of this manifest is not evidence that
+# anything still wants the modules it names. The managers -- the grader, the
+# lander, the topper-up -- quote candidate filenames in order to withdraw,
+# grade or land them, and one of them quotes two of those names out of a CI log
+# in a test fixture.
+#
+# Measured 2026-10-04 (cycle-0177) with a two-pole control on ONE tree:
+#   clean origin/main                              -> 45 no_live_referrer, test PASSES
+#   same tree + tools/stranded_land.py (38 KB)     -> 44 no_live_referrer, assert 44 >= 45 FAILS
+# i.e. adding a tool whose job is to LAND these modules made one of them look
+# WANTED and newly eligible for RE-EMISSION. The management tooling was voting
+# on its own queue.
+#
+# The marker is self-declared rather than a hardcoded path list, so a manager
+# written next month is covered without editing this file, and a real consumer
+# can never be excluded by accident -- it would have to assert the sentence.
+_MANAGER_MARK = "QUARANTINE-MANAGER: names candidates to manage them, not to use them"
+
 ID_PREFIX = "reemit_"
 
 # A retry attempt gets its own stable id so the collision-refusal in emit()
@@ -172,9 +190,12 @@ def _corpus(repo: Path):
         if rel.startswith(".git/") or any(part in rel for part in _NOT_A_REFERENCE):
             continue
         try:
-            yield rel, p.read_text(encoding="utf-8", errors="replace")
+            txt = p.read_text(encoding="utf-8", errors="replace")
         except Exception:                                       # noqa: BLE001
             continue
+        if _MANAGER_MARK in txt:
+            continue            # a self-declared manager of this manifest
+        yield rel, txt
 
 
 def reference_counts(repo: Path, candidates) -> dict:

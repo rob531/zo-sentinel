@@ -358,6 +358,67 @@ def self_test() -> int:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # P8 -- RUN main() END TO END on the plan path against a stub grader.
+    # The first version of this file had 10 green poles and a NameError on line
+    # 472 of the plan path, because not one pole executed main(). A self-test
+    # that never runs the entry point is testing a different artifact than the
+    # one that runs (R1), so this pole exists to execute it.
+    tmp8 = Path(tempfile.mkdtemp(prefix="stranded_land_p8_"))
+    try:
+        stub = tmp8 / "stub_grader.py"
+        stub.write_text(
+            "import argparse, json, sys\n"
+            "a = argparse.ArgumentParser()\n"
+            "a.add_argument('--repo'); a.add_argument('--json'); a.add_argument('--manifest')\n"
+            "a.add_argument('--enforce', action='store_true')\n"
+            "n = a.parse_args()\n"
+            "rows = [\n"
+            "  {'candidate': 'u%d.py' % i, 'landed_state': 'untracked',\n"
+            "   'verdict': 'CLEAN', 'bytes': 100 + i, 'lines': i} for i in range(5)\n"
+            "] + [\n"
+            "  {'candidate': 'services/staged/pkg/__init__.py', 'landed_state': 'untracked',\n"
+            "   'verdict': 'CLEAN', 'bytes': 50, 'lines': 5},\n"
+            "  {'candidate': 'services/staged/pkg/logic.py', 'landed_state': 'untracked',\n"
+            "   'verdict': 'CLEAN', 'bytes': 60, 'lines': 6},\n"
+            "  {'candidate': 'bad.py', 'landed_state': 'untracked', 'verdict': 'PHANTOM',\n"
+            "   'bytes': 10, 'lines': 1},\n"
+            "  {'candidate': 'done.py', 'landed_state': 'landed', 'verdict': 'CLEAN',\n"
+            "   'bytes': 10, 'lines': 1},\n"
+            "  {'candidate': 'gone.py', 'landed_state': 'absent', 'verdict': None,\n"
+            "   'bytes': 0, 'lines': 0},\n"
+            "]\n"
+            "json.dump({'basis': {'repo_head': 'stub0000', 'catalog_planes': ['bus:1'],\n"
+            "  'catalog_tables': 1, 'bus_age_days': 0.0, 'generated_at': 'stub'},\n"
+            "  'counts': {}, 'verdicts': {}, 'rows': rows}, open(n.json, 'w'))\n",
+            encoding="utf-8")
+        jout = tmp8 / "p8.json"
+        import io as _io
+        import contextlib as _ctx
+        buf = _io.StringIO()
+        try:
+            with _ctx.redirect_stdout(buf):
+                rc8 = main(["--repo", str(tmp8), "--grader", str(stub),
+                            "--json", str(jout), "--limit", "4"])
+            boom = None
+        except Exception as exc:  # noqa: BLE001 -- a raise here is the whole point
+            rc8, boom = None, "%s: %s" % (type(exc).__name__, exc)
+        text = buf.getvalue()
+        payload = json.loads(jout.read_text(encoding="utf-8")) if jout.is_file() else {}
+        pole("P8 main() runs the PLAN path without raising",
+             boom is None and rc8 == 1,
+             boom or ("rc=%s (1 expected)" % rc8))
+        pole("P8b the plan batch is <= --limit and holds no refused row",
+             boom is None and len(payload.get("batch") or []) <= 4
+             and "bad.py" not in (payload.get("batch") or [])
+             and "done.py" not in (payload.get("batch") or [])
+             and "gone.py" not in (payload.get("batch") or []),
+             "batch=%s" % (payload.get("batch"),))
+        pole("P8c the plan prints its BASIS (R5), not just a verdict",
+             "BASIS" in text and "stub0000" in text,
+             "stdout head: %s" % text[:120].replace("\n", " | "))
+    finally:
+        shutil.rmtree(tmp8, ignore_errors=True)
+
     # P6 -- no grader => CANNOT EVALUATE, never a pass.
     g, err = grade(Path("."), Path(tempfile.gettempdir()) / "definitely_no_grader_here.py", None)
     pole("P6 missing grader is rc=2 CANNOT EVALUATE, not 0",
@@ -462,18 +523,25 @@ def main(argv=None) -> int:
     if not units:
         print("\nNOTHING ELIGIBLE. rc=0.")
         return 0
+    if not batch_units:
+        print("\n--limit 0: nothing requested. rc=1 (there IS work).")
+        return 1
+
+    # The PLAN is read-only and must stay readable even when `gh` is down. The
+    # in-flight ceiling gates --apply ONLY. Ordering these the other way round
+    # made a broken `gh` return rc=2 CANNOT EVALUATE for a question that needs
+    # no network at all -- caught by pole P8.
+    if not a.apply:
+        print("\nPLAN ONLY (rc=1). Re-run with --apply to open ONE PR for the %d file(s) above." % len(rels))
+        return 1
+
     if nf < 0:
-        print("\nREFUSED: the in-flight PR count could not be read, and an unknown is not a zero. rc=2.")
+        print("\nREFUSED: --apply needs the in-flight PR count and it could not be read."
+              " An unknown is not a zero (R6). rc=2.")
         return 2
     if nf >= MAX_IN_FLIGHT:
         print("\nHELD: %d [stranded-land] PR(s) already open (ceiling %d). Land or close those first: %s"
               % (nf, MAX_IN_FLIGHT, ", ".join("#%d" % p["number"] for p in prs)))
-        return 1
-    if not batch:
-        print("\n--limit 0: nothing requested. rc=1 (there IS work).")
-        return 1
-    if not a.apply:
-        print("\nPLAN ONLY (rc=1). Re-run with --apply to open ONE PR for the %d file(s) above." % len(rels))
         return 1
 
     # ---- apply: a FRESH clone, never the dirty runtime tree (FU-067)

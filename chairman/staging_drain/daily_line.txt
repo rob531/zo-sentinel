@@ -1,1 +1,1 @@
-staging_drain: promoted 0 · superseded 22 · repairing 100 · retired 1259 · remaining 403 · wall: image size UNKNOWN budget (25 promotable api services import to 70 MiB in one process; pass --budget-mb)
+staging_drain: promoted 0 · superseded 22 · repairing 200 · retired 1259 · remaining 303 · wall: image size UNKNOWN budget (8 promotable api services import to 68 MiB in one process; pass --budget-mb)

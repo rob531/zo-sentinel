@@ -65,9 +65,27 @@ def test_family_version_split():
     ("contract FAILED: exit=1 /usr/bin/python3: No module named services.staged.x.contract", "contract_missing"),
     ("contract FAILED: exit=1 AssertionError: 500", "contract_failed"),
     ("contract FAILED: contract TIMEOUT (120s)", "contract_timeout"),
+    ("test-only import at module scope (breaks the prod spine at import, release v86): router.py:10 fastapi.testclient.TestClient", "test_only_import_at_module_scope"),
+    ("mount probe FAILED (real router on the exemplar harness): GET /api/x -> 500 over an empty data layer", "mount_probe_failed"),
 ])
+
+
+
 def test_failure_classes(line, expected):
     assert census.classify_failure(line, "PROMOTE" if not line else "HOLD") == expected
+
+
+def test_module_scope_test_imports_and_contract_shape():
+    src = ("from fastapi import APIRouter\nfrom fastapi.testclient import TestClient\n"
+           "def f():\n    from unittest.mock import patch\n"
+           "if __name__ == '__main__':\n    import pytest\n")
+    found = census.module_scope_test_imports(src)
+    assert found == [(2, "fastapi.testclient.TestClient")], found   # guarded/inner imports are fine
+    assert census.CONTRACT_ROUTER_IMPORT_RE.search("from .router import router\n")
+    assert census.CONTRACT_ROUTER_IMPORT_RE.search("from services.staged.x.router import router\n")
+    assert not census.CONTRACT_ROUTER_IMPORT_RE.search("router = MagicMock()\n")
+    assert census.CONTRACT_MOCK_RE.search("from unittest.mock import MagicMock, patch\n")
+    assert not census.CONTRACT_MOCK_RE.search("# no mock data here\n")
 
 
 # ---------------------------------------------------------------- S3 / S6 ledger

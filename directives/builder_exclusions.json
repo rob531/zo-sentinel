@@ -1,8 +1,8 @@
 {
- "generated_at": "2026-10-04T21:15:13Z",
+ "generated_at": "2026-10-04T21:39:11Z",
  "writer": "tools/staging_drain/exclusions.py",
  "basis": {
-  "ledger_generated_at": "2026-10-04T21:15:13Z"
+  "ledger_generated_at": "2026-10-04T21:39:10Z"
  },
  "families": {
   "ask_answer_api": {

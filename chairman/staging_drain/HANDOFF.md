@@ -7,29 +7,41 @@ this file is hand-maintained; `STATUS.md`, `daily_line.txt`, `ledger.json` and
 ## What is true now (measured on main @ 60d32fd, 2026-10-04)
 
 ```
-staging_drain: promoted 0 · superseded 22 · repairing 100 · retired 1259 · remaining 403 · wall: image size UNKNOWN budget (25 promotable api services import to 70 MiB in one process)
+staging_drain: promoted 0 · superseded 22 · repairing 200 · retired 1259 · remaining 303 · wall: image size UNKNOWN budget (8 promotable api services import to 68 MiB in one process)
 ```
+
+Third tick of the day (the first two are in git history). Between the first and the third tick the
+census learned three checks from S4 batch 1 (PR #6154), which is why "promotable api" fell from 25
+to 8 and "repairing" rose: test-only imports at module scope, a real-router mount probe, and the
+shape of the contract (see "What the gate was missing" below).
 
 - 1,784 directories under `services/staged` (the "~426" count was a stale label).
 - 1,259 have **no source** (1,259 `manifest_only`): `__init__.py` and/or `service.toml`
   only. `tools/service_decomposer.py` lands those two by `write_raw`; the engine's
   router/logic/contract land ~21% of the time (c122). Retired with that reason.
   Nothing deleted; a later census that finds source re-classifies them.
-- 25 pass the real gate (`promote_staged_to_active.evaluate`), all `api`.
+- 25 pass the promoter's gate (`promote_staged_to_active.evaluate`), all `api`; **8** also pass the
+  census's pre-move checks (no test-only import at module scope; the real router mounts on the
+  exemplar harness and every parameterless GET answers < 500): `ask_corpus_health`,
+  `axis_score_delta_consumer`, `cadence_job_runs_health_api`, `ghsa_feed_ingestor`,
+  `risk_tier_statistics`, `risk_tier_writer`, `server_cve_search_consumer`, `threat_intel_summary`.
+  All 8 carry a weak contract (it never imports `.router`), recorded on their rows as `proof_weak`.
 - 13 `worker` dirs (source entrypoint + every module imports) are promotable on the
   zo path, which has **no gate yet** beyond import + entrypoint.
-- 465 repair targets; 100 have an open builder directive, 365 wait for later ticks
+- 482 repair targets; 200 have an open builder directive, 282 wait for later ticks
   (cap 100/tick). Classes: `lib_no_router` 155 (logic.py but no router — unfinished
   api scaffolds), `import_module_not_found` 103 (83 of them a router importing a
   `logic.py` that does not exist), `contract_missing` 90, `import_model_name` 50 (all
   family B: no referent in `app/models.py`), `contract_failed` 36,
-  `import_undefined_name` 28, `import_other` 2, `hollow_member` 1.
+  `import_undefined_name` 28, `mount_probe_failed` 9 (6 of them handlers that call write_service at
+  `127.0.0.1:8772` directly, which the Fly image cannot reach; 2 routers with 0 routes),
+  `test_only_import_at_module_scope` 8, `import_other` 2, `hollow_member` 1.
 - S2 harvest: **0 bytes**. All three mechanical scripts ran and refused every
   remaining site. The promoter's `casing_autofixed` field reported 165 sites and
   changed no file (`gate_changed_tree` = 0 in the census) — a GC-5 report of a
   mutation that did not happen.
-- Image wall: importing all 25 promotable api routers into one interpreter reaches
-  70 MiB max RSS (fastapi + sqlalchemy + `app.models` are ~67 MiB of that; the
+- Image wall: importing the 8 promotable api routers into one interpreter reaches
+  68 MiB max RSS (fastapi + sqlalchemy + `app.models` are ~67 MiB of that; the
   services add ~3 MiB together). The Fly machine's memory budget was not readable
   here; pass `--budget-mb` to turn the wall into `none` / `image size`.
 
@@ -59,9 +71,10 @@ staging_drain: promoted 0 · superseded 22 · repairing 100 · retired 1259 · r
    stdout of `python tools/staging_drain/report.py`). Nothing else from this chain goes
    in the brief.
 
-3. **S4 batch 1** (draft PR, branch `staging-drain/s4-batch-1`: 10 api services moved
-   staged→active, `app/_spine_generated.py` regenerated; `generate_spine --check` and
-   `--strict` clean; 0 duplicate routes across the 69 active routers). To finish:
+3. **S4 batch 1** (draft PR #6154, branch `staging-drain/s4-batch-1`: 7 api services moved
+   staged→active after 3 were pulled back, `app/_spine_generated.py` regenerated; `generate_spine
+   --check` and `--strict` clean; 0 duplicate routes across the 66 active routers;
+   `verify_deploy_candidate` 8/8 PASS on the first head). To finish:
    ```
    git fetch origin staging-drain/s4-batch-1 && git worktree add D:\zo\_prod_dryrun origin/staging-drain/s4-batch-1
    cd D:\zo\_prod_dryrun && python tools/verify_deploy_candidate.py --json
@@ -76,9 +89,10 @@ staging_drain: promoted 0 · superseded 22 · repairing 100 · retired 1259 · r
    That file is the only thing that turns `promotable` into `promoted` in the ledger.
    Red → revert the batch only (`git revert <merge>`), and paste the failure into the
    affected rows' repair directives (S5).
-   Flag: `server_cve_exposure_api` declares `/api/exemplar/scores/{server_id}` — a route
-   name mirrored from the exemplar. It passed the gate (real data layer, contract 200);
-   a reviewer may still want it renamed before it is public.
+   Pulled back from batch 1, now repair rows: `server_cve_exposure_api` (contract is a
+   MagicMock router; `/api/exemplar/...` route unadapted), `circuit_breaker_state_api` and
+   `directive_queue_health_api` (handlers call write_service at 127.0.0.1:8772, unreachable
+   from the Fly image).
 
 4. **Before the first worker batch — prove zo reaches the prod DB** (one read, one
    idempotent write on a scratch table, through write_service, never DuckDB directly):
@@ -97,6 +111,24 @@ staging_drain: promoted 0 · superseded 22 · repairing 100 · retired 1259 · r
    superseded) is read by `proposed_to_pending_promoter` (fan-out → `.excluded`) and the
    architect floor the moment the segments PR is live on the host; confirm with the log
    line `family of ... is excluded by`.
+
+## What the gate was missing (learned from S4 batch 1, now measured by the census)
+
+- **24 of the 25 gate-green contracts never import their own `.router`** (300 of all staged
+  contracts; 6 build on `unittest.mock`). They re-implement a handler and test that, so the
+  promoter's liveness step (`contract` exit 0) is a hollow proof for 96% of what it passes (GC-8).
+  The census records `contract_imports_router` / `contract_uses_mock` on every row and the ledger
+  marks promotable rows `proof_weak`. It does not flip the verdict: no armed gate defines that
+  rule yet. The real measurement is the mount probe below.
+- **Mount probe** (`census.py::mount_probe`): the REAL router on the exemplar harness (FastAPI app,
+  `app.db.get_session` overridden to an empty in-memory SQLite), GET every parameterless route.
+  25 gate-green services: 16 ok, 9 failed. Failures: 6 handlers call write_service at
+  `127.0.0.1:8772` directly (`ConnectionError`; unreachable from the Fly image, so every request
+  500s in prod: these are zo-side jobs or need `app.db`), 2 routers declare 0 routes, 1 raises.
+- **Test-only imports at module scope** (`fastapi.testclient`, `unittest.mock`, `pytest`): 8 of the
+  25, one in a router. `tests/test_no_module_scope_test_imports.py` is the armed gate, but it only
+  looks at `services/active/`, so it fires after the move; the census runs the same rule pre-move.
+  The promoter should too (`promote_staged_to_active.evaluate`): one more static reason.
 
 ## Findings filed on the way (each needs its own row or a note on GR-23)
 

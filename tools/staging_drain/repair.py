@@ -187,6 +187,17 @@ def build_directive(row, rec):
                                    "If it is an intra-service module, write it.",
         "import_syntax_error": "Fix the syntax error at the quoted location.",
         "import_other": "Fix the import-time failure quoted above.",
+        "test_only_import_at_module_scope": "Move the named import inside the function or the `if __name__ == "
+                                            "\"__main__\":` guard that uses it. fastapi.testclient / unittest.mock / "
+                                            "pytest at module scope break the prod spine at import (release v86).",
+        "mount_probe_failed": "If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, "
+                              "which the Fly image cannot reach -- read through app.db (SQLAlchemy session via "
+                              "app.db.get_session) or declare the service a zo-side job. Otherwise: "
+                              "the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the "
+                              "exemplar contract's harness), failed as quoted. Fix the router/logic so every "
+                              "parameterless GET answers < 500 on an empty data layer, and make contract.py import "
+                              "THIS service's router (`from .router import router`) and assert it -- no "
+                              "re-implemented handler, no MagicMock router.",
         "contract_timeout": "The contract hung for 120s. Remove any network call, server bind, or blocking loop from "
                             "import time and from the contract.",
     }.get(fc, "Fix the quoted gate failure.")

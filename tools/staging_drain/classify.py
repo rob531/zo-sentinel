@@ -217,11 +217,19 @@ def classify(census, promotions=None, active=None):
                     "newest version that passes the gate" if passing else "newest version and therefore the repair target"),
             }
         if _passes(keeper):
+            weak = []
+            if keeper.get("contract_uses_mock"):
+                weak.append("contract builds on unittest.mock")
+            elif keeper.get("contract_imports_router") is False:
+                weak.append("contract never imports .router (its exit 0 is not a proof of this service)")
+            mp = keeper.get("mount_probe") or {}
             out[keeper["service"]] = {
                 "outcome": "promotable",
                 "reason": "passes %s; awaiting S4 (%s) with prod evidence" % (
                     _gate_name(keeper),
                     "Fly image + boot test" if keeper["runtime_class_observed"] == "api" else "zo scheduled job"),
+                "proof": ("mount probe: %s" % mp.get("detail")) if mp else "no mount probe (worker/lib)",
+                "proof_weak": weak,
             }
         else:
             ff, fc = _failure(keeper)

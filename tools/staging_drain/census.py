@@ -68,6 +68,39 @@ WORKER_NAME_RE = re.compile(
 # (measured: 14 carry a real entrypoint).
 WORKER_SRC_RE = re.compile(r"^\s*def\s+(run|main|run_once|tick|cycle)\s*\(|^\s*while\s+True\s*:", re.M)
 ROUTE_RE = re.compile(r"@router\.(get|post|put|delete|patch)\(")
+# Two checks CI taught S4 batch 1 (2026-10-04, PR #6154), run BEFORE a move:
+#  * tests/test_no_module_scope_test_imports.py -- a test-only import at module
+#    scope under services/active breaks the prod spine at import (release v86).
+#    The needles are that test's, keyed on the symbol/submodule path.
+#  * a contract that never imports the service's real `.router`, or builds its
+#    router from unittest.mock, is a hollow liveness proof: exit 0 says nothing
+#    about the service (server_cve_exposure_api: MagicMock router, exemplar route).
+TEST_ONLY_NEEDLES = ("testclient", "pytest", "hypothesis", "unittest.mock", "freezegun",
+                     "responses.", "moto", "faker", "testcontainers", "factory_boy")
+CONTRACT_ROUTER_IMPORT_RE = re.compile(
+    r"^\s*from\s+\.router\s+import|^\s*from\s+\.\s+import\s+router|^\s*from\s+services\.(staged|active)\.[A-Za-z0-9_]+\.router\s+import|"
+    r"^\s*import\s+services\.(staged|active)\.[A-Za-z0-9_]+\.router", re.M)
+CONTRACT_MOCK_RE = re.compile(r"unittest\.mock|MagicMock\(|\bmock\.patch\b")
+
+
+def module_scope_test_imports(src):
+    """[(lineno, name)] for test-only imports that are direct children of the module."""
+    import ast
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    out = []
+    for node in tree.body:
+        names = []
+        if isinstance(node, ast.Import):
+            names = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = ["%s.%s" % (node.module or "", a.name) for a in node.names]
+        for n in names:
+            if any(k in n.lower() for k in TEST_ONLY_NEEDLES):
+                out.append((node.lineno, n))
+    return out
 
 
 def _read(p):
@@ -90,6 +123,10 @@ def classify_failure(first_failure, verdict):
     f = first_failure or ""
     if verdict == "PROMOTE" and not f:
         return "none"
+    if f.startswith("test-only import at module scope"):
+        return "test_only_import_at_module_scope"
+    if f.startswith("mount probe FAILED"):
+        return "mount_probe_failed"
     if f.startswith("service.toml missing/invalid"):
         return "missing_or_invalid_toml"
     if "carried by no Dockerfile COPY" in f:
@@ -169,8 +206,19 @@ def inspect_dir(name):
     else:
         stage = "logic_only"
     family, version = split_family(name)
+    # pre-move liveness-shape checks (see TEST_ONLY_NEEDLES above)
+    test_imports = []
+    for f in py:
+        for ln, n in module_scope_test_imports(_read(os.path.join(sdir, f))):
+            test_imports.append("%s:%d %s" % (f, ln, n))
+    contract_src = _read(os.path.join(sdir, "contract.py")) if "contract.py" in files else ""
+    contract_imports_router = bool(contract_src) and bool(CONTRACT_ROUTER_IMPORT_RE.search(contract_src))
+    contract_uses_mock = bool(contract_src) and bool(CONTRACT_MOCK_RE.search(contract_src))
     return {
         "service": name,
+        "module_scope_test_imports": test_imports,
+        "contract_imports_router": contract_imports_router if contract_src else None,
+        "contract_uses_mock": contract_uses_mock if contract_src else None,
         "family": family,
         "version": version,
         "files": files,
@@ -242,6 +290,91 @@ def _rss_kb(module, timeout=90):
     return v
 
 
+_MOUNT_CODE = r"""
+import importlib, json, sys
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from app.db import get_session
+from app.models import Base
+mod = importlib.import_module(sys.argv[1])
+router = getattr(mod, "router")
+eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+Base.metadata.create_all(eng)
+S = sessionmaker(bind=eng, autoflush=False, autocommit=False)
+def _o():
+    db = S()
+    try:
+        yield db
+    finally:
+        db.close()
+app = FastAPI()
+app.include_router(router)
+app.dependency_overrides[get_session] = _o
+c = TestClient(app, raise_server_exceptions=True)
+out = []
+n = 0
+# enumerate the ROUTER's routes (prefix already applied), not app.routes: on
+# fastapi>=0.14x include_router nests them under an _IncludedRouter entry
+for r in router.routes:
+    methods = getattr(r, "methods", None) or set()
+    path = getattr(r, "path", "")
+    if not methods:
+        continue
+    n += 1
+    if "GET" in methods and "{" not in path:
+        try:
+            out.append([path, c.get(path).status_code, ""])
+        except Exception as exc:  # the handler raised: a 500 in prod, with its cause
+            out.append([path, 500, "%s: %s" % (type(exc).__name__, str(exc)[:240])])
+print(json.dumps({"routes": n, "probed": out}))
+"""
+
+
+def mount_probe(module, timeout=120):
+    """Mount the REAL router on a FastAPI app over an empty in-memory SQLite (the
+    exemplar contract's harness) and GET every parameterless route. This is the
+    liveness measurement the per-service contract was supposed to be: on
+    2026-10-04, 24 of the 25 gate-green contracts never imported their own
+    `.router`, so their exit 0 proved nothing about the service (GC-8).
+    Returns {"ok": bool|None, "routes": n, "probed": [[path, status]], "detail"}.
+    ok=None means UNMEASURED (the harness itself failed), never a pass."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _MOUNT_CODE, module], cwd=ROOT, capture_output=True, text=True,
+            timeout=timeout,
+            env={**os.environ, "PYTHONPATH": ROOT + os.pathsep + os.environ.get("PYTHONPATH", ""),
+                 "DATABASE_URL": "sqlite://"},
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "routes": None, "probed": [], "detail": "mount probe TIMEOUT (%ss)" % timeout}
+    except OSError as e:
+        return {"ok": None, "routes": None, "probed": [], "detail": "mount probe could not run: %r" % e}
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip().splitlines()
+        return {"ok": False, "routes": None, "probed": [],
+                "detail": "mount FAILED: " + (err[-1] if err else "exit=%d" % proc.returncode)[:300]}
+    try:
+        data = json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"ok": None, "routes": None, "probed": [], "detail": "mount probe output unreadable"}
+    bad = [p for p in data["probed"] if p[1] >= 500]
+    if data["routes"] == 0:
+        return {"ok": False, "routes": 0, "probed": [], "detail": "router mounts but declares 0 routes"}
+    if bad:
+        why = bad[0][2] if len(bad[0]) > 2 else ""
+        if "8772" in why:
+            why = ("handler calls write_service at 127.0.0.1:8772 directly (%s) -- that bus is not reachable "
+                   "from the Fly image, so every request 500s in prod; an api service must read through "
+                   "app.db, or this is a zo-side job, not a Fly route" % why.split(":")[0])
+        return {"ok": False, "routes": data["routes"], "probed": data["probed"],
+                "detail": "GET %s -> %d over an empty data layer%s" % (bad[0][0], bad[0][1], (": " + why) if why else "")}
+    return {"ok": True, "routes": data["routes"], "probed": data["probed"],
+            "detail": "mounted; %d parameterless GET route(s) answered < 500" % len(data["probed"])}
+
+
 def census_one(name, active_routes, baseline_kb, static_only=False):
     rec = inspect_dir(name)
     if static_only:
@@ -253,6 +386,7 @@ def census_one(name, active_routes, baseline_kb, static_only=False):
         rec["gate_changed_tree"] = None
         rec["source_import"] = None
         rec["source_import_ok"] = None
+        rec["mount_probe"] = None
         return rec
     t0 = time.time()
     sdir = os.path.join(STAGED, name)
@@ -275,6 +409,21 @@ def census_one(name, active_routes, baseline_kb, static_only=False):
         "casing_autofixed": len(v.get("casing_autofixed") or {}),
         "seconds": round(time.time() - t0, 2),
     }
+    rec["mount_probe"] = None
+    if v["verdict"] == "PROMOTE":
+        rec["mount_probe"] = mount_probe(gate._staged_equivalent(v["import_path"], name))
+        extra = []
+        if rec["mount_probe"]["ok"] is False:
+            extra.append("mount probe FAILED (real router on the exemplar harness): " + rec["mount_probe"]["detail"])
+        if rec["module_scope_test_imports"]:
+            extra.append("test-only import at module scope (breaks the prod spine at import, release v86): "
+                         + "; ".join(rec["module_scope_test_imports"][:4]))
+        if extra:
+            v["verdict"] = "HOLD"
+            v["reasons"] = extra
+            rec["gate"]["verdict"] = "HOLD"
+            rec["gate"]["reasons"] = extra
+            rec["gate"]["pre_move_checks_failed"] = True
     rec["first_failure"] = v["reasons"][0] if v["reasons"] else ""
     rec["failure_class"] = classify_failure(rec["first_failure"], v["verdict"])
     if v["import_ok"]:
@@ -323,6 +472,10 @@ def summarize(records):
         "failure_class": c("failure_class"),
         "scaffold_stage": c("scaffold_stage"),
         "gate_changed_tree": sum(1 for r in records if r.get("gate_changed_tree")),
+        "contract_never_imports_router": sum(1 for r in records if r.get("contract_imports_router") is False),
+        "contract_uses_mock": sum(1 for r in records if r.get("contract_uses_mock")),
+        "mount_probe_ok": sum(1 for r in records if (r.get("mount_probe") or {}).get("ok") is True),
+        "mount_probe_failed": sum(1 for r in records if (r.get("mount_probe") or {}).get("ok") is False),
         "source_import_ok": sum(1 for r in records if r.get("source_import_ok") is True),
         "source_import_failed": sum(1 for r in records if r.get("source_import_ok") is False),
         "footprint_delta_kb_measured": sum(1 for r in records if r.get("footprint_delta_kb") is not None),

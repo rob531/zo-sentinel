@@ -1,0 +1,38 @@
+{
+  "task": "patch_mcp_score_dispute_passes_gate",
+  "directive_id": "patch_mcp_score_dispute_passes_gate",
+  "id": "patch_mcp_score_dispute_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/mcp_score_dispute/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'mcp_score_dispute' (services/staged/mcp_score_dispute; family mcp_score_dispute v1; runtime class lib) so it passes the promotion gate. GATE FAILURE (verbatim): source import FAILED: services.staged.mcp_score_dispute.router: NameError: name 'services' is not defined. Fix the quoted gate failure. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/mcp_score_dispute (service.toml valid, router.py exposes a router, `python -m services.staged.mcp_score_dispute.router` imports, `python -m services.staged.mcp_score_dispute.contract` exits 0). Then `python tools/staging_drain/census.py --only mcp_score_dispute --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/mcp_score_dispute/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/mcp_score_dispute/__init__.py",
+    "services/staged/mcp_score_dispute/router.py",
+    "services/staged/mcp_score_dispute/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "mcp_score_dispute fails the promotion gate: import_undefined_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "source import FAILED: services.staged.mcp_score_dispute.router: NameError: name 'services' is not defined",
+    "failure_class": "import_undefined_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the quoted gate failure.",
+  "details": {
+    "family": "mcp_score_dispute",
+    "version": 1,
+    "runtime_class": "lib",
+    "files": [
+      "__init__.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

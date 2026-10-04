@@ -1,17 +1,17 @@
 {
- "generated_at": "2026-10-04T21:15:13Z",
+ "generated_at": "2026-10-04T21:39:10Z",
  "writer": "tools/staging_drain/classify.py",
  "basis": {
-  "census_generated_at": "2026-10-04T21:15:09Z",
-  "census_git_head": "6b3abd0accb1cfbfcae7e5780ebf0ee49c59c146",
+  "census_generated_at": "2026-10-04T21:39:07Z",
+  "census_git_head": "2879ef79d8fefccf14725d901e8c9f244d61b142",
   "census_mode": "full-gate",
   "active_families": 59
  },
  "counts": {
   "retired": 1259,
   "superseded": 22,
-  "repair": 465,
-  "promotable": 38
+  "repair": 482,
+  "promotable": 21
  },
  "services": {
   "adapter_promotion_ledger": {
@@ -93,7 +93,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_admin_exemptions_api_passes_gate.json"
+   "directive": "patch_admin_exemptions_api_passes_gate (already in flight)"
   },
   "admin_exemptions_view": {
    "outcome": "repair",
@@ -108,7 +108,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_admin_exemptions_view_router.json"
+   "directive": "build_admin_exemptions_view_router (already in flight)"
   },
   "admin_policies": {
    "outcome": "retired",
@@ -145,7 +145,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_admin_submissions_passes_gate.json"
+   "directive": "patch_admin_submissions_passes_gate (already in flight)"
   },
   "admin_submissions_api": {
    "outcome": "retired",
@@ -181,8 +181,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26844,
-   "directive": "directives/pending/build_advisory_alert_api_contract.json"
+   "footprint_delta_kb": 26872,
+   "directive": "build_advisory_alert_api_contract (already in flight)"
   },
   "advisory_details": {
    "outcome": "retired",
@@ -251,8 +251,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26956,
-   "directive": "directives/pending/build_advisory_feed_normalizer_contract.json"
+   "footprint_delta_kb": 26768,
+   "directive": "build_advisory_feed_normalizer_contract (already in flight)"
   },
   "advisory_feed_status": {
    "outcome": "retired",
@@ -278,7 +278,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_advisory_freshness_logic.json"
+   "directive": "build_advisory_freshness_logic (already in flight)"
   },
   "advisory_freshness_gate": {
    "outcome": "retired",
@@ -381,7 +381,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_api_key_audit_log_router.json"
+   "directive": "build_api_key_audit_log_router (already in flight)"
   },
   "api_key_management": {
    "outcome": "retired",
@@ -417,8 +417,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26868,
-   "directive": "directives/pending/build_api_key_rotation_contract.json"
+   "footprint_delta_kb": 26968,
+   "directive": "build_api_key_rotation_contract (already in flight)"
   },
   "api_risk_tier_trend": {
    "outcome": "retired",
@@ -444,7 +444,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_api_signal_scores_distribution_router.json"
+   "directive": "build_api_signal_scores_distribution_router (already in flight)"
   },
   "app_main": {
    "outcome": "repair",
@@ -459,7 +459,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_app_main_passes_gate.json"
+   "directive": "patch_app_main_passes_gate (already in flight)"
   },
   "app_router_integration": {
    "outcome": "repair",
@@ -473,8 +473,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26920,
-   "directive": "directives/pending/build_app_router_integration_contract.json"
+   "footprint_delta_kb": 26756,
+   "directive": "build_app_router_integration_contract (already in flight)"
   },
   "app_router_registry": {
    "outcome": "retired",
@@ -510,8 +510,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25504,
-   "directive": "directives/pending/build_app_scoring_consumer_contract.json"
+   "footprint_delta_kb": 25308,
+   "directive": "build_app_scoring_consumer_contract (already in flight)"
   },
   "app_scoring_consumer_risk_tier_trend": {
    "outcome": "repair",
@@ -526,7 +526,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_app_scoring_consumer_risk_tier_trend_router.json"
+   "directive": "build_app_scoring_consumer_risk_tier_trend_router (already in flight)"
   },
   "app_scoring_consumer_vulnerability_exposure": {
    "outcome": "retired",
@@ -553,6 +553,8 @@
   "app_spine_wiring": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "app_spine_wiring",
    "version": 1,
    "runtime_class": "worker",
@@ -619,15 +621,19 @@
    "footprint_delta_kb": null
   },
   "ask_corpus_drift": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): router mounts but declares 0 routes",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): router mounts but declares 0 routes",
    "family": "ask_corpus_drift",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26948
+   "footprint_delta_kb": 26996,
+   "directive": "directives/pending/patch_ask_corpus_drift_passes_gate.json"
   },
   "ask_corpus_drift_guard": {
    "outcome": "retired",
@@ -643,13 +649,17 @@
   "ask_corpus_health": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 1 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "ask_corpus_health",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27000
+   "footprint_delta_kb": 26936
   },
   "ask_corpus_indexer": {
    "outcome": "retired",
@@ -753,7 +763,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_ask_query_expansion_v3_passes_gate.json"
+   "directive": "patch_ask_query_expansion_v3_passes_gate (already in flight)"
   },
   "ask_related_queries": {
    "outcome": "retired",
@@ -779,7 +789,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_ask_retrieval_passes_gate.json"
+   "directive": "patch_ask_retrieval_passes_gate (already in flight)"
   },
   "ask_retrieval_service": {
    "outcome": "repair",
@@ -794,7 +804,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_ask_retrieval_service_passes_gate.json"
+   "directive": "patch_ask_retrieval_service_passes_gate (already in flight)"
   },
   "ask_search": {
    "outcome": "retired",
@@ -820,7 +830,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_ask_search_api_passes_gate.json"
+   "directive": "patch_ask_search_api_passes_gate (already in flight)"
   },
   "ask_search_view": {
    "outcome": "repair",
@@ -835,7 +845,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_ask_search_view_router.json"
+   "directive": "build_ask_search_view_router (already in flight)"
   },
   "atomicity_gate": {
    "outcome": "retired",
@@ -927,7 +937,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_attestation_summary_logic.json"
+   "directive": "build_attestation_summary_logic (already in flight)"
   },
   "audit_log": {
    "outcome": "retired",
@@ -964,7 +974,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_audit_log_query_router.json"
+   "directive": "build_audit_log_query_router (already in flight)"
   },
   "audit_log_view": {
    "outcome": "repair",
@@ -978,8 +988,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 28456,
-   "directive": "directives/pending/build_audit_log_view_contract.json"
+   "footprint_delta_kb": 28524,
+   "directive": "build_audit_log_view_contract (already in flight)"
   },
   "auth_session": {
    "outcome": "retired",
@@ -1027,7 +1037,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_authority_log_report_passes_gate.json"
+   "directive": "patch_authority_log_report_passes_gate (already in flight)"
   },
   "authority_log_report_service": {
    "outcome": "retired",
@@ -1053,7 +1063,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_auto_emitted_service_router.json"
+   "directive": "build_auto_emitted_service_router (already in flight)"
   },
   "auto_emitted_service_package": {
    "outcome": "repair",
@@ -1067,8 +1077,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 7028,
-   "directive": "directives/pending/build_auto_emitted_service_package_contract.json"
+   "footprint_delta_kb": 6812,
+   "directive": "build_auto_emitted_service_package_contract (already in flight)"
   },
   "axis_attribution_api": {
    "outcome": "repair",
@@ -1082,8 +1092,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29372,
-   "directive": "directives/pending/build_axis_attribution_api_contract.json"
+   "footprint_delta_kb": 29528,
+   "directive": "build_axis_attribution_api_contract (already in flight)"
   },
   "axis_breakdown": {
    "outcome": "retired",
@@ -1120,7 +1130,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_change_attribution_logic.json"
+   "directive": "build_axis_change_attribution_logic (already in flight)"
   },
   "axis_change_attribution_probe": {
    "outcome": "retired",
@@ -1146,7 +1156,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_axis_change_attributions_passes_gate.json"
+   "directive": "patch_axis_change_attributions_passes_gate (already in flight)"
   },
   "axis_change_probe": {
    "outcome": "retired",
@@ -1204,8 +1214,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26980,
-   "directive": "directives/pending/build_axis_confidence_service_contract.json"
+   "footprint_delta_kb": 27036,
+   "directive": "build_axis_confidence_service_contract (already in flight)"
   },
   "axis_correlation_heatmap": {
    "outcome": "retired",
@@ -1231,7 +1241,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_axis_critical_concentration_passes_gate.json"
+   "directive": "patch_axis_critical_concentration_passes_gate (already in flight)"
   },
   "axis_critical_multi_flags": {
    "outcome": "repair",
@@ -1246,7 +1256,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_critical_multi_flags_logic.json"
+   "directive": "build_axis_critical_multi_flags_logic (already in flight)"
   },
   "axis_critical_servers": {
    "outcome": "retired",
@@ -1294,7 +1304,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_disagreement_scoring_consumer_router.json"
+   "directive": "build_axis_disagreement_scoring_consumer_router (already in flight)"
   },
   "axis_distribution": {
    "outcome": "retired",
@@ -1320,7 +1330,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_distribution_api_router.json"
+   "directive": "build_axis_distribution_api_router (already in flight)"
   },
   "axis_distribution_snapshot": {
    "outcome": "retired",
@@ -1401,7 +1411,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_axis_drift_scoring_consumer_passes_gate.json"
+   "directive": "patch_axis_drift_scoring_consumer_passes_gate (already in flight)"
   },
   "axis_drift_timeline": {
    "outcome": "retired",
@@ -1439,6 +1449,8 @@
   "axis_entropy_scoring_consumer": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "axis_entropy_scoring_consumer",
    "version": 1,
    "runtime_class": "worker",
@@ -1504,7 +1516,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_evidence_router.json"
+   "directive": "build_axis_evidence_router (already in flight)"
   },
   "axis_evidence_api": {
    "outcome": "repair",
@@ -1519,7 +1531,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_evidence_api_router.json"
+   "directive": "build_axis_evidence_api_router (already in flight)"
   },
   "axis_evidence_compile": {
    "outcome": "retired",
@@ -1611,7 +1623,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_evidence_query_router.json"
+   "directive": "build_axis_evidence_query_router (already in flight)"
   },
   "axis_evidence_retriever": {
    "outcome": "retired",
@@ -1692,7 +1704,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_model_version_report_logic.json"
+   "directive": "build_axis_model_version_report_logic (already in flight)"
   },
   "axis_percentile_comparison": {
    "outcome": "retired",
@@ -1773,7 +1785,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_risk_tier_consumer_logic.json"
+   "directive": "build_axis_risk_tier_consumer_logic (already in flight)"
   },
   "axis_risk_tier_scorer": {
    "outcome": "retired",
@@ -1820,8 +1832,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25584,
-   "directive": "directives/pending/build_axis_score_aggregator_scoring_consumer_contract.json"
+   "footprint_delta_kb": 25424,
+   "directive": "build_axis_score_aggregator_scoring_consumer_contract (already in flight)"
   },
   "axis_score_anomaly_probe": {
    "outcome": "retired",
@@ -1859,13 +1871,15 @@
   "axis_score_delta_consumer": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 1 parameterless GET route(s) answered < 500",
+   "proof_weak": [],
    "family": "axis_score_delta_consumer",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27028
+   "footprint_delta_kb": 26968
   },
   "axis_score_detail": {
    "outcome": "retired",
@@ -1914,6 +1928,8 @@
   "axis_score_drift": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "axis_score_drift",
    "version": 1,
    "runtime_class": "worker",
@@ -1957,7 +1973,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_score_freshness_scoring_consumer_router.json"
+   "directive": "build_axis_score_freshness_scoring_consumer_router (already in flight)"
   },
   "axis_score_heatmap": {
    "outcome": "repair",
@@ -1972,7 +1988,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_score_heatmap_router.json"
+   "directive": "build_axis_score_heatmap_router (already in flight)"
   },
   "axis_score_heatmap_api": {
    "outcome": "retired",
@@ -2042,7 +2058,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_axis_score_risk_tier_consumer_passes_gate.json"
+   "directive": "patch_axis_score_risk_tier_consumer_passes_gate (already in flight)"
   },
   "axis_score_snapshot": {
    "outcome": "retired",
@@ -2100,8 +2116,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27184,
-   "directive": "directives/pending/build_axis_score_timeline_api_contract.json"
+   "footprint_delta_kb": 27116,
+   "directive": "build_axis_score_timeline_api_contract (already in flight)"
   },
   "axis_score_to_risk_tier": {
    "outcome": "retired",
@@ -2337,7 +2353,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_scoring_consumer_logic.json"
+   "directive": "build_axis_scoring_consumer_logic (already in flight)"
   },
   "axis_scoring_consumer_auth_strength": {
    "outcome": "retired",
@@ -2384,8 +2400,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27016,
-   "directive": "directives/pending/build_axis_time_series_api_contract.json"
+   "footprint_delta_kb": 27012,
+   "directive": "build_axis_time_series_api_contract (already in flight)"
   },
   "axis_timeline": {
    "outcome": "retired",
@@ -2433,7 +2449,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_axis_to_risk_tier_consumer_logic.json"
+   "directive": "build_axis_to_risk_tier_consumer_logic (already in flight)"
   },
   "axis_top_servers_api": {
    "outcome": "retired",
@@ -2491,8 +2507,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29608,
-   "directive": "directives/pending/build_axis_volatility_scoring_consumer_contract.json"
+   "footprint_delta_kb": 29632,
+   "directive": "build_axis_volatility_scoring_consumer_contract (already in flight)"
   },
   "builder_health_api": {
    "outcome": "repair",
@@ -2507,7 +2523,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_builder_health_api_logic.json"
+   "directive": "build_builder_health_api_logic (already in flight)"
   },
   "cadence_health_summary": {
    "outcome": "repair",
@@ -2522,7 +2538,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cadence_health_summary_logic.json"
+   "directive": "build_cadence_health_summary_logic (already in flight)"
   },
   "cadence_job_health": {
    "outcome": "repair",
@@ -2537,7 +2553,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_cadence_job_health_passes_gate.json"
+   "directive": "patch_cadence_job_health_passes_gate (already in flight)"
   },
   "cadence_job_health_api": {
    "outcome": "retired",
@@ -2551,15 +2567,19 @@
    "footprint_delta_kb": null
   },
   "cadence_job_health_consumer": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): router mounts but declares 0 routes",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): router mounts but declares 0 routes",
    "family": "cadence_job_health_consumer",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 24424
+   "footprint_delta_kb": 24440,
+   "directive": "directives/pending/patch_cadence_job_health_consumer_passes_gate.json"
   },
   "cadence_job_health_detail": {
    "outcome": "retired",
@@ -2640,7 +2660,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cadence_job_monitoring_router.json"
+   "directive": "build_cadence_job_monitoring_router (already in flight)"
   },
   "cadence_job_run": {
    "outcome": "retired",
@@ -2710,7 +2730,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_cadence_job_runs_passes_gate.json"
+   "directive": "patch_cadence_job_runs_passes_gate (already in flight)"
   },
   "cadence_job_runs_audit": {
    "outcome": "retired",
@@ -2737,13 +2757,17 @@
   "cadence_job_runs_health_api": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 1 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "cadence_job_runs_health_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27040
+   "footprint_delta_kb": 26976
   },
   "cadence_job_sla": {
    "outcome": "repair",
@@ -2758,7 +2782,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cadence_job_sla_router.json"
+   "directive": "build_cadence_job_sla_router (already in flight)"
   },
   "cadence_job_sla_report": {
    "outcome": "retired",
@@ -2805,15 +2829,19 @@
    "footprint_delta_kb": null
   },
   "cadence_monitor": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:4 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:4 fastapi.testclient.TestClient",
    "family": "cadence_monitor",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26812
+   "footprint_delta_kb": 26988,
+   "directive": "directives/pending/patch_cadence_monitor_passes_gate.json"
   },
   "cadence_runtime_trend": {
    "outcome": "repair",
@@ -2827,8 +2855,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26344,
-   "directive": "directives/pending/build_cadence_runtime_trend_contract.json"
+   "footprint_delta_kb": 26256,
+   "directive": "build_cadence_runtime_trend_contract (already in flight)"
   },
   "cadence_runtime_trend_api": {
    "outcome": "retired",
@@ -2877,7 +2905,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_canonical_family_drift_router.json"
+   "directive": "build_canonical_family_drift_router (already in flight)"
   },
   "canonical_family_drift_probe": {
    "outcome": "retired",
@@ -2914,7 +2942,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_cascade_family_coverage_passes_gate.json"
+   "directive": "patch_cascade_family_coverage_passes_gate (already in flight)"
   },
   "cascade_family_rollup": {
    "outcome": "repair",
@@ -2929,7 +2957,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cascade_family_rollup_router.json"
+   "directive": "build_cascade_family_rollup_router (already in flight)"
   },
   "circuit_breaker_cohort_report": {
    "outcome": "retired",
@@ -2976,15 +3004,19 @@
    "footprint_delta_kb": null
   },
   "circuit_breaker_state_api": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /diagnostics/circuit-breaker -> 500 over an empty data layer: handler calls write_service at 127.0.0.1:8772 directly (ConnectionError) -- that bus is not reachable from the Fly image, so every request 500s in prod; an api service must read through app.db, or this is a zo-side job, not a Fly route",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /diagnostics/circuit-breaker -> 500 over an empty data layer: handler calls write_service at 127.0.0.1:8772 directly (ConnectionError) -- that bus is not reachable from the Fly image, so every request 500s in prod; an api service must rea",
    "family": "circuit_breaker_state_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 6804
+   "footprint_delta_kb": 6664,
+   "directive": "directives/pending/patch_circuit_breaker_state_api_passes_gate.json"
   },
   "circuit_breaker_status": {
    "outcome": "repair",
@@ -2999,7 +3031,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_circuit_breaker_status_logic.json"
   },
   "circuit_breaker_status_api": {
    "outcome": "repair",
@@ -3014,7 +3046,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_circuit_breaker_status_api_passes_gate.json"
   },
   "circuit_health_report": {
    "outcome": "repair",
@@ -3029,7 +3061,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_circuit_health_report_passes_gate.json"
   },
   "ciso_daily_digest_api": {
    "outcome": "retired",
@@ -3066,7 +3098,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_community_signal_api_router.json"
   },
   "community_signal_enrichment_wiring": {
    "outcome": "retired",
@@ -3091,8 +3123,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27036,
-   "directive": null
+   "footprint_delta_kb": 26900,
+   "directive": "directives/pending/patch_compare_risk_tiers_passes_gate.json"
   },
   "contract": {
    "outcome": "retired",
@@ -3184,7 +3216,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_critical_server_alert_router.json"
   },
   "critical_server_alert_consumer": {
    "outcome": "retired",
@@ -3287,7 +3319,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_analysis_dashboard_logic.json"
+   "directive": "build_cve_analysis_dashboard_logic (already in flight)"
   },
   "cve_axis_freshness": {
    "outcome": "repair",
@@ -3302,7 +3334,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_axis_freshness_logic.json"
+   "directive": "build_cve_axis_freshness_logic (already in flight)"
   },
   "cve_axis_freshness_api": {
    "outcome": "retired",
@@ -3449,7 +3481,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_facet_compile_service_router.json"
+   "directive": "build_cve_facet_compile_service_router (already in flight)"
   },
   "cve_facet_compile_v2": {
    "outcome": "retired",
@@ -3475,7 +3507,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_facet_compile_v3_logic.json"
+   "directive": "build_cve_facet_compile_v3_logic (already in flight)"
   },
   "cve_facet_compile_wiring_v2": {
    "outcome": "retired",
@@ -3545,7 +3577,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_cve_family_propagation_passes_gate.json"
+   "directive": "patch_cve_family_propagation_passes_gate (already in flight)"
   },
   "cve_family_propagation_api": {
    "outcome": "retired",
@@ -3593,7 +3625,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_cve_feed_processing_passes_gate.json"
+   "directive": "patch_cve_feed_processing_passes_gate (already in flight)"
   },
   "cve_impact_analysis": {
    "outcome": "retired",
@@ -3662,8 +3694,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26968,
-   "directive": "directives/pending/build_cve_linkage_summary_contract.json"
+   "footprint_delta_kb": 26908,
+   "directive": "build_cve_linkage_summary_contract (already in flight)"
   },
   "cve_linker": {
    "outcome": "retired",
@@ -3733,7 +3765,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_risk_summary_logic.json"
+   "directive": "build_cve_risk_summary_logic (already in flight)"
   },
   "cve_risk_tier_cross_api": {
    "outcome": "repair",
@@ -3748,7 +3780,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_risk_tier_cross_api_router.json"
+   "directive": "build_cve_risk_tier_cross_api_router (already in flight)"
   },
   "cve_risk_tier_severity_matrix": {
    "outcome": "repair",
@@ -3763,22 +3795,22 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_risk_tier_severity_matrix_router.json"
+   "directive": "build_cve_risk_tier_severity_matrix_router (already in flight)"
   },
   "cve_search": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 ge': 'test-package-1', 'feed': None, 'content_hash': None, 'ecosystem': None, 'source_url': None}, {'severity': 'medium', 'id': 2, 'published_at': '2023-01-02', 'summary': 'Test CVE 2 summary', 'package': 'test-package-2', 'feed': None, 'content_hash': None, 'ecosystem': None, 'source_url': None}]]",
+   "first_failure": "contract FAILED: exit=1 'Test CVE 1 summary', 'ecosystem': None, 'source_url': None, 'content_hash': None, 'feed': None}, {'severity': 'medium', 'published_at': '2023-01-02', 'id': 2, 'package': 'test-package-2', 'summary': 'Test CVE 2 summary', 'ecosystem': None, 'source_url': None, 'content_hash': None, 'feed': None}]]",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 ge': 'test-package-1', 'feed': None, 'content_hash': None, 'ecosystem': None, 'source_url': None}, {'severity': 'medium', 'id': 2, 'published_at': '2023-01-02', 'summary': 'Test CVE 2 summary', 'package': 'test-package-2', 'feed': None, 'content_hash': None, 'ecosystem': None",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 'Test CVE 1 summary', 'ecosystem': None, 'source_url': None, 'content_hash': None, 'feed': None}, {'severity': 'medium', 'published_at': '2023-01-02', 'id': 2, 'package': 'test-package-2', 'summary': 'Test CVE 2 summary', 'ecosystem': None, 'source_url': None, 'content_hash':",
    "family": "cve_search",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 27220,
-   "directive": "directives/pending/patch_cve_search_passes_gate.json"
+   "footprint_delta_kb": 27164,
+   "directive": "patch_cve_search_passes_gate (already in flight)"
   },
   "cve_search_api": {
    "outcome": "retired",
@@ -3880,8 +3912,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26948,
-   "directive": "directives/pending/build_cve_severity_rollup_contract.json"
+   "footprint_delta_kb": 26988,
+   "directive": "build_cve_severity_rollup_contract (already in flight)"
   },
   "cve_severity_rollup_api": {
    "outcome": "repair",
@@ -3896,7 +3928,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_cve_severity_rollup_api_passes_gate.json"
+   "directive": "patch_cve_severity_rollup_api_passes_gate (already in flight)"
   },
   "cve_severity_rollup_dashboard": {
    "outcome": "retired",
@@ -3966,7 +3998,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_cve_summary_dashboard_view_logic.json"
+   "directive": "build_cve_summary_dashboard_view_logic (already in flight)"
   },
   "cve_vulnerability_analysis": {
    "outcome": "retired",
@@ -4069,7 +4101,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_daemon_health_status_api_logic.json"
   },
   "daemon_heartbeat_alerts": {
    "outcome": "retired",
@@ -4106,7 +4138,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_daemon_liveness_api_router.json"
   },
   "daemon_liveness_report": {
    "outcome": "retired",
@@ -4132,7 +4164,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_daemon_roster_logic.json"
   },
   "daemon_roster_coverage": {
    "outcome": "retired",
@@ -4158,7 +4190,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_daemon_roster_coverage_api_passes_gate.json"
   },
   "daemon_roster_coverage_report": {
    "outcome": "repair",
@@ -4173,7 +4205,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_daemon_roster_coverage_report_passes_gate.json"
   },
   "daemon_roster_health": {
    "outcome": "retired",
@@ -4209,8 +4241,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 24580,
-   "directive": null
+   "footprint_delta_kb": 24324,
+   "directive": "directives/pending/build_daemon_roster_health_report_contract.json"
   },
   "daemon_roster_health_service": {
    "outcome": "retired",
@@ -4258,7 +4290,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_dashboard_risk_tier_trend_router.json"
   },
   "dashboard_risk_tier_trends": {
    "outcome": "retired",
@@ -4373,7 +4405,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_deferred_router_ledger_passes_gate.json"
   },
   "deferred_router_ledger_report": {
    "outcome": "repair",
@@ -4388,7 +4420,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_deferred_router_ledger_report_passes_gate.json"
   },
   "deferred_router_triage_report": {
    "outcome": "retired",
@@ -4414,7 +4446,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_definition_history_passes_gate.json"
   },
   "definition_history_backfill_api": {
    "outcome": "retired",
@@ -4527,26 +4559,34 @@
    "footprint_delta_kb": null
   },
   "directive_queue_health": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:7 fastapi.testclient.TestClient; router.py:10 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:7 fastapi.testclient.TestClient; router.py:10 fastapi.testclient.TestClient",
    "family": "directive_queue_health",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29444
+   "footprint_delta_kb": 29524,
+   "directive": "directives/pending/patch_directive_queue_health_passes_gate.json"
   },
   "directive_queue_health_api": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /api/directives/queue-health -> 500 over an empty data layer: handler calls write_service at 127.0.0.1:8772 directly (ConnectionError) -- that bus is not reachable from the Fly image, so every request 500s in prod; an api service must read through app.db, or this is a zo-side job, not a Fly route",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /api/directives/queue-health -> 500 over an empty data layer: handler calls write_service at 127.0.0.1:8772 directly (ConnectionError) -- that bus is not reachable from the Fly image, so every request 500s in prod; an api service must rea",
    "family": "directive_queue_health_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26836
+   "footprint_delta_kb": 26992,
+   "directive": "directives/pending/patch_directive_queue_health_api_passes_gate.json"
   },
   "directive_queue_health_router": {
    "outcome": "retired",
@@ -4560,15 +4600,19 @@
    "footprint_delta_kb": null
   },
   "directive_queue_starvation_timeline": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /api/directives/starvation -> 500 over an empty data layer: FileNotFoundError: [Errno 2] No such file or directory: 'directives/proposed'",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /api/directives/starvation -> 500 over an empty data layer: FileNotFoundError: [Errno 2] No such file or directory: 'directives/proposed'",
    "family": "directive_queue_starvation_timeline",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26976
+   "footprint_delta_kb": 27012,
+   "directive": "directives/pending/patch_directive_queue_starvation_timeline_passes_gate.json"
   },
   "dispute_backlog": {
    "outcome": "retired",
@@ -4594,7 +4638,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_dispute_backlog_summary_logic.json"
   },
   "dispute_backlog_summary_api": {
    "outcome": "retired",
@@ -4631,7 +4675,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_dispute_resolution_router.json"
   },
   "dispute_resolution_api": {
    "outcome": "retired",
@@ -4679,7 +4723,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_e2e_scenarios_run_router.json"
   },
   "entity_comparison_api": {
    "outcome": "retired",
@@ -4704,8 +4748,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26988,
-   "directive": null
+   "footprint_delta_kb": 26908,
+   "directive": "directives/pending/patch_entity_detail_passes_gate.json"
   },
   "entity_detail_api": {
    "outcome": "repair",
@@ -4720,7 +4764,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_entity_detail_api_passes_gate.json"
   },
   "entity_detail_dashboard": {
    "outcome": "retired",
@@ -4769,7 +4813,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_entity_detail_view_api_logic.json"
   },
   "entity_export": {
    "outcome": "retired",
@@ -4795,7 +4839,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_entity_report_logic.json"
   },
   "entity_report_api": {
    "outcome": "retired",
@@ -4941,8 +4985,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27020,
-   "directive": null
+   "footprint_delta_kb": 26904,
+   "directive": "directives/pending/build_escalated_servers_api_contract.json"
   },
   "escalation_alert_consumer": {
    "outcome": "retired",
@@ -4989,8 +5033,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25856,
-   "directive": null
+   "footprint_delta_kb": 25740,
+   "directive": "directives/pending/build_facet_compile_contract.json"
   },
   "facet_enum": {
    "outcome": "repair",
@@ -5005,7 +5049,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_facet_enum_passes_gate.json"
   },
   "facet_enum_service": {
    "outcome": "superseded",
@@ -5044,6 +5088,8 @@
   "family_concentration_scoring_consumer": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "family_concentration_scoring_consumer",
    "version": 1,
    "runtime_class": "worker",
@@ -5075,8 +5121,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26860,
-   "directive": null
+   "footprint_delta_kb": 26824,
+   "directive": "directives/pending/build_family_coverage_report_contract.json"
   },
   "family_rollup": {
    "outcome": "repair",
@@ -5091,7 +5137,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_family_rollup_passes_gate.json"
   },
   "family_rollup_api": {
    "outcome": "retired",
@@ -5238,8 +5284,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 27052,
-   "directive": "directives/pending/build_get_vuln_advisories_by_id_contract.json"
+   "footprint_delta_kb": 26920,
+   "directive": "build_get_vuln_advisories_by_id_contract (already in flight)"
   },
   "ghsa_feed": {
    "outcome": "retired",
@@ -5265,7 +5311,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_ghsa_feed_ingestion_logic.json"
+   "directive": "build_ghsa_feed_ingestion_logic (already in flight)"
   },
   "ghsa_feed_ingestion_v2": {
    "outcome": "retired",
@@ -5281,13 +5327,17 @@
   "ghsa_feed_ingestor": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 0 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "ghsa_feed_ingestor",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26996
+   "footprint_delta_kb": 26924
   },
   "github_pr_checker_wiring": {
    "outcome": "repair",
@@ -5302,7 +5352,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_github_pr_checker_wiring_logic.json"
   },
   "global_alert_feed": {
    "outcome": "retired",
@@ -5328,7 +5378,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_health_aggregated_api_router.json"
   },
   "health_monitor": {
    "outcome": "retired",
@@ -5365,7 +5415,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_high_risk_alert_feed_logic.json"
   },
   "high_risk_server_alert_feed": {
    "outcome": "retired",
@@ -5390,8 +5440,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27040,
-   "directive": null
+   "footprint_delta_kb": 26956,
+   "directive": "directives/pending/build_high_risk_server_spotlight_api_contract.json"
   },
   "high_risk_servers": {
    "outcome": "retired",
@@ -5416,8 +5466,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26992,
-   "directive": null
+   "footprint_delta_kb": 27000,
+   "directive": "directives/pending/build_high_risk_servers_api_contract.json"
   },
   "high_risk_servers_dashboard_view": {
    "outcome": "retired",
@@ -5443,7 +5493,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_high_value_routers_wiring_passes_gate.json"
   },
   "high_value_server_concentration_api": {
    "outcome": "retired",
@@ -5534,8 +5584,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29364,
-   "directive": null
+   "footprint_delta_kb": 29432,
+   "directive": "directives/pending/build_integrate_staged_routers_into_main_contract.json"
   },
   "investigate_definition_history": {
    "outcome": "retired",
@@ -5584,6 +5634,8 @@
   "known_bad_pattern_enrichment_v3": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "known_bad_pattern_enrichment",
    "version": 3,
    "runtime_class": "worker",
@@ -5604,8 +5656,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27132,
-   "directive": null
+   "footprint_delta_kb": 27028,
+   "directive": "directives/pending/patch_ladder_rung_convergence_report_passes_gate.json"
   },
   "llm_axis_risk_tier_scoring_consumer": {
    "outcome": "retired",
@@ -5630,8 +5682,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26816,
-   "directive": null
+   "footprint_delta_kb": 27080,
+   "directive": "directives/pending/build_llm_axis_risk_tier_wire_contract.json"
   },
   "llm_axis_scores_api": {
    "outcome": "retired",
@@ -5679,7 +5731,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_llm_axis_scores_distribution_router.json"
   },
   "llm_axis_scores_distribution_api": {
    "outcome": "retired",
@@ -5705,7 +5757,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_llm_axis_scores_distribution_dashboard_logic.json"
   },
   "llm_axis_scores_history": {
    "outcome": "retired",
@@ -5808,7 +5860,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_mcp_definition_history_backfill_api_passes_gate.json"
   },
   "mcp_definition_history_dashboard_view": {
    "outcome": "retired",
@@ -5856,7 +5908,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_mcp_definition_history_pipeline_status_dashboard_passes_gate.json"
   },
   "mcp_definition_history_pipeline_status_dashboard_view": {
    "outcome": "retired",
@@ -5948,7 +6000,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_mcp_llm_axis_scores_detail_api_passes_gate.json"
   },
   "mcp_llm_axis_scores_distribution": {
    "outcome": "repair",
@@ -5963,7 +6015,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_mcp_llm_axis_scores_distribution_passes_gate.json"
   },
   "mcp_llm_axis_scores_distribution_dashboard": {
    "outcome": "retired",
@@ -6033,7 +6085,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_mcp_llm_axis_scoring_consumer_passes_gate.json"
   },
   "mcp_llm_scoring": {
    "outcome": "repair",
@@ -6048,7 +6100,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_llm_scoring_logic.json"
   },
   "mcp_overview_dashboard": {
    "outcome": "retired",
@@ -6140,7 +6192,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_detail_api_logic.json"
   },
   "mcp_risk_tier_detail_dashboard": {
    "outcome": "retired",
@@ -6198,8 +6250,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27028,
-   "directive": null
+   "footprint_delta_kb": 26936,
+   "directive": "directives/pending/build_mcp_risk_tier_distribution_api_contract.json"
   },
   "mcp_risk_tier_distribution_by_org": {
    "outcome": "retired",
@@ -6247,7 +6299,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_distribution_dashboard_view_v2_router.json"
   },
   "mcp_risk_tier_distribution_view": {
    "outcome": "repair",
@@ -6261,8 +6313,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27048,
-   "directive": null
+   "footprint_delta_kb": 27028,
+   "directive": "directives/pending/build_mcp_risk_tier_distribution_view_contract.json"
   },
   "mcp_risk_tier_history": {
    "outcome": "retired",
@@ -6288,7 +6340,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_overview_router.json"
   },
   "mcp_risk_tier_overview_api": {
    "outcome": "repair",
@@ -6303,7 +6355,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_overview_api_logic.json"
   },
   "mcp_risk_tier_overview_dashboard": {
    "outcome": "retired",
@@ -6340,7 +6392,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_overview_view_logic.json"
   },
   "mcp_risk_tier_pipeline_status": {
    "outcome": "retired",
@@ -6377,7 +6429,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_scoring_consumer_logic.json"
   },
   "mcp_risk_tier_summary": {
    "outcome": "retired",
@@ -6413,8 +6465,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26784,
-   "directive": null
+   "footprint_delta_kb": 27036,
+   "directive": "directives/pending/build_mcp_risk_tier_summary_dashboard_contract.json"
   },
   "mcp_risk_tier_summary_dashboard_view": {
    "outcome": "retired",
@@ -6440,7 +6492,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_summary_view_logic.json"
   },
   "mcp_risk_tier_trend": {
    "outcome": "retired",
@@ -6499,7 +6551,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_trend_v2_logic.json"
   },
   "mcp_risk_tier_trend_view": {
    "outcome": "repair",
@@ -6514,7 +6566,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_risk_tier_trend_view_router.json"
   },
   "mcp_score_dispute": {
    "outcome": "repair",
@@ -6529,7 +6581,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_mcp_score_dispute_passes_gate.json"
   },
   "mcp_score_dispute_analytics": {
    "outcome": "repair",
@@ -6543,8 +6595,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25996,
-   "directive": null
+   "footprint_delta_kb": 25916,
+   "directive": "directives/pending/build_mcp_score_dispute_analytics_contract.json"
   },
   "mcp_score_dispute_api_v2": {
    "outcome": "retired",
@@ -6603,7 +6655,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_scoring_wave_cost_ledger_api_router.json"
   },
   "mcp_server_attestations": {
    "outcome": "repair",
@@ -6618,7 +6670,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_server_attestations_router.json"
   },
   "mcp_server_axis_probabilities": {
    "outcome": "retired",
@@ -6721,7 +6773,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_server_registry_search_api_router.json"
   },
   "mcp_server_registry_source_distribution": {
    "outcome": "retired",
@@ -6747,7 +6799,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_server_registry_source_distribution_dashboard_logic.json"
   },
   "mcp_server_registry_source_distribution_dashboard_view": {
    "outcome": "retired",
@@ -6827,8 +6879,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25960,
-   "directive": null
+   "footprint_delta_kb": 26008,
+   "directive": "directives/pending/build_mcp_server_risk_register_contract.json"
   },
   "mcp_server_risk_tier": {
    "outcome": "repair",
@@ -6843,7 +6895,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_server_risk_tier_router.json"
   },
   "mcp_server_signal_scores": {
    "outcome": "retired",
@@ -6968,7 +7020,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_mcp_submissions_api_router.json"
   },
   "mcp_submissions_workflow": {
    "outcome": "retired",
@@ -7059,8 +7111,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25576,
-   "directive": null
+   "footprint_delta_kb": 25776,
+   "directive": "directives/pending/build_mount_staged_services_contract.json"
   },
   "multi_axis_scoring_consumer": {
    "outcome": "retired",
@@ -7097,7 +7149,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_network_egress_scoring_consumer_passes_gate.json"
   },
   "never_scored_backlog": {
    "outcome": "retired",
@@ -7145,7 +7197,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_never_scored_backlog_rollup_passes_gate.json"
   },
   "never_scored_burndown": {
    "outcome": "retired",
@@ -7204,7 +7256,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_nvd_cve_feed_ingestion_passes_gate.json"
+   "directive": "patch_nvd_cve_feed_ingestion_passes_gate (already in flight)"
   },
   "nvd_cve_feed_ingestion_v2": {
    "outcome": "retired",
@@ -7252,7 +7304,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_operational_health_dashboard_logic.json"
   },
   "org_api_key_manager": {
    "outcome": "retired",
@@ -7268,17 +7320,17 @@
   "org_api_keys": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 140180816967360 and this is thread id 140180877435008.",
+   "first_failure": "contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 139916433209024 and this is thread id 139916493889664.",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 140180816967360 and this is thr",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 139916433209024 and this is thr",
    "family": "org_api_keys",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26924,
-   "directive": null
+   "footprint_delta_kb": 26956,
+   "directive": "directives/pending/patch_org_api_keys_passes_gate.json"
   },
   "org_audit_trail": {
    "outcome": "retired",
@@ -7359,7 +7411,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_org_health_router.json"
   },
   "org_health_api": {
    "outcome": "retired",
@@ -7429,7 +7481,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_org_risk_tier_detail_passes_gate.json"
   },
   "org_risk_tier_distribution": {
    "outcome": "retired",
@@ -7454,8 +7506,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27088,
-   "directive": null
+   "footprint_delta_kb": 26996,
+   "directive": "directives/pending/patch_org_risk_tier_summary_passes_gate.json"
   },
   "org_risk_tier_trend": {
    "outcome": "retired",
@@ -7481,7 +7533,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_org_risk_tiers_passes_gate.json"
   },
   "org_server_list": {
    "outcome": "retired",
@@ -7561,8 +7613,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26972,
-   "directive": null
+   "footprint_delta_kb": 26944,
+   "directive": "directives/pending/build_orphan_router_census_report_contract.json"
   },
   "orphan_router_wiring_report": {
    "outcome": "retired",
@@ -7599,7 +7651,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_osv_feed_ingestion_v2_passes_gate.json"
+   "directive": "patch_osv_feed_ingestion_v2_passes_gate (already in flight)"
   },
   "osv_feed_ingestor": {
    "outcome": "repair",
@@ -7614,7 +7666,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_osv_feed_ingestor_router.json"
+   "directive": "build_osv_feed_ingestor_router (already in flight)"
   },
   "overall_risk_tier": {
    "outcome": "retired",
@@ -7640,7 +7692,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_overview_dashboard_logic.json"
   },
   "overview_dashboard_api": {
    "outcome": "superseded",
@@ -7667,7 +7719,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_overview_dashboard_service_logic.json"
   },
   "pending_triage_dashboard_api": {
    "outcome": "retired",
@@ -7837,7 +7889,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_email_digest_logic.json"
   },
   "perspective_email_digest_api": {
    "outcome": "repair",
@@ -7852,7 +7904,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_email_digest_api_router.json"
   },
   "perspective_event": {
    "outcome": "repair",
@@ -7867,7 +7919,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_event_logic.json"
   },
   "perspective_event_analysis": {
    "outcome": "retired",
@@ -7927,6 +7979,8 @@
   "perspective_event_management": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "perspective_event_management",
    "version": 1,
    "runtime_class": "worker",
@@ -7959,7 +8013,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_event_retriever_router.json"
   },
   "perspective_event_rollup": {
    "outcome": "repair",
@@ -7974,7 +8028,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_event_rollup_router.json"
   },
   "perspective_event_rollup_api": {
    "outcome": "retired",
@@ -8054,8 +8108,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27008,
-   "directive": null
+   "footprint_delta_kb": 26980,
+   "directive": "directives/pending/patch_perspective_event_summary_passes_gate.json"
   },
   "perspective_event_timeline": {
    "outcome": "retired",
@@ -8102,8 +8156,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29700,
-   "directive": null
+   "footprint_delta_kb": 29688,
+   "directive": "directives/pending/patch_perspective_events_passes_gate.json"
   },
   "perspective_events_api": {
    "outcome": "retired",
@@ -8139,8 +8193,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27036,
-   "directive": null
+   "footprint_delta_kb": 26972,
+   "directive": "directives/pending/build_perspective_events_rollup_contract.json"
   },
   "perspective_events_summary": {
    "outcome": "repair",
@@ -8155,7 +8209,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_events_summary_router.json"
   },
   "perspective_growth_rollup": {
    "outcome": "retired",
@@ -8180,8 +8234,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26900,
-   "directive": null
+   "footprint_delta_kb": 26988,
+   "directive": "directives/pending/build_perspective_health_contract.json"
   },
   "perspective_lifecycle_summary": {
    "outcome": "repair",
@@ -8196,7 +8250,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_lifecycle_summary_router.json"
   },
   "perspective_lifecycle_summary_api": {
    "outcome": "repair",
@@ -8211,7 +8265,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_lifecycle_summary_api_logic.json"
   },
   "perspective_lifecycle_summary_service": {
    "outcome": "repair",
@@ -8226,7 +8280,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/build_perspective_lifecycle_summary_service_router.json"
   },
   "perspective_management": {
    "outcome": "repair",
@@ -8241,7 +8295,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
    "footprint_delta_kb": null,
-   "directive": null
+   "directive": "directives/pending/patch_perspective_management_passes_gate.json"
   },
   "perspective_management_api": {
    "outcome": "retired",
@@ -8318,7 +8372,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29548,
+   "footprint_delta_kb": 29460,
    "directive": null
   },
   "perspective_membership_details": {
@@ -8465,7 +8519,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27180,
+   "footprint_delta_kb": 27076,
    "directive": null
   },
   "perspective_snapshot_daemon": {
@@ -8610,15 +8664,19 @@
    "footprint_delta_kb": null
   },
   "perspective_snapshot_rollup": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:5 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:5 fastapi.testclient.TestClient",
    "family": "perspective_snapshot_rollup",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27076
+   "footprint_delta_kb": 26940,
+   "directive": null
   },
   "perspective_snapshot_rollup_api": {
    "outcome": "retired",
@@ -8832,7 +8890,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25900,
+   "footprint_delta_kb": 25768,
    "directive": null
   },
   "product_audit_log": {
@@ -8943,7 +9001,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26996,
+   "footprint_delta_kb": 27012,
    "directive": null
   },
   "recent_vuln_advisories": {
@@ -9153,7 +9211,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25428,
+   "footprint_delta_kb": 25324,
    "directive": null
   },
   "registry_growth_snapshot_api": {
@@ -9433,6 +9491,8 @@
   "registry_source_freshness_metrics": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "registry_source_freshness_metrics",
    "version": 1,
    "runtime_class": "worker",
@@ -9575,7 +9635,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26832,
+   "footprint_delta_kb": 27060,
    "directive": null
   },
   "report_generator": {
@@ -9693,7 +9753,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27040,
+   "footprint_delta_kb": 26996,
    "directive": null
   },
   "risk_composite": {
@@ -10000,15 +10060,19 @@
    "directive": null
   },
   "risk_summary_external_api": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:3 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:3 fastapi.testclient.TestClient",
    "family": "risk_summary_external_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27392
+   "footprint_delta_kb": 27412,
+   "directive": null
   },
   "risk_threshold_api": {
    "outcome": "retired",
@@ -10107,7 +10171,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29536,
+   "footprint_delta_kb": 29212,
    "directive": null
   },
   "risk_tier_alert_consumer": {
@@ -10190,6 +10254,8 @@
   "risk_tier_assign": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "risk_tier_assign",
    "version": 1,
    "runtime_class": "worker",
@@ -10243,7 +10309,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26984,
+   "footprint_delta_kb": 27000,
    "directive": null
   },
   "risk_tier_axis_aggregator": {
@@ -10306,7 +10372,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27076,
+   "footprint_delta_kb": 26932,
    "directive": null
   },
   "risk_tier_axis_scoring_consumer": {
@@ -10347,7 +10413,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26992,
+   "footprint_delta_kb": 27008,
    "directive": null
   },
   "risk_tier_breakdown": {
@@ -10414,7 +10480,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27080,
+   "footprint_delta_kb": 26944,
    "directive": null
   },
   "risk_tier_by_perspective": {
@@ -10554,7 +10620,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25876,
+   "footprint_delta_kb": 25940,
    "directive": null
   },
   "risk_tier_classification": {
@@ -10679,7 +10745,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25352,
+   "footprint_delta_kb": 25504,
    "directive": null
   },
   "risk_tier_composite": {
@@ -10864,7 +10930,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26840,
+   "footprint_delta_kb": 26956,
    "directive": null
   },
   "risk_tier_daily_summary": {
@@ -10879,7 +10945,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27044,
+   "footprint_delta_kb": 26864,
    "directive": null
   },
   "risk_tier_dashboard": {
@@ -10990,7 +11056,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26956,
+   "footprint_delta_kb": 27000,
    "directive": null
   },
   "risk_tier_detail_api": {
@@ -11044,16 +11110,16 @@
   "risk_tier_distribution": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 n_rule_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: (1, 'test_axis', None, None, 0.9, None, None, None, None, None, None, None, '2026-10-03 21:13:52.150116')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+   "first_failure": "contract FAILED: exit=1 n_rule_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: (1, 'test_axis', None, None, 0.9, None, None, None, None, None, None, None, '2026-10-03 21:38:07.547063')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 n_rule_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: (1, 'test_axis', None, None, 0.9, None, None, None, None, None, None, None, '2026-10-03 21:13:52.150116')]\n(Background on this error at: https:/",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 n_rule_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: (1, 'test_axis', None, None, 0.9, None, None, None, None, None, None, None, '2026-10-03 21:38:07.547063')]\n(Background on this error at: https:/",
    "family": "risk_tier_distribution",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26828,
+   "footprint_delta_kb": 27016,
    "directive": null
   },
   "risk_tier_distribution_analysis": {
@@ -11068,15 +11134,19 @@
    "footprint_delta_kb": null
   },
   "risk_tier_distribution_api": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:8 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:8 fastapi.testclient.TestClient",
    "family": "risk_tier_distribution_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26900
+   "footprint_delta_kb": 26956,
+   "directive": null
   },
   "risk_tier_distribution_breakdown": {
    "outcome": "retired",
@@ -11168,7 +11238,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26888,
+   "footprint_delta_kb": 26916,
    "directive": null
   },
   "risk_tier_distribution_by_source_dashboard_view": {
@@ -11253,7 +11323,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26448,
+   "footprint_delta_kb": 26520,
    "directive": null
   },
   "risk_tier_distribution_over_time_dashboard_view": {
@@ -11268,7 +11338,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26964,
+   "footprint_delta_kb": 26948,
    "directive": null
   },
   "risk_tier_distribution_snapshot": {
@@ -11283,7 +11353,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25872,
+   "footprint_delta_kb": 25804,
    "directive": null
   },
   "risk_tier_distribution_snapshot_api": {
@@ -11365,7 +11435,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25484,
+   "footprint_delta_kb": 25428,
    "directive": null
   },
   "risk_tier_evaluation": {
@@ -11435,7 +11505,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26988,
+   "footprint_delta_kb": 27088,
    "directive": null
   },
   "risk_tier_forecast_api": {
@@ -11489,16 +11559,16 @@
   "risk_tier_history": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test_server_1', 'p_critical', None, None, 0.95, None, None, None, None, None, None, None, '2026-10-03 21:13:57.215551')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+   "first_failure": "contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test_server_1', 'p_critical', None, None, 0.95, None, None, None, None, None, None, None, '2026-10-03 21:38:11.496644')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test_server_1', 'p_critical', None, None, 0.95, None, None, None, None, None, None, None, '2026-10-03 21:13:57.215551')]\n(Background on this error at: https:/",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test_server_1', 'p_critical', None, None, 0.95, None, None, None, None, None, None, None, '2026-10-03 21:38:11.496644')]\n(Background on this error at: https:/",
    "family": "risk_tier_history",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26908,
+   "footprint_delta_kb": 27100,
    "directive": null
   },
   "risk_tier_history_trend": {
@@ -11784,16 +11854,16 @@
   "risk_tier_scoring": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('critical_server', 'axis_1', 'CRITICAL', 0, 0.05, 0.9, 0.05, None, None, None, None, None, '2026-10-04 21:13:59.283902')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+   "first_failure": "contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('critical_server', 'axis_1', 'CRITICAL', 0, 0.05, 0.9, 0.05, None, None, None, None, None, '2026-10-04 21:38:12.828875')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('critical_server', 'axis_1', 'CRITICAL', 0, 0.05, 0.9, 0.05, None, None, None, None, None, '2026-10-04 21:13:59.283902')]\n(Background on this error at: https:/",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('critical_server', 'axis_1', 'CRITICAL', 0, 0.05, 0.9, 0.05, None, None, None, None, None, '2026-10-04 21:38:12.828875')]\n(Background on this error at: https:/",
    "family": "risk_tier_scoring",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27000,
+   "footprint_delta_kb": 27004,
    "directive": null
   },
   "risk_tier_scoring_consumer": {
@@ -11919,7 +11989,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26976,
+   "footprint_delta_kb": 26928,
    "directive": null
   },
   "risk_tier_source_breakdown": {
@@ -11962,13 +12032,17 @@
   "risk_tier_statistics": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 1 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "risk_tier_statistics",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26912
+   "footprint_delta_kb": 26936
   },
   "risk_tier_summary": {
    "outcome": "repair",
@@ -11982,7 +12056,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26840,
+   "footprint_delta_kb": 27080,
    "directive": null
   },
   "risk_tier_summary_api": {
@@ -11997,7 +12071,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26856,
+   "footprint_delta_kb": 26960,
    "directive": null
   },
   "risk_tier_summary_by_org": {
@@ -12093,7 +12167,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25472,
+   "footprint_delta_kb": 25412,
    "directive": null
   },
   "risk_tier_sync": {
@@ -12285,7 +12359,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26964,
+   "footprint_delta_kb": 27008,
    "directive": null
   },
   "risk_tier_transition": {
@@ -12319,15 +12393,19 @@
    "directive": null
   },
   "risk_tier_transition_alerts": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /api/risk/transitions -> 500 over an empty data layer: AttributeError: type object 'McpLlmAxisScore' has no attribute 'risk_tier'",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /api/risk/transitions -> 500 over an empty data layer: AttributeError: type object 'McpLlmAxisScore' has no attribute 'risk_tier'",
    "family": "risk_tier_transition_alerts",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26992
+   "footprint_delta_kb": 27012,
+   "directive": null
   },
   "risk_tier_transition_analysis": {
    "outcome": "retired",
@@ -12466,7 +12544,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26968,
+   "footprint_delta_kb": 27024,
    "directive": null
   },
   "risk_tier_transition_scoring_consumer": {
@@ -12610,7 +12688,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27000,
+   "footprint_delta_kb": 26932,
    "directive": null
   },
   "risk_tier_trend_analysis": {
@@ -12625,7 +12703,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27080,
+   "footprint_delta_kb": 26948,
    "directive": null
   },
   "risk_tier_trend_api": {
@@ -12882,6 +12960,8 @@
   "risk_tier_watchlist": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "risk_tier_watchlist",
    "version": 1,
    "runtime_class": "worker",
@@ -12893,13 +12973,17 @@
   "risk_tier_writer": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 0 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "risk_tier_writer",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29524
+   "footprint_delta_kb": 29520
   },
   "risk_timeline": {
    "outcome": "repair",
@@ -12998,7 +13082,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27048,
+   "footprint_delta_kb": 27000,
    "directive": null
   },
   "router": {
@@ -13024,15 +13108,19 @@
    "footprint_delta_kb": null
   },
   "run_reconciliation_report": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /api/scorer/reconciliation -> 500 over an empty data layer: OperationalError: (sqlite3.OperationalError) no such table: mcp_score_run_ledger\n[SQL: \n            SELECT\n                r.server_id,\n                r.fire_score,\n                r.final_score,\n                (r.final_score - r.fire_score) AS difference\n",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /api/scorer/reconciliation -> 500 over an empty data layer: OperationalError: (sqlite3.OperationalError) no such table: mcp_score_run_ledger\n[SQL: \n            SELECT\n                r.server_id,\n                r.fire_score,\n            ",
    "family": "run_reconciliation_report",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27556
+   "footprint_delta_kb": 27592,
+   "directive": null
   },
   "rung_hollow_rate_api": {
    "outcome": "retired",
@@ -13149,7 +13237,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26872,
+   "footprint_delta_kb": 26952,
    "directive": null
   },
   "score_change_alert": {
@@ -13429,7 +13517,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26928,
+   "footprint_delta_kb": 26976,
    "directive": null
   },
   "score_disputes_summary": {
@@ -13609,7 +13697,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25936,
+   "footprint_delta_kb": 26056,
    "directive": null
   },
   "score_import_reconciliation": {
@@ -13823,7 +13911,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27136,
+   "footprint_delta_kb": 27100,
    "directive": null
   },
   "score_timeline_api": {
@@ -13855,6 +13943,8 @@
   "score_to_tier_consumer": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "score_to_tier_consumer",
    "version": 1,
    "runtime_class": "worker",
@@ -13997,7 +14087,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26008,
+   "footprint_delta_kb": 25888,
    "directive": null
   },
   "scoring_analytics_dashboard": {
@@ -14055,16 +14145,16 @@
   "scoring_backlog": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 nt': 1, 'server_id': 3, 'url': 'http://test3.example.com', 'name': 'Test Server 3', 'registry_source': 'test', ' ... (55 characters truncated) ... e, 'verdict_reasoning': None, 'verdict': None, 'last_seen': None, 'last_assessed': None, 'last_scanned': None, 'trust_score': None, 'risk_tier': None}]]",
+   "first_failure": "contract FAILED: exit=1 irst_seen': '2023-01-03', 'server_id': 3, 'name': 'Test Server 3', 'registry_source': 'test', 'scan_count': 1, ' ... (55 characters truncated) ... None, 'verdict_reasoning': None, 'metadata': None, 'trust_score': None, 'risk_tier': None, 'verdict': None, 'last_scanned': None, 'description': None}]]",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 nt': 1, 'server_id': 3, 'url': 'http://test3.example.com', 'name': 'Test Server 3', 'registry_source': 'test', ' ... (55 characters truncated) ... e, 'verdict_reasoning': None, 'verdict': None, 'last_seen': None, 'last_assessed': None, 'last_scanned': None, 'trust_score': Non",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 irst_seen': '2023-01-03', 'server_id': 3, 'name': 'Test Server 3', 'registry_source': 'test', 'scan_count': 1, ' ... (55 characters truncated) ... None, 'verdict_reasoning': None, 'metadata': None, 'trust_score': None, 'risk_tier': None, 'verdict': None, 'last_scanned': None,",
    "family": "scoring_backlog",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26832,
+   "footprint_delta_kb": 26972,
    "directive": null
   },
   "scoring_backlog_api": {
@@ -14090,7 +14180,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26812,
+   "footprint_delta_kb": 26992,
    "directive": null
   },
   "scoring_backlog_health_api": {
@@ -14105,7 +14195,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25988,
+   "footprint_delta_kb": 25968,
    "directive": null
   },
   "scoring_backlog_summary": {
@@ -14212,7 +14302,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27000,
+   "footprint_delta_kb": 26976,
    "directive": null
   },
   "scoring_consumer_critical_axis": {
@@ -14496,7 +14586,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26076,
+   "footprint_delta_kb": 26040,
    "directive": null
   },
   "scoring_coverage_summary": {
@@ -14725,7 +14815,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25916,
+   "footprint_delta_kb": 25928,
    "directive": null
   },
   "scoring_health_probe": {
@@ -15179,7 +15269,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26996,
+   "footprint_delta_kb": 26928,
    "directive": null
   },
   "scoring_tier_assignment_consumer": {
@@ -15512,7 +15602,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25508,
+   "footprint_delta_kb": 25936,
    "directive": null
   },
   "server_axis_detail": {
@@ -15538,7 +15628,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26852,
+   "footprint_delta_kb": 26904,
    "directive": null
   },
   "server_axis_deviation_analysis": {
@@ -15641,7 +15731,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27092,
+   "footprint_delta_kb": 26992,
    "directive": null
   },
   "server_axis_profile": {
@@ -16080,15 +16170,19 @@
    "footprint_delta_kb": null
   },
   "server_cve_exposure_api": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:7 unittest.mock.MagicMock; contract.py:7 unittest.mock.patch; contract.py:10 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:7 unittest.mock.MagicMock; contract.py:7 unittest.mock.patch; contract.py:10 fastapi.testclient.TestClient",
    "family": "server_cve_exposure_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 27076
+   "footprint_delta_kb": 26996,
+   "directive": "directives/pending/patch_server_cve_exposure_api_passes_gate.json"
   },
   "server_cve_history_api": {
    "outcome": "repair",
@@ -16102,8 +16196,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 29568,
-   "directive": "directives/pending/build_server_cve_history_api_contract.json"
+   "footprint_delta_kb": 29480,
+   "directive": "build_server_cve_history_api_contract (already in flight)"
   },
   "server_cve_info": {
    "outcome": "repair",
@@ -16118,7 +16212,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_server_cve_info_logic.json"
+   "directive": "build_server_cve_info_logic (already in flight)"
   },
   "server_cve_lookup": {
    "outcome": "repair",
@@ -16133,7 +16227,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_server_cve_lookup_passes_gate.json"
+   "directive": "patch_server_cve_lookup_passes_gate (already in flight)"
   },
   "server_cve_population_backfill": {
    "outcome": "retired",
@@ -16159,7 +16253,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_server_cve_risk_profile_router.json"
+   "directive": "build_server_cve_risk_profile_router (already in flight)"
   },
   "server_cve_search": {
    "outcome": "repair",
@@ -16174,7 +16268,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_server_cve_search_router.json"
+   "directive": "build_server_cve_search_router (already in flight)"
   },
   "server_cve_search_api": {
    "outcome": "repair",
@@ -16189,18 +16283,22 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_server_cve_search_api_passes_gate.json"
+   "directive": "patch_server_cve_search_api_passes_gate (already in flight)"
   },
   "server_cve_search_consumer": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 0 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "server_cve_search_consumer",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": true,
-   "footprint_delta_kb": 25976
+   "footprint_delta_kb": 25944
   },
   "server_cve_search_service": {
    "outcome": "repair",
@@ -16215,7 +16313,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_server_cve_search_service_router.json"
+   "directive": "build_server_cve_search_service_router (already in flight)"
   },
   "server_cve_severity_rollup": {
    "outcome": "retired",
@@ -16263,7 +16361,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_server_cve_summary_api_router.json"
+   "directive": "build_server_cve_summary_api_router (already in flight)"
   },
   "server_cve_timeline": {
    "outcome": "retired",
@@ -16288,8 +16386,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 29660,
-   "directive": "directives/pending/build_server_cve_timeline_api_contract.json"
+   "footprint_delta_kb": 29688,
+   "directive": "build_server_cve_timeline_api_contract (already in flight)"
   },
   "server_cves": {
    "outcome": "retired",
@@ -16391,7 +16489,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27080,
+   "footprint_delta_kb": 26864,
    "directive": null
   },
   "server_entity_detail": {
@@ -16461,7 +16559,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26736,
+   "footprint_delta_kb": 27036,
    "directive": null
   },
   "server_family_coverage": {
@@ -16513,7 +16611,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26960,
+   "footprint_delta_kb": 26924,
    "directive": null
   },
   "server_family_risk_summary": {
@@ -16594,7 +16692,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26944,
+   "footprint_delta_kb": 26956,
    "directive": null
   },
   "server_freshness_health": {
@@ -16665,15 +16763,19 @@
    "footprint_delta_kb": null
   },
   "server_freshness_monitor": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:2 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:2 fastapi.testclient.TestClient",
    "family": "server_freshness_monitor",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26964
+   "footprint_delta_kb": 27004,
+   "directive": null
   },
   "server_freshness_monitoring": {
    "outcome": "retired",
@@ -16797,16 +16899,16 @@
   "server_history": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 e_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test1', 'axis1', 'Label 1', None, 0.9, 0.8, 0.7, None, None, None, None, None, '2026-10-01 21:14:36.194292')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+   "first_failure": "contract FAILED: exit=1 e_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test1', 'axis1', 'Label 1', None, 0.9, 0.8, 0.7, None, None, None, None, None, '2026-10-01 21:38:41.003391')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 e_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test1', 'axis1', 'Label 1', None, 0.9, 0.8, 0.7, None, None, None, None, None, '2026-10-01 21:14:36.194292')]\n(Background on this error at: https:/",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 e_version, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test1', 'axis1', 'Label 1', None, 0.9, 0.8, 0.7, None, None, None, None, None, '2026-10-01 21:38:41.003391')]\n(Background on this error at: https:/",
    "family": "server_history",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26952,
+   "footprint_delta_kb": 26856,
    "directive": null
   },
   "server_history_timeline": {
@@ -16904,6 +17006,8 @@
   "server_registry_csv_export": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "server_registry_csv_export",
    "version": 1,
    "runtime_class": "worker",
@@ -17020,7 +17124,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27052,
+   "footprint_delta_kb": 26968,
    "directive": null
   },
   "server_registry_source_distribution_router": {
@@ -17068,7 +17172,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29460,
+   "footprint_delta_kb": 29496,
    "directive": null
   },
   "server_risk_assessment": {
@@ -17293,7 +17397,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27056,
+   "footprint_delta_kb": 26972,
    "directive": null
   },
   "server_risk_factors_api": {
@@ -17319,7 +17423,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27020,
+   "footprint_delta_kb": 26956,
    "directive": null
   },
   "server_risk_history_api": {
@@ -17430,7 +17534,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27024,
+   "footprint_delta_kb": 26932,
    "directive": null
   },
   "server_risk_tier": {
@@ -17497,7 +17601,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26992,
+   "footprint_delta_kb": 26956,
    "directive": null
   },
   "server_risk_tier_comparison_api": {
@@ -17648,15 +17752,19 @@
    "footprint_delta_kb": null
   },
   "server_risk_tier_distribution_dashboard": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /api/risk/tier/distribution -> 500 over an empty data layer: AttributeError: type object 'McpLlmAxisScore' has no attribute 'c'",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /api/risk/tier/distribution -> 500 over an empty data layer: AttributeError: type object 'McpLlmAxisScore' has no attribute 'c'",
    "family": "server_risk_tier_distribution_dashboard",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27036
+   "footprint_delta_kb": 26944,
+   "directive": null
   },
   "server_risk_tier_distribution_dashboard_view": {
    "outcome": "retired",
@@ -17703,22 +17811,22 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27000,
+   "footprint_delta_kb": 26904,
    "directive": null
   },
   "server_risk_tier_history_api": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 sion, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test-server-1', None, 'high', None, None, None, None, None, None, None, None, None, '2026-10-02 21:14:42.802211')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+   "first_failure": "contract FAILED: exit=1 sion, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test-server-1', None, 'high', None, None, None, None, None, None, None, None, None, '2026-10-02 21:38:46.495801')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 sion, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test-server-1', None, 'high', None, None, None, None, None, None, None, None, None, '2026-10-02 21:14:42.802211')]\n(Background on this error at: https:/",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 sion, model_version, adapter_sha256, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('test-server-1', None, 'high', None, None, None, None, None, None, None, None, None, '2026-10-02 21:38:46.495801')]\n(Background on this error at: https:/",
    "family": "server_risk_tier_history_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26692,
+   "footprint_delta_kb": 26984,
    "directive": null
   },
   "server_risk_tier_lookup": {
@@ -17807,15 +17915,19 @@
    "footprint_delta_kb": null
   },
   "server_risk_tier_snapshot_api": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "test_only_import_at_module_scope",
+   "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): __init__.py:10 fastapi.testclient.TestClient",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): test-only import at module scope (breaks the prod spine at import, release v86): __init__.py:10 fastapi.testclient.TestClient",
    "family": "server_risk_tier_snapshot_api",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29496
+   "footprint_delta_kb": 29532,
+   "directive": null
   },
   "server_risk_tier_snapshot_service": {
    "outcome": "repair",
@@ -17829,7 +17941,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26912,
+   "footprint_delta_kb": 26900,
    "directive": null
   },
   "server_risk_tier_summary": {
@@ -17892,7 +18004,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27072,
+   "footprint_delta_kb": 26976,
    "directive": null
   },
   "server_risk_tier_transition_check": {
@@ -17973,7 +18085,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27044,
+   "footprint_delta_kb": 27008,
    "directive": null
   },
   "server_risk_timeline_api": {
@@ -18440,16 +18552,16 @@
   "server_threat_intel": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 '1.2.3.4', 'PulseA', 'http://example.com/a', datetime.datetime(2026, 10, 4, 21, 14, 49, 708642), 'srv-123'), ('Domain', 'bad.example.com', 'PulseB', 'http://example.com/b', datetime.datetime(2026, 10, 4, 21, 14, 49, 708642), 'srv-123')]]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+   "first_failure": "contract FAILED: exit=1 '1.2.3.4', 'PulseA', 'http://example.com/a', datetime.datetime(2026, 10, 4, 21, 38, 51, 306376), 'srv-123'), ('Domain', 'bad.example.com', 'PulseB', 'http://example.com/b', datetime.datetime(2026, 10, 4, 21, 38, 51, 306376), 'srv-123')]]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 '1.2.3.4', 'PulseA', 'http://example.com/a', datetime.datetime(2026, 10, 4, 21, 14, 49, 708642), 'srv-123'), ('Domain', 'bad.example.com', 'PulseB', 'http://example.com/b', datetime.datetime(2026, 10, 4, 21, 14, 49, 708642), 'srv-123')]]\n(Background on this error at: https://",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 '1.2.3.4', 'PulseA', 'http://example.com/a', datetime.datetime(2026, 10, 4, 21, 38, 51, 306376), 'srv-123'), ('Domain', 'bad.example.com', 'PulseB', 'http://example.com/b', datetime.datetime(2026, 10, 4, 21, 38, 51, 306376), 'srv-123')]]\n(Background on this error at: https://",
    "family": "server_threat_intel",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26916,
+   "footprint_delta_kb": 26928,
    "directive": null
   },
   "server_threat_intel_associations": {
@@ -18582,7 +18694,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27000,
+   "footprint_delta_kb": 26904,
    "directive": null
   },
   "server_trust_trajectory_scoring_consumer": {
@@ -18808,7 +18920,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_server_vulnerability_timeline_router.json"
+   "directive": "build_server_vulnerability_timeline_router (already in flight)"
   },
   "server_watchlist": {
    "outcome": "retired",
@@ -18877,7 +18989,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26980,
+   "footprint_delta_kb": 26912,
    "directive": null
   },
   "service_health_alert_feed": {
@@ -19225,7 +19337,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27004,
+   "footprint_delta_kb": 26940,
    "directive": null
   },
   "sprint_progress_overview": {
@@ -19310,7 +19422,7 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26896,
+   "footprint_delta_kb": 26912,
    "directive": null
   },
   "submission_intake": {
@@ -19577,16 +19689,16 @@
   "threat_intel_refs": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 139823025845952 and this is thread id 139823085138048.",
+   "first_failure": "contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 140623532881600 and this is thread id 140623592165504.",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 139823025845952 and this is thr",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 140623532881600 and this is thr",
    "family": "threat_intel_refs",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27020,
+   "footprint_delta_kb": 27008,
    "directive": null
   },
   "threat_intel_refs_aggregation": {
@@ -19616,19 +19728,23 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 29496,
+   "footprint_delta_kb": 29528,
    "directive": null
   },
   "threat_intel_summary": {
    "outcome": "promotable",
    "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "proof": "mount probe: mounted; 1 parameterless GET route(s) answered < 500",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "threat_intel_summary",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "PROMOTE",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26908
+   "footprint_delta_kb": 27108
   },
   "threat_intel_summary_api": {
    "outcome": "retired",
@@ -19963,19 +20079,27 @@
    "footprint_delta_kb": null
   },
   "unit_atomicity_gate": {
-   "outcome": "promotable",
-   "reason": "passes promote_staged_to_active (router gate: toml, router, import, contract); awaiting S4 (Fly image + boot test) with prod evidence",
+   "outcome": "repair",
+   "failure_class": "mount_probe_failed",
+   "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /health -> 500 over an empty data layer: KeyError: 'Mcp_server_registry'",
+   "repair_path": "builder directive",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): mount probe FAILED (real router on the exemplar harness): GET /health -> 500 over an empty data layer: KeyError: 'Mcp_server_registry'",
    "family": "unit_atomicity_gate",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
-   "gate_verdict": "PROMOTE",
+   "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 25288
+   "footprint_delta_kb": 25448,
+   "directive": null
   },
   "unit_promotion_readiness_report": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [
+    "contract never imports .router (its exit 0 is not a proof of this service)"
+   ],
    "family": "unit_promotion_readiness_report",
    "version": 1,
    "runtime_class": "worker",
@@ -20007,7 +20131,7 @@
    "scaffold_stage": "logic_only",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 5088,
+   "footprint_delta_kb": 5084,
    "directive": null
   },
   "unmounted_router_census_report": {
@@ -20161,16 +20285,16 @@
   "verdict_breakdown": {
    "outcome": "repair",
    "failure_class": "contract_failed",
-   "first_failure": "contract FAILED: exit=1 at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('server1', 'overall_risk', 'Label for overall_risk', None, '[0.1, 0.2, 0.3, 0.4]', 0.1, 0.2, 0.3, 0, None, '1.0', None, None, '2026-10-04 21:15:00.416491')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+   "first_failure": "contract FAILED: exit=1 at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('server1', 'overall_risk', 'Label for overall_risk', None, '[0.1, 0.2, 0.3, 0.4]', 0.1, 0.2, 0.3, 0, None, '1.0', None, None, '2026-10-04 21:39:00.015354')]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
    "repair_path": "builder directive",
-   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('server1', 'overall_risk', 'Label for overall_risk', None, '[0.1, 0.2, 0.3, 0.4]', 0.1, 0.2, 0.3, 0, None, '1.0', None, None, '2026-10-04 21:15:00.416491')]\n(Background on this error at: https:/",
+   "reason": "fails promote_staged_to_active (router gate: toml, router, import, contract): contract FAILED: exit=1 at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id]\n[parameters: ('server1', 'overall_risk', 'Label for overall_risk', None, '[0.1, 0.2, 0.3, 0.4]', 0.1, 0.2, 0.3, 0, None, '1.0', None, None, '2026-10-04 21:39:00.015354')]\n(Background on this error at: https:/",
    "family": "verdict_breakdown",
    "version": 1,
    "runtime_class": "api",
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27124,
+   "footprint_delta_kb": 27228,
    "directive": null
   },
   "verdict_breakdown_api": {
@@ -20351,7 +20475,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27016,
+   "footprint_delta_kb": 27024,
    "directive": null
   },
   "verdict_detail_view": {
@@ -20399,7 +20523,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 26628,
+   "footprint_delta_kb": 26972,
    "directive": null
   },
   "verdict_distribution_timeline": {
@@ -20414,7 +20538,7 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": false,
-   "footprint_delta_kb": 27020,
+   "footprint_delta_kb": 26892,
    "directive": null
   },
   "verdict_distribution_timeline_api": {
@@ -20768,8 +20892,8 @@
    "scaffold_stage": "complete",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26976,
-   "directive": "directives/pending/patch_vuln_advisories_list_passes_gate.json"
+   "footprint_delta_kb": 26940,
+   "directive": "patch_vuln_advisories_list_passes_gate (already in flight)"
   },
   "vuln_advisory_analysis": {
    "outcome": "retired",
@@ -20828,7 +20952,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_advisory_management_v2_router.json"
+   "directive": "build_vuln_advisory_management_v2_router (already in flight)"
   },
   "vuln_advisory_manager": {
    "outcome": "retired",
@@ -20920,7 +21044,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_analysis_dashboard_logic.json"
+   "directive": "build_vuln_analysis_dashboard_logic (already in flight)"
   },
   "vuln_analysis_dashboard_api": {
    "outcome": "repair",
@@ -20935,7 +21059,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_analysis_dashboard_api_router.json"
+   "directive": "build_vuln_analysis_dashboard_api_router (already in flight)"
   },
   "vuln_analysis_dashboard_v2": {
    "outcome": "retired",
@@ -20993,8 +21117,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 26728,
-   "directive": "directives/pending/build_vuln_facet_compile_contract.json"
+   "footprint_delta_kb": 26964,
+   "directive": "build_vuln_facet_compile_contract (already in flight)"
   },
   "vuln_family_propagation": {
    "outcome": "repair",
@@ -21009,7 +21133,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_family_propagation_logic.json"
+   "directive": "build_vuln_family_propagation_logic (already in flight)"
   },
   "vuln_feed_freshness_report_api": {
    "outcome": "retired",
@@ -21057,7 +21181,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_link_management_logic.json"
+   "directive": "build_vuln_link_management_logic (already in flight)"
   },
   "vuln_link_provenance": {
    "outcome": "retired",
@@ -21083,7 +21207,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_link_provenance_audit_logic.json"
+   "directive": "build_vuln_link_provenance_audit_logic (already in flight)"
   },
   "vuln_linkage_coverage": {
    "outcome": "retired",
@@ -21175,7 +21299,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vuln_management_dashboard_logic.json"
+   "directive": "build_vuln_management_dashboard_logic (already in flight)"
   },
   "vuln_management_dashboard_view": {
    "outcome": "retired",
@@ -21234,7 +21358,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_vulnerability_advisory_manager_passes_gate.json"
+   "directive": "patch_vulnerability_advisory_manager_passes_gate (already in flight)"
   },
   "vulnerability_advisory_search": {
    "outcome": "retired",
@@ -21359,7 +21483,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/patch_vulnerability_links_passes_gate.json"
+   "directive": "patch_vulnerability_links_passes_gate (already in flight)"
   },
   "vulnerability_management": {
    "outcome": "repair",
@@ -21373,8 +21497,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 27076,
-   "directive": "directives/pending/build_vulnerability_management_contract.json"
+   "footprint_delta_kb": 27176,
+   "directive": "build_vulnerability_management_contract (already in flight)"
   },
   "vulnerability_risk_integration": {
    "outcome": "retired",
@@ -21400,7 +21524,7 @@
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
    "footprint_delta_kb": null,
-   "directive": "directives/pending/build_vulnerability_search_logic.json"
+   "directive": "build_vulnerability_search_logic (already in flight)"
   },
   "vulnerability_search_api": {
    "outcome": "repair",
@@ -21414,8 +21538,8 @@
    "scaffold_stage": "router_no_contract",
    "gate_verdict": "HOLD",
    "vulnerability_family": true,
-   "footprint_delta_kb": 27004,
-   "directive": "directives/pending/build_vulnerability_search_api_contract.json"
+   "footprint_delta_kb": 26980,
+   "directive": "build_vulnerability_search_api_contract (already in flight)"
   },
   "vulnerability_summary": {
    "outcome": "retired",
@@ -21479,6 +21603,8 @@
   "wire_routers_into_main_app": {
    "outcome": "promotable",
    "reason": "passes source import (every source module imports in a clean interpreter) + entrypoint; no zo scheduled-job gate exists yet; awaiting S4 (zo scheduled job) with prod evidence",
+   "proof": "no mount probe (worker/lib)",
+   "proof_weak": [],
    "family": "wire_routers_into_main_app",
    "version": 1,
    "runtime_class": "worker",
@@ -21521,5 +21647,5 @@
    "footprint_delta_kb": null
   }
  },
- "directives_emitted_at": "2026-10-04T21:15:13Z"
+ "directives_emitted_at": "2026-10-04T21:39:11Z"
 }

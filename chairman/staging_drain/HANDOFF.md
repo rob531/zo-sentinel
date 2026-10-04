@@ -71,25 +71,34 @@ shape of the contract (see "What the gate was missing" below).
    stdout of `python tools/staging_drain/report.py`). Nothing else from this chain goes
    in the brief.
 
-3. **S4 batch 1** (draft PR #6154, branch `staging-drain/s4-batch-1`: 7 api services moved
-   staged→active after 3 were pulled back, `app/_spine_generated.py` regenerated; `generate_spine
-   --check` and `--strict` clean; 0 duplicate routes across the 66 active routers;
-   `verify_deploy_candidate` 8/8 PASS on the first head). To finish:
+3. **S4 batch 1** (PR #6154, 7 api services staged→active, `app/_spine_generated.py` regenerated;
+   `generate_spine --check` and `--strict` clean; 0 duplicate routes across the 66 active routers;
+   `verify_deploy_candidate` 8/8 PASS; CI green; squash-merged to `main` on 2026-10-04 so the
+   release runbook has a CI-green `origin/main` sha to fire). The boot test, deploy and drift check
+   are the repo's OWN runbook, not a hand-rolled `fly deploy` -- and the tower is PowerShell, where
+   `curl -s` is `Invoke-WebRequest -SessionVariable` and prompts for a Uri. Use `curl.exe` or
+   `Invoke-RestMethod`. Never deploy from the shared checkout `D:\zo\zo-sentinel\zo-sentinel`
+   (deploy_prod.ps1 builds from a disposable worktree by design).
+   ```powershell
+   cd D:\zo\zo-sentinel\zo-sentinel
+   git fetch origin main
+   $sha = git rev-parse origin/main          # the squash-merge of #6154 (or any later CI-green main)
+   .\ops\host\deploy_prod.ps1 -Sha $sha -DryRun   # worktree, build args, fire_gate, current prod probes; deploys nothing
+   .\ops\host\deploy_prod.ps1 -Sha $sha           # the boot test IS this deploy: rollback anchor, flyctl deploy, accept_gate (0 ACCEPT / 1 REJECT / 2 ERROR)
+   Invoke-RestMethod https://mcprisky.io/spine/health | ConvertTo-Json -Depth 6   # ok:true, failures:[], the 7 new import_paths present
+   Invoke-RestMethod https://mcprisky.io/version                                   # git_sha == $sha
    ```
-   git fetch origin staging-drain/s4-batch-1 && git worktree add D:\zo\_prod_dryrun origin/staging-drain/s4-batch-1
-   cd D:\zo\_prod_dryrun && python tools/verify_deploy_candidate.py --json
-   fly deploy --config fly.toml --remote-only            # the boot test IS the deploy of the candidate image
-   curl -s https://<app>.fly.dev/spine/health            # ok:true, failures:[] and the 10 new import_paths present
-   python tools/prod_drift_check.py                      # or the prod-drift-sentinel run for this deploy
-   ```
-   Green → merge, then record each of the 10 in `chairman/staging_drain/promotions.json`:
+   The prod-drift check is the tower's scheduled `prod-drift-sentinel` task (3h cron,
+   `ops/host/verify_candidate.ps1`); run it once by hand after the deploy or wait for the next tick.
+   ACCEPT → record each of the 7 in `chairman/staging_drain/promotions.json`:
    ```json
-   {"services": {"ghsa_feed_ingestor": {"at": "<utc>", "summary": "fly v<N>", "evidence": {"deploy": "v<N>", "spine_health": "<the json line>"}}}}
+   {"services": {"ghsa_feed_ingestor": {"at": "<utc>", "summary": "fly release v<N>, sha <sha>", "evidence": {"accept_gate": "ACCEPT rc=0", "spine_health": "<the json line>"}}}}
    ```
    That file is the only thing that turns `promotable` into `promoted` in the ledger.
-   Red → revert the batch only (`git revert <merge>`), and paste the failure into the
-   affected rows' repair directives (S5).
-   Pulled back from batch 1, now repair rows: `server_cve_exposure_api` (contract is a
+   REJECT → `deploy_prod.ps1` prints the rollback command (`flyctl deploy --app mcplookup --image <anchor> --yes`);
+   then `git revert <merge sha>` on main for this batch only, and the failure goes into the affected
+   rows' repair directives (S5).
+   Pulled back from batch 1 before the merge, now repair rows: `server_cve_exposure_api` (contract is a
    MagicMock router; `/api/exemplar/...` route unadapted), `circuit_breaker_state_api` and
    `directive_queue_health_api` (handlers call write_service at 127.0.0.1:8772, unreachable
    from the Fly image).

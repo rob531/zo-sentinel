@@ -75,3 +75,24 @@ GR-18), and `tests/test_gap_register_ids_unique.py` gates duplicates (red on
 the pre-fix HEAD). Tools in zo-fleet-tools: dead alert checks off,
 lane_prompt_audit, fu_memory_sync, creds_runway, one-page brief.
 Routes: none (governance docs)
+
+## 2026-10-04T21:30:00Z
+Chain `staging_drain` (chairman direction 2026-10-03) built as repo code
+(`tools/staging_drain/`, one CLI per segment + `chain_tick.py`) and run on main.
+Re-measured, not relabelled: 1,784 staged dirs (not ~426), 1,259 with no source
+(manifest-only scaffolds), 25 pass the real gate, 0 live in prod. Daily line:
+`promoted 0 · superseded 22 · repairing 100 · retired 1259 · remaining 403 ·
+wall: 25 api services import to 70 MiB in one process (budget unknown)`.
+S2 harvest = 0 bytes: the promoter's `casing_autofixed` reports 165 "fixes"
+that change nothing (GC-5 flag inversion), and all three mechanical repair
+scripts refuse every remaining site (family B model names, no-provenance
+names). 100 builder directives emitted into directives/pending/ (365 deferred by
+the per-tick cap), each quoting the gate failure verbatim with acceptance =
+passes the gate. S7: `directives/builder_exclusions.json` (71 families) read by
+the proposal fan-out and the architect floor. S4 batch 1 (10 api services, 3
+vulnerability) moved staged->active on branch `staging-drain/s4-batch-1` as a
+DRAFT PR: spine --check/--strict clean, 0 route duplicates, no boot test or
+prod evidence possible from the cloud, so nothing is "promoted". GR-23 opened
+at C1. `add_repo` for zo-fleet-tools was denied, so the one-pager section is a
+recorded command in chairman/staging_drain/HANDOFF.md, not a PR.
+Routes: none in ui_server.py (services/active +10 on the S4 branch only)

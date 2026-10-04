@@ -1,0 +1,293 @@
+{
+ "generated_at": "2026-10-04T21:15:13Z",
+ "writer": "tools/staging_drain/exclusions.py",
+ "basis": {
+  "ledger_generated_at": "2026-10-04T21:15:13Z"
+ },
+ "families": {
+  "ask_answer_api": {
+   "reason": "active: services/active/ask_answer_api is live",
+   "since": null
+  },
+  "ask_corpus_indexer": {
+   "reason": "active: services/active/ask_corpus_indexer is live",
+   "since": null
+  },
+  "axis_change_attribution_probe": {
+   "reason": "active: services/active/axis_change_attribution_probe is live",
+   "since": null
+  },
+  "axis_score_variance_report": {
+   "reason": "active: services/active/axis_score_variance_report is live",
+   "since": null
+  },
+  "axis_scores_query_api": {
+   "reason": "active: services/active/axis_scores_query_api is live",
+   "since": null
+  },
+  "cadence_admin_api": {
+   "reason": "active: services/active/cadence_admin_api is live",
+   "since": null
+  },
+  "cadence_job_sla_report": {
+   "reason": "active: services/active/cadence_job_sla_report is live",
+   "since": null
+  },
+  "config_scan_api": {
+   "reason": "active: services/active/config_scan_api is live",
+   "since": null
+  },
+  "cve_detail_api": {
+   "reason": "active: services/active/cve_detail_api is live",
+   "since": null
+  },
+  "dashboard_summary_api": {
+   "reason": "active: services/active/dashboard_summary_api is live",
+   "since": null
+  },
+  "dispute_detail_api": {
+   "reason": "active: services/active/dispute_detail_api is live",
+   "since": null
+  },
+  "entity_detail_view": {
+   "reason": "active: services/active/entity_detail_view is live",
+   "since": null
+  },
+  "entity_report_exporter": {
+   "reason": "active: services/active/entity_report_exporter is live",
+   "since": null
+  },
+  "facet_enum_service": {
+   "reason": "active: services/active/facet_enum_service is live",
+   "since": null
+  },
+  "freshness_metadata_api": {
+   "reason": "active: services/active/freshness_metadata_api is live",
+   "since": null
+  },
+  "freshness_policy_api": {
+   "reason": "active: services/active/freshness_policy_api is live",
+   "since": null
+  },
+  "media_assets": {
+   "reason": "active: services/active/media_assets is live",
+   "since": null
+  },
+  "never_scored_backlog_api": {
+   "reason": "active: services/active/never_scored_backlog_api is live",
+   "since": null
+  },
+  "org_api_key_manager": {
+   "reason": "active: services/active/org_api_key_manager is live",
+   "since": null
+  },
+  "org_entity_search_api": {
+   "reason": "active: services/active/org_entity_search_api is live",
+   "since": null
+  },
+  "org_risk_summary": {
+   "reason": "active: services/active/org_risk_summary is live",
+   "since": null
+  },
+  "orphan_router_caller_probe": {
+   "reason": "active: services/active/orphan_router_caller_probe is live",
+   "since": null
+  },
+  "otx_threat_refs": {
+   "reason": "active: services/active/otx_threat_refs is live",
+   "since": null
+  },
+  "overview_dashboard_api": {
+   "reason": "active: services/active/overview_dashboard_api is live",
+   "since": null
+  },
+  "perspective_admin_api": {
+   "reason": "active: services/active/perspective_admin_api is live",
+   "since": null
+  },
+  "perspective_diff_service": {
+   "reason": "active: services/active/perspective_diff_service is live",
+   "since": null
+  },
+  "perspective_query_api": {
+   "reason": "active: services/active/perspective_query_api is live",
+   "since": null
+  },
+  "registry_freshness_api": {
+   "reason": "active: services/active/registry_freshness_api is live",
+   "since": null
+  },
+  "registry_source_freshness_report_api": {
+   "reason": "active: services/active/registry_source_freshness_report_api is live",
+   "since": null
+  },
+  "registry_source_health_report": {
+   "reason": "active: services/active/registry_source_health_report is live",
+   "since": null
+  },
+  "risk_tier_summary_dashboard": {
+   "reason": "active: services/active/risk_tier_summary_dashboard is live",
+   "since": null
+  },
+  "risk_tier_threshold_calibration_probe": {
+   "reason": "active: services/active/risk_tier_threshold_calibration_probe is live",
+   "since": null
+  },
+  "runtime_deploy_info_endpoint": {
+   "reason": "active: services/active/runtime_deploy_info_endpoint is live",
+   "since": null
+  },
+  "score_dispute_api": {
+   "reason": "active: services/active/score_dispute_api is live",
+   "since": null
+  },
+  "score_dispute_router": {
+   "reason": "active: services/active/score_dispute_router is live",
+   "since": null
+  },
+  "scoring_axis_criteria_api": {
+   "reason": "active: services/active/scoring_axis_criteria_api is live",
+   "since": null
+  },
+  "scoring_freshness_surface": {
+   "reason": "active: services/active/scoring_freshness_surface is live",
+   "since": null
+  },
+  "scoring_timeline_api": {
+   "reason": "active: services/active/scoring_timeline_api is live",
+   "since": null
+  },
+  "scoring_wave_summary_api": {
+   "reason": "active: services/active/scoring_wave_summary_api is live",
+   "since": null
+  },
+  "server_axis_score_distribution_api": {
+   "reason": "active: services/active/server_axis_score_distribution_api is live",
+   "since": null
+  },
+  "server_axis_scores_summary_router": {
+   "reason": "active: services/active/server_axis_scores_summary_router is live",
+   "since": null
+  },
+  "server_compare_api": {
+   "reason": "active: services/active/server_compare_api is live",
+   "since": null
+  },
+  "server_composite_risk_ranking_api": {
+   "reason": "active: services/active/server_composite_risk_ranking_api is live",
+   "since": null
+  },
+  "server_registry_search_api": {
+   "reason": "active: services/active/server_registry_search_api is live",
+   "since": null
+  },
+  "server_risk_axes_api": {
+   "reason": "active: services/active/server_risk_axes_api is live",
+   "since": null
+  },
+  "server_scorecard_api": {
+   "reason": "active: services/active/server_scorecard_api is live",
+   "since": null
+  },
+  "server_verdict_router": {
+   "reason": "active: services/active/server_verdict_router is live",
+   "since": null
+  },
+  "threat_intel_summary_api": {
+   "reason": "active: services/active/threat_intel_summary_api is live",
+   "since": null
+  },
+  "verdict_axis_detail_api": {
+   "reason": "active: services/active/verdict_axis_detail_api is live",
+   "since": null
+  },
+  "verdict_breakdown_api": {
+   "reason": "active: services/active/verdict_breakdown_api is live",
+   "since": null
+  },
+  "verdict_export_router": {
+   "reason": "active: services/active/verdict_export_router is live",
+   "since": null
+  },
+  "verdict_summary_api": {
+   "reason": "active: services/active/verdict_summary_api is live",
+   "since": null
+  },
+  "verdict_watchlist_service": {
+   "reason": "active: services/active/verdict_watchlist_service is live",
+   "since": null
+  },
+  "vuln_coverage_sla_api": {
+   "reason": "active: services/active/vuln_coverage_sla_api is live",
+   "since": null
+  },
+  "vuln_exposure_api": {
+   "reason": "active: services/active/vuln_exposure_api is live",
+   "since": null
+  },
+  "vuln_facet_extension": {
+   "reason": "active: services/active/vuln_facet_extension is live",
+   "since": null
+  },
+  "vuln_osv_ingestor": {
+   "reason": "active: services/active/vuln_osv_ingestor is live",
+   "since": null
+  },
+  "vuln_pkg_enricher": {
+   "reason": "active: services/active/vuln_pkg_enricher is live",
+   "since": null
+  },
+  "vuln_registry_linker": {
+   "reason": "active: services/active/vuln_registry_linker is live",
+   "since": null
+  },
+  "ask_answer": {
+   "reason": "superseded: ask_answer by active:ask_answer_api",
+   "since": null
+  },
+  "cadence_sla_report": {
+   "reason": "superseded: cadence_sla_report by active:cadence_job_sla_report",
+   "since": null
+  },
+  "dashboard_summary": {
+   "reason": "superseded: dashboard_summary by active:dashboard_summary_api",
+   "since": null
+  },
+  "freshness_metadata": {
+   "reason": "superseded: freshness_metadata by active:freshness_metadata_api",
+   "since": null
+  },
+  "perspective_diff_api": {
+   "reason": "superseded: perspective_diff_api by active:perspective_diff_service",
+   "since": null
+  },
+  "perspective_snapshot": {
+   "reason": "superseded: perspective_snapshot by active:perspective_diff_service",
+   "since": null
+  },
+  "perspective_snapshot_diff": {
+   "reason": "superseded: perspective_snapshot_diff by active:perspective_diff_service",
+   "since": null
+  },
+  "risk_tier_verdict": {
+   "reason": "superseded: risk_tier_verdict by active:verdict_breakdown_api",
+   "since": null
+  },
+  "score_dispute_summary_api": {
+   "reason": "superseded: score_dispute_summary_api by active:score_dispute_api",
+   "since": null
+  },
+  "server_axis_volatility_scoring_consumer": {
+   "reason": "superseded: server_axis_volatility_scoring_consumer by active:axis_scores_query_api",
+   "since": null
+  },
+  "server_freshness_metrics": {
+   "reason": "superseded: server_freshness_metrics by active:verdict_breakdown_api",
+   "since": null
+  },
+  "verdict_view": {
+   "reason": "superseded: verdict_view by active:verdict_breakdown_api",
+   "since": null
+  }
+ }
+}

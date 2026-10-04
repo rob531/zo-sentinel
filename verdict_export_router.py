@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from typing import List, Optional
 import csv
@@ -60,6 +59,7 @@ router.get("/export/{server_id}")(get_verdict_export)
 
 if __name__ == "__main__":
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient  # smoke-test only; kept out of import scope
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.models import Base

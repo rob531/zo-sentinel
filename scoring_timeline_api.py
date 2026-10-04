@@ -6,7 +6,6 @@ from app.db import get_session
 from app.models import McpLlmAxisScore
 from sqlalchemy.orm import Session
 import requests
-from fastapi.testclient import TestClient
 
 router = APIRouter()
 
@@ -72,6 +71,7 @@ async def get_scoring_timeline(
 
 if __name__ == "__main__":
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient  # smoke-test only; kept out of import scope
     from app.db import get_session
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

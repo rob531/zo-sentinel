@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Dict, Optional
-import httpx
+import requests
 from app.db import get_session
 from app.models import McpServerRegistry
 
@@ -30,13 +30,13 @@ def get_server_risk_axes(server_id: str, version: Optional[str] = None) -> dict:
         params.append(version)
 
     try:
-        response = httpx.post(
+        response = requests.post(
             "http://127.0.0.1:8772/query",
             json={"query": query, "params": params}
         )
         response.raise_for_status()
         rows = response.json()
-    except httpx.HTTPStatusError as e:
+    except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Server not found")
         raise

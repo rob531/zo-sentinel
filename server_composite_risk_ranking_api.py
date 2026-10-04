@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.db import get_session
 from app.models import McpServerRegistry
-import httpx
+import requests
 from sqlalchemy.orm import Session
 from sqlalchemy import asc, nullslast
 
@@ -24,7 +24,7 @@ class RiskRankingResponse(BaseModel):
 
 def get_composite_risk_score(server_id: int, session: Session) -> float:
     try:
-        response = httpx.post(
+        response = requests.post(
             "http://127.0.0.1:8772/query",
             json={
                 "query": f"""

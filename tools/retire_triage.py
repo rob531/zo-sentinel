@@ -231,6 +231,18 @@ DOC_ROW = re.compile(
     r"^\|[^|]*\|\s*`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\|\s*\*{0,2}RETIRE\*{0,2}\s*\|",
     re.M)
 
+# Same row shape as DOC_ROW, but capturing the cells either side of the verdict
+# so --write-doc replaces ONLY the verdict cell and leaves every other byte of
+# the row alone. One regex per job: DOC_ROW answers "what does the doc claim",
+# this one answers "where is the claim written".
+DOC_ROW_FULL = re.compile(
+    r"^(\|[^|]*\|\s*`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\|)"
+    r"(\s*\*{0,2}RETIRE\*{0,2}\s*)(\|)",
+    re.M)
+
+WRITE_BEGIN = "<!-- retire-triage:begin -->"
+WRITE_END = "<!-- retire-triage:end -->"
+
 
 def doc_retire_claims(path):
     """Stems a markdown table asserts RETIRE for. Returns [] for a missing file,
@@ -272,6 +284,109 @@ def render_md(recs):
     return "\n".join(lines) + "\n"
 
 
+def git_basis():
+    """The commit this triage was derived from. R5: publish the basis with the
+    number. R6: an unresolvable sha is reported as unknown, never as blank."""
+    import subprocess
+    try:
+        p = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                           capture_output=True, text=True, timeout=30)
+        sha = (p.stdout or "").strip()
+        return sha if p.returncode == 0 and sha else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def rewrite_doc(path, recs, basis):
+    """Rewrite every RETIRE assertion in PATH to the verdict the classifier
+    derives from that module's own live evidence.
+
+    This is the RECOVERY form of --check-doc (HARNESS_DOCTRINE R7): rather than
+    add a gate that fails forever on a hand-written table, the table is
+    re-derived from the running classifier, so the document cannot assert a
+    RETIRE the code cannot support.
+
+    BYTE-IDEMPOTENT by construction: a cell this function has rewritten to
+    "~~RETIRE~~ -> **HOLD** (live)" no longer matches DOC_ROW_FULL's verdict
+    group, so a second run does not touch it; a cell that still earns RETIRE is
+    rewritten to the identical "**RETIRE**". Returns (changed, rows).
+
+    It DELETES NOTHING and RETIRES NOTHING -- `data_deletion` is FOREVER_HELD
+    and #4004 ask 1 is an explicit chairman reservation.
+    """
+    try:
+        with open(path, encoding="utf-8", newline="") as fh:
+            raw = fh.read()
+    except OSError:
+        return None, []
+    if not raw:
+        return None, []
+    # Measure the line endings BEFORE writing. They have flipped twice on this
+    # tower; a cure that silently rewrites 306 CRLF lines to LF is a 306-line
+    # diff hiding a 12-line change.
+    n_crlf = raw.count("\r\n")
+    eol = "\r\n" if n_crlf > raw.count("\n") - n_crlf else "\n"
+    text = raw.replace("\r\n", "\n")
+
+    live = {r["module"]: r for r in recs}
+    rows = []
+
+    def one(m):
+        stem = m.group(2)
+        was = m.group(3)
+        r = live.get(stem)
+        if r is None:
+            cell = " ~~RETIRE~~ -> NOT DEFERRED (live) "
+        elif r["verdict"] == "RETIRE":
+            cell = " **RETIRE** "
+        else:
+            cell = " ~~RETIRE~~ -> **%s** (live) " % r["verdict"]
+        if cell != was:
+            rows.append((stem, was.strip(), cell.strip()))
+        return m.group(1) + cell + m.group(4)
+
+    out = DOC_ROW_FULL.sub(one, text)
+
+    banner = "\n".join([
+        WRITE_BEGIN,
+        "",
+        "> **The RETIRE column in this document is DERIVED, not hand-written.**",
+        ">",
+        "> Rewritten by `python tools/retire_triage.py --write-doc <this file>`",
+        "> from live repo state at `%s`." % basis,
+        ">",
+        "> A `~~RETIRE~~ ->` cell is a RETIRE this document asserted that the",
+        "> classifier cannot support on that module's own evidence. The override",
+        "> sentence *\"ALSO duplicated at `services/staged/<stem>`, so the",
+        "> promotion lane is its real path\"* cleared 11 modules as a class and",
+        "> was rejected by the chairman review of 2026-09-21; for most of them",
+        "> the staged lane is a manifest-only stub or declares zero routes, so",
+        "> there is no promotion lane to be the real path.",
+        ">",
+        "> Re-run the tool rather than hand-editing the column: `--check-doc` is",
+        "> rc=1 whenever a row drifts back to an unsupported RETIRE.",
+        ">",
+        "> **Nothing is deleted or retired by this file or that tool.**",
+        "> `data_deletion` is FOREVER_HELD and #4004 ask 1 is an explicit",
+        "> chairman reservation.",
+        "",
+        WRITE_END,
+    ])
+    if WRITE_BEGIN in out and WRITE_END in out:
+        i = out.index(WRITE_BEGIN)
+        j = out.index(WRITE_END) + len(WRITE_END)
+        out = out[:i] + banner + out[j:]
+    else:
+        cut = out.index("\n") + 1 if "\n" in out else len(out)
+        out = out[:cut] + "\n" + banner + "\n" + out[cut:]
+
+    changed = out != text
+    if changed:
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(out.replace("\n", eol))
+    return changed, rows
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Per-deferral RETIRE triage derived from live state. "
@@ -281,6 +396,9 @@ def main(argv=None):
                     help="restrict to this stem (repeatable)")
     ap.add_argument("--emit-md", metavar="PATH",
                     help="write the derived triage table to PATH")
+    ap.add_argument("--write-doc", metavar="PATH",
+                    help="rewrite PATH's RETIRE column to the live-derived "
+                         "verdict (recovery, not a gate); byte-idempotent")
     ap.add_argument("--check-doc", metavar="PATH",
                     help="rc=1 if PATH asserts RETIRE for a stem that is HOLD "
                          "live; rc=2 if PATH cannot be read (never a pass)")
@@ -292,6 +410,25 @@ def main(argv=None):
     if args.emit_md:
         with open(args.emit_md, "w", encoding="utf-8") as fh:
             fh.write(render_md(recs))
+
+    if args.write_doc:
+        basis = git_basis()
+        changed, rows = rewrite_doc(args.write_doc, recs, basis)
+        if changed is None:
+            print("CANNOT READ %s -- unknown is not agreement (R6)"
+                  % args.write_doc)
+            return 2
+        print("=== --write-doc %s  basis=%s  deferrals=%d ==="
+              % (args.write_doc, basis, len(recs)))
+        if not rows:
+            print("  NO CHANGE: every RETIRE cell already matches live state "
+                  "(idempotent re-run, not a skipped check).")
+        for stem, was, now in rows:
+            print("  %-44s %s  ->  %s" % (stem, was, now))
+        print("")
+        print("  NOTHING WAS DELETED. data_deletion is FOREVER_HELD and #4004 "
+              "ask 1 is an explicit chairman reservation.")
+        return 0
 
     if args.check_doc:
         claims = doc_retire_claims(args.check_doc)

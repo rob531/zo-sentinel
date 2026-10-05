@@ -1,5 +1,11 @@
 name: bus-catalog-freshness
 
+concurrency:
+  # cancel superseded runs on the same PR branch so the cheap-build PR
+  # velocity cannot pile up concurrent runners and flake required checks.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 # THE ALARM MUST NOT LIVE ON THE MACHINE IT IS WATCHING.
 #
 # schema/bus_catalog.json is refreshed on the HOST, by tools/bus_catalog_guard.sh,

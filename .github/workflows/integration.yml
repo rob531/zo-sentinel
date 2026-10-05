@@ -1,5 +1,11 @@
 name: integration
 
+concurrency:
+  # cancel superseded runs on the same PR branch so the cheap-build PR
+  # velocity cannot pile up concurrent runners and flake required checks.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 # Real-DB integration tier (vs the hermetic dict-mock smoke-ladder).
 # Stands up tests/integration/it_write_service.py -- the write_service HTTP
 # contract over a REAL ephemeral DuckDB loaded from schemas/duckdb_schema.json --

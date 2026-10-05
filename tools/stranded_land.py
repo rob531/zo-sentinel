@@ -194,6 +194,38 @@ def take_batch(units, budget: int):
     return batch
 
 
+def refill_after_gate(units, batch_units, inside, want, dropped_keys,
+                      last_attempt: bool = False):
+    """Recompute the batch after the hollow-scaffold gate rejected `inside`.
+
+    Two things, and the first is the throughput defect this fixes:
+
+    * REFILL, do not merely subtract. The first version dropped the rejected
+      files out of the batch and pushed whatever was left, so the number of
+      modules landed per run was set by the gate's reject rate rather than by
+      MAX_PER_RUN. Observed on cycle-0184 / PR #6196: a budget of 8 landed 5
+      while 30 eligible units sat waiting -- 3 of the 8 were hollow, nothing
+      took their place, and the queue therefore needs ~1.6x as many runs as the
+      rate limit implies. The negative control for this is pole P11b, which
+      runs the old shrink-only arithmetic and must be seen to under-fill.
+
+    * A rejected member refuses its WHOLE unit, exactly as group_units decides
+      eligibility. Subtracting the named file alone could push a package's
+      clean half with its siblings missing -- the 'one door of eight' shape.
+
+    On the LAST attempt it shrinks instead of refilling: a run already red
+    twice must converge, not keep pulling in never-gated units.
+
+    Returns (batch_units, dropped_keys); never mutates its arguments.
+    """
+    dropped_keys = set(dropped_keys) | {
+        u["key"] for u in units if any(r in inside for r in u["rels"])
+    }
+    pool = batch_units if last_attempt else units
+    return (take_batch([u for u in pool if u["key"] not in dropped_keys], want),
+            dropped_keys)
+
+
 # ------------------------------------------------------------------ the stager
 
 def stage_exact(clone: Path, rels):
@@ -541,6 +573,43 @@ def self_test() -> int:
          _d(eight) == _d(list(reversed(eight))) and _d(eight) != _d(six),
          "d8=%s d8rev=%s d6=%s" % (_d(eight), _d(list(reversed(eight))), _d(six)))
 
+    # P11 -- the gate's rejects must be REFILLED, not subtracted. This is the
+    # cycle-0184 defect: PR #6196 landed 5 of a budget of 8 because 3 were
+    # hollow and nothing replaced them, while 30 units were eligible.
+    def _mku(k, n=1):
+        return {"key": k, "rels": ["%s_%d.py" % (k, i) for i in range(n)],
+                "bytes": 100, "verdicts": ["CLEAN"]}
+    _allu = [_mku("a"), _mku("b"), _mku("c"), _mku("d")]
+    _first = take_batch(_allu, 2)
+    _rej = _first[0]["rels"][:1]
+    _refilled, _dk = refill_after_gate(_allu, _first, _rej, 2, set())
+    _shrunk = [x for x in _first if x["key"] not in _dk]
+    pole("P11 a gate reject is REFILLED to the budget, not subtracted from it",
+         len(_refilled) == 2 and "a" not in [x["key"] for x in _refilled],
+         "refilled=%s" % [x["key"] for x in _refilled])
+
+    # P11b -- NEGATIVE CONTROL. The old shrink-only arithmetic is run here and
+    # must be OBSERVED under-filling. If this pole ever goes green, P11 is
+    # measuring nothing (R4).
+    pole("P11b shrink-only observed RED: 1 unit of a 2-unit budget",
+         len(_shrunk) == 1, "shrunk to %d, expected 1" % len(_shrunk))
+
+    # P11c -- a rejected member refuses its WHOLE unit; never half a package.
+    _pk = {"key": "services/staged/p",
+           "rels": ["services/staged/p/__init__.py", "services/staged/p/x.py"],
+           "bytes": 10, "verdicts": ["CLEAN"]}
+    _b2, _dk2 = refill_after_gate([_pk, _mku("z")], [_pk],
+                                  ["services/staged/p/x.py"], 2, set())
+    pole("P11c a rejected member refuses the whole unit, never half a package",
+         "services/staged/p" in _dk2
+         and all(x["key"] != "services/staged/p" for x in _b2),
+         "dropped=%s batch=%s" % (sorted(_dk2), [x["key"] for x in _b2]))
+
+    # P11d -- the final attempt converges: it shrinks rather than refilling.
+    _b3, _ = refill_after_gate(_allu, _first, _rej, 2, set(), last_attempt=True)
+    pole("P11d the final attempt shrinks rather than refilling",
+         [x["key"] for x in _b3] == ["b"], "%s" % [x["key"] for x in _b3])
+
     # P6 -- no grader => CANNOT EVALUATE, never a pass.
     g, err = grade(Path("."), Path(tempfile.gettempdir()) / "definitely_no_grader_here.py", None)
     pole("P6 missing grader is rc=2 CANNOT EVALUATE, not 0",
@@ -698,7 +767,8 @@ def main(argv=None) -> int:
             return m
 
         want_rels, dropped, gate_text = list(rels), [], ""
-        for attempt in (1, 2):
+        gate_dropped_keys = set()
+        for attempt in (1, 2, 3):
             staged, why = build_commit(clone, runtime, "_stranded_land_wip", want_rels,
                                        message(len(want_rels), dropped))
             if staged is None:
@@ -722,12 +792,18 @@ def main(argv=None) -> int:
                 print("\nREFUSED: the gate rejects %s, which this batch did not add. Not ours to fix." % rej)
                 return 1
             dropped += inside
-            want_rels = [r for r in want_rels if r not in inside]
+            batch_units, gate_dropped_keys = refill_after_gate(
+                units, batch_units, inside, want, gate_dropped_keys,
+                last_attempt=(attempt == 3))
+            want_rels = sorted(x for u in batch_units for x in u["rels"])
             if not want_rels:
                 print("\nREFUSED: every file in this batch is rejected by %s. Nothing to land." % GATE_REL)
                 print("  rejected: %s" % dropped)
                 return 1
-            print("  dropping %s and rebuilding the batch from origin/main" % inside)
+            print("  dropping unit(s) %s and %s the batch from origin/main: %d file(s) of a %d budget"
+                  % (sorted(gate_dropped_keys),
+                     "shrinking" if attempt == 3 else "REFILLING",
+                     len(want_rels), want))
         else:
             print("\nREFUSED: %s still RED after dropping %s. Not pushing a red batch." % (GATE_REL, dropped))
             print(gate_text.strip()[-800:])

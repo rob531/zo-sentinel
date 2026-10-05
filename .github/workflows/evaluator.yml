@@ -1,5 +1,11 @@
 name: evaluator
 
+concurrency:
+  # cancel superseded runs on the same PR branch so the cheap-build PR
+  # velocity cannot pile up concurrent runners and flake required checks.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 # Goose-T2 evaluator (cheap version). GH-hosted runner takes the role
 # the tower-side Goose-T2 would otherwise play: run the canonical test
 # target, naturally produce a check pass/fail, and upload junit.xml so

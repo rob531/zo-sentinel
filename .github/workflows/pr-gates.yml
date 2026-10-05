@@ -1,5 +1,11 @@
 name: pr-gates
 
+concurrency:
+  # cancel superseded runs on the same PR branch so the cheap-build PR
+  # velocity cannot pile up concurrent runners and flake required checks.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 # Pull-request quality gates for the zo-sentinel app:
 #   1. static-analysis -- ruff (pyflakes + syntax/runtime errors)
 #   2. smoke-ladder     -- the recursive hermetic smoke gates (tests/ci)

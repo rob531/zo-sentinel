@@ -15,7 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import singleton_lock  # identity-verified single-instance lock
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bus_write_guard
+
 SERVICE_NAME = "discovery_npm_paginator"
+CANDIDATES_TABLE = "mcp_discovery_candidates"
+SPOOL_DIR = os.environ.get("BUS_WRITE_SPOOL_DIR", "/home/workspace/logs/bus_spool")
 STATE_DIR = Path("/home/workspace/zo_sentinel/state")
 STATE_FILE = STATE_DIR / "npm_pagination_cursor.json"
 LOCK_FILE = Path("/home/workspace/logs/discovery_npm_paginator.lock")
@@ -175,11 +180,23 @@ def get_table_columns(table_name):
 
 
 def verify_candidates_schema():
-    cols = get_table_columns("mcp_discovery_candidates")
+    """Resolve the target on the live bus before trusting any column read.
+
+    "could not verify" collapsed three states into one warning the caller ignored:
+    the table is absent, the bus is unreachable, or the columns are simply unreadable.
+    Only the first means every subsequent write is destroyed (R6).
+    """
+    state, basis = bus_write_guard.resolve_table(
+        CANDIDATES_TABLE, QUERY_SERVICE_URL, timeout=10, use_cache=False
+    )
+    if state != bus_write_guard.PRESENT:
+        log(f"error: {CANDIDATES_TABLE} is {state} on the bus -- basis: {basis}")
+        return False
+    cols = get_table_columns(CANDIDATES_TABLE)
     if cols:
-        log(f"info: mcp_discovery_candidates columns: {cols}")
+        log(f"info: {CANDIDATES_TABLE} columns: {cols}")
         return True
-    log("warn: could not verify mcp_discovery_candidates schema")
+    log(f"warn: {CANDIDATES_TABLE} exists but its columns could not be read")
     return False
 
 
@@ -272,12 +289,26 @@ def process_page(data, query_key):
 
 
 def write_candidates(candidates):
+    """Return the number of rows actually POSTED, never len(candidates).
+
+    `if result: return len(candidates)` read the enqueue receipt
+    {"ok": true, "queued": 1} as proof of storage.  With the target table absent from
+    the bus this daemon reported every page as fully written while write_service
+    discarded all of it -- 4172 rows on 2026-10-04 alone.
+    """
     if not candidates:
         return 0
-    result = ws_write("mcp_discovery_candidates", candidates)
-    if result:
-        return len(candidates)
-    return 0
+    result = bus_write_guard.guarded_write(
+        CANDIDATES_TABLE,
+        candidates,
+        write_url=get_write_url(),
+        query_url=QUERY_SERVICE_URL,
+        spool_dir=SPOOL_DIR,
+        timeout=FETCH_TIMEOUT_SECS,
+        logger=log,
+    )
+    log(result.summary())
+    return result.posted
 
 
 def advance_cursor(cursor, query_key):

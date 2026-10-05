@@ -14,7 +14,7 @@ from app.db import get_session
 from app.models import CadenceJobRun, Base  # type: ignore
 
 # Business logic import (relative)
-from .logic import get_cadence_job_runs
+from .contract import get_cadence_job_runs
 
 router = APIRouter(prefix="/api")
 

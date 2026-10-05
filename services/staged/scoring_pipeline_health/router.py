@@ -5,7 +5,7 @@ from typing import Dict, Any
 from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry, CadenceJobRun
 
-from .logic import get_pipeline_health
+from .contract import get_pipeline_health
 
 router = APIRouter(prefix="/api/scoring")
 

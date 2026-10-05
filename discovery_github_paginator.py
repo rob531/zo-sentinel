@@ -7,6 +7,9 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bus_write_guard
+
 SERVICE_NAME = 'discovery_github_paginator'
 SERVICE_PORT = 8782
 WRITE_SERVICE_URL = 'http://127.0.0.1:8772/write'
@@ -32,6 +35,8 @@ SORT_OPTIONS = ['updated', 'stars', 'forks']
 QUERY_OPTIONS = ['topic:mcp-server', 'topic:model-context-protocol', 'topic:modelcontextprotocol']
 SCHEMA_VERIFIED = False
 COLUMNS_CACHE = None
+CANDIDATES_TABLE = 'mcp_discovery_candidates'
+SPOOL_DIR = os.environ.get('BUS_WRITE_SPOOL_DIR', '/home/workspace/logs/bus_spool')
 
 
 def log(msg):
@@ -101,6 +106,12 @@ def save_cursor(cursor):
 
 
 def get_columns():
+    """Columns of the candidates table, or None when they cannot be resolved.
+
+    An EMPTY result is None, not []. The previous version cached [] and set
+    SCHEMA_VERIFIED = True over a table that does not exist on the bus at all --
+    HARNESS_DOCTRINE R6, unknown is not zero.
+    """
     global COLUMNS_CACHE, SCHEMA_VERIFIED
     if COLUMNS_CACHE is not None:
         return COLUMNS_CACHE
@@ -112,7 +123,10 @@ def get_columns():
         )
         if resp.status_code == 200:
             data = resp.json()
-            COLUMNS_CACHE = [row['column_name'] for row in data.get('rows', [])]
+            cols = [row['column_name'] for row in data.get('rows', [])]
+            if not cols:
+                return None
+            COLUMNS_CACHE = cols
             SCHEMA_VERIFIED = True
             return COLUMNS_CACHE
     except Exception as e:
@@ -121,9 +135,15 @@ def get_columns():
 
 
 def verify_schema():
+    state, basis = bus_write_guard.resolve_table(
+        CANDIDATES_TABLE, QUERY_SERVICE_URL, timeout=10, use_cache=False
+    )
+    if state != bus_write_guard.PRESENT:
+        log(f'ERROR: {CANDIDATES_TABLE} is {state} on the bus -- basis: {basis}')
+        return False
     cols = get_columns()
     if cols is None:
-        log('WARNING: could not verify mcp_discovery_candidates schema')
+        log(f'WARNING: {CANDIDATES_TABLE} exists but its columns could not be read')
         return False
     required = {'candidate_name', 'candidate_url', 'candidate_description', 'discovered_in_directory', 'discovered_status', 'last_seen', 'promoted'}
     missing = required - set(cols)
@@ -185,36 +205,38 @@ def fetch_page(page, sort_option, query):
 
 
 def write_repos(items):
-    written = 0
-    errors = 0
+    """Post candidates only to a target proven PRESENT on the live bus.
+
+    The previous version counted a 2xx from /write as a written row.  /write answers
+    {"ok": true, "queued": 1} -- an ENQUEUE receipt returned before the row reaches the
+    store -- so when mcp_discovery_candidates did not exist on the bus this reported
+    4172 rows/day as written while write_service logged `Catalog Error: Table with name
+    mcp_discovery_candidates does not exist!` for every one of them.
+    """
     now = datetime.datetime.utcnow().isoformat()
-    for item in items:
-        full_name = item.get('full_name', '')
-        html_url = item.get('html_url', '')
-        description = (item.get('description') or '')[:500]
-        row = {
-            'candidate_name': full_name,
-            'candidate_url': html_url,
-            'candidate_description': description,
+    rows = [
+        {
+            'candidate_name': item.get('full_name', ''),
+            'candidate_url': item.get('html_url', ''),
+            'candidate_description': (item.get('description') or '')[:500],
             'discovered_in_directory': 'github_topic',
             'discovered_status': 'active',
             'last_seen': now,
-            'promoted': False
+            'promoted': False,
         }
-        try:
-            resp = requests.post(
-                WRITE_SERVICE_URL,
-                json={'table': 'mcp_discovery_candidates', 'rows': row, 'wait': True},
-                timeout=10
-            )
-            if resp.status_code in (200, 201):
-                written += 1
-            else:
-                errors += 1
-        except Exception as e:
-            errors += 1
-            log(f'write error for {full_name}: {e}')
-    return written, errors
+        for item in items
+    ]
+    result = bus_write_guard.guarded_write(
+        CANDIDATES_TABLE,
+        rows,
+        write_url=WRITE_SERVICE_URL,
+        query_url=QUERY_SERVICE_URL,
+        spool_dir=SPOOL_DIR,
+        timeout=10,
+        logger=log,
+    )
+    log(result.summary())
+    return result.posted, result.failed + result.spooled
 
 
 def cycle():

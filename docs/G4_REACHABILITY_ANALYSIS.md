@@ -1,5 +1,29 @@
 # G4 — reachability: populations, lifecycle, and triage
 
+<!-- retire-triage:begin -->
+
+> **The RETIRE column in this document is DERIVED, not hand-written.**
+>
+> Rewritten by `python tools/retire_triage.py --write-doc <this file>`
+> from live repo state at `de732e3c61fe3bf513e2f2532adc137d0879238c`.
+>
+> A `~~RETIRE~~ ->` cell is a RETIRE this document asserted that the
+> classifier cannot support on that module's own evidence. The override
+> sentence *"ALSO duplicated at `services/staged/<stem>`, so the
+> promotion lane is its real path"* cleared 11 modules as a class and
+> was rejected by the chairman review of 2026-09-21; for most of them
+> the staged lane is a manifest-only stub or declares zero routes, so
+> there is no promotion lane to be the real path.
+>
+> Re-run the tool rather than hand-editing the column: `--check-doc` is
+> rc=1 whenever a row drifts back to an unsupported RETIRE.
+>
+> **Nothing is deleted or retired by this file or that tool.**
+> `data_deletion` is FOREVER_HELD and #4004 ask 1 is an explicit
+> chairman reservation.
+
+<!-- retire-triage:end -->
+
 Companion to `MERGE_AUDIT_2026-08-23.md` finding **G4**. The gate change is in
 `tools/reachability_ratchet.py`; this document carries the analysis the finding
 asked for.
@@ -238,8 +262,8 @@ copy is a duplicate and the promotion lane is its real path.
 
 | # | module | verdict | why unmounted | routes | data-wired | reason |
 |---|---|---|---|---:|---|---|
-| 1 | `api_key_manager` | **RETIRE** | MOUNTABLE | 2 | yes | clean and data-wired; the mount is the only missing step; ALSO duplicated at services/staged/api_key_manager, so the promotion lane is its real path |
-| 2 | `audit_log_api` | **RETIRE** | NO_ROUTES | 0 | yes | declares no routes, so it is not a service; ALSO duplicated at services/staged/audit_log_api, so the promotion lane is its real path |
+| 1 | `api_key_manager` | ~~RETIRE~~ -> **HOLD** (live) | MOUNTABLE | 2 | yes | clean and data-wired; the mount is the only missing step; ALSO duplicated at services/staged/api_key_manager, so the promotion lane is its real path |
+| 2 | `audit_log_api` | ~~RETIRE~~ -> **HOLD** (live) | NO_ROUTES | 0 | yes | declares no routes, so it is not a service; ALSO duplicated at services/staged/audit_log_api, so the promotion lane is its real path |
 | 3 | `audit_log_export_api` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
 | 4 | `audit_log_query_api` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
 | 5 | `axis_change_attribution_probe` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
@@ -248,28 +272,28 @@ copy is a duplicate and the promotion lane is its real path.
 | 8 | `cve_detail_api` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
 | 9 | `cve_facet_compile_service_enhanced_router` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
 | 10 | `cve_facet_compile_wiring_v3` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
-| 11 | `deferred_router_ledger_report` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/deferred_router_ledger_report, so the promotion lane is its real path |
-| 12 | `deferred_router_triage_report` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/deferred_router_triage_report, so the promotion lane is its real path |
+| 11 | `deferred_router_ledger_report` | ~~RETIRE~~ -> **HOLD** (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/deferred_router_ledger_report, so the promotion lane is its real path |
+| 12 | `deferred_router_triage_report` | ~~RETIRE~~ -> **HOLD** (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/deferred_router_triage_report, so the promotion lane is its real path |
 | 13 | `dispute_detail_api` | **MOUNT*** | BROKEN_IMPORT | 2 | yes | unmountable only on model-name casing; mechanically repairable |
 | 14 | `entity_detail_view` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
-| 15 | `never_scored_backlog_api` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/never_scored_backlog_api, so the promotion lane is its real path |
+| 15 | `never_scored_backlog_api` | ~~RETIRE~~ -> NOT DEFERRED (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/never_scored_backlog_api, so the promotion lane is its real path |
 | 16 | `orphan_router_caller_probe` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 17 | `perspective_events_feed_api` | **MOUNT** | MOUNTABLE | 2 | yes | clean and data-wired; the mount is the only missing step |
 | 18 | `propose_directive_outcome_log` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
 | 19 | `registry_freshness_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 20 | `registry_growth_report_generator` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
-| 21 | `registry_ingest_anomaly_report` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/registry_ingest_anomaly_report, so the promotion lane is its real path |
+| 21 | `registry_ingest_anomaly_report` | ~~RETIRE~~ -> **HOLD** (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/registry_ingest_anomaly_report, so the promotion lane is its real path |
 | 22 | `registry_source_freshness_report_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 23 | `registry_source_health_report` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 24 | `risk_tier_alert_router` | **MOUNT** | MOUNTABLE | 2 | yes | clean and data-wired; the mount is the only missing step |
 | 25 | `risk_tier_by_source_report_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 26 | `risk_tier_change_dashboard` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
-| 27 | `risk_tier_summary_dashboard` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/risk_tier_summary_dashboard, so the promotion lane is its real path |
+| 27 | `risk_tier_summary_dashboard` | ~~RETIRE~~ -> NOT DEFERRED (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/risk_tier_summary_dashboard, so the promotion lane is its real path |
 | 28 | `risk_tier_summary_router` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 29 | `risk_tier_threshold_api` | **RETIRE** | NO_ROUTES | 0 | yes | declares no routes, so it is not a service |
-| 30 | `risk_tier_threshold_calibration_probe` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/risk_tier_threshold_calibration_probe, so the promotion lane is its real path |
+| 30 | `risk_tier_threshold_calibration_probe` | ~~RETIRE~~ -> NOT DEFERRED (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/risk_tier_threshold_calibration_probe, so the promotion lane is its real path |
 | 31 | `risk_tier_thresholds_api` | **MOUNT** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step |
-| 32 | `risk_tier_trend_api` | **RETIRE** | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step; ALSO duplicated at services/staged/risk_tier_trend_api, so the promotion lane is its real path |
+| 32 | `risk_tier_trend_api` | ~~RETIRE~~ -> **HOLD** (live) | MOUNTABLE | 1 | yes | clean and data-wired; the mount is the only missing step; ALSO duplicated at services/staged/risk_tier_trend_api, so the promotion lane is its real path |
 | 33 | `score_dispute_router` | **MOUNT*** | BROKEN_IMPORT | 0 | yes | unmountable only on model-name casing; mechanically repairable |
 | 34 | `score_results_push_consumer` | **MOUNT*** | BROKEN_IMPORT | 0 | yes | unmountable only on model-name casing; mechanically repairable |
 | 35 | `scoring_axis_criteria_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
@@ -287,10 +311,10 @@ copy is a duplicate and the promotion lane is its real path.
 | 47 | `server_registry_search_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 48 | `server_registry_source_distribution_view` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 49 | `server_risk_axes_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
-| 50 | `server_risk_detail_api` | **RETIRE** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/server_risk_detail_api, so the promotion lane is its real path |
+| 50 | `server_risk_detail_api` | ~~RETIRE~~ -> **HOLD** (live) | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable; ALSO duplicated at services/staged/server_risk_detail_api, so the promotion lane is its real path |
 | 51 | `server_scorecard_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 52 | `server_scoring_status_api` | **MOUNT*** | BROKEN_IMPORT | 2 | yes | unmountable only on model-name casing; mechanically repairable |
-| 53 | `server_submission_api` | **RETIRE** | MOUNTABLE | 2 | yes | clean and data-wired; the mount is the only missing step; ALSO duplicated at services/staged/server_submission_api, so the promotion lane is its real path |
+| 53 | `server_submission_api` | ~~RETIRE~~ -> **HOLD** (live) | MOUNTABLE | 2 | yes | clean and data-wired; the mount is the only missing step; ALSO duplicated at services/staged/server_submission_api, so the promotion lane is its real path |
 | 54 | `server_timeline_event_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |
 | 55 | `server_verdict_router` | **MOUNT** | MOUNTABLE | 3 | yes | clean and data-wired; the mount is the only missing step |
 | 56 | `service_extraction_candidate_report_api` | **MOUNT*** | BROKEN_IMPORT | 1 | yes | unmountable only on model-name casing; mechanically repairable |

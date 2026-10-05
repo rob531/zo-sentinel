@@ -33,6 +33,11 @@ _As of 2026-10-05 (UTC). Owner tags: **[you]** = chairman decision/action · **[
    `cloudflare`). **[you]** approve → **[lane]** runs.
 10. **The "manifest" weekend idea is still unrecovered** (cloud-session only, not Tower-indexed; "spineful"
     was recovered, in `EVENTS_STORE.md`). **[you]** if it matters, paste the Claude Docs link; else drop it.
+11. **GR-25: autogenous/ruClip adoption — which rigor increments to take?** Design-only sketch (PR #6170, GR-25)
+    deep-parsed both from source: we're equal-or-stricter on reversibility/hard-gates/ledger/adversary-over-quorum;
+    3 real gaps worth a bounded steal (enforcing expiry on peer *proposals*; Ed25519 identity on a peer decision;
+    a fail-closed budget sentinel — partial cure for FU-342). **[you]** rule on INC-1..5; none widens a clause, no
+    code until authorized. (`docs/DESIGN_AUTOGENOUS_RUCLIP_ADOPTION_2026-10-05.md`.)
 
 ## How this file works
 - **Before a session/lane ends**, it adds or updates **its own** loose ends here: one plain line each —

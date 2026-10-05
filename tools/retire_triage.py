@@ -347,13 +347,27 @@ def rewrite_doc(path, recs, basis):
 
     out = DOC_ROW_FULL.sub(one, text)
 
+    # The basis sha is RESTAMPED only when a verdict actually moved. Restamping
+    # it on every commit made a no-op run rewrite the file, so --write-doc
+    # printed "NO CHANGE" while `git status` reported a modification -- R5
+    # inverted: the basis moved while nothing it is the basis FOR did. Observed
+    # 2026-10-05 against the merged c842f5074 immediately after the cure landed.
+    prior_basis = None
+    if WRITE_BEGIN in text:
+        m0 = re.search(r"^> from live repo state at `([^`]*)`\.$", text, re.M)
+        if m0:
+            prior_basis = m0.group(1)
+    banner_basis = prior_basis if (not rows and prior_basis) else basis
+
     banner = "\n".join([
+
         WRITE_BEGIN,
         "",
         "> **The RETIRE column in this document is DERIVED, not hand-written.**",
         ">",
         "> Rewritten by `python tools/retire_triage.py --write-doc <this file>`",
-        "> from live repo state at `%s`." % basis,
+        "> from live repo state at `%s`." % banner_basis,
+
         ">",
         "> A `~~RETIRE~~ ->` cell is a RETIRE this document asserted that the",
         "> classifier cannot support on that module's own evidence. The override",
@@ -421,8 +435,13 @@ def main(argv=None):
         print("=== --write-doc %s  basis=%s  deferrals=%d ==="
               % (args.write_doc, basis, len(recs)))
         if not rows:
-            print("  NO CHANGE: every RETIRE cell already matches live state "
-                  "(idempotent re-run, not a skipped check).")
+            print("  NO VERDICT MOVED: every RETIRE cell already matches live "
+                  "state (idempotent re-run, not a skipped check).")
+        # Report what the FILE did, measured, not what the row list implies.
+        # The first version of this message read "NO CHANGE" off an empty row
+        # list while the banner restamp had modified the file.
+        print("  file: %s" % ("REWRITTEN" if changed else "byte-identical"))
+
         for stem, was, now in rows:
             print("  %-44s %s  ->  %s" % (stem, was, now))
         print("")

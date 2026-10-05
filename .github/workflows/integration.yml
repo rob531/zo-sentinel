@@ -20,6 +20,19 @@ on:
 permissions:
   contents: read
 
+# CI-pileup guard (added 2026-10-05). Collapse redundant runs of THIS workflow
+# on the SAME ref so a burst (e.g. the autonomous builder landing several
+# scaffold PRs in one hour) cannot pin every GitHub-hosted runner at once and
+# starve other PRs' required checks into cancelled/no-runner failures. Keyed by
+# ref, so it NEVER cancels a different PR's run -- only a superseded run of the
+# same branch/PR. No gate is weakened: the newest run on each ref still must
+# pass. Safe re the 2026-09 sweep storm -- auto-merge sweeps now gate on
+# workflow_run.conclusion=='success', so a concurrency-cancelled run no longer
+# triggers a sweep.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   db-integration:
     runs-on: ubuntu-latest

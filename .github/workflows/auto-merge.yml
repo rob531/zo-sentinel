@@ -373,11 +373,22 @@ jobs:
           for pr in $prs; do
             [ "$examined" -ge "$SWEEP_CAP" ] && break
             examined=$((examined+1))
-            # CLEAN = all required green. UNSTABLE = all REQUIRED green, some
-            # non-required check red (e.g. CodeQL); branch protection permits
-            # that merge, so we do too.
+            # TRUST GRADIENT (chairman ruling 2026-10-05, DRAFT -- awaiting approval).
+            # The axis is MODEL-TIER, not human-vs-agent (the chairman authors no
+            # PRs). The cheap-API auto-build ladder is the high-velocity, non-frontier,
+            # unscored-service RISK, so it gets the STRICTER bar: it must be CLEAN
+            # (EVERY check green, incl. non-required quality/security signals like
+            # CodeQL/bandit), NOT merely UNSTABLE (required-green, non-required red).
+            # Frontier-session / hand PRs (land-when-green) keep the looser
+            # required-green bar via --auto -- they need gating LEAST. This INVERTS the
+            # prior `CLEAN|UNSTABLE`, which let the cheap ladder ship past non-required
+            # reds. (Scope note: this is the green-sweep lever; the autonomous-build
+            # pull_request_target job and triage-solid-sweep still arm bare `--auto`,
+            # which merges on required-green -- fully enforcing CLEAN for the ladder
+            # also needs those two to gate on mergeStateStatus==CLEAN. Flagged for the
+            # chairman's scope decision rather than smuggled in here.)
             ms=$(gh pr view "$pr" -R "$REPO" --json mergeStateStatus -q .mergeStateStatus) || continue
-            case "$ms" in CLEAN|UNSTABLE) ;; *) continue ;; esac
+            case "$ms" in CLEAN) ;; *) continue ;; esac
 
             files=$(gh pr view "$pr" -R "$REPO" --json files -q '.files[].path') || continue
             if echo "$files" | grep -Eq '^\.github/'; then

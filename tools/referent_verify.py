@@ -1066,7 +1066,7 @@ def main() -> int:
         if q_error is not None:
             # UNKNOWN, never "nothing is excluded" -- the empty reading would
             # arm the whole backlog at once (R6).
-            print(f"\n[3] COLUMN REFERENTS ......... UNKNOWN")
+            print("\n[3] COLUMN REFERENTS ......... UNKNOWN")
             print(f"    {q_error}")
             report["columns"] = {"verdict": "UNKNOWN", "detail": q_error,
                                  "checked": len(column_sites),

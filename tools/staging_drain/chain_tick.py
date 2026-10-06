@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""One tick of the staging_drain chain: S1 -> S5(apply) -> S1(affected) -> S3/S6 -> S5(emit) -> S7 -> report.
+"""One tick of the staging_drain chain: S1 -> S5(apply) -> S5b(sibling symbols)
+-> S1(affected) -> S3/S6 -> S5(emit) -> S7 -> report.
 
 Deterministic and idempotent: a second tick on an unchanged tree rewrites the same
 census, ledger, exclusions and daily line, and emits no new directives (the dedup
@@ -32,17 +33,60 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 PY = sys.executable
 
 
-def run(step, cmd, log):
-    t0 = time.time()
-    proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
+def _record(step, cmd, proc, seconds, log):
     entry = {"step": step, "cmd": [os.path.relpath(c, ROOT) if c.startswith(ROOT) else c for c in cmd],
-             "rc": proc.returncode, "seconds": round(time.time() - t0, 1),
+             "rc": proc.returncode, "seconds": round(seconds, 1),
              "tail": ((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()[-12:]}
     log.append(entry)
     print("[%s] rc=%d %.0fs" % (step, proc.returncode, entry["seconds"]), flush=True)
     for line in entry["tail"]:
         print("    " + line)
+    return entry
+
+
+def run(step, cmd, log):
+    t0 = time.time()
+    proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
+    _record(step, cmd, proc, time.time() - t0, log)
     return proc.returncode
+
+
+SIBLING_TOOL = os.path.join(ROOT, "tools", "repair_staged_sibling_symbols.py")
+
+
+def run_sibling_repair(log):
+    """S5b: apply the git-PROVEN sibling-symbol repairs; return the services it moved.
+
+    `tools/repair_staged_sibling_symbols.py` landed 2026-10-05 (#6165) with a 13-pole
+    self-test and NO caller anywhere in the repo -- a cure merged but never armed
+    (doctrine R2). This function is its caller, on the path that runs every day.
+
+    It repairs the one class the other mechanical scripts refuse: a staged service whose
+    router imports a name its sibling no longer defines, where git PROVES the
+    correspondence (the removing commit added exactly one top-level name, still defined).
+    Everything else it refuses with a reason code, which is the common case by design.
+
+    Its rc is deliberately NOT treated as a gate -- 0 proven repairs is a normal tick,
+    not a failure -- and the work list is re-derived from the tree each run, so a second
+    tick on an unchanged tree edits 0 files.
+    """
+    cmd = [PY, SIBLING_TOOL, "--root", ROOT, "--apply", "--json"]
+    t0 = time.time()
+    proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
+    changed = []
+    try:
+        data = json.JSONDecoder().raw_decode((proc.stdout or "").lstrip())[0]
+        rows = (data.get("proven_rename") or []) + (data.get("proven_module") or [])
+        for row in rows:
+            parts = str(row.get("file") or "").replace("\\", "/").split("/")
+            if len(parts) > 3 and parts[0] == "services" and parts[1] == "staged":
+                changed.append(parts[2])
+    except (ValueError, AttributeError, TypeError):
+        pass
+    changed = sorted(set(changed))
+    entry = _record("S5b sibling-symbol apply", cmd, proc, time.time() - t0, log)
+    entry["repaired_services"] = changed
+    return changed
 
 
 def main(argv=None):
@@ -75,6 +119,7 @@ def main(argv=None):
                 changed = json.load(fh).get("changed_dirs") or []
         except (OSError, ValueError):
             pass
+        changed = sorted(set(changed) | set(run_sibling_repair(log)))
         if changed:
             run("S1 re-census of repaired", [PY, sd("census.py"), "--out", census, "--merge", census, "--quiet"]
                 + [a for n in changed for a in ("--only", n)], log)

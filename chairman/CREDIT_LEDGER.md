@@ -12,10 +12,11 @@ check. Every cloud session appends one row to Sessions before it ends, with
 ## Balances (one row per provider; edit in place when re-measured)
 | provider | balance_usd | measured_at (UTC) | expires (UTC) | source |
 |---|---|---|---|---|
-| claude-cloud-credit | 66.00 | 2026-10-04T23:00Z | 2026-10-08 | Robin in-session 2026-10-04 ~23:00Z (grant $250) |
-| anthropic-api | 1.00 | 2026-09-29 | - | console |
+| claude-cloud-credit | 50.00 | 2026-10-05 | 2026-10-08 | Robin pinned STATE_OF_PLAY 2026-10-05 (was 66.00 10-04) |
+| anthropic-api | 20.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (+$20 topup; unblocks auth_evidence E14b) |
 | mistral | 0.00 | 2026-09-29 | - | out |
-| vast | 5.50 | 2026-09-29 | - | invoices API |
+| vast | 10.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (refill; was 5.50) |
+| glide | 5.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (new LLM-gateway provider; proposer/tie-breaker only, GLIDE_DECISION_SURROGATE_POLICY.md) |
 
 ## Reserved (work that must stay fundable)
 | chain | provider | ceiling_usd | note |
@@ -32,3 +33,4 @@ check. Every cloud session appends one row to Sessions before it ends, with
 | 2026-10-04 | claude-cloud-credit | ? | session_01TwJ15ma5Nf91RxPTJP85nt | events store rebuilt from the 2026-10-03 packet (GR-24), zo-fleet-tools#50; Robin: >$40 spent on recovery + rebuild; two recovery sub-agents stopped early |
 | 2026-10-05 | - | 0 | tower-local (GR-24 arming) | armed the events store on the tower (GR-24 C1->C3): self-test PASS + tests 6/6, baseline tick (bus 3646 == registry N, 0 events) + idempotent re-tick + `check` rc 0 + TLS baseline, Parquet backup; no vast/anthropic/cloud-credit spend. Ran from a clean zo-fleet-tools checkout; `_tools` left dirty. ZoEventsTick (C4) deferred -- chairman option C (`_tools` ff when the owning lane commits) |
 | 2026-10-05 | - | 0 | tower-local (B1'' zo_call tag fuse) | fixed B1'' in zo-fleet-tools zo_call.py: a COMPLETED auto-tag no longer refuses (c170 `_rot > 9` exited rc=2, blocking a legit re-run) -- rotates past DONE until a tag runs; both guarantees preserved (live child ADOPTS; DONE never handed back as a fresh rc). Hermetic two-pole test test_b1dp_tag_fuse.py RED on origin/main (pole-a call#11 rc=2) / GREEN on fix; py_compile green both trees. zo-fleet-tools#58 merged (squash b06159e). Max sub -- no provider spend. Clean checkout; `_tools` untouched |
+| 2026-10-06 | - | 0 | tower-local (glide proposer/tie-breaker + chain legibility) | wired Glide as PROPOSER + TIE-BREAKER (zo-fleet-tools#71, glide_propose.py): tier computed from authority.json not from Glide; Tier0 FORBIDDEN=still_escalate clauses+patterns, Tier1 unknown-action->peer_review, Tier2 non-HELD input->reversible decided_by:glide receipt. Two-pole: self-test 19/19 GREEN, RED 6-fail on gate-removed copy incl. malicious-Glide invariant; verified on origin/main. Also wrote GLIDE_DECISION_SURROGATE_POLICY.md, added auth_evidence E14b-FUND (attested on the +$20 anthropic topup -> E14b unblocked) + grant-chain R07 in-flight cost-guard; verified budget_guard_sentinel #60 14/14. Balances updated this session. Max sub -- no provider spend |

@@ -12,7 +12,7 @@ check. Every cloud session appends one row to Sessions before it ends, with
 ## Balances (one row per provider; edit in place when re-measured)
 | provider | balance_usd | measured_at (UTC) | expires (UTC) | source |
 |---|---|---|---|---|
-| claude-cloud-credit | 50.00 | 2026-10-05 | 2026-10-08 | Robin pinned STATE_OF_PLAY 2026-10-05 (was 66.00 10-04) |
+| claude-cloud-credit | 50.00 | 2026-10-06 | 2026-11-05 | Robin in-session 2026-10-06: expiry is 2026-11-05 (was wrongly 10-08); ~$50-60 est unspent, none logged since the 10-04 read |
 | anthropic-api | 20.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (+$20 topup; unblocks auth_evidence E14b) |
 | mistral | 0.00 | 2026-09-29 | - | out |
 | vast | 10.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (refill; was 5.50) |

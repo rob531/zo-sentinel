@@ -1,0 +1,186 @@
+# REFERENT COLUMN QUARANTINE -- the pre-existing backlog, enumerated so the
+# check can be ARMED today instead of waiting for the backlog to be empty.
+#
+# WHY THIS FILE EXISTS
+#   referent-verify's COLUMN check sat REPORT-ONLY from 2026-08-26 to
+#   2026-10-06 on one argument, restated three times in its own workflow:
+#   "arming it today would turn every PR on the repo red, that is not
+#   enforcement, it is an outage." True, and it kept the check unarmed for 40
+#   days -- during which the backlog grew from 115 to 122. A report-only check
+#   does not hold a line; it watches it move.
+#
+#   So the arming does not wait for zero. Every name below is excused BY
+#   NAME AND BY SITE COUNT, and nothing else is. The effect is a RATCHET:
+#
+#     a column name not listed here          -> RED, the merge stops
+#     a listed name gaining a new call site  -> RED, the spread stops
+#     a listed name losing a call site       -> fine, and --triage-columns
+#                                               prints the tightened number
+#     a listed name that now resolves        -> RED until the line is deleted
+#
+#   The sediment can only shrink. That is the property report-only never had.
+#
+# FORMAT   <table>.<column> sites=<n>  # <reason>
+#   The reason is REQUIRED. A line without one is refused (rc 2), because a
+#   list a human extends silently is the defect this construction replaces --
+#   see the pytest allow-list, cured the same way in cycle-0162 after four
+#   hand-maintained 'cures' each re-armed it.
+#
+# TO DRAIN IT      python tools/referent_verify.py --triage-columns
+#   prints which listed names now resolve (delete those lines) and which
+#   carry a stale site count (tighten those numbers). Deleting lines is the
+#   whole edit; no workflow change, nothing to remember.
+#
+# SEEDED from the live census at origin/main 425a13220bc2bcdaade4a826a792bb17f6438719:
+#   392 qualified column refs checked, 122 missing, 14 tables, 39 files.
+#   Sourced from tools/referent_verify.py --json, not by hand. See #4080.
+
+# -- audit_log (4) -----------------------------------------
+audit_log.detail sites=2  # pre-existing at 425a13220 (#4080); first site services\staged\product_audit_log_service\logic.py
+audit_log.id sites=2  # pre-existing at 425a13220 (#4080); first site services\staged\product_audit_log_service\logic.py
+audit_log.meta sites=2  # pre-existing at 425a13220 (#4080); first site services\staged\product_audit_log_service\logic.py
+audit_log.target_type sites=2  # pre-existing at 425a13220 (#4080); first site services\staged\product_audit_log_service\logic.py
+
+# -- cadence_job_runs (1) ----------------------------------
+cadence_job_runs.server_id sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\scoring_backlog_health_api\router.py
+
+# -- mcp_decisions (11) -------------------------------------
+mcp_decisions.created_at sites=1  # pre-existing at 425a13220 (#4080); first site snow_approval_wiring.py
+mcp_decisions.decided_by sites=3  # pre-existing at 425a13220 (#4080); first site pattern_learner.py
+mcp_decisions.decision_id sites=3  # pre-existing at 425a13220 (#4080); first site snow_connector_workflow_wiring.py
+mcp_decisions.decision_time sites=2  # pre-existing at 425a13220 (#4080); first site approval_anomaly_detector.py
+mcp_decisions.name sites=1  # pre-existing at 425a13220 (#4080); first site snow_connector_workflow_wiring.py
+mcp_decisions.requested_by sites=2  # pre-existing at 425a13220 (#4080); first site approval_anomaly_detector.py
+mcp_decisions.server_id sites=11  # pre-existing at 425a13220 (#4080); first site approval_anomaly_detector.py
+mcp_decisions.snow_sync_status sites=1  # pre-existing at 425a13220 (#4080); first site snow_approval_wiring.py
+mcp_decisions.status sites=1  # pre-existing at 425a13220 (#4080); first site snow_connector_workflow_wiring.py
+mcp_decisions.submission_time sites=2  # pre-existing at 425a13220 (#4080); first site approval_anomaly_detector.py
+mcp_decisions.verdict sites=3  # pre-existing at 425a13220 (#4080); first site approval_anomaly_detector.py
+
+# -- mcp_definition_history (1) ----------------------------
+mcp_definition_history.definition_hash sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+
+# -- mcp_ecosystems_metadata (20) ---------------------------
+mcp_ecosystems_metadata.contributor_count sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.cousin_count sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_ecosystems_metadata.dependent_package_count sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.download_count sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.ecosystems_observed sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_ecosystems_metadata.first_published_at sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.forks sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.has_code_of_conduct sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.has_security_policy sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.last_updated_at sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.license_type sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.lookup_status sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_ecosystems_metadata.maintainer_count sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.open_issues sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.readme_length sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.stars sites=2  # pre-existing at 425a13220 (#4080); first site integrate_weak_signals_v2_enrichments.py
+mcp_ecosystems_metadata.top_downloads sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_ecosystems_metadata.top_ecosystem sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_ecosystems_metadata.top_package_name sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_ecosystems_metadata.top_package_purl sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+
+# -- mcp_fingerprints (8) ----------------------------------
+mcp_fingerprints.captured_at sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+mcp_fingerprints.definition_fingerprint sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+mcp_fingerprints.definition_hash sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+mcp_fingerprints.is_mcp_confirmed sites=2  # pre-existing at 425a13220 (#4080); first site mcp_scanner_fingerprints_wiring.py
+mcp_fingerprints.mcp_identifier sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+mcp_fingerprints.scan_id sites=2  # pre-existing at 425a13220 (#4080); first site mcp_scanner_fingerprints_wiring.py
+mcp_fingerprints.schema_version sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+mcp_fingerprints.tool_count sites=1  # pre-existing at 425a13220 (#4080); first site mcp_definition_history_filler.py
+
+# -- mcp_llm_axis_scores (7) -------------------------------
+mcp_llm_axis_scores.alignment_score sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\axis_critical_multi_flags\logic.py
+mcp_llm_axis_scores.created_at sites=2  # pre-existing at 425a13220 (#4080); first site services\staged\scoring_backlog_health_api\router.py
+mcp_llm_axis_scores.criteria_version sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\verdict_view_api\logic.py
+mcp_llm_axis_scores.risk_tier sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\verdict_view_api\logic.py
+mcp_llm_axis_scores.safety_score sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\axis_critical_multi_flags\logic.py
+mcp_llm_axis_scores.score sites=2  # pre-existing at 425a13220 (#4080); first site services\staged\run_reconciliation_report\contract.py
+mcp_llm_axis_scores.utility_score sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\axis_critical_multi_flags\logic.py
+
+# -- mcp_risk_register (3) ---------------------------------
+mcp_risk_register.assessed_at sites=1  # pre-existing at 425a13220 (#4080); first site aidr_commit_gateway_connector.py
+mcp_risk_register.composite_score sites=2  # pre-existing at 425a13220 (#4080); first site aidr_commit_gateway_connector.py
+mcp_risk_register.verdict sites=2  # pre-existing at 425a13220 (#4080); first site aidr_commit_gateway_connector.py
+
+# -- mcp_server_registry (51) -------------------------------
+mcp_server_registry.age_days sites=3  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.auth_method sites=2  # pre-existing at 425a13220 (#4080); first site signal_enrichment_harness.py
+mcp_server_registry.canonical_id sites=1  # pre-existing at 425a13220 (#4080); first site canonicalizer.py
+mcp_server_registry.commit_activity sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.commit_frequency sites=2  # pre-existing at 425a13220 (#4080); first site temporal_stability_enrichment_v4.py
+mcp_server_registry.contributors sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.created_at sites=5  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.decision_rule_version sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\verdict_criteria_audit\router.py
+mcp_server_registry.dependency_count sites=5  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.designation sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\axis_critical_multi_flags\logic.py
+mcp_server_registry.display_name sites=1  # pre-existing at 425a13220 (#4080); first site sentinel_ui_inventory_paginator.py
+mcp_server_registry.download_count sites=7  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.downloads sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.family_id sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\mcp_server_risk_register\router.py
+mcp_server_registry.flag_state sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\axis_critical_multi_flags\logic.py
+mcp_server_registry.forks sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.github_org sites=1  # pre-existing at 425a13220 (#4080); first site threat_correlator.py
+mcp_server_registry.id sites=6  # pre-existing at 425a13220 (#4080); first site assessment_scheduler.py
+mcp_server_registry.last_updated sites=6  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.mcp_id sites=1  # pre-existing at 425a13220 (#4080); first site mcp_submission_handler.py
+mcp_server_registry.mcp_identifier sites=2  # pre-existing at 425a13220 (#4080); first site aidr_commit_gateway_connector.py
+mcp_server_registry.mcp_name sites=1  # pre-existing at 425a13220 (#4080); first site mcp_submission_handler.py
+mcp_server_registry.metadata_age_days sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.metadata_contributors sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.metadata_download_count sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.metadata_forks sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.metadata_maintainers sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.metadata_stars sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.metadata_verified sites=2  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_wiring.py
+mcp_server_registry.npm_author sites=1  # pre-existing at 425a13220 (#4080); first site threat_correlator.py
+mcp_server_registry.open_issues sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.owner sites=2  # pre-existing at 425a13220 (#4080); first site signal_analyser_v2_permission_scope_wiring.py
+mcp_server_registry.permission_list sites=2  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.permission_scopes sites=2  # pre-existing at 425a13220 (#4080); first site signal_enrichment_harness.py
+mcp_server_registry.permissions sites=2  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.publisher_verified sites=5  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.release_regularity sites=2  # pre-existing at 425a13220 (#4080); first site temporal_stability_enrichment_v4.py
+mcp_server_registry.server_name sites=2  # pre-existing at 425a13220 (#4080); first site e2e_scenarios_validation.py
+mcp_server_registry.source sites=2  # pre-existing at 425a13220 (#4080); first site signal_analyser_v2_permission_scope_wiring.py
+mcp_server_registry.stars sites=5  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.status sites=3  # pre-existing at 425a13220 (#4080); first site assessment_scheduler.py
+mcp_server_registry.tool_count sites=2  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.tool_schema sites=1  # pre-existing at 425a13220 (#4080); first site build_mcp_definition_history_backfill_api_logic.py
+mcp_server_registry.tools sites=2  # pre-existing at 425a13220 (#4080); first site signal_enrichment_harness.py
+mcp_server_registry.tools_count sites=2  # pre-existing at 425a13220 (#4080); first site signal_analyser_v2_permission_scope_wiring.py
+mcp_server_registry.verdict_updated_at sites=2  # pre-existing at 425a13220 (#4080); first site verdict_aggregator_daemon.py
+mcp_server_registry.verified sites=2  # pre-existing at 425a13220 (#4080); first site temporal_stability_enrichment_v4.py
+mcp_server_registry.verified_publisher sites=4  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.version sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_server_registry.version_count sites=4  # pre-existing at 425a13220 (#4080); first site populate_mcp_signal_enrichments_first_batch.py
+mcp_server_registry.weekly_downloads sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+
+# -- mcp_signal_enrichments (4) ----------------------------
+mcp_signal_enrichments.enrichment_name sites=4  # pre-existing at 425a13220 (#4080); first site signal_analyser_v2_permission_scope_wiring.py
+mcp_signal_enrichments.evidence sites=1  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_signal_enrichments.signal_name sites=5  # pre-existing at 425a13220 (#4080); first site community_signal_enrichment_integration.py
+mcp_signal_enrichments.version sites=2  # pre-existing at 425a13220 (#4080); first site temporal_stability_enrichment_v2.py
+
+# -- mcp_signal_scores (6) ---------------------------------
+mcp_signal_scores.assessment_validity_days sites=1  # pre-existing at 425a13220 (#4080); first site assessment_scheduler.py
+mcp_signal_scores.category sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\org_risk_tiers\__init__.py
+mcp_signal_scores.expiry_date sites=1  # pre-existing at 425a13220 (#4080); first site assessment_scheduler.py
+mcp_signal_scores.final_score sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\run_reconciliation_report\logic.py
+mcp_signal_scores.fire_score sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\run_reconciliation_report\logic.py
+mcp_signal_scores.is_active sites=1  # pre-existing at 425a13220 (#4080); first site stale_data_cleaner.py
+
+# -- mcp_submissions (4) -----------------------------------
+mcp_submissions.mcp_id sites=1  # pre-existing at 425a13220 (#4080); first site mcp_submission_handler.py
+mcp_submissions.name sites=2  # pre-existing at 425a13220 (#4080); first site snow_connector_integration_completion.py
+mcp_submissions.snow_ticket_id sites=2  # pre-existing at 425a13220 (#4080); first site snow_connector_integration_completion.py
+mcp_submissions.sys_id sites=1  # pre-existing at 425a13220 (#4080); first site snow_connector_integration_v2.py
+
+# -- vuln_advisories (1) -----------------------------------
+vuln_advisories.advisory_id sites=1  # pre-existing at 425a13220 (#4080); first site server_detail_composite_api.py
+
+# -- vuln_links (1) ----------------------------------------
+vuln_links.threat_intel_ref_id sites=1  # pre-existing at 425a13220 (#4080); first site services\staged\threat_intel_refs_api\contract.py

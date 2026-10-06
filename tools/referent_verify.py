@@ -61,6 +61,7 @@ import argparse
 import ast
 import json
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -785,6 +786,107 @@ def _print_capped(items, cap, indent, render, what):
     return total
 
 
+# -- the column quarantine ----------------------------------------------------
+#
+# ARMING WITHOUT WAITING FOR ZERO. The column check was report-only for 40 days
+# because arming it on a 122-name backlog would redden every PR. The backlog is
+# therefore ENUMERATED instead, by name AND by call-site count, and everything
+# not enumerated is enforced. See schema/referent_column_quarantine.txt.
+#
+# The site count is what makes this a ratchet rather than a permanent excuse: a
+# listed name may lose sites, never gain them. So the sediment can only shrink.
+COLUMN_QUARANTINE = ROOT / "schema" / "referent_column_quarantine.txt"
+
+# <table>.<column> sites=<n>  # <reason>
+_Q_LINE = re.compile(
+    r"^(?P<key>[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)"
+    r"\s+sites=(?P<sites>\d+)"
+    r"\s*#\s*(?P<reason>\S.*)$"
+)
+
+
+class QuarantineError(Exception):
+    """The quarantine could not be read as a quarantine. Never 'exclude nothing'."""
+
+
+def load_column_quarantine(path=None) -> dict:
+    """Return {key: {"sites": int, "reason": str, "lineno": int}}.
+
+    Raises QuarantineError rather than returning an empty dict. An absent or
+    malformed exclusion list is UNKNOWN, not "nothing is excluded" (R6): the
+    empty-set reading would silently ARM the whole 122-name backlog and redden
+    every PR, which is the outage this construction exists to avoid.
+    """
+    path = COLUMN_QUARANTINE if path is None else pathlib.Path(path)
+    if not path.exists():
+        raise QuarantineError(
+            f"{path} is ABSENT. The column check is armed and its exclusion "
+            f"list cannot be read, so no verdict is possible. This is UNKNOWN, "
+            f"not an empty quarantine."
+        )
+    try:
+        # utf-8-SIG, not utf-8. A BOM is invisible, every Windows editor and
+        # PowerShell's `Set-Content -Encoding UTF8` writes one, and under plain
+        # utf-8 it lands as \ufeff on line 1 -- which made this loader reject
+        # its own file and report UNKNOWN. That is an outage on a required
+        # check, caused by a byte nobody can see. Found by this cycle's own
+        # negative control, which wrote the file the way a human would have.
+        raw = path.read_text(encoding="utf-8-sig")
+    except OSError as exc:                                   # pragma: no cover
+        raise QuarantineError(f"{path} is UNREADABLE: {exc}") from exc
+
+    out: dict = {}
+    for lineno, line in enumerate(raw.splitlines(), 1):
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        m = _Q_LINE.match(s)
+        if not m:
+            raise QuarantineError(
+                f"{path}:{lineno} is not a quarantine entry: {line!r}\n"
+                f"    expected: <table>.<column> sites=<n>  # <why>\n"
+                f"    the reason is REQUIRED -- a list extended silently is the "
+                f"defect this file replaces."
+            )
+        key = m.group("key")
+        if key in out:
+            raise QuarantineError(
+                f"{path}:{lineno} re-lists {key}, already on line "
+                f"{out[key]['lineno']}. Two site budgets for one name is "
+                f"ambiguous, and the looser one would silently win."
+            )
+        out[key] = {"sites": int(m.group("sites")),
+                    "reason": m.group("reason").strip(),
+                    "lineno": lineno}
+    return out
+
+
+def judge_columns(missing: dict, site_counts: dict, quarantine: dict) -> dict:
+    """Split the missing-column set against the quarantine.
+
+    missing      : {"table.column": [sites...]}  -- every unresolved ref
+    site_counts  : {"table.column": n}           -- UNCAPPED site counts
+    returns the three enforceable buckets plus the advisory one.
+    """
+    unlisted, spread, stale, shrunk = {}, {}, {}, {}
+    for key in sorted(missing):
+        q = quarantine.get(key)
+        observed = site_counts.get(key, len(missing[key]))
+        if q is None:
+            unlisted[key] = missing[key]
+        elif observed > q["sites"]:
+            spread[key] = {"budget": q["sites"], "observed": observed,
+                           "sites": missing[key], "lineno": q["lineno"]}
+        elif observed < q["sites"]:
+            shrunk[key] = {"budget": q["sites"], "observed": observed,
+                           "lineno": q["lineno"]}
+    for key, q in sorted(quarantine.items()):
+        if key not in missing:
+            stale[key] = {"reason": q["reason"], "lineno": q["lineno"]}
+    return {"unlisted": unlisted, "spread": spread, "stale": stale,
+            "shrunk": shrunk}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--enforce", action="store_true",
@@ -800,6 +902,11 @@ def main() -> int:
                     help="write a markdown verdict table (CI job summary)")
     ap.add_argument("--skip-routes", action="store_true",
                     help="skip the boot check (deps unavailable)")
+    ap.add_argument("--triage-columns", action="store_true",
+                    help="print which quarantined column names now resolve "
+                         "(delete those lines) and which carry a stale site "
+                         "count (tighten those numbers). Draining the "
+                         "quarantine is the whole edit -- no workflow change.")
     args = ap.parse_args()
 
     print("=" * 72)
@@ -945,28 +1052,81 @@ def main() -> int:
 
         missing_c = {f"{t}.{c}": s for (t, c), s in sorted(column_sites.items())
                      if t in catalog and catalog[t] and c not in catalog[t]}
-        print(f"\n[3] COLUMN REFERENTS ......... "
-              f"{'FAIL' if missing_c else 'PASS'}")
-        print(f"    {len(column_sites)} qualified column refs checked, "
-              f"{len(missing_c)} MISSING")
-        _mc = list(missing_c.items())
-        for c, sites in _mc[:25]:
-            print(f"    MISSING COLUMN {c}")
-            _print_capped(sites, 3, "        ",
-                          lambda s: f"referenced at {s}", "ref site(s)")
-        if len(_mc) > 25:
-            print(f"    ... and {len(_mc) - 25} more MISSING COLUMN(s) NOT "
-                  f"SHOWN ({len(_mc)} total; display capped at 25 -- "
-                  f"use --json for the full set)")
-        report["columns"] = {
-            "verdict": "FAIL" if missing_c else "PASS",
-            "checked": len(column_sites),
-            "missing": {c: s[:5] for c, s in missing_c.items()},
-            "missing_site_cap": 5,
-            "missing_site_counts": {c: len(s) for c, s in missing_c.items()},
-        }
-        if missing_c:
-            fails.append("columns")
+        counts_c = {c: len(s) for c, s in missing_c.items()}
+
+        # The verdict is NOT len(missing_c). It is the part of missing_c that
+        # the quarantine does not excuse, plus the part of the quarantine that
+        # has gone stale. See schema/referent_column_quarantine.txt.
+        try:
+            quarantine = load_column_quarantine()
+            q_error = None
+        except QuarantineError as exc:
+            quarantine, q_error = {}, str(exc)
+
+        if q_error is not None:
+            # UNKNOWN, never "nothing is excluded" -- the empty reading would
+            # arm the whole backlog at once (R6).
+            print(f"\n[3] COLUMN REFERENTS ......... UNKNOWN")
+            print(f"    {q_error}")
+            report["columns"] = {"verdict": "UNKNOWN", "detail": q_error,
+                                 "checked": len(column_sites),
+                                 "missing_total": len(missing_c)}
+            unknowns.append(f"columns ({q_error.splitlines()[0]})")
+        else:
+            j = judge_columns(missing_c, counts_c, quarantine)
+            bad = len(j["unlisted"]) + len(j["spread"]) + len(j["stale"])
+            print(f"\n[3] COLUMN REFERENTS ......... "
+                  f"{'FAIL' if bad else 'PASS'}")
+            print(f"    {len(column_sites)} qualified column refs checked, "
+                  f"{len(missing_c)} unresolved, "
+                  f"{len(quarantine)} quarantined, {bad} ENFORCED")
+            _print_capped(sorted(j["unlisted"]), 25, "    ",
+                          lambda c: f"MISSING COLUMN {c} -- NOT in the "
+                                    f"quarantine. Fix the name, or add it with "
+                                    f"a reason.",
+                          "unlisted missing column(s)")
+            _print_capped(sorted(j["spread"]), 25, "    ",
+                          lambda c: f"SPREAD {c} -- quarantined at "
+                                    f"sites={j['spread'][c]['budget']}, now "
+                                    f"{j['spread'][c]['observed']}. A "
+                                    f"quarantined name may shrink, never grow.",
+                          "spreading column(s)")
+            _print_capped(sorted(j["stale"]), 25, "    ",
+                          lambda c: f"STALE {c} -- resolves now; delete "
+                                    f"schema/referent_column_quarantine.txt:"
+                                    f"{j['stale'][c]['lineno']}",
+                          "stale quarantine entr(ies)")
+            if j["shrunk"]:
+                print(f"    {len(j['shrunk'])} quarantined name(s) now have "
+                      f"FEWER sites than budgeted -- not a failure. Run "
+                      f"--triage-columns to tighten the numbers.")
+            report["columns"] = {
+                "verdict": "FAIL" if bad else "PASS",
+                "checked": len(column_sites),
+                "missing_total": len(missing_c),
+                "quarantined": len(quarantine),
+                "enforced": bad,
+                "unlisted": {c: s[:5] for c, s in j["unlisted"].items()},
+                "spread": j["spread"],
+                "stale": j["stale"],
+                "shrunk": j["shrunk"],
+                "missing": {c: s[:5] for c, s in missing_c.items()},
+                "missing_site_cap": 5,
+                "missing_site_counts": counts_c,
+            }
+            if bad:
+                fails.append("columns")
+
+            if args.triage_columns:
+                print("\n--- TRIAGE: the drain list ---")
+                if not j["stale"] and not j["shrunk"]:
+                    print("    nothing to drain: every quarantined name is "
+                          "still missing at its budgeted site count.")
+                for c, d in sorted(j["stale"].items()):
+                    print(f"    DELETE line {d['lineno']}: {c} resolves now")
+                for c, d in sorted(j["shrunk"].items()):
+                    print(f"    TIGHTEN line {d['lineno']}: {c} "
+                          f"sites={d['budget']} -> sites={d['observed']}")
 
     # -- 4. unparseable modules ----------------------------------------------
     print(f"\n[4] PARSE COVERAGE ........... "

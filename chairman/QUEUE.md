@@ -93,6 +93,13 @@ through them. The tools live in zo-fleet-tools, and the prompts live on the towe
 - decisions owed (Robin): the IPQS and Clef $ budgets proposed 2026-10-03 (not recovered) as Reserved rows in `chairman/CREDIT_LEDGER.md`; the IPQS population (remote endpoints or egress domains, not listing URLs); the ZoComputer backup destination (`--push-cmd`)
 - evidence for move: C3 when the first baseline run row is `ok` with n_seen equal to the registry count [**MET 2026-10-04**]; C4 when a stale store (no run for >26h) turns into a red alert [pending ZoEventsTick, deferred option C]
 
+## 0i. GR-26 / GR-27: file the histo FU, then decide what the judge needs to be wired
+- grade **C0** -> target C4 | classes GC-15 (GR-26), GC-10 + GC-2 (GR-27) | plan of record: zo-fleet-tools `histo/DESIGN_histo_schema_2026-10-07.md` §6-§7
+- first command (tower, after [zo-fleet-tools#86](https://github.com/rob531/zo-fleet-tools/pull/86) merges and `_tools` fast-forwards): `python "D:\zo\Zocomputer Agents\_tools\histo\histo_schema_verify.py"` (expect GREEN; its 27 zo-sentinel quotes are reported UNCHECKED on the tower), then the `fu_file.py` command in `histo/FU_entry.md`
+- decisions owed: Q4, which peer_review clause carries a judge escalation (`UNKNOWN_ACTION` is the nearest); Q8, whether to accept or veto `judge_policy.min_confidence = 0.80`; Q3, whether a peer-cleared schema row may admit a new organ (spawn)
+- GR-27: re-pair the three enabled filers whose adversary was removed, or add a ring-liveness check to `lane_start.py`
+- evidence for move: GR-26 reaches C1 when the judge runs in shadow beside `may_shadow.jsonl`, and C4 under the two-pole test in DESIGN §7. GR-27 reaches C4 when the ring-liveness check goes red on a dead adversary.
+
 ## 1. GR-8 — linter --fix corrupts SQL names (unblocks 34 downstream decisions)
 - grade C0 -> target C3 | class GC-12
 - first command: `grep -rn "def .*fix" tools/model_import_linter* 2>/dev/null || find . -name "*model_import_linter*" -not -path './.git/*'`

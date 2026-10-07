@@ -197,15 +197,66 @@ def scan(root: str, only_tracked: bool = True) -> list:
 # ------------------------------------------------------------------ the oracle
 
 
+# [c191] top-level import/def/class/decorator -- see is_module_shaped() below.
+_MODULE_SHAPE_RE = __import__("re").compile(r"^(import |from |def |class |@|async def )")
 REFUSALS = (
     "NEVER_IN_HISTORY",  # the name was never in that sibling -- nothing was renamed
     "NO_REMOVING_COMMIT",  # present in history but never observed going absent
     "AMBIGUOUS",  # the removing commit added != 1 top-level def
     "STALE_TARGET",  # proven successor no longer defined on disk
     "SIBLING_UNTRACKED",  # no readable history for the oracle
+    # [c191] the named sibling is not a module body at all (path listing, tree
+    # art, prose, empty). 79 such files across 77 live staged services on
+    # 2026-10-07, 62 tracked. A rewritten import would hide it, not cure it.
+    "SIBLING_NOT_A_MODULE",
+    "SIBLING_UNREADABLE",
+
 )
 
 
+def is_module_shaped(src: str) -> bool:
+    """True when `src` plausibly IS a Python module body.
+
+    [c191] WHY THIS GUARD EXISTS, and it is not hypothetical. On 2026-10-07 the
+    ONLY PROVEN_MODULE repair in the live tree was
+    `services/staged/cve_risk_summary/router.py:3  get_cve_risk_summary  .logic -> .contract`.
+    The oracle was CORRECT -- `contract.py` really does define that name. But
+    `logic.py` in that service is not code at all; its entire body is four lines
+    of FILE PATHS, the builder's own manifest output written where the module
+    should be:
+
+        services/staged/cve_risk_summary/contract.py
+        services/staged/cve_risk_summary/router.py
+        services/staged/cve_risk_summary/service.toml
+        services/_exemplar/logic.py
+
+    Applying the repair would have moved the import to `.contract`, the import
+    gate would have gone GREEN, the census site would have DISAPPEARED, and the
+    service would have been promotable with no business logic behind its route.
+    A Potemkin service, passed by a gate. The defect is a MISSING MODULE BODY,
+    not a mis-addressed import, and the two have different cures.
+
+    Why py_compile cannot see it (R6: unknown is not zero): a line like
+    `services/staged/x/contract.py` is SYNTACTICALLY VALID Python -- it parses as
+    division between undefined names -- so the file compiles and the symbol
+    census reads it as "a module that merely does not export the wanted name".
+    The whole class was invisible to every instrument pointed at it.
+
+    The test is deliberately the weakest one that separates the two: a real
+    module body carries at least one top-level import, def, class or decorator.
+    A file with none of those is refused. That direction is safe -- the cost of a
+    false positive is one REFUSED site a human reads, while the cost of a false
+    negative is a hollow service promoted into the spine.
+    """
+    try:
+        import ast
+        ast.parse(src)
+    except SyntaxError:
+        return False
+    for line in src.splitlines():
+        if _MODULE_SHAPE_RE.match(line):
+            return True
+    return False
 def resolve_module(root: str, hit: dict) -> tuple:
     """Second oracle, and the one that fires in practice.
 
@@ -216,6 +267,16 @@ def resolve_module(root: str, hit: dict) -> tuple:
     so there is no choice to make. Two candidates -> MODULE_AMBIGUOUS, and refused.
     """
     svc, want = hit["svc"], hit["want"]
+    # [c191] REFUSE before either oracle runs: if the sibling the import names is
+    # not a module body at all, the defect is the missing body, not the address.
+    # Rewriting the import would green the gate over a hollow service.
+    _sib_abs = os.path.join(root, hit["sibling"])
+    try:
+        _sib_src = open(_sib_abs, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return ("REFUSED", "SIBLING_UNREADABLE")
+    if not is_module_shaped(_sib_src):
+        return ("REFUSED", "SIBLING_NOT_A_MODULE")
     sdir = os.path.join(root, "services", "staged", svc)
     cur = os.path.basename(hit["sibling"])[:-3]
     owners = []
@@ -240,6 +301,14 @@ def resolve(root: str, hit: dict) -> tuple:
     sib_rel, want = hit["sibling"], hit["want"]
     if not hit.get("sibling_tracked", True):
         return ("REFUSED", "SIBLING_UNTRACKED")
+    # [c191] same guard as resolve_module(): a rename oracle must not rewrite an
+    # import whose named sibling has no module body. See is_module_shaped().
+    try:
+        if not is_module_shaped(open(os.path.join(root, sib_rel),
+                                    encoding="utf-8", errors="replace").read()):
+            return ("REFUSED", "SIBLING_NOT_A_MODULE")
+    except OSError:
+        return ("REFUSED", "SIBLING_UNREADABLE")
     log = git(root, "log", "--format=%H", "-S", want, "--", sib_rel).stdout.split()
     if not log:
         return ("REFUSED", "NEVER_IN_HISTORY")
@@ -498,6 +567,15 @@ def self_test() -> int:
             "b.py": "def dup():\n    return 2\n",
             "router.py": "from .logic import dup\n",
         })
+        # [c191] second genuine-module fixture, consumed by self-test pole 15:
+        # proves the SIBLING_NOT_A_MODULE guard refuses the hollow case WITHOUT
+        # refusing a real one. A guard that refuses everything passes pole 14.
+        _svc(root, "wrongmod2", {
+            "__init__.py": "",
+            "logic.py": "import os\n\n\ndef stays2():\n    return 1\n",
+            "contract.py": "def moved2():\n    return 2\n",
+            "router.py": "from .logic import moved2\n",
+        })
         _commit(root, "build: module-oracle fixtures")
         h = {(x["svc"], x["want"]): x for x in scan(root)}
 
@@ -532,6 +610,56 @@ def self_test() -> int:
         pole("12 repoint clears its own site, leaves the ambiguous one",
              ("wrongmod", "moved") not in after and ("twoowners", "dup") in after,
              detail=str(sorted(after)))
+
+        # --- [c191] the sibling that is not a module at all ----------------------
+        # The live case this guard was built for, reduced to a fixture:
+        # `hollow/logic.py` holds the builder's own PATH LISTING, and
+        # `contract.py` uniquely defines the wanted name. Before this guard the
+        # module oracle returned PROVEN_MODULE/contract here -- a repair that
+        # greens the import gate over a service with no logic body.
+        #
+        # NOTE the listing is syntactically VALID Python: each line parses as
+        # division between undefined names. py_compile cannot see this class,
+        # which is exactly why the census could not either (R6).
+        _svc(root, "hollow", {
+            "__init__.py": "",
+            "logic.py": ("services/staged/hollow/contract.py\n"
+                         "services/staged/hollow/router.py\n"
+                         "services/staged/hollow/service.toml\n"
+                         "services/_exemplar/logic.py\n"),
+            "contract.py": "def hollow_body():\n    return 3\n",
+            "router.py": "from .logic import hollow_body\n",
+        })
+        _commit(root, "build: non-module sibling fixture")
+        h = {(x["svc"], x["want"]): x for x in scan(root)}
+
+        # pole 13: the listing PARSES, so the old blindness is real, not assumed
+        _listing = open(os.path.join(root, "services", "staged", "hollow",
+                                     "logic.py"), encoding="utf-8").read()
+        _parses = True
+        try:
+            __import__("ast").parse(_listing)
+        except SyntaxError:
+            _parses = False
+        pole("13 path-listing sibling COMPILES (so py_compile is blind to it)",
+             _parses and not is_module_shaped(_listing),
+             detail="parses=%s module_shaped=%s" % (_parses,
+                                                    is_module_shaped(_listing)))
+
+        # pole 14: RED ON PURPOSE -- both oracles must refuse, not repoint
+        v, n = resolve(root, h[("hollow", "hollow_body")])
+        v2, n2 = resolve_module(root, h[("hollow", "hollow_body")])
+        pole("14 non-module sibling REFUSED by BOTH oracles (was PROVEN_MODULE)",
+             (v, n) == ("REFUSED", "SIBLING_NOT_A_MODULE")
+             and (v2, n2) == ("REFUSED", "SIBLING_NOT_A_MODULE"),
+             detail="rename=%s/%s module=%s/%s" % (v, n, v2, n2))
+
+        # pole 15: a REAL module sibling is still repaired -- the guard must not
+        # refuse everything. Without this pole the guard could be `return
+        # REFUSED` and poles 13/14 would still pass.
+        v3, n3 = resolve_module(root, h[("wrongmod2", "moved2")])
+        pole("15 genuine module sibling still PROVEN_MODULE (guard discriminates)",
+             (v3, n3) == ("PROVEN_MODULE", "contract"), detail="%s/%s" % (v3, n3))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

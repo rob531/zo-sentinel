@@ -35,11 +35,60 @@
 #   bash tools/reload_daemon.sh sentinel_directive_generator_goose
 set -uo pipefail
 
-NAME="${1:?usage: reload_daemon.sh <daemon-basename, e.g. goose_runner>}"
+CHECK_ONLY=0
+if [ "${1:-}" = "--check-supervisor" ]; then CHECK_ONLY=1; shift; fi
+NAME="${1:?usage: reload_daemon.sh [--check-supervisor] <daemon-basename, e.g. goose_runner>}"
 NAME="${NAME%.py}"
 MESH="/home/workspace/zo_mesh"
 SENTINEL="/home/workspace/zo_sentinel"
 LOGS="/home/workspace/logs"
+
+# --- FU-530 guard (graphify-kl-daily-refresh, 2026-09-24) -------------------
+# reload_daemon can only relaunch a daemon as `daemon_wrapper.sh <name> <script>`
+# with NO trailing args. graph_refresh and loop_watch are launched by
+# go.sh / watchdog.sh as a DIRECT self-looping loop --
+# `python3 .../graph_refresh.py --interval 900` -- PRECISELY because
+# daemon_wrapper does not forward trailing flags. A bare relaunch here would
+# drop `--interval`, and graph_refresh.py with no --interval is a ONE-SHOT: it
+# reindexes once and exits 0, which daemon_wrapper reads as "clean shutdown,
+# do not respawn". The 15-minute refresher becomes a single run then permanent
+# silence, logged as perfectly healthy (measured 2026-09-24: two refreshes in
+# 48h). Refuse rather than reproduce that false green. The supervisor files are
+# overridable for tests via $RELOAD_SUPERVISOR_FILES.
+_supervisor_flagged_form() {
+  local -a files
+  if [ -n "${RELOAD_SUPERVISOR_FILES:-}" ]; then
+    read -r -a files <<< "$RELOAD_SUPERVISOR_FILES"
+  else
+    files=("$MESH/go.sh" "$MESH/watchdog.sh")
+  fi
+  # First `<name>.py --flag` (or `-f`) in an authoritative supervisor line.
+  grep -hoE "${NAME}\.py[[:space:]]+--?[A-Za-z][A-Za-z0-9-]*" "${files[@]}" \
+    2>/dev/null | head -1
+}
+FLAGGED_FORM="$(_supervisor_flagged_form || true)"
+
+if [ "$CHECK_ONLY" = "1" ]; then
+  if [ -n "$FLAGGED_FORM" ]; then
+    echo "FLAGGED: $NAME is supervised as a direct self-looping loop carrying"
+    echo "  trailing flags ('$FLAGGED_FORM ...'); reload_daemon would drop them (FU-530)."
+    exit 2
+  fi
+  echo "CLEAR: $NAME has no flagged supervisor form; reload_daemon can relaunch it."
+  exit 0
+fi
+
+if [ -n "$FLAGGED_FORM" ]; then
+  echo "REFUSED: $NAME is supervised as a DIRECT self-looping loop that carries"
+  echo "  trailing flags ('$FLAGGED_FORM ...'), per \$MESH/go.sh / \$MESH/watchdog.sh."
+  echo "  reload_daemon.sh can only relaunch under 'daemon_wrapper.sh <name> <script>'"
+  echo "  with NO trailing args, so it would drop those flags -- and e.g."
+  echo "  graph_refresh.py with no --interval is a ONE-SHOT the wrapper reads as a"
+  echo "  clean stop, silencing the daemon forever (FU-530). Reload it via its OWN"
+  echo "  supervisor instead: watchdog.sh respawns the correct form within ~30s,"
+  echo "  or re-run its section of go.sh."
+  exit 2
+fi
 
 # --- target resolution ------------------------------------------------------
 # FU-121 (2026-07-27): this resolver looked ONLY for a top-level <name>.py in

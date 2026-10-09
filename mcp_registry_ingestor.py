@@ -107,21 +107,11 @@ CREATE TABLE IF NOT EXISTS mcp_directory_mentions (
 )
 """.strip()
 
-SCHEMA_CANDIDATES = """
-CREATE TABLE IF NOT EXISTS mcp_discovery_candidates (
-    id                         BIGINT PRIMARY KEY,
-    candidate_name             VARCHAR NOT NULL,
-    candidate_url              VARCHAR,
-    candidate_description      VARCHAR,
-    discovered_in_directory    VARCHAR NOT NULL,
-    discovered_status          VARCHAR,
-    first_seen                 TIMESTAMPTZ DEFAULT now(),
-    last_seen                  TIMESTAMPTZ DEFAULT now(),
-    reviewed_at                TIMESTAMPTZ,
-    promoted                   BOOLEAN DEFAULT FALSE,
-    UNIQUE (discovered_in_directory, candidate_name)
-)
-""".strip()
+# The mcp_discovery_candidates DDL now lives in discovery_candidates_schema
+# (FU-596). This ingestor's INSERT already used `id BIGINT` + ON CONFLICT
+# (discovered_in_directory, candidate_name), which the canonical shape keeps;
+# only the divergent inline copy is removed so no shape can disagree.
+from discovery_candidates_schema import ensure_candidates_table as _ensure_canonical_candidates
 
 # Additional table specific to registry ingestion: preserve the rich
 # enumerable metadata (registryType, identifier, version, publishedAt)
@@ -199,7 +189,7 @@ def heartbeat() -> None:
 
 def ensure_schema() -> None:
     ws_execute(SCHEMA_MENTIONS)
-    ws_execute(SCHEMA_CANDIDATES)
+    _ensure_canonical_candidates(ws_execute)
     ws_execute(SCHEMA_REGISTRY_FACTS)
 
 

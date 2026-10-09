@@ -54,15 +54,28 @@ def _compute(db: Session) -> dict:
     scored_servers = db.scalar(
         select(func.count(func.distinct(McpLlmAxisScore.server_id)))) or 0
     registry_rows = db.scalar(select(func.count()).select_from(McpServerRegistry)) or 0
+    # never_scored is the coverage hole: registry servers with NO score at all.
+    # It MUST be the set difference (registry server_ids NOT IN scores), NOT the
+    # arithmetic proxy `registry_rows - scored_servers`. The proxy only equals
+    # the truth when every scored server_id is also a registry row, which is not
+    # guaranteed: McpLlmAxisScore.server_id has no FK to the registry and the
+    # score table is append-only, so an ORPHAN score (scored, since re-promoted
+    # under a fresh server_id, or deleted from the registry) silently credits
+    # the subtraction and drifts the published gap. This is the same anti-join
+    # the sibling `/servers/never-scored` surface (never_scored_backlog_api.py)
+    # already uses -- one aggregate COUNT, no per-server rows, THE LINE honoured.
+    scored_ids = select(McpLlmAxisScore.server_id).distinct().scalar_subquery()
+    never_scored = db.scalar(
+        select(func.count())
+        .select_from(McpServerRegistry)
+        .where(McpServerRegistry.server_id.notin_(scored_ids))) or 0
     newest = db.scalar(select(func.max(McpLlmAxisScore.scored_at)))
     oldest = db.scalar(select(func.min(McpLlmAxisScore.scored_at)))
     return {
         "scores_rows": int(scores_rows),
         "scored_servers": int(scored_servers),
         "registry_rows": int(registry_rows),
-        # never_scored: the coverage hole. 80,539 - 66,565 = ~14k servers with
-        # NO score at all as of 2026-07-14 -- a bigger product gap than staleness.
-        "never_scored": max(0, int(registry_rows) - int(scored_servers)),
+        "never_scored": int(never_scored),
         "newest_scored_at": newest.isoformat() if newest else None,
         "oldest_scored_at": oldest.isoformat() if oldest else None,
         "computed_at": datetime.now(timezone.utc).isoformat(),

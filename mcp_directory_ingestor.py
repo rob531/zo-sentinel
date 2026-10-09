@@ -14,6 +14,8 @@ sys.path.insert(0, '/home/workspace/zo_sentinel')
 
 import requests
 
+from discovery_candidates_schema import ensure_candidates_table as _ensure_canonical_candidates
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -127,21 +129,12 @@ def send_heartbeat():
 
 
 def ensure_candidates_table():
-    sql = """
-    CREATE TABLE IF NOT EXISTS mcp_discovery_candidates (
-        candidate_id INTEGER PRIMARY KEY,
-        candidate_name VARCHAR,
-        candidate_url VARCHAR,
-        candidate_description VARCHAR,
-        discovered_in_directory VARCHAR,
-        discovered_status VARCHAR DEFAULT 'active',
-        promoted BOOLEAN DEFAULT false,
-        first_seen TIMESTAMP,
-        last_seen TIMESTAMP,
-        discovery_metadata VARCHAR
-    )
-    """
-    ws_execute(sql)
+    # Canonical shape lives in discovery_candidates_schema (FU-596). The old
+    # inline DDL here used `candidate_id INTEGER PK` -- one of 4 divergent shapes
+    # that left the table uncreated. It is replaced by the canonical `id BIGINT`
+    # shape every promoter reads; this ingestor's INSERT vocabulary
+    # (candidate_name/...) already matches the canonical table.
+    _ensure_canonical_candidates(ws_execute)
 
 
 def safe_request(url: str, headers: Dict[str, str] = None, params: Dict = None, timeout: int = 30) -> Optional[Dict]:

@@ -10,7 +10,8 @@ from typing import Any, Dict, List, Optional
 import requests
 
 sys.path.insert(0, '/home/workspace/zo_sentinel')
-from db_utils import ws_query, ws_write
+from db_utils import ws_query, ws_write, ws_execute
+from discovery_candidates_schema import ensure_candidates_table, normalize_candidate
 
 SERVICE_NAME = "discovery_pypi_paginator_v2"
 SERVICE_PORT = None
@@ -185,63 +186,35 @@ def extract_package_info(package_data: Dict[str, Any]) -> Optional[Dict[str, Any
 
 
 def ensure_table() -> None:
-    sql = """
-    CREATE TABLE IF NOT EXISTS mcp_discovery_candidates (
-        server_id VARCHAR PRIMARY KEY,
-        source VARCHAR NOT NULL,
-        name VARCHAR NOT NULL,
-        version VARCHAR,
-        description TEXT,
-        author VARCHAR,
-        author_email VARCHAR,
-        url VARCHAR,
-        repository VARCHAR,
-        license VARCHAR,
-        keywords VARCHAR,
-        created_at VARCHAR,
-        latest_release VARCHAR,
-        downloads_last_week BIGINT,
-        ingested_at VARCHAR NOT NULL,
-        status VARCHAR DEFAULT 'pending',
-        metadata JSON
-    )
-    """
-    ws_write(WRITE_SERVICE_URL, sql)
+    # Canonical shape is defined once in discovery_candidates_schema (FU-596).
+    # The old package-vocab DDL here (server_id PK, source/version/downloads/...)
+    # was one of 4 divergent DDLs that left the table uncreated; it is dropped in
+    # favour of the directory vocabulary every promoter reads. Rich package
+    # fields are preserved under discovery_metadata by normalize_candidate.
+    ensure_candidates_table(ws_execute)
 
 
 def insert_candidate(candidate: Dict[str, Any]) -> None:
-    sql = """
-    INSERT INTO mcp_discovery_candidates 
-    (server_id, source, name, version, description, author, author_email, url, repository, license, keywords, created_at, latest_release, downloads_last_week, ingested_at, status, metadata)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-    ON CONFLICT (server_id) DO NOTHING
-    """
-    server_id = compute_server_id(candidate['name'])
-    ingested_at = get_utc_now()
-    metadata = {
+    # Reconcile the package vocabulary onto the canonical directory vocabulary.
+    # `id` is omitted so the table's sequence assigns it; dedup is on the
+    # UNIQUE (discovered_in_directory, candidate_name) content key.
+    row = normalize_candidate({
+        'name': candidate['name'],
+        'url': candidate.get('home_page') or candidate.get('repository') or '',
+        'description': candidate.get('summary', ''),
+        'source': 'pypi',
+        'version': candidate.get('version', ''),
+        'author': candidate.get('author', ''),
+        'author_email': candidate.get('author_email', ''),
+        'license': candidate.get('license', ''),
+        'keywords': candidate.get('keywords', ''),
+        'latest_release': candidate.get('latest_release', ''),
+        'downloads_last_week': candidate.get('downloads_last_week', 0),
         'ingestion_source': 'pypi_paginator_v2',
-        'discovered_keywords': candidate.get('keywords', '')
-    }
-    params = (
-        server_id,
-        'pypi',
-        candidate['name'],
-        candidate.get('version', '0.0.0'),
-        candidate.get('summary', ''),
-        candidate.get('author', ''),
-        candidate.get('author_email', ''),
-        candidate.get('home_page', ''),
-        candidate.get('repository', ''),
-        candidate.get('license', ''),
-        candidate.get('keywords', ''),
-        candidate.get('created_at', ''),
-        candidate.get('latest_release', ''),
-        candidate.get('downloads_last_week', 0),
-        ingested_at,
-        str(metadata)
-    )
+        'ingested_at': get_utc_now(),
+    })
     try:
-        ws_write(WRITE_SERVICE_URL, sql, params)
+        ws_write('mcp_discovery_candidates', row)
         log(f"Inserted/updated candidate: {candidate['name']}", "DEBUG")
     except Exception as e:
         log(f"Error inserting candidate '{candidate['name']}': {e}", "ERROR")

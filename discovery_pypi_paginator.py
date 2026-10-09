@@ -13,6 +13,7 @@ import ssl
 
 sys.path.insert(0, '/home/workspace/zo_sentinel')
 from db_utils import ws_query, ws_write
+from discovery_candidates_schema import normalize_candidate
 
 SERVICE_NAME = 'discovery_pypi_paginator'
 SERVICE_PORT = None
@@ -222,26 +223,28 @@ def write_discovery_candidates(candidates):
         return 0
     log(f'Writing {len(candidates)} candidates to mcp_discovery_candidates...')
     try:
+        # Reconcile this ingestor's legacy vocabulary (name/discovery_source/
+        # metadata_json/status='candidate') onto the canonical directory
+        # vocabulary every promoter reads (FU-596). `id` is omitted so the
+        # table's sequence assigns it. Rich package fields are folded into
+        # discovery_metadata by normalize_candidate -- nothing is dropped.
         rows_to_write = []
         for candidate in candidates:
-            rows_to_write.append({
+            rows_to_write.append(normalize_candidate({
                 'name': candidate.get('name', ''),
                 'url': candidate.get('pypi_url', f"https://pypi.org/project/{candidate.get('name', '')}"),
                 'description': candidate.get('description', ''),
                 'discovery_source': 'pypi',
                 'discovery_date': get_iso_timestamp(),
-                'metadata_json': json.dumps({
-                    'version': candidate.get('version', ''),
-                    'author': candidate.get('author', ''),
-                    'author_email': candidate.get('author_email', ''),
-                    'homepage': candidate.get('homepage', ''),
-                    'license': candidate.get('license', ''),
-                    'python_version': candidate.get('python_version', ''),
-                    'upload_date': candidate.get('upload_date', '')
-                }),
-                'status': 'candidate'
-            })
-        ws_write(WRITE_SERVICE_URL, {'table': 'mcp_discovery_candidates', 'rows': rows_to_write, 'wait': True})
+                'version': candidate.get('version', ''),
+                'author': candidate.get('author', ''),
+                'author_email': candidate.get('author_email', ''),
+                'homepage': candidate.get('homepage', ''),
+                'license': candidate.get('license', ''),
+                'python_version': candidate.get('python_version', ''),
+                'upload_date': candidate.get('upload_date', ''),
+            }))
+        ws_write('mcp_discovery_candidates', rows_to_write)
         log(f'Successfully wrote {len(candidates)} candidates')
         return len(candidates)
     except Exception as e:

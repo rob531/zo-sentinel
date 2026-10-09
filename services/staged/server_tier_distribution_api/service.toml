@@ -1,0 +1,12 @@
+[service]
+name = "server_tier_distribution_api"
+import_path = "services.active.server_tier_distribution_api.router"
+prefix = "/api"
+tag = "server_tier_distribution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by zo_sentinel/publisher/auto_stage.py for a root-level builder
+# router. import_path names services.ACTIVE because that is where router.py
+# lives AFTER promote_staged_to_active passes it.

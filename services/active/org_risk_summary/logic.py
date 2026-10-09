@@ -42,7 +42,13 @@ def compute_org_risk_summary(org_id: str, db: Session) -> Dict:
             {
                 "server_id": getattr(srv, "server_id"),
                 "risk_tier": tier,
-                "verdict": getattr(srv, "verdict", None),
+                # Surface the live risk_tier, not the legacy `verdict` column
+                # (~99.4% the worthless string 'unknown'). This endpoint is
+                # public/unauthenticated, so the legacy column must never leak.
+                # Keep the `verdict` KEY (an external consumer may read it) but
+                # populate it from risk_tier -- matching the already-shipped
+                # migration in server_scorecard_api.py / server_composite_risk_ranking_api.py.
+                "verdict": tier,
                 "assessed_at": (
                     getattr(srv, "last_assessed").isoformat()
                     if getattr(srv, "last_assessed")

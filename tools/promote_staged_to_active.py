@@ -52,6 +52,35 @@ ACTIVE = os.path.join(ROOT, "services", "active")
 ARTIFACT = os.path.join(ROOT, "artifacts", "staged_promotion_report.json")
 DOCKERFILE = os.path.join(ROOT, "Dockerfile")
 
+# FU-607: the dated cohort baseline (cohort_<YYYYMMDD>.json) that the
+# ENTERED/LEFT/STABLE comparison grades against. It had had no writer since
+# 2026-10-02 -- cohort_honesty.py writes cohort_honesty.json, and nothing wrote
+# the dated baseline -- so churn was being measured against a days-old file and
+# a run's own promotions leaked in as "LEFT". The readers (autopoiesis-bar-
+# tracker, cohort grading) EXPECT a flat sorted array of service names, which is
+# the shape the pre-2026-10-02 baselines already carried; this writer matches it.
+COHORT_STATE_DIR = os.path.join(os.path.dirname(ROOT), "zo_sentinel_state")
+
+
+def write_cohort_baseline(verdicts, state_dir=COHORT_STATE_DIR, when=None):
+    """Emit the day's PROMOTE-eligible cohort to cohort_<YYYYMMDD>.json and
+    return the path written.
+
+    The baseline is the sorted, de-duplicated set of service names whose verdict
+    is PROMOTE -- exactly the population the report's promote_count counts.
+    Idempotent within a UTC day: re-running overwrites the same dated file, so a
+    promoter run that fires twice in a day leaves one baseline, not two. `when`
+    (a time.struct_time) is injectable so the write is testable without clock
+    dependence."""
+    promote_set = sorted({v["service"] for v in verdicts
+                          if v.get("verdict") == "PROMOTE"})
+    stamp = time.strftime("%Y%m%d", when or time.gmtime())
+    os.makedirs(state_dir, exist_ok=True)
+    path = os.path.join(state_dir, "cohort_%s.json" % stamp)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(promote_set, fh, indent=1)
+    return path
+
 # FU-031 scar: this script is run as `python tools/promote_staged_to_active.py`,
 # so sys.path[0] is tools/, NOT the repo root -- `import tools.x` fails there.
 # Accept both invocation shapes rather than assuming one.
@@ -465,6 +494,10 @@ def main(argv=None):
     with open(ARTIFACT, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
 
+    # FU-607: refresh the dated cohort baseline on EVERY run, observe and
+    # enforce alike -- the comparison is only honest against a <36h baseline.
+    cohort_path = write_cohort_baseline(verdicts)
+
     if not args.quiet:
         print("=== staged->active promotion (%s) ===" % report["mode"])
         print("  candidates: %d  promote-eligible: %d  hold: %d  moved: %d"
@@ -487,6 +520,8 @@ def main(argv=None):
             print("  model-name drift: UNKNOWN (%s)" % mr["detail"])
         if not args.enforce and report["promote_count"]:
             print("  observe mode: nothing moved. Re-run with --enforce --max-per-run N to promote.")
+        print("  cohort baseline: %d PROMOTE member(s) -> %s (FU-607)"
+              % (report["promote_count"], cohort_path))
     return 0
 
 

@@ -239,10 +239,38 @@ def write_repos(items):
     return result.posted, result.failed + result.spooled
 
 
+def drain_spool():
+    """Replay any spooled candidates once the target table exists.
+
+    guarded_write() spools rows to disk whenever mcp_discovery_candidates is ABSENT or
+    UNKNOWN on the bus, so nothing is lost -- but bus_write_guard.replay_spool() had no
+    production caller anywhere (#6167 shipped the spool, never the drain), so the rows
+    sat on disk forever even after the table was created.  This closes that loop: it is
+    a no-op while the table is absent (posts 0, leaves the spool intact) and drains it on
+    the first cycle after the table appears, so the funnel self-heals with no second
+    intervention once FU-596's table lands.
+    """
+    try:
+        res = bus_write_guard.replay_spool(
+            CANDIDATES_TABLE,
+            write_url=WRITE_SERVICE_URL,
+            query_url=QUERY_SERVICE_URL,
+            spool_dir=SPOOL_DIR,
+            timeout=10,
+            logger=log,
+        )
+        if res.posted or res.spooled:
+            log(f'spool drain: {res.summary()}')
+    except Exception as e:
+        log(f'spool drain error: {e}')
+
+
 def cycle():
     global SCHEMA_VERIFIED
     if not SCHEMA_VERIFIED:
         verify_schema()
+
+    drain_spool()
 
     cursor = load_cursor()
     page = cursor.get('page', 1)

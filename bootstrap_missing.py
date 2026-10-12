@@ -137,10 +137,35 @@ TABLES = [
         published_at    TIMESTAMPTZ,
         flagged_at      TIMESTAMPTZ DEFAULT now()
     )""", 'npm_typosquat_alerts'),
+
+    # -- discovery -> promotion funnel (chairman issue #4003 / FU-596) --
+    # discovery_github_paginator.py and discovery_npm_paginator.py WRITE candidates
+    # here; candidate_github_promoter.py / candidate_npm_promoter.py SELECT by id and
+    # UPDATE promoted/reviewed_at/metadata WHERE id=<int>.  The table had no definition
+    # anywhere that runs, so every write was acknowledged with a 2xx and discarded by
+    # write_service (`Catalog Error: Table ... does not exist`, 4172 rows on 2026-10-04)
+    # until bus_write_guard (#6167) began spooling them to disk instead.  This def is the
+    # target those spooled rows replay into.  Columns are the exact union both paginators
+    # write and both promoters read; id uses the nextval pattern of our other tables so a
+    # paginator INSERT that omits id still gets a surrogate key the promoter can address.
+    ("""CREATE TABLE IF NOT EXISTS mcp_discovery_candidates (
+        id                      BIGINT PRIMARY KEY DEFAULT nextval('seq_discovery_candidate_id'),
+        candidate_name          VARCHAR,
+        candidate_url           VARCHAR,
+        candidate_description   VARCHAR,
+        discovered_in_directory VARCHAR,
+        discovered_status       VARCHAR DEFAULT 'active',
+        last_seen               TIMESTAMPTZ,
+        promoted                BOOLEAN DEFAULT FALSE,
+        reviewed_at             TIMESTAMPTZ,
+        metadata                TEXT
+    )""", 'mcp_discovery_candidates'),
 ]
 
 # Sequence for npm alerts
 ex("CREATE SEQUENCE IF NOT EXISTS seq_id START 1", 'sequence seq_id')
+# Sequence for the discovery -> promotion funnel surrogate key (#4003 / FU-596)
+ex("CREATE SEQUENCE IF NOT EXISTS seq_discovery_candidate_id START 1", 'sequence seq_discovery_candidate_id')
 
 created = sum(1 for sql, label in TABLES if ex(sql, label))
 log.info('Bootstrap complete: %d/%d tables created/verified', created, len(TABLES))

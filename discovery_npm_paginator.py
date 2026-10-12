@@ -311,6 +311,30 @@ def write_candidates(candidates):
     return result.posted
 
 
+def drain_spool():
+    """Replay any spooled candidates once the target table exists.
+
+    guarded_write() spools to disk whenever mcp_discovery_candidates is ABSENT/UNKNOWN,
+    but bus_write_guard.replay_spool() had no production caller (#6167 shipped the spool,
+    never the drain), so rows sat on disk even after the table was created.  No-op while
+    the table is absent; drains on the first cycle after it appears, so the funnel
+    self-heals with no second intervention once FU-596's table lands.
+    """
+    try:
+        res = bus_write_guard.replay_spool(
+            CANDIDATES_TABLE,
+            write_url=get_write_url(),
+            query_url=QUERY_SERVICE_URL,
+            spool_dir=SPOOL_DIR,
+            timeout=FETCH_TIMEOUT_SECS,
+            logger=log,
+        )
+        if res.posted or res.spooled:
+            log(f"spool drain: {res.summary()}")
+    except Exception as e:
+        log(f"spool drain error: {e}")
+
+
 def advance_cursor(cursor, query_key):
     new_cursor = dict(cursor)
     new_cursor[query_key] = cursor.get(query_key, 0) + PAGE_SIZE
@@ -333,6 +357,7 @@ def get_next_query_key(cursor):
 
 
 def cycle():
+    drain_spool()
     cursor = load_cursor()
     next_key = get_next_query_key(cursor)
     query_config = next(cfg for cfg in QUERY_CONFIGS if cfg["key"] == next_key)

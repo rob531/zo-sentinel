@@ -49,7 +49,17 @@ def ws_write(table, rows):
     """
     payload = {'table': table, 'rows': rows, 'wait': True}
     last = ''
-    for attempt in range(3):
+    # 5 attempts, not 3. The dominant NON-persist cause is not a per-row error
+    # (write_service reports total_errors:0) but the ~5-10s window in which the
+    # single-writer write_service is DOWN and respawning -- a DuckDB
+    # self-invalidation self-kill (os._exit(42)) or a daily wrapper restart.
+    # During that window every POST gets ConnectionRefused. The old 3x2s=6s
+    # budget just missed the far edge of that window, so a cycle straddling a
+    # restart dropped ~169 rows that were otherwise perfectly writable. 5
+    # attempts with a 3s gap spans ~15s -- comfortably past the restart -- and
+    # is still strictly bounded. A genuine total failure still returns None
+    # (honest drop), never raises: this must stay ADDITIVE, never essential.
+    for attempt in range(5):
         try:
             r = requests.post(WRITE_SERVICE_URL, json=payload, timeout=30)
             if r.status_code in (200, 201):
@@ -59,8 +69,8 @@ def ws_write(table, rows):
         except Exception as e:
             last = f'{type(e).__name__}: {e}'
             log(f'ws_write attempt {attempt+1} error ({table}): {last}')
-        time.sleep(2)
-    log(f'ws_write FAILED after 3 attempts -- NOTHING PERSISTED to {table}: {last}')
+        time.sleep(3)
+    log(f'ws_write FAILED after 5 attempts -- NOTHING PERSISTED to {table}: {last}')
     return None
 
 def ws_query(sql):
@@ -247,11 +257,26 @@ def cvss_base_score(raw):
 
 
 def query_osv(ecosystem, package):
+    # Threat-intel is ADDITIVE, never essential (chairman directive): an
+    # upstream that is rate-limited, out of quota, or out of credit must make
+    # this cycle DEGRADE honestly, never crash, never hot-spin, never block the
+    # spine. OSV itself is free/keyless, but 402 (payment/credit) and 429
+    # (rate-limit/quota) are the generic exhaustion signals any enrichment
+    # upstream would raise, so recognise them explicitly and log the honest
+    # reason rather than swallowing it in the generic catch below. Returning []
+    # means "no vulns learned this cycle" -- scoring/verdicts are unaffected.
     try:
         payload = {'package': {'name': package, 'ecosystem': ecosystem}, 'version': ''}
         r = requests.post(f'{OSV_API_BASE}/query', json=payload, timeout=15)
         if r.status_code == 200:
             return r.json().get('vulns', [])
+        if r.status_code in (402, 429):
+            log(f'OSV upstream exhausted/limited (HTTP {r.status_code}) for '
+                f'{ecosystem}/{package} -- DEGRADING this cycle (additive, not '
+                f'essential): skipping enrichment, nothing persisted, no crash')
+            return []
+        log(f'OSV query non-200 (HTTP {r.status_code}) for {ecosystem}/{package}: '
+            f'{r.text[:120]}')
     except Exception as e:
         log(f'OSV query error for {ecosystem}/{package}: {e}')
     return []

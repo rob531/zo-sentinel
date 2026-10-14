@@ -1,0 +1,11 @@
+[service]
+name = "health_metrics"
+import_path = "services.active.health_metrics.router"
+prefix = "/api"
+tag = "health_metrics"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

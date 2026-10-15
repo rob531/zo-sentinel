@@ -98,6 +98,12 @@ SFT_REPO = "rob531/zomesh-sentinel-sft"
 # periodically cleaned; the 6/25 one vanished by 7/14). Sha-pinned either way.
 ADAPTER_LOCAL_DIR = Path(os.environ.get("RESCORE_ADAPTER_DIR",
                                         r"D:\zo\runs\v3.0_40974559_FULL\final"))
+# Vast instance label. Env-gated (2026-10-15) so CONCURRENT shard pods can each carry a
+# DISTINCT label (e.g. zo-sentinel-score-s3): the preflight abort guard checks only for
+# instances wearing THIS label, so sibling shards are not seen as a collision, while two
+# fires of the SAME shard still refuse to double-draw. Default unchanged -> the scheduled
+# v3.0 lane keeps the single canonical label and its exclusive guard.
+SCORE_LABEL = os.environ.get("RESCORE_LABEL", "zo-sentinel-score")
 FLY_PG_APP = "mcplookup-db"
 PROXY_PORT = 15432
 DSN_FILE = Path(os.environ.get("RESCORE_DSN_FILE", r"D:\zo\runs\rescore_20260703\_dsn.txt"))
@@ -637,9 +643,9 @@ def ph_preflight(run: Run, args) -> None:
     from vastai_sdk import VastAI
     v = VastAI(api_key=secret("vast"))
     live = [i for i in (v.show_instances() or [])
-            if str(i.get("label", "")) == "zo-sentinel-score"]
+            if str(i.get("label", "")) == SCORE_LABEL]
     if live:
-        raise SystemExit(f"ABORT: live zo-sentinel-score instance(s) already exist: "
+        raise SystemExit(f"ABORT: live {SCORE_LABEL} instance(s) already exist: "
                          f"{[i.get('id') for i in live]} -- collect/destroy first")
     run.mark("preflight", baseline_freshness=base, scored_before=scored_before)
     log(f"preflight OK: scored_before={scored_before} newest={base.get('newest_scored_at')}")
@@ -1083,7 +1089,7 @@ def ph_fire(run: Run, args) -> None:
         env={"RUnpodGHAPI": secret("github"),
              "SCORE_BRANCH": run.state["score_branch"],
              "RESULTS_BRANCH": run.state["results_branch"]},
-        onstart_cmd=ONSTART, runtype="ssh", label="zo-sentinel-score")
+        onstart_cmd=ONSTART, runtype="ssh", label=SCORE_LABEL)
     iid = resp.get("new_contract") or resp.get("contract_id") or resp.get("id")
     run.state["credit_at_launch"] = launch_credit
     if getattr(args, "cap_usd", None) is not None:

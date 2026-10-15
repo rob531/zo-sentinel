@@ -869,6 +869,27 @@ def ph_export(run: Run, args) -> None:
             note = f"snap: FAILED ({exc.__class__.__name__}: {exc}) -- plain slice"
         log(f"export: {note}")
         run.state["refresh_snap"] = note
+    # SHARD SEAM (2026-10-15). To cover a fresh model_version's whole corpus FAST,
+    # fire concurrent pods over DISJOINT never-scored sets. RESCORE_OF=K + RESCORE_SHARD=i
+    # (0<=i<K) keeps only the never-scored servers whose stable hash falls in shard i.
+    # Hash is md5(server_id)%K computed HERE in Python (NOT Postgres hashtext, which is an
+    # internal we should not depend on) -- every server_id maps to exactly one shard, so K
+    # shards partition the corpus with no overlap and no gap (sum of shard sizes == unsharded
+    # size). Applied to new_rows only; refresh is unaffected. Unset -> no sharding, so the
+    # scheduled v3.0 lane is unchanged. Idempotent + disjoint => concurrent imports are safe
+    # (each shard's DELETE/INSERT touches server_ids no other shard touches).
+    _of = os.environ.get("RESCORE_OF")
+    _shard = os.environ.get("RESCORE_SHARD")
+    if _of and _shard and _of.isdigit() and _shard.isdigit() and int(_of) > 0:
+        _ofn, _shn = int(_of), int(_shard)
+        if not (0 <= _shn < _ofn):
+            raise SystemExit(f"ABORT: RESCORE_SHARD={_shn} out of range for RESCORE_OF={_ofn}")
+        _before = len(new_rows)
+        new_rows = [r for r in new_rows
+                    if int(hashlib.md5(r[0].encode("utf-8")).hexdigest(), 16) % _ofn == _shn]
+        log(f"export: SHARD {_shn}/{_ofn} -- never-scored half {_before} -> {len(new_rows)} "
+            f"(md5(server_id)%{_ofn}=={_shn}; disjoint across shards)")
+
     # BOUNDED NEW-WAVE CAP (2026-10-15). new_rows (never-scored-under-this-version)
     # is otherwise UNCAPPED, so a brand-new model_version would try to score the whole
     # corpus in one pod. RESCORE_NEW_CAP=N bounds each wave to N never-scored servers,

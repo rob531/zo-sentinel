@@ -1182,7 +1182,17 @@ def _read_launch_credit(args):
 
 
 def _spent_since_launch(run, est_cost: float) -> tuple[float, str]:
-    """(spend, basis). MEASURED credit delta when readable, never below the estimate."""
+    """(spend, basis). MEASURED credit delta when readable, never below the estimate.
+
+    CONCURRENCY GUARD (2026-10-15): the vast credit delta is ACCOUNT-WIDE. With several
+    shards drawing on the same credit at once, every shard's (credit_at_launch - now)
+    reflects the WHOLE FLEET's burn, so each shard false-trips its OWN per-pod cap the
+    moment the fleet cumulatively crosses it (observed: shard2 killed healthy at $5.02
+    while it had itself burned ~$0.50). When RESCORE_OF is set (concurrent sharding) the
+    only honest per-pod figure is the per-instance estimate (billed_dph * elapsed), so
+    use THAT and never the shared credit delta."""
+    if os.environ.get("RESCORE_OF"):
+        return est_cost, "billed_dph_estimate(sharded_per_pod)"
     c0 = run.state.get("credit_at_launch")
     if c0 is not None:
         try:

@@ -311,6 +311,108 @@ def parse_gate_rejects(text: str):
     return sorted(set(out))
 
 
+# ---- the SECOND pre-push gate: the repo's OWN referent check (columns) ------
+#
+# CI runs tools/referent_verify.py --enforce-checks ...,columns as a BLOCKING
+# gate. The COLUMN arm was armed behind a shrink-only ratchet by cycle-0187
+# (#6210), AFTER the last green stranded-land (#6196, 2026-10-05). This lander
+# gated on ONLY no_hollow_scaffold, so on 2026-10-15 it pushed PR #6858 --
+# no-hollow GREEN -- carrying scoring_freshness_dashboard, which names
+# mcp_signal_scores.computed_at (the real column is scored_at). CI's
+# referent-verify went RED on that column. A no-hollow pass is not a
+# landability verdict any more than a CLEAN grade was (#6106): the lander must
+# ask EVERY blocking gate the repo enforces, not the one it was born with.
+# Tables are already covered upstream -- stranded_review grades a file CLEAN
+# only if every table it names resolves -- so COLUMNS is the arm enforced here;
+# routes/capmap are not yet observed RED by THIS tool and a gate never seen red
+# is an assertion, not evidence (R4). (#4079, cycle-0197.)
+REFERENT_REL = "tools/referent_verify.py"
+
+
+def referent_sites_in_batch(cols: dict, want_rels):
+    """Map referent_verify's enforced COLUMN failures back to the batch files
+    that name them, using its OWN site attribution -- never a second catalog of
+    the same rule (the 'three instruments, three catalogs' bite, cycle-0177).
+
+    `unlisted` is {col: [site, ...]} (new, unquarantined) and `spread` is
+    {col: {"sites": [...]}} (quarantined but grown past budget); both are the
+    enforced buckets. A site matches a batch file when their separator-
+    normalised paths are equal or one ends with the other -- scan_tree may
+    record repo-relative or OS-separated paths."""
+    sites = []
+    for _c, s in (cols.get("unlisted") or {}).items():
+        sites += list(s or [])
+    for _c, d in (cols.get("spread") or {}).items():
+        sites += list((d or {}).get("sites") or [])
+    import re as _re
+    def norm(p):
+        # referent_verify reports a site as "<path>:<lineno>"; drop the lineno
+        # before matching, and fold any OS backslash separators to "/".
+        return _re.sub(r":\d+$", "", str(p).replace(chr(92), "/"))
+    want_norm = {norm(w): w for w in want_rels}
+    hit = set()
+    for raw in sites:
+        s = norm(raw)
+        for wn, w in want_norm.items():
+            if s == wn or s.endswith("/" + wn) or wn.endswith("/" + s):
+                hit.add(w)
+    return sorted(hit)
+
+
+def run_referent_gate(clone: Path, want_rels):
+    """Run the repo's own referent_verify (columns) on the committed batch.
+
+    Returns (rc, rejected_rels, text). rc=0 PASS, rc=1 FAIL (rejected_rels are
+    the batch files that introduced an enforced column failure), rc=2 UNKNOWN.
+    A FAIL whose offending sites are not in the batch yields rc=1 with an empty
+    reject list -- the caller then refuses to push rather than dropping a file
+    it did not add. A verdict of UNKNOWN or STALE is rc=2, never a pass (R6)."""
+    if not (clone / REFERENT_REL).is_file():
+        return 2, [], "referent gate absent at %s -- UNKNOWN, not clean" % REFERENT_REL
+    tmpd = Path(tempfile.mkdtemp(prefix="stranded_referent_"))
+    out_json = tmpd / "rv.json"
+    try:
+        r = subprocess.run(
+            [sys.executable, REFERENT_REL, "--enforce-checks", "columns",
+             "--json", str(out_json)],
+            cwd=clone, capture_output=True, timeout=600)
+        text = (r.stdout + r.stderr).decode("utf-8", "replace")
+        try:
+            report = json.loads(out_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            return 2, [], "%s ran (rc=%d) but its JSON was unreadable: %s\n%s" % (
+                REFERENT_REL, r.returncode, exc, text[-400:])
+    finally:
+        shutil.rmtree(tmpd, ignore_errors=True)
+    cols = report.get("columns") or {}
+    verdict = cols.get("verdict")
+    if verdict == "PASS":
+        return 0, [], text
+    if verdict == "FAIL":
+        return 1, referent_sites_in_batch(cols, want_rels), text
+    return 2, [], ("referent columns verdict=%s -- cannot evaluate, not a pass "
+                   "(R6)\n%s" % (verdict, text[-400:]))
+
+
+def run_all_gates(clone: Path, want_rels):
+    """Run every blocking gate the repo enforces, in order, and return the
+    FIRST non-clean verdict as (gate_label, rc, rejected_rels, text). All clean
+    -> (None, 0, [], last_text). Gating on only the gate this tool was born
+    with (no_hollow) is what let PR #6858 pass locally and fail CI's
+    referent-verify (#4079, cycle-0197)."""
+    gates = (
+        (GATE_REL, lambda: run_gate(clone)),
+        (REFERENT_REL, lambda: run_referent_gate(clone, want_rels)),
+    )
+    last_text = ""
+    for label, fn in gates:
+        grc, rej, text = fn()
+        last_text = text
+        if grc != 0:
+            return label, grc, rej, text
+    return None, 0, [], last_text
+
+
 def build_commit(clone: Path, runtime: Path, branch: str, rels, msg: str):
     """Put exactly `rels` on a fresh `branch` off origin/main and commit.
 
@@ -615,6 +717,70 @@ def self_test() -> int:
     pole("P6 missing grader is rc=2 CANNOT EVALUATE, not 0",
          g is None and err is not None, "err=%s" % err)
 
+    # ---- the referent (columns) gate, added cycle-0197 for #4079 ----------
+    #
+    # P12 -- an enforced COLUMN failure is attributed to exactly the batch file
+    # that names it, via referent_verify's OWN site lists, and a failing site
+    # that is NOT in the batch is left alone (not ours to fix). The in-batch
+    # site is given with BACKSLASH separators, as scan_tree can emit, to pin
+    # the normalisation.
+    _cols = {
+        "verdict": "FAIL",
+        "unlisted": {"mcp_signal_scores.computed_at": [
+            "services\\staged\\scoring_freshness_dashboard\\__init__.py",
+            "some/pre_existing/not_in_batch.py"]},
+        "spread": {},
+    }
+    _want = ["services/staged/scoring_freshness_dashboard/__init__.py",
+             "signal_drift_detector.py"]
+    pole("P12 enforced column failure attributed to the one batch file that names it",
+         referent_sites_in_batch(_cols, _want) ==
+         ["services/staged/scoring_freshness_dashboard/__init__.py"],
+         "got %s" % referent_sites_in_batch(_cols, _want))
+
+    # P12b -- a spread (grown-past-budget) failure is attributed via its nested
+    # "sites", and -- the NEGATIVE half -- a failing site outside the batch is
+    # never selected.
+    _spread = {"verdict": "FAIL", "unlisted": {},
+               "spread": {"t.c": {"sites": ["signal_drift_detector.py",
+                                            "not/in/batch.py"]}}}
+    pole("P12b spread failure attributed via nested sites, non-batch site ignored",
+         referent_sites_in_batch(_spread, _want) == ["signal_drift_detector.py"],
+         "got %s" % referent_sites_in_batch(_spread, _want))
+
+    # P12c -- NEGATIVE CONTROL. An ABSENT referent gate is rc=2 UNKNOWN, never a
+    # silent pass. A lander that read a missing gate as clean would push exactly
+    # the batch CI rejects (the no_hollow analogue is P9c).
+    _t12 = Path(tempfile.mkdtemp(prefix="stranded_land_p12_"))
+    try:
+        _grc, _rej, _gtxt = run_referent_gate(_t12, _want)
+        pole("P12c an absent referent gate is rc=2, not clean",
+             _grc == 2 and _rej == [] and REFERENT_REL in _gtxt,
+             "rc=%s text=%s" % (_grc, _gtxt[:90]))
+    finally:
+        shutil.rmtree(_t12, ignore_errors=True)
+
+    # P12d -- the enforced gate set INCLUDES the referent gate. If run_all_gates
+    # ever shrinks back to no_hollow alone, PR #6858 comes back.
+    import inspect as _inspect
+    _gsrc = _inspect.getsource(run_all_gates)
+    pole("P12d run_all_gates enforces BOTH no_hollow and referent_verify",
+         "run_gate(clone)" in _gsrc and "run_referent_gate(clone" in _gsrc,
+         "gate-set source did not name both gates")
+
+    # P12e -- referent_verify reports a site as "<path>:<lineno>". The lineno
+    # must be stripped before matching, or EVERY real failure attributes to
+    # nothing and the lander refuses to push instead of dropping the offender.
+    # This is the exact bite seen live on 2026-10-15 (rejects nothing -> refuse)
+    # before the strip was added; this pole goes RED if it is removed.
+    pole("P12e a site carrying a :lineno suffix still attributes to its batch file",
+         referent_sites_in_batch(
+             {"verdict": "FAIL", "spread": {},
+              "unlisted": {"t.c": ["services/staged/scoring_freshness_dashboard/__init__.py:206"]}},
+             ["services/staged/scoring_freshness_dashboard/__init__.py"]) ==
+         ["services/staged/scoring_freshness_dashboard/__init__.py"],
+         "a :lineno-suffixed site was not attributed to its file")
+
     for name, ok, detail in poles:
         print("  %-4s %s%s" % ("ok" if ok else "FAIL", name,
                                "" if ok else "   <-- " + detail))
@@ -763,20 +929,27 @@ def main(argv=None) -> int:
                 m += ("\nDROPPED by %s before the push, because a CLEAN grade is not a\n"
                       "landability grade -- the grader resolves tables against 4 catalog planes\n"
                       "and this gate asks whether the module has a real data layer:\n%s\n"
-                      % (GATE_REL, "".join("  - %s\n" % d for d in dropped)))
+                      % ("the blocking CI gates", "".join("  - %s\n" % d for d in dropped)))
             return m
 
         want_rels, dropped, gate_text = list(rels), [], ""
         gate_dropped_keys = set()
-        for attempt in (1, 2, 3):
+        # Two gates (no_hollow + referent_verify) drop more units than the
+        # three attempts the no_hollow-only era budgeted, and the small end of
+        # the queue is dense with both hollow scaffolds and column phantoms.
+        # dropped_keys only grows over a finite pool, so the loop still
+        # terminates; the final attempt shrinks rather than refills.
+        MAX_GATE_ATTEMPTS = 10
+        for attempt in range(1, MAX_GATE_ATTEMPTS + 1):
             staged, why = build_commit(clone, runtime, "_stranded_land_wip", want_rels,
                                        message(len(want_rels), dropped))
             if staged is None:
                 print("\nREFUSED: %s" % why)
                 return 1 if "index" in why else 2
             print("\nindex verified: %d path(s), exactly the intended set" % len(staged))
-            grc, rej, gate_text = run_gate(clone)
-            print("gate %s (attempt %d): rc=%d, rejects %s" % (GATE_REL, attempt, grc, rej or "nothing"))
+            gate_label, grc, rej, gate_text = run_all_gates(clone, want_rels)
+            print("gates (attempt %d): rc=%d via %s, rejects %s"
+                  % (attempt, grc, gate_label or "all clean", rej or "nothing"))
             if grc == 0:
                 break
             if grc == 2:
@@ -794,18 +967,18 @@ def main(argv=None) -> int:
             dropped += inside
             batch_units, gate_dropped_keys = refill_after_gate(
                 units, batch_units, inside, want, gate_dropped_keys,
-                last_attempt=(attempt == 3))
+                last_attempt=(attempt == MAX_GATE_ATTEMPTS))
             want_rels = sorted(x for u in batch_units for x in u["rels"])
             if not want_rels:
-                print("\nREFUSED: every file in this batch is rejected by %s. Nothing to land." % GATE_REL)
+                print("\nREFUSED: every file in this batch is rejected by %s. Nothing to land." % gate_label)
                 print("  rejected: %s" % dropped)
                 return 1
             print("  dropping unit(s) %s and %s the batch from origin/main: %d file(s) of a %d budget"
                   % (sorted(gate_dropped_keys),
-                     "shrinking" if attempt == 3 else "REFILLING",
+                     "shrinking" if attempt == MAX_GATE_ATTEMPTS else "REFILLING",
                      len(want_rels), want))
         else:
-            print("\nREFUSED: %s still RED after dropping %s. Not pushing a red batch." % (GATE_REL, dropped))
+            print("\nREFUSED: %s still RED after dropping %s. Not pushing a red batch." % (gate_label, dropped))
             print(gate_text.strip()[-800:])
             return 1
 
@@ -838,7 +1011,7 @@ def main(argv=None) -> int:
             msg + "\nFiles:\n" + "".join("- `%s`\n" % p for p in staged) +
             "\nRefused in the same bucket (PHANTOM, named a table on no plane):\n" +
             "".join("- `%s`\n" % r["candidate"] for r in refused) +
-            ("\nDropped before the push by `%s`:\n" % GATE_REL) +
+            ("\nDropped before the push by a blocking CI gate (no-hollow / referent-verify columns):\n") +
             ("".join("- `%s`\n" % d for d in dropped) if dropped else "- none\n") +
             "\nOpened by `tools/stranded_land.py` (cycle-0177). The lander never grades, never\n"
             "deletes, never merges, and never force-pushes. It asks the repo's own added-file\n"

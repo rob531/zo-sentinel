@@ -77,8 +77,18 @@ HERE = Path(__file__).resolve().parent                  # tools/rescore/
 RUNS_ROOT = Path(os.environ.get("RESCORE_RUNS_ROOT", r"D:\zo\runs\weekly_rescore"))
 LEDGER = RUNS_ROOT / "ledger.jsonl"
 
-MODEL_VERSION = "v3.0_40974559"
-ADAPTER_SHA_PIN = "bf842f5450347c19ac195ef32a7298a1579566a7b9b454a5381fda333e7198e3"
+# Promotion seam (2026-10-15, chairman-funded v3.4 full-corpus advisory rescore).
+# Both default to the v3.0 pin, so the SCHEDULED weekly-delta lane -- which runs
+# this file with NO env set -- is byte-for-byte unchanged and stays on v3.0. A
+# v3.4 (or any future) wave is promoted by exporting RESCORE_MODEL_VERSION +
+# RESCORE_ADAPTER_SHA (+ RESCORE_ADAPTER_DIR) for THAT invocation only. The two
+# versions COEXIST in mcp_llm_axis_scores because every read/write here is keyed
+# on model_version; the prod VERDICT still reads v3.0 until a separate chairman
+# cutover. REVERT: unset the env or restore these two literals.
+MODEL_VERSION = os.environ.get("RESCORE_MODEL_VERSION", "v3.0_40974559")
+ADAPTER_SHA_PIN = os.environ.get(
+    "RESCORE_ADAPTER_SHA",
+    "bf842f5450347c19ac195ef32a7298a1579566a7b9b454a5381fda333e7198e3")
 RULE = "gate_rule_v1_2026-06-16"
 AXES = ["overall_risk", "auth_strength", "capability_breadth", "data_sensitivity",
         "network_egress", "maintainer_trust", "exploit_surface"]
@@ -859,6 +869,21 @@ def ph_export(run: Run, args) -> None:
             note = f"snap: FAILED ({exc.__class__.__name__}: {exc}) -- plain slice"
         log(f"export: {note}")
         run.state["refresh_snap"] = note
+    # BOUNDED NEW-WAVE CAP (2026-10-15). new_rows (never-scored-under-this-version)
+    # is otherwise UNCAPPED, so a brand-new model_version would try to score the whole
+    # corpus in one pod. RESCORE_NEW_CAP=N bounds each wave to N never-scored servers,
+    # chosen deterministically (sorted by server_id) so sequential waves tile the corpus
+    # and a resume picks up exactly where the last wave stopped -- the pipeline's
+    # (server_id, model_version) dedup makes any overlap converge rather than double-score.
+    # Unset -> unbounded, so the scheduled v3.0 delta lane is unchanged. Refresh half is
+    # already capped by --refresh-cap; this is the matching knob for the never-scored half.
+    _new_cap = os.environ.get("RESCORE_NEW_CAP")
+    if _new_cap and _new_cap.isdigit() and int(_new_cap) > 0:
+        new_rows.sort(key=lambda r: r[0])
+        _nc = int(_new_cap)
+        log(f"export: RESCORE_NEW_CAP={_nc} -- bounding never-scored half "
+            f"{len(new_rows)} -> {min(_nc, len(new_rows))} (sorted by server_id)")
+        new_rows = new_rows[:_nc]
     uniq = new_rows + refresh_rows
     cohort_sids = [r[0] for r in uniq]
 
@@ -1639,6 +1664,20 @@ def ph_import(run: Run, args) -> None:
 
 def ph_backfill(run: Run, args) -> None:
     if run.done("backfill") or run.state["phases"].get("backfill") == "skipped":
+        return
+    # ADVISORY-WAVE GUARD (2026-10-15). apply_risk_tier_backfill stamps the SINGLE
+    # mcp_server_registry.risk_tier column (not versioned) AND un-asserts any server
+    # lacking rows under the given model_version. For a coexisting advisory version
+    # (e.g. v3.4 alongside v3.0) that would OVERWRITE the v3.0-derived registry tier
+    # the prod verdict reads and un-assert the whole corpus mid-rescore. So when
+    # RESCORE_SKIP_BACKFILL=1 the advisory wave writes ONLY mcp_llm_axis_scores and
+    # leaves the registry tier (the verdict-read path) untouched. The scheduled v3.0
+    # lane does not set this and backfills as before. REVERT: unset the env.
+    if os.environ.get("RESCORE_SKIP_BACKFILL") == "1":
+        run.mark("backfill", "skipped")
+        log(f"backfill SKIPPED (RESCORE_SKIP_BACKFILL=1): advisory wave "
+            f"model_version={MODEL_VERSION} writes axis scores only; "
+            f"mcp_server_registry.risk_tier (verdict-read path) left untouched")
         return
     ensure_proxy()
     r = subprocess.run([sys.executable, str(HERE / "apply_risk_tier_backfill.py"),

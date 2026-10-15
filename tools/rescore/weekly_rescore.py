@@ -984,7 +984,14 @@ def ph_bundle(run: Run, args) -> None:
         return
     pat = secret("github")
     ts = run.state["run_id"]
-    score_branch = f"score-job-{ts}"
+    # The score branch must be UNIQUE per concurrent shard. run_id is a HHMMSS
+    # timestamp, so two shards firing in the same second collide on the branch name
+    # (each runs-root namespaces the LOCAL dir, but not the shared remote branch) and
+    # the second push is rejected non-fast-forward. When SCORE_LABEL is non-default
+    # (a shard), suffix the branch with the label's discriminator so every shard owns
+    # its own branch. Default label -> unchanged branch name (scheduled v3.0 lane).
+    _lbl_suffix = SCORE_LABEL.replace("zo-sentinel-score", "").lstrip("-")
+    score_branch = f"score-job-{ts}" + (f"-{_lbl_suffix}" if _lbl_suffix else "")
     repo_url = f"https://x-access-token:{pat}@github.com/{SFT_REPO}.git"
     # unique dir per attempt: Windows file locks make rmtree unreliable, and a
     # half-deleted dir fails `git clone` with rc=128.

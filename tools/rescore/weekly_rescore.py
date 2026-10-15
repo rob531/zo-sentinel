@@ -869,6 +869,21 @@ def ph_export(run: Run, args) -> None:
             note = f"snap: FAILED ({exc.__class__.__name__}: {exc}) -- plain slice"
         log(f"export: {note}")
         run.state["refresh_snap"] = note
+    # BOUNDED NEW-WAVE CAP (2026-10-15). new_rows (never-scored-under-this-version)
+    # is otherwise UNCAPPED, so a brand-new model_version would try to score the whole
+    # corpus in one pod. RESCORE_NEW_CAP=N bounds each wave to N never-scored servers,
+    # chosen deterministically (sorted by server_id) so sequential waves tile the corpus
+    # and a resume picks up exactly where the last wave stopped -- the pipeline's
+    # (server_id, model_version) dedup makes any overlap converge rather than double-score.
+    # Unset -> unbounded, so the scheduled v3.0 delta lane is unchanged. Refresh half is
+    # already capped by --refresh-cap; this is the matching knob for the never-scored half.
+    _new_cap = os.environ.get("RESCORE_NEW_CAP")
+    if _new_cap and _new_cap.isdigit() and int(_new_cap) > 0:
+        new_rows.sort(key=lambda r: r[0])
+        _nc = int(_new_cap)
+        log(f"export: RESCORE_NEW_CAP={_nc} -- bounding never-scored half "
+            f"{len(new_rows)} -> {min(_nc, len(new_rows))} (sorted by server_id)")
+        new_rows = new_rows[:_nc]
     uniq = new_rows + refresh_rows
     cohort_sids = [r[0] for r in uniq]
 

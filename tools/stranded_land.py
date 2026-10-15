@@ -344,7 +344,11 @@ def referent_sites_in_batch(cols: dict, want_rels):
         sites += list(s or [])
     for _c, d in (cols.get("spread") or {}).items():
         sites += list((d or {}).get("sites") or [])
-    norm = lambda p: str(p).replace("\\", "/")
+    import re as _re
+    def norm(p):
+        # referent_verify reports a site as "<path>:<lineno>"; drop the lineno
+        # before matching, and fold any OS backslash separators to "/".
+        return _re.sub(r":\d+$", "", str(p).replace(chr(92), "/"))
     want_norm = {norm(w): w for w in want_rels}
     hit = set()
     for raw in sites:
@@ -764,6 +768,19 @@ def self_test() -> int:
          "run_gate(clone)" in _gsrc and "run_referent_gate(clone" in _gsrc,
          "gate-set source did not name both gates")
 
+    # P12e -- referent_verify reports a site as "<path>:<lineno>". The lineno
+    # must be stripped before matching, or EVERY real failure attributes to
+    # nothing and the lander refuses to push instead of dropping the offender.
+    # This is the exact bite seen live on 2026-10-15 (rejects nothing -> refuse)
+    # before the strip was added; this pole goes RED if it is removed.
+    pole("P12e a site carrying a :lineno suffix still attributes to its batch file",
+         referent_sites_in_batch(
+             {"verdict": "FAIL", "spread": {},
+              "unlisted": {"t.c": ["services/staged/scoring_freshness_dashboard/__init__.py:206"]}},
+             ["services/staged/scoring_freshness_dashboard/__init__.py"]) ==
+         ["services/staged/scoring_freshness_dashboard/__init__.py"],
+         "a :lineno-suffixed site was not attributed to its file")
+
     for name, ok, detail in poles:
         print("  %-4s %s%s" % ("ok" if ok else "FAIL", name,
                                "" if ok else "   <-- " + detail))
@@ -917,7 +934,13 @@ def main(argv=None) -> int:
 
         want_rels, dropped, gate_text = list(rels), [], ""
         gate_dropped_keys = set()
-        for attempt in (1, 2, 3):
+        # Two gates (no_hollow + referent_verify) drop more units than the
+        # three attempts the no_hollow-only era budgeted, and the small end of
+        # the queue is dense with both hollow scaffolds and column phantoms.
+        # dropped_keys only grows over a finite pool, so the loop still
+        # terminates; the final attempt shrinks rather than refills.
+        MAX_GATE_ATTEMPTS = 10
+        for attempt in range(1, MAX_GATE_ATTEMPTS + 1):
             staged, why = build_commit(clone, runtime, "_stranded_land_wip", want_rels,
                                        message(len(want_rels), dropped))
             if staged is None:
@@ -944,7 +967,7 @@ def main(argv=None) -> int:
             dropped += inside
             batch_units, gate_dropped_keys = refill_after_gate(
                 units, batch_units, inside, want, gate_dropped_keys,
-                last_attempt=(attempt == 3))
+                last_attempt=(attempt == MAX_GATE_ATTEMPTS))
             want_rels = sorted(x for u in batch_units for x in u["rels"])
             if not want_rels:
                 print("\nREFUSED: every file in this batch is rejected by %s. Nothing to land." % gate_label)
@@ -952,7 +975,7 @@ def main(argv=None) -> int:
                 return 1
             print("  dropping unit(s) %s and %s the batch from origin/main: %d file(s) of a %d budget"
                   % (sorted(gate_dropped_keys),
-                     "shrinking" if attempt == 3 else "REFILLING",
+                     "shrinking" if attempt == MAX_GATE_ATTEMPTS else "REFILLING",
                      len(want_rels), want))
         else:
             print("\nREFUSED: %s still RED after dropping %s. Not pushing a red batch." % (gate_label, dropped))

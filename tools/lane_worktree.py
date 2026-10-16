@@ -96,6 +96,16 @@ def ensure(lane: str, target: str = "origin/main", repo: str | None = None,
         created = True
 
     runner(path, "fetch", "origin", "--quiet")
+    # FU-666: a worktree shares the primary clone's object store, so it inherits any
+    # SHALLOW graft. A shallow graft makes `git merge-base A B` return EMPTY and
+    # `rev-list A..B` truncate at the graft boundary, silently under-reading drift --
+    # which is precisely the corroboration prod-drift-sentinel relies on. Deepen to
+    # full history once; `fetch --unshallow` is a near-noop when already complete, so
+    # this stays idempotent in character.
+    _, shallow = runner(path, "rev-parse", "--is-shallow-repository")
+    deepened = shallow.strip() == "true"
+    if deepened:
+        runner(path, "fetch", "--unshallow", "origin", "--quiet")
     rc, out = runner(path, "checkout", "--detach", target, "-q")
     if rc != 0:
         return {"lane": lane, "path": path, "ok": False, "created": created,
@@ -107,7 +117,7 @@ def ensure(lane: str, target: str = "origin/main", repo: str | None = None,
         "lane": lane, "path": path, "ok": head == tgt, "created": created,
         "head": head[:12], "target": tgt[:12],
         "dirty": len([x for x in dirty.splitlines() if x.strip()]),
-        "shared": is_shared(path),
+        "shared": is_shared(path), "deepened": deepened,
     }
 
 

@@ -1,9 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from datetime import datetime, timedelta
+"""GET /registry/freshness-report: scan staleness per registry source.
+
+Reads Fly Postgres through the injected session. Until FU-667 (#6985) this
+POSTed SQL to http://127.0.0.1:8772/query -- the factory DuckDB write_service,
+which runs on the ZoComputer host and is not in the Fly image -- so on Fly the
+route could only 500 (Errno 111), from its 2026-09-28 mount (#5689) on.
+The data was in Postgres the whole time; the handler already took a session.
+"""
+from datetime import datetime, timezone
 from statistics import mean
 from typing import List, Optional
-import requests
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.db import get_session
 from app.models import McpServerRegistry
 
@@ -25,27 +36,25 @@ class FreshnessReport(BaseModel):
 def get_stale_threshold_days(stale_threshold_days: Optional[int] = Query(30)) -> int:
     return stale_threshold_days
 
-def calculate_days_since_last_scan(last_scanned: datetime) -> int:
-    return (datetime.utcnow() - last_scanned).days
+def _as_utc(ts: datetime) -> datetime:
+    # timestamptz comes back aware from Postgres, naive from sqlite.
+    return ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts.astimezone(timezone.utc)
 
-def get_registry_data(session=Depends(get_session)) -> List[McpServerRegistry]:
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={
-                "query": "SELECT * FROM mcp_server_registry",
-                "params": []
-            }
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def calculate_days_since_last_scan(last_scanned: datetime) -> int:
+    return (datetime.now(timezone.utc) - _as_utc(last_scanned)).days
+
+def get_registry_data(session: Session) -> List[tuple]:
+    """(registry_source, last_scanned) for every scanned server. Two columns, not
+    SELECT *. Never-scanned servers have no scan age; /registry/freshness counts them."""
+    return session.execute(
+        select(McpServerRegistry.registry_source, McpServerRegistry.last_scanned)
+        .where(McpServerRegistry.last_scanned.isnot(None))
+    ).all()
 
 @router.get("/registry/freshness-report", response_model=FreshnessReport)
-async def get_freshness_report(
+def get_freshness_report(
     stale_threshold_days: int = Depends(get_stale_threshold_days),
-    session=Depends(get_session)
+    session: Session = Depends(get_session)
 ):
     registry_data = get_registry_data(session)
 
@@ -53,9 +62,9 @@ async def get_freshness_report(
     total_servers = 0
     total_stale_servers = 0
 
-    for server in registry_data:
-        source = server["registry_source"]
-        last_scanned = datetime.fromisoformat(server["last_scanned"])
+    for source, last_scanned in registry_data:
+        source = source or "unknown"
+        last_scanned = _as_utc(last_scanned)
 
         days_since_last_scan = calculate_days_since_last_scan(last_scanned)
         is_stale = days_since_last_scan > stale_threshold_days
@@ -111,61 +120,3 @@ async def get_freshness_report(
         overall_stale_pct=overall_stale_pct,
         alerts=alerts
     )
-
-if __name__ == "__main__":
-    from fastapi.testclient import TestClient
-    from app.db import get_session
-    from app.models import McpServerRegistry
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    # Setup test database
-    test_engine = create_engine("sqlite:///:memory:")
-    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-    McpServerRegistry.metadata.create_all(test_engine)
-
-    # Override the get_session dependency for testing
-    app.dependency_overrides[get_session] = lambda: TestSessionLocal()
-
-    # Create test app
-    app = FastAPI()
-    app.include_router(router)
-
-    # Seed test data
-    test_session = TestSessionLocal()
-    test_data = [
-        McpServerRegistry(
-            registry_source="source1",
-            last_scanned=(datetime.utcnow() - timedelta(days=1)).isoformat()
-        ),
-        McpServerRegistry(
-            registry_source="source1",
-            last_scanned=(datetime.utcnow() - timedelta(days=5)).isoformat()
-        ),
-        McpServerRegistry(
-            registry_source="source2",
-            last_scanned=(datetime.utcnow() - timedelta(days=40)).isoformat()
-        ),
-        McpServerRegistry(
-            registry_source="source2",
-            last_scanned=(datetime.utcnow() - timedelta(days=45)).isoformat()
-        ),
-        McpServerRegistry(
-            registry_source="source3",
-            last_scanned=(datetime.utcnow() - timedelta(days=20)).isoformat()
-        )
-    ]
-    test_session.add_all(test_data)
-    test_session.commit()
-
-    # Test the endpoint
-    client = TestClient(app)
-    response = client.get("/registry/freshness-report?stale_threshold_days=30")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data["sources"], list)
-    assert 0 <= data["overall_stale_pct"] <= 100
-    assert isinstance(data["alerts"], list)
-
-    print("PASS")

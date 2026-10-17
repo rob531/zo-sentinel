@@ -153,8 +153,9 @@ def _read_surface_health(timeout: float = 2.0) -> dict:
     (which also covers the connect)."""
     import threading as _threading
     import time as _time
-    from sqlalchemy import text as _text
-    from .db import engine as _engine
+    from sqlalchemy import literal as _literal, select as _select, text as _text
+    from . import models as _models  # noqa: F401 -- registers the tables on Base.metadata
+    from .db import Base as _Base, engine as _engine
 
     outcome: dict = {}
 
@@ -164,8 +165,9 @@ def _read_surface_health(timeout: float = 2.0) -> dict:
                 if conn.dialect.name == "postgresql":
                     conn.execute(_text("SELECT set_config('statement_timeout', :ms, true)"),
                                  {"ms": str(int(timeout * 1000))})
-                for table in _READ_SURFACE_TABLES:
-                    conn.execute(_text(f"SELECT 1 FROM {table} LIMIT 1"))
+                for name in _READ_SURFACE_TABLES:
+                    table = _Base.metadata.tables[name]
+                    conn.execute(_select(_literal(1)).select_from(table).limit(1))
             outcome["error"] = None
         except Exception as e:  # noqa: BLE001 -- health must always return
             outcome["error"] = f"{type(e).__name__}: {e}"

@@ -127,45 +127,64 @@ from ._spine_generated import include_spine
 include_spine(app)  # boot-anyway in prod; strict raise is a CI-only gate
 
 
+# The Postgres tables the freshness / registry / scoring read routes query.
+_READ_SURFACE_TABLES = ("mcp_server_registry", "mcp_llm_axis_scores", "cadence_job_runs")
+
+
 def _read_surface_health(timeout: float = 2.0) -> dict:
-    """Runtime liveness of the :8772 moat query backend that the freshness /
-    registry / scoring read routes proxy to (they POST SQL to
-    `<WRITE_SERVICE_URL>/query`; default `http://127.0.0.1:8772`).
+    """Runtime liveness of the backend the freshness / registry / scoring read
+    routes actually query: Postgres, through app.db's engine.
 
     WHY THIS EXISTS (FU-667 / issue #6985): /spine/health 'ok' used to be
     import-health ONLY -- a router that MOUNTED fine still read ok=true even
-    when the backend it calls was dead, which is how a 3-day read-surface
-    outage stayed invisible (every /freshness hung HTTP 000 while the spine
-    said ok=true). This probes the SAME backend the read routes hit, with a
-    SHORT timeout so the health endpoint can never itself inherit the
-    /freshness hang. A probe that is observed going RED (connrefused -> ok
-    False) and GREEN (200 -> ok True) is the negative control this fix owes."""
+    when the backend it calls was dead. #6990 first aimed this probe at :8772,
+    but :8772 is the factory DuckDB write_service on the ZoComputer host and is
+    not in the Fly image: on prod that probe could only read RED, so
+    tools/accept_gate.py would have REJECTed every deploy. The two
+    routes that called :8772 now read Postgres, so the probe follows them.
+
+    Proves: Postgres answers and every read-surface table is readable (a dead
+    DB or a lock held on one of them reads RED). Does NOT prove the corpus
+    aggregates are fast -- a cold /freshness can still be slow, and that is
+    query cost, which no redeploy or rollback fixes, so it is not gated here.
+
+    Bounded twice so the health endpoint never inherits a hang: Postgres
+    statement_timeout on each statement, and a thread join over the whole probe
+    (which also covers the connect)."""
+    import threading as _threading
     import time as _time
-    import requests as _requests
-    url = _os.getenv("WRITE_SERVICE_URL", "http://127.0.0.1:8772").rstrip("/")
+    from sqlalchemy import text as _text
+    from .db import engine as _engine
+
+    outcome: dict = {}
+
+    def _probe() -> None:
+        try:
+            with _engine.connect() as conn:
+                if conn.dialect.name == "postgresql":
+                    conn.execute(_text("SELECT set_config('statement_timeout', :ms, true)"),
+                                 {"ms": str(int(timeout * 1000))})
+                for table in _READ_SURFACE_TABLES:
+                    conn.execute(_text(f"SELECT 1 FROM {table} LIMIT 1"))
+            outcome["error"] = None
+        except Exception as e:  # noqa: BLE001 -- health must always return
+            outcome["error"] = f"{type(e).__name__}: {e}"
+
     started = _time.monotonic()
-    try:
-        resp = _requests.post(
-            f"{url}/query",
-            json={"query": "SELECT 1", "params": []},
-            timeout=timeout,
-        )
-        alive = resp.status_code == 200
-        return {
-            "ok": alive,
-            "backend": url,
-            "status_code": resp.status_code,
-            "latency_ms": round((_time.monotonic() - started) * 1000, 1),
-            "detail": None if alive else f"HTTP {resp.status_code}",
-        }
-    except Exception as e:  # requests.RequestException + any unexpected -- health must always return
-        return {
-            "ok": False,
-            "backend": url,
-            "status_code": None,
-            "latency_ms": round((_time.monotonic() - started) * 1000, 1),
-            "detail": f"{type(e).__name__}: {e}",
-        }
+    worker = _threading.Thread(target=_probe, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        detail = f"no answer within {timeout}s"
+    else:
+        detail = outcome["error"]
+    return {
+        "ok": detail is None,
+        "backend": _engine.dialect.name,
+        "tables": list(_READ_SURFACE_TABLES),
+        "latency_ms": round((_time.monotonic() - started) * 1000, 1),
+        "detail": detail,
+    }
 
 
 @app.get("/spine/health")
@@ -174,7 +193,7 @@ def spine_health(deep: bool = True):
     mounted / skipped_no_router / failures are recorded by include_spine().
 
     'ok' now folds in the RUNTIME read-surface probe (FU-667/#6985): a mounted
-    router whose :8772 backend is dead no longer reads ok=true. `mount_ok`
+    router whose Postgres backend is dead no longer reads ok=true. `mount_ok`
     preserves the old import-health-only signal unchanged. Pass `?deep=false`
     for the fast mount-only path (no network call)."""
     st = app.state

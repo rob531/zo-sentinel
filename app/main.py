@@ -127,14 +127,64 @@ from ._spine_generated import include_spine
 include_spine(app)  # boot-anyway in prod; strict raise is a CI-only gate
 
 
+def _read_surface_health(timeout: float = 2.0) -> dict:
+    """Runtime liveness of the :8772 moat query backend that the freshness /
+    registry / scoring read routes proxy to (they POST SQL to
+    `<WRITE_SERVICE_URL>/query`; default `http://127.0.0.1:8772`).
+
+    WHY THIS EXISTS (FU-667 / issue #6985): /spine/health 'ok' used to be
+    import-health ONLY -- a router that MOUNTED fine still read ok=true even
+    when the backend it calls was dead, which is how a 3-day read-surface
+    outage stayed invisible (every /freshness hung HTTP 000 while the spine
+    said ok=true). This probes the SAME backend the read routes hit, with a
+    SHORT timeout so the health endpoint can never itself inherit the
+    /freshness hang. A probe that is observed going RED (connrefused -> ok
+    False) and GREEN (200 -> ok True) is the negative control this fix owes."""
+    import time as _time
+    import requests as _requests
+    url = _os.getenv("WRITE_SERVICE_URL", "http://127.0.0.1:8772").rstrip("/")
+    started = _time.monotonic()
+    try:
+        resp = _requests.post(
+            f"{url}/query",
+            json={"query": "SELECT 1", "params": []},
+            timeout=timeout,
+        )
+        alive = resp.status_code == 200
+        return {
+            "ok": alive,
+            "backend": url,
+            "status_code": resp.status_code,
+            "latency_ms": round((_time.monotonic() - started) * 1000, 1),
+            "detail": None if alive else f"HTTP {resp.status_code}",
+        }
+    except Exception as e:  # requests.RequestException + any unexpected -- health must always return
+        return {
+            "ok": False,
+            "backend": url,
+            "status_code": None,
+            "latency_ms": round((_time.monotonic() - started) * 1000, 1),
+            "detail": f"{type(e).__name__}: {e}",
+        }
+
+
 @app.get("/spine/health")
-def spine_health():
+def spine_health(deep: bool = True):
     """Visible mount status for the SOA spine -- the anti-invisibility surface.
-    mounted / skipped_no_router / failures are recorded by include_spine()."""
+    mounted / skipped_no_router / failures are recorded by include_spine().
+
+    'ok' now folds in the RUNTIME read-surface probe (FU-667/#6985): a mounted
+    router whose :8772 backend is dead no longer reads ok=true. `mount_ok`
+    preserves the old import-health-only signal unchanged. Pass `?deep=false`
+    for the fast mount-only path (no network call)."""
     st = app.state
     failures = getattr(st, "spine_mount_failures", [])
+    mount_ok = not failures
+    read_surface = _read_surface_health() if deep else None
     return {
-        "ok": not failures,
+        "ok": mount_ok and (read_surface is None or read_surface["ok"]),
+        "mount_ok": mount_ok,
+        "read_surface": read_surface,
         "service_count": getattr(st, "spine_service_count", 0),
         "mounted": getattr(st, "spine_mounted", []),
         "skipped_no_router": getattr(st, "spine_skipped_no_router", []),

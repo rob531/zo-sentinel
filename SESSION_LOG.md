@@ -110,3 +110,16 @@ rob531/zo-fleet-tools `histo/` (draft PR zo-fleet-tools#86): 20 task rows, the f
 LOCO_CHAIRMAN: minted GC-15 (the identity-blind grant) and opened GR-26 (C0) and GR-27 (C0,
 dead peer-review adversaries); added queue entry 0i; added a CREDIT_LEDGER Sessions row.
 Routes: none (no ui_server.py change)
+
+## 2026-10-17T21:00Z
+FU-667 / #6985 evaluation (cloud). Option 1 ("supervise :8772 in the Fly entrypoint") cannot fix
+the outage: write_service is not in the image, and the issue merged two failures. (1) The two HTTP-500
+routes POSTed to 127.0.0.1:8772, which does not exist on Fly; they now read Postgres through the session
+they already took. (2) /freshness and /registry/freshness never called :8772 -- the hang is Postgres-side.
+Measured on local PG16 with the migrated schema (300k registry / 1.6M scores): the /freshness `NOT IN`
+anti-join plans as a plain SubPlan at work_mem=4MB and was cancelled at 90s, while 16MB hashes it; NOT
+EXISTS takes 0.5s. Orphaned NOT IN backends keep running after their client is killed
+(client_connection_check_interval=0). #6990's /spine/health probe now checks Postgres instead of :8772
+(it would have REJECTed every deploy). Correction posted on #6985; LOCO_CHAIRMAN GR-29 opened (GC-11, C0).
+Prod itself was unreachable from the cloud session (network policy), so nothing here is a prod measurement.
+Routes: /registry/freshness-report, /scoring/waves/summary, /freshness, /spine/health (app/, not ui_server.py)

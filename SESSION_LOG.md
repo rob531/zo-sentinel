@@ -123,3 +123,10 @@ EXISTS takes 0.5s. Orphaned NOT IN backends keep running after their client is k
 (it would have REJECTed every deploy). Correction posted on #6985; LOCO_CHAIRMAN GR-29 opened (GC-11, C0).
 Prod itself was unreachable from the cloud session (network policy), so nothing here is a prod measurement.
 Routes: /registry/freshness-report, /scoring/waves/summary, /freshness, /spine/health (app/, not ui_server.py)
+
+## 2026-10-17T22:45Z
+GR-29 grade move C0 -> C1 on the merge of #7016 (`1fd0a6f0`). Re-measured the class before moving it: an AST
+census of the Dockerfile COPY set finds the two fixed routes clean, and 10 live siblings still calling :8772 from
+Fly-bound code (6 mounted root routers, 4 services/active packages) plus 1 dead constant; the row now lists them
+and splits the C3 and C4 steps. No code change.
+Routes: none

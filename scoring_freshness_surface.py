@@ -64,11 +64,21 @@ def _compute(db: Session) -> dict:
     # the subtraction and drifts the published gap. This is the same anti-join
     # the sibling `/servers/never-scored` surface (never_scored_backlog_api.py)
     # already uses -- one aggregate COUNT, no per-server rows, THE LINE honoured.
-    scored_ids = select(McpLlmAxisScore.server_id).distinct().scalar_subquery()
+    #
+    # NOT EXISTS, not NOT IN (FU-667 / #6985). Postgres can only run
+    # `NOT IN (subquery)` as a SubPlan: hashed while the distinct server_id set
+    # fits in work_mem, otherwise rescanned once per registry row (~registry x
+    # scored). That is a cliff, not a slope. Measured on PG16, migrated schema,
+    # 300k registry / 1.6M score rows / 200k scored servers: work_mem=4MB ->
+    # plain SubPlan, cancelled at 90s; 16MB -> hashed. NOT EXISTS at 4MB plans
+    # as a hash anti-join: 0.5s, same count.
+    has_score = (select(McpLlmAxisScore.server_id)
+                 .where(McpLlmAxisScore.server_id == McpServerRegistry.server_id)
+                 .exists())
     never_scored = db.scalar(
         select(func.count())
         .select_from(McpServerRegistry)
-        .where(McpServerRegistry.server_id.notin_(scored_ids))) or 0
+        .where(~has_score)) or 0
     newest = db.scalar(select(func.max(McpLlmAxisScore.scored_at)))
     oldest = db.scalar(select(func.min(McpLlmAxisScore.scored_at)))
     return {

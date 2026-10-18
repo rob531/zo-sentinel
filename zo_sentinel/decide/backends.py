@@ -108,8 +108,12 @@ class JevBackend:
             resp = json.loads(r.read().decode())
         ms = (time.monotonic() - t0) * 1000
         return self.parse(resp, plan), {"calls": 1, "latency_ms": ms,
-                                        "cost_usd": float((resp.get("usage") or {}).get("cost") or 0.0),
+                                        "cost_usd": self.cost_from(resp),
                                         "model": resp.get("model", self.model)}
+
+    @staticmethod
+    def cost_from(resp: Mapping) -> float:
+        return float((resp.get("usage") or {}).get("cost") or 0.0)
 
     @staticmethod
     def parse(resp: Mapping, plan) -> Dict:
@@ -127,3 +131,25 @@ class JevBackend:
             else:
                 raw[qid] = {str(k): float(v) for k, v in (a.get("probabilities") or {}).items()}
         return raw
+
+
+class GlideBackend(JevBackend):
+    """Fastino GLiDE: same Noul/Choice/Score request and response shape as Jev.
+
+    POST https://api.fastino.ai/v1/systemone, model must be "fastino/GLiDE",
+    key from FASTINO_API_KEY (AgentVault). The response carries usage.input_tokens
+    but no cost field, so cost is computed at the documented $0.15 / 1M input tokens
+    (output free). Per-question limit is 40k tokens; core's 32k state guard is stricter.
+    """
+    name = "glide"
+    DEFAULT_URL = "https://api.fastino.ai/v1/systemone"
+    USD_PER_INPUT_TOKEN = 0.15 / 1_000_000
+
+    def __init__(self, url: str = None, timeout: float = 15.0, opener=None):
+        super().__init__(model="fastino/GLiDE", url=url or os.environ.get("GLIDE_BASE_URL", self.DEFAULT_URL),
+                         key_env="FASTINO_API_KEY", timeout=timeout, opener=opener)
+
+    @staticmethod
+    def cost_from(resp) -> float:
+        tok = ((resp.get("usage") or {}).get("input_tokens")) or 0
+        return float(tok) * GlideBackend.USD_PER_INPUT_TOKEN

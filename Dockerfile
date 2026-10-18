@@ -14,6 +14,8 @@ COPY facet_enum_service.py perspective_model.py perspective_query_api.py perspec
 # policy module (kill-switch chain) -- without this the vuln surfaces are
 # permanently fail-closed on Fly (found 2026-07-04: ZO_VULN_ENABLED had no lever)
 COPY zo_sentinel/__init__.py zo_sentinel/policy.py zo_sentinel/policy_defaults.toml /srv/zo_sentinel/
+# Typed-decision package, imported lazily by app/routers/decide_shadow.py (/app shadow mode).
+COPY zo_sentinel/decide /srv/zo_sentinel/decide
 
 # FU-102: root modules registered in services/active/ but absent from the image.
 # Without these the app mounts them at build time and prod raises ModuleNotFoundError

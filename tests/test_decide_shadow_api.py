@@ -115,3 +115,14 @@ def test_routes_live_where_the_page_calls_them(shadow):
     paths = {r.path for r in shadow.router.routes}
     assert "/api/decide/shadow" in paths and "/api/admin/decide/shadow" in paths
     assert "fetch('/api/decide/shadow'" in (ROOT / "app" / "static" / "app.html").read_text(encoding="utf-8")
+
+
+def test_direct_typesafe_key_enables_when_base_url_points_there(shadow, monkeypatch):
+    # Prod uses the direct TypeSafe endpoint; the switch must look for the key the backend will use.
+    monkeypatch.setenv("DECIDE_SHADOW", "1")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "x")
+    assert shadow.shadow_enabled() is False          # default endpoint is OpenRouter
+    monkeypatch.setenv("JEV_BASE_URL", "https://api.typesafe.ai/v1/systemone")
+    assert shadow.shadow_enabled() is True
+    import zo_sentinel.decide.backends as b
+    assert b.JevBackend().key_env == "TYPESAFE_API_KEY"   # and the backend agrees

@@ -1,0 +1,13 @@
+[service]
+name = "decide_shadow_api"
+import_path = "decide_shadow_api"
+prefix = "/api"
+tag = "decide"
+origin = "live"
+auth = "public"
+needs_data_layer = false
+
+# Shadow-mode typed-decision composer for /app (docs/eval/JEV_TYPED_DECISIONS_EVAL.md).
+# Off unless DECIDE_SHADOW=1 and the backend key is present; logs what it WOULD show,
+# never changes what the analyst sees. Approved by the chairman 2026-10-18.
+# Code lives at the root module path (decide_shadow_api.py); this file registers it.

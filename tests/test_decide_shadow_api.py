@@ -1,4 +1,4 @@
-"""decide_shadow_api: off by default, bounded, never raises, summarises honestly.
+"""app.routers.decide_shadow: off by default, bounded, never raises, summarises honestly.
 
 Imports the module with its one heavy dependency (verdict_breakdown_api, which pulls the
 DB layer) stubbed, so this runs without Postgres or Clerk.
@@ -25,8 +25,8 @@ def shadow(monkeypatch):
     stub.get_principal = lambda: Principal()
     stub.require_admin = lambda: Principal("admin")
     monkeypatch.setitem(sys.modules, "verdict_breakdown_api", stub)
-    sys.modules.pop("decide_shadow_api", None)
-    import decide_shadow_api as m
+    sys.modules.pop("app.routers.decide_shadow", None)
+    from app.routers import decide_shadow as m
     m._RECORDS.clear()
     m._WINDOW.update(start=0.0, count=0)
     for k in ("DECIDE_SHADOW", "DECIDE_SHADOW_BACKEND", "OPENROUTER_API_KEY", "FASTINO_API_KEY",
@@ -107,3 +107,11 @@ def test_summary_reports_agreement_and_errors(shadow):
 def test_query_length_is_bounded(shadow):
     with pytest.raises(Exception):
         shadow.ShadowIn(q="x" * 301, actual="explore")
+
+
+def test_routes_live_where_the_page_calls_them(shadow):
+    # The spine's include_router() applies no prefix, so the router must carry /api itself;
+    # app.html POSTs to /api/decide/shadow. A bare APIRouter() mounted these at /decide/...
+    paths = {r.path for r in shadow.router.routes}
+    assert "/api/decide/shadow" in paths and "/api/admin/decide/shadow" in paths
+    assert "fetch('/api/decide/shadow'" in (ROOT / "app" / "static" / "app.html").read_text(encoding="utf-8")

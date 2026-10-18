@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 from verdict_breakdown_api import Principal, get_principal, require_admin
 
 log = logging.getLogger("decide_shadow")
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["decide"])  # spine include_router() applies no prefix
 
 _RECORDS: deque = deque(maxlen=500)
 _LOCK = threading.Lock()

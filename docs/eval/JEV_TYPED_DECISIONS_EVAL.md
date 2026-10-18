@@ -88,13 +88,36 @@ Model `typesafe/jev-1.13-20260917`, floor 0.45, same harness and rows as the bas
 `/app` behind a flag in shadow (log spec vs the page's actual route), and inspect the 16
 frontend-recipe disagreements before any builder change.
 
-## GLiDE (Fastino) backend
+## GLiDE (Fastino) — live results, 2026-10-17 (run on the tower, key from the keyring)
 
-Same Noul/Choice/Score primitives and response shape; `GlideBackend` is a subclass
-(`POST api.fastino.ai/v1/systemone`, model `fastino/GLiDE`, key `FASTINO_API_KEY`,
-$0.15 / 1M input tokens, about 3.6x Jev's reported price). Fastino describes it as
-spending more reasoning on uncertain decisions. Not yet run: no `FASTINO_API_KEY` on
-the tower or zo. Once present: `eval_decide.py --suite ui --backend glide`.
+Same harness, rows and floor as Jev. Key read from the tower keyring entry
+`towersideglide` into the eval process only.
+
+| Measure | Jev | GLiDE |
+|---|---|---|
+| View accuracy, end to end | **0.925** | 0.900 |
+| Coverage (answered) | 0.95 | 0.925 |
+| View accuracy, answered | 0.947 | 0.919 |
+| Risk filter / panels | 0.95 / 0.975 | 0.95 / 0.975 |
+| Calibration error (ECE) | **0.027** | 0.075 |
+| Latency p50 / max | **107 / 169 ms** | 391 / 422 ms |
+| Cost per composition | **~$0.000026** | ~$0.000065 |
+| Same probabilities on repeat (8 calls) | no | **yes, bit-identical** |
+| Recipe agreement with heuristic (200) | 0.70 | 0.53 |
+
+- Both clear the UI bar. Jev is more accurate, better calibrated, ~3.7x faster and
+  ~2.5x cheaper. GLiDE is the only one that is actually deterministic: identical
+  probabilities on every repeat, where Jev drifted on a near-tie.
+- GLiDE's recipe disagreement is one-directional: 82 of the 200 directives the
+  heuristic routes to the FastAPI recipe, GLiDE routes to `module_from_exemplar`.
+  That is the same default the architect's server stamps today
+  (`directive_mcp.py:646`), so it may be agreeing with the system, not erring.
+  Inspect before trusting either side.
+- Both misrouted the injection probe to the dashboard; neither could reach admin.
+
+**Use:** Jev for live, latency-sensitive UI composition. GLiDE where a decision must
+replay exactly (gates, audit trails, anything re-evaluated later), or as a second
+vote when the two disagree.
 
 ## Cost model (at the reported price — verify on the OpenRouter model page before spend)
 
@@ -132,10 +155,12 @@ The money is not the constraint. Trust boundary and data egress are.
 
 ## Decisions needed from the chairman
 
-- Approve one OpenRouter (or TypeSafe) key into AgentVault with a hard spend cap
-  (~$5 is ample for months of shadow evals). Without it, step 2 cannot run.
+- Keys: resolved 2026-10-17. Jev runs via zo's `OPENROUTER_API_KEY`; the tower keyring
+  also holds `jevapi` (direct TypeSafe) and `towersideglide` (GLiDE). `fetch_secret.py`
+  does not map either keyring name yet, so a mesh caller cannot reach them by service id.
 - Data: only analyst queries and our own directives would be sent; no customer or
   firm data. TypeSafe offers zero-retention to enterprise customers only.
+- Open: approve wiring `compose()` into `/app` in shadow (log only, no user-visible change).
 
 ## Sources
 

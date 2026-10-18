@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from zo_sentinel.decide import Choice, decide  # noqa: E402
-from zo_sentinel.decide.backends import JevBackend, LexicalBackend  # noqa: E402
+from zo_sentinel.decide.backends import GlideBackend, JevBackend, LexicalBackend  # noqa: E402
 from zo_sentinel.decide.ui_compose import compose  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -123,14 +123,14 @@ def run_recipe(backend, debias, floor, limit):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--suite", choices=["ui", "recipe"], default="ui")
-    ap.add_argument("--backend", choices=["lexical", "jev"], default="lexical")
+    ap.add_argument("--backend", choices=["lexical", "jev", "glide"], default="lexical")
     ap.add_argument("--debias", action="store_true", help="answer twice with options reversed")
     ap.add_argument("--floor", type=float, default=0.45)
     ap.add_argument("--limit", type=int, default=10_000)
     ap.add_argument("--out")
     a = ap.parse_args()
-    if a.backend == "jev":
-        be = JevBackend()
+    if a.backend in ("jev", "glide"):
+        be = JevBackend() if a.backend == "jev" else GlideBackend()
         if not be.available():
             print(f"REFUSED: {be.key_env} not set (inject via AgentVault)", file=sys.stderr)
             return 2

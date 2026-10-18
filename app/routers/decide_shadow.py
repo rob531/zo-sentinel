@@ -50,7 +50,11 @@ def _backend_name() -> str:
 
 
 def _key_env(name: str) -> str:
-    return "FASTINO_API_KEY" if name == "glide" else "OPENROUTER_API_KEY"
+    # Mirror JevBackend: JEV_BASE_URL pointing at api.typesafe.ai means the direct
+    # TypeSafe key, otherwise the OpenRouter key. Must match or the switch reads OFF.
+    if name == "glide":
+        return "FASTINO_API_KEY"
+    return "TYPESAFE_API_KEY" if "typesafe.ai" in os.environ.get("JEV_BASE_URL", "") else "OPENROUTER_API_KEY"
 
 
 def shadow_enabled() -> bool:

@@ -71,7 +71,7 @@ SPINE_MOUNTS = [   {'name': 'ask_answer_api', 'import_path': 'ask_answer_api', '
         'prefix': '/api',
         'origin': 'live'},
     {   'name': 'decide_shadow_api',
-        'import_path': 'decide_shadow_api',
+        'import_path': 'app.routers.decide_shadow',
         'prefix': '/api',
         'origin': 'live'},
     {   'name': 'directive_queue_health',

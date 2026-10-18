@@ -141,3 +141,34 @@ def test_eval_harness_refuses_jev_without_key_rc2():
     r = subprocess.run([sys.executable, str(ROOT / "tools/decide/eval_decide.py"), "--backend", "jev"],
                        capture_output=True, text=True, env=env)
     assert r.returncode == 2 and "REFUSED" in r.stderr
+
+
+def test_glide_payload_parse_and_cost(monkeypatch):
+    from zo_sentinel.decide.backends import GlideBackend
+    monkeypatch.setenv("FASTINO_API_KEY", "test-not-a-real-key")
+    seen = {}
+
+    def opener(req, timeout):
+        seen["url"], seen["body"] = req.full_url, json.loads(req.data)
+        # Documented GLiDE shape: score is an int index plus expected_level; no usage.cost.
+        return _Resp(json.dumps({"model": "glide", "answers": {
+            "team": {"type": "choice", "choice": "billing", "confidence": 0.9,
+                     "probabilities": {"billing": 0.95, "tech": 0.05}},
+            "urgent": {"type": "noul", "noul": 0.2, "confidence": 0.6},
+            "sev": {"type": "score", "score": 0, "expected_level": 0.3, "confidence": 0.7,
+                    "probabilities": {"0": 0.7, "1": 0.3}, "legend": {"0": "l", "1": "h"}}},
+            "usage": {"input_tokens": 2000, "output_tokens": 9}}).encode())
+
+    qs = {**Q, "urgent": Noul("today?"), "sev": Score("sev", ["l", "h"])}
+    out = decide({"ticket": "refund please"}, qs, GlideBackend(opener=opener))
+    assert seen["url"] == "https://api.fastino.ai/v1/systemone"
+    assert seen["body"]["model"] == "fastino/GLiDE"
+    assert out["team"].value == "billing" and out["urgent"].yes is False and out["sev"].value == "0"
+    assert out["team"].meta["cost_usd"] == pytest.approx(2000 * 0.15 / 1_000_000)
+
+
+def test_glide_without_key_refuses(monkeypatch):
+    from zo_sentinel.decide.backends import GlideBackend
+    monkeypatch.delenv("FASTINO_API_KEY", raising=False)
+    with pytest.raises(DecisionError):
+        decide({}, Q, GlideBackend())

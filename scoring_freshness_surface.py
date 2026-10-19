@@ -27,17 +27,15 @@ A fake zero here is indistinguishable from "the corpus is empty" -- the exact
 class of silent lie freshness_gate.py exists to prevent (an unknown is not a
 zero).
 """
-import threading
-import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import get_session
+from app.db import SessionLocal
 from app.models import McpLlmAxisScore, McpServerRegistry
-from app.read_surface_guard import arm_statement_timeout, is_statement_timeout, timeout_as_503
+from app.read_surface_guard import BackgroundSnapshot
 
 router = APIRouter(tags=["freshness"])
 
@@ -45,15 +43,18 @@ router = APIRouter(tags=["freshness"])
 # than the 7-day SLA these numbers are measured against.
 CACHE_TTL_SECONDS = 600
 
-_lock = threading.Lock()
-_cache: dict | None = None
-_cached_at: float = 0.0
-
 
 def _compute(db: Session) -> dict:
     scores_rows = db.scalar(select(func.count()).select_from(McpLlmAxisScore)) or 0
+    # scored_servers = distinct scored server_ids. COUNT(DISTINCT server_id) over
+    # the 4.7M-row append-only score table forces a sort (measured 24-56s on prod
+    # PG16); COUNT(*) over a GROUP BY server_id hash-aggregates off the
+    # (server_id, ...) unique index as an index-only scan (~5s, same answer).
+    # FU-667: same count, ~10x cheaper.
     scored_servers = db.scalar(
-        select(func.count(func.distinct(McpLlmAxisScore.server_id)))) or 0
+        select(func.count()).select_from(
+            select(McpLlmAxisScore.server_id)
+            .group_by(McpLlmAxisScore.server_id).subquery())) or 0
     registry_rows = db.scalar(select(func.count()).select_from(McpServerRegistry)) or 0
     # never_scored is the coverage hole: registry servers with NO score at all.
     # It MUST be the set difference (registry server_ids NOT IN scores), NOT the
@@ -93,44 +94,19 @@ def _compute(db: Session) -> dict:
     }
 
 
+# FU-667: the aggregates above cost ~50s cold on the prod corpus (COUNT over
+# 4.7M scores + the never-scored anti-join) -- more than any client waits, and
+# more than a request-time statement_timeout can allow, so a request-time
+# compute can only hang (old) or 503 forever (the TTL cache never fills from the
+# request path). They only move weekly. So compute them OFF the request path in
+# a background daemon on a generous budget; the route serves the stored snapshot
+# instantly (200), or 503 "warming" until the first compute lands. Honest: an
+# unknown is a 503, never a fabricated zero.
+_snapshot = BackgroundSnapshot(
+    "scoring_freshness", _compute, SessionLocal,
+    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=300)
+
+
 @router.get("/freshness")
-def scoring_freshness(db: Session = Depends(get_session)) -> dict:
-    global _cache, _cached_at
-    now = time.monotonic()
-    with _lock:
-        fresh_enough = _cache is not None and (now - _cached_at) < CACHE_TTL_SECONDS
-        if fresh_enough:
-            payload = dict(_cache)
-            payload["cache_age_seconds"] = round(now - _cached_at, 1)
-            payload["cache_ttl_seconds"] = CACHE_TTL_SECONDS
-            return payload
-        last_good = _cache  # may be None on a cold worker
-
-    # FU-667: bound the aggregate with a Postgres statement_timeout so a cold
-    # slow compute is CANCELLED by the DB instead of hanging the worker 45s+
-    # (the HTTP 000 "/freshness goes blind" mode). Outside the lock: the compute
-    # can be slow and must not block cache reads by other requests.
-    arm_statement_timeout(db)
-    try:
-        computed = _compute(db)
-    except Exception as exc:  # noqa: BLE001 -- classify the failure
-        if is_statement_timeout(exc) and last_good is not None:
-            # Serve the last good numbers, marked stale, rather than error: the
-            # corpus is reachable, this one pass was just too slow right now.
-            payload = dict(last_good)
-            payload["cache_age_seconds"] = round(time.monotonic() - _cached_at, 1)
-            payload["cache_ttl_seconds"] = CACHE_TTL_SECONDS
-            payload["stale"] = True
-            return payload
-        # No cache to fall back on (cold worker) or a real DB error: raise an
-        # honest 503/500. A fabricated zero would be a silent lie (an unknown is
-        # not a zero -- freshness_gate.py doctrine).
-        raise timeout_as_503(exc)
-
-    with _lock:
-        _cache = computed
-        _cached_at = time.monotonic()
-        payload = dict(_cache)
-        payload["cache_age_seconds"] = 0.0
-        payload["cache_ttl_seconds"] = CACHE_TTL_SECONDS
-    return payload
+def scoring_freshness() -> dict:
+    return _snapshot.get()

@@ -48,9 +48,19 @@ def upgrade():
     # the prod warm: the compute succeeded, the write was refused, so the surface
     # stayed 503). Mirror the grants mcp_server_registry already carries. Postgres
     # only; sqlite (CI/dev) has no role split, so guard on dialect.
+    # GUARD on the role EXISTING: the prod moat PG has mcplookup_app, but the
+    # CI/deploy-compat rehearsal Postgres does NOT -- a bare GRANT there raises
+    # `role "mcplookup_app" does not exist` and fails the in-image alembic run
+    # (caught by deploy-compat: boot_proof NOT PROVEN). A DO block that grants
+    # only when the role is present works on prod and is a clean no-op elsewhere.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON freshness_stats TO mcplookup_app")
+        op.execute(
+            "DO $$ BEGIN "
+            "IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcplookup_app') THEN "
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON freshness_stats TO mcplookup_app; "
+            "END IF; END $$;"
+        )
 
 
 def downgrade():

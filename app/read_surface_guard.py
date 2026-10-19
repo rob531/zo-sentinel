@@ -89,102 +89,174 @@ def timeout_as_503(exc: BaseException) -> HTTPException:
     raise exc
 
 
-# Background statement budget: the corpus-wide aggregates (COUNT over 4.7M
-# scores, the never-scored anti-join) cost ~50s cold on the small Fly PG --
-# fundamentally more than any client will wait. They only move when a weekly
-# rescore lands, so they are computed OFF the request path by a background
-# thread on a generous budget, and the route serves the cached snapshot.
-BACKGROUND_STATEMENT_TIMEOUT_MS = 120_000
+# Background statement budget: the full corpus aggregates cost ~460s cold on
+# the 1-vCPU Fly PG (distinct-servers over 4.7M scores + the never-scored
+# anti-join over 560k registry rows), fundamentally more than any client will
+# wait. They only move when a weekly rescore lands, so they are computed OFF
+# the request path by a SINGLE elected worker and persisted to freshness_stats;
+# routes read that one row. 15-min budget: headroom over the ~8-min cold
+# compute, well under the DB's 15-min default statement_timeout.
+BACKGROUND_STATEMENT_TIMEOUT_MS = 900_000
+
+# Read budget for the one-row freshness_stats lookup the routes do. A primary-
+# key SELECT is sub-millisecond; 5s is pure backstop against a locked table.
+SNAPSHOT_READ_TIMEOUT_MS = 5000
 
 
-class BackgroundSnapshot:
-    """A TTL snapshot computed by a background thread, served instantly by the
-    route (FU-667).
+class SharedSnapshot:
+    """A DB-backed freshness snapshot: computed by ONE elected worker, persisted
+    to the freshness_stats table, served O(1) by every worker and route (FU-667).
 
-    The outage this closes: /freshness / /registry/freshness aggregate over the
-    whole corpus; a cold compute is ~50s, longer than any client waits, so a
-    request-time compute either hangs (old) or 503s forever (the cache can never
-    fill from the request path). This decouples the two: a daemon recomputes on
-    a generous budget and stores the payload; the route reads the stored payload
-    with no DB work. Until the first compute lands the route 503s "warming"
-    (honest -- an unknown is not a fabricated zero).
+    Why DB-backed and lock-elected (not a per-worker in-memory daemon): the
+    aggregates cost ~460s on the 1-vCPU moat PG. A per-worker daemon runs that
+    heavy query once PER gunicorn worker -- with 2 machines x N workers, N
+    concurrent 460s scans saturated the single PG (the v122 pile-up that forced
+    the v122->v121 rollback). Here every worker runs a refresher loop, but each
+    cycle first tries a Postgres session-level ADVISORY LOCK: only the one worker
+    that gets it recomputes and writes the row; all others release instantly and
+    skip. So the heavy aggregate runs at most once per cadence across the whole
+    fleet, never once-per-worker.
 
-    `compute(db)` must accept a Session and return the payload. `session_factory`
-    is app.db.SessionLocal. Thread-safe; at most one refresh runs at a time.
+    The route path never computes: `get()` reads one indexed row. Until the
+    first compute lands the route 503s "warming" (honest -- an unknown is not a
+    fabricated zero). `compute(db)` returns the JSON-serialisable payload.
     """
 
-    def __init__(self, name: str, compute: Callable[[Session], dict],
+    def __init__(self, surface: str, compute: Callable[[Session], dict],
                  session_factory: Callable[[], Session],
-                 ttl_seconds: int = 600, refresh_interval_seconds: int = 300):
-        self.name = name
+                 advisory_lock_key: int,
+                 ttl_seconds: int = 3600, refresh_interval_seconds: int = 1800):
+        self.surface = surface
         self._compute = compute
         self._session_factory = session_factory
+        self.advisory_lock_key = advisory_lock_key
         self.ttl_seconds = ttl_seconds
         self.refresh_interval_seconds = refresh_interval_seconds
         self._lock = threading.Lock()
-        self._payload: Optional[dict] = None
-        self._computed_at: float = 0.0
-        self._refreshing = False
-        self._last_error: Optional[str] = None
         self._thread: Optional[threading.Thread] = None
+        self._last_error: Optional[str] = None
 
-    def _refresh_once(self) -> None:
+    # --- persistence helpers (import here to avoid a cycle at module load) ---
+    def _read_row(self, db: Session):
+        from app.models import FreshnessStat
+        return db.get(FreshnessStat, self.surface)
+
+    def _write_row(self, db: Session, payload: dict, compute_seconds: float) -> None:
+        from datetime import datetime, timezone
+        from app.models import FreshnessStat
+        row = db.get(FreshnessStat, self.surface)
+        now = datetime.now(timezone.utc)
+        if row is None:
+            db.add(FreshnessStat(surface=self.surface, payload=payload,
+                                 computed_at=now, compute_seconds=compute_seconds))
+        else:
+            row.payload = payload
+            row.computed_at = now
+            row.compute_seconds = compute_seconds
+        db.commit()
+
+    def _row_age_seconds(self, db: Session) -> Optional[float]:
+        from datetime import datetime, timezone
+        row = self._read_row(db)
+        if row is None:
+            return None
+        ca = row.computed_at
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - ca).total_seconds()
+
+    def refresh_if_stale(self, force: bool = False) -> bool:
+        """If this surface's row is missing or older than refresh_interval, try
+        to grab the advisory lock and recompute+persist it. Returns True if THIS
+        call did the compute. Never raises (records _last_error). Safe to call
+        from any worker: the lock serialises the heavy work to one at a time."""
         db = self._session_factory()
         try:
-            arm_statement_timeout(db, BACKGROUND_STATEMENT_TIMEOUT_MS)
-            payload = self._compute(db)
-            with self._lock:
-                self._payload = payload
-                self._computed_at = time.monotonic()
-                self._last_error = None
-        except Exception as e:  # noqa: BLE001 -- a background daemon must never die
+            if not force:
+                age = self._row_age_seconds(db)
+                if age is not None and age < self.refresh_interval_seconds:
+                    return False  # fresh enough; some worker already did it
+            # Elect: only the lock holder computes. pg_try_advisory_lock is
+            # non-blocking -- a worker that loses the election returns at once.
+            is_pg = db.get_bind().dialect.name == "postgresql"
+            got_lock = True
+            if is_pg:
+                got_lock = bool(db.execute(
+                    text("SELECT pg_try_advisory_lock(:k)")
+                    .bindparams(k=self.advisory_lock_key)).scalar())
+            if not got_lock:
+                return False
+            try:
+                compute_db = self._session_factory()
+                try:
+                    # Re-check under the lock: another worker may have just
+                    # written it while we waited to acquire.
+                    if not force:
+                        age = self._row_age_seconds(compute_db)
+                        if age is not None and age < self.refresh_interval_seconds:
+                            return False
+                    arm_statement_timeout(compute_db, BACKGROUND_STATEMENT_TIMEOUT_MS)
+                    t0 = time.monotonic()
+                    payload = self._compute(compute_db)
+                    self._write_row(compute_db, payload, round(time.monotonic() - t0, 1))
+                    with self._lock:
+                        self._last_error = None
+                    return True
+                finally:
+                    compute_db.close()
+            finally:
+                if is_pg:
+                    db.execute(text("SELECT pg_advisory_unlock(:k)")
+                               .bindparams(k=self.advisory_lock_key))
+                    db.commit()
+        except Exception as e:  # noqa: BLE001 -- a refresher must never die
             with self._lock:
                 self._last_error = f"{type(e).__name__}: {e}"
+            return False
         finally:
             db.close()
 
     def _run_loop(self) -> None:
         while True:
-            self._refresh_once()
-            with self._lock:
-                self._refreshing = False
+            self.refresh_if_stale()
             time.sleep(self.refresh_interval_seconds)
 
     def start(self) -> None:
-        """Start the daemon refresher. Idempotent, never fatal."""
+        """Start the refresher daemon. Idempotent, never fatal. Every worker
+        runs one, but the advisory lock means only one computes at a time."""
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return
-            self._refreshing = True
             self._thread = threading.Thread(
-                target=self._run_loop, name=f"snapshot-{self.name}", daemon=True)
+                target=self._run_loop, name=f"snapshot-{self.surface}", daemon=True)
             self._thread.start()
 
-    def _kick(self) -> None:
-        """Ensure the refresher is running (lazy start for workers that never
-        ran lifespan, e.g. a fresh gunicorn fork)."""
+    def get(self, db: Session) -> dict:
+        """Read the persisted row O(1) and return its payload with staleness
+        metadata. 503 while the first compute is still pending. Lazy-kicks the
+        refresher so a never-warmed surface starts computing on first hit."""
         if self._thread is None or not self._thread.is_alive():
             self.start()
-
-    def get(self) -> dict:
-        """Return the cached payload with cache-age metadata, or 503 while the
-        first compute is still in flight / has only ever errored."""
-        self._kick()
-        with self._lock:
-            payload = self._payload
-            computed_at = self._computed_at
-            last_error = self._last_error
-        if payload is None:
+        arm_statement_timeout(db, SNAPSHOT_READ_TIMEOUT_MS)
+        row = self._read_row(db)
+        if row is None:
+            with self._lock:
+                err = self._last_error
             detail = ("freshness snapshot is warming up (first compute in "
                       "flight); retry shortly")
-            if last_error:
-                detail = f"freshness snapshot unavailable: {last_error}"
+            if err:
+                detail = f"freshness snapshot unavailable: {err}"
             raise HTTPException(status_code=503, detail=detail)
-        out = dict(payload)
-        age = round(time.monotonic() - computed_at, 1)
-        out["cache_age_seconds"] = age
+        from datetime import datetime, timezone
+        ca = row.computed_at
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - ca).total_seconds()
+        out = dict(row.payload)
+        out["cache_age_seconds"] = round(age, 1)
         out["cache_ttl_seconds"] = self.ttl_seconds
         out["stale"] = age > self.ttl_seconds
+        out["computed_at"] = ca.isoformat()
         return out
 
 
@@ -252,19 +324,20 @@ if __name__ == "__main__":
     # 4. a non-OperationalError is never a timeout.
     assert is_statement_timeout(ValueError("nope")) is False
 
-    # 5. BackgroundSnapshot: 503 while warming, serves payload once computed,
-    #    survives a compute that raises.
-    class _FakeSession:
-        dialect = type("D", (), {"name": "sqlite"})()
+    # 5. SharedSnapshot (DB-backed, sqlite): 503 while unwarmed, serves the
+    #    persisted row after a refresh, computes at most once when fresh, and a
+    #    raising compute leaves no row + surfaces the error.
+    import os as _os
+    _os.environ.setdefault("APP_JWT_SECRET", "test-secret-at-least-32-bytes-long-xx")
+    _os.environ.setdefault("APP_ENV", "dev")
+    _os.environ.setdefault("DATABASE_URL", "sqlite://")
+    from app.db import Base as _AppBase
+    from app import models as _models  # noqa: F401 -- registers FreshnessStat
 
-        def get_bind(self):
-            return self
-
-        def execute(self, *a, **k):
-            return None
-
-        def close(self):
-            pass
+    eng2 = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                         poolclass=StaticPool)
+    _AppBase.metadata.create_all(eng2)
+    TS2 = sessionmaker(bind=eng2, future=True)
 
     calls = {"n": 0}
 
@@ -272,30 +345,34 @@ if __name__ == "__main__":
         calls["n"] += 1
         return {"scores_rows": 42}
 
-    snap = BackgroundSnapshot("test", _compute_ok, _FakeSession,
-                              ttl_seconds=600, refresh_interval_seconds=3600)
-    # Before any compute: 503 warming.
-    raised_503 = False
-    try:
-        snap.get()
-    except HTTPException as he:
-        raised_503 = he.status_code == 503
-    assert raised_503, "must 503 before the first compute lands"
-    # Drive one synchronous refresh (no daemon needed for the test).
-    snap._refresh_once()
-    got = snap.get()
+    snap = SharedSnapshot("t_ok", _compute_ok, TS2, advisory_lock_key=991001,
+                          ttl_seconds=3600, refresh_interval_seconds=1800)
+    # Before any compute there is no row -> reading it must 503 "warming".
+    # NOTE: do NOT call snap.get() here -- get() lazy-starts the daemon, which
+    # would race the explicit refresh below. Assert the unwarmed state directly.
+    assert snap._read_row(TS2()) is None, "no row before the first compute"
+    # Explicit refresh (sqlite: no advisory lock, so it always computes + writes).
+    did = snap.refresh_if_stale()
+    assert did is True, "first refresh must compute"
+    assert calls["n"] == 1, calls
+    got = snap.get(TS2())
     assert got["scores_rows"] == 42, got
-    assert "cache_age_seconds" in got and got["stale"] is False, got
+    assert got["stale"] is False and "computed_at" in got, got
+    # A second refresh within the interval must NOT recompute (row is fresh).
+    did2 = snap.refresh_if_stale()
+    assert did2 is False and calls["n"] == 1, (did2, calls)
+    # force=True recomputes regardless of freshness.
+    assert snap.refresh_if_stale(force=True) is True and calls["n"] == 2, calls
 
-    # A compute that raises leaves the LAST good payload in place, records error.
+    # A raising compute leaves no row (surface never warmed) -> 503 + error.
     def _compute_boom(db):
         raise RuntimeError("db blip")
 
-    snap2 = BackgroundSnapshot("boom", _compute_boom, _FakeSession)
-    snap2._refresh_once()
+    snap2 = SharedSnapshot("t_boom", _compute_boom, TS2, advisory_lock_key=991002)
+    snap2.refresh_if_stale()
     boomed = False
     try:
-        snap2.get()
+        snap2.get(TS2())
     except HTTPException as he:
         boomed = he.status_code == 503 and "db blip" in he.detail
     assert boomed, "a never-succeeded snapshot must 503 and surface the error"

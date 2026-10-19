@@ -1121,11 +1121,37 @@ def _results_state(run: Run, pat: str) -> str:
     return ""
 
 
-def _destroy(run: Run, reason: str) -> None:
+def _destroy(run: Run, reason: str, force: bool = False) -> None:
+    """Tear down the instance.
+
+    DURABILITY GATE (harness-durability): the success path must NOT destroy a
+    pod whose results are not provably on the remote. On 2026-10 a full-corpus
+    v3.4 wave lost data because `destroy` could fire before the results branch
+    was durably pushed; once the GPU is gone the preds are unrecoverable. So a
+    normal (success-path) destroy first re-reads `_results_state(run)` and
+    REFUSES unless it is 'ok'.
+
+    `force=True` is the escape hatch for the LEGITIMATE no-data teardowns --
+    wedge / cost_breach / cap_hit / deadline / vanished / fail -- where there is
+    deliberately no results branch and leaving the pod rented just burns money.
+    The watch/collect caller passes force=True for every non-'ok' verdict, so
+    this gate narrows ONLY the success path and changes nothing for the
+    forensic/wedge teardowns.
+    """
     from vastai_sdk import VastAI
     iid = run.state.get("instance_id")
     if not iid or run.state.get("destroyed"):
         return
+    if not force:
+        state = _results_state(run, secret("github"))
+        if state != "ok":
+            ledger("destroy_REFUSED", run.state["run_id"], instance=iid,
+                   reason=reason, results_state=state or "absent")
+            raise SystemExit(
+                f"ALERT: refusing to destroy instance {iid} on the success path -- "
+                f"results branch state is {state or 'absent'!r}, not 'ok'. The preds "
+                f"are not provably on the remote; destroying now would lose data. "
+                f"Pass force=True only for a deliberate no-data teardown.")
     v = VastAI(api_key=secret("vast"))
     try:
         v.destroy_instance(id=int(iid))
@@ -1140,6 +1166,48 @@ def _destroy(run: Run, reason: str) -> None:
     run.save()
     ledger("destroyed", run.state["run_id"], instance=iid, reason=reason)
     log(f"instance {iid} destroyed ({reason})")
+
+
+def _self_heal_preds(run: Run, pat: str, coll: Path) -> bool:
+    """Recover results/preds.jsonl.gz from the durable results branch on origin.
+
+    The primary transfer (shallow clone of the results branch) can land the
+    branch but miss the preds blob -- e.g. the clone raced the pod's final push,
+    or score_results/ was still being assembled. The DURABLE copy is the git
+    branch named in run.state['results_branch'], with the preds at
+    score_results/preds.jsonl.gz. This fetches that branch fresh and extracts the
+    blob straight out of git (`git show <branch>:score_results/preds.jsonl.gz`),
+    so a stale/partial working copy cannot mask a good remote.
+
+    Returns True iff a non-empty preds.jsonl.gz now exists in `coll`. Never
+    raises -- a failed self-heal falls through to the caller's hard post-check.
+    """
+    branch = run.state["results_branch"]
+    url = f"https://x-access-token:{pat}@github.com/{SFT_REPO}.git"
+    clone = coll / "r"
+    try:
+        if (clone / ".git").exists():
+            subprocess.run(["git", "-C", str(clone), "fetch", "--depth", "1",
+                            "origin", branch],
+                           capture_output=True, text=True, timeout=900, check=True)
+            ref = "FETCH_HEAD"
+        else:
+            subprocess.run(["git", "clone", "--depth", "1", "--branch", branch,
+                            url, str(clone)],
+                           capture_output=True, text=True, timeout=900, check=True)
+            ref = branch
+        blob = subprocess.run(
+            ["git", "-C", str(clone), "show", f"{ref}:score_results/preds.jsonl.gz"],
+            capture_output=True, timeout=300, check=True)
+        if blob.stdout:
+            (coll / "preds.jsonl.gz").write_bytes(blob.stdout)
+            log(f"self-heal: recovered preds.jsonl.gz ({len(blob.stdout)} bytes) "
+                f"from {branch}:score_results/preds.jsonl.gz")
+    except Exception as e:  # noqa: BLE001 -- best effort; caller hard-fails on empty
+        log(f"self-heal: could not recover preds from {branch} "
+            f"({e.__class__.__name__}: {e})")
+    preds = coll / "preds.jsonl.gz"
+    return preds.exists() and preds.stat().st_size > 0
 
 
 def _eff_cost_cap(run, args):
@@ -1492,6 +1560,31 @@ def ph_watch_collect(run: Run, args) -> None:
                 for pt in parts:
                     w.write(pt.read_bytes())
             got.append("preds.jsonl.gz(reassembled from %d parts)" % len(parts))
+    # COLLECT POST-CONDITION + SELF-HEAL (harness-durability). The old code
+    # marked collect=done whether or not preds actually landed; a run whose
+    # primary transfer produced nothing then sailed to `collect=done` and only
+    # blew up later in ph_import with "preds.jsonl.gz missing" -- after the pod
+    # was already destroyed. On the SUCCESS path we now require a non-empty
+    # results/preds.jsonl.gz before marking done, and if the primary transfer
+    # produced nothing we SELF-HEAL from the durable results branch on origin
+    # (the preds blob lives at score_results/preds.jsonl.gz on results_branch)
+    # before giving up. Only 'ok' is gated: fail/wedge/breach paths legitimately
+    # have no preds and must still fall through to forensics + destroy below.
+    preds = coll / "preds.jsonl.gz"
+    if run.state.get("result") == "ok":
+        if (not preds.exists()) or preds.stat().st_size == 0:
+            healed = _self_heal_preds(run, pat, coll)
+            if healed:
+                got.append("preds.jsonl.gz(self-healed from %s)" % run.state["results_branch"])
+        if (not preds.exists()) or preds.stat().st_size == 0:
+            ledger("collect_no_preds", run.state["run_id"],
+                   branch=run.state["results_branch"])
+            raise SystemExit(
+                f"ALERT: collect produced NO usable results/preds.jsonl.gz for run "
+                f"{run.state['run_id']} even after self-heal from "
+                f"{run.state['results_branch']!r}; refusing to mark collect=done "
+                f"(the pod is NOT destroyed -- the preds may still be recoverable). "
+                f"Investigate the results branch before re-running.")
     run.mark("collect", collected=got)
     log(f"collect: {got or 'nothing on remote (instance may still be running the job)'}")
     if run.state.get("result") != "ok" and not got:
@@ -1499,9 +1592,14 @@ def ph_watch_collect(run: Run, args) -> None:
         # remaining evidence and destroy erases it. Pull it via the API first.
         _pull_instance_logs(run)
     # DESTROY decision (I4): success+forensics, or any breach => destroy now.
-    if run.state.get("result") in ("ok", "fail", "cost_breach", "cap_hit", "deadline",
-                                   "wedge", "vanished"):
-        _destroy(run, run.state.get("result", "unknown"))
+    # The 'ok' path goes through the durability gate (force=False): it may only
+    # tear down once _results_state confirms the preds are on the remote. Every
+    # other verdict is a deliberate NO-DATA teardown (there is no results branch
+    # to protect), so it forces past the gate rather than wedging a rented pod.
+    _result = run.state.get("result")
+    if _result in ("ok", "fail", "cost_breach", "cap_hit", "deadline",
+                   "wedge", "vanished"):
+        _destroy(run, _result or "unknown", force=(_result != "ok"))
         run.mark("destroy")
     if run.state.get("result") != "ok":
         raise SystemExit(f"ALERT: rescore run {run.state['run_id']} did not produce results "
@@ -1609,12 +1707,29 @@ def ph_import(run: Run, args) -> None:
                     st["unchanged"] += 1
 
         def _apply(evs):
-            cur.execute("delete from mcp_llm_axis_scores where model_version=%s and server_id=any(%s)",
-                        (MODEL_VERSION, sids))
+            # IDEMPOTENT WRITE (harness-durability). The old path DELETEd this
+            # batch's (model_version, server_id) rows then plain-INSERTed. On a
+            # re-import of a shard whose rows are PARTIALLY present -- which is
+            # exactly what happened re-running a v3.4 shard -- the delete/insert
+            # pair could still collide on uq_axis_scores_natural (server_id,
+            # axis_name, model_version): the dup-key aborted the transaction and
+            # the failed lock cascaded into the later shards, silently losing
+            # rows. UPSERT is conflict-safe by construction: re-importing an
+            # existing row UPDATEs it (scores + provenance + scored_at refreshed)
+            # instead of erroring, so a partial/overlapping re-run can never
+            # abort the import. No DELETE is needed -- any (server_id, axis_name)
+            # under this model_version that this batch does NOT re-emit (e.g. an
+            # axis that went -1) is simply left as-is, same as a no-op row.
             execute_values(cur,
                 "insert into mcp_llm_axis_scores (server_id, axis_name, label, label_index, probs, "
                 "p_top, p_critical, p_danger, escalated, escalated_to, decision_rule_version, "
-                "model_version, adapter_sha256, scored_at) values %s", rows)
+                "model_version, adapter_sha256, scored_at) values %s "
+                "on conflict (server_id, axis_name, model_version) do update set "
+                "label=excluded.label, label_index=excluded.label_index, probs=excluded.probs, "
+                "p_top=excluded.p_top, p_critical=excluded.p_critical, p_danger=excluded.p_danger, "
+                "escalated=excluded.escalated, escalated_to=excluded.escalated_to, "
+                "decision_rule_version=excluded.decision_rule_version, "
+                "adapter_sha256=excluded.adapter_sha256, scored_at=excluded.scored_at", rows)
             if evs:
                 execute_values(cur,
                     "insert into score_change_events (server_id, axis_name, model_version, run_id, "

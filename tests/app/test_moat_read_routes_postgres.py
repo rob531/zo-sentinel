@@ -135,7 +135,9 @@ def test_freshness_never_scored_is_the_set_difference(client):
         # an orphan score must not credit the registry
         McpLlmAxisScore(id=5, server_id="orphan", axis_name="auth", model_version="v3.0"),
     )
-    scoring_freshness_surface._cache = None  # process-local TTL cache
+    # /freshness serves a background snapshot; drive one synchronous refresh so
+    # the GET is deterministic (the daemon would otherwise race the assert).
+    scoring_freshness_surface._snapshot._refresh_once()
     r = client.get("/freshness")
     assert r.status_code == 200, r.text
     body = r.json()
@@ -166,6 +168,7 @@ def test_registry_freshness_aggregates_in_sql(client):
         # f1 is the only assessed server
         McpLlmAxisScore(id=1, server_id="f1", axis_name="auth", model_version="v3.0"),
     )
+    registry_freshness_api._snapshot._refresh_once()  # warm the default-params snapshot
     r = client.get("/registry/freshness")
     assert r.status_code == 200, r.text
     j = r.json()
@@ -189,6 +192,7 @@ def test_registry_freshness_caps_never_scanned_list(client):
     registry_freshness_api._cache.clear()
     cap = registry_freshness_api._NEVER_SCANNED_LIST_CAP
     _seed(*[McpServerRegistry(server_id=f"never{i}") for i in range(cap + 25)])
+    registry_freshness_api._snapshot._refresh_once()  # warm the default-params snapshot
     r = client.get("/registry/freshness")
     assert r.status_code == 200, r.text
     j = r.json()

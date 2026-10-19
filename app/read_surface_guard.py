@@ -21,6 +21,10 @@ empty" -- the exact silent lie these surfaces exist to prevent.
 """
 from __future__ import annotations
 
+import threading
+import time
+from typing import Callable, Optional
+
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -83,6 +87,105 @@ def timeout_as_503(exc: BaseException) -> HTTPException:
                     "(retry shortly -- a warm cache serves instantly)"),
         )
     raise exc
+
+
+# Background statement budget: the corpus-wide aggregates (COUNT over 4.7M
+# scores, the never-scored anti-join) cost ~50s cold on the small Fly PG --
+# fundamentally more than any client will wait. They only move when a weekly
+# rescore lands, so they are computed OFF the request path by a background
+# thread on a generous budget, and the route serves the cached snapshot.
+BACKGROUND_STATEMENT_TIMEOUT_MS = 120_000
+
+
+class BackgroundSnapshot:
+    """A TTL snapshot computed by a background thread, served instantly by the
+    route (FU-667).
+
+    The outage this closes: /freshness / /registry/freshness aggregate over the
+    whole corpus; a cold compute is ~50s, longer than any client waits, so a
+    request-time compute either hangs (old) or 503s forever (the cache can never
+    fill from the request path). This decouples the two: a daemon recomputes on
+    a generous budget and stores the payload; the route reads the stored payload
+    with no DB work. Until the first compute lands the route 503s "warming"
+    (honest -- an unknown is not a fabricated zero).
+
+    `compute(db)` must accept a Session and return the payload. `session_factory`
+    is app.db.SessionLocal. Thread-safe; at most one refresh runs at a time.
+    """
+
+    def __init__(self, name: str, compute: Callable[[Session], dict],
+                 session_factory: Callable[[], Session],
+                 ttl_seconds: int = 600, refresh_interval_seconds: int = 300):
+        self.name = name
+        self._compute = compute
+        self._session_factory = session_factory
+        self.ttl_seconds = ttl_seconds
+        self.refresh_interval_seconds = refresh_interval_seconds
+        self._lock = threading.Lock()
+        self._payload: Optional[dict] = None
+        self._computed_at: float = 0.0
+        self._refreshing = False
+        self._last_error: Optional[str] = None
+        self._thread: Optional[threading.Thread] = None
+
+    def _refresh_once(self) -> None:
+        db = self._session_factory()
+        try:
+            arm_statement_timeout(db, BACKGROUND_STATEMENT_TIMEOUT_MS)
+            payload = self._compute(db)
+            with self._lock:
+                self._payload = payload
+                self._computed_at = time.monotonic()
+                self._last_error = None
+        except Exception as e:  # noqa: BLE001 -- a background daemon must never die
+            with self._lock:
+                self._last_error = f"{type(e).__name__}: {e}"
+        finally:
+            db.close()
+
+    def _run_loop(self) -> None:
+        while True:
+            self._refresh_once()
+            with self._lock:
+                self._refreshing = False
+            time.sleep(self.refresh_interval_seconds)
+
+    def start(self) -> None:
+        """Start the daemon refresher. Idempotent, never fatal."""
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._refreshing = True
+            self._thread = threading.Thread(
+                target=self._run_loop, name=f"snapshot-{self.name}", daemon=True)
+            self._thread.start()
+
+    def _kick(self) -> None:
+        """Ensure the refresher is running (lazy start for workers that never
+        ran lifespan, e.g. a fresh gunicorn fork)."""
+        if self._thread is None or not self._thread.is_alive():
+            self.start()
+
+    def get(self) -> dict:
+        """Return the cached payload with cache-age metadata, or 503 while the
+        first compute is still in flight / has only ever errored."""
+        self._kick()
+        with self._lock:
+            payload = self._payload
+            computed_at = self._computed_at
+            last_error = self._last_error
+        if payload is None:
+            detail = ("freshness snapshot is warming up (first compute in "
+                      "flight); retry shortly")
+            if last_error:
+                detail = f"freshness snapshot unavailable: {last_error}"
+            raise HTTPException(status_code=503, detail=detail)
+        out = dict(payload)
+        age = round(time.monotonic() - computed_at, 1)
+        out["cache_age_seconds"] = age
+        out["cache_ttl_seconds"] = self.ttl_seconds
+        out["stale"] = age > self.ttl_seconds
+        return out
 
 
 if __name__ == "__main__":
@@ -148,5 +251,53 @@ if __name__ == "__main__":
 
     # 4. a non-OperationalError is never a timeout.
     assert is_statement_timeout(ValueError("nope")) is False
+
+    # 5. BackgroundSnapshot: 503 while warming, serves payload once computed,
+    #    survives a compute that raises.
+    class _FakeSession:
+        dialect = type("D", (), {"name": "sqlite"})()
+
+        def get_bind(self):
+            return self
+
+        def execute(self, *a, **k):
+            return None
+
+        def close(self):
+            pass
+
+    calls = {"n": 0}
+
+    def _compute_ok(db):
+        calls["n"] += 1
+        return {"scores_rows": 42}
+
+    snap = BackgroundSnapshot("test", _compute_ok, _FakeSession,
+                              ttl_seconds=600, refresh_interval_seconds=3600)
+    # Before any compute: 503 warming.
+    raised_503 = False
+    try:
+        snap.get()
+    except HTTPException as he:
+        raised_503 = he.status_code == 503
+    assert raised_503, "must 503 before the first compute lands"
+    # Drive one synchronous refresh (no daemon needed for the test).
+    snap._refresh_once()
+    got = snap.get()
+    assert got["scores_rows"] == 42, got
+    assert "cache_age_seconds" in got and got["stale"] is False, got
+
+    # A compute that raises leaves the LAST good payload in place, records error.
+    def _compute_boom(db):
+        raise RuntimeError("db blip")
+
+    snap2 = BackgroundSnapshot("boom", _compute_boom, _FakeSession)
+    snap2._refresh_once()
+    boomed = False
+    try:
+        snap2.get()
+    except HTTPException as he:
+        boomed = he.status_code == 503 and "db blip" in he.detail
+    assert boomed, "a never-succeeded snapshot must 503 and surface the error"
 
     print("PASS")

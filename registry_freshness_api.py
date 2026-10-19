@@ -37,7 +37,9 @@ _DEFAULT_PARAMS = (24, 7, 30)
 # TTL-cached like the sibling /freshness surface -- these aggregates only move
 # when a scan/rescore lands. Bounded by a Postgres statement_timeout so a
 # pathological plan is cancelled into an honest 503, never a worker hang.
-CACHE_TTL_SECONDS = 600
+# 30-min TTL vs the 15-min background refresh: only flagged stale if two
+# refreshes in a row failed.
+CACHE_TTL_SECONDS = 1800
 # The never-scanned list is a dashboard preview, not a bulk export (THE LINE:
 # no per-server bulk surface). Cap it; the never_scanned COUNT stays exact.
 _NEVER_SCANNED_LIST_CAP = 100
@@ -231,7 +233,7 @@ def _compute_default(db: Session) -> dict:
 # tweaks) fall through to a bounded request-time compute.
 _snapshot = BackgroundSnapshot(
     "registry_freshness", _compute_default, SessionLocal,
-    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=300)
+    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=900)
 
 
 @router.get("/freshness", response_model=RegistryFreshnessResponse)

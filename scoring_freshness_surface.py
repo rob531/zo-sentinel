@@ -39,9 +39,11 @@ from app.read_surface_guard import BackgroundSnapshot
 
 router = APIRouter(tags=["freshness"])
 
-# Aggregates move only when a rescore lands (weekly). 10 min is far fresher
-# than the 7-day SLA these numbers are measured against.
-CACHE_TTL_SECONDS = 600
+# Aggregates move only when a rescore lands (weekly). The background snapshot
+# refreshes every 15 min; a 30-min TTL means a payload is only flagged `stale`
+# if two refreshes in a row failed -- still vastly fresher than the 7-day SLA
+# these numbers are measured against.
+CACHE_TTL_SECONDS = 1800
 
 
 def _compute(db: Session) -> dict:
@@ -104,7 +106,7 @@ def _compute(db: Session) -> dict:
 # unknown is a 503, never a fabricated zero.
 _snapshot = BackgroundSnapshot(
     "scoring_freshness", _compute, SessionLocal,
-    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=300)
+    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=900)
 
 
 @router.get("/freshness")

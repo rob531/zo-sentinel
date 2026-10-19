@@ -89,12 +89,14 @@ def timeout_as_503(exc: BaseException) -> HTTPException:
     raise exc
 
 
-# Background statement budget: the corpus-wide aggregates (COUNT over 4.7M
-# scores, the never-scored anti-join) cost ~50s cold on the small Fly PG --
-# fundamentally more than any client will wait. They only move when a weekly
-# rescore lands, so they are computed OFF the request path by a background
-# thread on a generous budget, and the route serves the cached snapshot.
-BACKGROUND_STATEMENT_TIMEOUT_MS = 120_000
+# Background statement budget: the corpus-wide aggregates cost ~150s cold on
+# the small Fly PG (measured: distinct-servers over 4.7M score rows ~150s, the
+# never-scored anti-join ~38s), fundamentally more than any client will wait.
+# They only move when a weekly rescore lands, so they are computed OFF the
+# request path by a daemon on a generous budget (well under the DB's 15min
+# default statement_timeout), and the route serves the cached snapshot. No
+# client ever waits this long -- the route reads the stored payload.
+BACKGROUND_STATEMENT_TIMEOUT_MS = 600_000
 
 
 class BackgroundSnapshot:

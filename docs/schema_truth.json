@@ -5,7 +5,7 @@
     "app/db.py"
   ],
   "app_models": {
-    "count": 14,
+    "count": 15,
     "classes": [
       "Org",
       "User",
@@ -20,7 +20,8 @@
       "VulnAdvisory",
       "VulnLink",
       "ThreatIntelRef",
-      "CadenceJobRun"
+      "CadenceJobRun",
+      "FreshnessStat"
     ],
     "detail": [
       {
@@ -269,6 +270,19 @@
           "rows_affected",
           "detail"
         ]
+      },
+      {
+        "class": "FreshnessStat",
+        "tablename": "freshness_stats",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "surface",
+          "payload",
+          "computed_at",
+          "compute_seconds"
+        ]
       }
     ],
     "public_names": [
@@ -281,6 +295,7 @@
       "DateTime",
       "Float",
       "ForeignKey",
+      "FreshnessStat",
       "Integer",
       "JSON",
       "Mapped",

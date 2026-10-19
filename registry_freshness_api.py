@@ -18,12 +18,12 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
-from app.read_surface_guard import BackgroundSnapshot, arm_statement_timeout, timeout_as_503
+from app.read_surface_guard import SharedSnapshot, arm_statement_timeout, timeout_as_503
 
 router = APIRouter(prefix="/registry", tags=["registry"])
 
 # Default query-param triple -- the only shape the public watcher and dashboard
-# hit, and the one the background snapshot pre-warms.
+# hit, and the one the shared snapshot precomputes.
 _DEFAULT_PARAMS = (24, 7, 30)
 
 # FU-667: this route used to pull EVERY scanned registry row (server_id, name,
@@ -37,7 +37,8 @@ _DEFAULT_PARAMS = (24, 7, 30)
 # TTL-cached like the sibling /freshness surface -- these aggregates only move
 # when a scan/rescore lands. Bounded by a Postgres statement_timeout so a
 # pathological plan is cancelled into an honest 503, never a worker hang.
-CACHE_TTL_SECONDS = 600
+# 60-min TTL vs the 30-min shared-snapshot refresh (weekly-moving aggregates).
+CACHE_TTL_SECONDS = 3600
 # The never-scanned list is a dashboard preview, not a bulk export (THE LINE:
 # no per-server bulk surface). Cap it; the never_scanned COUNT stays exact.
 _NEVER_SCANNED_LIST_CAP = 100
@@ -225,13 +226,14 @@ def _compute_default(db: Session) -> dict:
     return resp.model_dump()
 
 
-# FU-667: the default-params view costs ~50s cold on prod (the score-table
-# aggregates); compute it OFF the request path in a daemon on a generous budget
-# and serve the stored snapshot instantly. Non-default params (rare dashboard
-# tweaks) fall through to a bounded request-time compute.
-_snapshot = BackgroundSnapshot(
-    "registry_freshness", _compute_default, SessionLocal,
-    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=300)
+# FU-667: the default-params view costs ~50s+ cold on the 1-vCPU prod PG (the
+# score-table aggregates). Compute it OFF the request path via a SINGLE elected
+# worker (advisory lock) that writes freshness_stats; the route reads that one
+# row O(1). Non-default params (rare dashboard tweaks) fall through to a bounded
+# request-time compute. advisory_lock_key in the FU-667 667_0xx band.
+_snapshot = SharedSnapshot(
+    "registry_freshness", _compute_default, SessionLocal, advisory_lock_key=667002,
+    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=1800)
 
 
 @router.get("/freshness", response_model=RegistryFreshnessResponse)
@@ -243,18 +245,18 @@ def get_registry_freshness(
 ) -> RegistryFreshnessResponse:
     """Dashboard-ready overview of registry data freshness across all servers.
 
-    The default-params view (the public/watcher shape) is served from a
-    background snapshot (FU-667) -- 200 instantly, or 503 while warming. Custom
-    params are TTL-cached per triple and bounded by a Postgres statement_timeout
-    so a cold slow pass is cancelled into an honest 503, never a worker hang."""
+    The default-params view (the public/watcher shape) is served from the shared
+    snapshot (FU-667) -- 200 instantly from freshness_stats, or 503 while
+    warming. Custom params are TTL-cached per triple and bounded by a Postgres
+    statement_timeout so a cold slow pass is cancelled into an honest 503."""
     params = (fresh_hours, stale_days, very_stale_days)
     if params == _DEFAULT_PARAMS:
-        # snapshot returns a dict with cache_age metadata; strip the extras the
-        # response_model does not declare so FastAPI validation stays clean.
-        snap = _snapshot.get()
+        # snapshot returns a dict with cache_age/computed_at metadata; strip the
+        # extras the response_model does not declare so validation stays clean.
+        snap = _snapshot.get(db)
         return RegistryFreshnessResponse(**{
             k: v for k, v in snap.items()
-            if k not in ("cache_age_seconds", "cache_ttl_seconds", "stale")})
+            if k not in ("cache_age_seconds", "cache_ttl_seconds", "stale", "computed_at")})
 
     key = params
     now_mono = time.monotonic()
@@ -340,7 +342,7 @@ if __name__ == "__main__":
     # the module SessionLocal (not this test's TS) on a daemon. Point it at the
     # test factory and drive ONE synchronous refresh so the GET is deterministic.
     _snapshot._session_factory = TS
-    _snapshot._refresh_once()
+    _snapshot.refresh_if_stale(force=True)
 
     # Test 1: mixed dataset
     r = c.get("/registry/freshness"); assert r.status_code == 200, r.text
@@ -384,7 +386,7 @@ if __name__ == "__main__":
     c2 = TestClient(app2)
     # Re-point + re-warm the snapshot at the empty DB (see Test 1 note).
     _snapshot._session_factory = TS2
-    _snapshot._refresh_once()
+    _snapshot.refresh_if_stale(force=True)
     r2 = c2.get("/registry/freshness"); assert r2.status_code == 200, r2.text
     j2 = r2.json()
     assert j2["total_servers"] == 0, j2

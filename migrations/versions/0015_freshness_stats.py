@@ -40,6 +40,17 @@ def upgrade():
         # how long that compute took, for observability
         sa.Column("compute_seconds", sa.Float, nullable=True),
     )
+    # GRANT the app role write access. release_command runs as the OWNER role
+    # ($OWNER_DATABASE_URL / mcplookup), so CREATE TABLE leaves the owner the
+    # only role with privileges -- but the app serves and the snapshot refresher
+    # WRITES as the app role (mcplookup_app), which would otherwise get
+    # `permission denied for table freshness_stats` on INSERT (FU-667, caught in
+    # the prod warm: the compute succeeded, the write was refused, so the surface
+    # stayed 503). Mirror the grants mcp_server_registry already carries. Postgres
+    # only; sqlite (CI/dev) has no role split, so guard on dialect.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON freshness_stats TO mcplookup_app")
 
 
 def downgrade():

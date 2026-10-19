@@ -148,19 +148,21 @@ def _compute(
                 days_ago=int((now - oldest_at).total_seconds() // 86400),
             )
 
-    # Median days since scan, DB-side. Postgres: percentile_cont (exact, cheap).
+    # Median days since scan, DB-side. Postgres: percentile_cont over a NUMERIC
+    # (days-since-scan), NOT over the timestamp -- percentile_cont has no
+    # (fraction) WITHIN GROUP (ORDER BY timestamptz) form, so ordering a
+    # timestamp column raises `function percentile_cont(double precision,
+    # timestamp with time zone) does not exist` (FU-667, caught in prod warm).
+    # Order by epoch-days instead; the result is already the median age in days.
     # sqlite (CI/dev, tiny): fall back to the in-Python median over the small set.
     median_days = 0.0
     if scanned_servers:
         if db.get_bind().dialect.name == "postgresql":
-            median_scanned_at = db.execute(
-                select(func.percentile_cont(0.5).within_group(scanned.asc()))
+            age_days = func.extract("epoch", func.now() - scanned) / 86400.0
+            median_days = db.execute(
+                select(func.percentile_cont(0.5).within_group(age_days.asc()))
                 .where(scanned.isnot(None))
-            ).scalar()
-            if median_scanned_at is not None:
-                if median_scanned_at.tzinfo is None:
-                    median_scanned_at = median_scanned_at.replace(tzinfo=timezone.utc)
-                median_days = (now - median_scanned_at).total_seconds() / 86400.0
+            ).scalar() or 0.0
         else:
             rows = db.execute(select(scanned).where(scanned.isnot(None))).scalars().all()
             days = []

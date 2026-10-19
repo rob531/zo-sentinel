@@ -216,10 +216,24 @@ class SharedSnapshot:
         finally:
             db.close()
 
+    # After a FAILED/elected-skip cycle, retry soon rather than waiting the full
+    # cadence -- otherwise a transient error (a missing GRANT, a lock lost to a
+    # peer, a one-off timeout) blanks the surface for the whole interval. A
+    # successful write sleeps the full cadence (the data only moves weekly).
+    _ERROR_RETRY_SECONDS = 60
+
     def _run_loop(self) -> None:
         while True:
-            self.refresh_if_stale()
-            time.sleep(self.refresh_interval_seconds)
+            did = self.refresh_if_stale()
+            with self._lock:
+                errored = self._last_error is not None
+            # did == True: wrote a row -> sleep the cadence.
+            # did == False + no error: another worker owns a fresh row -> cadence.
+            # did == False + error: this surface may be blank -> retry soon.
+            if (not did) and errored:
+                time.sleep(self._ERROR_RETRY_SECONDS)
+            else:
+                time.sleep(self.refresh_interval_seconds)
 
     def start(self) -> None:
         """Start the refresher daemon. Idempotent, never fatal. Every worker

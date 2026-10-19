@@ -89,14 +89,15 @@ def timeout_as_503(exc: BaseException) -> HTTPException:
     raise exc
 
 
-# Background statement budget: the corpus-wide aggregates cost ~150s cold on
-# the small Fly PG (measured: distinct-servers over 4.7M score rows ~150s, the
-# never-scored anti-join ~38s), fundamentally more than any client will wait.
-# They only move when a weekly rescore lands, so they are computed OFF the
-# request path by a daemon on a generous budget (well under the DB's 15min
-# default statement_timeout), and the route serves the cached snapshot. No
-# client ever waits this long -- the route reads the stored payload.
-BACKGROUND_STATEMENT_TIMEOUT_MS = 600_000
+# Background statement budget: the full freshness compute costs ~460s cold on
+# the small Fly PG (measured end-to-end against prod: distinct-servers GROUP BY
+# over 4.68M score rows + the never-scored anti-join over 560k registry rows,
+# cold seq scans), fundamentally more than any client will wait. It only moves
+# when a weekly rescore lands, so it is computed OFF the request path by a
+# daemon on a 15-min budget (headroom over the ~8-min cold compute, still well
+# under the DB's 15-min default statement_timeout), and the route serves the
+# cached snapshot. No client ever waits this long -- the route reads the store.
+BACKGROUND_STATEMENT_TIMEOUT_MS = 900_000
 
 
 class BackgroundSnapshot:

@@ -56,6 +56,21 @@ async def lifespan(app: FastAPI):
         logging.getLogger(__name__).warning(
             "attestation_refresher not started; continuing without it", exc_info=True
         )
+    # FU-667: warm the moat freshness background snapshots at boot so the first
+    # user request serves 200 instead of a ~50s cold compute. BEST-EFFORT: the
+    # routes also lazy-start their daemon on first hit, so a failure here never
+    # blocks boot and never blinds the surface.
+    try:
+        import scoring_freshness_surface
+        import registry_freshness_api
+
+        scoring_freshness_surface._snapshot.start()
+        registry_freshness_api._snapshot.start()
+    except Exception:  # noqa: BLE001 -- optional warmers must never halt the API
+        logging.getLogger(__name__).warning(
+            "freshness snapshot warmers not started at boot; routes will lazy-start",
+            exc_info=True,
+        )
     yield
 
 

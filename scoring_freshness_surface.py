@@ -29,19 +29,21 @@ zero).
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
+from app.db import SessionLocal, get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
-from app.read_surface_guard import BackgroundSnapshot
+from app.read_surface_guard import SharedSnapshot
 
 router = APIRouter(tags=["freshness"])
 
-# Aggregates move only when a rescore lands (weekly). 10 min is far fresher
-# than the 7-day SLA these numbers are measured against.
-CACHE_TTL_SECONDS = 600
+# Aggregates move only when a rescore lands (weekly); a cold compute is ~8min on
+# prod, so the shared snapshot refreshes every 30 min and a 60-min TTL only
+# flags stale if two refreshes in a row failed -- still vastly fresher than the
+# 7-day SLA these numbers are measured against.
+CACHE_TTL_SECONDS = 3600
 
 
 def _compute(db: Session) -> dict:
@@ -94,19 +96,20 @@ def _compute(db: Session) -> dict:
     }
 
 
-# FU-667: the aggregates above cost ~50s cold on the prod corpus (COUNT over
-# 4.7M scores + the never-scored anti-join) -- more than any client waits, and
-# more than a request-time statement_timeout can allow, so a request-time
-# compute can only hang (old) or 503 forever (the TTL cache never fills from the
-# request path). They only move weekly. So compute them OFF the request path in
-# a background daemon on a generous budget; the route serves the stored snapshot
-# instantly (200), or 503 "warming" until the first compute lands. Honest: an
-# unknown is a 503, never a fabricated zero.
-_snapshot = BackgroundSnapshot(
-    "scoring_freshness", _compute, SessionLocal,
-    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=300)
+# FU-667: the aggregates above cost ~460s cold on the 1-vCPU prod PG -- more
+# than any client waits and more than a request-time statement_timeout allows.
+# A per-worker background compute multiplied that heavy scan across gunicorn
+# workers and saturated the PG (the v122 pile-up that forced a rollback). So a
+# SINGLE elected worker (Postgres advisory lock) recomputes on a cadence and
+# writes freshness_stats; this route reads that one row O(1). 503 "warming"
+# until the first compute lands -- an unknown is never a fabricated zero.
+# advisory_lock_key: a fixed per-surface integer so at most one compute runs
+# fleet-wide (FU-667 keys live in the 667_0xx band).
+_snapshot = SharedSnapshot(
+    "scoring_freshness", _compute, SessionLocal, advisory_lock_key=667001,
+    ttl_seconds=CACHE_TTL_SECONDS, refresh_interval_seconds=1800)
 
 
 @router.get("/freshness")
-def scoring_freshness() -> dict:
-    return _snapshot.get()
+def scoring_freshness(db: Session = Depends(get_session)) -> dict:
+    return _snapshot.get(db)

@@ -143,3 +143,54 @@ def test_freshness_never_scored_is_the_set_difference(client):
     assert body["scores_rows"] == 5
     assert body["scored_servers"] == 2
     assert body["never_scored"] == 2
+
+
+def test_registry_freshness_aggregates_in_sql(client):
+    """FU-667: /registry/freshness no longer materialises every scanned row into
+    Python; it computes the counts/buckets in SQL. Pins the numbers end-to-end
+    so the SQL ladder stays equivalent to the old per-row loop."""
+    import registry_freshness_api
+    registry_freshness_api._cache.clear()
+    _seed(
+        # fresh (<24h)
+        McpServerRegistry(server_id="f1", last_scanned=NOW - timedelta(hours=2)),
+        # fresh (<7d, >24h)
+        McpServerRegistry(server_id="f2", last_scanned=NOW - timedelta(days=3)),
+        # stale 7d..30d
+        McpServerRegistry(server_id="s1", last_scanned=NOW - timedelta(days=14)),
+        # very stale >30d
+        McpServerRegistry(server_id="v1", last_scanned=NOW - timedelta(days=45)),
+        # never scanned
+        McpServerRegistry(server_id="n1"),
+        McpServerRegistry(server_id="n2"),
+        # f1 is the only assessed server
+        McpLlmAxisScore(id=1, server_id="f1", axis_name="auth", model_version="v3.0"),
+    )
+    r = client.get("/registry/freshness")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["total_servers"] == 6, j
+    assert j["scanned_servers"] == 4, j
+    assert j["never_scanned"] == 2, j
+    assert j["stale_servers"] == 2, j  # s1 + v1
+    assert j["freshness_buckets"]["fresh_24h"] == 1, j  # f1
+    assert j["freshness_buckets"]["fresh_7d"] == 2, j   # f1 + f2
+    assert j["freshness_buckets"]["stale_7d_30d"] == 1, j  # s1
+    assert j["freshness_buckets"]["stale_over_30d"] == 1, j  # v1
+    assert j["assessed_servers"] == 1, j
+    assert j["oldest_scan"]["server_id"] == "v1", j
+
+
+def test_registry_freshness_caps_never_scanned_list(client):
+    """The never-scanned preview is a dashboard hint, not a bulk export (THE
+    LINE): the LIST is capped while the never_scanned COUNT stays exact. This is
+    also what stops the route re-materialising the whole never-scanned corpus."""
+    import registry_freshness_api
+    registry_freshness_api._cache.clear()
+    cap = registry_freshness_api._NEVER_SCANNED_LIST_CAP
+    _seed(*[McpServerRegistry(server_id=f"never{i}") for i in range(cap + 25)])
+    r = client.get("/registry/freshness")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["never_scanned"] == cap + 25, "COUNT must be exact"
+    assert len(j["never_scanned_servers"]) == cap, "LIST must be capped"

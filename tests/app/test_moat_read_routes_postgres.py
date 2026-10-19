@@ -64,6 +64,8 @@ def test_registry_freshness_report_reads_the_registry(client):
         McpServerRegistry(server_id="c1", registry_source=None, last_scanned=NOW - timedelta(days=20)),
         McpServerRegistry(server_id="d1", registry_source="smithery", last_scanned=None),  # never scanned
     )
+    import registry_source_freshness_report_api
+    registry_source_freshness_report_api._snapshot.refresh_if_stale(force=True)  # warm default-threshold snapshot
     r = client.get("/registry/freshness-report?stale_threshold_days=30")
     assert r.status_code == 200, r.text
     body = r.json()
@@ -81,6 +83,8 @@ def test_registry_freshness_report_reads_the_registry(client):
 
 
 def test_registry_freshness_report_empty_registry(client):
+    import registry_source_freshness_report_api
+    registry_source_freshness_report_api._snapshot.refresh_if_stale(force=True)  # warm (empty) snapshot
     r = client.get("/registry/freshness-report")
     assert r.status_code == 200, r.text
     assert r.json() == {"sources": [], "overall_stale_pct": 0, "alerts": []}
@@ -137,7 +141,7 @@ def test_freshness_never_scored_is_the_set_difference(client):
     )
     # /freshness serves a background snapshot; drive one synchronous refresh so
     # the GET is deterministic (the daemon would otherwise race the assert).
-    scoring_freshness_surface._snapshot._refresh_once()
+    scoring_freshness_surface._snapshot.refresh_if_stale(force=True)
     r = client.get("/freshness")
     assert r.status_code == 200, r.text
     body = r.json()
@@ -168,7 +172,7 @@ def test_registry_freshness_aggregates_in_sql(client):
         # f1 is the only assessed server
         McpLlmAxisScore(id=1, server_id="f1", axis_name="auth", model_version="v3.0"),
     )
-    registry_freshness_api._snapshot._refresh_once()  # warm the default-params snapshot
+    registry_freshness_api._snapshot.refresh_if_stale(force=True)  # warm the default-params snapshot
     r = client.get("/registry/freshness")
     assert r.status_code == 200, r.text
     j = r.json()
@@ -192,9 +196,43 @@ def test_registry_freshness_caps_never_scanned_list(client):
     registry_freshness_api._cache.clear()
     cap = registry_freshness_api._NEVER_SCANNED_LIST_CAP
     _seed(*[McpServerRegistry(server_id=f"never{i}") for i in range(cap + 25)])
-    registry_freshness_api._snapshot._refresh_once()  # warm the default-params snapshot
+    registry_freshness_api._snapshot.refresh_if_stale(force=True)  # warm the default-params snapshot
     r = client.get("/registry/freshness")
     assert r.status_code == 200, r.text
     j = r.json()
     assert j["never_scanned"] == cap + 25, "COUNT must be exact"
     assert len(j["never_scanned_servers"]) == cap, "LIST must be capped"
+
+
+def test_shared_snapshot_computes_once_per_cadence(client):
+    """FU-667 core invariant: the heavy compute runs ONCE per cadence, not once
+    per worker/request. A fresh row short-circuits refresh_if_stale (no recompute),
+    and concurrent refreshers do not each recompute -- this is what stops the
+    per-worker pile-up that saturated the PG and forced the v122->v121 rollback."""
+    import threading as _threading
+    from app.read_surface_guard import SharedSnapshot
+    from app.db import SessionLocal
+
+    calls = {"n": 0}
+    barrier_calls = _threading.Lock()
+
+    def _compute(db):
+        with barrier_calls:
+            calls["n"] += 1
+        return {"scores_rows": 1}
+
+    snap = SharedSnapshot("test_once", _compute, SessionLocal, advisory_lock_key=667099,
+                          ttl_seconds=3600, refresh_interval_seconds=1800)
+    # First refresh computes and persists.
+    assert snap.refresh_if_stale(force=True) is True
+    assert calls["n"] == 1
+    # A row fresher than the interval short-circuits: no recompute.
+    assert snap.refresh_if_stale() is False
+    assert calls["n"] == 1, "a fresh row must not trigger a recompute"
+    # Many concurrent refreshers against a fresh row: still no extra compute.
+    threads = [_threading.Thread(target=snap.refresh_if_stale) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert calls["n"] == 1, f"concurrent refreshers must not each recompute (got {calls['n']})"

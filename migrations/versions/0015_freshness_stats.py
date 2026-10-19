@@ -1,0 +1,46 @@
+"""freshness_stats: one precomputed row per freshness surface (FU-667)
+
+The public freshness routes (/freshness, /registry/freshness,
+/registry/freshness-report) aggregate over the whole corpus (4.7M score rows /
+560k registry rows on a 1-vCPU Fly PG). A cold compute is ~460s -- impossible
+inside any request budget, and a per-request/per-worker background compute
+multiplies that heavy query across gunicorn workers and saturates the single
+small PG (the v122 pile-up that forced the v122->v121 rollback).
+
+This table decouples compute from serve: ONE elected worker (guarded by a
+Postgres advisory lock) recomputes each surface on a cadence and writes its
+payload here with a computed_at; every worker and every route then reads a
+single indexed row O(1). The heavy aggregate runs once per cadence, never
+per-request, never once-per-worker.
+
+Additive and reversible: a new table, no change to any existing column. Grades
+EXPAND-ONLY / GREEN. On prod the release_command (alembic upgrade head) creates
+it; it is tiny (one row per surface).
+"""
+from alembic import op
+import sqlalchemy as sa
+
+revision = "0015_freshness_stats"
+down_revision = "0014_axis_scored_at_index"
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    op.create_table(
+        "freshness_stats",
+        # surface key: 'scoring_freshness' | 'registry_freshness' |
+        # 'registry_source_freshness_report'
+        sa.Column("surface", sa.String(64), primary_key=True),
+        # the full JSON payload the route serves (counts, buckets, timestamps)
+        sa.Column("payload", sa.JSON, nullable=False),
+        # when the aggregate that produced `payload` was computed (UTC)
+        sa.Column("computed_at", sa.DateTime(timezone=True), nullable=False,
+                  server_default=sa.func.now()),
+        # how long that compute took, for observability
+        sa.Column("compute_seconds", sa.Float, nullable=True),
+    )
+
+
+def downgrade():
+    op.drop_table("freshness_stats")

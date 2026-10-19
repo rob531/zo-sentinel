@@ -233,3 +233,20 @@ class CadenceJobRun(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     rows_affected: Mapped[Optional[int]] = mapped_column(Integer)
     detail: Mapped[Optional[dict]] = mapped_column(JSON)
+
+
+class FreshnessStat(Base):
+    """One precomputed row per freshness surface (FU-667).
+
+    The heavy corpus aggregates (COUNT over 4.7M scores, the never-scored
+    anti-join, the 560k-row registry report) cannot run inside a request budget
+    on the 1-vCPU moat PG, and computing them per-worker saturated the PG. A
+    single elected worker recomputes each surface on a cadence and writes its
+    payload here; every route then reads this one indexed row O(1). `payload` is
+    the exact JSON the route serves; `computed_at` makes staleness visible."""
+    __tablename__ = "freshness_stats"
+    surface: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                  server_default=func.now())
+    compute_seconds: Mapped[Optional[float]] = mapped_column(Float)

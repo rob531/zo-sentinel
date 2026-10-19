@@ -47,7 +47,12 @@ def arm_statement_timeout(db: Session, timeout_ms: int = READ_SURFACE_STATEMENT_
         return
     # SET LOCAL takes effect for the current transaction; a plain SELECT via the
     # ORM implicitly begins one, so arm it up front on the same connection.
-    db.execute(text("SET LOCAL statement_timeout = :ms").bindparams(ms=int(timeout_ms)))
+    # NOTE: Postgres SET does NOT accept a bind parameter ($1) -- it demands a
+    # literal, so a parameterised `SET LOCAL statement_timeout = :ms` fails with
+    # `syntax error at or near "$1"`. timeout_ms is a server-controlled int
+    # (coerced below), never user input, so inlining it is safe from injection.
+    ms = int(timeout_ms)
+    db.execute(text(f"SET LOCAL statement_timeout = {ms}"))
 
 
 def is_statement_timeout(exc: BaseException) -> bool:
@@ -94,6 +99,30 @@ if __name__ == "__main__":
     arm_statement_timeout(s)
     assert s.execute(text("SELECT 1")).scalar() == 1
     s.close()
+
+    # 1b. The SET statement MUST inline the timeout as a literal -- Postgres SET
+    # rejects a bind parameter ($1) with a syntax error (regression guard: this
+    # 500'd prod on first deploy because the ms was bound, not inlined). Capture
+    # the SQL the arm would execute on a postgres-dialect session and assert it
+    # carries a literal integer, no ':ms' / '$' placeholder.
+    from sqlalchemy.dialects import postgresql as _pg
+
+    class _CaptureSession:
+        dialect = _pg.dialect()
+        executed: list[str] = []
+
+        def get_bind(self):
+            return self
+
+        def execute(self, clause):
+            self.executed.append(str(clause))
+
+    cap = _CaptureSession()
+    arm_statement_timeout(cap, 8000)
+    assert cap.executed, "arm must issue a SET on a postgresql session"
+    sql = cap.executed[0]
+    assert "8000" in sql, f"timeout must be an inlined literal: {sql!r}"
+    assert ":ms" not in sql and "$" not in sql, f"no bind placeholder allowed in SET: {sql!r}"
 
     # 2. a plain OperationalError that is NOT a timeout is re-raised untouched.
     non_timeout = OperationalError("stmt", {}, Exception("connection reset"))

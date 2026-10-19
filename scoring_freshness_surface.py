@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
+from app.read_surface_guard import arm_statement_timeout, is_statement_timeout, timeout_as_503
 
 router = APIRouter(tags=["freshness"])
 
@@ -98,11 +99,38 @@ def scoring_freshness(db: Session = Depends(get_session)) -> dict:
     now = time.monotonic()
     with _lock:
         fresh_enough = _cache is not None and (now - _cached_at) < CACHE_TTL_SECONDS
-        if not fresh_enough:
-            # Let DB errors propagate: a 500 is honest, a fabricated zero is not.
-            _cache = _compute(db)
-            _cached_at = now
+        if fresh_enough:
+            payload = dict(_cache)
+            payload["cache_age_seconds"] = round(now - _cached_at, 1)
+            payload["cache_ttl_seconds"] = CACHE_TTL_SECONDS
+            return payload
+        last_good = _cache  # may be None on a cold worker
+
+    # FU-667: bound the aggregate with a Postgres statement_timeout so a cold
+    # slow compute is CANCELLED by the DB instead of hanging the worker 45s+
+    # (the HTTP 000 "/freshness goes blind" mode). Outside the lock: the compute
+    # can be slow and must not block cache reads by other requests.
+    arm_statement_timeout(db)
+    try:
+        computed = _compute(db)
+    except Exception as exc:  # noqa: BLE001 -- classify the failure
+        if is_statement_timeout(exc) and last_good is not None:
+            # Serve the last good numbers, marked stale, rather than error: the
+            # corpus is reachable, this one pass was just too slow right now.
+            payload = dict(last_good)
+            payload["cache_age_seconds"] = round(time.monotonic() - _cached_at, 1)
+            payload["cache_ttl_seconds"] = CACHE_TTL_SECONDS
+            payload["stale"] = True
+            return payload
+        # No cache to fall back on (cold worker) or a real DB error: raise an
+        # honest 503/500. A fabricated zero would be a silent lie (an unknown is
+        # not a zero -- freshness_gate.py doctrine).
+        raise timeout_as_503(exc)
+
+    with _lock:
+        _cache = computed
+        _cached_at = time.monotonic()
         payload = dict(_cache)
-        payload["cache_age_seconds"] = round(now - _cached_at, 1)
+        payload["cache_age_seconds"] = 0.0
         payload["cache_ttl_seconds"] = CACHE_TTL_SECONDS
     return payload

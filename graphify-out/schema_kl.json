@@ -1,6 +1,6 @@
 {
-  "built_at": "2026-08-26T19:16:07+00:00",
-  "built_at_commit": "a78a514a",
+  "built_at": "2026-10-20T10:55:15+00:00",
+  "built_at_commit": "0d5cddc4a",
   "models": {
     "ApiKey": {
       "column_meta": {
@@ -137,6 +137,41 @@
         "status"
       ],
       "table": "cadence_job_runs"
+    },
+    "FreshnessStat": {
+      "column_meta": {
+        "compute_seconds": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "computed_at": {
+          "has_default": true,
+          "nullable": false,
+          "primary_key": false
+        },
+        "payload": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": false
+        },
+        "surface": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        }
+      },
+      "columns": [
+        "compute_seconds",
+        "computed_at",
+        "payload",
+        "surface"
+      ],
+      "relationships": [],
+      "required_construct": [
+        "payload"
+      ],
+      "table": "freshness_stats"
     },
     "McpLlmAxisScore": {
       "column_meta": {

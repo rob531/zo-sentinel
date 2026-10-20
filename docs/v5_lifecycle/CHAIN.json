@@ -1,0 +1,138 @@
+{
+ "id": "v5_lifecycle",
+ "title": "CHAIN - v5 full MCP lifecycle scoring: born / changed / died / archived (spooled)",
+ "purpose": "Chairman mandate 2026-10-18 (memory v5-lifecycle-scoring-mandate-2026-10; design _staging/V5_LIFECYCLE_SCORING.md): by mid-November, a smooth INTEGRATED pipeline where an MCP is scored across its whole lifecycle via DISTINCT routes - BORN (harvester->first-score), CHANGED (delta-rescore on change, incl cert/CA), DIED (absence->mark dead, retain last score + reason as INTEL, never delete), ARCHIVED (cold store, intel-queryable). Build on the hardened weekly_rescore harness (feat/harness-durability: idempotent ON CONFLICT import, durable-push-gated teardown, collect self-heal) that finalized v3.4 (334,754 servers). The self-aware SEAM-AUDIT monitor is the enforcement that stops initiatives half-finishing (harvested-but-unscored / scored-but-stale / seen-vs-dead become loud deterministic numbers). ~$119 API credits until Nov 5 fund the build; chain ticks on Max sub, GPU steps deferred to the interactive/poll path.",
+ "view_path": "D:\\zo\\Zocomputer Agents\\_staging\\V5_LIFECYCLE_SCORING.md",
+ "invariants": [
+  "Build on what we have: extend the hardened weekly_rescore harness + existing registry/scorer/chain; ADD, never greenfield or fork.",
+  "Fail gracefully tower-side: every step durable + idempotent + resumable; ADDITIVE-not-essential (scoring/verdicts/spine must work with any subsystem down and its table empty); no silent caps -- log what is dropped.",
+  "Scheduled serialized off-peak: heavy GPU/import steps are async (their id/title/do names 'vast' or 'gpu' so the worker DEFERS them to the interactive/poll path, never fires them inline); never collide with other tower jobs; respect each segment's OWN paid cap; vast <= $1.50/GPU with a fleet watchdog AND a destroy clock set BEFORE the pod is drawn - if price or watchdog cannot be read back, do not fire.",
+  "'Died' is INTEL, not deletion: a vanished MCP is marked dead with its last score + a reason retained; never silently dropped or hard-deleted.",
+  "v3.0 and the verdict-read path (mcp_server_registry.risk_tier, 333,954 asserted tiers) stay UNTOUCHED until an empirically-cleared v5 cutover; all score writes are version-scoped (model_version only).",
+  "Prod-schema changes (lifecycle_state) and the v5 SERVING cutover are gated: the chairman directive authorizes the BUILD; an irreversible schema migration gets a pre-check artifact first; the serving cutover fires only on a falsifiable better-than-incumbent gate (NOT eyeball).",
+  "Repo changes land as PRs (never push main); the two-pole self-test is the merge gate; never commit secrets (scan gh[op]_, sk-, key=).",
+  "Reconcile against the seam-audit each tick: close the gap a segment targets or record the blocker; never bank a holdover."
+ ],
+ "segments": [
+  {
+   "id": "V00",
+   "phase": "P0",
+   "kind": "observe",
+   "title": "Baseline: v3.4 finalized is the foundation",
+   "do": "Nothing to build. artifacts/v5_baseline.json records the finalized v3.4 state (334,754 scored; v3.0 + verdict path untouched; 16k gap verified ~98.8% benign URL-dedup). Every later route compares against this.",
+   "verify": {"type": "json", "path": "artifacts/v5_baseline.json", "key": "v34_distinct", "op": ">=", "value": 334000}
+  },
+  {
+   "id": "V01",
+   "phase": "P1",
+   "depends": ["V00"],
+   "title": "Seam-audit monitor v1 (the self-aware enforcement) -- build FIRST so every gap is a loud number",
+   "do": "Build _tools/seam_audit.py: a deterministic daily check over mcp_server_registry + mcp_llm_axis_scores (via the fly proxy, same conn as tools/rescore) computing the lifecycle seam ratios -- harvested-but-unscored (scorable registry rows with no score), scorable-but-dropped, scored-but-stale (oldest scored_at), scored-under-old-model-not-current (v3.0 reps with no v3.4), and a placeholder seen-vs-marked-dead (wired once lifecycle_state exists). Writes artifacts/seam_audit.json with each ratio + a breached[] list, and EXITS NONZERO (fails loud) when any ratio crosses its threshold. Include a hermetic two-pole --self-test (vary the mechanism: inject a breaching fixture -> RED, clean -> GREEN). Additive, read-only on prod.",
+   "verify": {"type": "all", "of": [
+     {"type": "cmd", "argv": ["python", "../../_tools/seam_audit.py", "--self-test"], "timeout": 300},
+     {"type": "file", "path": "artifacts/seam_audit.json"}
+   ]}
+  },
+  {
+   "id": "V02",
+   "phase": "P1",
+   "depends": ["V00"],
+   "title": "lifecycle_state schema (design + additive migration + pre-check) -- NOT applied",
+   "do": "Design the lifecycle_state backbone (born/active/changed/dead/archived + a transitions log). Write an ADDITIVE, reversible migration script (adds a nullable lifecycle_state column / a lifecycle table; defaults preserve current behaviour) + an explicit rollback, with a hermetic self-test against a THROWAWAY table (never prod). Produce artifacts/lifecycle_schema_precheck.json {change, reversibility, blast_radius, rollback_cmd, applied:false}. Do NOT apply to prod -- applying is the HELD pre-check gate.",
+   "verify": {"type": "all", "of": [
+     {"type": "cmd", "argv": ["python", "../../_tools/lifecycle_migration.py", "--self-test"], "timeout": 300},
+     {"type": "json", "path": "artifacts/lifecycle_schema_precheck.json", "key": "applied", "op": "==", "value": false}
+   ]}
+  },
+  {
+   "id": "V03",
+   "phase": "P1",
+   "depends": ["V01"],
+   "title": "BORN route: close the harvester -> scoring seam",
+   "do": "Diagnose why ~213k registry rows are never-scored (drive the zocomputer daily harvester READ-ONLY via zo_call -- no inline $(...), pin paths): split thin-stub (no scorable description) from scorable-but-dropped (standing scorer not picking them up / not running). Fix the seam so newly-harvested SCORABLE rows flow to a first-score incrementally (enrich stubs to pass the desc>20 filter, and/or restore the standing scorer pickup). No GPU in this segment -- score via the existing standing scorer. Prove with seam_audit: harvested-but-unscored-scorable drops below threshold. Write artifacts/born_route.json {diagnosed, fix, scorable_unscored_before, after}.",
+   "verify": {"type": "all", "of": [
+     {"type": "json", "path": "artifacts/born_route.json", "key": "after", "op": "<", "value": 2000},
+     {"type": "cmd", "argv": ["python", "../../_tools/seam_audit.py", "--check", "harvested_unscored"], "timeout": 300}
+   ]}
+  },
+  {
+   "id": "V04",
+   "phase": "P2",
+   "depends": ["V02"],
+   "title": "DIED route: absence-detection -> mark dead (intel), never delete",
+   "do": "Build _tools/lifecycle_died.py: detect MCPs not seen in the harvest for N cycles, set lifecycle_state=dead, RETAIN their last score + a reason/last-seen (intel), raise an intel signal; never hard-delete. Idempotent, additive, hermetic self-test (throwaway rows). Depends on the lifecycle_schema pre-check (V02); gate the actual column apply behind the HELD pre-check before running against prod.",
+   "verify": {"type": "all", "of": [
+     {"type": "cmd", "argv": ["python", "../../_tools/lifecycle_died.py", "--self-test"], "timeout": 300},
+     {"type": "file", "path": "artifacts/died_route.json"}
+   ]}
+  },
+  {
+   "id": "V05",
+   "phase": "P2",
+   "depends": ["V04"],
+   "title": "ARCHIVED route: cold store for dead MCPs, intel-queryable",
+   "do": "Build _tools/lifecycle_archive.py: move long-dead MCPs to a cold/archive store (table/partition) that stays queryable for intel/trends but is EXCLUDED from live scoring; idempotent, reversible, hermetic self-test. Write artifacts/archived_route.json.",
+   "verify": {"type": "all", "of": [
+     {"type": "cmd", "argv": ["python", "../../_tools/lifecycle_archive.py", "--self-test"], "timeout": 300},
+     {"type": "file", "path": "artifacts/archived_route.json"}
+   ]}
+  },
+  {
+   "id": "V06",
+   "phase": "P3",
+   "depends": ["V02", "V03"],
+   "title": "CHANGED route: change-detection triggers (incl cert/CA) -> delta-rescore",
+   "do": "Build _tools/lifecycle_changed.py: detect a meaningful change on an MCP (description, url, cert/CA, verdict) between harvest cycles and enqueue a delta-rescore through the HARDENED weekly_rescore harness (version-scoped, idempotent). Surface cert/CA changes as a first-class signal. Hermetic self-test. Write artifacts/changed_route.json.",
+   "verify": {"type": "all", "of": [
+     {"type": "cmd", "argv": ["python", "../../_tools/lifecycle_changed.py", "--self-test"], "timeout": 300},
+     {"type": "file", "path": "artifacts/changed_route.json"}
+   ]}
+  },
+  {
+   "id": "V07",
+   "phase": "P3",
+   "depends": ["V03"],
+   "title": "v5 model train + eval on vast GPU (ASYNC -- interactive/poll, not fired by the worker)",
+   "do": "ASYNC/GPU -- the worker SKIPS this; it is fired on the interactive/poll path. Train the lifecycle-aware v5 student on a vast GPU (fleet watchdog + destroy clock set BEFORE the pod is drawn; <= $1.50; results pushed to a durable branch per the hardened pattern), and run the falsifiable better-than-incumbent eval vs v3.4 on held-out sets. Write artifacts/v5_eval.json {verdict: IMPROVES|FLAT|REGRESSES, per_axis, corpus_sanity}.",
+   "verify": {"type": "file", "path": "artifacts/v5_eval.json"}
+  },
+  {
+   "id": "V08",
+   "phase": "P4",
+   "depends": ["V05", "V06", "V09", "V10", "V11"],
+   "title": "Integrate the spine end-to-end + prepare the v5 cutover gate (HELD/empirical)",
+   "do": "Wire the integrated spine: harvester -> registry(lifecycle_state) -> scorer(v5) -> verdict -> {change-detect->CHANGED; absence->DIED->ARCHIVED}, with the seam-audit green across all ratios. Run the v5 empirical cutover gate (better-than-incumbent on held-out + full-corpus sanity). If green, PREPARE the cutover (central ACTIVE_MODEL_VERSION / v5-else-v3.4 fallback) but do NOT flip serving -- the cutover is the chairman's empirical go. Write artifacts/v5_integrated.json + artifacts/v5_cutover_gate.json {gate: GREEN|RED, ready_to_cut}.",
+   "verify": {"type": "all", "of": [
+     {"type": "file", "path": "artifacts/v5_integrated.json"},
+     {"type": "file", "path": "artifacts/v5_cutover_gate.json"}
+   ]}
+  },
+  {
+   "id": "V09",
+   "phase": "P2",
+   "depends": ["V03"],
+   "title": "BORN at scale: score the net-new scorable backlog (GPU/vast, ASYNC)",
+   "do": "ASYNC/GPU -- worker SKIPS. After V03 closes the harvester->score seam + enrichment, SCORE the full net-new scorable backlog (the ~213k never-scored minus unscorable stubs) under the current serving model via the hardened weekly_rescore harness: sharded vast GPU run, fleet watchdog + destroy clock set BEFORE drawing pods, results to durable branches, idempotent ON CONFLICT import, seam-audit/integrity verified. Coexist model_version; v3.0/v3.4/verdict path untouched. Write artifacts/born_at_scale.json {scorable_backlog, scored, remaining}.",
+   "verify": {"type": "json", "path": "artifacts/born_at_scale.json", "key": "remaining", "op": "<", "value": 2000}
+  },
+  {
+   "id": "V10",
+   "phase": "P2",
+   "depends": ["V00"],
+   "title": "Known-bad / criticals INTEL store: accrue attribute intelligence over time",
+   "do": "Build _tools/known_bad_store.py: a first-class attribute/intel store capturing, for every CRITICAL verdict and every DIED MCP, WHAT IT WAS -- last per-axis scores, cert/CA, escalation reason, last-seen, source -- building a cumulative KNOWN-BAD MCP corpus that is queryable for intel and anchors future scoring (the curated known-dangerous exemplar set). Additive, idempotent, read-only on live scores, hermetic two-pole --self-test. Write artifacts/known_bad_store.json {criticals_captured, dead_captured, attributes_tracked}.",
+   "verify": {"type": "all", "of": [
+     {"type": "cmd", "argv": ["python", "../../_tools/known_bad_store.py", "--self-test"], "timeout": 300},
+     {"type": "file", "path": "artifacts/known_bad_store.json"}
+   ]}
+  },
+  {
+   "id": "V11",
+   "phase": "P4",
+   "depends": ["V07"],
+   "title": "v5 full-corpus rescore (GPU/vast, ASYNC) -- only after v5 eval IMPROVES",
+   "do": "ASYNC/GPU -- worker SKIPS. ONLY after V07's artifacts/v5_eval.json verdict is IMPROVES: rescore the full ~334k corpus under v5 on vast (sharded hardened harness: durable-push-gated teardown + idempotent ON CONFLICT import + partition/completion integrity; watchdog + destroy clock BEFORE drawing pods). Coexist model_version; do NOT touch v3.0/v3.4 rows or the verdict path. Write artifacts/v5_rescore.json {v5_distinct, coverage, integrity_ok}.",
+   "verify": {"type": "json", "path": "artifacts/v5_rescore.json", "key": "integrity_ok", "op": "==", "value": true}
+  }
+ ]
+}

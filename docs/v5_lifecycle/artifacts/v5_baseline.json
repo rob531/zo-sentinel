@@ -1,0 +1,12 @@
+{
+ "as_of": "2026-10-19",
+ "v34_distinct": 334754,
+ "v30_distinct": 333958,
+ "gap_v30_no_v34": 16169,
+ "gap_benign_url_dedup": 15977,
+ "gap_true_stragglers": 188,
+ "verdict_path_tiers": 333954,
+ "v34_partial_or_double_rows": 0,
+ "v34_finalized": true,
+ "note": "v3.4 corpus rescore finalized on the hardened harness (idempotent ON CONFLICT import + durable-push-gated teardown). v3.0 + verdict-read path untouched; v3.4 scored-complete, NOT serving (cutover HELD/empirical). This is the foundation the v5 lifecycle chain builds on."
+}

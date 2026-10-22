@@ -1,0 +1,11 @@
+[service]
+name = "escalation_path_stats_api"
+import_path = "services.active.escalation_path_stats_api.router"
+prefix = "/api"
+tag = "escalation_path_stats_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

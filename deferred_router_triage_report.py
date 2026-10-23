@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.testclient import TestClient
 
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 
 router = APIRouter(prefix="/routers/deferred", tags=["routers"])
 
@@ -29,9 +29,9 @@ class DeferredRouterTriageReport(BaseModel):
 @router.get("/triage", response_model=DeferredRouterTriageReport)
 def get_deferred_router_triage(session: Session = Depends(get_session)):
     deferred_routers = (
-        session.query(MCPServerRegistry)
-        .filter(MCPServerRegistry.status == "deferred")
-        .order_by(MCPServerRegistry.last_checked.desc())
+        session.query(McpServerRegistry)
+        .filter(McpServerRegistry.status == "deferred")
+        .order_by(McpServerRegistry.last_checked.desc())
         .all()
     )
 
@@ -63,21 +63,21 @@ if __name__ == "__main__":
     TestingSession = sessionmaker(bind=engine)
     test_session = TestingSession()
 
-    r1 = MCPServerRegistry(
+    r1 = McpServerRegistry(
         id="router-test-001",
         name="Alpha Router",
         status="deferred",
         last_checked=datetime(2024, 1, 15, 10, 0),
         deferral_reason="resource_constraint",
     )
-    r2 = MCPServerRegistry(
+    r2 = McpServerRegistry(
         id="router-test-002",
         name="Beta Router",
         status="deferred",
         last_checked=datetime(2024, 1, 15, 9, 0),
         deferral_reason="config_pending",
     )
-    r3 = MCPServerRegistry(
+    r3 = McpServerRegistry(
         id="router-test-003",
         name="Gamma Router",
         status="active",

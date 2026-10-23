@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import requests
 from app.db import get_session
-from app.models import MCPServerRegistry, MCPLLMAxisScore, MCPScoreDispute
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, desc
 
@@ -88,7 +88,7 @@ class DisputeListResponse(BaseModel):
 
 @router.post("/scoring-results-push", response_model=ScoringResultsResponse, status_code=202)
 async def push_scoring_results(payload: ScoringResultsPush, db: Session = Depends(get_session)):
-    server = db.query(MCPServerRegistry).filter(MCPServerRegistry.server_id == payload.server_id).first()
+    server = db.query(McpServerRegistry).filter(McpServerRegistry.server_id == payload.server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     rows = []
@@ -110,10 +110,10 @@ async def push_scoring_results(payload: ScoringResultsPush, db: Session = Depend
 
 @router.get("/verdict/{server_id}", response_model=VerdictResponse)
 async def get_verdict(server_id: str, db: Session = Depends(get_session)):
-    server = db.query(MCPServerRegistry).filter(MCPServerRegistry.server_id == server_id).first()
+    server = db.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    scores = db.query(MCPLLMAxisScore).filter(MCPLLMAxisScore.server_id == server_id).order_by(desc(MCPLLMAxisScore.scored_at)).all()
+    scores = db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).order_by(desc(McpLlmAxisScore.scored_at)).all()
     axes = [VerdictAxis(axis_name=s.axis_name, label=s.label, p_top=s.p_top, p_critical=s.p_critical, scored_at=s.scored_at.isoformat() if s.scored_at else "") for s in scores]
     return VerdictResponse(server_id=server.server_id, name=server.name, risk_tier=server.risk_tier, verdict=server.verdict or "", axes=axes, criteria_version=server.criteria_version or "unknown")
 
@@ -121,11 +121,11 @@ async def get_verdict(server_id: str, db: Session = Depends(get_session)):
 @router.get("/servers", response_model=ServersResponse)
 async def list_servers(skip: int = 0, limit: int = 100, risk_tier: Optional[str] = None, db: Session = Depends(get_session)):
     limit = min(limit, 100)
-    q = db.query(MCPServerRegistry)
-    cq = db.query(func.count(MCPServerRegistry.server_id))
+    q = db.query(McpServerRegistry)
+    cq = db.query(func.count(McpServerRegistry.server_id))
     if risk_tier:
-        q = q.filter(MCPServerRegistry.risk_tier == risk_tier)
-        cq = cq.filter(MCPServerRegistry.risk_tier == risk_tier)
+        q = q.filter(McpServerRegistry.risk_tier == risk_tier)
+        cq = cq.filter(McpServerRegistry.risk_tier == risk_tier)
     total = cq.scalar()
     servers = q.offset(skip).limit(limit).all()
     return ServersResponse(servers=[ServerSummary(server_id=s.server_id, name=s.name, risk_tier=s.risk_tier, verdict=s.verdict or "", last_assessed=s.last_assessed.isoformat() if s.last_assessed else None) for s in servers], total=total)
@@ -133,7 +133,7 @@ async def list_servers(skip: int = 0, limit: int = 100, risk_tier: Optional[str]
 
 @router.post("/disputes", response_model=DisputeResponse, status_code=201)
 async def create_dispute(dispute: DisputeCreate, db: Session = Depends(get_session)):
-    new_dispute = MCPScoreDispute(
+    new_dispute = McpScoreDispute(
         server_id=dispute.server_id,
         submitted_by=dispute.submitted_by,
         proposed_overall_risk=dispute.proposed_overall_risk,
@@ -150,7 +150,7 @@ async def create_dispute(dispute: DisputeCreate, db: Session = Depends(get_sessi
 
 @router.get("/disputes/{server_id}", response_model=DisputeListResponse)
 async def get_disputes(server_id: str, db: Session = Depends(get_session)):
-    disputes = db.query(MCPScoreDispute).filter(MCPScoreDispute.server_id == server_id).order_by(desc(MCPScoreDispute.created_at)).all()
+    disputes = db.query(McpScoreDispute).filter(McpScoreDispute.server_id == server_id).order_by(desc(McpScoreDispute.created_at)).all()
     return DisputeListResponse(disputes=[DisputeResponse(dispute_id=d.id, server_id=d.server_id, submitted_by=d.submitted_by, proposed_overall_risk=d.proposed_overall_risk, proposed_axes=d.proposed_axes, reason_category=d.reason_category, explanation=d.explanation, status=d.status, created_at=d.created_at.isoformat() if d.created_at else None) for d in disputes])
 
 
@@ -189,9 +189,9 @@ if __name__ == "__main__":
         assert sr.json()["rows_written"] == 2
         print("PASS: POST /external/scoring-results-push")
 
-    srv = MCPServerRegistry(server_id="srv-001", name="Test Server", risk_tier="low", verdict="clean", criteria_version="v1")
+    srv = McpServerRegistry(server_id="srv-001", name="Test Server", risk_tier="low", verdict="clean", criteria_version="v1")
     test_session.add(srv)
-    sc = MCPLLMAxisScore(server_id="srv-001", axis_name="security", label="low", p_top=0.8, p_critical=0.1, probs=[0.8, 0.15, 0.05], model_version="v1", scored_at=datetime(2024, 1, 1))
+    sc = McpLlmAxisScore(server_id="srv-001", axis_name="security", label="low", p_top=0.8, p_critical=0.1, probs=[0.8, 0.15, 0.05], model_version="v1", scored_at=datetime(2024, 1, 1))
     test_session.add(sc)
     test_session.commit()
 

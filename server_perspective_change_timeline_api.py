@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 from sqlalchemy import select
 
 router = APIRouter()
@@ -45,8 +45,8 @@ def fetch_perspective_events(perspective_id: str, write_service) -> List[dict]:
 def fetch_server_names(server_ids: List[int], session) -> dict:
     if not server_ids:
         return {}
-    stmt = select(MCPServerRegistry.id, MCPServerRegistry.name).where(
-        MCPServerRegistry.id.in_(server_ids)
+    stmt = select(McpServerRegistry.id, McpServerRegistry.name).where(
+        McpServerRegistry.id.in_(server_ids)
     )
     result = session.execute(stmt).fetchall()
     return {row[0]: row[1] for row in result}
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     TestSession = sessionmaker(bind=engine)
     test_session = TestSession()
     
-    test_server = MCPServerRegistry(id=10, name="Test Server Alpha")
+    test_server = McpServerRegistry(id=10, name="Test Server Alpha")
     test_session.add(test_server)
     test_session.commit()
 

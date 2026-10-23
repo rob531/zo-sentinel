@@ -7,8 +7,11 @@ def test_modelspec_carries_base_url_and_key_env():
     s = E.ModelSpec("openai_compatible", "m", 1, 1, 0.0, "l",
                     base_url="http://x/v1", key_env="K")
     assert s.base_url == "http://x/v1" and s.key_env == "K"
-    # existing positional specs still construct (defaults)
-    assert E.LADDER[0].base_url == "" and E.LADDER[0].key_env == ""
+    # existing positional specs still construct: base_url defaults to "" (only
+    # openai_compatible rungs carry one), while LADDER[0] (MiniMax) now carries an
+    # explicit key_env="MINIMAX_API_KEY" from the native-key-alignment change in
+    # this PR -- an intentional, non-default key_env, not a regression.
+    assert E.LADDER[0].base_url == "" and E.LADDER[0].key_env == "MINIMAX_API_KEY"
 
 
 def test_nvidia_rung_wired_nonbreaking():

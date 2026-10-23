@@ -1,0 +1,8 @@
+[service]
+name = "vuln_linker_v2"
+import_path = "services.active.vuln_linker_v2.router"
+prefix = "/api"
+tag = "vuln_linker_v2"
+origin = "service"
+auth = "public"
+needs_data_layer = true

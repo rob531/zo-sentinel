@@ -1,0 +1,8 @@
+[service]
+name = "axis_escalation_census_api"
+import_path = "services.active.axis_escalation_census_api.router"
+prefix = "/api"
+tag = "axis_escalation_census_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

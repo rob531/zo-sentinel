@@ -247,28 +247,45 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
     trusted_override = bool(gate.get("trusted")) or bool(gate.get("masquerade_flag"))
     override_reason = trust_basis if trusted_override else None
 
-    # Audit: log override application to write_service (fire-and-forget)
+    # Audit: log override application to write_service (fire-and-forget).
+    #
+    # This wrote to `trust_gating_audit_log`, a table that exists on no plane --
+    # not on the bus, not as a __tablename__, in no migration, and nothing in
+    # the tree ever created it. The write is fire-and-forget inside a bare
+    # `except: pass`, so every trust-gate override since this code landed was
+    # audited into nothing, silently. An audit trail that cannot fail loudly is
+    # the one kind of code where a swallowed exception is worst. Refs #4080.
+    #
+    # The bus has exactly one audit table, `audit_log`, and it is shaped for
+    # precisely this: an actor, an action, a target server, and a details_json
+    # for the payload-shaped remainder. That is the intended referent.
     if trusted_override:
         try:
             requests.post(
                 f"{WRITE_SERVICE}/execute",
                 json={
                     "sql": (
-                        "INSERT INTO trust_gating_audit_log "
-                        "(server_id, url, name, trusted, trust_basis, masquerade_flag, "
-                        "model_overall_risk, published_overall_risk, logged_at) "
-                        "VALUES (:sid, :url, :name, :trusted, :basis, :masq, "
-                        ":model_risk, :pub_risk, now())"
+                        "INSERT INTO audit_log "
+                        "(event_type, actor, action, target_server_id, "
+                        " details_json, outcome, timestamp) "
+                        "VALUES ('trust_gating', 'verdict_breakdown_api', "
+                        " :action, :sid, :details, 'applied', now())"
                     ),
                     "params": {
+                        "action": ("masquerade_flagged" if masquerade_flag
+                                   else "trusted_cap_applied"),
                         "sid": server_id,
-                        "url": url,
-                        "name": name,
-                        "trusted": trusted,
-                        "basis": trust_basis,
-                        "masq": masquerade_flag,
-                        "model_risk": gate.get("original_overall_risk") or labels.get("overall_risk"),
-                        "pub_risk": gate.get("published_overall_risk") or labels.get("overall_risk"),
+                        "details": json.dumps({
+                            "url": url,
+                            "name": name,
+                            "trusted": trusted,
+                            "trust_basis": trust_basis,
+                            "masquerade_flag": masquerade_flag,
+                            "model_overall_risk": (gate.get("original_overall_risk")
+                                                   or labels.get("overall_risk")),
+                            "published_overall_risk": (gate.get("published_overall_risk")
+                                                       or labels.get("overall_risk")),
+                        }),
                     },
                     "wait": False,
                 },

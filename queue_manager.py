@@ -1,29 +1,35 @@
-#!/usr/bin/env python3
-"""
-queue_manager.py -- ZO-SENTINEL assessment queue manager.
-Manages prioritization of which MCPs to assess next.
-No daemon, utility module used by signal_analyser.
-"""
 import requests
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 log = logging.getLogger(__name__)
 
-WRITE_SERVICE_URL = "http://127.0.0.1:8772/write"
-QUERY_SERVICE_URL = "http://127.0.0.1:8773"
-EXECUTE_URL = "http://127.0.0.1:8772/execute"
+WRITE_SERVICE_URL = "http://127.0.0.1:8772"
+QUERY_SERVICE_URL = "http://127.0.0.1:8772/query"
+EXECUTE_SERVICE_URL = "http://127.0.0.1:8772/execute"
 
 ASSESSMENT_QUEUE_FILE = "ASSESSMENT_QUEUE.md"
 PRIORITY_THRESHOLD_DAYS = 7
-APPROVAL_WORKFLOW_TABLE = "approval_workflow"
+
+MCP_SERVER_REGISTRY = "mcp_server_registry"
+MCP_SIGNAL_SCORES = "mcp_signal_scores"
+MCP_RISK_REGISTER = "mcp_risk_register"
 MESH_EVENTS_TABLE = "mesh_events"
 NPM_SCOPE_KEYWORDS = ["@modelcontextprotocol", "@mcp", "mcp-server", "model-context-protocol"]
 
+RISK_TIER_ORDER = {
+    "CRITICAL": 1,
+    "HIGH": 2,
+    "MEDIUM": 3,
+    "LOW": 4,
+    "MINIMAL": 5,
+    "UNKNOWN": 99,
+}
+
 
 def ws_query(sql: str) -> List[Dict[str, Any]]:
-    """Execute a query via inference_router (DuckDB)."""
+    """Execute a SELECT query via write_service."""
     try:
         resp = requests.post(
             QUERY_SERVICE_URL,
@@ -32,17 +38,21 @@ def ws_query(sql: str) -> List[Dict[str, Any]]:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data.get("data", [])
+        return data.get("rows", [])
     except Exception as e:
         log.warning(f"Query failed: {sql[:100]}... Error: {e}")
         return []
 
 
-def ws_write(table: str, rows: Any) -> bool:
+def ws_write(table: str, rows: List[Dict[str, Any]]) -> bool:
     """Write rows to table via write_service."""
     try:
         payload = {"table": table, "rows": rows}
-        resp = requests.post(WRITE_SERVICE_URL, json=payload, timeout=15)
+        resp = requests.post(
+            f"{WRITE_SERVICE_URL}/write",
+            json=payload,
+            timeout=15
+        )
         resp.raise_for_status()
         return True
     except Exception as e:
@@ -50,285 +60,266 @@ def ws_write(table: str, rows: Any) -> bool:
         return False
 
 
-def get_approval_submitted_servers() -> set:
-    """Get server_ids explicitly submitted via approval_workflow (highest priority)."""
-    query = """
-        SELECT DISTINCT server_id 
-        FROM approval_workflow 
-        WHERE server_id IS NOT NULL 
-        AND (status IS NULL OR status != 'completed')
-    """
-    results = ws_query(query)
-    return {row.get("server_id") for row in results if row.get("server_id")}
+def ws_execute(sql: str) -> bool:
+    """Execute DDL/DML via write_service."""
+    try:
+        resp = requests.post(
+            EXECUTE_SERVICE_URL,
+            json={"sql": sql},
+            timeout=30
+        )
+        resp.raise_for_status()
+        return True
+    except Exception as e:
+        log.error(f"Execute failed: {sql[:100]}... Error: {e}")
+        return False
+
+
+def utc_now_iso() -> str:
+    """Return current UTC time as ISO 8601 string."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def get_mesh_submitted_servers() -> set:
-    """Get server_ids submitted via mesh_events (approval workflow submissions)."""
-    query = """
-        SELECT DISTINCT server_id 
-        FROM mesh_events 
-        WHERE event_type = 'approval_submitted' 
-        AND server_id IS NOT NULL
-    """
-    results = ws_query(query)
-    return {row.get("server_id") for row in results if row.get("server_id")}
+    """Get server_ids submitted via mesh events (mesh_memory SQLite)."""
+    import sqlite3
+    servers = set()
+    try:
+        conn = sqlite3.connect("/home/workspace/Datasets/zo-mesh/mesh_memory.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT server_id 
+            FROM mesh_events 
+            WHERE server_id IS NOT NULL
+            AND event_type IN ('mcp_submitted', 'mcp_candidate_added')
+        """)
+        for row in cursor.fetchall():
+            servers.add(row[0])
+        conn.close()
+    except Exception as e:
+        log.warning(f"mesh_memory query failed: {e}")
+    return servers
 
 
 def get_npm_official_servers() -> set:
-    """Get servers discovered from npm official scope."""
+    """Get server_ids from NPM official registry sources."""
     query = """
         SELECT server_id 
         FROM mcp_server_registry 
-        WHERE (
-            LOWER(name) LIKE '%@modelcontextprotocol%' 
-            OR LOWER(name) LIKE '%@mcp%'
-            OR LOWER(name) LIKE '%mcp-server%'
-            OR LOWER(description) LIKE '%model context protocol%'
-            OR registry_source = 'npm_official'
-        )
-        AND server_id IS NOT NULL
+        WHERE registry_source IN ('npm', 'github', 'smithery')
+        AND verdict IS NULL
+        AND trust_score < 50
     """
     results = ws_query(query)
     return {row.get("server_id") for row in results if row.get("server_id")}
 
 
-def get_high_scan_count_servers(limit: int = 50) -> List[Dict[str, Any]]:
-    """Get servers with high scan_count but no verdict."""
+def get_unscored_servers(limit: int = 100) -> List[Dict[str, Any]]:
+    """Get servers missing signal scores, ordered by risk priority."""
     query = f"""
-        SELECT server_id, scan_count, last_assessed, name
-        FROM mcp_server_registry 
-        WHERE verdict IS NULL 
-        OR verdict = ''
-        OR verdict = 'unknown'
-        AND scan_count > 0
-        ORDER BY scan_count DESC
+        SELECT 
+            r.server_id,
+            r.name,
+            r.url,
+            r.registry_source,
+            r.verdict,
+            r.trust_score,
+            r.scan_count,
+            COALESCE(rr.risk_tier, 'UNKNOWN') as risk_tier,
+            COALESCE(rr.threat_count, 0) as threat_count
+        FROM mcp_server_registry r
+        LEFT JOIN mcp_risk_register rr ON r.server_id = rr.server_id
+        WHERE r.verdict IS NULL
+        OR r.verdict = 'UNKNOWN'
+        ORDER BY
+            CASE COALESCE(rr.risk_tier, 'UNKNOWN')
+                WHEN 'CRITICAL' THEN 1
+                WHEN 'HIGH' THEN 2
+                WHEN 'MEDIUM' THEN 3
+                WHEN 'LOW' THEN 4
+                WHEN 'MINIMAL' THEN 5
+                ELSE 99
+            END,
+            COALESCE(rr.threat_count, 0) DESC,
+            r.scan_count ASC,
+            r.trust_score ASC
         LIMIT {limit}
     """
     return ws_query(query)
 
 
-def get_stale_servers(days_threshold: int = 7) -> List[Dict[str, Any]]:
-    """Get servers last assessed > N days ago."""
-    threshold_date = (datetime.now() - timedelta(days=days_threshold)).isoformat()
+def get_stale_servers(days: int = 7) -> List[Dict[str, Any]]:
+    """Get servers with stale assessments needing refresh."""
+    cutoff = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     query = f"""
-        SELECT server_id, scan_count, last_assessed, name
-        FROM mcp_server_registry 
-        WHERE last_assessed IS NOT NULL 
-        AND last_assessed < '{threshold_date}'
-        AND (verdict IS NULL OR verdict = '' OR verdict = 'unknown')
+        SELECT 
+            server_id,
+            name,
+            verdict,
+            trust_score,
+            last_assessed
+        FROM mcp_server_registry
+        WHERE last_assessed IS NOT NULL
+        AND last_assessed < '{cutoff}'
+        AND verdict IS NOT NULL
+        AND verdict != 'UNKNOWN'
         ORDER BY last_assessed ASC
-        LIMIT 100
+        LIMIT 50
     """
     return ws_query(query)
 
 
-def get_all_unscored_servers() -> List[Dict[str, Any]]:
-    """Get all servers without a verdict."""
+def get_high_risk_unassessed() -> List[Dict[str, Any]]:
+    """Get high-risk servers that have never been assessed."""
     query = """
-        SELECT server_id, scan_count, last_assessed, name, url, description
-        FROM mcp_server_registry 
-        WHERE verdict IS NULL 
-        OR verdict = ''
-        OR verdict = 'unknown'
-        ORDER BY last_seen DESC
+        SELECT 
+            r.server_id,
+            r.name,
+            r.url,
+            r.registry_source,
+            COALESCE(rr.risk_tier, 'UNKNOWN') as risk_tier,
+            COALESCE(rr.threat_count, 0) as threat_count
+        FROM mcp_server_registry r
+        INNER JOIN mcp_risk_register rr ON r.server_id = rr.server_id
+        WHERE rr.risk_tier IN ('CRITICAL', 'HIGH')
+        AND (r.verdict IS NULL OR r.verdict = 'UNKNOWN')
+        ORDER BY 
+            CASE rr.risk_tier WHEN 'CRITICAL' THEN 1 ELSE 2 END,
+            rr.threat_count DESC
+        LIMIT 20
     """
     return ws_query(query)
 
 
-def build_priority_queue() -> List[Dict[str, Any]]:
-    """
-    Build ordered priority queue of servers to assess.
-    Priority order:
-    1. Servers explicitly submitted via approval_workflow (highest)
-    2. Servers discovered from npm official scope
-    3. Servers with high scan_count but no verdict
-    4. Servers last assessed >7d ago
-    """
-    priority_queue = []
+def compute_queue_priority(server: Dict[str, Any]) -> int:
+    """Compute numeric priority for a server (lower = higher priority)."""
+    tier = server.get("risk_tier", "UNKNOWN")
+    threat_count = server.get("threat_count", 0)
+    trust_score = server.get("trust_score", 50)
+    scan_count = server.get("scan_count", 0)
+    
+    tier_rank = RISK_TIER_ORDER.get(tier, 99)
+    
+    return (
+        tier_rank * 100000 +
+        min(threat_count, 100) * 1000 +
+        (100 - min(trust_score, 100)) * 10 +
+        min(scan_count, 100)
+    )
+
+
+def build_assessment_queue(limit: int = 100) -> List[Dict[str, Any]]:
+    """Build ordered assessment queue combining all priority sources."""
+    queue = []
     seen_ids = set()
     
-    # Priority 1: Approval workflow submissions
-    approval_servers = get_approval_submitted_servers()
-    mesh_servers = get_mesh_submitted_servers()
-    all_submitted = approval_servers | mesh_servers
+    high_risk = get_high_risk_unassessed()
+    for server in high_risk:
+        sid = server.get("server_id")
+        if sid and sid not in seen_ids:
+            server["priority"] = compute_queue_priority(server)
+            server["queue_source"] = "high_risk"
+            queue.append(server)
+            seen_ids.add(sid)
     
-    for server_id in all_submitted:
-        if server_id and server_id not in seen_ids:
-            query = f"""
-                SELECT server_id, name, scan_count, last_assessed, url
-                FROM mcp_server_registry 
-                WHERE server_id = '{server_id}'
-            """
-            results = ws_query(query)
-            if results:
-                priority_queue.append({
-                    "server_id": server_id,
-                    "priority": 1,
-                    "reason": "approval_submitted",
-                    "data": results[0]
-                })
-                seen_ids.add(server_id)
+    unscored = get_unscored_servers(limit=limit)
+    for server in unscored:
+        sid = server.get("server_id")
+        if sid and sid not in seen_ids:
+            server["priority"] = compute_queue_priority(server)
+            server["queue_source"] = "unscored"
+            queue.append(server)
+            seen_ids.add(sid)
     
-    # Priority 2: NPM official scope
-    npm_servers = get_npm_official_servers()
-    for server_id in npm_servers:
-        if server_id and server_id not in seen_ids:
-            query = f"""
-                SELECT server_id, name, scan_count, last_assessed, url
-                FROM mcp_server_registry 
-                WHERE server_id = '{server_id}'
-            """
-            results = ws_query(query)
-            if results:
-                priority_queue.append({
-                    "server_id": server_id,
-                    "priority": 2,
-                    "reason": "npm_official_scope",
-                    "data": results[0]
-                })
-                seen_ids.add(server_id)
-    
-    # Priority 3: High scan count servers
-    high_scan = get_high_scan_count_servers(limit=50)
-    for row in high_scan:
-        server_id = row.get("server_id")
-        if server_id and server_id not in seen_ids:
-            priority_queue.append({
-                "server_id": server_id,
-                "priority": 3,
-                "reason": "high_scan_count",
-                "data": row
-            })
-            seen_ids.add(server_id)
-    
-    # Priority 4: Stale servers (>7 days)
-    stale = get_stale_servers(days_threshold=PRIORITY_THRESHOLD_DAYS)
-    for row in stale:
-        server_id = row.get("server_id")
-        if server_id and server_id not in seen_ids:
-            priority_queue.append({
-                "server_id": server_id,
-                "priority": 4,
-                "reason": "stale_assessment",
-                "data": row
-            })
-            seen_ids.add(server_id)
-    
-    return priority_queue
-
-
-def get_next_batch(n: int = 10) -> List[str]:
-    """
-    Get next batch of server_ids to assess.
-    Returns ordered list of server_ids in priority order.
-    """
-    queue = build_priority_queue()
-    batch = []
-    
-    for item in queue[:n]:
-        server_id = item.get("server_id")
-        if server_id:
-            batch.append(server_id)
-    
-    return batch
-
-
-def write_assessment_queue_file(queue: List[Dict[str, Any]]) -> bool:
-    """Write priority queue to ASSESSMENT_QUEUE.md file."""
-    try:
-        lines = [
-            "# ZO-SENTINEL Assessment Queue",
-            f"Generated: {datetime.now().isoformat()}",
-            "",
-            "## Priority Legend",
-            "- Priority 1: Approval workflow submissions (highest)",
-            "- Priority 2: NPM official scope",
-            "- Priority 3: High scan count",
-            "- Priority 4: Stale assessment (>7 days)",
-            "",
-            "## Queue",
-            "",
-        ]
-        
-        lines.append("| Priority | Server ID | Reason | Name | Scan Count | Last Assessed |")
-        lines.append("|----------|-----------|--------|------|------------|--------------|")
-        
-        for item in queue:
-            data = item.get("data", {})
-            last_assessed = data.get("last_assessed", "Never")
-            if last_assessed and last_assessed != "Never":
-                try:
-                    dt = datetime.fromisoformat(last_assessed.replace("Z", "+00:00"))
-                    last_assessed = dt.strftime("%Y-%m-%d %H:%M")
-                except Exception:
-                    pass
-            
-            lines.append(
-                f"| {item['priority']} | "
-                f"{item['server_id']} | "
-                f"{item['reason']} | "
-                f"{data.get('name', 'N/A')} | "
-                f"{data.get('scan_count', 0)} | "
-                f"{last_assessed} |"
-            )
-        
-        lines.append("")
-        lines.append(f"**Total in queue: {len(queue)}**")
-        
-        with open(ASSESSMENT_QUEUE_FILE, "w") as f:
-            f.write("\n".join(lines))
-        
-        log.info(f"Wrote assessment queue with {len(queue)} entries to {ASSESSMENT_QUEUE_FILE}")
-        return True
-        
-    except Exception as e:
-        log.error(f"Failed to write queue file: {e}")
-        return False
+    queue.sort(key=lambda x: x["priority"])
+    return queue[:limit]
 
 
 def get_queue_stats() -> Dict[str, Any]:
-    """Get statistics about the current queue."""
-    queue = build_priority_queue()
+    """Return statistics about the current assessment queue."""
+    total = get_unscored_servers(limit=10000)
+    high_risk = get_high_risk_unassessed()
+    mesh_submitted = get_mesh_submitted_servers()
+    npm_official = get_npm_official_servers()
     
-    stats = {
-        "total": len(queue),
-        "by_priority": {},
-        "timestamp": datetime.now().isoformat()
+    unscored_ids = {s["server_id"] for s in total if s.get("server_id")}
+    
+    return {
+        "total_unassessed": len(total),
+        "high_risk_pending": len(high_risk),
+        "mesh_submitted_count": len(mesh_submitted),
+        "npm_official_count": len(npm_official),
+        "mesh_in_unassessed": len(mesh_submitted & unscored_ids),
+        "npm_in_unassessed": len(npm_official & unscored_ids),
+        "generated_at": utc_now_iso(),
     }
-    
-    for item in queue:
-        priority = item["priority"]
-        stats["by_priority"][priority] = stats["by_priority"].get(priority, 0) + 1
-    
-    return stats
 
 
-def refresh_queue() -> List[Dict[str, Any]]:
-    """Build queue and write to file. Returns the queue."""
-    queue = build_priority_queue()
-    write_assessment_queue_file(queue)
-    return queue
+def mark_assessment_complete(server_id: str, new_verdict: str, new_trust_score: float) -> bool:
+    """Record that a server has been assessed."""
+    row = {
+        "server_id": server_id,
+        "verdict": new_verdict,
+        "trust_score": new_trust_score,
+        "last_assessed": utc_now_iso(),
+    }
+    return ws_write(MCP_SERVER_REGISTRY, [row])
 
 
-def get_queue_for_signal_analyser(batch_size: int = 10) -> List[str]:
-    """
-    Get next batch of server_ids for signal_analyser.
-    Convenience function that builds queue, writes file, and returns batch.
-    """
-    queue = refresh_queue()
-    return [item["server_id"] for item in queue[:batch_size]]
+def get_next_assessment_target() -> Optional[Dict[str, Any]]:
+    """Get the highest-priority server for next assessment."""
+    queue = build_assessment_queue(limit=1)
+    return queue[0] if queue else None
+
+
+def log_queue_event(event_type: str, server_id: Optional[str] = None, details: Optional[Dict[str, Any]] = None) -> None:
+    """Log an event to mesh_events for queue tracking."""
+    event = {
+        "event_type": event_type,
+        "server_id": server_id,
+        "timestamp": utc_now_iso(),
+        "details_json": details or {},
+    }
+    ws_write(MESH_EVENTS_TABLE, [event])
+
+
+def ensure_queue_table() -> None:
+    """Ensure mesh_events table exists in mesh_memory."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect("/home/workspace/Datasets/zo-mesh/mesh_memory.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mesh_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                server_id TEXT,
+                timestamp TEXT NOT NULL,
+                details_json TEXT,
+                processed INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error(f"Failed to create mesh_events table: {e}")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    import sys
     
-    log.info("Building assessment queue...")
-    queue = refresh_queue()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+    )
     
+    ensure_queue_table()
     stats = get_queue_stats()
-    log.info(f"Queue stats: {stats}")
+    print(f"Queue Stats: {stats}")
     
-    batch = get_next_batch(n=10)
-    log.info(f"Next batch ({len(batch)} servers): {batch[:5]}...")
+    queue = build_assessment_queue(limit=20)
+    print(f"\nTop 20 Assessment Queue:")
+    for i, server in enumerate(queue, 1):
+        print(f"  {i}. [{server.get('queue_source')}] {server.get('name')} ({server.get('server_id')}) - tier={server.get('risk_tier')}, threats={server.get('threat_count')}")
     
-    log.info(f"Full queue written to {ASSESSMENT_QUEUE_FILE}")
+    sys.exit(0)

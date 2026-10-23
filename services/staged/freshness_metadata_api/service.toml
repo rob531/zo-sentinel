@@ -1,0 +1,8 @@
+[service]
+name = "freshness_metadata_api"
+import_path = "services.active.freshness_metadata_api.router"
+prefix = "/api"
+tag = "freshness_metadata_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

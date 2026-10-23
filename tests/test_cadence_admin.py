@@ -140,3 +140,41 @@ def test_cost_ceiling_env_parsing(monkeypatch):
     assert mod._env_int("CADENCE_REINDEX_MAX_ROWS", 200_000) == 200_000
     monkeypatch.setenv("CADENCE_DRIFT_PCT", "2.5")
     assert mod._env_float("CADENCE_DRIFT_PCT", 5.0) == 2.5
+
+
+def test_drift_response_publishes_the_threshold_it_graded_against(monkeypatch):
+    """A guard that publishes a measurement and a verdict but not the bar forces
+    every reader to carry its own copy of CADENCE_DRIFT_PCT (prod runs
+    112/114/116/118/120, 2026-09-11..14: drift 0.08 -> 0.81, triggered:false,
+    no threshold anywhere in the response or the ledger detail).
+
+    Two poles, because a green never observed RED is UNPROVEN:
+      - the field must be PRESENT (it was absent at b77c47d8), and
+      - it must TRACK the environment, not be a hardcoded 5.0. A literal would
+        satisfy presence and still be the same defect one layer down.
+    """
+    import cadence_admin_api as mod
+    TestSession = _sessionmaker()
+    s = TestSession()
+    from app.models import McpServerRegistry
+    now = datetime.utcnow()
+    for i in range(4):
+        s.add(McpServerRegistry(server_id=f"t{i}", name=f"n{i}",
+                                registry_source="github", last_assessed=now))
+    s.commit()
+
+    monkeypatch.setenv("CADENCE_DRIFT_PCT", "2.5")
+    stats, triggered = mod._graded_stats(s)
+    assert stats["threshold_pct"] == 2.5, "threshold must be published"
+    assert triggered is True  # drift_pct 100.0 > 2.5
+
+    # RED pole: a hardcoded literal would not move when the env moves.
+    monkeypatch.setenv("CADENCE_DRIFT_PCT", "99.5")
+    stats2, triggered2 = mod._graded_stats(s)
+    assert stats2["threshold_pct"] == 99.5, "threshold must be DERIVED, not carried"
+    assert stats2["drift_pct"] == stats["drift_pct"], "measurement must not move"
+
+    # force must still win over an unreachable bar.
+    _, forced = mod._graded_stats(s, force=True)
+    assert forced is True
+    s.close()

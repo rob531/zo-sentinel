@@ -23,7 +23,7 @@ async def family_propagation(
 if __name__ == "__main__":
     import sqlalchemy as sa
     from sqlalchemy.orm import Session
-    from app.dependency_overrides import get_session
+    from app.db import get_session
     from app import app
 
     engine = sa.create_engine("sqlite:///:memory:")

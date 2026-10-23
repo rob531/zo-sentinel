@@ -1,0 +1,25 @@
+# service.toml for advisory_exposure_audit
+# Service for auditing MCP server advisory exposure across organizational axis
+
+[service]
+name = "advisory_exposure_audit"
+import_path = "services.active.advisory_exposure_audit.router"
+prefix = "/api"
+tag = "advisory_exposure_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_store = true
+
+[mesh]
+endpoint = "http://127.0.0.1:8772/query"
+
+[data_access]
+app_tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[self_test]
+pass_phrase = "PASS"

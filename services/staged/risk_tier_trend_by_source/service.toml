@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_trend_by_source"
+import_path = "services.active.risk_tier_trend_by_source.router"
+prefix = "/api"
+tag = "risk_tier_trend_by_source"
+origin = "service"
+auth = "public"
+needs_data_layer = true

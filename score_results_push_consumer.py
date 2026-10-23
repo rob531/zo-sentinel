@@ -4,15 +4,15 @@ from datetime import datetime
 import requests
 from typing import List, Dict
 from app.db import get_session
-from app.models import MCPLLMAxisScore
+from app.models import McpLlmAxisScore
 
 router = APIRouter()
 
 def push_scores(server_id: str) -> Dict:
     session: Session = Depends(get_session)()
     try:
-        scores: List[MCPLLMAxisScore] = session.query(MCPLLMAxisScore).filter(
-            MCPLLMAxisScore.server_id == server_id
+        scores: List[McpLlmAxisScore] = session.query(McpLlmAxisScore).filter(
+            McpLlmAxisScore.server_id == server_id
         ).all()
 
         if not scores:
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     from app.models import Base
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -56,16 +56,16 @@ if __name__ == "__main__":
 
     dependency_overrides[get_session] = override_get_session
 
-    from app.models import MCPLLMAxisScore
+    from app.models import McpLlmAxisScore
 
     mock_scores = [
-        MCPLLMAxisScore(
+        McpLlmAxisScore(
             server_id="test-server",
             axis_name="axis1",
             p_top=80,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScore(
+        McpLlmAxisScore(
             server_id="test-server",
             axis_name="axis2",
             p_top=90,

@@ -1,0 +1,27 @@
+{
+ "_README": [
+  "Declare hatch for tools/queue_census.py. Mirrors tools/reachability_deferred.json.",
+  "",
+  "An entry SUPPRESSES one alarm kind on one lane, and only while it is valid:",
+  "  {\"lane\": \"builder:other\", \"kind\": \"UNDRAINED\",",
+  "   \"reason\": \"why this is expected, in a sentence\", \"expires\": \"2026-08-06\"}",
+  "",
+  "Rules the census enforces, because a silenced gate is the failure this file",
+  "exists to prevent:",
+  "  - No reason        -> REASONLESS: does not suppress, and is reported.",
+  "  - No/bad expires   -> REASONLESS: an unexpiring suppression is a permanent",
+  "                        blindfold nobody remembers putting on.",
+  "  - Past expires     -> STALE: does not suppress, and is reported.",
+  "  - Valid entry      -> suppresses, but the alarm is STILL PRINTED as",
+  "                        SUPPRESSED with its reason and expiry. Hidden alarms",
+  "                        are unread alarms.",
+  "Scope is (lane, kind). There is deliberately no wildcard.",
+  "",
+  "SHIPPED EMPTY ON PURPOSE (2026-07-30). The UNDRAINED alarms currently firing on",
+  "the builder lanes are reporting the exact condition the chairman raised as a",
+  "problem ('no builds for 11 hrs'), so declaring them away would suppress the",
+  "signal this organ was built to produce. Whether a lane's drain is manual by",
+  "policy is the chairman's ruling to record here, not mine to assume."
+ ],
+ "declared": []
+}

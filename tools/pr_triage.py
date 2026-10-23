@@ -520,6 +520,40 @@ _FULL_FIELDS = "number,title,files,labels,mergeable,statusCheckRollup"
 _CHEAP_FIELDS = "number,title,labels,mergeable"
 _HYDRATE_FIELDS = "files,statusCheckRollup"
 
+# A --limit IS A POPULATION CAP WEARING A COUNT'S CLOTHES.
+#
+# `--limit 300` on the combined query is a deliberate COST control (see the 504
+# note above) -- but it is also a page size, and when the population reaches it
+# the failure is SILENT: gh returns exactly 300 rows with exit 0, this module
+# triages them perfectly, and every PR past the boundary is simply never seen.
+# Nothing goes red. Measured 2026-09-12: the open autonomous-build queue was
+# 296, FOUR below the cap, while the auto-merge workflow's own comment records
+# it growing 276 -> 321 in two days.
+#
+# Raising the number alone would only re-arm the same trap at a larger value AND
+# push the combined query back over the 504 budget. So instead: a full-query
+# result exactly `_FULL_LIMIT` long is treated as a CAP HIT and falls through to
+# the DEGRADED path that already exists -- metadata list at `_CHEAP_LIMIT` plus
+# per-PR hydration, whose many small queries carry no such budget problem.
+#
+# This adds no gate. The run still proceeds on what it fetched; it just stops
+# being able to report a page size as if it were a count.
+_FULL_LIMIT = 300
+_CHEAP_LIMIT = 1000
+
+
+def _capped(rows, where: str, limit: int) -> bool:
+    """True when a result is exactly `limit` long -- a cap, not a count."""
+    if len(rows) >= limit:
+        print(f"::warning title=pr-triage population capped::{where} returned "
+              f"{len(rows)} row(s) against --limit {limit}. A result equal to "
+              f"its own page size is a CAP, not a count: PRs past the boundary "
+              f"were not in this answer.", file=sys.stderr)
+        return True
+    print(f"[basis] {where}: {len(rows)} row(s) of --limit {limit} "
+          f"({limit - len(rows)} headroom)", file=sys.stderr)
+    return False
+
 
 def _is_transient(stderr: str) -> bool:
     e = (stderr or "").lower()
@@ -546,27 +580,34 @@ def fetch_open_build_prs(repo: str):
     # 8-minute job on 2026-07-28T03:33Z and could never have succeeded. One retry
     # still absorbs a genuine one-off blip; the rest was pure loss.
     res = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
-              "--limit", "300", "--json", _FULL_FIELDS, retries=1)
+              "--limit", str(_FULL_LIMIT), "--json", _FULL_FIELDS, retries=1)
     if res is not None and res.returncode == 0:
         try:
-            return json.loads(res.stdout or "[]"), "full", []
+            full = json.loads(res.stdout or "[]")
         except json.JSONDecodeError as e:
             print(f"ERROR: bad JSON from gh: {e}", file=sys.stderr)
             return [], "error", []
+        # A cap hit is not an error and not a count -- it is an incomplete
+        # answer that looks complete. Degrade rather than triage a page.
+        if not _capped(full, "combined build-PR query", _FULL_LIMIT):
+            return full, "full", []
+        print("::warning title=pr-triage degraded::combined query hit its page "
+              "size; retrying as metadata list + per-PR hydration so the whole "
+              "population is seen", file=sys.stderr)
+    else:
+        err = (res.stderr or "").strip() if res is not None else "no result from gh"
+        if _is_rate_limited(err):
+            return [], "rate_limited", []
+        if not _is_transient(err):
+            print(f"ERROR: gh pr list failed: {err}", file=sys.stderr)
+            return [], "error", []
 
-    err = (res.stderr or "").strip() if res is not None else "no result from gh"
-    if _is_rate_limited(err):
-        return [], "rate_limited", []
-    if not _is_transient(err):
-        print(f"ERROR: gh pr list failed: {err}", file=sys.stderr)
-        return [], "error", []
-
-    print("::warning title=pr-triage degraded::combined PR query failed "
-          f"({err[:180]}); retrying as metadata list + per-PR hydration",
-          file=sys.stderr)
+        print("::warning title=pr-triage degraded::combined PR query failed "
+              f"({err[:180]}); retrying as metadata list + per-PR hydration",
+              file=sys.stderr)
 
     cheap = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
-                "--limit", "300", "--json", _CHEAP_FIELDS)
+                "--limit", str(_CHEAP_LIMIT), "--json", _CHEAP_FIELDS)
     if cheap is None or cheap.returncode != 0:
         cerr = (cheap.stderr or "").strip() if cheap is not None else "no result from gh"
         if _is_rate_limited(cerr):
@@ -579,6 +620,7 @@ def fetch_open_build_prs(repo: str):
     except json.JSONDecodeError as e:
         print(f"ERROR: bad JSON from gh: {e}", file=sys.stderr)
         return [], "error", []
+    _capped(stubs, "degraded build-PR query", _CHEAP_LIMIT)
 
     prs: list = []
     dropped: list = []

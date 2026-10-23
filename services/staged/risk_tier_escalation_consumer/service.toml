@@ -1,0 +1,19 @@
+[service]
+name = "risk_tier_escalation_consumer"
+import_path = "services.active.risk_tier_escalation_consumer.router"
+prefix = "/api"
+tag = "risk_tier_escalation_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+file = "router.py"
+class = "router"
+
+[models]
+app = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "Org", "User"]
+mesh = ["mcp_signal_scores", "mesh_memory"]
+
+[dependencies]
+http = ["127.0.0.1:8772"]

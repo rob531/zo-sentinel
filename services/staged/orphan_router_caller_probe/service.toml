@@ -1,0 +1,11 @@
+[service]
+name = "orphan_router_caller_probe"
+import_path = "services.active.orphan_router_caller_probe.router"
+prefix = "/api"
+tag = "orphan_router_caller_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true

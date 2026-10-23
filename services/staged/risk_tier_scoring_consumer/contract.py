@@ -1,188 +1,225 @@
-from fastapi import FastAPI, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
-from typing import List, Dict, Optional
-from pydantic import BaseModel
-import logging
-from fastapi.testclient import TestClient
-from app.dependency_overrides import override_get_session
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-app = FastAPI()
+router = APIRouter()
 
-class RiskTierScoringResponse(BaseModel):
-    servers_processed: int
-    tiers: Dict[str, int]
 
-class StatusResponse(BaseModel):
-    last_run: Optional[str]
-    servers_processed: int
-    tiers: Dict[str, int]
+class AxisScoreInput(BaseModel):
+    server_id: str
+    axis_name: str
+    label: str
+    label_index: int
+    probs: List[float]
+    p_critical: Optional[float] = None
+    p_danger: Optional[float] = None
+    p_top: Optional[float] = None
+    model_version: str
+    decision_rule_version: str
+    adapter_sha256: str
+    scored_at: str
 
-def compute_risk_tier(p_top: float, escalated: bool) -> str:
-    if escalated:
-        return "HIGH_RISK_ISOLATED"
-    if p_top > 75:
-        return "TRUSTED_GENERAL"
-    if p_top > 60:
-        return "TRUSTED_RESEARCH"
-    if p_top > 45:
-        return "ENTERPRISE_CONTROLLED"
-    if p_top > 30:
-        return "CAUTION_LIMITED"
-    if p_top > 15:
-        return "HIGH_RISK_ISOLATED"
-    return "KNOWN_THREAT"
 
-def get_servers_with_all_axes(db: Session) -> List[int]:
-    subquery = db.query(
-        McpLlmAxisScore.server_id,
-        McpLlmAxisScore.axis_name
-    ).group_by(
-        McpLlmAxisScore.server_id
-    ).having(
-        "COUNT(DISTINCT axis_name) = 7"
-    ).subquery()
+class RiskTierVerdict(BaseModel):
+    server_id: str
+    risk_tier: str
+    confidence: float
+    verdict_reasoning: str
 
-    return [row.server_id for row in db.query(subquery.c.server_id).all()]
 
-def compute_composite_p_top(db: Session, server_id: int) -> float:
-    scores = db.query(McpLlmAxisScore.p_top).filter(
-        McpLlmAxisScore.server_id == server_id
-    ).all()
-    return sum(score.p_top for score in scores) / len(scores)
+class RiskTierResponse(BaseModel):
+    server_id: str
+    risk_tier: Optional[str] = None
+    confidence: Optional[float] = None
+    verdict: Optional[str] = None
+    verdict_reasoning: Optional[str] = None
 
-def get_escalated_status(db: Session, server_id: int) -> bool:
-    return db.query(McpLlmAxisScore.escalated).filter(
-        McpLlmAxisScore.server_id == server_id,
-        McpLlmAxisScore.label == "CRITICAL"
-    ).scalar() or False
 
-@app.post("/api/scoring/consume", response_model=RiskTierScoringResponse)
-async def consume_scoring(db: Session = Depends(get_session)):
-    servers = get_servers_with_all_axes(db)
-    processed = 0
-    tiers = {
-        "TRUSTED_GENERAL": 0,
-        "TRUSTED_RESEARCH": 0,
-        "ENTERPRISE_CONTROLLED": 0,
-        "CAUTION_LIMITED": 0,
-        "HIGH_RISK_ISOLATED": 0,
-        "KNOWN_THREAT": 0
+def compute_risk_tier(label: str, label_index: int, p_critical: Optional[float] = None) -> tuple[str, float]:
+    tier_map = {
+        "critical": ("CRITICAL", 0.95),
+        "high": ("HIGH", 0.85),
+        "medium": ("MEDIUM", 0.70),
+        "low": ("LOW", 0.55),
+        "minimal": ("MINIMAL", 0.40),
     }
+    tier, base_confidence = tier_map.get(label.lower(), ("UNKNOWN", 0.30))
+    if p_critical is not None and p_critical > 0.7:
+        tier = "CRITICAL"
+        base_confidence = 0.95
+    return tier, base_confidence
 
-    for server_id in servers:
-        p_top = compute_composite_p_top(db, server_id)
-        escalated = get_escalated_status(db, server_id)
-        tier = compute_risk_tier(p_top, escalated)
 
+@router.post("/process_scores", response_model=RiskTierVerdict)
+def process_scores(
+    scores: List[AxisScoreInput],
+    db: Session = Depends(get_session),
+):
+    verdicts = []
+    for score in scores:
+        risk_tier, confidence = compute_risk_tier(score.label, score.label_index, score.p_critical)
+        reasoning = f"Axis '{score.axis_name}' scored as '{score.label}' (index={score.label_index})"
+        
         db.query(McpServerRegistry).filter(
-            McpServerRegistry.server_id == server_id
-        ).update({"risk_tier": tier})
-        db.commit()
+            McpServerRegistry.server_id == score.server_id
+        ).update({
+            "risk_tier": risk_tier,
+            "confidence": confidence,
+            "verdict": risk_tier,
+            "verdict_reasoning": reasoning,
+        })
+        
+        verdicts.append(RiskTierVerdict(
+            server_id=score.server_id,
+            risk_tier=risk_tier,
+            confidence=confidence,
+            verdict_reasoning=reasoning,
+        ))
+    
+    db.commit()
+    return verdicts
 
-        tiers[tier] += 1
-        processed += 1
 
-    return {"servers_processed": processed, "tiers": tiers}
-
-@app.get("/api/scoring/status", response_model=StatusResponse)
-async def get_status(db: Session = Depends(get_session)):
-    last_run = None
-    processed = 0
-    tiers = {
-        "TRUSTED_GENERAL": 0,
-        "TRUSTED_RESEARCH": 0,
-        "ENTERPRISE_CONTROLLED": 0,
-        "CAUTION_LIMITED": 0,
-        "HIGH_RISK_ISOLATED": 0,
-        "KNOWN_THREAT": 0
+@router.post("/score_received", response_model=dict)
+def score_received(
+    score: AxisScoreInput,
+    db: Session = Depends(get_session),
+):
+    risk_tier, confidence = compute_risk_tier(score.label, score.label_index, score.p_critical)
+    reasoning = f"Received axis '{score.axis_name}' score for server"
+    
+    db.query(McpServerRegistry).filter(
+        McpServerRegistry.server_id == score.server_id
+    ).update({
+        "risk_tier": risk_tier,
+        "confidence": confidence,
+        "verdict": risk_tier,
+        "verdict_reasoning": reasoning,
+    })
+    
+    db.commit()
+    
+    return {
+        "status": "processed",
+        "server_id": score.server_id,
+        "risk_tier": risk_tier,
+        "confidence": confidence,
     }
 
-    # This is a simplified status check
-    # In a real implementation, you might track last run time in a separate table
-    return {"last_run": last_run, "servers_processed": processed, "tiers": tiers}
+
+@router.get("/risk_tier/{server_id}", response_model=RiskTierResponse)
+def get_risk_tier(server_id: str, db: Session = Depends(get_session)):
+    server = db.query(McpServerRegistry).filter(
+        McpServerRegistry.server_id == server_id
+    ).first()
+    
+    if not server:
+        return RiskTierResponse(server_id=server_id)
+    
+    return RiskTierResponse(
+        server_id=server.server_id,
+        risk_tier=server.risk_tier,
+        confidence=server.confidence,
+        verdict=server.verdict,
+        verdict_reasoning=server.verdict_reasoning,
+    )
+
+
+@router.get("/risk_tiers", response_model=List[RiskTierResponse])
+def get_all_risk_tiers(db: Session = Depends(get_session)):
+    servers = db.query(McpServerRegistry).all()
+    return [
+        RiskTierResponse(
+            server_id=s.server_id,
+            risk_tier=s.risk_tier,
+            confidence=s.confidence,
+            verdict=s.verdict,
+            verdict_reasoning=s.verdict_reasoning,
+        )
+        for s in servers
+    ]
+
+
+@router.get("/health")
+def health():
+    return {"status": "healthy", "service": "risk_tier_scoring_consumer"}
+
 
 if __name__ == "__main__":
-    # Set up test database
-    engine = create_engine("sqlite:///:memory:")
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    app.dependency_overrides[get_session] = override_get_session(SessionLocal)
+    import sys
+    from fastapi import FastAPI
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from fastapi.testclient import TestClient
 
-    # Create tables
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
     from app.models import Base
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=test_engine)
 
-    # Seed test data
-    test_db = SessionLocal()
-    try:
-        # Create test servers
-        test_servers = [
-            {"server_id": 1, "risk_tier": None},
-            {"server_id": 2, "risk_tier": None},
-            {"server_id": 3, "risk_tier": None},
-            {"server_id": 4, "risk_tier": None},
-            {"server_id": 5, "risk_tier": None}
-        ]
-        test_db.add_all([McpServerRegistry(**s) for s in test_servers])
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-        # Create test scores
-        test_scores = [
-            # Server 1 - all axes, high p_top
-            {"server_id": 1, "axis_name": "axis1", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 1, "axis_name": "axis2", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 1, "axis_name": "axis3", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 1, "axis_name": "axis4", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 1, "axis_name": "axis5", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 1, "axis_name": "axis6", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 1, "axis_name": "axis7", "p_top": 80, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
+    def override_get_session():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
 
-            # Server 2 - all axes, CRITICAL escalated
-            {"server_id": 2, "axis_name": "axis1", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 2, "axis_name": "axis2", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 2, "axis_name": "axis3", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 2, "axis_name": "axis4", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 2, "axis_name": "axis5", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 2, "axis_name": "axis6", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 2, "axis_name": "axis7", "p_top": 70, "p_critical": 0, "p_danger": 0, "escalated": True, "label": "CRITICAL"},
+    test_app = FastAPI()
+    test_app.include_router(router)
+    test_app.dependency_overrides[get_session] = override_get_session
 
-            # Server 3 - missing some axes
-            {"server_id": 3, "axis_name": "axis1", "p_top": 60, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 3, "axis_name": "axis2", "p_top": 60, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
+    session = TestingSessionLocal()
+    test_server = McpServerRegistry(
+        server_id="srv_test_001",
+        name="Test Server",
+        url="https://test.example.com",
+        registry_source="test",
+        risk_tier=None,
+        confidence=None,
+    )
+    session.add(test_server)
+    session.commit()
+    session.close()
 
-            # Server 4 - missing some axes
-            {"server_id": 4, "axis_name": "axis1", "p_top": 50, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
+    client = TestClient(test_app)
 
-            # Server 5 - all axes, low p_top
-            {"server_id": 5, "axis_name": "axis1", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 5, "axis_name": "axis2", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 5, "axis_name": "axis3", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 5, "axis_name": "axis4", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 5, "axis_name": "axis5", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 5, "axis_name": "axis6", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"},
-            {"server_id": 5, "axis_name": "axis7", "p_top": 10, "p_critical": 0, "p_danger": 0, "escalated": False, "label": "GOOD"}
-        ]
-        test_db.add_all([McpLlmAxisScore(**s) for s in test_scores])
-        test_db.commit()
-    finally:
-        test_db.close()
+    response = client.get("/health")
+    assert response.status_code == 200, f"Health check failed: {response.text}"
 
-    # Run test
-    client = TestClient(app)
-    response = client.post("/api/scoring/consume")
-    assert response.status_code == 200
-    assert response.json()["servers_processed"] >= 2
+    score_payload = {
+        "server_id": "srv_test_001",
+        "axis_name": "security",
+        "label": "high",
+        "label_index": 2,
+        "probs": [0.1, 0.2, 0.5, 0.2],
+        "model_version": "v1.0",
+        "decision_rule_version": "r1",
+        "adapter_sha256": "abc123",
+        "scored_at": "2024-01-01T00:00:00Z",
+    }
 
-    # Verify CRITICAL server was marked HIGH_RISK_ISOLATED
-    test_db = SessionLocal()
-    try:
-        server2 = test_db.query(McpServerRegistry).filter(
-            McpServerRegistry.server_id == 2
-        ).first()
-        assert server2.risk_tier == "HIGH_RISK_ISOLATED"
-    finally:
-        test_db.close()
+    response = client.post("/score_received", json=score_payload)
+    assert response.status_code == 200, f"Score processing failed: {response.text}"
+    data = response.json()
+    assert data["risk_tier"] == "HIGH", f"Expected HIGH, got {data.get('risk_tier')}"
+
+    response = client.get("/risk_tier/srv_test_001")
+    assert response.status_code == 200, f"Risk tier query failed: {response.text}"
+    data = response.json()
+    assert data["risk_tier"] == "HIGH", f"Expected HIGH, got {data.get('risk_tier')}"
+    assert data["confidence"] is not None
 
     print("PASS")
+    sys.exit(0)

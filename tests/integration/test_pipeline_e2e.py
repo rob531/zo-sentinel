@@ -41,7 +41,7 @@ from zo_sentinel.ingestor.store import (  # noqa: E402
 )
 from zo_sentinel.promoters import proposed_to_pending_promoter as promoter  # noqa: E402
 from zo_sentinel.publisher.gitops import FakeGitOps  # noqa: E402
-from zo_sentinel.publisher.publisher import Publisher  # noqa: E402
+from zo_sentinel.publisher.publisher import ProducerCommit  # noqa: E402
 
 WS = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772")
 T = 15
@@ -126,20 +126,17 @@ def test_full_pipeline_directive_to_pr(tmp_path: Path):
         files.append(c.get("file"))
     assert output_file in files, f"publisher's artifact read didn't see the build; saw {files}"
 
-    # --- Stage 4: PUBLISHER (real) + FakeGitOps -> (fake) PR ----------------
-    pub = Publisher(
-        store=store,
-        gitops=FakeGitOps("https://github.com/rob531/zo-sentinel"),
-        home=str(tmp_path),
-        enabled_override=True,
-        content_resolver=lambda art: "# e2e stub built file\nprint('ok')\n",
-        daily_cap=100,
-        pr_spacing_sec=0.0,
-        sleep=lambda _s: None,
-    )
-    published = pub.run_once(limit=10)
-    assert published, "publisher consumed the build_artifact and opened a (fake) PR"
-    pub_files = " ".join(json.dumps(p) for p in published)
-    assert output_file in pub_files or "e2e_pipeline_probe" in pub_files, (
-        f"published PR didn't reference the built artifact: {published}"
-    )
+    # --- Stage 4: PRODUCER COMMIT (real) + FakeGitOps -> (fake) PR ----------
+    # RCA 2026-10 Fix 3: the watermark publisher that read the row above is
+    # retired; the producer hands the built file to ProducerCommit directly.
+    built = tmp_path / output_file
+    built.parent.mkdir(parents=True, exist_ok=True)
+    built.write_text("# e2e stub built file\nprint('ok')\n")
+    gitops = FakeGitOps("https://github.com/rob531/zo-sentinel")
+    pc = ProducerCommit(gitops=gitops, home=str(tmp_path), enabled_override=True,
+                        outbox=str(tmp_path / "state" / "outbox.json"),
+                        quarantine_dir=str(tmp_path / "quarantine"),
+                        pr_spacing_sec=0.0, sleep=lambda _s: None)
+    res = pc.commit(output_file, task="e2e_pipeline_probe")
+    assert res["action"] == "published", f"producer did not publish the build: {res}"
+    assert gitops.published and gitops.published[0].file_path == output_file

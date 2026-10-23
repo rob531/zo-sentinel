@@ -20,6 +20,12 @@ engine, not the symptoms:
 
   1. GROUNDING PARITY -- build_with_engine() takes the SAME fully-composed task
      text the goose path uses (content + graph + lessons + data-access).
+     CORRECTION 2026-08-11: for six weeks this line was read as meaning the
+     engine received SCHEMA grounding. It did not. The composed task carried
+     table and class NAMES plus a pointer to docs/SCHEMA_TRUTH.md -- which a
+     single chat completion with no filesystem cannot open. Real COLUMN lists
+     reached only the 8/day SOA canary. goose_runner._engine_task now inlines
+     them here too; see [engine-ground] in the log for the arming witness.
   2. RUNG ESCALATION BY ATTEMPT -- ghost retry N runs a higher capable rung
      (env-tunable ZO_ENGINE_RUNGS; capped at free rungs -- escalation.py's cost
      gate remains the paid backstop).
@@ -234,8 +240,14 @@ def build_with_engine(directive: dict, task_text: str, attempt: int = 0,
             f"(py_compile) and its __main__ self-test must print PASS, exactly "
             f"as the directive's ACCEPTANCE describes." if out is not None else ""
         )
-        txt = _chat(post, shim_url, model, _SYSTEM,
-                    f"Complete this task: {task_text}{acceptance}", timeout)
+        _user = f"Complete this task: {task_text}{acceptance}"
+        # ARMING WITNESS (CofC 2026-08-11 cond.5): asserted against the string
+        # actually SENT, not against the composer that built it. A verify that
+        # reads the caller's variable witnesses the code, not the request.
+        log(f"[engine-ground] {out.name if out is not None else '?'}: "
+            f"schema_in_sent_prompt={'REAL SCHEMA --' in _user} "
+            f"prompt_chars={len(_user)}")
+        txt = _chat(post, shim_url, model, _SYSTEM, _user, timeout)
         res["result"] = txt
         if out is None:
             # Edit-class directive: no single declared file to write/verify --

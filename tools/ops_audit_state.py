@@ -45,7 +45,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -107,33 +107,96 @@ def save(state: dict, path: Optional[Path] = None) -> Path:
     return path
 
 
+def _in_memory(path, state) -> bool:
+    """True when the caller supplied the state and named no file to write.
+
+    WHY THIS EXISTS (2026-08-06, FU-268, live incident): `record()` and
+    `record_credit()` ended `if path is not False: save(state, path)`, and
+    `save()` resolves `path or DEFAULT_PATH`. So a caller who passed an explicit
+    in-memory `state=` and no `path=` -- the natural way to write a read-only
+    probe -- silently PERSISTED that partial state over the canonical file. It
+    destroyed D:\\zo\\runs\\ops_audit_state.json: 11 balance samples and
+    `schema: 2` deleted, a real top-up re-dated, a fabricated invoice appended,
+    and `budget.level` blinded to UNKNOWN four hours after FU-267 had repaired
+    that very number. The same file had already been clobbered once, on
+    2026-07-28, by a different lane.
+
+    A `path=False` no-write mode already existed, but it is opt-in and invisible
+    in a signature typed `Optional[Path]`. The DESTRUCTIVE behaviour was the
+    DEFAULT and the safe one had to be known in advance. This inverts that:
+    supplying a state means "operate on THIS", and persisting is the thing you
+    ask for, by naming a path.
+
+    Zero existing callers change. At 9e12c062 `git grep record_credit` is 16
+    test calls (all `path=statefile`) plus one CLI call (`path=path`), and every
+    `record()` call site likewise passes `path=`. Nothing in the repo relied on
+    the implicit DEFAULT_PATH write.
+    """
+    return state is not None and path is None
+
+
 def record(balance: float, date: Optional[str] = None,
            path: Optional[Path] = None, state: Optional[dict] = None) -> dict:
-    """Upsert today's balance sample. Same-date re-run replaces, never appends."""
+    """Upsert today's balance sample. Same-date re-run replaces, never appends.
+
+    Persists to `path`, or to DEFAULT_PATH when no `state=` was supplied.
+    Passing `state=` without `path=` is IN-MEMORY and writes nothing (FU-268);
+    `path=False` remains an explicit no-write for callers that pass both.
+    """
+    in_memory = _in_memory(path, state)
     state = state if state is not None else load(path)
     date = date or _today()
     entry = {"date": date, "at": _utcnow(), "balance": float(balance)}
     state["entries"] = [e for e in state.get("entries", []) if e["date"] != date]
     state["entries"].append(entry)
-    if path is not False:
+    if path is not False and not in_memory:
         save(state, path)
     return state
+
+
+def _cid(v):
+    """Normalise a credit id to a comparable form.
+
+    WHY THIS EXISTS (2026-08-06, this lane, live incident): the dedup key was
+    the RAW value, so an id written as int 3148330 by a Python caller did not
+    equal the SAME invoice arriving as str "3148330" from argparse (which has
+    no type=). Vast invoice 3148330 was therefore recorded twice, credits_ever
+    went $25 -> $50, since_funding.spend_usd went $10.23 -> $35.23, and
+    budget.level flipped to a FALSE RED against a $25 budget on an account
+    that has only ever been funded once. Same class as the permission value
+    graded against one literal: a key that is compared must be NORMALISED at
+    both ends, never trusted to arrive in one type.
+    """
+    if v is None:
+        return None
+    v = str(v).strip()
+    return v or None
 
 
 def record_credit(amount: float, date: str, credit_id=None,
                   source: str = "vast_invoice", path: Optional[Path] = None,
                   state: Optional[dict] = None) -> dict:
-    """Record a top-up. Deduped on (id) when known, else (date, amount)."""
+    """Record a top-up. Deduped on (id) when known, else (date, amount).
+
+    The id is compared via _cid() so int and str spellings of the same
+    invoice collapse to one entry. Also self-heals: pre-existing duplicates
+    of the id being recorded are dropped on write.
+
+    Persists to `path`, or to DEFAULT_PATH when no `state=` was supplied.
+    Passing `state=` without `path=` is IN-MEMORY and writes nothing (FU-268).
+    """
+    in_memory = _in_memory(path, state)
     state = state if state is not None else load(path)
-    key = ("id", credit_id) if credit_id is not None else ("da", date, amount)
+    credit_id = _cid(credit_id)
+    key = ("id", credit_id) if credit_id is not None else ("da", date, float(amount))
     def _key(c):
-        return (("id", c["id"]) if c.get("id") is not None
-                else ("da", c["date"], c["amount"]))
+        return (("id", _cid(c.get("id"))) if _cid(c.get("id")) is not None
+                else ("da", c["date"], float(c["amount"])))
     state["credits"] = [c for c in state.get("credits", []) if _key(c) != key]
     state["credits"].append({"date": date, "at": _utcnow(),
                              "amount": float(amount), "id": credit_id,
                              "source": source})
-    if path is not False:
+    if path is not False and not in_memory:
         save(state, path)
     return state
 
@@ -167,9 +230,65 @@ def month_to_date(state: dict, month: Optional[str] = None) -> dict:
             "first_entry_balance": first["balance"],
             "credits_added": credits,
             "basis_days": basis_days,
+            "observed_days": len({e["date"] for e in entries}),
+            "missing_days": (basis_days + 1
+                             - len({e["date"] for e in entries})),
             "complete_month": first["date"].endswith("-01"),
             "basis": ("first_balance + credits - current_balance over "
                       f"{basis_days}d from {first['date']}")}
+
+
+def coverage(state: dict, month: Optional[str] = None) -> dict:
+    """Which days this lane actually OBSERVED -- and which it did not.
+
+    The daily ops audit is the only writer of ``entries[]``, so the dates
+    present in it are a record of this lane's own runs. A date between the
+    first and last entry that is ABSENT means the audit did not run that day.
+
+    SPANS THE WHOLE HISTORY BY DEFAULT, AND THAT IS THE POINT. The first
+    draft of this function was month-scoped, and it could not see the gap
+    that motivated it: the state file held 2026-07-26..2026-07-30 and then
+    2026-08-01, so July read COMPLETE, August read COMPLETE, and the missed
+    day fell in the seam between them. A guard that cannot catch what it
+    guards is worse than no guard, because it reports clean. ``month=`` is
+    available for a scoped read, but ``show`` must never pass one.
+
+    Why this is not cosmetic: ``month_to_date`` reports ``basis_days`` as the
+    CALENDAR span from first entry to last, so a window with holes publishes
+    the same basis as a fully observed one. A reader cannot tell a 30-day
+    window sampled 30 times from a 30-day window sampled twice. Publishing
+    the basis (R5) means publishing how much of it was actually looked at,
+    and an unobserved day is UNKNOWN, not zero (R6).
+
+    REPORT, NOT A GATE: nothing here changes an exit code or blocks a run.
+    A missed day is often legitimate (a paused fleet, a month boundary); the
+    value is that it becomes VISIBLE instead of being absorbed into a span.
+    """
+    dates = sorted({e["date"] for e in state.get("entries", [])
+                    if month is None or e["date"][:7] == month})
+    scope = month or "all"
+    if not dates:
+        return {"scope": scope, "observed_days": 0, "span_days": 0,
+                "missing_dates": [], "complete": None,
+                "basis": "no entries in scope -- coverage is UNKNOWN, "
+                         "not complete"}
+    first = datetime.strptime(dates[0], "%Y-%m-%d")
+    last = datetime.strptime(dates[-1], "%Y-%m-%d")
+    span = (last - first).days + 1
+    have = set(dates)
+    missing = [(first + timedelta(days=i)).strftime("%Y-%m-%d")
+               for i in range(span)
+               if (first + timedelta(days=i)).strftime("%Y-%m-%d") not in have]
+    return {"scope": scope,
+            "observed_days": len(dates),
+            "span_days": span,
+            "first_entry_date": dates[0],
+            "last_entry_date": dates[-1],
+            "missing_dates": missing,
+            "complete": not missing,
+            "basis": ("dates present in entries[] vs every date in "
+                      f"{dates[0]}..{dates[-1]}; a missing date means this "
+                      "lane did not run that day (FU-207 class)")}
 
 
 def since_funding(state: dict) -> dict:
@@ -251,6 +370,7 @@ def main(argv=None) -> int:
                       "entries": len(state.get("entries", [])),
                       "credits": len(state.get("credits", [])),
                       "mtd": month_to_date(state, a.month),
+                      "coverage": coverage(state),
                       "since_funding": since_funding(state),
                       "budget": budget_status(state)}, indent=2))
     return 0

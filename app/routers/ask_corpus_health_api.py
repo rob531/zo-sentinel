@@ -17,6 +17,7 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 # Import the real data layer – never create a mock session here.
 from app.db import get_session, Base

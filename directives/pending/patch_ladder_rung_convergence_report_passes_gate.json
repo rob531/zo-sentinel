@@ -1,0 +1,42 @@
+{
+  "task": "patch_ladder_rung_convergence_report_passes_gate",
+  "directive_id": "patch_ladder_rung_convergence_report_passes_gate",
+  "id": "patch_ladder_rung_convergence_report_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/ladder_rung_convergence_report/router.py",
+  "complexity": "medium",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'ladder_rung_convergence_report' (services/staged/ladder_rung_convergence_report; family ladder_rung_convergence_report v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): contract FAILED: exit=1 er 3-0', 'test', 'http://example.com', 'test server', 1.0, 'clean', None, 0.9, None, None, None, 0, 'low', {}, 'svr-3-1', 'Server 3-1', 'test', 'http://example.com', 'test server', 1.0, 'clean', None, 0.9, None, None, None, 0, 'low', {})]\n(Background on this error at: https://sqlalche.me/e/20/f405). contract.py runs but fails: fix the ROUTE or the LOGIC so the contract's assertions hold over the real data layer; do not weaken the contract to pass. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/ladder_rung_convergence_report (service.toml valid, router.py exposes a router, `python -m services.staged.ladder_rung_convergence_report.router` imports, `python -m services.staged.ladder_rung_convergence_report.contract` exits 0). Then `python tools/staging_drain/census.py --only ladder_rung_convergence_report --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/ladder_rung_convergence_report/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/ladder_rung_convergence_report/__init__.py",
+    "services/staged/ladder_rung_convergence_report/contract.py",
+    "services/staged/ladder_rung_convergence_report/logic.py",
+    "services/staged/ladder_rung_convergence_report/router.py",
+    "services/staged/ladder_rung_convergence_report/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "ladder_rung_convergence_report fails the promotion gate: contract_failed",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "contract FAILED: exit=1 er 3-0', 'test', 'http://example.com', 'test server', 1.0, 'clean', None, 0.9, None, None, None, 0, 'low', {}, 'svr-3-1', 'Server 3-1', 'test', 'http://example.com', 'test server', 1.0, 'clean', None, 0.9, None, None, None, 0, 'low', {})]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "failure_class": "contract_failed",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "contract.py runs but fails: fix the ROUTE or the LOGIC so the contract's assertions hold over the real data layer; do not weaken the contract to pass.",
+  "details": {
+    "family": "ladder_rung_convergence_report",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

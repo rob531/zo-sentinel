@@ -1,0 +1,12 @@
+[service]
+name = "ask_answer_feedback"
+import_path = "services.active.ask_answer_feedback.router"
+prefix = "/api"
+tag = "ask_answer_feedback"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by zo_sentinel/publisher/auto_stage.py for a root-level builder
+# router. import_path names services.ACTIVE because that is where router.py
+# lives AFTER promote_staged_to_active passes it.

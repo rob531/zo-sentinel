@@ -1,0 +1,11 @@
+[service]
+name = "verdict_tier_composition"
+import_path = "services.active.verdict_tier_composition.router"
+prefix = "/api"
+tag = "verdict_tier_composition"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

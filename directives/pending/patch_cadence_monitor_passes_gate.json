@@ -1,0 +1,40 @@
+{
+  "task": "patch_cadence_monitor_passes_gate",
+  "directive_id": "patch_cadence_monitor_passes_gate",
+  "id": "patch_cadence_monitor_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/cadence_monitor/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'cadence_monitor' (services/staged/cadence_monitor; family cadence_monitor v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): test-only import at module scope (breaks the prod spine at import, release v86): contract.py:4 fastapi.testclient.TestClient. Move the named import inside the function or the `if __name__ == \"__main__\":` guard that uses it. fastapi.testclient / unittest.mock / pytest at module scope break the prod spine at import (release v86). ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/cadence_monitor (service.toml valid, router.py exposes a router, `python -m services.staged.cadence_monitor.router` imports, `python -m services.staged.cadence_monitor.contract` exits 0). Then `python tools/staging_drain/census.py --only cadence_monitor --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/cadence_monitor/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/cadence_monitor/contract.py",
+    "services/staged/cadence_monitor/logic.py",
+    "services/staged/cadence_monitor/router.py",
+    "services/staged/cadence_monitor/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "cadence_monitor fails the promotion gate: test_only_import_at_module_scope",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "test-only import at module scope (breaks the prod spine at import, release v86): contract.py:4 fastapi.testclient.TestClient",
+    "failure_class": "test_only_import_at_module_scope",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Move the named import inside the function or the `if __name__ == \"__main__\":` guard that uses it. fastapi.testclient / unittest.mock / pytest at module scope break the prod spine at import (release v86).",
+  "details": {
+    "family": "cadence_monitor",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

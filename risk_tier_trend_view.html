@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier Trend</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        .server-selector {
+            margin-bottom: 20px;
+        }
+        .export-button {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Risk Tier Trend</h1>
+        <div class="server-selector">
+            <label for="server-select">Select Server:</label>
+            <select id="server-select">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <div class="chart-container">
+            <canvas id="riskTierChart"></canvas>
+        </div>
+        <div class="export-button">
+            <button id="export-csv">Export to CSV</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const serverSelect = document.getElementById('server-select');
+            const riskTierChart = document.getElementById('riskTierChart').getContext('2d');
+            const exportCsvButton = document.getElementById('export-csv');
+
+            let chart;
+            let serverData = {};
+
+            // Fetch server list
+            fetch('/api/servers')
+                .then(response => response.json())
+                .then(servers => {
+                    servers.forEach(server => {
+                        const option = document.createElement('option');
+                        option.value = server.id;
+                        option.textContent = server.name;
+                        serverSelect.appendChild(option);
+                    });
+
+                    // Load data for first server
+                    if (servers.length > 0) {
+                        loadServerData(servers[0].id);
+                    }
+                });
+
+            // Load data for selected server
+            serverSelect.addEventListener('change', function() {
+                const serverId = this.value;
+                loadServerData(serverId);
+            });
+
+            // Load server data
+            function loadServerData(serverId) {
+                fetch(`/api/risk-tier-trend/${serverId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        serverData[serverId] = data;
+                        renderChart(data);
+                    });
+            }
+
+            // Render chart
+            function renderChart(data) {
+                if (chart) {
+                    chart.destroy();
+                }
+
+                const labels = data.dates;
+                const riskTiers = data.risk_tiers;
+
+                chart = new Chart(riskTierChart, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Risk Tier',
+                            data: riskTiers,
+                            borderColor: 'rgb(75, 192, 192)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `Risk Tier Trend for ${serverSelect.options[serverSelect.selectedIndex].text}`
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Export to CSV
+            exportCsvButton.addEventListener('click', function() {
+                const serverId = serverSelect.value;
+                const data = serverData[serverId];
+
+                if (!data) {
+                    alert('No data available for export');
+                    return;
+                }
+
+                const csvContent = "Date,Risk Tier\n" +
+                    data.dates.map((date, index) => `${date},${data.risk_tiers[index]}`).join("\n");
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `risk_tier_trend_${serverId}.csv`;
+                link.click();
+            });
+        });
+    </script>
+</body>
+</html>

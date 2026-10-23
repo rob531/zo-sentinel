@@ -1,0 +1,49 @@
+[service]
+name = "perspective_timeline"
+import_path = "services.active.perspective_timeline.router"
+prefix = "/api"
+tag = "perspective_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+models = ["Perspective", "Org", "User", "McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute"]
+app_tables = ["perspectives", "orgs", "users", "mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+write_service = "http://127.0.0.1:8772"
+
+[api]
+endpoints = [
+    "GET /timeline",
+    "GET /timeline/{perspective_id}",
+    "GET /perspectives",
+    "POST /perspectives",
+    "GET /perspectives/{perspective_id}",
+    "PUT /perspectives/{perspective_id}",
+    "DELETE /perspectives/{perspective_id}",
+    "GET /scores/timeline",
+    "GET /scores/axis/{axis}",
+    "GET /disputes/timeline",
+]
+
+[data_access]
+app_db = true
+mesh_store = true
+
+[schema.perspective]
+columns = ["id", "name", "description", "org_id", "created_by", "created_at", "updated_at", "facet_filters"]
+
+[schema.signal_score]
+columns = ["id", "server_id", "axis", "score", "timestamp", "metadata"]
+
+[schema.memory]
+columns = ["id", "key", "value", "timestamp", "tags"]
+
+[tests]
+self_test_module = "services.active.perspective_timeline.self_test"
+
+[runtime]
+pool_size = 10
+timeout = 30
+retry_attempts = 3

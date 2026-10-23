@@ -1,5 +1,11 @@
 name: evaluator
 
+concurrency:
+  # cancel superseded runs on the same PR branch so the cheap-build PR
+  # velocity cannot pile up concurrent runners and flake required checks.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 # Goose-T2 evaluator (cheap version). GH-hosted runner takes the role
 # the tower-side Goose-T2 would otherwise play: run the canonical test
 # target, naturally produce a check pass/fail, and upload junit.xml so
@@ -10,6 +16,11 @@ on:
   push:
     branches:
       - "**"
+  # pr-relander dispatches this on relanded PR branches: GITHUB_TOKEN pushes
+  # (its update-branch merge commits) never fire push/pull_request workflows
+  # (GitHub recursion guard), and `pytest` here is a REQUIRED context -- without
+  # a dispatch path a relanded head can never report it and never merges.
+  workflow_dispatch:
   pull_request:
 
 jobs:
@@ -42,68 +53,76 @@ jobs:
           else
             # requests is needed by zo_sentinel.probes.duckdb_schema_uptime_probe
             # (loaded at import time by its test module). Stays cheap to install.
-            pip install pytest requests
+            # PyYAML: tests/test_graph_gap_directives_wired.py proves a CI
+            # caller from PARSED workflow structure, never from raw text
+            # (FU-305 -- a commented-out path string reads as an invocation).
+            # Pinned here rather than importorskip'd: a skip is not a pass.
+            pip install pytest requests PyYAML
           # app-tier deps so the Perspectives/Ask module self-tests run here
           pip install -r tests/ci/requirements-ci.txt
           fi
 
       - name: Run pytest (Goose-T2 cheap evaluator)
-        # Canonical targets, picked because they import cleanly outside the
-        # /home/workspace/zo_sentinel layout:
-        #   tests/test_scoring.py       - pure scoring boundary tests
-        #   tests/test_evaluator_smoke.py - reverse-feed fetcher smoke
-        #   tests/test_proposed_to_pending_promoter.py - Step 4b promoter
-#   tests/test_hollow_gate.py   - the anti-hollow rule + every seam that calls it
-#   tests/test_park_hollow.py   - parking a refused build (durable, not re-admitted)
-        # Other tests (test_wiring, smoke_test, test_known_threats) require
-        # the live ZoComputer host or have pre-existing failures unrelated
-        # to this PR; they are intentionally not in the evaluator scope.
+        # The target set is CONSTRUCTED, not hand-listed. tools/ci_pytest.py
+        # collects every tests/test_*.py on disk MINUS the entries in
+        # tests/ci/pytest_quarantine.txt, each of which must state a reason.
+        #
+        # 2026-09-30 (improvement-loop cycle-0162, FU-572). Until this commit
+        # this step named 74 files by hand while 192 sat on disk: 118 were never
+        # run by a REQUIRED check. Not a theoretical gap -- cycles 0158, 0159
+        # and 0160 each shipped a negative-control suite this step never
+        # executed and published the resulting green as evidence. The
+        # 2026-09-01 note this replaces recorded the same class ("577 passed" on
+        # a PR that added ten tests, the same number as the day before) and was
+        # cured by adding six filenames BY HAND, which is why it recurred inside
+        # the month. A list someone must remember to extend is the prose remedy
+        # rule 1 exists to replace. Adding a test file is now sufficient.
+        #
+        # The prior list and its per-file rationale are preserved in git history
+        # at 17be6e4d2 and summarised in tools/ci_pytest.py.
+        #
+        # The quarantine was SEEDED with exactly the 118 files this step already
+        # did not run, so this commit changes the MECHANISM and not one test
+        # result. Emptying it is incremental and needs no edit here:
+        # `python tools/ci_pytest.py --triage` runs each one alone and prints
+        # which now pass; deleting those lines is the whole change.
+        #
+        # tests/test_c162_ci_target_parity.py -- collected by this very step --
+        # goes red if a hand-listed path returns, if a quarantine entry goes
+        # stale or loses its reason, or if an empty target set ever exits 0.
+        #
+        # The old backslash-continuation hazard noted here (a `#` between two
+        # continued lines silently terminated the command and the filenames ran
+        # as shell commands) is now structurally absent: there is one line.
         # Junit XML is the structured artifact that gh_actions_fetcher.py
         # parses when reverse-feeding failures into mesh_memory.
         run: |
           mkdir -p artifacts
-          # The last three are DEPLOY-SAFETY gates: Dockerfile COPY coverage,
-          # the prod deploy wrapper's invariants, and the alembic revision
-          # graph. Until 2026-07-27 none of them ran on a PR -- they lived only
-          # in the tower-side verifier, so they gated nothing a human merges,
-          # while the class they catch (FU-102) had already killed 7 prod
-          # services on v64. All three are stdlib-only text/graph checks.
-          python -m pytest \
-            tests/test_scoring.py \
-            tests/test_evaluator_smoke.py \
-            tests/test_schema_loader.py \
-            tests/test_duckdb_schema_uptime_probe.py \
-            tests/test_proposed_to_pending_promoter.py \
-          tests/test_hollow_gate.py \
-          tests/test_park_hollow.py \
-            tests/test_sft_ingest.py \
-            tests/test_artifact_ingestor.py \
-            tests/test_ingestor_governor.py \
-            tests/test_breaker_autorecover.py \
-            tests/test_breaker_retire.py \
-            tests/test_ladder_routing.py \
-            tests/test_pr_publisher.py \
-            tests/test_build_routing.py \
-            tests/test_queue_janitor.py \
-            tests/test_engine_build.py \
-            tests/test_anchor_refill.py \
-            tests/test_policy.py \
-            tests/test_policy_chain_integration.py \
-            tests/test_directive_simplifier.py \
-            tests/test_perspectives_ask.py \
-            tests/test_vast_jobs.py \
-            tests/test_vuln_and_scan.py \
-            tests/test_vuln_enrich_otx.py \
-            tests/test_glama_counts.py \
-            tests/test_tier_backfill_trust_cap.py \
-            tests/test_vuln_surfacing.py \
-            tests/test_freshness_metadata.py \
-            tests/test_cadence_admin.py \
-            tests/test_dockerfile_copy_covers_active_services.py \
-            tests/test_deploy_prod_script.py \
-            tests/test_migration_graph_single_head.py \
-            -q \
-            --junitxml=artifacts/junit.xml
+          python tools/ci_pytest.py -q --junitxml=artifacts/junit.xml
+
+      - name: Halt shadow report (REPORT-ONLY -- what the ARMED halt would do)
+        # NOT a new blocking gate. The machine-checkable claim this report carries
+        # -- "the founding case still fires" -- is asserted by
+        # tests/test_queue_census.py, which the step above now collects, so it is
+        # already blocking via an EXISTING required check. This step exists so the
+        # UPSTREAM/PRESENT/DOWNSTREAM narrative, which needs a human reader and
+        # cannot be asserted, is produced and archived on every run instead of
+        # being available only to whoever remembers the tool exists.
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          python tools/halt_shadow_report.py > artifacts/halt_shadow_report.txt 2>&1
+          cat artifacts/halt_shadow_report.txt
+
+      - name: Upload halt shadow report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: halt-shadow-report
+          path: artifacts/halt_shadow_report.txt
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload pytest results
         if: always()

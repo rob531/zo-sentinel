@@ -1,0 +1,12 @@
+[service]
+name = "runtime_checkout_drift_report"
+import_path = "services.active.runtime_checkout_drift_report.router"
+prefix = "/api"
+tag = "runtime_checkout_drift_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[files]
+"router.py" = "services.active.runtime_checkout_drift_report.router"
+"__init__.py" = ""

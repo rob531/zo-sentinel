@@ -33,9 +33,9 @@ async def get_org_risk_tier_summary(
             COUNT(DISTINCT s.server_id) as server_count,
             AVG(a.p_top) as avg_p_top
         FROM
-            mcp_server_registry s
+            McpServerRegistry s
         LEFT JOIN
-            mcp_llm_axis_scores a ON s.server_id = a.server_id
+            McpLlmAxisScore a ON s.server_id = a.server_id
         WHERE
             s.org_id = :org_id
         GROUP BY
@@ -94,7 +94,7 @@ if __name__ == "__main__":
         # Insert test servers
         session.execute(
             """
-            INSERT INTO mcp_server_registry (server_id, org_id, risk_tier)
+            INSERT INTO McpServerRegistry (server_id, org_id, risk_tier)
             VALUES
                 ('server1', 'org1', 'low'),
                 ('server2', 'org1', 'medium'),
@@ -105,7 +105,7 @@ if __name__ == "__main__":
         # Insert test axis scores
         session.execute(
             """
-            INSERT INTO mcp_llm_axis_scores (server_id, axis_name, p_top)
+            INSERT INTO McpLlmAxisScore (server_id, axis_name, p_top)
             VALUES
                 ('server1', 'axis1', 0.8),
                 ('server1', 'axis2', 0.7),

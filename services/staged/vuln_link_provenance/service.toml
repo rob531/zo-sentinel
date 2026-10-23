@@ -1,0 +1,8 @@
+[service]
+name = "vuln_link_provenance"
+import_path = "services.active.vuln_link_provenance.router"
+prefix = "/api"
+tag = "vuln_link_provenance"
+origin = "service"
+auth = "public"
+needs_data_layer = true

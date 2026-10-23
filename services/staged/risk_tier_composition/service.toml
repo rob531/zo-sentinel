@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_composition"
+import_path = "services.active.risk_tier_composition.router"
+prefix = "/api"
+tag = "risk_tier_composition"
+origin = "service"
+auth = "public"
+needs_data_layer = true

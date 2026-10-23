@@ -1,0 +1,20 @@
+[service]
+name = "scoring_wave_analytics"
+import_path = "services.active.scoring_wave_analytics.router"
+prefix = "/api"
+tag = "scoring_wave_analytics"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = { source = "app.db", export = "get_session" }
+app_models = { source = "app.models", export = "McpServerRegistry,McpLlmAxisScore,McpScoreDispute,Org,User" }
+write_service = { source = "services.write_service.client", export = "WriteServiceClient" }
+
+[models]
+# No new models - only reads from existing tables
+
+[tables]
+app = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+bus = ["mcp_signal_scores", "mesh_memory"]

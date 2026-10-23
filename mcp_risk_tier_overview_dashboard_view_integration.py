@@ -5,7 +5,8 @@ from sqlalchemy.orm import sessionmaker
 from app.db import get_session
 from app.models import MCPServerRegistry, MCPAxisScores, MCPScoreDisputes, Orgs, Users
 from app.main import app
-from app.dependency_overrides import override_get_session
+# FU-369: removed an import of `override_get_session` from a module that does not
+# exist in this tree. The name was never used in this file.
 
 @pytest.fixture
 def test_db():

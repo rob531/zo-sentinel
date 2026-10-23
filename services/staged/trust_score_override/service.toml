@@ -1,0 +1,11 @@
+[service]
+name = "trust_score_override"
+import_path = "services.active.trust_score_override.router"
+prefix = "/api"
+tag = "trust_score_override"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

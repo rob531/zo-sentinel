@@ -1,39 +1,57 @@
-#!/usr/bin/env python3
-"""
-assessment_auditor.py -- ZO-SENTINEL Assessment Quality Auditor
-Reviews recent verdicts for quality issues and writes corrections.
-"""
 import requests
-import time
 import os
+import signal
+import sys
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 SERVICE_NAME = 'assessment_auditor'
-WRITE_SERVICE_URL = 'http://127.0.0.1:8772/write'
-EXECUTE_URL = 'http://127.0.0.1:8772/execute'
+WRITE_SERVICE_URL = 'http://127.0.0.1:8772'
+QUERY_SERVICE_URL = 'http://127.0.0.1:8772'
+EXECUTE_URL = 'http://127.0.0.1:8772'
 HEARTBEAT_INTERVAL = 60
 AUDIT_INTERVAL = 86400
-
-PID_FILE = '/var/run/zo/assessment_auditor.pid'
+PID_FILE = '/tmp/assessment_auditor.pid'
 AUDIT_REPORT_PATH = '/home/workspace/zo_sentinel/AUDIT_REPORT.md'
+
+import logging
+LOG_DIR = Path('/home/workspace/logs')
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    filename=str(LOG_DIR / f'{SERVICE_NAME}.log')
+)
+log = logging.getLogger(__name__)
 
 
 def ws_query(sql, params=None):
-    """Execute SQL query against DuckDB via inference_router."""
+    """Execute SQL query against DuckDB via write_service."""
     payload = {'sql': sql}
     if params:
         payload['params'] = params
-    resp = requests.post(EXECUTE_URL, json=payload, timeout=30)
+    resp = requests.post(f'{QUERY_SERVICE_URL}/query', json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
 
 def ws_write(table, rows, wait=True):
     """Write rows to DuckDB table via write_service."""
-    url = f'{WRITE_SERVICE_URL}/write'
+    if isinstance(rows, dict):
+        rows = [rows]
     payload = {'table': table, 'rows': rows, 'wait': wait}
-    resp = requests.post(url, json=payload)
+    resp = requests.post(f'{WRITE_SERVICE_URL}/write', json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ws_execute(sql, params=None):
+    """Execute DDL/DML via write_service execute endpoint."""
+    payload = {'sql': sql}
+    if params:
+        payload['params'] = params
+    resp = requests.post(f'{EXECUTE_URL}/execute', json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -47,304 +65,258 @@ def send_heartbeat():
             'status': 'running'
         })
     except Exception as e:
-        print(f"Heartbeat failed: {e}")
+        log.error(f"Heartbeat failed: {e}")
 
 
 def check_single_instance():
     """Ensure only one instance of daemon runs."""
-    os.makedirs(os.path.dirname(PID_FILE), exist_ok=True)
-    
-    if os.path.exists(PID_FILE):
-        with open(PID_FILE) as f:
+    pid_file = Path(PID_FILE)
+    if pid_file.exists():
+        with open(pid_file) as f:
             old_pid = int(f.read().strip())
         try:
             os.kill(old_pid, 0)
-            print(f"Already running with PID {old_pid}")
+            log.error(f"Another instance already running with PID {old_pid}")
             sys.exit(1)
         except OSError:
-            pass
-    
-    with open(PID_FILE, 'w') as f:
+            log.info(f"Stale PID file found, removing")
+    with open(pid_file, 'w') as f:
         f.write(str(os.getpid()))
 
 
-def check_low_confidence_verdicts():
-    """Find servers with verdict but confidence < 0.3."""
+def remove_pid_file():
+    """Remove the PID file on exit."""
+    try:
+        os.remove(PID_FILE)
+    except OSError:
+        pass
+
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    log.info(f"Received signal {signum}, shutting down")
+    remove_pid_file()
+    sys.exit(0)
+
+
+def utc_now_iso():
+    """Return current UTC time as ISO 8601 string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def check_low_confidence_verdicts(threshold=50, lookback_days=7):
+    """Find recent verdicts with low confidence scores that may need review."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
     sql = """
-    SELECT id, name, verdict, confidence, last_seen
-    FROM mcp_servers
-    WHERE verdict IS NOT NULL
-      AND verdict != ''
-      AND (confidence < 0.3 OR confidence IS NULL)
-    ORDER BY last_seen DESC
+        SELECT 
+            r.server_id,
+            r.name,
+            r.verdict,
+            r.trust_score,
+            r.scan_count,
+            r.registry_source
+        FROM mcp_server_registry r
+        WHERE r.verdict IN ('UNKNOWN', 'AMBER_UNVERIFIED', 'CAUTION_LIMITED')
+          AND r.trust_score < ?
+          AND r.scan_count < 3
     """
-    try:
-        result = ws_query(sql)
-        return result.get('rows', [])
-    except Exception as e:
-        print(f"Error checking low confidence verdicts: {e}")
-        return []
+    result = ws_query(sql, params=[threshold])
+    return result.get('rows', [])
 
 
-def check_identical_signal_scores():
-    """Find servers where all 6 signals have identical scores (scoring bug indicator)."""
+def check_unscored_servers(lookback_days=7):
+    """Find servers that have never been scored."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
     sql = """
-    SELECT 
-        server_id,
-        COUNT(DISTINCT score) as unique_scores,
-        COUNT(*) as signal_count,
-        MIN(score) as score_value
-    FROM mcp_signal_scores
-    GROUP BY server_id
-    HAVING COUNT(DISTINCT score) = 1 AND COUNT(*) >= 6
+        SELECT 
+            r.server_id,
+            r.name,
+            r.verdict,
+            r.registry_source,
+            r.scan_count
+        FROM mcp_server_registry r
+        LEFT JOIN mcp_signal_scores s ON r.server_id = s.server_id
+        WHERE s.server_id IS NULL
+        ORDER BY r.scan_count ASC, r.registry_source
+        LIMIT 100
     """
-    try:
-        result = ws_query(sql)
-        return result.get('rows', [])
-    except Exception as e:
-        print(f"Error checking identical signal scores: {e}")
-        return []
+    result = ws_query(sql)
+    return result.get('rows', [])
 
 
-def check_stale_assessments():
-    """Find servers assessed > 30 days ago not reassessed."""
-    threshold = datetime.now(timezone.utc) - timedelta(days=30)
+def check_stale_verdicts(max_age_days=30):
+    """Find verdicts that haven't been reassessed in a while."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
     sql = """
-    SELECT id, name, verdict, last_seen, status
-    FROM mcp_servers
-    WHERE last_seen < ?
-      AND status NOT IN ('ARCHIVED', 'DEPRECATED', 'REMOVED')
-    ORDER BY last_seen ASC
+        SELECT 
+            r.server_id,
+            r.name,
+            r.verdict,
+            r.trust_score,
+            r.scan_count
+        FROM mcp_server_registry r
+        WHERE r.verdict IN ('TRUSTED_RESEARCH', 'ENTERPRISE_CONTROLLED')
+          AND r.scan_count < 5
+        ORDER BY r.scan_count ASC
+        LIMIT 50
     """
+    result = ws_query(sql)
+    return result.get('rows', [])
+
+
+def record_audit_event(event_type, action, target_server_id, details, outcome='success'):
+    """Record an audit event for quality tracking."""
+    event_id = f"audit_{int(time.time()*1000)}"
     try:
-        result = ws_query(sql, [threshold.isoformat()])
-        return result.get('rows', [])
+        ws_write('audit_log', {
+            'event_id': event_id,
+            'event_type': event_type,
+            'actor': SERVICE_NAME,
+            'action': action,
+            'target_server_id': target_server_id,
+            'details_json': details,
+            'outcome': outcome,
+            'timestamp': utc_now_iso(),
+            'immutable': True
+        })
     except Exception as e:
-        print(f"Error checking stale assessments: {e}")
-        return []
+        log.warning(f"Failed to record audit event: {e}")
 
 
-def check_trusted_with_threats():
-    """Find TRUSTED_GENERAL servers with HIGH/CRITICAL threat associations."""
-    sql = """
-    SELECT DISTINCT
-        s.id as server_id,
-        s.name as server_name,
-        t.threat_type,
-        t.severity,
-        t.reported_at
-    FROM mcp_servers s
-    JOIN mcp_threat_associations t ON s.server_id = t.server_id
-    WHERE s.risk_tier = 'TRUSTED_GENERAL'
-      AND t.severity IN ('HIGH', 'CRITICAL')
-    ORDER BY t.reported_at DESC
-    """
-    try:
-        result = ws_query(sql)
-        return result.get('rows', [])
-    except Exception as e:
-        print(f"Error checking trusted with threats: {e}")
-        return []
-
-
-def write_correction(server_id, issue_type, reason, details=None):
-    """Write a correction record to the corrections table."""
-    correction = {
-        'agent_id': 'zo_sentinel.auditor',
-        'action': 'assessment_quality_issue',
-        'issue_type': issue_type,
-        'reason': reason,
-        'cluster': 'data_quality',
-        'server_id': server_id,
-        'details': details or {},
-        'created_at': datetime.now(timezone.utc).isoformat()
-    }
-    try:
-        ws_write('corrections', correction)
-    except Exception as e:
-        print(f"Failed to write correction: {e}")
-
-
-def create_corrections_table():
-    """Create corrections table if not exists."""
-    sql = """
-    CREATE TABLE IF NOT EXISTS corrections (
-        id BIGINT PRIMARY KEY,
-        agent_id VARCHAR,
-        action VARCHAR,
-        issue_type VARCHAR,
-        reason TEXT,
-        cluster VARCHAR,
-        server_id VARCHAR,
-        details JSON,
-        created_at TIMESTAMPTZ DEFAULT now()
-    )
-    """
-    try:
-        ws_query(sql)
-    except Exception as e:
-        print(f"Error creating corrections table: {e}")
-
-
-def generate_audit_report(issues):
-    """Generate AUDIT_REPORT.md with findings."""
+def generate_audit_report(low_conf, unscored, stale):
+    """Generate markdown audit report."""
     report_lines = [
-        "# ZO-SENTINEL Assessment Quality Audit Report",
+        f"# Assessment Quality Audit Report",
         f"",
-        f"**Generated:** {datetime.now(timezone.utc).isoformat()}",
-        f"**Auditor:** {SERVICE_NAME}",
+        f"**Generated:** {utc_now_iso()}",
         f"",
-        f"---",
+        f"## Summary",
+        f"",
+        f"- Low confidence verdicts: {len(low_conf)}",
+        f"- Unscored servers: {len(unscored)}",
+        f"- Stale verdicts: {len(stale)}",
         f"",
     ]
     
-    total_issues = sum(len(v) for v in issues.values())
-    report_lines.append(f"## Summary")
-    report_lines.append(f"")
-    report_lines.append(f"- **Total Issues Found:** {total_issues}")
-    report_lines.append(f"- Low Confidence Verdicts: {len(issues.get('low_confidence', []))}")
-    report_lines.append(f"- Identical Signal Scores: {len(issues.get('identical_scores', []))}")
-    report_lines.append(f"- Stale Assessments: {len(issues.get('stale', []))}")
-    report_lines.append(f"- Trusted with Threats: {len(issues.get('trusted_threats', []))}")
-    report_lines.append(f"")
-    report_lines.append(f"---")
-    report_lines.append(f"")
+    if low_conf:
+        report_lines.extend([
+            f"## Low Confidence Verdicts",
+            f"",
+            f"| Server ID | Name | Verdict | Trust Score | Source |",
+            f"|-----------|------|----------|-------------|--------|",
+        ])
+        for row in low_conf[:20]:
+            report_lines.append(
+                f"| {row.get('server_id', '')} | {row.get('name', '')[:50]} | "
+                f"{row.get('verdict', '')} | {row.get('trust_score', 0)} | "
+                f"{row.get('registry_source', '')} |"
+            )
+        report_lines.append("")
     
-    if issues.get('low_confidence'):
-        report_lines.append(f"## 1. Low Confidence Verdicts")
-        report_lines.append(f"")
-        report_lines.append(f"| Server | Verdict | Confidence | Last Seen |")
-        report_lines.append(f"|--------|---------|------------|-----------|")
-        for s in issues['low_confidence']:
-            conf = s.get('confidence') or 'NULL'
-            report_lines.append(f"| {s.get('name', 'N/A')} | {s.get('verdict', 'N/A')} | {conf} | {s.get('last_seen', 'N/A')} |")
-        report_lines.append(f"")
+    if unscored:
+        report_lines.extend([
+            f"## Unscored Servers",
+            f"",
+            f"| Server ID | Name | Source |",
+            f"|-----------|------|--------|",
+        ])
+        for row in unscored[:20]:
+            report_lines.append(
+                f"| {row.get('server_id', '')} | {row.get('name', '')[:50]} | "
+                f"{row.get('registry_source', '')} |"
+            )
+        report_lines.append("")
     
-    if issues.get('identical_scores'):
-        report_lines.append(f"## 2. Identical Signal Scores (Possible Scoring Bug)")
-        report_lines.append(f"")
-        report_lines.append(f"| Server ID | Unique Scores | Signal Count | Score Value |")
-        report_lines.append(f"|-----------|---------------|--------------|-------------|")
-        for s in issues['identical_scores']:
-            report_lines.append(f"| {s.get('server_id', 'N/A')} | {s.get('unique_scores', 'N/A')} | {s.get('signal_count', 'N/A')} | {s.get('score_value', 'N/A')} |")
-        report_lines.append(f"")
+    if stale:
+        report_lines.extend([
+            f"## Stale Verdicts Requiring Reassessment",
+            f"",
+            f"| Server ID | Name | Verdict | Trust Score | Scans |",
+            f"|-----------|------|---------|-------------|-------|",
+        ])
+        for row in stale[:20]:
+            report_lines.append(
+                f"| {row.get('server_id', '')} | {row.get('name', '')[:50]} | "
+                f"{row.get('verdict', '')} | {row.get('trust_score', 0)} | "
+                f"{row.get('scan_count', 0)} |"
+            )
+        report_lines.append("")
     
-    if issues.get('stale'):
-        report_lines.append(f"## 3. Stale Assessments (>30 days)")
-        report_lines.append(f"")
-        report_lines.append(f"| Server | Verdict | Last Seen | Status |")
-        report_lines.append(f"|--------|---------|-----------|--------|")
-        for s in issues['stale']:
-            report_lines.append(f"| {s.get('name', 'N/A')} | {s.get('verdict', 'N/A')} | {s.get('last_seen', 'N/A')} | {s.get('status', 'N/A')} |")
-        report_lines.append(f"")
-    
-    if issues.get('trusted_threats'):
-        report_lines.append(f"## 4. TRUSTED_GENERAL with HIGH/CRITICAL Threats (Contradiction)")
-        report_lines.append(f"")
-        report_lines.append(f"| Server | Threat Type | Severity | Reported At |")
-        report_lines.append(f"|--------|--------------|----------|-------------|")
-        for t in issues['trusted_threats']:
-            report_lines.append(f"| {t.get('server_name', 'N/A')} | {t.get('threat_type', 'N/A')} | {t.get('severity', 'N/A')} | {t.get('reported_at', 'N/A')} |")
-        report_lines.append(f"")
-    
-    if total_issues == 0:
-        report_lines.append(f"## No Issues Found")
-        report_lines.append(f"")
-        report_lines.append(f"All assessment quality checks passed. No corrective actions required.")
-        report_lines.append(f"")
-    
-    report_lines.append(f"---")
-    report_lines.append(f"*Report generated by {SERVICE_NAME}*")
-    
-    report_content = '\n'.join(report_lines)
-    
-    try:
-        Path(AUDIT_REPORT_PATH).parent.mkdir(parents=True, exist_ok=True)
-        with open(AUDIT_REPORT_PATH, 'w') as f:
-            f.write(report_content)
-        print(f"Audit report written to {AUDIT_REPORT_PATH}")
-    except Exception as e:
-        print(f"Failed to write audit report: {e}")
-    
-    return report_content
+    return "\n".join(report_lines)
 
 
 def cycle():
-    """Main audit cycle - review recent verdicts for quality issues."""
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Starting assessment audit cycle")
+    """Perform one audit cycle."""
+    log.info("Starting assessment audit cycle")
     
-    create_corrections_table()
-    
-    issues = {
-        'low_confidence': [],
-        'identical_scores': [],
-        'stale': [],
-        'trusted_threats': []
-    }
-    
-    low_conf = check_low_confidence_verdicts()
-    issues['low_confidence'] = low_conf
-    for s in low_conf:
-        reason = f"Server '{s.get('name')}' has verdict '{s.get('verdict')}' but confidence is {s.get('confidence') or 'NULL'} (<0.3 threshold)"
-        write_correction(s.get('id'), 'low_confidence_verdict', reason, {
-            'verdict': s.get('verdict'),
-            'confidence': s.get('confidence')
-        })
-    print(f"  Found {len(low_conf)} low confidence verdicts")
-    
-    identical = check_identical_signal_scores()
-    issues['identical_scores'] = identical
-    for s in identical:
-        reason = f"Server '{s.get('server_id')}' has all signals scoring {s.get('score_value')} - possible scoring bug"
-        write_correction(s.get('server_id'), 'identical_signal_scores', reason, {
-            'score_value': s.get('score_value'),
-            'signal_count': s.get('signal_count')
-        })
-    print(f"  Found {len(identical)} servers with identical signal scores")
-    
-    stale = check_stale_assessments()
-    issues['stale'] = stale
-    for s in stale:
-        reason = f"Server '{s.get('name')}' has not been reassessed since {s.get('last_seen')} (>30 days)"
-        write_correction(s.get('id'), 'stale_assessment', reason, {
-            'last_seen': s.get('last_seen'),
-            'status': s.get('status')
-        })
-    print(f"  Found {len(stale)} stale assessments")
-    
-    trusted_threats = check_trusted_with_threats()
-    issues['trusted_threats'] = trusted_threats
-    for t in trusted_threats:
-        reason = f"Server '{t.get('server_name')}' is TRUSTED_GENERAL but has {t.get('severity')} threat '{t.get('threat_type')}' - classification contradiction"
-        write_correction(t.get('server_id'), 'trusted_threat_contradiction', reason, {
-            'threat_type': t.get('threat_type'),
-            'severity': t.get('severity'),
-            'reported_at': t.get('reported_at')
-        })
-    print(f"  Found {len(trusted_threats)} TRUSTED_GENERAL with threats")
-    
-    generate_audit_report(issues)
-    
-    total = sum(len(v) for v in issues.values())
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Audit cycle complete: {total} issues found")
-    
-    return issues
+    try:
+        low_conf = check_low_confidence_verdicts(threshold=50, lookback_days=7)
+        log.info(f"Found {len(low_conf)} low confidence verdicts")
+        
+        unscored = check_unscored_servers(lookback_days=7)
+        log.info(f"Found {len(unscored)} unscored servers")
+        
+        stale = check_stale_verdicts(max_age_days=30)
+        log.info(f"Found {len(stale)} stale verdicts")
+        
+        report = generate_audit_report(low_conf, unscored, stale)
+        
+        try:
+            Path(AUDIT_REPORT_PATH).parent.mkdir(parents=True, exist_ok=True)
+            with open(AUDIT_REPORT_PATH, 'w') as f:
+                f.write(report)
+            log.info(f"Audit report written to {AUDIT_REPORT_PATH}")
+        except Exception as e:
+            log.error(f"Failed to write audit report: {e}")
+        
+        for row in low_conf[:10]:
+            record_audit_event(
+                event_type='quality_review',
+                action='flagged_low_confidence',
+                target_server_id=row.get('server_id', ''),
+                details={'verdict': row.get('verdict'), 'trust_score': row.get('trust_score')},
+                outcome='flagged'
+            )
+        
+        for row in unscored[:10]:
+            record_audit_event(
+                event_type='quality_review',
+                action='flagged_unscored',
+                target_server_id=row.get('server_id', ''),
+                details={'source': row.get('registry_source')},
+                outcome='flagged'
+            )
+        
+        log.info("Assessment audit cycle complete")
+        
+    except Exception as e:
+        log.error(f"Error in audit cycle: {e}", exc_info=True)
 
 
 def run():
-    """Run the assessment auditor daemon."""
-    print(f"Starting {SERVICE_NAME}...")
+    """Main daemon run loop."""
     check_single_instance()
-    send_heartbeat()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    log.info(f"{SERVICE_NAME} starting")
+    
+    cycle()
+    
+    last_audit = time.time()
     
     while True:
         try:
-            cycle()
+            send_heartbeat()
         except Exception as e:
-            print(f"Error in audit cycle: {e}")
+            log.error(f"Heartbeat failed: {e}")
         
-        send_heartbeat()
-        time.sleep(AUDIT_INTERVAL)
+        now = time.time()
+        if now - last_audit >= AUDIT_INTERVAL:
+            cycle()
+            last_audit = now
+        
+        time.sleep(HEARTBEAT_INTERVAL)
 
 
 if __name__ == '__main__':

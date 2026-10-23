@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from typing import List
 import requests
 
@@ -20,11 +20,11 @@ async def get_disputes(db=Depends(get_session)):
 
 @app.get("/orgs")
 async def get_orgs(db=Depends(get_session)):
-    return db.query(Orgs).all()
+    return db.query(Org).all()
 
 @app.get("/users")
 async def get_users(db=Depends(get_session)):
-    return db.query(Users).all()
+    return db.query(User).all()
 
 @app.get("/mesh_scores")
 async def get_mesh_scores():

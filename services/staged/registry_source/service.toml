@@ -1,0 +1,8 @@
+[service]
+name = "registry_source"
+import_path = "services.active.registry_source.router"
+prefix = "/api"
+tag = "registry_source"
+origin = "service"
+auth = "public"
+needs_data_layer = true

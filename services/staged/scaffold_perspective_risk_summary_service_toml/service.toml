@@ -1,0 +1,11 @@
+[service]
+name = "scaffold_perspective_risk_summary_service_toml"
+import_path = "services.active.scaffold_perspective_risk_summary_service_toml.router"
+prefix = "/api"
+tag = "scaffold_perspective_risk_summary_service_toml"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

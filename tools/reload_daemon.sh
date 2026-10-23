@@ -17,17 +17,78 @@
 #      rc. A post-verify + cold-relaunch fallback makes the script converge
 #      even under an UNPATCHED wrapper (defense in depth), and it exits
 #      NONZERO if the daemon is still down -- no more trusting "OK" lines.
+#   3. THE SURVIVOR TRAP (root-caused 2026-09-28): the cold-relaunch fallback
+#      accepted ANY pid matching the child pattern, including the old process
+#      it had failed to kill -- so it printed "OK: ... running (pid 4602)" and
+#      exited 0 for a daemon that was never reloaded and was still STALE. The
+#      post-verify loop had always required a CHANGED pid; the fallback did
+#      not. Now it does, and refuses with rc=5 rather than publishing an
+#      arming that never happened. Regression test:
+#      tests/deploy/test_reload_daemon_cold_relaunch_guard.py
+#
+# Exit codes: 0 running on fresh code · 1 down · 2 refused (bad resolution, or
+#      a module-mode cold relaunch the wrapper cannot serve) · 4 mid-cycle,
+#      nothing killed · 5 cold relaunch did not replace the old pid.
 #
 # Usage:
 #   bash tools/reload_daemon.sh goose_runner
 #   bash tools/reload_daemon.sh sentinel_directive_generator_goose
 set -uo pipefail
 
-NAME="${1:?usage: reload_daemon.sh <daemon-basename, e.g. goose_runner>}"
+CHECK_ONLY=0
+if [ "${1:-}" = "--check-supervisor" ]; then CHECK_ONLY=1; shift; fi
+NAME="${1:?usage: reload_daemon.sh [--check-supervisor] <daemon-basename, e.g. goose_runner>}"
 NAME="${NAME%.py}"
 MESH="/home/workspace/zo_mesh"
 SENTINEL="/home/workspace/zo_sentinel"
 LOGS="/home/workspace/logs"
+
+# --- FU-530 guard (graphify-kl-daily-refresh, 2026-09-24) -------------------
+# reload_daemon can only relaunch a daemon as `daemon_wrapper.sh <name> <script>`
+# with NO trailing args. graph_refresh and loop_watch are launched by
+# go.sh / watchdog.sh as a DIRECT self-looping loop --
+# `python3 .../graph_refresh.py --interval 900` -- PRECISELY because
+# daemon_wrapper does not forward trailing flags. A bare relaunch here would
+# drop `--interval`, and graph_refresh.py with no --interval is a ONE-SHOT: it
+# reindexes once and exits 0, which daemon_wrapper reads as "clean shutdown,
+# do not respawn". The 15-minute refresher becomes a single run then permanent
+# silence, logged as perfectly healthy (measured 2026-09-24: two refreshes in
+# 48h). Refuse rather than reproduce that false green. The supervisor files are
+# overridable for tests via $RELOAD_SUPERVISOR_FILES.
+_supervisor_flagged_form() {
+  local -a files
+  if [ -n "${RELOAD_SUPERVISOR_FILES:-}" ]; then
+    read -r -a files <<< "$RELOAD_SUPERVISOR_FILES"
+  else
+    files=("$MESH/go.sh" "$MESH/watchdog.sh")
+  fi
+  # First `<name>.py --flag` (or `-f`) in an authoritative supervisor line.
+  grep -hoE "${NAME}\.py[[:space:]]+--?[A-Za-z][A-Za-z0-9-]*" "${files[@]}" \
+    2>/dev/null | head -1
+}
+FLAGGED_FORM="$(_supervisor_flagged_form || true)"
+
+if [ "$CHECK_ONLY" = "1" ]; then
+  if [ -n "$FLAGGED_FORM" ]; then
+    echo "FLAGGED: $NAME is supervised as a direct self-looping loop carrying"
+    echo "  trailing flags ('$FLAGGED_FORM ...'); reload_daemon would drop them (FU-530)."
+    exit 2
+  fi
+  echo "CLEAR: $NAME has no flagged supervisor form; reload_daemon can relaunch it."
+  exit 0
+fi
+
+if [ -n "$FLAGGED_FORM" ]; then
+  echo "REFUSED: $NAME is supervised as a DIRECT self-looping loop that carries"
+  echo "  trailing flags ('$FLAGGED_FORM ...'), per \$MESH/go.sh / \$MESH/watchdog.sh."
+  echo "  reload_daemon.sh can only relaunch under 'daemon_wrapper.sh <name> <script>'"
+  echo "  with NO trailing args, so it would drop those flags -- and e.g."
+  echo "  graph_refresh.py with no --interval is a ONE-SHOT the wrapper reads as a"
+  echo "  clean stop, silencing the daemon forever (FU-530). Reload it via its OWN"
+  echo "  supervisor instead: watchdog.sh respawns the correct form within ~30s,"
+  echo "  or re-run its section of go.sh."
+  exit 2
+fi
 
 # --- target resolution ------------------------------------------------------
 # FU-121 (2026-07-27): this resolver looked ONLY for a top-level <name>.py in
@@ -74,7 +135,26 @@ else
              -not -path "*/node_modules/*" -not -path "*/.git/*" \
              2>/dev/null | head -1 || true)"
   if [ -n "$NESTED" ]; then
-    MODE="module"; SCRIPT="$NESTED"; _derive_module "$NESTED"
+    # FU-460 (2026-09-14): HARNESS_DOCTRINE R1 -- the RUNTIME decides how a
+    # daemon is started, not the filesystem layout. A nested <name>.py sitting
+    # in a package dir CAN be run as `-m pkg.sub.name`, but go.sh declares
+    # these by PATH and they run in SCRIPT form. Classifying them module-mode
+    # built a CHILD_PAT that matched nothing, so every reload fell through to
+    # the cold relaunch below -- which pkill'd the LIVE wrapper and then handed
+    # daemon_wrapper.sh a `-m` it has no code to parse. Net effect of a
+    # "reload": a healthy supervised daemon became an ORPHAN on stale code.
+    # Measured 2026-09-14: 2 of 26 live wrapper-managed daemons are in this
+    # class, and module-mode misfired on 2 of the 2 cases it fired on.
+    # Ask the runtime first, then go.sh; only guess from layout as a last resort.
+    if pgrep -f "python.*${NAME}\.py" >/dev/null 2>&1; then
+      SCRIPT="$NESTED"                      # live proc is script form -> MODE stays "file"
+    elif grep -qE "daemon_wrapper\.sh +${NAME}([[:space:]]|\\\\|$)" "$MESH/go.sh" 2>/dev/null &&
+         grep -A3 -E "daemon_wrapper\.sh +${NAME}([[:space:]]|\\\\|$)" "$MESH/go.sh" 2>/dev/null \
+           | grep -q "${NAME}\.py"; then
+      SCRIPT="$NESTED"                      # go.sh declares it by path -> script form
+    else
+      MODE="module"; SCRIPT="$NESTED"; _derive_module "$NESTED"
+    fi
   else
     # 4. ask the running process how it was started
     LIVE="$(pgrep -af "python.* -m ([A-Za-z0-9_]+\.)*${NAME}( |$)" 2>/dev/null \
@@ -128,6 +208,33 @@ fi
 OLD_CHILD=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
 WRAPPER=$(pgrep -f "$WRAP_PAT" 2>/dev/null | head -1 || true)
 
+# FU-515: OLD_CHILD is `pgrep | head -1` but every kill below is `pkill -f`,
+# which kills EVERY match. The script therefore REASONS ABOUT ONE PID AND
+# KILLS N. When a daemon has >1 live process (graph_refresh routinely does:
+# one idle, one mid-cycle), a reload aimed at the idle one also destroys the
+# busy one's in-flight work. daemon_staleness.py already computes that
+# BUSY/IDLE split per-pid -- but could only print it as ADVICE, because the
+# remedy it emits is name-scoped and the caller has no way to say "not that
+# one". The distinction was unenforceable at the call site, which is how the
+# 2026-09-22 deploy run killed a graph_refresh the tool had explicitly told it
+# not to touch. Make the distinction enforceable instead of advisory.
+# Default-off: unset => byte-identical behaviour for every existing caller.
+if [ -n "${RELOAD_DAEMON_PROTECT_PID:-}" ]; then
+  _matched=$(pgrep -f "$CHILD_PAT" 2>/dev/null || true)
+  for _p in $(printf '%s' "$RELOAD_DAEMON_PROTECT_PID" | tr ',' ' '); do
+    for _m in $_matched; do
+      if [ "$_p" = "$_m" ]; then
+        echo "REFUSING reload of $NAME: pid $_p is protected (RELOAD_DAEMON_PROTECT_PID)"
+        echo "  and it MATCHES the kill pattern: $CHILD_PAT"
+        echo "  This daemon has more than one live process; a name-scoped pkill"
+        echo "  would take the protected one down with the intended target."
+        echo "  NOTHING WAS KILLED. Re-run once that pid is idle."
+        exit 4
+      fi
+    done
+  done
+fi
+
 if [ -n "$WRAPPER" ]; then
   touch "$MARKER"
   echo "wrapper alive (pid $WRAPPER) -- reload marker set; killing python child (old pid ${OLD_CHILD:-none})"
@@ -147,7 +254,29 @@ done
 # Fallback: cold relaunch under a FRESH wrapper (covers wrapper-dead,
 # unpatched-wrapper, and back-off-forever cases).
 if [ -z "$NEW" ]; then
+  # FU-460: NEVER trade a live supervisor for a dead one. daemon_wrapper.sh
+  # takes `<name> <script-path>` and contains NO `-m` handling at all, so a
+  # module-mode cold relaunch CANNOT succeed -- and the pkill below would have
+  # already destroyed the working wrapper by the time we found that out. This
+  # is the "surface advertised a shape the writer refuses" class: refuse up
+  # front and leave the existing wrapper running.
+  if [ "$MODE" = "module" ] && ! grep -q -- '-m' "$MESH/daemon_wrapper.sh" 2>/dev/null; then
+    rm -f "$MARKER"
+    echo "REFUSING cold relaunch: $NAME resolved module-mode, but $MESH/daemon_wrapper.sh"
+    echo "  has no -m support -- the relaunch would fail AFTER killing the live wrapper."
+    echo "  Existing wrapper left UNTOUCHED. Fix the wrapper contract or the resolution."
+    exit 2
+  fi
   echo "child did not respawn -- cold-relaunching a fresh wrapper"
+  # FU-558: record the pid that is running BEFORE the cold relaunch. The
+  # post-verify loop above required a pid DIFFERENT from the one it killed;
+  # the fallback loop below did not, so a surviving old process was reported
+  # as "OK" and rc=0. Measured live 2026-09-28: pid 4602
+  # (sentinel_directive_generator_goose, started 04:21:09, pre-ff) survived
+  # both pkills, the script printed "OK: ... running (pid 4602)" and exited 0,
+  # and daemon_staleness.py still called it STALE two minutes later. An OK is
+  # not an arming (R2).
+  PRE_COLD=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
   rm -f "$MARKER"
   pkill -f "$WRAP_PAT" 2>/dev/null || true
   pkill -f "$CHILD_PAT" 2>/dev/null || true
@@ -163,9 +292,18 @@ if [ -z "$NEW" ]; then
   fi
   for _ in $(seq 1 20); do
     sleep 1
-    NEW=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
-    [ -n "$NEW" ] && break
+    P=$(pgrep -f "$CHILD_PAT" 2>/dev/null | head -1 || true)
+    if [ -n "$P" ] && [ "$P" != "${PRE_COLD:-__none__}" ]; then NEW="$P"; break; fi
   done
+  if [ -z "$NEW" ] && [ -n "${PRE_COLD:-}" ] && kill -0 "$PRE_COLD" 2>/dev/null; then
+    echo "FAIL: cold relaunch did NOT replace pid $PRE_COLD -- that same process is"
+    echo "  still the running child, so it is still on the OLD code. It survived both"
+    echo "  pkills (pattern miss, or an unkillable / uninterruptible state)."
+    echo "  Refusing to print OK: a success line here would publish an arming that"
+    echo "  never happened. Inspect: ps -o pid,lstart,args -p $PRE_COLD"
+    echo "  and $LOGS/wrapper_${NAME}.log"
+    exit 5
+  fi
 fi
 
 # Tidy: if the wrapper respawned without passing its exit branch, the marker

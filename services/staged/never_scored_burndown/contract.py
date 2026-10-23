@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import func, desc
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, CadenceJobRuns
+from app.models import McpServerRegistry, McpLlmAxisScore, CadenceJobRun
 from app.schemas import MCPServerRegistrySchema, MCPLLMAxisScoresSchema, CadenceJobRunsSchema
 
 router = APIRouter(prefix="/api/scoring")
@@ -41,9 +41,9 @@ def get_never_scored_burndown(session=Depends(get_session)) -> NeverScoredBurndo
 
     # Get latest snapshot date
     snapshot = (
-        session.query(CadenceJobRuns)
-        .filter(CadenceJobRuns.job == 'never_scored_snapshot')
-        .order_by(desc(CadenceJobRuns.finished_at))
+        session.query(CadenceJobRun)
+        .filter(CadenceJobRun.job == 'never_scored_snapshot')
+        .order_by(desc(CadenceJobRun.finished_at))
         .first()
     )
     snapshot_date = snapshot.finished_at if snapshot else None
@@ -52,12 +52,12 @@ def get_never_scored_burndown(session=Depends(get_session)) -> NeverScoredBurndo
     daily_delta = None
     if snapshot:
         prev_snapshot = (
-            session.query(CadenceJobRuns)
+            session.query(CadenceJobRun)
             .filter(
-                CadenceJobRuns.job == 'never_scored_snapshot',
-                CadenceJobRuns.finished_at < snapshot.finished_at
+                CadenceJobRun.job == 'never_scored_snapshot',
+                CadenceJobRun.finished_at < snapshot.finished_at
             )
-            .order_by(desc(CadenceJobRuns.finished_at))
+            .order_by(desc(CadenceJobRun.finished_at))
             .first()
         )
         if prev_snapshot:
@@ -141,7 +141,7 @@ if __name__ == "__main__":
             session.add(server)
 
         # Create a snapshot
-        snapshot = CadenceJobRuns(
+        snapshot = CadenceJobRun(
             job="never_scored_snapshot",
             started_at=datetime.now(),
             finished_at=datetime.now(),

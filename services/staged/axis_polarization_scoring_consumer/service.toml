@@ -1,0 +1,18 @@
+[service]
+name = "axis_polarization_scoring_consumer"
+import_path = "services.active.axis_polarization_scoring_consumer.router"
+prefix = "/api"
+tag = "axis_polarization_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+module = "services.active.axis_polarization_scoring_consumer.router"
+
+[dependencies]
+requires = ["app"]
+
+[notes]
+emitted_by = "tools/service_decomposer.py"
+promoted_from = "services.pipeline.axis_polarization_scoring_consumer"

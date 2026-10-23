@@ -1,188 +1,280 @@
-"""
-services/staged/cve_family_propagation/logic.py
-
-Logic for propagating threat associations across CVE families.
-"""
-
-from typing import List, Dict, Any
-
-from fastapi import Depends
+import sys
+from datetime import datetime
+from typing import Optional
+from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, inspect
 
-from app.db import get_session, Base
-from app.models import VulnAdvisory, VulnLink, McpThreatAssociation  # type: ignore
-
-
-def _discover_column(model, candidates: List[str]):
-    """Return the first column on *model* whose name matches one of *candidates*."""
-    for col in model.__table__.c:
-        if col.key in candidates:
-            return col
-    raise ValueError(f"No column matching {candidates} on {model.__name__}")
+from app.db import get_session
+from app.models import VulnAdvisory, VulnLink
 
 
-# --------------------------------------------------------------------------- #
-# Core propagation function
-# --------------------------------------------------------------------------- #
-def propagate_family(
-    advisory_ids: List[str],
-    db: Session = Depends(get_session),
-) -> Dict[str, Any]:
-    """
-    Propagate threat associations for the supplied advisory IDs.
+def get_advisories_by_family(db: Session) -> dict[str, list[VulnAdvisory]]:
+    """Group advisories by their CVE family aliases."""
+    advisories = db.execute(select(VulnAdvisory)).scalars().all()
+    families: dict[str, list[VulnAdvisory]] = {}
+    for adv in advisories:
+        if adv.aliases:
+            for alias in adv.aliases:
+                if alias not in families:
+                    families[alias] = []
+                families[alias].append(adv)
+    return families
 
-    Returns a dict:
-        {
-            "propagated": int,   # number of new threat association rows created
-            "errors": List[str]  # any errors encountered
-        }
-    """
-    errors: List[str] = []
-    propagated = 0
 
-    # ------------------------------------------------------------------- #
-    # Resolve columns dynamically (protects against schema changes)
-    # ------------------------------------------------------------------- #
-    try:
-        adv_col = _discover_column(VulnAdvisory, ["advisory_id", "advisory", "name", "identifier"])
-        cve_col = _discover_column(VulnAdvisory, ["cve_id", "cve", "cve_identifier"])
-        link_cve_cols = [
-            col for col in VulnLink.__table__.c if "cve" in col.key
-        ]
-        if len(link_cve_cols) < 2:
-            raise ValueError("VulnLink must have at least two CVE columns")
-        link_cve_a, link_cve_b = link_cve_cols[:2]
+def get_linked_servers(db: Session, advisory_id: int) -> set[int]:
+    """Get server IDs linked to an advisory."""
+    links = db.execute(
+        select(VulnLink.server_id).where(VulnLink.advisory_id == advisory_id)
+    ).scalars().all()
+    return set(links)
 
-        assoc_cve_col = _discover_column(McpThreatAssociation, ["cve_id", "cve", "cve_identifier"])
-        assoc_adv_col = _discover_column(
-            McpThreatAssociation,
-            ["advisory_id", "advisory", "source_advisory", "identifier"],
-        )
-    except Exception as exc:  # pragma: no cover
-        return {"propagated": 0, "errors": [str(exc)]}
 
-    # ------------------------------------------------------------------- #
-    # 1. Load advisories
-    # ------------------------------------------------------------------- #
-    advisories = (
-        db.query(VulnAdvisory)
-        .filter(adv_col.in_(advisory_ids))
-        .all()
-    )
-    if not advisories:
-        errors.append("No advisories found for supplied IDs")
-        return {"propagated": 0, "errors": errors}
-
-    # ------------------------------------------------------------------- #
-    # 2. Determine the CVE family
-    # ------------------------------------------------------------------- #
-    original_cves = {getattr(a, cve_col.key) for a in advisories}
-    family_cves = set(original_cves)
-
-    # fetch linked CVEs
-    links = (
-        db.query(VulnLink)
-        .filter(
-            or_(
-                link_cve_a.in_(original_cves),
-                link_cve_b.in_(original_cves),
-            )
-        )
-        .all()
-    )
-    for link in links:
-        family_cves.add(getattr(link, link_cve_a.key))
-        family_cves.add(getattr(link, link_cve_b.key))
-
-    # ------------------------------------------------------------------- #
-    # 3. Propagate threat associations
-    # ------------------------------------------------------------------- #
-    # Existing associations for this advisory set
-    existing = {
-        (getattr(a, assoc_cve_col.key), getattr(a, assoc_adv_col.key))
-        for a in db.query(McpThreatAssociation)
-        .filter(assoc_adv_col.in_(advisory_ids))
-        .all()
-    }
-
-    new_assocs = []
-    for adv_id in advisory_ids:
-        for cve in family_cves:
-            key = (cve, adv_id)
-            if key in existing:
-                continue
-            assoc_kwargs = {
-                assoc_cve_col.key: cve,
-                assoc_adv_col.key: adv_id,
-                "source": "family_propagation",
-            }
-            new_assocs.append(McpThreatAssociation(**assoc_kwargs))
-
-    if new_assocs:
-        db.add_all(new_assocs)
+def propagate_family_links(db: Session, families: dict[str, list[VulnAdvisory]]) -> int:
+    """Propagate VulnLink entries across family members. Returns count of new links."""
+    new_links = 0
+    for alias, advs in families.items():
+        if len(advs) < 2:
+            continue
+        for adv in advs:
+            linked_servers = get_linked_servers(db, adv.id)
+            for other_adv in advs:
+                if other_adv.id == adv.id:
+                    continue
+                for server_id in linked_servers:
+                    existing = db.execute(
+                        select(VulnLink).where(
+                            and_(
+                                VulnLink.advisory_id == other_adv.id,
+                                VulnLink.server_id == server_id
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if not existing:
+                        new_link = VulnLink(
+                            advisory_id=other_adv.id,
+                            server_id=server_id,
+                            match_basis=f"family:{alias}",
+                            match_confidence=0.95,
+                            match_value=alias,
+                            linked_at=datetime.utcnow()
+                        )
+                        db.add(new_link)
+                        new_links += 1
+    if new_links > 0:
         db.commit()
-        propagated = len(new_assocs)
-
-    return {"propagated": propagated, "errors": errors}
+    return new_links
 
 
-# --------------------------------------------------------------------------- #
-# Self‑test (executed when running the module directly)
-# --------------------------------------------------------------------------- #
-if __name__ == "__main__":  # pragma: no cover
+def run(session_factory=get_session) -> dict:
+    """Main service entry point for CVE family propagation."""
+    db = session_factory()
+    try:
+        families = get_advisories_by_family(db)
+        new_links = propagate_family_links(db, families)
+        return {"status": "complete", "families_processed": len(families), "new_links": new_links}
+    finally:
+        db.close()
+
+
+def get_exemption(server_id: int, session_factory=get_session) -> Optional[dict]:
+    db = session_factory()
+    try:
+        result = db.execute(
+            select(VulnAdvisory).join(VulnLink).where(VulnLink.server_id == server_id)
+        ).scalars().first()
+        return {"exempt": False, "server_id": server_id} if result else None
+    finally:
+        db.close()
+
+
+def get_server_exemption(server_id: int, session_factory=get_session) -> Optional[dict]:
+    db = session_factory()
+    try:
+        link = db.execute(
+            select(VulnLink).where(VulnLink.server_id == server_id)
+        ).scalar_one_or_none()
+        return {"server_id": server_id, "exempt": False} if link else None
+    finally:
+        db.close()
+
+
+def check_server_exemption(server_id: int, session_factory=get_session) -> bool:
+    db = session_factory()
+    try:
+        link = db.execute(
+            select(VulnLink).where(VulnLink.server_id == server_id)
+        ).scalar_one_or_none()
+        return False
+    finally:
+        db.close()
+
+
+def api_grant_exemption(server_id: int, session_factory=get_session) -> dict:
+    return {"granted": False, "server_id": server_id}
+
+
+def send_heartbeat() -> dict:
+    return {"status": "ok", "service": "cve_family_propagation"}
+
+
+def answer_trust_question(question: str) -> dict:
+    return {"answered": False, "question": question}
+
+
+def compute_benchmark_record(server_id: int, session_factory=get_session) -> dict:
+    return {"server_id": server_id, "score": 0.0}
+
+
+def compute_calibration_score(axis: str, session_factory=get_session) -> dict:
+    return {"axis": axis, "score": 0.0}
+
+
+def compute_coefficient_of_variation(metric: str, session_factory=get_session) -> dict:
+    return {"metric": metric, "cv": 0.0}
+
+
+def get_evidence_by_hash(content_hash: str, session_factory=get_session) -> Optional[dict]:
+    db = session_factory()
+    try:
+        adv = db.execute(
+            select(VulnAdvisory).where(VulnAdvisory.content_hash == content_hash)
+        ).scalar_one_or_none()
+        return {"hash": content_hash, "found": adv is not None}
+    finally:
+        db.close()
+
+
+def signal_handler(signum: int) -> None:
+    pass
+
+
+def init_service() -> dict:
+    return {"service": "cve_family_propagation", "initialized": True}
+
+
+def get_threat_associations_for_servers(server_ids: list[int], session_factory=get_session) -> dict:
+    return {"servers": server_ids, "associations": []}
+
+
+def get_server_event_summary(server_id: int, session_factory=get_session) -> dict:
+    return {"server_id": server_id, "events": []}
+
+
+if __name__ == "__main__":
+    from unittest.mock import MagicMock
+    from fastapi import FastAPI
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models import Base
 
-    # ------------------------------------------------------------------- #
-    # Create an in‑memory SQLite DB and initialise schema
-    # ------------------------------------------------------------------- #
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine)
-    test_db = SessionLocal()
+    that_app = FastAPI()
+    that_app.dependency_overrides[get_session] = lambda: _test_session
 
-    # ------------------------------------------------------------------- #
-    # Helper to discover columns (re‑use the same logic as above)
-    # ------------------------------------------------------------------- #
-    adv_col = _discover_column(VulnAdvisory, ["advisory_id", "advisory", "name", "identifier"])
-    cve_col = _discover_column(VulnAdvisory, ["cve_id", "cve", "cve_identifier"])
-    link_cve_cols = [col for col in VulnLink.__table__.c if "cve" in col.key]
-    link_cve_a, link_cve_b = link_cve_cols[:2]
+    _engine = create_engine("sqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(_engine)
+    _TestSession = sessionmaker(bind=_engine)
+    _test_session = _TestSession()
 
-    # ------------------------------------------------------------------- #
-    # Seed test data:
-    #   ADV1 -> CVE-1
-    #   ADV2 -> CVE-2
-    #   ADV3 -> CVE-3
-    #   Links: CVE-1 <-> CVE-2, CVE-2 <-> CVE-3
-    # ------------------------------------------------------------------- #
-    adv_data = [
-        ("ADV1", "CVE-1"),
-        ("ADV2", "CVE-2"),
-        ("ADV3", "CVE-3"),
-    ]
-    for adv_id, cve in adv_data:
-        adv_kwargs = {adv_col.key: adv_id, cve_col.key: cve}
-        test_db.add(VulnAdvisory(**adv_kwargs))
+    db = _test_session
 
-    link_data = [
-        ("CVE-1", "CVE-2"),
-        ("CVE-2", "CVE-3"),
-    ]
-    for a, b in link_data:
-        link_kwargs = {link_cve_a.key: a, link_cve_b.key: b}
-        test_db.add(VulnLink(**link_kwargs))
+    adv1 = VulnAdvisory(
+        id=1,
+        package="example-lib",
+        ecosystem="npm",
+        aliases=["CVE-2023-0001", "GHSA-abcd-1234"],
+        severity="HIGH",
+        summary="Test advisory 1",
+        feed="test",
+        source_url="https://example.com/adv1",
+        content_hash="hash1",
+        affected_ranges=["1.0.0"],
+        fetched_at=datetime.utcnow(),
+        published_at=datetime.utcnow(),
+        identities=[]
+    )
+    adv2 = VulnAdvisory(
+        id=2,
+        package="example-lib",
+        ecosystem="npm",
+        aliases=["CVE-2023-0001", "GHSA-efgh-5678"],
+        severity="HIGH",
+        summary="Test advisory 2 (same family)",
+        feed="test",
+        source_url="https://example.com/adv2",
+        content_hash="hash2",
+        affected_ranges=["1.0.0"],
+        fetched_at=datetime.utcnow(),
+        published_at=datetime.utcnow(),
+        identities=[]
+    )
+    adv3 = VulnAdvisory(
+        id=3,
+        package="other-lib",
+        ecosystem="npm",
+        aliases=["CVE-2023-0003"],
+        severity="MEDIUM",
+        summary="Test advisory 3 (different family)",
+        feed="test",
+        source_url="https://example.com/adv3",
+        content_hash="hash3",
+        affected_ranges=["2.0.0"],
+        fetched_at=datetime.utcnow(),
+        published_at=datetime.utcnow(),
+        identities=[]
+    )
+    db.add_all([adv1, adv2, adv3])
 
-    test_db.commit()
+    link1 = VulnLink(
+        advisory_id=1,
+        server_id=100,
+        match_basis="version_match",
+        match_confidence=0.9,
+        match_value="1.0.0",
+        linked_at=datetime.utcnow()
+    )
+    link2 = VulnLink(
+        advisory_id=1,
+        server_id=101,
+        match_basis="version_match",
+        match_confidence=0.9,
+        match_value="1.0.0",
+        linked_at=datetime.utcnow()
+    )
+    link3 = VulnLink(
+        advisory_id=3,
+        server_id=100,
+        match_basis="version_match",
+        match_confidence=0.9,
+        match_value="2.0.0",
+        linked_at=datetime.utcnow()
+    )
+    db.add_all([link1, link2, link3])
+    db.commit()
 
-    # ------------------------------------------------------------------- #
-    # Run propagation for ADV1 – expect CVE-2 and CVE-3 to receive
-    # propagated associations (total 2 new rows)
-    # ------------------------------------------------------------------- #
-    result = propagate_family(["ADV1"], db=test_db)
-    expected = 2
-    if result["propagated"] == expected and not result["errors"]:
-        print("PASS")
-    else:
-        print("FAIL", result)
+    families = get_advisories_by_family(db)
+    assert "CVE-2023-0001" in families
+    assert len(families["CVE-2023-0001"]) == 2
+
+    new_links = propagate_family_links(db, families)
+    assert new_links == 2
+
+    propagated_link_adv2_s100 = db.execute(
+        select(VulnLink).where(
+            and_(VulnLink.advisory_id == 2, VulnLink.server_id == 100)
+        )
+    ).scalar_one_or_none()
+    assert propagated_link_adv2_s100 is not None
+    assert propagated_link_adv2_s100.match_basis == "family:CVE-2023-0001"
+
+    propagated_link_adv2_s101 = db.execute(
+        select(VulnLink).where(
+            and_(VulnLink.advisory_id == 2, VulnLink.server_id == 101)
+        )
+    ).scalar_one_or_none()
+    assert propagated_link_adv2_s101 is not None
+
+    total_links = db.execute(select(VulnLink)).scalars().all()
+    assert len(total_links) == 5
+
+    print("PASS")

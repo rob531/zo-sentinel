@@ -1,11 +1,17 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List
 import requests
 import json
 from datetime import datetime, timedelta
 
-app = FastAPI()
+router = APIRouter()
+# APIRouter, not FastAPI(). include_spine() mounts a module's `router`
+# attribute with include_router(); a standalone FastAPI() instance cannot be
+# mounted that way, so declaring one here meant this service was named _api,
+# declared a real route, and served nothing -- it sat in the no-router skip
+# list of tools/spine_known_issues.json alongside three genuine library
+# modules. See #4081.
 
 class TierDistribution(BaseModel):
     tier_distribution: Dict[str, int]
@@ -63,14 +69,14 @@ def process_data(data: List[dict]) -> TierDistribution:
         seven_day_trend=seven_day_trend
     )
 
-@app.get("/dashboard/overview", response_model=TierDistribution)
+@router.get("/dashboard/overview", response_model=TierDistribution)
 async def get_overview_dashboard(org_id: str):
     data = get_mcp_server_registry(org_id)
     return process_data(data)
 
 if __name__ == "__main__":
     import uvicorn
-    import pytest
+    from fastapi import FastAPI
 
     def test_tier_distribution():
         sample_data = [
@@ -85,4 +91,9 @@ if __name__ == "__main__":
         print("PASS")
 
     test_tier_distribution()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    # Standalone run: wrap the router in a throwaway app. In the real spine the
+    # router is mounted by include_spine() into app/main.py's app.
+    _standalone = FastAPI()
+    _standalone.include_router(router)
+    uvicorn.run(_standalone, host="0.0.0.0", port=8000)

@@ -329,6 +329,26 @@ def run_snapshots(background: BackgroundTasks, force: bool = False,
             "poll": f"/api/admin/cadence/jobs/{run.id}"}
 
 
+def _graded_stats(db: Session, force: bool = False) -> tuple[dict, bool]:
+    """Measurement PLUS the bar it was graded against, derived at call time.
+
+    A consumer handed drift_pct and triggered but not the threshold cannot
+    interpret either without carrying its own copy of CADENCE_DRIFT_PCT --
+    which is the carried-constant class relocated into the reader. Five runs
+    (112/114/116/118/120, 2026-09-11..14) published drift 0.08 -> 0.81 with
+    triggered:false and no way for any reader to say how near firing that was.
+    The threshold rides in `stats`, so it reaches the response AND the recorded
+    no-op detail that the tower ledger parses. Never hardcode it here: it is
+    read from the environment on every call so the published bar is always the
+    bar actually applied.
+    """
+    stats = _drift_stats(db)
+    stats["threshold_pct"] = _env_float("CADENCE_DRIFT_PCT", 5.0)
+    triggered = bool(force or stats["drift_pct"] > stats["threshold_pct"]
+                     or stats["scores_newer_than_index"])
+    return stats, triggered
+
+
 @router.post("/ask/drift-check")
 def drift_check(background: BackgroundTasks, force: bool = False,
                 db: Session = Depends(get_session),
@@ -337,10 +357,7 @@ def drift_check(background: BackgroundTasks, force: bool = False,
     an enqueued background job (MUST 5). No drift => records an ok no-op run
     (a clean check IS a successful cadence)."""
     _reap_zombies(db)
-    stats = _drift_stats(db)
-    pct = _env_float("CADENCE_DRIFT_PCT", 5.0)
-    triggered = bool(force or stats["drift_pct"] > pct
-                     or stats["scores_newer_than_index"])
+    stats, triggered = _graded_stats(db, force=force)
     if not triggered:
         run = _record_noop(db, JOB_DRIFT, {"triggered": False, **stats})
         return {"job": JOB_DRIFT, "run_id": run.id, "status": "ok",

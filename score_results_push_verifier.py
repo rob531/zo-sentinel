@@ -1,237 +1,365 @@
+import os
+import sys
+import hashlib
+import logging
+import time
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any
+
 import requests
-from typing import Dict, List, Optional
-from fastapi import Depends
-from app.db import get_session
-from app.models import (
-    McpServerRegistry,
-    McpLlmAxisScores,
-    McpScoreDisputes,
-    Org,
-    User
+
+WRITE_SERVICE_URL = os.environ.get(
+    "WRITE_SERVICE_URL",
+    "http://localhost:8772"
 )
-from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+QUERY_SERVICE_URL = os.environ.get(
+    "QUERY_SERVICE_URL",
+    "http://localhost:8772"
+)
+EXECUTE_SERVICE_URL = os.environ.get(
+    "EXECUTE_SERVICE_URL",
+    "http://localhost:8772"
+)
+SERVICE_NAME = "score_results_push_verifier"
+PID_FILE = f"/tmp/{SERVICE_NAME}.pid"
+LOG_DIR = os.path.dirname(f"/home/workspace/logs/{SERVICE_NAME}.log")
+LOG_FILE = f"/home/workspace/logs/{SERVICE_NAME}.log"
 
-def get_risk_tier_from_axis_scores(axis_scores: Dict[str, float]) -> str:
-    critical_axis = axis_scores.get('critical', 0.0)
-    if critical_axis > 0.5:
-        return "CRITICAL"
-    high_axis = axis_scores.get('high', 0.0)
-    if high_axis > 0.7:
-        return "HIGH"
-    medium_axis = axis_scores.get('medium', 0.0)
-    if medium_axis > 0.6:
-        return "MEDIUM"
-    return "LOW"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+log = logging.getLogger(__name__)
 
-def verify_push_consumer_push(server_id: str) -> Dict:
-    session: Session = Depends(get_session)()
 
+def ws_query(sql: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    payload: Dict[str, Any] = {"sql": sql}
+    if params:
+        payload["params"] = params
     try:
-        # Get latest axis scores for the server
-        latest_axis_scores = session.query(McpLlmAxisScores).filter(
-            McpLlmAxisScores.server_id == server_id
-        ).order_by(McpLlmAxisScores.created_at.desc()).first()
+        resp = requests.post(
+            f"{QUERY_SERVICE_URL}/query",
+            json=payload,
+            timeout=30
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("rows", [])
+    except requests.exceptions.RequestException as e:
+        log.error("ws_query failed: %s | SQL: %s", e, sql)
+        return []
 
-        if not latest_axis_scores:
-            return {
-                "passed": False,
-                "checks": [],
-                "errors": [f"No axis scores found for server {server_id}"]
-            }
 
-        axis_scores = {
-            'critical': latest_axis_scores.critical,
-            'high': latest_axis_scores.high,
-            'medium': latest_axis_scores.medium,
-            'low': latest_axis_scores.low,
-            'info': latest_axis_scores.info,
-            'debug': latest_axis_scores.debug,
-            'trace': latest_axis_scores.trace
-        }
+def ws_write(table: str, rows: List[Dict[str, Any]]) -> bool:
+    try:
+        resp = requests.post(
+            f"{WRITE_SERVICE_URL}/write",
+            json={"table": table, "rows": rows, "wait": True},
+            timeout=30
+        )
+        resp.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        log.error("ws_write failed for table %s: %s", table, e)
+        return False
 
-        # Compute expected risk tier
-        expected_tier = get_risk_tier_from_axis_scores(axis_scores)
 
-        # Get current risk tier from server registry
-        server = session.query(McpServerRegistry).filter(
-            McpServerRegistry.server_id == server_id
-        ).first()
+def ws_execute(sql: str, params: Optional[Dict[str, Any]] = None) -> bool:
+    payload: Dict[str, Any] = {"sql": sql}
+    if params:
+        payload["params"] = params
+    try:
+        resp = requests.post(
+            f"{EXECUTE_SERVICE_URL}/execute",
+            json=payload,
+            timeout=30
+        )
+        resp.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        log.error("ws_execute failed: %s | SQL: %s", e, sql)
+        return False
 
-        if not server:
-            return {
-                "passed": False,
-                "checks": [],
-                "errors": [f"No server registry entry found for {server_id}"]
-            }
 
-        actual_tier = server.risk_tier
+def check_single_instance() -> None:
+    pid = str(os.getpid())
+    if os.path.exists(PID_FILE):
+        old = open(PID_FILE).read().strip()
+        if old and old != pid:
+            log.error("Another instance already running (PID %s). Exiting.", old)
+            sys.exit(1)
+    with open(PID_FILE, "w") as f:
+        f.write(pid)
 
-        # Check if there are any disputes
-        disputes = session.query(McpScoreDisputes).filter(
-            McpScoreDisputes.server_id == server_id,
-            McpScoreDisputes.resolved_at.is_(None)
-        ).all()
 
-        dispute_info = []
-        if disputes:
-            for dispute in disputes:
-                dispute_info.append({
-                    "id": dispute.id,
-                    "reason": dispute.reason,
-                    "created_at": dispute.created_at
-                })
+def remove_pid_file() -> None:
+    try:
+        os.remove(PID_FILE)
+    except OSError:
+        pass
 
-        # Check scoring wave cost ledger
-        try:
-            response = requests.post(
-                "http://127.0.0.1:8772/query",
-                json={
-                    "query": f"SELECT * FROM scoring_wave_cost_ledger WHERE server_id = '{server_id}' ORDER BY created_at DESC LIMIT 1",
-                    "timeout": 10
-                },
-                timeout=10
-            )
-            response.raise_for_status()
-            ledger_data = response.json().get("data", [])
-            ledger_info = ledger_data[0] if ledger_data else None
-        except requests.RequestException as e:
-            ledger_info = {"error": str(e)}
 
-        checks = [
-            {
-                "name": "axis_scores_exist",
-                "passed": latest_axis_scores is not None,
-                "details": f"Found axis scores for {server_id}"
-            },
-            {
-                "name": "server_registry_exists",
-                "passed": server is not None,
-                "details": f"Found server registry entry for {server_id}"
-            },
-            {
-                "name": "risk_tier_match",
-                "passed": expected_tier == actual_tier,
-                "details": f"Expected {expected_tier}, got {actual_tier}",
-                "expected": expected_tier,
-                "actual": actual_tier
-            },
-            {
-                "name": "no_active_disputes",
-                "passed": not disputes,
-                "details": f"Found {len(disputes)} active disputes",
-                "disputes": dispute_info
-            },
-            {
-                "name": "ledger_data_available",
-                "passed": ledger_info is not None and "error" not in ledger_info,
-                "details": "Ledger data available" if ledger_info else "No ledger data",
-                "ledger": ledger_info
-            }
-        ]
+def signal_handler(signum: int, frame) -> None:
+    log.info("Received signal %d, shutting down gracefully.", signum)
+    remove_pid_file()
+    sys.exit(0)
 
-        passed = all(check["passed"] for check in checks)
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def compute_idempotency_key(server_id: str, check_type: str) -> str:
+    raw = f"{server_id}:{check_type}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def ensure_verification_results_table() -> None:
+    create_sql = """
+    CREATE TABLE IF NOT EXISTS score_push_verification_results (
+        verification_id    VARCHAR(64) PRIMARY KEY,
+        server_id         VARCHAR(128) NOT NULL,
+        check_type        VARCHAR(64) NOT NULL,
+        passed            BOOLEAN NOT NULL,
+        details_json      VARCHAR(2048),
+        computed_at       TIMESTAMPTZ NOT NULL,
+        UNIQUE(server_id, check_type)
+    )
+    """
+    ws_execute(create_sql)
+
+
+def get_registry_servers(limit: int = 100) -> List[Dict[str, Any]]:
+    sql = """
+    SELECT server_id, name, trust_score, verdict, risk_tier, last_assessed
+    FROM mcp_server_registry
+    ORDER BY last_assessed DESC NULLS LAST
+    LIMIT %s
+    """
+    return ws_query(sql, {"limit": limit})
+
+
+def get_signal_scores_for_server(server_id: str) -> List[Dict[str, Any]]:
+    sql = """
+    SELECT signal_name, score, evidence, scored_at
+    FROM mcp_signal_scores
+    WHERE server_id = %s
+    ORDER BY scored_at DESC
+    """
+    return ws_query(sql, {"server_id": server_id})
+
+
+def get_risk_register_for_server(server_id: str) -> Optional[Dict[str, Any]]:
+    sql = """
+    SELECT risk_tier, risk_rank, threat_count, computed_at
+    FROM mcp_risk_register
+    WHERE server_id = %s
+    ORDER BY computed_at DESC
+    LIMIT 1
+    """
+    rows = ws_query(sql, {"server_id": server_id})
+    return rows[0] if rows else None
+
+
+def verify_signal_scores_populated(server_id: str) -> Dict[str, Any]:
+    scores = get_signal_scores_for_server(server_id)
+    signal_count = len(scores)
+    passed = signal_count > 0
+    details = {
+        "signal_count": signal_count,
+        "signals": [s.get("signal_name") for s in scores]
+    }
+    return {
+        "check_type": "signal_scores_populated",
+        "passed": passed,
+        "details": details,
+        "server_id": server_id
+    }
+
+
+def verify_risk_register_match(server_id: str) -> Dict[str, Any]:
+    risk = get_risk_register_for_server(server_id)
+    if risk is None:
         return {
-            "passed": passed,
-            "checks": checks,
-            "errors": [] if passed else [f"Verification failed for server {server_id}"]
-        }
-
-    except Exception as e:
-        return {
+            "check_type": "risk_register_match",
             "passed": False,
-            "checks": [],
-            "errors": [f"Error verifying server {server_id}: {str(e)}"]
+            "details": {"reason": "No risk_register entry found"},
+            "server_id": server_id
         }
-    finally:
-        session.close()
+    registry = ws_query(
+        "SELECT risk_tier FROM mcp_server_registry WHERE server_id = %s LIMIT 1",
+        {"server_id": server_id}
+    )
+    registry_risk_tier = registry[0].get("risk_tier") if registry else None
+    passed = registry_risk_tier == risk.get("risk_tier")
+    return {
+        "check_type": "risk_register_match",
+        "passed": passed,
+        "details": {
+            "registry_risk_tier": registry_risk_tier,
+            "risk_register_tier": risk.get("risk_tier")
+        },
+        "server_id": server_id
+    }
 
-def run_verification(sample_size: int = 20) -> Dict:
-    session: Session = Depends(get_session)()
 
-    try:
-        # Get a sample of servers
-        servers = session.query(McpServerRegistry.server_id).limit(sample_size).all()
-        server_ids = [server.server_id for server in servers]
-
-        results = []
-        for server_id in server_ids:
-            result = verify_push_consumer_push(server_id)
-            results.append(result)
-
-        passed_count = sum(1 for result in results if result["passed"])
-        failed_count = len(results) - passed_count
-
+def verify_trust_score_consistency(server_id: str) -> Dict[str, Any]:
+    registry_rows = ws_query(
+        "SELECT trust_score, verdict FROM mcp_server_registry WHERE server_id = %s LIMIT 1",
+        {"server_id": server_id}
+    )
+    if not registry_rows:
         return {
-            "summary": {
-                "total": len(results),
-                "passed": passed_count,
-                "failed": failed_count
-            },
-            "results": results
+            "check_type": "trust_score_consistency",
+            "passed": False,
+            "details": {"reason": "Server not found in registry"},
+            "server_id": server_id
+        }
+    row = registry_rows[0]
+    trust_score = row.get("trust_score")
+    verdict = row.get("verdict", "").upper()
+
+    if trust_score is None:
+        return {
+            "check_type": "trust_score_consistency",
+            "passed": False,
+            "details": {"reason": "trust_score is NULL"},
+            "server_id": server_id
         }
 
-    except Exception as e:
-        return {
-            "summary": {
-                "total": 0,
-                "passed": 0,
-                "failed": 0
-            },
-            "results": [],
-            "error": str(e)
-        }
-    finally:
-        session.close()
+    if verdict == "TRUSTED":
+        passed = trust_score >= 70.0
+    elif verdict == "AMBER":
+        passed = 40.0 <= trust_score < 70.0
+    elif verdict == "UNTRUSTED":
+        passed = trust_score < 40.0
+    elif verdict == "KNOWN_THREAT":
+        passed = trust_score < 20.0
+    else:
+        passed = True
+
+    return {
+        "check_type": "trust_score_consistency",
+        "passed": passed,
+        "details": {
+            "trust_score": trust_score,
+            "verdict": verdict
+        },
+        "server_id": server_id
+    }
+
+
+def verify_all_checks_for_server(server_id: str) -> List[Dict[str, Any]]:
+    checks = [
+        verify_signal_scores_populated,
+        verify_risk_register_match,
+        verify_trust_score_consistency,
+    ]
+    results = []
+    for check_fn in checks:
+        result = check_fn(server_id)
+        results.append(result)
+        log.debug(
+            "Server %s | %s: %s",
+            server_id,
+            result["check_type"],
+            "PASS" if result["passed"] else "FAIL"
+        )
+    return results
+
+
+def persist_verification_result(result: Dict[str, Any]) -> None:
+    import json
+    verification_id = compute_idempotency_key(
+        result["server_id"], result["check_type"]
+    )
+    row = {
+        "verification_id": verification_id,
+        "server_id": result["server_id"],
+        "check_type": result["check_type"],
+        "passed": result["passed"],
+        "details_json": json.dumps(result.get("details", {})),
+        "computed_at": utc_now_iso()
+    }
+    ws_write("score_push_verification_results", [row])
+
+
+def cycle() -> Dict[str, Any]:
+    log.info("Starting verification cycle")
+    ensure_verification_results_table()
+
+    servers = get_registry_servers(limit=50)
+    total_servers = len(servers)
+    total_checks = 0
+    passed_checks = 0
+
+    for server in servers:
+        server_id = server.get("server_id")
+        if not server_id:
+            continue
+        results = verify_all_checks_for_server(server_id)
+        for result in results:
+            persist_verification_result(result)
+            total_checks += 1
+            if result["passed"]:
+                passed_checks += 1
+
+    summary = {
+        "servers_processed": total_servers,
+        "total_checks": total_checks,
+        "passed_checks": passed_checks,
+        "failed_checks": total_checks - passed_checks,
+        "pass_rate": round(passed_checks / total_checks, 4) if total_checks > 0 else 0.0
+    }
+    log.info(
+        "Cycle complete: %d servers, %d checks, pass_rate=%.2f%%",
+        total_servers, total_checks,
+        (passed_checks / total_checks * 100) if total_checks > 0 else 0.0
+    )
+    return summary
+
+
+def send_heartbeat(status: str = "running", meta: Optional[Dict[str, Any]] = None) -> None:
+    row = {
+        "service": SERVICE_NAME,
+        "status": status,
+        "last_heartbeat": utc_now_iso(),
+        "meta": str(meta) if meta else "{}"
+    }
+    ws_write("service_health", [row])
+
+
+def health() -> Dict[str, str]:
+    return {
+        "service": SERVICE_NAME,
+        "status": "ok",
+        "timestamp": utc_now_iso()
+    }
+
+
+def run() -> None:
+    import signal
+    check_single_instance()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    log.info("%s starting", SERVICE_NAME)
+
+    poll_interval = int(os.environ.get("POLL_SECS", 300))
+
+    while True:
+        try:
+            summary = cycle()
+            send_heartbeat("running", summary)
+        except Exception as e:
+            log.exception("Error in cycle: %s", e)
+            send_heartbeat("error", {"error": str(e)})
+
+        time.sleep(poll_interval)
+
 
 if __name__ == "__main__":
-    from app.db import get_session
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    # Override the session for testing
-    engine = create_engine("sqlite:///:memory:")
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    app.dependency_overrides[get_session] = lambda: SessionLocal()
-
-    # Create test tables
-    from app.models import Base
-    Base.metadata.create_all(bind=engine)
-
-    # Add test data
-    session = SessionLocal()
-    test_server = McpServerRegistry(
-        server_id="test-server-1",
-        risk_tier="HIGH"
-    )
-    session.add(test_server)
-    session.commit()
-
-    test_scores = McpLlmAxisScores(
-        server_id="test-server-1",
-        critical=0.4,
-        high=0.8,
-        medium=0.5,
-        low=0.3,
-        info=0.2,
-        debug=0.1,
-        trace=0.0
-    )
-    session.add(test_scores)
-    session.commit()
-
-    # Run verification
-    result = run_verification(sample_size=1)
-    if result["summary"]["failed"] == 0:
-        print("PASS")
-    else:
-        print("FAIL")
-        for res in result["results"]:
-            if not res["passed"]:
-                print(f"Server {res['server_id']} failed:")
-                for check in res["checks"]:
-                    if not check["passed"]:
-                        print(f"  - {check['name']}: {check['details']}")
-                for error in res["errors"]:
-                    print(f"  - Error: {error}")
+    run()

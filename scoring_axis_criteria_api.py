@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from app.db import get_session
-from app.models import MCPServerRegistry, MCPLLMAxisScores, Org, User
+from app.models import McpServerRegistry, McpLlmAxisScore, Org, User
 
 router = APIRouter()
 

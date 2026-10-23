@@ -89,9 +89,33 @@ if __name__ == "__main__":
     test_client = TestClient(app)
 
     from app.db import get_session
-    from app.dependency_overrides import override_get_session
+    # FU-369: `app.dependency_overrides` is not a module in this repo, so the import
+    # that stood here raised ModuleNotFoundError the moment this block ran. The
+    # override is defined locally instead, per the pattern in
+    # services/active/cadence_job_sla_report/contract.py.
+    from sqlalchemy import create_engine as _fu369_create_engine
+    from sqlalchemy.orm import sessionmaker as _fu369_sessionmaker
 
-    override_get_session()
+    _FU369Session = _fu369_sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=_fu369_create_engine("sqlite:///:memory:"),
+    )
+
+
+    def _fu369_session_override(session_factory=None):
+        """Test session override covering every call shape used in this repo.
+
+        Called with a sessionmaker it returns a dependency callable bound to that
+        factory; called with nothing it returns a Session, which is what a FastAPI
+        dependency override needs AND what `with ... as session:` needs, because
+        Session implements the context-manager protocol itself.
+        """
+        if session_factory is not None:
+            return lambda: session_factory()
+        return _FU369Session()
+
+    _fu369_session_override()
 
     test_data = [
         (1, 'server1', 'type1', 0.5),

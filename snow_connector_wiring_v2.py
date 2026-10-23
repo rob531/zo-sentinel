@@ -163,7 +163,8 @@ def extract_server_name_from_description(description: str) -> Optional[str]:
     return description[:100].strip() if len(description) > 100 else description.strip()
 
 def get_server_by_name(server_name: str) -> Optional[Dict[str, Any]]:
-    result = ws_query(f"SELECT server_id, name, url, description, trust_score, verdict, registry_source, scan_count FROM mcp_server_registry WHERE LOWER(name) = LOWER('{server_name.replace('\'', '\'\'')}') LIMIT 1")
+    _safe_server_name = server_name.replace(chr(39), chr(39)+chr(39))
+    result = ws_query(f"SELECT server_id, name, url, description, trust_score, verdict, registry_source, scan_count FROM mcp_server_registry WHERE LOWER(name) = LOWER('{_safe_server_name}') LIMIT 1")
     rows = result.get("rows", [])
     return rows[0] if rows else None
 

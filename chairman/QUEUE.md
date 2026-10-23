@@ -1,0 +1,166 @@
+# Chairman queue — the work feed (layer L1)
+
+Contract (`LOCO_CHAIRMAN.md` §9): ordered; top entry is the default next unit
+of work; every entry is self-contained; an entry leaves only via a Gap
+Register grade-move with evidence. Regenerable from the register — on
+disagreement the register wins.
+
+Seeded 2026-08-29 from the Gap Register. Grades are the register's
+conservative seeds; each entry's step 1 is re-measurement.
+
+---
+
+**MISSION SESSION 2026-08-30 — the three missing organs.** Scheduled by the
+operator ("maximum thought and imagination"). These three outrank the numbered
+backlog below for that session; they are the difference between an instruction
+set and an organism (chairman assessment, 2026-08-29 EOD).
+
+## 0a. Enforcement predicates — the doctrine must be un-ignorable
+- grade C1 -> target C4 | class GC-3 (the doctrine itself is report-only today)
+- shape: FU-style machine-closeable predicates for Gap Register rows + a CI
+  step (pr-gates or its own workflow) that fails when a PR claims a gap fix
+  but moves no register grade, and greens when the register moves with
+  evidence. Harden its own disarming (#4128 pattern). Design freely: the
+  predicate schema is yours to invent — but UNKNOWN must carry an age budget
+  (GC-1) and a grade claim must be checkable from the diff + repo state alone.
+- evidence for move: injected-defect test — a synthetic "closed at C1" PR goes
+  red; a genuine grade-move with evidence goes green.
+
+## 0b. The chairman->emitter bridge — shape-changing tasks
+- grade C0 -> target C3 | the protean organ the loop is starving for
+- shape: queue/register entries become TYPED directives the pipeline consumes:
+  DIAGNOSE (emit a probe — referent_verify/census shape), EVAL (emit an
+  acceptance harness — F2 antipattern-suite shape), BUILD (emit the fix —
+  existing builder shape). A gap enters at DIAGNOSE and the task CHANGES SHAPE
+  as evidence accumulates; the dispatcher decides the next shape from the
+  register row's state. Respect SENTINEL_DIRECTIVE_SCHEMA.md and
+  directives/pending/ conventions; the bridge emits FROM the register (the
+  system's own self-description), which is the autopoietic test. Imagine
+  beyond a translator script: the bridge should also CLOSE the loop — a
+  directive's outcome writes back a grade-move proposal.
+- evidence for move: one real gap (pick from GR-3/GR-6/GR-10) driven
+  DIAGNOSE->EVAL->BUILD end to end by emitted directives, with the register
+  row moved by the outcome.
+
+## 0c. S1 pivot — the scores are the product
+- grade C0 -> target: measurable movement | stage S1 gate (GR-7 + the 82%)
+- shape: spend the session's larger half on the scoring axis, not the loop
+  that watches it. Priorities: (1) canonical verdict vocabulary declared in
+  one file + emitter migration plan (kills GC-6); (2) attack the ~82% unknown
+  share with enrichment measured against labelled ground truth, not
+  re-labelling; (3) axis sense-check follow-through (docs/AXIS_SENSE_CHECK,
+  tools/axis_sense_check.py, tools/axis_scorer_grounded.py) — make the twelve
+  canonical signal types' flow measurable. Imagination welcome: risk-curve
+  backtests (RISK_CURVE_HYPOTHESIS.md), verdict-drift surfacing, whatever
+  makes an MCP score DEFENSIBLE to a paying stranger.
+- evidence for move: a number about the scores themselves (unknown share,
+  vocabulary compliance, axis coverage) measured before and after.
+
+---
+
+**STORE ROLES, 2026-10-03.** From `docs/FINDINGS_2026-10-02_store_overlap.md`.
+These outrank the numbered backlog because every lane's output volume flows
+through them. The tools live in zo-fleet-tools, and the prompts live on the tower.
+
+## 0d. GR-19 / GR-20: rewrite the enabled lane prompts to one write target
+- grade C0 -> target C4 | class GC-14
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\lane_prompt_audit.py" --enabled-only --gate` (`lane_roster.json` goes stale on 2026-10-04 and then reads rc 2 UNKNOWN: run `roster_refresh.py` first)
+- then: `--dupes` (move the shared charter to one file the prompts point to), `--plan <task>` for each red prompt, rewrite with `task_edit.py --set-prompt`, and re-run `--gate` until rc 0. Retire `graphify-kl-daily-refresh` into the zo `graph_refresh` cron.
+- evidence for move: `--gate` rc 0 on every enabled prompt (C3). C4 when a fleet check reads it and goes red.
+
+## 0e. GR-22: MEM MCP derived-only
+- grade C0 -> target C3 | classes GC-5, GC-8
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\fu_memory_sync.py" --dry-run`, then `--hand-nodes`
+- evidence for move: the exploder committed to zo-fleet-tools; sync scheduled once daily in place of the full explode; `--check` GREEN on two consecutive days; the 34 hand nodes migrated through the ledger writer.
+
+## 0f. GR-21: money has a red line
+- grade C0 -> target C4 | class GC-1 | Decision Dock "Funding" (Robin)
+- first command (tower): `python "D:\zo\Zocomputer Agents\_tools\creds_runway.py"` after re-measuring the balances in `chairman/CREDIT_LEDGER.md`
+- evidence for move: runway shown in `chairman_daily_brief.py --one-page`; rc != 0 reaches the alert channel.
+
+## 0g. GR-23: staging_drain — run the tick on the tower, finish batch 1 with prod evidence
+- grade C1 -> target C4 | classes GC-12, GC-7, GC-5 | chairman direction 2026-10-03 ("push out everything in staging; repair everything else")
+- first command (tower, zo-sentinel checkout at origin/main after the segments PR merges): `python tools/staging_drain/chain_tick.py --measure-wall --budget-mb <Fly machine MiB>`; then register it with ZoChainTick daily and make its `rc != 0` reach the alert channel (GR-11)
+- then (S4, batch 1 PR `staging-drain/s4-batch-1`): merge only after the Fly image boots (`fly deploy` of the candidate tree, `/spine/health` ok:true, prod-drift check green); record each service in `chairman/staging_drain/promotions.json` with the deploy id + probe output -- that file is the ONLY thing that turns `promotable` into `promoted`
+- before the first worker batch: prove zo reaches the prod DB (one read, one idempotent write on a scratch table) and record the commands in HANDOFF.md
+- evidence for move: C2 when the decomposer stops landing manifest-only dirs (teach the emitter: `requires` honoured or manifest emitted last); C3 when `remaining` in the daily line is 0 (every dir in one of the four states); C4 when the ledger-freshness check is red on a staged dir without a row and `builder_exclusions.json` is read by the live architect (log line on the host)
+
+## 0h. GR-24: arm the historical-events store on the tower
+- grade **C3** (2026-10-04) -> target C4 | classes GC-9, GC-10 | plan of record: zo-fleet-tools `EVENTS_STORE.md`
+- status (2026-10-04): **C3 reached** -- baseline run row `ok`, n_seen 3646 == registry 3646, 0 events; idempotent re-tick + `check --sources bus,ledger` rc 0; TLS baseline 0 own-domain hosts. Run from a clean zo-fleet-tools checkout; the live `_tools` checkout was left dirty/untouched. bus = ZoComputer `100.102.218.26:8772` over Tailscale. C4 **deferred (chairman option C)**: register ZoEventsTick daily + alert once the owning lane commits its `_tools` edits and `_tools` ff's clean
+- first command (tower): `python -m pip install duckdb`, then `python "D:\zo\Zocomputer Agents\_tools\events_store.py" --self-test` (expect PASS, rc 0)
+- then: the baseline `tick` with `--bus`, `--ledger` and `--backup-dir` (exact line in EVENTS_STORE.md "Deploy on the Tower"); register ZoEventsTick daily; add `--probe-tls` once the baseline is green; put `events_store.py check --sources bus,ledger` in the alert path
+- decisions owed (Robin): the IPQS and Clef $ budgets proposed 2026-10-03 (not recovered) as Reserved rows in `chairman/CREDIT_LEDGER.md`; the IPQS population (remote endpoints or egress domains, not listing URLs); the ZoComputer backup destination (`--push-cmd`)
+- evidence for move: C3 when the first baseline run row is `ok` with n_seen equal to the registry count [**MET 2026-10-04**]; C4 when a stale store (no run for >26h) turns into a red alert [pending ZoEventsTick, deferred option C]
+
+## 0i. GR-26 / GR-27: file the histo FU, then decide what the judge needs to be wired
+- grade **C0** -> target C4 | classes GC-15 (GR-26), GC-10 + GC-2 (GR-27) | plan of record: zo-fleet-tools `histo/DESIGN_histo_schema_2026-10-07.md` §6-§7
+- first command (tower, after [zo-fleet-tools#86](https://github.com/rob531/zo-fleet-tools/pull/86) merges and `_tools` fast-forwards): `python "D:\zo\Zocomputer Agents\_tools\histo\histo_schema_verify.py"` (expect GREEN; its 27 zo-sentinel quotes are reported UNCHECKED on the tower), then the `fu_file.py` command in `histo/FU_entry.md`
+- decisions owed: Q4, which peer_review clause carries a judge escalation (`UNKNOWN_ACTION` is the nearest); Q8, whether to accept or veto `judge_policy.min_confidence = 0.80`; Q3, whether a peer-cleared schema row may admit a new organ (spawn)
+- GR-27: re-pair the three enabled filers whose adversary was removed, or add a ring-liveness check to `lane_start.py`
+- evidence for move: GR-26 reaches C1 when the judge runs in shadow beside `may_shadow.jsonl`, and C4 under the two-pole test in DESIGN §7. GR-27 reaches C4 when the ring-liveness check goes red on a dead adversary.
+
+## 1. GR-8 — linter --fix corrupts SQL names (unblocks 34 downstream decisions)
+- grade C0 -> target C3 | class GC-12
+- first command: `grep -rn "def .*fix" tools/model_import_linter* 2>/dev/null || find . -name "*model_import_linter*" -not -path './.git/*'`
+- evidence for move: failing repro of the string-literal corruption; fix; sweep of every `--fix` call site; #4000 updated.
+
+## 2. GR-6 — 7 FU predicates query nonexistent tables; UNKNOWN never escalates
+- grade C0 -> target C4 | class GC-1
+- first command: `sed -n '80,130p' tools/fu/fu_seed_predicates.py`
+- evidence for move: names repointed per MERGE_AUDIT B1 suggestion; an age budget on UNKNOWN in `sql_assert`; a test that a catalog error cannot rest as UNKNOWN past budget.
+
+## 3. GR-3 — columns check FAIL(114) but report-only; parse coverage UNKNOWN(4)
+- grade C0 -> target C4 | classes GC-3, GC-1
+- first command: `python tools/referent_verify.py --help 2>&1 | head -30`
+- evidence for move: arming condition recorded ("arm at <= N" or date); the #4124 arming + #4128 disarm-hardening pair replicated for columns.
+
+## 4. GR-1 — G6 truncation: patch parked; 583 unpaginated reads keep trusting `count`
+- grade C2 -> target C4 | classes GC-5, GC-9
+- first command: `sed -n '1,60p' docs/G6_BUS_TRUNCATION_CALLERS.md`
+- evidence for move: operator decision re-asked per Decision Dock (apply+restart is operator-only); caller census taught to check `truncated`; #4003 pagination sweep started.
+
+## 5. GR-4 — retry/reasoning-strip sweep: 10 censused files never swept
+- grade C1 -> target C3 | class GC-4
+- first command: `sed -n '55,75p' RETRY_GAP_SWEEP.md`
+- evidence for move: each of the 10 scanned; patched or registered individually; zero remainder.
+
+## 6. GR-2 — delegated gate on app.main (tier1/tier4 mutual deferral)
+- grade C0 -> target C4 | class GC-2
+- first command: `sed -n '390,410p' tests/ci/smoke_ladder.py`
+- evidence for move: single declared owner; a test asserting every declared surface has exactly one owning gate; G1's defect-injection repro now caught.
+
+## 7. GR-16 — graphify graph absent in fresh clones; structural claims unbudgeted
+- grade C0 -> target C4 | classes GC-1, GC-8
+- first command: `ls graphify-out/ && grep -rn graphify .github/workflows/ | head`
+- evidence for move: graph rebuilt by CI on merge (F4); graph-derived claims carry build-time stamps.
+
+## 8. GR-9 — builder-lane contention; archival record says retired, it never took effect
+- grade C0 -> target C4 | class GC-8
+- first command: `sed -n '53,110p' docs/FINDINGS_2026-08-23.md`
+- evidence for move: one lane, or partitioned lanes, verified live on the host; record matches referent.
+
+## 9. GR-10 — 6 phantom dependency_overrides imports; 25 staged services fail dry-run
+- grade C0 -> target C3 | class GC-4
+- first command: `grep -rn "dependency_overrides" --include='*.py' -l . | head`
+- evidence for move: #4001 + #4002 site lists at zero remainder or individually registered.
+
+## 10. GR-7 — verdict vocabulary drift (docs vs emitters; `unknown` ~82%)
+- grade C1 -> target C4 | class GC-6 | S1 gate
+- first command: `grep -n "verdict" DB_SCHEMA.md | head -20`
+- evidence for move: canonical vocab declared in one file; emitters migrated or dated shims; a gate rejecting the dead dialect.
+
+## 11. GR-5 — deferral list 63 > cap 40; escalation owed, not automatic
+- grade C0 -> target C4 | class GC-7 | operator-coupled (#4004/#4005)
+- first command: `ls tools/reachability_deferred.json 2>/dev/null; grep -n "over_review_cap" PRODUCT_SPEC.md | head -3`
+- evidence for move: breach auto-fires the escalation; aging report on cadence; count under cap.
+
+## 12. GR-17 — chairman state has no bus mirror
+- grade C0 -> target C2 | class GC-4
+- first command: `grep -n "mesh_memory" CLAUDE.md`
+- evidence for move: write-through repo->bus per §11.2 implemented in the session-end protocol.
+
+## 13. GR-18 — landing chain: verify the relander drains the backlog
+- grade C2 -> target C3/C4 | class GC-13
+- first command: `gh` unavailable in-session; check https://github.com/rob531/zo-sentinel/actions/workflows/pr-relander.yml runs + open-PR count vs the 117 baseline
+- evidence for move: C3 = backlog measurably draining (open count + oldest-age down across two governance sessions); C4 = a test asserting each §13 chain link has an owner (workflow exists, label wiring intact — the #4128 disarm-hardening pattern for the landing chain).

@@ -1,0 +1,31 @@
+{
+  "task": "build_daemon_roster_health_report_contract",
+  "handler": "generate_file",
+  "recipe": "service_dir_from_exemplar",
+  "output_file": "services/staged/daemon_roster_health_report/contract.py",
+  "exemplar_file": "services/_exemplar/contract.py",
+  "reads": [
+    "services/_exemplar/contract.py"
+  ],
+  "description": "Build services/staged/daemon_roster_health_report/contract.py for service 'daemon_roster_health_report' by MIRRORING services/_exemplar/contract.py. Role: acceptance self-test runnable as `python -m services.staged.daemon_roster_health_report.contract`, TestClient + dependency_overrides + SQLite StaticPool, prints PASS/exit 0. Single-file only; import the REAL data layer; no stub DB. Service spec: Repair of an existing staged service, not a new one. The directory already holds: router.py, service.toml. Gate failure (verbatim): contract FAILED: exit=1 /usr/local/bin/python3: No module named services.staged.daemon_roster_health_report.contract. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/daemon_roster_health_report (service.toml valid, router.py exposes a router, `python -m services.staged.daemon_roster_health_report.router` imports, `python -m services.staged.daemon_roster_health_report.contract` exits 0). Then `python tools/staging_drain/census.py --only daemon_roster_health_report --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/daemon_roster_health_report/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "complexity": "medium",
+  "source": "staging_drain",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "summary": "daemon_roster_health_report: contract.py is missing; the gate holds it at 'contract_missing'",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "contract FAILED: exit=1 /usr/local/bin/python3: No module named services.staged.daemon_roster_health_report.contract",
+    "failure_class": "contract_missing",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "write services/staged/daemon_roster_health_report/contract.py mirroring services/_exemplar/contract.py",
+  "details": {
+    "family": "daemon_roster_health_report",
+    "version": 1,
+    "runtime_class": "api"
+  }
+}

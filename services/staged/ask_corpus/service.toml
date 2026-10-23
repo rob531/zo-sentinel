@@ -1,0 +1,8 @@
+[service]
+name = "ask_corpus"
+import_path = "services.active.ask_corpus.router"
+prefix = "/api"
+tag = "ask_corpus"
+origin = "service"
+auth = "public"
+needs_data_layer = true

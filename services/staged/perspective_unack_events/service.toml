@@ -1,0 +1,11 @@
+[service]
+name = "perspective_unack_events"
+import_path = "services.active.perspective_unack_events.router"
+prefix = "/api"
+tag = "perspective_unack_events"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

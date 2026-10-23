@@ -1,0 +1,8 @@
+[service]
+name = "verdict_breakdown_by_tier"
+import_path = "services.active.verdict_breakdown_by_tier.router"
+prefix = "/api"
+tag = "verdict_breakdown_by_tier"
+origin = "service"
+auth = "public"
+needs_data_layer = true

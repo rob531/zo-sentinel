@@ -21,6 +21,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from zo_sentinel import signal_reads
+
 log = logging.getLogger(__name__)
 WRITE_SERVICE = "http://127.0.0.1:8772"
 PORT          = 8780
@@ -102,18 +104,21 @@ def get_intelligence_brief(mcp_identifier: str) -> dict:
     rec = rows[0]
     server_id = rec.get("server_id", "")
 
-    # Fetch signal scores
-    signals = ws_query(
-        f"SELECT signal_name, score, evidence FROM mcp_signal_scores "
-        f"WHERE server_id = '{server_id}' ORDER BY scored_at DESC LIMIT 12"
+    # The CURRENT score of every signal -- one row per signal_name (#4003).
+    #
+    # What this replaced was bounded and still wrong: `ORDER BY scored_at DESC
+    # LIMIT 12` takes the 12 NEWEST rows, and mcp_signal_scores is a rescore
+    # HISTORY -- measured LIVE 2026-10-01, '@goke/mcp' holds 12,834 rows across
+    # 12,716 distinct scored_at values for just 12 signals. The 12 newest rows
+    # come from one rescore wave, so the dedup below collapsed them to whichever
+    # two or three signals that wave happened to touch and this summary reported
+    # the rest as absent. Taking the latest row PER signal is the bound that is
+    # both correct and under the bus's 200-row cap by construction.
+    deduped = signal_reads.latest_signal_scores(
+        server_id,
+        columns=("signal_name", "score", "evidence"),
+        url=f"{WRITE_SERVICE}/query",
     )
-
-    # Dedup signals (keep most recent per signal_name)
-    seen, deduped = set(), []
-    for s in signals:
-        if s["signal_name"] not in seen:
-            seen.add(s["signal_name"])
-            deduped.append(s)
 
     age_str = "unknown"
     if rec.get("last_assessed"):
@@ -265,10 +270,45 @@ def registry(
 
 @app.get("/api/audit")
 def audit(limit: int = Query(50, ge=1, le=200)):
-    """Full audit trail of all decisions."""
+    """Full audit trail of all decisions.
+
+    REFERENT FIX 2026-09-29 -- issue #4080, the columns half.
+
+    This SELECT named two columns `mcp_submissions` has on no plane, so the
+    endpoint could never return a row. Measured against the LIVE write-service
+    on :8772 before the fix:
+
+        HTTP 400  Binder Error: Table "s" does not have a column named
+                  "mcp_identifier"   Candidate bindings: "mcp_name"
+
+    and `ws_query` above turns every non-200 into `[]`, so `/api/audit` served
+    {"count": 0, "decisions": []} -- indistinguishable from "no decisions yet".
+    That is HARNESS_DOCTRINE R6 (unknown is not zero) reaching production: the
+    same shape as the `trust_gating_audit_log` write this issue already fixed,
+    one plane down in a COLUMN rather than a table.
+
+      s.mcp_identifier -> s.mcp_name          the real column; the bus named it
+      s.requester_team -> NULL AS ...         NO team column exists on ANY plane.
+                                              `requested_by` is a PERSON, not a
+                                              team; aliasing it here would put a
+                                              real column in front of a referent
+                                              that does not exist, which is the
+                                              wrong-name-that-passes move that
+                                              produced this backlog
+                                              (BUILDER_ANTIPATTERNS AP-005).
+                                              SQL NULL keeps the response key and
+                                              leaves the value honestly unknown.
+
+    The real `mcp_submissions` columns, read from the live catalog on
+    2026-09-29: submission_id, server_id, mcp_name, url, description,
+    requested_by, business_purpose, environment, submitted_at, status.
+
+    Both names are aliased back so the response contract is unchanged.
+    """
     rows = ws_query(
         f"SELECT d.submission_id, d.analyst_name, d.decision, d.decided_at, "
-        f"d.conditions, s.mcp_identifier, s.requester_team, s.environment "
+        f"d.conditions, s.mcp_name AS mcp_identifier, "
+        f"NULL AS requester_team, s.environment "
         f"FROM mcp_decisions d "
         f"JOIN mcp_submissions s ON d.submission_id = s.submission_id "
         f"ORDER BY d.decided_at DESC LIMIT {limit}"

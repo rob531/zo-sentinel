@@ -1,0 +1,8 @@
+[service]
+name = "definition_history_pipeline_status"
+import_path = "services.active.definition_history_pipeline_status.router"
+prefix = "/api"
+tag = "definition_history_pipeline_status"
+origin = "service"
+auth = "public"
+needs_data_layer = true

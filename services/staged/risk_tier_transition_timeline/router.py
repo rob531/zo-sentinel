@@ -49,7 +49,7 @@ if __name__ == "__main__":
     # Seed sample data (two servers, three dates)
     # ------------------------------------------------------------------- #
     session = SessionLocal()
-    from app.models import mcp_llm_axis_scores, mcp_server_registry  # noqa: E402
+    from app.models import McpLlmAxisScore, McpServerRegistry  # noqa: E402
 
     today = datetime.datetime.utcnow().replace(
         hour=0, minute=0, second=0, microsecond=0
@@ -59,8 +59,8 @@ if __name__ == "__main__":
     # Server registry
     session.add_all(
         [
-            mcp_server_registry(server_id=1, risk_tier="LOW"),
-            mcp_server_registry(server_id=2, risk_tier="HIGH"),
+            McpServerRegistry(server_id=1, risk_tier="LOW"),
+            McpServerRegistry(server_id=2, risk_tier="HIGH"),
         ]
     )
 
@@ -68,13 +68,13 @@ if __name__ == "__main__":
     for d in dates:
         session.add_all(
             [
-                mcp_llm_axis_scores(
+                McpLlmAxisScore(
                     server_id=1,
                     axis_name="overall_risk",
                     p_top=0.5,
                     scored_at=d,
                 ),
-                mcp_llm_axis_scores(
+                McpLlmAxisScore(
                     server_id=2,
                     axis_name="overall_risk",
                     p_top=0.7,

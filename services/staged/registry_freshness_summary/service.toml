@@ -1,0 +1,8 @@
+[service]
+name = "registry_freshness_summary"
+import_path = "services.active.registry_freshness_summary.router"
+prefix = "/api"
+tag = "registry_freshness_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true

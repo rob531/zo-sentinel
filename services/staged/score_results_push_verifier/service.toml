@@ -1,0 +1,8 @@
+[service]
+name = "score_results_push_verifier"
+import_path = "services.active.score_results_push_verifier.router"
+prefix = "/api"
+tag = "score_results_push_verifier"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -1,0 +1,12 @@
+[service]
+name = "server_risk_history_api"
+import_path = "services.active.server_risk_history_api.router"
+prefix = "/api"
+tag = "server_risk_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

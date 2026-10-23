@@ -55,7 +55,7 @@ if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import Base, engine
     from app.models import McpVerifiedCves
-    from app.dependency_overrides import dependency_overrides
+    from app import dependency_overrides
 
     # Create a test database
     Base.metadata.create_all(engine)

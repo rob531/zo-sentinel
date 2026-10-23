@@ -11,7 +11,7 @@ from typing import Dict
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import select, and_, func, text
+from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 
 from app.db import get_session

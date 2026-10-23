@@ -1,0 +1,42 @@
+{
+  "task": "patch_mcp_definition_history_pipeline_status_dashboard_passes_gate",
+  "directive_id": "patch_mcp_definition_history_pipeline_status_dashboard_passes_gate",
+  "id": "patch_mcp_definition_history_pipeline_status_dashboard_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/mcp_definition_history_pipeline_status_dashboard/router.py",
+  "complexity": "medium",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'mcp_definition_history_pipeline_status_dashboard' (services/staged/mcp_definition_history_pipeline_status_dashboard; family mcp_definition_history_pipeline_status_dashboard v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): IMPORT FAILED (would ModuleNotFoundError at spine mount): ImportError: cannot import name 'mcp_definition_history' from 'app.models' (/home/user/zo-sentinel/app/models.py). The name has NO referent in app/models.py (family B of tools/repair_staged_model_names.py): either use the model that really exists for this data, or, if the table truly does not exist, this service is unbuildable as specified -- say so in the PR and stop. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/mcp_definition_history_pipeline_status_dashboard (service.toml valid, router.py exposes a router, `python -m services.staged.mcp_definition_history_pipeline_status_dashboard.router` imports, `python -m services.staged.mcp_definition_history_pipeline_status_dashboard.contract` exits 0). Then `python tools/staging_drain/census.py --only mcp_definition_history_pipeline_status_dashboard --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/mcp_definition_history_pipeline_status_dashboard/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/mcp_definition_history_pipeline_status_dashboard/__init__.py",
+    "services/staged/mcp_definition_history_pipeline_status_dashboard/contract.py",
+    "services/staged/mcp_definition_history_pipeline_status_dashboard/logic.py",
+    "services/staged/mcp_definition_history_pipeline_status_dashboard/router.py",
+    "services/staged/mcp_definition_history_pipeline_status_dashboard/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "mcp_definition_history_pipeline_status_dashboard fails the promotion gate: import_model_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "IMPORT FAILED (would ModuleNotFoundError at spine mount): ImportError: cannot import name 'mcp_definition_history' from 'app.models' (/home/user/zo-sentinel/app/models.py)",
+    "failure_class": "import_model_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "The name has NO referent in app/models.py (family B of tools/repair_staged_model_names.py): either use the model that really exists for this data, or, if the table truly does not exist, this service is unbuildable as specified -- say so in the PR and stop.",
+  "details": {
+    "family": "mcp_definition_history_pipeline_status_dashboard",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

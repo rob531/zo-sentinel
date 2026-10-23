@@ -82,9 +82,9 @@ def get_signal_scores(db: Session = Depends(get_session)):
 def setup_database(db: Session = Depends(get_session)):
     try:
         # Create tables if they don't exist
-        db.execute("CREATE TABLE IF NOT EXISTS mcp_server_registry (id SERIAL PRIMARY KEY, server_name TEXT, server_url TEXT, org_id INTEGER, is_active BOOLEAN)")
-        db.execute("CREATE TABLE IF NOT EXISTS mcp_llm_axis_scores (id SERIAL PRIMARY KEY, server_id INTEGER, axis_name TEXT, score FLOAT, timestamp TEXT)")
-        db.execute("CREATE TABLE IF NOT EXISTS mcp_score_disputes (id SERIAL PRIMARY KEY, server_id INTEGER, user_id INTEGER, axis_name TEXT, disputed_score FLOAT, new_score FLOAT, reason TEXT, status TEXT)")
+        db.execute("CREATE TABLE IF NOT EXISTS McpServerRegistry (id SERIAL PRIMARY KEY, server_name TEXT, server_url TEXT, org_id INTEGER, is_active BOOLEAN)")
+        db.execute("CREATE TABLE IF NOT EXISTS McpLlmAxisScore (id SERIAL PRIMARY KEY, server_id INTEGER, axis_name TEXT, score FLOAT, timestamp TEXT)")
+        db.execute("CREATE TABLE IF NOT EXISTS McpScoreDispute (id SERIAL PRIMARY KEY, server_id INTEGER, user_id INTEGER, axis_name TEXT, disputed_score FLOAT, new_score FLOAT, reason TEXT, status TEXT)")
         db.execute("CREATE TABLE IF NOT EXISTS orgs (id SERIAL PRIMARY KEY, name TEXT, description TEXT)")
         db.execute("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT, email TEXT, org_id INTEGER)")
         db.commit()

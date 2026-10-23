@@ -1,0 +1,11 @@
+[service]
+name = "github_pr_checker_wiring"
+import_path = "services.active.github_pr_checker_wiring.router"
+prefix = "/api"
+tag = "github_pr_checker_wiring"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

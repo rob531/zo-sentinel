@@ -1,0 +1,42 @@
+{
+  "task": "patch_org_api_keys_passes_gate",
+  "directive_id": "patch_org_api_keys_passes_gate",
+  "id": "patch_org_api_keys_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/org_api_keys/router.py",
+  "complexity": "medium",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'org_api_keys' (services/staged/org_api_keys; family org_api_keys v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 139916433209024 and this is thread id 139916493889664.. contract.py runs but fails: fix the ROUTE or the LOGIC so the contract's assertions hold over the real data layer; do not weaken the contract to pass. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/org_api_keys (service.toml valid, router.py exposes a router, `python -m services.staged.org_api_keys.router` imports, `python -m services.staged.org_api_keys.contract` exits 0). Then `python tools/staging_drain/census.py --only org_api_keys --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/org_api_keys/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/org_api_keys/__init__.py",
+    "services/staged/org_api_keys/contract.py",
+    "services/staged/org_api_keys/logic.py",
+    "services/staged/org_api_keys/router.py",
+    "services/staged/org_api_keys/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "org_api_keys fails the promotion gate: contract_failed",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "contract FAILED: exit=1 ib/python3.11/dist-packages/sqlalchemy/engine/default.py\", line 721, in do_close\n    dbapi_connection.close()\nsqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 139916433209024 and this is thread id 139916493889664.",
+    "failure_class": "contract_failed",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "contract.py runs but fails: fix the ROUTE or the LOGIC so the contract's assertions hold over the real data layer; do not weaken the contract to pass.",
+  "details": {
+    "family": "org_api_keys",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

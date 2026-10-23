@@ -1,0 +1,11 @@
+[service]
+name = "sprint_progress_overview"
+import_path = "services.active.sprint_progress_overview.router"
+prefix = "/api"
+tag = "sprint_progress_overview"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

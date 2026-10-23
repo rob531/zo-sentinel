@@ -180,6 +180,7 @@ def get_breaker_state() -> str:
 
 
 def is_quarantined(filename: str) -> bool:
+    drop_nonidentifying_keys()
     return filename in snapshot().get("quarantined", {})
 
 
@@ -197,6 +198,10 @@ def may_rebuild(filename: str) -> tuple[bool, str]:
     (ok, reason). Reason is always populated so the generator prompt can
     include it."""
     maybe_auto_recover()
+    # Converge away keys that cannot identify an artifact BEFORE answering.
+    # Without this a poisoned pre-fix entry keeps returning False for every
+    # service-unit directive and the architect self-censors on it.
+    drop_nonidentifying_keys()
     snap = snapshot()
     if filename in snap.get("retired", {}):
         r = snap["retired"][filename]
@@ -469,29 +474,119 @@ def maybe_auto_recover(now: Optional[float] = None) -> Optional[str]:
         return "half-open"
 
 
+# ---- Non-identifying keys -------------------------------------------------
+
+#: Filenames every service unit emits. Under the pre-2026-08-03 keyspace the
+#: accounting key was `Path(build['file']).name`, so ALL services shared one
+#: counter for each of these -- `__init__.py` reached 19 attempts against a
+#: budget of 3 and quarantined, blocking every service at once. A key that
+#: cannot name one artifact cannot support a claim about one artifact.
+SERVICE_UNIT_MEMBERS = frozenset({
+    "service.toml", "__init__.py", "router.py", "logic.py", "contract.py",
+})
+
+
+def _is_nonidentifying(key: str) -> bool:
+    """True if `key` is a BARE service-unit member basename.
+
+    Bare == no directory component. `services/staged/foo/router.py` names one
+    artifact and is fine; `router.py` names ~345 of them and is not. Legacy
+    flat modules (`mcp_scanner.py`, `e2e_scenarios.py`, ...) are untouched --
+    they are not service-unit members.
+    """
+    if not key or "/" in key or "\\" in key:
+        return False
+    return key in SERVICE_UNIT_MEMBERS
+
+
+def drop_nonidentifying_keys() -> list:
+    """Delete quarantine + retry entries whose key cannot identify an artifact.
+
+    Idempotent and self-healing: it converges the state file to the post-fix
+    keyspace on every read, so a rollback of the gate change simply refills
+    them rather than leaving a wedge. Returns the keys dropped.
+
+    This is a REMOVAL of a false gate, not the addition of a real one (R7).
+    The entries it drops assert `missing_on_disk` about files with 300+ copies
+    on disk; the assertion was never true, so nothing is being forgiven.
+    """
+    # Cheap lockless gate for the common (already-converged) case; the write
+    # lock is taken only when there is actually something to drop.
+    snap = snapshot()
+    if not any(_is_nonidentifying(k)
+               for b in ("quarantined", "file_retries")
+               for k in snap.get(b, {})):
+        return []
+    dropped = []
+    with _LockedStateFile() as data:
+        for bucket in ("quarantined", "file_retries"):
+            for key in [k for k in data.get(bucket, {}) if _is_nonidentifying(k)]:
+                del data[bucket][key]
+                dropped.append(f"{bucket}:{key}")
+        if dropped:
+            data.setdefault("notes", []).append({
+                "at": _now(),
+                "action": "drop_nonidentifying_keys",
+                "dropped": dropped,
+                "reason": ("key is a bare service-unit member basename; it "
+                           "aggregates every service and identifies none"),
+            })
+            data["notes"] = data["notes"][-50:]
+    return dropped
+
+
+def _default_find_fn(root: Path, filename: str) -> bool:
+    """True if <filename> exists ANYWHERE under root (any depth).
+
+    The service unit puts service.toml / __init__.py / router.py / logic.py /
+    contract.py inside services/<lane>/<name>/, so a root-only existence probe
+    reports MISSING for a file that has hundreds of copies on disk. Guarded so
+    an unreadable tree degrades to an honest False rather than raising inside a
+    recovery sweep."""
+    try:
+        return any(True for _ in Path(root).rglob(filename))
+    except Exception:
+        return False
+
+
 def release_stale_missing(exists_fn: Callable[[str], bool] = os.path.exists,
-                          root: Optional[Path] = None) -> list:
+                          root: Optional[Path] = None,
+                          find_fn: Optional[Callable[[Path, str], bool]] = None) -> list:
     """Release quarantine entries flagged 'missing_on_disk' whose file now EXISTS.
 
     Gate 8 quarantines a file as 'missing_on_disk' when it can't find the built
     artifact. If the file is later (re)built, that entry is stale -- the breaker
     never re-checks disk on its own, so false positives accumulate forever. This
     sweeps them: for each quarantined file whose reason mentions
-    'missing_on_disk', if exists_fn(<root>/<filename>) is true, release it
-    (clears quarantine + retry counter). Returns the list of released filenames.
+    'missing_on_disk', release it if the file is found EITHER at <root>/<filename>
+    OR anywhere beneath root (clears quarantine + retry counter). Returns the list
+    of released filenames.
+
+    The tree search is load-bearing, not defensive: service-unit members
+    (service.toml, __init__.py, router.py, logic.py, contract.py) only ever exist
+    at services/<lane>/<name>/<filename>, so the original root-only probe made
+    their 'missing_on_disk' entries PERMANENT -- a monitored item that can never
+    clear. Measured 2026-08-02: four such entries held while 327 copies of each
+    were on disk.
 
     exists_fn/root are injectable for hermetic tests; on the host they default to
     os.path.exists against the state file's directory (the build output dir)."""
     root = root if root is not None else _resolve_state_file().parent
+    find_fn = find_fn if find_fn is not None else _default_find_fn
     released = []
     snap = snapshot()
     for filename, meta in list(snap.get("quarantined", {}).items()):
         if "missing_on_disk" not in str(meta.get("reason", "")):
             continue
-        if exists_fn(str(Path(root) / filename)):
+        # Resolve the artifact from the TREE, not from one candidate path (R1):
+        # 'missing' must be measured. A root-only probe is structurally blind to
+        # every service-unit member and so can never release one.
+        at_root = exists_fn(str(Path(root) / filename))
+        if at_root or find_fn(Path(root), filename):
+            where = "at root" if at_root else "elsewhere under root"
             if release_quarantine(
                 filename,
-                note="auto: missing_on_disk flag stale; file present on disk",
+                note=f"auto: missing_on_disk flag stale; file present on disk ({where})",
             ):
                 released.append(filename)
     return released

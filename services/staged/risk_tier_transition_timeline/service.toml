@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_transition_timeline"
+import_path = "services.active.risk_tier_transition_timeline.router"
+prefix = "/api"
+tag = "risk_tier_transition_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true

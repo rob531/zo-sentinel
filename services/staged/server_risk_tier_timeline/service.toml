@@ -1,55 +1,8 @@
-# service.toml (Python module)
-
-# Service metadata
+[service]
 name = "server_risk_tier_timeline"
 import_path = "services.active.server_risk_tier_timeline.router"
 prefix = "/api"
 tag = "server_risk_tier_timeline"
 origin = "service"
 auth = "public"
-needs_data_layer = True
-
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.testclient import TestClient
-
-# App data layer imports (must remain)
-from app.db import get_session
-from app.models import (
-    mcp_server_registry,
-    mcp_llm_axis_scores,
-    mcp_score_disputes,
-    orgs,
-    users,
-)
-
-router = APIRouter(prefix=f"{prefix}/{tag}", tags=[tag])
-
-
-@router.get("/", summary="Retrieve server risk tier timeline")
-async def get_server_risk_tier_timeline(session=Depends(get_session)):
-    """
-    Placeholder implementation.
-    In a real implementation this would query the authoritative tables
-    using the provided SQLAlchemy session.
-    """
-    # Example static response; replace with actual DB logic.
-    return {"status": "ok", "message": "server risk tier timeline placeholder"}
-
-
-__all__ = ["router"]
-
-
-if __name__ == "__main__":
-    # Self‑test
-    app = FastAPI()
-    app.include_router(router)
-
-    # Override the DB session dependency with a no‑op for testing.
-    app.dependency_overrides[get_session] = lambda: None
-
-    client = TestClient(app)
-    response = client.get(f"{prefix}/{tag}/")
-    assert response.status_code == 200, f"Unexpected status {response.status_code}"
-    json_resp = response.json()
-    assert json_resp.get("status") == "ok", "Unexpected response payload"
-    print("PASS")
+needs_data_layer = true

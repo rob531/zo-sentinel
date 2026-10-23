@@ -1,0 +1,12 @@
+[service]
+name = "tenant_org_model"
+import_path = "services.active.tenant_org_model.router"
+prefix = "/api"
+tag = "tenant_org_model"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.tenant_org_model.router"
+expected_output = "PASS"

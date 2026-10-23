@@ -1,0 +1,11 @@
+[service]
+name = "recently_scored_servers"
+import_path = "services.active.recently_scored_servers.router"
+prefix = "/api"
+tag = "recently_scored_servers"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

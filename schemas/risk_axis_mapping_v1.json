@@ -1,0 +1,191 @@
+{
+  "_readme": [
+    "THE AXIS CONTRACT. PRODUCT_SPEC.md tells consumers to read axis label enums",
+    "from this file. Until 2026-08-28 it did not exist, so every consumer inferred",
+    "the enum from observed data -- and 'this axis only ever emits 2 labels' could",
+    "not be distinguished from 'this axis declares 2 labels'. Those are mode",
+    "collapse and a correctly narrow axis, and they need opposite fixes.",
+    "",
+    "EVERY AXIS DECLARES INSUFFICIENT_EVIDENCE. That is the change this file",
+    "exists to make. The v3.0 scorer had no ignorance token on five of seven axes,",
+    "so it never emitted one, and its labels were indistinguishable from informed",
+    "ones. Two axes (auth_strength, maintainer_trust) DID carry an UNKNOWN and used",
+    "it 83% and 92% of the time -- which is what the other five would have done if",
+    "they could.",
+    "",
+    "backed_by names the mcp_signal_scores signals that are EVIDENCE for the axis.",
+    "An axis with no non-degenerate backing signal for a server MUST return",
+    "INSUFFICIENT_EVIDENCE. Degeneracy is MEASURED per run from the corpus, never",
+    "assumed here -- a signal that is discriminating today can go constant tomorrow",
+    "(tool_count did: it reads mcp_fingerprints, where tool_name_hash is",
+    "SHA-256(\"\") for every row, so it scores 91.95 +/- 1.36 for everything).",
+    "",
+    "labels_ascend_with_risk: TRUE means labels[0] is the LOWEST risk (LOW->CRITICAL, NARROW->BROAD). FALSE means labels[0] is the WORST case and the list ascends in GOODNESS (NONE->STRONG auth; UNKNOWN_AUTHOR->ESTABLISHED). Two of the seven are FALSE. Mapping a risk score onto those without honouring the direction labels the riskiest servers ESTABLISHED -- caught before this shipped, and the reason the flag is REQUIRED rather than inferred.",
+    "",
+    "derived_signals: signals that re-serve a stored verdict instead of making an observation. They are REJECTED as backing evidence for the same reason a near-constant signal is: they cannot move a label on their own merit. This class was found by checking WHY maintainer_trust suddenly discriminated -- 110 of 150 servers were being graded ESTABLISHED on `reputation` alone, with no github_stars at all. It looked exactly like the fix working."
+  ],
+  "version": "v1",
+  "created": "2026-08-28",
+  "score_direction": "mcp_signal_scores.score is 0-100 where HIGH = SAFE. Risk is the inverse.",
+  "insufficient_evidence_label": "INSUFFICIENT_EVIDENCE",
+  "axes": {
+    "auth_strength": {
+      "question": "How strong is the authentication this server requires of its callers?",
+      "labels": [
+        "NONE",
+        "WEAK",
+        "MODERATE",
+        "STRONG",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "UNKNOWN",
+        "WEAK",
+        "MODERATE"
+      ],
+      "backed_by": [
+        "permission_scope",
+        "tls_validity"
+      ],
+      "note": "permission_scope covers 32 of 3,173 servers and its evidence carries {canary:true} -- it is a canary, not a production signal. tls_validity is near-constant. So this axis is expected to return INSUFFICIENT_EVIDENCE for almost everything, and that is the CORRECT answer, not a failure.",
+      "labels_ascend_with_risk": false
+    },
+    "capability_breadth": {
+      "question": "How broad is the set of actions this server can perform?",
+      "labels": [
+        "NARROW",
+        "MODERATE",
+        "BROAD",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "NARROW",
+        "MODERATE",
+        "BROAD"
+      ],
+      "backed_by": [
+        "tool_count",
+        "tool_description_safety"
+      ],
+      "note": "tool_count is DEGENERATE -- it reads mcp_fingerprints.tool_count, and that table stores SHA-256(\"\") in its hash columns for all 3,316 rows.",
+      "labels_ascend_with_risk": true
+    },
+    "data_sensitivity": {
+      "question": "How sensitive is the data this server can reach?",
+      "labels": [
+        "PUBLIC",
+        "INTERNAL",
+        "SENSITIVE",
+        "CRITICAL",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "PUBLIC",
+        "INTERNAL",
+        "SENSITIVE",
+        "CRITICAL",
+        "UNKNOWN"
+      ],
+      "backed_by": [
+        "tool_description_safety",
+        "permission_scope"
+      ],
+      "labels_ascend_with_risk": true
+    },
+    "network_egress": {
+      "question": "Where can this server send data?",
+      "labels": [
+        "NONE",
+        "INTERNAL",
+        "EXTERNAL",
+        "ARBITRARY",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "NONE",
+        "INTERNAL",
+        "EXTERNAL",
+        "ARBITRARY",
+        "UNKNOWN"
+      ],
+      "backed_by": [
+        "domain_trust",
+        "url_safety",
+        "domain_age"
+      ],
+      "labels_ascend_with_risk": true
+    },
+    "maintainer_trust": {
+      "question": "How established and accountable is the maintainer?",
+      "labels": [
+        "UNKNOWN_AUTHOR",
+        "COMMUNITY",
+        "ESTABLISHED",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "UNKNOWN_AUTHOR",
+        "ESTABLISHED"
+      ],
+      "backed_by": [
+        "github_stars",
+        "domain_age",
+        "community_signal",
+        "reputation"
+      ],
+      "note": "github_stars (sd 36.6 over 1,483 servers) and domain_age (sd 37.8) are the two most discriminating signals in the store. v3 returned UNKNOWN_AUTHOR for 92% of servers while this evidence sat unread. This is the axis where grounding should change the most answers.",
+      "labels_ascend_with_risk": false
+    },
+    "exploit_surface": {
+      "question": "How much attack surface does this server expose?",
+      "labels": [
+        "MINIMAL",
+        "LIMITED",
+        "MODERATE",
+        "BROAD",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "MINIMAL",
+        "LIMITED",
+        "MODERATE",
+        "BROAD"
+      ],
+      "backed_by": [
+        "tool_security",
+        "known_bad_pattern",
+        "otx_threat_intel",
+        "injection_resilience"
+      ],
+      "labels_ascend_with_risk": true
+    },
+    "overall_risk": {
+      "question": "Overall risk of adopting this server.",
+      "labels": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "v3_observed_labels": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL"
+      ],
+      "backed_by": [
+        "composite",
+        "supply_chain",
+        "reputation",
+        "domain_trust"
+      ],
+      "note": "v3 assigned a confident tier to EVERY server. On prod that produced 99.47% in the top two bands (FU-058). A scorer with no way to say 'insufficient evidence' has to put its mass somewhere.",
+      "labels_ascend_with_risk": true
+    }
+  },
+  "derived_signals": {
+    "reputation": "Its evidence is {\"checks\":[\"existing_trust:X\"],\"existing_trust\":X} on every row sampled -- its only check IS a stored trust value. Backing an axis with it means 'this maintainer is trusted because our trust score says so'. No independent observation, so it is not evidence.",
+    "composite": "An aggregate of the other signals by construction. Backing overall_risk with it double-counts every signal that already backs the sub-axes."
+  }
+}

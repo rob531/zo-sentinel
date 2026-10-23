@@ -1,0 +1,12 @@
+[service]
+name = "dispute_backlog_summary"
+import_path = "services.active.dispute_backlog_summary.router"
+prefix = "/api"
+tag = "dispute_backlog_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.dispute_backlog_summary.router"
+expected_output = "PASS"

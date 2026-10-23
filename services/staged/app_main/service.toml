@@ -1,0 +1,8 @@
+[service]
+name = "app_main"
+import_path = "services.active.app_main.router"
+prefix = "/api"
+tag = "app_main"
+origin = "service"
+auth = "public"
+needs_data_layer = true

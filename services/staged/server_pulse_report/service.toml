@@ -1,0 +1,8 @@
+[service]
+name = "server_pulse_report"
+import_path = "services.active.server_pulse_report.router"
+prefix = "/api"
+tag = "server_pulse_report"
+origin = "service"
+auth = "public"
+needs_data_layer = true

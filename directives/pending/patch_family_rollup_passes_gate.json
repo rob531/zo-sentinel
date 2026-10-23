@@ -1,0 +1,38 @@
+{
+  "task": "patch_family_rollup_passes_gate",
+  "directive_id": "patch_family_rollup_passes_gate",
+  "id": "patch_family_rollup_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/family_rollup/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'family_rollup' (services/staged/family_rollup; family family_rollup v1; runtime class lib) so it passes the promotion gate. GATE FAILURE (verbatim): source import FAILED: services.staged.family_rollup.router: NameError: name 'services' is not defined. Fix the quoted gate failure. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/family_rollup (service.toml valid, router.py exposes a router, `python -m services.staged.family_rollup.router` imports, `python -m services.staged.family_rollup.contract` exits 0). Then `python tools/staging_drain/census.py --only family_rollup --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/family_rollup/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/family_rollup/__init__.py",
+    "services/staged/family_rollup/router.py",
+    "services/staged/family_rollup/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "family_rollup fails the promotion gate: import_undefined_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "source import FAILED: services.staged.family_rollup.router: NameError: name 'services' is not defined",
+    "failure_class": "import_undefined_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the quoted gate failure.",
+  "details": {
+    "family": "family_rollup",
+    "version": 1,
+    "runtime_class": "lib",
+    "files": [
+      "__init__.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

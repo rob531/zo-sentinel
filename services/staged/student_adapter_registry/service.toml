@@ -1,0 +1,29 @@
+[service]
+name = "student_adapter_registry"
+import_path = "services.active.student_adapter_registry.router"
+prefix = "/api"
+tag = "student_adapter_registry"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[description]
+summary = "Student adapter registry service for managing MCP server registrations and adapter configurations"
+read_databases = ["app", "mesh"]
+write_databases = []
+
+[app_tables]
+read = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "Org", "User"]
+
+[mesh_tables]
+read = ["mcp_signal_scores", "mesh_memory"]
+write = []
+
+[routes]
+health = "/health"
+ready = "/ready"
+
+[dependencies]
+requires_auth = false
+rate_limited = false
+cache_enabled = false

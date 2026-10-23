@@ -1,0 +1,8 @@
+[service]
+name = "verdict_verification"
+import_path = "services.active.verdict_verification.router"
+prefix = "/api"
+tag = "verdict_verification"
+origin = "service"
+auth = "public"
+needs_data_layer = true

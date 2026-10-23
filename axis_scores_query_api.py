@@ -5,7 +5,7 @@ from datetime import datetime
 import base64
 import json
 from app.db import get_session
-from app.models import McpLlmAxisScores
+from app.models import McpLlmAxisScore
 from sqlalchemy import func, and_, or_, desc
 from sqlalchemy.orm import Session
 import requests
@@ -51,33 +51,33 @@ def _get_axis_scores(
     escalated: Optional[bool] = None,
     limit: int = 50,
     cursor: Optional[str] = None
-) -> List[McpLlmAxisScores]:
-    query = db.query(McpLlmAxisScores)
+) -> List[McpLlmAxisScore]:
+    query = db.query(McpLlmAxisScore)
 
     if server_id:
-        query = query.filter(McpLlmAxisScores.server_id == server_id)
+        query = query.filter(McpLlmAxisScore.server_id == server_id)
     if axis_name:
-        query = query.filter(McpLlmAxisScores.axis_name == axis_name)
+        query = query.filter(McpLlmAxisScore.axis_name == axis_name)
     if min_p_top is not None:
-        query = query.filter(McpLlmAxisScores.p_top >= min_p_top)
+        query = query.filter(McpLlmAxisScore.p_top >= min_p_top)
     if max_p_top is not None:
-        query = query.filter(McpLlmAxisScores.p_top <= max_p_top)
+        query = query.filter(McpLlmAxisScore.p_top <= max_p_top)
     if escalated is not None:
-        query = query.filter(McpLlmAxisScores.escalated == escalated)
+        query = query.filter(McpLlmAxisScore.escalated == escalated)
 
     if cursor:
         cursor_data = json.loads(base64.b64decode(cursor).decode('utf-8'))
         query = query.filter(
             or_(
-                McpLlmAxisScores.scored_at < cursor_data['scored_at'],
+                McpLlmAxisScore.scored_at < cursor_data['scored_at'],
                 and_(
-                    McpLlmAxisScores.scored_at == cursor_data['scored_at'],
-                    McpLlmAxisScores.server_id < cursor_data['server_id']
+                    McpLlmAxisScore.scored_at == cursor_data['scored_at'],
+                    McpLlmAxisScore.server_id < cursor_data['server_id']
                 )
             )
         )
 
-    query = query.order_by(desc(McpLlmAxisScores.scored_at), McpLlmAxisScores.server_id)
+    query = query.order_by(desc(McpLlmAxisScore.scored_at), McpLlmAxisScore.server_id)
     query = query.limit(limit + 1)
 
     results = query.all()
@@ -126,13 +126,13 @@ async def get_axis_scores(
         }
         next_cursor = base64.b64encode(json.dumps(cursor_data).encode('utf-8')).decode('utf-8')
 
-    total = db.query(func.count(McpLlmAxisScores.id)).filter(
+    total = db.query(func.count(McpLlmAxisScore.id)).filter(
         and_(
-            server_id is None or (McpLlmAxisScores.server_id == server_id),
-            axis_name is None or (McpLlmAxisScores.axis_name == axis_name),
-            min_p_top is None or (McpLlmAxisScores.p_top >= min_p_top),
-            max_p_top is None or (McpLlmAxisScores.p_top <= max_p_top),
-            escalated is None or (McpLlmAxisScores.escalated == escalated)
+            server_id is None or (McpLlmAxisScore.server_id == server_id),
+            axis_name is None or (McpLlmAxisScore.axis_name == axis_name),
+            min_p_top is None or (McpLlmAxisScore.p_top >= min_p_top),
+            max_p_top is None or (McpLlmAxisScore.p_top <= max_p_top),
+            escalated is None or (McpLlmAxisScore.escalated == escalated)
         )
     ).scalar()
 
@@ -177,9 +177,9 @@ async def get_server_axis_summary(
     server_id: str,
     db: Session = Depends(get_session)
 ):
-    query = db.query(McpLlmAxisScores).filter(
-        McpLlmAxisScores.server_id == server_id
-    ).order_by(desc(McpLlmAxisScores.scored_at))
+    query = db.query(McpLlmAxisScore).filter(
+        McpLlmAxisScore.server_id == server_id
+    ).order_by(desc(McpLlmAxisScore.scored_at))
 
     subquery = query.subquery()
 
@@ -224,7 +224,7 @@ if __name__ == '__main__':
     from sqlalchemy.orm import sessionmaker
 
     test_data = [
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="server1",
             axis_name="overall_risk",
             label="High",
@@ -235,7 +235,7 @@ if __name__ == '__main__':
             escalated=True,
             scored_at=datetime.now()
         ),
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="server1",
             axis_name="auth_strength",
             label="Medium",
@@ -246,7 +246,7 @@ if __name__ == '__main__':
             escalated=False,
             scored_at=datetime.now()
         ),
-        McpLlmAxisScores(
+        McpLlmAxisScore(
             server_id="server2",
             axis_name="overall_risk",
             label="Low",

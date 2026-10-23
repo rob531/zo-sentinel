@@ -1,0 +1,36 @@
+{
+  "task": "patch_perspective_management_passes_gate",
+  "directive_id": "patch_perspective_management_passes_gate",
+  "id": "patch_perspective_management_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/perspective_management/logic.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'perspective_management' (services/staged/perspective_management; family perspective_management v1; runtime class lib) so it passes the promotion gate. GATE FAILURE (verbatim): source import FAILED: services.staged.perspective_management.logic: NameError: name 'ecosystem_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_ve' is not defined. Fix the quoted gate failure. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/perspective_management (service.toml valid, router.py exposes a router, `python -m services.staged.perspective_management.router` imports, `python -m services.staged.perspective_management.contract` exits 0). Then `python tools/staging_drain/census.py --only perspective_management --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/perspective_management/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/perspective_management/logic.py",
+    "services/staged/perspective_management/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "perspective_management fails the promotion gate: import_undefined_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "source import FAILED: services.staged.perspective_management.logic: NameError: name 'ecosystem_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_vendor_version_ve' is not defined",
+    "failure_class": "import_undefined_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the quoted gate failure.",
+  "details": {
+    "family": "perspective_management",
+    "version": 1,
+    "runtime_class": "lib",
+    "files": [
+      "logic.py",
+      "service.toml"
+    ]
+  }
+}

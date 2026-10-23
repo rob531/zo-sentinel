@@ -1,0 +1,8 @@
+[service]
+name = "mcp_risk_tier_distribution_dashboard_view"
+import_path = "services.active.mcp_risk_tier_distribution_dashboard_view.router"
+prefix = "/api"
+tag = "mcp_risk_tier_distribution_dashboard_view"
+origin = "service"
+auth = "public"
+needs_data_layer = true

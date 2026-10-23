@@ -1,0 +1,16 @@
+[service]
+name = "risk_tier_breach_alert_api"
+import_path = "services.active.risk_tier_breach_alert_api.router"
+prefix = "/api"
+tag = "risk_tier_breach_alert_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[schema]
+app_tables = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "orgs", "users"]
+mesh_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[data_access]
+app_db = "postgres"
+mesh_store = "http://127.0.0.1:8772/query"

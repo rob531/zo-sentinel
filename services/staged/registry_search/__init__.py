@@ -24,8 +24,8 @@ from app.db import get_session
 from app.models import (
     mcp_signal_scores,
     mesh_memory,
-    mcp_llm_axis_scores,
-    mcp_server_registry,
+    McpLlmAxisScore,
+    McpServerRegistry,
 )
 
 router = APIRouter()
@@ -58,8 +58,8 @@ def get_mesh_memory() -> List[dict]:
 
 
 def get_mesh_scores() -> List[dict]:
-    """Fetch `mcp_llm_axis_scores` records from the external mesh store."""
-    payload = {"select": "*", "from": "mcp_llm_axis_scores"}
+    """Fetch `McpLlmAxisScore` records from the external mesh store."""
+    payload = {"select": "*", "from": "McpLlmAxisScore"}
     data = _post_query(payload)
     return data.get("results", [])
 
@@ -80,10 +80,10 @@ def reset_server_export_api_quarantine(
     server_id: int,
     session: Session = Depends(get_session),
 ) -> None:
-    """Clear the quarantine flag for a server in `mcp_server_registry`."""
+    """Clear the quarantine flag for a server in `McpServerRegistry`."""
     stmt = (
-        session.query(mcp_server_registry)
-        .filter(mcp_server_registry.id == server_id)
+        session.query(McpServerRegistry)
+        .filter(McpServerRegistry.id == server_id)
         .update({"quarantine": False})
     )
     if stmt == 0:

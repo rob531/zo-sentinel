@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from pydantic import BaseModel
 from app.db import get_session
-from app.models import MCPServerRegistry, MCPLLMAxisScores
+from app.models import McpServerRegistry, McpLlmAxisScore
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/entity", tags=["entity"])
@@ -32,12 +32,12 @@ class EntityDetail(BaseModel):
 @router.get("/{server_id}", response_model=EntityDetail)
 async def get_entity_detail(server_id: str, db: Session = Depends(get_session)) -> EntityDetail:
     # Fetch server registry data
-    server = db.query(MCPServerRegistry).filter(MCPServerRegistry.server_id == server_id).first()
+    server = db.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Fetch axis scores
-    axis_scores = db.query(MCPLLMAxisScores).filter(MCPLLMAxisScores.server_id == server_id).all()
+    axis_scores = db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).all()
 
     # Prepare response
     axes = [
@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     # Seed test data
     test_session = TestSession()
-    test_server = MCPServerRegistry(
+    test_server = McpServerRegistry(
         server_id="test-server-123",
         name="Test Server",
         registry_source="test_source",
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     test_session.add(test_server)
 
     test_axes = [
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-123",
             axis_name="axis1",
             label="label1",
@@ -110,7 +110,7 @@ if __name__ == "__main__":
             escalated=False,
             scored_at=datetime.utcnow()
         ),
-        MCPLLMAxisScores(
+        McpLlmAxisScore(
             server_id="test-server-123",
             axis_name="axis2",
             label="label2",

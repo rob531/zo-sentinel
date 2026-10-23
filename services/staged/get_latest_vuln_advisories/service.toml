@@ -1,0 +1,11 @@
+[service]
+name = "get_latest_vuln_advisories"
+import_path = "services.active.get_latest_vuln_advisories.router"
+prefix = "/api"
+tag = "get_latest_vuln_advisories"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

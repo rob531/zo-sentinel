@@ -1,0 +1,8 @@
+[service]
+name = "perspective_snapshot_rollup"
+import_path = "services.active.perspective_snapshot_rollup.router"
+prefix = "/api"
+tag = "perspective_snapshot_rollup"
+origin = "service"
+auth = "public"
+needs_data_layer = true

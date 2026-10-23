@@ -1,332 +1,373 @@
 import logging
-from typing import Dict, Any, Optional, List
+import os
+from datetime import datetime, timezone
+from typing import Any
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    filename='/home/workspace/logs/verdict_explainer.log'
+)
 logger = logging.getLogger(__name__)
 
-EXECUTE_URL = "http://127.0.0.1:8773"
-QUERY_URL = "http://127.0.0.1:8773/query"
-WRITE_SERVICE_URL = "http://127.0.0.1:8772/write"
+WRITE_SERVICE_URL = 'http://localhost:8772'
+QUERY_SERVICE_URL = 'http://localhost:8772'
 
 VERDICT_EXPLANATIONS = {
     'TRUSTED_GENERAL': 'This server has been assessed as broadly trusted for general use, with strong evidence across multiple security dimensions.',
     'TRUSTED_RESEARCH': 'This server is trusted based on research-grade analysis, with verified security properties and stable behavior patterns.',
     'ENTERPRISE_CONTROLLED': 'This server operates within enterprise-controlled boundaries with validated governance and compliance measures.',
     'CAUTION_LIMITED': 'This server presents limited caution concerns - some risk factors identified but manageable with appropriate safeguards.',
+    'AMBER_UNVERIFIED': 'This server has not been fully verified. Exercise caution and conduct additional assessment before deployment.',
     'HIGH_RISK_ISOLATED': 'This server exhibits high-risk characteristics and should be deployed in isolated environments with strict access controls.',
     'KNOWN_THREAT': 'This server has been identified as a known threat vector based on confirmed malicious indicators or patterns.',
+    'UNKNOWN': 'This server has not been assessed. Submit it for evaluation to receive a security verdict.',
     'INSUFFICIENT': 'This server lacks sufficient assessment data to generate a reliable security verdict.'
 }
 
-SIGNAL_EVIDENCE_TEMPLATES = {
-    'domain_trust': {
-        'high': 'The server domain has established trust credentials and verified ownership records.',
-        'medium': 'The server domain shows moderate trust indicators with partial verification.',
-        'low': 'The server domain lacks established trust or verification records.'
+SIGNAL_EXPLANATIONS = {
+    'injection_resilience': {
+        'high': 'Strong resilience against prompt injection attempts. Tool descriptions and parameters do not exhibit injection-prone patterns.',
+        'medium': 'Moderate injection resilience. Some areas may benefit from additional sanitization.',
+        'low': 'Potential vulnerability to prompt injection. Tool schemas or descriptions may contain risky patterns.',
+        'missing': 'No injection resilience assessment available for this server.'
     },
     'tool_description_safety': {
-        'high': 'Tool descriptions are free from suspicious patterns such as injection attempts, credential harvesting, or obfuscation.',
-        'medium': 'Tool descriptions contain minor security concerns requiring manual review.',
-        'low': 'Tool descriptions contain significant security concerns or malicious patterns.'
+        'high': 'Tool descriptions are clear, well-documented, and free from suspicious patterns such as injection attempts or credential harvesting.',
+        'medium': 'Tool descriptions contain minor concerns requiring manual review before deployment.',
+        'low': 'Tool descriptions contain significant security concerns or patterns consistent with credential harvesting.',
+        'missing': 'No tool description safety assessment available for this server.'
     },
     'permission_scope': {
-        'high': 'Permission requests are minimal and follow least-privilege principles.',
-        'medium': 'Permission requests are moderate in scope with acceptable risk profiles.',
-        'low': 'Permission requests are excessive and pose elevated risk to system security.'
+        'high': 'Permission requests follow least-privilege principles. Only minimal, necessary permissions are requested.',
+        'medium': 'Permission requests are moderate in scope with acceptable risk profiles for intended use cases.',
+        'low': 'Permission requests are excessive and pose elevated risk to system security if granted.',
+        'missing': 'No permission scope assessment available for this server.'
     },
     'supply_chain': {
-        'high': 'Supply chain verification confirms legitimate origins and verified build processes.',
-        'medium': 'Supply chain verification shows partial evidence of legitimate origins.',
-        'low': 'Supply chain verification reveals unverified or suspicious origins.'
+        'high': 'Supply chain verification confirms legitimate origins, verified build processes, and trusted publication channels.',
+        'medium': 'Supply chain verification shows partial evidence of legitimate origins. Some verification gaps exist.',
+        'low': 'Supply chain verification reveals unverified origins, unofficial distribution channels, or suspicious patterns.',
+        'missing': 'No supply chain assessment available for this server.'
     },
     'community_signal': {
-        'high': 'Community reports indicate positive experiences and verified safe usage patterns.',
-        'medium': 'Community signals show mixed reports with some unverified claims.',
-        'low': 'Community reports indicate negative experiences or confirmed security incidents.'
+        'high': 'Community reports indicate positive experiences, verified safe usage patterns, and no reported security incidents.',
+        'medium': 'Community signals show mixed reports with some unverified claims. Use with appropriate monitoring.',
+        'low': 'Community reports indicate negative experiences, security incidents, or significant trust concerns.',
+        'missing': 'No community signal assessment available for this server.'
     },
     'temporal_stability': {
-        'high': 'The server demonstrates stable behavior over extended observation periods.',
-        'medium': 'The server shows moderate stability with some behavioral variations.',
-        'low': 'The server exhibits unstable behavior patterns or recent significant changes.'
+        'high': 'The server demonstrates stable behavior over extended observation periods with no significant behavioral changes.',
+        'medium': 'The server shows moderate stability with some behavioral variations over time.',
+        'low': 'The server exhibits unstable behavior patterns, recent significant changes, or suspicious activity.',
+        'missing': 'No temporal stability assessment available for this server.'
+    },
+    'domain_trust': {
+        'high': 'The server domain has established trust credentials, verified ownership records, and positive reputation.',
+        'medium': 'The server domain shows moderate trust indicators with partial verification. Additional verification recommended.',
+        'low': 'The server domain lacks established trust, verification records, or exhibits suspicious characteristics.',
+        'missing': 'No domain trust assessment available for this server.'
+    },
+    'context_efficiency': {
+        'high': 'Tool schemas are well-designed and efficient, minimizing unnecessary context overhead.',
+        'medium': 'Tool schemas are reasonably efficient with some room for optimization.',
+        'low': 'Tool schemas are inefficient or overly verbose, potentially causing context management issues.',
+        'missing': 'No context efficiency assessment available for this server.'
     }
 }
 
-def ws_query(sql: str, params: dict = None) -> List[Dict[str, Any]]:
+SIGNAL_WEIGHTS = {
+    'injection_resilience': 0.20,
+    'tool_description_safety': 0.18,
+    'permission_scope': 0.15,
+    'supply_chain': 0.17,
+    'community_signal': 0.12,
+    'temporal_stability': 0.10,
+    'domain_trust': 0.05,
+    'context_efficiency': 0.03
+}
+
+
+def ws_query(sql: str, params: dict = None) -> list[dict[str, Any]]:
     import requests
     try:
-        response = requests.post(QUERY_URL, json={'sql': sql, 'params': params or {}}, timeout=30)
+        response = requests.post(
+            QUERY_SERVICE_URL,
+            json={'sql': sql, 'params': params or {}},
+            timeout=30
+        )
         response.raise_for_status()
-        return response.json().get('results', [])
-    except Exception as e:
-        logger.error(f"Query failed: {e}")
+        result = response.json()
+        return result.get('rows', result.get('results', []))
+    except requests.exceptions.RequestException as e:
+        logger.error(f'Query failed: {e}')
         return []
 
-def ws_write(table: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+def ws_write(table: str, rows: list[dict[str, Any]]) -> bool:
     import requests
     try:
-        response = requests.post(WRITE_SERVICE_URL, json={'table': table, 'rows': rows}, timeout=30)
+        response = requests.post(
+            WRITE_SERVICE_URL,
+            json={'table': table, 'rows': rows},
+            timeout=30
+        )
         response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        logger.error(f"Write failed: {e}")
-        return {}
+        return True
+    except requests.exceptions.RequestException as e:
+        logger.error(f'Write failed: {e}')
+        return False
 
-def fetch_server_verdict_data(server_id: str) -> Optional[Dict[str, Any]]:
-    query = """
-    SELECT 
-        ms.server_id,
-        ms.name,
-        ms.trust_score,
-        ms.verdict,
-        ms.confidence,
-        ms.assessment_count,
-        ms.last_evaluated,
-        ms.signals
-    FROM mcp_servers ms
-    WHERE ms.server_id = ?
-    """
-    results = ws_query(query, {'server_id': server_id})
-    if not results:
-        logger.warning(f"No server found with id: {server_id}")
-        return None
-    return results[0]
 
-def fetch_latest_signals(server_id: str) -> Optional[Dict[str, Any]]:
-    query = """
-    SELECT signals_data
-    FROM scoring_history
-    WHERE server_id = ?
-    ORDER BY scored_at DESC
-    LIMIT 1
-    """
-    results = ws_query(query, {'server_id': server_id})
-    if not results:
-        return None
-    row = results[0]
-    signals_data = row.get('signals_data', '{}')
-    if isinstance(signals_data, str):
-        import json
-        try:
-            return json.loads(signals_data)
-        except:
-            return {}
-    return signals_data
+def get_server_from_registry(server_id: str) -> dict[str, Any] | None:
+    sql = '''
+        SELECT server_id, name, url, description, verdict, trust_score, registry_source, scan_count
+        FROM mcp_server_registry
+        WHERE server_id = ?
+    '''
+    rows = ws_query(sql, {'p0': server_id})
+    if rows:
+        return rows[0]
+    return None
 
-def get_signal_level(score: float) -> str:
-    if score >= 0.7:
+
+def get_signal_scores(server_id: str) -> list[dict[str, Any]]:
+    sql = '''
+        SELECT signal_name, score, evidence, scored_at
+        FROM mcp_signal_scores
+        WHERE server_id = ?
+        ORDER BY signal_name
+    '''
+    return ws_query(sql, {'p0': server_id})
+
+
+def get_threat_associations(server_id: str) -> list[dict[str, Any]]:
+    sql = '''
+        SELECT threat_type, severity, evidence, reported_at
+        FROM mcp_threat_associations
+        WHERE server_id = ?
+        ORDER BY severity DESC, reported_at DESC
+    '''
+    return ws_query(sql, {'p0': server_id})
+
+
+def get_risk_register(server_id: str) -> dict[str, Any] | None:
+    sql = '''
+        SELECT risk_tier, risk_rank, threat_count, computed_at
+        FROM mcp_risk_register
+        WHERE server_id = ?
+    '''
+    rows = ws_query(sql, {'p0': server_id})
+    if rows:
+        return rows[0]
+    return None
+
+
+def score_band(score: float) -> str:
+    if score >= 0.75:
         return 'high'
-    elif score >= 0.4:
+    elif score >= 0.40:
         return 'medium'
     else:
         return 'low'
 
-def get_signal_evidence(signal_name: str, score: float) -> str:
-    level = get_signal_level(score)
-    template = SIGNAL_EVIDENCE_TEMPLATES.get(signal_name, {}).get(level, 'No evidence available for this signal.')
-    return template
 
-def rank_signals_by_impact(signals: Dict[str, float]) -> List[tuple]:
-    signal_weights = {
-        'domain_trust': 0.20,
-        'tool_description_safety': 0.20,
-        'permission_scope': 0.15,
-        'supply_chain': 0.15,
-        'community_signal': 0.15,
-        'temporal_stability': 0.15
-    }
-    weighted_scores = []
-    for signal_name, signal_value in signals.items():
-        weight = signal_weights.get(signal_name, 0.10)
-        weighted_scores.append((signal_name, signal_value, weight, signal_value * weight))
-    weighted_scores.sort(key=lambda x: x[3], reverse=True)
-    return weighted_scores
-
-def generate_verdict_explanation(
-    name: str,
-    verdict: str,
-    trust_score: float,
-    signals: Dict[str, float],
-    confidence: float,
-    assessment_count: int
-) -> str:
-    trust_score_display = int(trust_score * 100)
-    confidence_display = int(confidence * 100) if confidence else 50
-    signal_count = len(signals)
-    assessment_text = f"{assessment_count} assessment{'s' if assessment_count != 1 else ''}" if assessment_count else "initial assessment"
-    
-    ranked_signals = rank_signals_by_impact(signals)
-    
-    if ranked_signals:
-        top_signal_name, top_signal_score, top_signal_weight, top_weighted = ranked_signals[0]
-        top_score_display = int(top_signal_score * 100)
-        top_evidence = get_signal_evidence(top_signal_name, top_signal_score)
-        top_signal_readable = top_signal_name.replace('_', ' ')
+def format_signal_level(signal_name: str, score: float, evidence: str = '') -> dict[str, Any]:
+    band = score_band(score)
+    signal_key = signal_name.lower().replace('-', '_').replace(' ', '_')
+    explanation_base = SIGNAL_EXPLANATIONS.get(signal_key, SIGNAL_EXPLANATIONS.get(signal_name, {
+        'high': 'Strong positive signal.',
+        'medium': 'Moderate signal.',
+        'low': 'Weak or concerning signal.',
+        'missing': 'No assessment available.'
+    }))
+    if isinstance(explanation_base, dict):
+        explanation = explanation_base.get(band, explanation_base.get('missing', 'No assessment available.'))
     else:
-        top_signal_name = 'overall assessment'
-        top_signal_score = trust_score
-        top_score_display = trust_score_display
-        top_evidence = VERDICT_EXPLANATIONS.get(verdict, 'Assessment based on available data.')
-        top_signal_readable = 'overall assessment'
-    
-    offset_reinforce_text = ''
-    if len(ranked_signals) >= 2:
-        second_signal_name, second_signal_score, _, second_weighted = ranked_signals[1]
-        second_score_display = int(second_signal_score * 100)
-        second_evidence = get_signal_evidence(second_signal_name, second_signal_score)
-        second_signal_readable = second_signal_name.replace('_', ' ')
-        
-        if second_weighted > 0:
-            if second_signal_score > top_signal_score * 0.9:
-                offset_reinforce_text = f" This was reinforced by {second_signal_readable} (score: {second_score_display}/100): {second_evidence}"
-            else:
-                offset_reinforce_text = f" This was partially offset by {second_signal_readable} (score: {second_score_display}/100): {second_evidence}"
-        else:
-            offset_reinforce_text = f" However, {second_signal_readable} (score: {second_score_display}/100) presented challenges: {second_evidence}"
-    
-    additional_context = ''
-    if len(ranked_signals) >= 3:
-        negative_signals = [s for s in ranked_signals[1:] if s[1] < 0.4]
-        if negative_signals:
-            neg_names = ', '.join([s[0].replace('_', ' ') for s in negative_signals[:2]])
-            additional_context = f" Additional concerns were noted regarding {neg_names}."
-    
-    verdict_explanation = VERDICT_EXPLANATIONS.get(verdict, 'Assessment based on available security indicators.')
-    
-    explanation = (
-        f"{name} received verdict {verdict} (trust score: {trust_score_display}/100). "
-        f"{verdict_explanation} "
-        f"The strongest contributing factor was {top_signal_readable} (score: {top_score_display}/100): {top_evidence}"
-        f"{offset_reinforce_text}"
-        f"{additional_context} "
-        f"The assessment carries {confidence_display}% confidence based on {signal_count} scoring dimensions "
-        f"across {assessment_text}."
-    )
-    
-    return explanation
+        explanation = explanation_base
 
-def explain_verdict(server_id: str) -> str:
-    server_data = fetch_server_verdict_data(server_id)
-    if not server_data:
-        return f"Unable to generate verdict explanation: Server with ID '{server_id}' not found in registry."
-    
-    name = server_data.get('name', 'Unknown Server')
-    verdict = server_data.get('verdict', 'INSUFFICIENT')
-    trust_score = server_data.get('trust_score', 0.0)
-    confidence = server_data.get('confidence', 0.5)
-    assessment_count = server_data.get('assessment_count', 0)
-    
-    signals = fetch_latest_signals(server_id)
-    if not signals:
-        signals_str = server_data.get('signals')
-        if signals_str:
-            if isinstance(signals_str, str):
-                import json
-                try:
-                    signals = json.loads(signals_str)
-                except:
-                    signals = {}
-            else:
-                signals = signals_str
-        else:
-            signals = {}
-    
-    if not signals:
-        signals = {
-            'domain_trust': trust_score,
-            'tool_description_safety': trust_score,
-            'permission_scope': trust_score,
-            'supply_chain': trust_score,
-            'community_signal': trust_score,
-            'temporal_stability': trust_score
-        }
-    
-    explanation = generate_verdict_explanation(
-        name=name,
-        verdict=verdict,
-        trust_score=trust_score,
-        signals=signals,
-        confidence=confidence,
-        assessment_count=assessment_count
-    )
-    
-    return explanation
-
-def explain_verdict_batch(server_ids: List[str]) -> Dict[str, str]:
-    explanations = {}
-    for server_id in server_ids:
-        try:
-            explanations[server_id] = explain_verdict(server_id)
-        except Exception as e:
-            logger.error(f"Failed to explain verdict for {server_id}: {e}")
-            explanations[server_id] = f"Error generating explanation: {str(e)}"
-    return explanations
-
-def get_verdict_summary(server_id: str) -> Optional[Dict[str, Any]]:
-    server_data = fetch_server_verdict_data(server_id)
-    if not server_data:
-        return None
-    
-    signals = fetch_latest_signals(server_id)
-    if not signals:
-        signals_str = server_data.get('signals')
-        if signals_str:
-            if isinstance(signals_str, str):
-                import json
-                try:
-                    signals = json.loads(signals_str)
-                except:
-                    signals = {}
-            else:
-                signals = signals_str
-        else:
-            signals = {}
-    
-    ranked_signals = rank_signals_by_impact(signals) if signals else []
-    
     return {
-        'server_id': server_id,
-        'name': server_data.get('name'),
-        'verdict': server_data.get('verdict'),
-        'trust_score': server_data.get('trust_score'),
-        'confidence': server_data.get('confidence'),
-        'top_signal': ranked_signals[0][0] if ranked_signals else None,
-        'top_signal_score': ranked_signals[0][1] if ranked_signals else None,
-        'second_signal': ranked_signals[1][0] if len(ranked_signals) > 1 else None,
-        'second_signal_score': ranked_signals[1][1] if len(ranked_signals) > 1 else None,
-        'all_signals': signals,
-        'last_evaluated': server_data.get('last_evaluated')
+        'signal': signal_name,
+        'score': round(score, 3),
+        'band': band,
+        'explanation': explanation,
+        'evidence': evidence if evidence else None,
+        'contribution': round(SIGNAL_WEIGHTS.get(signal_name, 0.0) * score, 4)
     }
 
-def main():
-    import sys
-    if len(sys.argv) < 2:
-        print("Usage: python verdict_explainer.py <server_id>")
-        print("       python verdict_explainer.py --batch <server_id1> <server_id2> ...")
-        print("       python verdict_explainer.py --list")
-        sys.exit(1)
-    
-    if sys.argv[1] == '--list':
-        query = "SELECT server_id, name, verdict, trust_score FROM mcp_servers ORDER BY name"
-        results = ws_query(query)
-        if not results:
-            print("No servers found in registry.")
-            return
-        print("\n=== Servers in Registry ===")
-        for row in results:
-            print(f"  {row.get('name', 'Unknown')} | {row.get('verdict', 'N/A')} | Score: {int(row.get('trust_score', 0) * 100)}")
-        return
-    
-    if sys.argv[1] == '--batch' and len(sys.argv) > 2:
-        server_ids = sys.argv[2:]
-        explanations = explain_verdict_batch(server_ids)
-        for server_id, explanation in explanations.items():
-            print(f"\n=== Verdict Explanation for {server_id} ===")
-            print(explanation)
-        return
-    
-    server_id = sys.argv[1]
-    explanation = explain_verdict(server_id)
-    print(explanation)
 
-if __name__ == "__main__":
-    main()
+def get_verdict_explanation(server_id: str) -> dict[str, Any]:
+    server = get_server_from_registry(server_id)
+    if not server:
+        return {
+            'server_id': server_id,
+            'found': False,
+            'error': 'Server not found in registry'
+        }
+
+    verdict = server.get('verdict', 'UNKNOWN')
+    trust_score = server.get('trust_score')
+    risk_register = get_risk_register(server_id)
+    threat_associations = get_threat_associations(server_id)
+    signal_scores = get_signal_scores(server_id)
+
+    signals_formatted = []
+    for sig in signal_scores:
+        signals_formatted.append(format_signal_level(
+            sig.get('signal_name', 'unknown'),
+            float(sig.get('score', 0)),
+            sig.get('evidence', '')
+        ))
+
+    verdict_explanation = VERDICT_EXPLANATIONS.get(verdict, VERDICT_EXPLANATIONS.get('UNKNOWN', 'No verdict information available.'))
+
+    threats = []
+    for t in threat_associations:
+        threats.append({
+            'type': t.get('threat_type'),
+            'severity': t.get('severity'),
+            'evidence': t.get('evidence'),
+            'reported_at': t.get('reported_at')
+        })
+
+    result = {
+        'server_id': server_id,
+        'found': True,
+        'server_name': server.get('name'),
+        'verdict': verdict,
+        'trust_score': trust_score,
+        'verdict_explanation': verdict_explanation,
+        'risk_tier': risk_register.get('risk_tier') if risk_register else None,
+        'risk_rank': risk_register.get('risk_rank') if risk_register else None,
+        'threat_count': len(threats),
+        'threats': threats,
+        'signals': signals_formatted,
+        'registry_source': server.get('registry_source'),
+        'scan_count': server.get('scan_count')
+    }
+
+    return result
+
+
+def format_signal_breakdown(server_id: str) -> str:
+    data = get_verdict_explanation(server_id)
+    if not data.get('found'):
+        return f"Server {server_id} not found in registry."
+
+    lines = []
+    lines.append(f"=== Verdict Explanation for: {data['server_name']} ({server_id}) ===")
+    lines.append(f"Verdict: {data['verdict']}")
+    lines.append(f"Trust Score: {data['trust_score']:.2f}" if data['trust_score'] else "Trust Score: N/A")
+    lines.append(f"Risk Tier: {data['risk_tier'] or 'Not assessed'}")
+    lines.append("")
+    lines.append("Verdict Explanation:")
+    lines.append(f"  {data['verdict_explanation']}")
+    lines.append("")
+
+    if data['threats']:
+        lines.append(f"Threats ({len(data['threats'])}):")
+        for t in data['threats']:
+            lines.append(f"  [{t['severity'].upper()}] {t['type']}")
+            if t['evidence']:
+                lines.append(f"    Evidence: {t['evidence'][:200]}...")
+        lines.append("")
+
+    if data['signals']:
+        lines.append(f"Signal Breakdown ({len(data['signals'])} signals):")
+        for sig in data['signals']:
+            contrib_pct = sig['contribution'] * 100
+            lines.append(f"  {sig['signal']}: {sig['score']:.3f} ({sig['band']}) - contrib: {contrib_pct:.1f}%")
+            lines.append(f"    {sig['explanation']}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def get_all_verdicts_summary() -> list[dict[str, Any]]:
+    sql = '''
+        SELECT verdict, COUNT(*) as count
+        FROM mcp_server_registry
+        WHERE verdict IS NOT NULL
+        GROUP BY verdict
+        ORDER BY count DESC
+    '''
+    return ws_query(sql)
+
+
+def record_explanation_request(server_id: str, explanation: dict[str, Any]) -> bool:
+    import hashlib
+    from datetime import datetime, timezone
+
+    request_id = hashlib.sha256(
+        f"{server_id}:{datetime.now(timezone.utc).isoformat()}".encode()
+    ).hexdigest()[:32]
+
+    row = {
+        'request_id': request_id,
+        'server_id': server_id,
+        'verdict': explanation.get('verdict'),
+        'trust_score': explanation.get('trust_score'),
+        'signal_count': len(explanation.get('signals', [])),
+        'threat_count': len(explanation.get('threats', [])),
+        'requested_at': datetime.now(timezone.utc).isoformat()
+    }
+
+    return ws_write('verdict_explanation_requests', [row])
+
+
+def check_explanation_cache(server_id: str, max_age_hours: int = 24) -> dict[str, Any] | None:
+    sql = '''
+        SELECT request_id, verdict, trust_score, signal_count, requested_at
+        FROM verdict_explanation_requests
+        WHERE server_id = ?
+        AND requested_at > NOW() - INTERVAL '%d hours'
+        ORDER BY requested_at DESC
+        LIMIT 1
+    ''' % max_age_hours
+    rows = ws_query(sql, {'p0': server_id})
+    if rows:
+        return rows[0]
+    return None
+
+
+def ensure_explanation_requests_table() -> None:
+    import requests as req
+    create_sql = '''
+        CREATE TABLE IF NOT EXISTS verdict_explanation_requests (
+            request_id VARCHAR(64) PRIMARY KEY,
+            server_id VARCHAR(128),
+            verdict VARCHAR(64),
+            trust_score DOUBLE,
+            signal_count INTEGER,
+            threat_count INTEGER,
+            requested_at TIMESTAMPTZ
+        )
+    '''
+    try:
+        resp = req.post(
+            WRITE_SERVICE_URL,
+            json={'sql': create_sql},
+            timeout=30
+        )
+        resp.raise_for_status()
+    except req.exceptions.RequestException as e:
+        logger.warning(f'Could not create explanation requests table: {e}')
+
+
+def run():
+    import time
+    logger.info('Verdict explainer service started')
+    ensure_explanation_requests_table()
+
+    while True:
+        try:
+            summary = get_all_verdicts_summary()
+            logger.info(f'Verdict distribution: {summary}')
+        except Exception as e:
+            logger.error(f'Error in cycle: {e}')
+
+        time.sleep(3600)
+
+
+if __name__ == '__main__':
+    run()

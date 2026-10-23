@@ -37,6 +37,25 @@ So: resolve the declared import_path to a file, then ask whether any COPY source
 token is that file or an ancestor directory of it. That is the question the
 image actually answers at mount time.
 
+STATE OF THE WORLD, 2026-08-01 (FU-217) -- read this before trusting the
+paragraph above. The second bullet describes the Dockerfile as it was until
+2026-08-01. It is kept because it is why this module exists, but it is NO
+LONGER a description of the shipped Dockerfile, and a docstring whose stated
+method has drifted from the running one is its own defect class. What changed:
+
+    COPY services/__init__.py /srv/services/
+    COPY services/active     /srv/services/active
+
+so `services.active.<name>.router` is now COVERED and `would_be_shipped`
+returns True for it. This module's LOGIC is unchanged -- not one line of it was
+touched -- because it was never the thing that was wrong: it correctly reported
+a real gap, for four days, in a Dockerfile that had no COPY-list for services
+at all (267 of 300 promoter candidates held). What changed is the Dockerfile it
+reads. `services/staged` remains uncopied ON PURPOSE and this module will still
+answer False for it; that asymmetry is asserted two-sidedly in
+tests/test_dockerfile_copy_covers_active_services.py, so it cannot decay into
+a bare `COPY services` unnoticed.
+
 $0, static, no image build, no network.
 """
 

@@ -1,362 +1,232 @@
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
-import requests
-from typing import List, Dict, Optional
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Header, Query
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
+import hashlib
+import hmac
+import os
+import json
+import sqlite3
+import logging
 
-app = FastAPI()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+)
+logger = logging.getLogger(__name__)
 
-class SignalScore(BaseModel):
-    server_id: int
-    signal_name: str
-    score: float
-    timestamp: str
+app = FastAPI(title="Axis Scores API", version="1.0.0")
 
-class MeshMemory(BaseModel):
-    server_id: int
-    memory: Dict[str, str]
+WRITE_SERVICE_URL = "http://localhost:8772"
+MESH_MEMORY_DB = "/home/workspace/Datasets/zo-mesh/mesh_memory.db"
+API_SECRET = os.environ.get("AXIS_SCORES_API_SECRET", "")
 
-class ServerRiskTier(BaseModel):
-    server_id: int
-    risk_tier: int
 
-class VerdictBreakdown(BaseModel):
-    server_id: int
-    verdict: str
-    count: int
+def _verify_api_key(x_api_key: str = Header(None)) -> str:
+    if not API_SECRET:
+        return "unauthenticated"
+    if not x_api_key or not hmac.compare_digest(x_api_key, API_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return x_api_key
 
-class VerdictHistory(BaseModel):
-    server_id: int
-    verdict: str
-    timestamp: str
 
-class VulnAdvisory(BaseModel):
-    server_id: int
-    advisory_id: str
-    severity: str
-    description: str
-
-class FamilyCoverage(BaseModel):
-    server_id: int
-    family: str
-    coverage: float
-
-class ScoringPrecisionAudit(BaseModel):
-    server_id: int
-    signal_name: str
-    precision: float
-
-class TrustOverrideDiscrepancy(BaseModel):
-    server_id: int
-    override: bool
-    discrepancy: bool
-
-class ServerThreatIntel(BaseModel):
-    server_id: int
-    threat_intel: Dict[str, str]
-
-class RiskDistributionSummary(BaseModel):
-    risk_tier: int
-    count: int
-
-class RegistryGrowthProgress(BaseModel):
-    date: str
-    count: int
-
-class ScoringFreshnessDashboard(BaseModel):
-    server_id: int
-    freshness: float
-
-class ServerAxisScores(BaseModel):
-    server_id: int
-    axis: str
-    score: float
-
-class ServerRiskDetail(BaseModel):
-    server_id: int
-    risk_detail: Dict[str, str]
-
-class OverviewDashboard(BaseModel):
-    server_id: int
-    overview: Dict[str, str]
-
-def get_signal_scores(server_id: int, session: Session = Depends(get_session)) -> List[SignalScore]:
-    """Get signal scores for a server."""
+def _ws_write(table: str, rows: List[Dict[str, Any]]) -> bool:
+    import requests
     try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_signal_scores WHERE server_id = {server_id}"}
+        resp = requests.post(
+            f"{WRITE_SERVICE_URL}/write",
+            json={"table": table, "rows": rows},
+            timeout=10,
         )
-        response.raise_for_status()
-        return [SignalScore(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return resp.status_code in (200, 201)
+    except Exception as exc:
+        logger.error("ws_write failed for %s: %s", table, exc)
+        return False
 
-def get_mesh_memory(server_id: int, session: Session = Depends(get_session)) -> MeshMemory:
-    """Get mesh memory for a server."""
+
+def _ws_query(sql: str) -> List[Dict[str, Any]]:
+    import requests
     try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mesh_memory WHERE server_id = {server_id}"}
+        resp = requests.post(
+            f"{WRITE_SERVICE_URL}/query",
+            json={"sql": sql},
+            timeout=15,
         )
-        response.raise_for_status()
-        return MeshMemory(**response.json()[0])
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        data = resp.json()
+        return data.get("rows", [])
+    except Exception as exc:
+        logger.error("ws_query failed: %s", exc)
+        return []
 
-def get_server_risk_tier(server_id: int, session: Session = Depends(get_session)) -> ServerRiskTier:
-    """Get risk tier for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_server_registry WHERE server_id = {server_id}"}
+
+def _mesh_memory_query(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(MESH_MEMORY_DB)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def _mesh_memory_write(sql: str, params: tuple = ()) -> bool:
+    conn = sqlite3.connect(MESH_MEMORY_DB)
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    conn.commit()
+    rows_affected = cur.rowcount
+    conn.close()
+    return rows_affected > 0
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "axis_scores_api", "ts": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/api/registry/count")
+def registry_count(_api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    rows = _ws_query("SELECT COUNT(*) AS cnt FROM mcp_server_registry")
+    return {"count": rows[0]["cnt"] if rows else 0}
+
+
+@app.get("/api/registry/servers")
+def list_servers(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _api_key: str = Header(None),
+):
+    _verify_api_key(_api_key)
+    sql = f"SELECT server_id, name, url, verdict, trust_score FROM mcp_server_registry ORDER BY server_id LIMIT {limit} OFFSET {offset}"
+    rows = _ws_query(sql)
+    return {"servers": rows, "limit": limit, "offset": offset}
+
+
+@app.get("/api/registry/server/{server_id}")
+def get_server(server_id: str, _api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT server_id, name, url, description, verdict, trust_score, registry_source, scan_count FROM mcp_server_registry WHERE server_id = ?"
+    rows = _ws_query(sql)
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Server {server_id} not found")
+    return rows[0]
+
+
+@app.get("/api/scores/{server_id}")
+def get_signal_scores(server_id: str, _api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT server_id, signal_name, score, evidence, scored_at FROM mcp_signal_scores WHERE server_id = ?"
+    rows = _ws_query(sql)
+    return {"server_id": server_id, "signals": rows}
+
+
+@app.post("/api/scores")
+def post_signal_scores(
+    payload: Dict[str, Any],
+    _api_key: str = Header(None),
+):
+    _verify_api_key(_api_key)
+    signals = payload.get("signals", [])
+    if not signals:
+        raise HTTPException(status_code=400, detail="signals list required")
+    ts = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for sig in signals:
+        rows.append({
+            "server_id": str(sig["server_id"]),
+            "signal_name": str(sig["signal_name"]),
+            "score": float(sig["score"]),
+            "evidence": json.dumps(sig.get("evidence", {})),
+            "scored_at": ts,
+        })
+    ok = _ws_write("mcp_signal_scores", rows)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Write to mcp_signal_scores failed")
+    return {"ok": True, "count": len(rows)}
+
+
+@app.get("/api/risk/{server_id}")
+def get_risk_tier(server_id: str, _api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT server_id, risk_tier, risk_rank, threat_count, computed_at FROM mcp_risk_register WHERE server_id = ?"
+    rows = _ws_query(sql)
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Risk record for {server_id} not found")
+    return rows[0]
+
+
+@app.get("/api/risk/summary")
+def get_risk_summary(_api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT risk_tier, COUNT(*) AS cnt FROM mcp_risk_register GROUP BY risk_tier ORDER BY risk_tier"
+    rows = _ws_query(sql)
+    return {"distribution": rows}
+
+
+@app.get("/api/mesh/memory/{server_id}")
+def get_mesh_memory(server_id: str, _api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT server_id, key, value FROM mesh_memory WHERE server_id = ?"
+    rows = _mesh_memory_query(sql, (server_id,))
+    memory = {r["key"]: r["value"] for r in rows}
+    return {"server_id": server_id, "memory": memory}
+
+
+@app.post("/api/mesh/memory")
+def set_mesh_memory(
+    payload: Dict[str, Any],
+    _api_key: str = Header(None),
+):
+    _verify_api_key(_api_key)
+    server_id = str(payload.get("server_id", ""))
+    memory = payload.get("memory", {})
+    if not server_id:
+        raise HTTPException(status_code=400, detail="server_id required")
+    for k, v in memory.items():
+        _mesh_memory_write(
+            "INSERT OR REPLACE INTO mesh_memory (server_id, key, value) VALUES (?, ?, ?)",
+            (server_id, str(k), str(v)),
         )
-        response.raise_for_status()
-        return ServerRiskTier(**response.json()[0])
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True, "server_id": server_id}
 
-def get_verdict_breakdown(server_id: int, session: Session = Depends(get_session)) -> List[VerdictBreakdown]:
-    """Get verdict breakdown for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_verdict_breakdown WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [VerdictBreakdown(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-def get_verdict_history(server_id: int, session: Session = Depends(get_session)) -> List[VerdictHistory]:
-    """Get verdict history for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_verdict_history WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [VerdictHistory(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/threats/{server_id}")
+def get_threats(server_id: str, _api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT server_id, threat_type, severity, evidence, reported_at FROM mcp_threat_associations WHERE server_id = ?"
+    rows = _ws_query(sql)
+    return {"server_id": server_id, "threats": rows}
 
-def get_vuln_advisories(server_id: int, session: Session = Depends(get_session)) -> List[VulnAdvisory]:
-    """Get vulnerability advisories for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_vuln_advisories WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [VulnAdvisory(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-def get_family_coverage(server_id: int, session: Session = Depends(get_session)) -> List[FamilyCoverage]:
-    """Get family coverage for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_family_coverage WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [FamilyCoverage(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/verdicts")
+def list_verdicts(
+    verdict: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=1000),
+    _api_key: str = Header(None),
+):
+    _verify_api_key(_api_key)
+    if verdict:
+        sql = f"SELECT server_id, name, verdict, trust_score FROM mcp_server_registry WHERE verdict = ? ORDER BY trust_score DESC LIMIT {limit}"
+        rows = _ws_query(sql)
+    else:
+        sql = f"SELECT server_id, name, verdict, trust_score FROM mcp_server_registry ORDER BY trust_score DESC LIMIT {limit}"
+        rows = _ws_query(sql)
+    return {"verdicts": rows}
 
-def get_scoring_precision_audit(server_id: int, session: Session = Depends(get_session)) -> List[ScoringPrecisionAudit]:
-    """Get scoring precision audit for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_scoring_precision_audit WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [ScoringPrecisionAudit(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-def get_trust_override_discrepancy(server_id: int, session: Session = Depends(get_session)) -> List[TrustOverrideDiscrepancy]:
-    """Get trust override discrepancy for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_trust_override_discrepancy WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [TrustOverrideDiscrepancy(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/audit/{server_id}")
+def get_audit_trail(server_id: str, _api_key: str = Header(None)):
+    _verify_api_key(_api_key)
+    sql = "SELECT event_id, event_type, actor, action, details_json, outcome, timestamp FROM audit_log WHERE target_server_id = ? ORDER BY timestamp DESC LIMIT 50"
+    rows = _ws_query(sql)
+    return {"server_id": server_id, "events": rows}
 
-def get_server_threat_intel(server_id: int, session: Session = Depends(get_session)) -> List[ServerThreatIntel]:
-    """Get server threat intel for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_server_threat_intel WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [ServerThreatIntel(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-def get_risk_distribution_summary(session: Session = Depends(get_session)) -> List[RiskDistributionSummary]:
-    """Get risk distribution summary."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": "SELECT risk_tier, COUNT(*) as count FROM mcp_server_registry GROUP BY risk_tier"}
-        )
-        response.raise_for_status()
-        return [RiskDistributionSummary(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def run():
+    import uvicorn
+    port = int(os.environ.get("AXIS_SCORES_PORT", "8783"))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
-def get_registry_growth_progress(session: Session = Depends(get_session)) -> List[RegistryGrowthProgress]:
-    """Get registry growth progress."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": "SELECT date, COUNT(*) as count FROM mcp_server_registry GROUP BY date"}
-        )
-        response.raise_for_status()
-        return [RegistryGrowthProgress(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def get_scoring_freshness_dashboard(session: Session = Depends(get_session)) -> List[ScoringFreshnessDashboard]:
-    """Get scoring freshness dashboard."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": "SELECT server_id, freshness FROM mcp_scoring_freshness_dashboard"}
-        )
-        response.raise_for_status()
-        return [ScoringFreshnessDashboard(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def get_server_axis_scores(server_id: int, session: Session = Depends(get_session)) -> List[ServerAxisScores]:
-    """Get server axis scores for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_llm_axis_scores WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [ServerAxisScores(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def get_server_risk_detail(server_id: int, session: Session = Depends(get_session)) -> List[ServerRiskDetail]:
-    """Get server risk detail for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_server_risk_detail WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [ServerRiskDetail(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def get_overview_dashboard(server_id: int, session: Session = Depends(get_session)) -> List[OverviewDashboard]:
-    """Get overview dashboard for a server."""
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": f"SELECT * FROM mcp_overview_dashboard WHERE server_id = {server_id}"}
-        )
-        response.raise_for_status()
-        return [OverviewDashboard(**item) for item in response.json()]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def _run_self_test():
-    """Self-test for the module."""
-    from app.dependency_overrides import override_get_session
-    from app.db import get_session
-    from app.models import Base
-
-    # Override the session for testing
-    override_get_session()
-
-    # Create a test database
-    from sqlalchemy import create_engine
-    engine = create_engine('sqlite:///:memory:')
-    Base.metadata.create_all(engine)
-
-    # Test the functions
-    try:
-        # Test get_signal_scores
-        signal_scores = get_signal_scores(1)
-        assert isinstance(signal_scores, list)
-
-        # Test get_mesh_memory
-        mesh_memory = get_mesh_memory(1)
-        assert isinstance(mesh_memory, MeshMemory)
-
-        # Test get_server_risk_tier
-        server_risk_tier = get_server_risk_tier(1)
-        assert isinstance(server_risk_tier, ServerRiskTier)
-
-        # Test get_verdict_breakdown
-        verdict_breakdown = get_verdict_breakdown(1)
-        assert isinstance(verdict_breakdown, list)
-
-        # Test get_verdict_history
-        verdict_history = get_verdict_history(1)
-        assert isinstance(verdict_history, list)
-
-        # Test get_vuln_advisories
-        vuln_advisories = get_vuln_advisories(1)
-        assert isinstance(vuln_advisories, list)
-
-        # Test get_family_coverage
-        family_coverage = get_family_coverage(1)
-        assert isinstance(family_coverage, list)
-
-        # Test get_scoring_precision_audit
-        scoring_precision_audit = get_scoring_precision_audit(1)
-        assert isinstance(scoring_precision_audit, list)
-
-        # Test get_trust_override_discrepancy
-        trust_override_discrepancy = get_trust_override_discrepancy(1)
-        assert isinstance(trust_override_discrepancy, list)
-
-        # Test get_server_threat_intel
-        server_threat_intel = get_server_threat_intel(1)
-        assert isinstance(server_threat_intel, list)
-
-        # Test get_risk_distribution_summary
-        risk_distribution_summary = get_risk_distribution_summary()
-        assert isinstance(risk_distribution_summary, list)
-
-        # Test get_registry_growth_progress
-        registry_growth_progress = get_registry_growth_progress()
-        assert isinstance(registry_growth_progress, list)
-
-        # Test get_scoring_freshness_dashboard
-        scoring_freshness_dashboard = get_scoring_freshness_dashboard()
-        assert isinstance(scoring_freshness_dashboard, list)
-
-        # Test get_server_axis_scores
-        server_axis_scores = get_server_axis_scores(1)
-        assert isinstance(server_axis_scores, list)
-
-        # Test get_server_risk_detail
-        server_risk_detail = get_server_risk_detail(1)
-        assert isinstance(server_risk_detail, list)
-
-        # Test get_overview_dashboard
-        overview_dashboard = get_overview_dashboard(1)
-        assert isinstance(overview_dashboard, list)
-
-        print("PASS")
-    except Exception as e:
-        print(f"FAIL: {e}")
 
 if __name__ == "__main__":
-    _run_self_test()
+    run()

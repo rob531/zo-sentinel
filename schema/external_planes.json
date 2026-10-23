@@ -1,0 +1,36 @@
+{
+  "_readme": [
+    "Tables that are REAL but live on a database tools/referent_verify.py does not read.",
+    "",
+    "THIS IS NOT AN ALLOWLIST, AND IT MUST NOT BECOME ONE.",
+    "An allowlist says 'trust me'. Every entry here instead carries PROVENANCE:",
+    "the file that creates the table, and the pattern that proves the CREATE is",
+    "still in it. referent_verify re-checks that claim on every single run. If",
+    "the creating file is deleted, renamed, or has its CREATE removed, the entry",
+    "stops being evidence and the checker FAILS on the entry itself -- it does",
+    "not quietly keep passing the table.",
+    "",
+    "So this file can only hold claims that are still true, and the cost of a",
+    "stale entry is a red gate, not a silent hole. That is the opposite of what",
+    "an allowlist does, and it is the only form of exception a blocking check",
+    "can safely carry.",
+    "",
+    "ADDING AN ENTRY IS NOT A WAY TO SILENCE A PHANTOM. If no file in this",
+    "repository creates the table, there is no provenance to record and the",
+    "referent is not real. Say UNRESOLVED instead."
+  ],
+  "planes": [
+    {
+      "plane": "gate_errors.db",
+      "why": "A standalone DuckDB file for the gate framework's own run/check/error records, deliberately separate from the write-service bus so a gate failure cannot be lost with the bus. tests/gate_framework.py writes it; tools/governor_explain.py reads it with duckdb.connect(db_path, read_only=True).",
+      "created_by": "tests/gate_errors_bootstrap.py",
+      "tables": {
+        "gate_checks": {
+          "proof": "CREATE TABLE IF NOT EXISTS gate_checks",
+          "read_by": ["tools/governor_explain.py"],
+          "note": "Reported MISSING in #4080 because referent_verify's catalog covers the bus, app/models.py and migrations/ -- three planes, none of which is this file. The table is real; the plane was invisible."
+        }
+      }
+    }
+  ]
+}

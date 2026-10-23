@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, MCPSignalScores, MeshMemory, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, MCPSignalScores, MeshMemory, McpScoreDispute, Org, User
 from typing import List, Optional
 import requests
 import json
@@ -36,7 +36,7 @@ def reset_quarantine_endpoint() -> str:
     return "Quarantine reset successfully"
 
 def reset_server_export_api_quarantine() -> str:
-    response = requests.post("http://127.0.0.1:8772/query", json={"query": "UPDATE mcp_server_registry SET export_api_quarantine = 0"})
+    response = requests.post("http://127.0.0.1:8772/query", json={"query": "UPDATE McpServerRegistry SET export_api_quarantine = 0"})
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail="Failed to reset server export API quarantine")
     return "Server export API quarantine reset successfully"

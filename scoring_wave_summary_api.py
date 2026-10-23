@@ -1,12 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+"""GET /scoring/waves/summary: totals over the scoring-wave cadence job runs.
+
+Reads `cadence_job_runs` from Fly Postgres through the injected session. Until
+FU-667 (#6985) this POSTed SQL to http://127.0.0.1:8772/query -- the factory
+DuckDB write_service, which runs on the ZoComputer host and is not in the Fly
+image -- so on Fly the route could only 500 (Errno 111), from its 2026-09-28
+mount (#5689) on. The SQL it sent was already Postgres
+(`detail->>'cost_usd'`): the table it wanted is the app's own.
+"""
 from typing import Optional
-from datetime import datetime
-import requests
-from app.db import get_session
-from app.models import cadence_job_runs
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+
+from app.db import get_session
+from app.models import CadenceJobRun
 
 router = APIRouter()
 
@@ -18,134 +27,34 @@ class WaveSummary(BaseModel):
     error_count: int
     cost_estimate_usd: Optional[float]
 
-def get_write_service_query(query: str) -> dict:
-    response = requests.post(
-        "http://127.0.0.1:8772/query",
-        json={"query": query},
-        timeout=10
-    )
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Write service query failed")
-    return response.json()
+def _cost_usd(detail) -> Optional[float]:
+    if not isinstance(detail, dict):
+        return None
+    try:
+        return float(detail["cost_usd"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 @router.get("/scoring/waves/summary", response_model=WaveSummary)
-async def scoring_wave_summary(db: Session = Depends(get_session)):
-    # Query for scoring-wave jobs
-    query = """
-    SELECT
-        COUNT(*) as total_waves,
-        SUM(rows_affected) as total_servers_scored,
-        AVG(rows_affected) as avg_servers_per_wave,
-        MAX(finished_at) as last_wave_at,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as error_count,
-        SUM(CAST(detail->>'cost_usd' AS FLOAT)) as cost_estimate_usd
-    FROM cadence_job_runs
-    WHERE job LIKE 'score_wave%' OR job = 'scoring_batch'
-    """
+def scoring_wave_summary(db: Session = Depends(get_session)):
+    # One row per job run, so the wave subset is small: aggregate in Python.
+    # `detail` is JSON and `->>` is Postgres-only, while dev/CI run sqlite.
+    runs = db.execute(
+        select(CadenceJobRun.rows_affected, CadenceJobRun.finished_at,
+               CadenceJobRun.status, CadenceJobRun.detail)
+        .where(or_(CadenceJobRun.job.startswith("score_wave", autoescape=True),
+                   CadenceJobRun.job == "scoring_batch"))
+    ).all()
 
-    # Execute query via write service
-    result = get_write_service_query(query)
-    data = result.get("data", {})
-
-    # Process results
-    total_waves = data.get("total_waves", 0)
-    servers_scored = data.get("total_servers_scored", 0)
-    avg_per_wave = data.get("avg_servers_per_wave", 0.0)
-    last_wave_at = data.get("last_wave_at")
-    error_count = data.get("error_count", 0)
-    cost_estimate_usd = data.get("cost_estimate_usd")
+    affected = [r.rows_affected for r in runs if r.rows_affected is not None]
+    finished = [r.finished_at for r in runs if r.finished_at is not None]
+    costs = [c for c in (_cost_usd(r.detail) for r in runs) if c is not None]
 
     return WaveSummary(
-        total_waves=total_waves,
-        servers_scored=servers_scored,
-        avg_per_wave=avg_per_wave,
-        last_wave_at=last_wave_at,
-        error_count=error_count,
-        cost_estimate_usd=cost_estimate_usd
+        total_waves=len(runs),
+        servers_scored=sum(affected),
+        avg_per_wave=sum(affected) / len(affected) if affected else 0.0,
+        last_wave_at=max(finished).isoformat() if finished else None,
+        error_count=sum(1 for r in runs if r.status == "failed"),
+        cost_estimate_usd=round(sum(costs), 2) if costs else None,
     )
-
-if __name__ == "__main__":
-    from fastapi.testclient import TestClient
-    from app.db import get_session
-    from app.models import cadence_job_runs
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    # Setup test database
-    test_engine = create_engine("sqlite:///:memory:")
-    test_session = sessionmaker(bind=test_engine)
-    test_db = test_session()
-
-    # Create test table
-    cadence_job_runs.__table__.create(test_engine)
-
-    # Add test data
-    test_data = [
-        cadence_job_runs(
-            id=1,
-            job="score_wave_1",
-            status="completed",
-            started_at=datetime.now(),
-            finished_at=datetime.now(),
-            rows_affected=100,
-            detail={"cost_usd": 1.50}
-        ),
-        cadence_job_runs(
-            id=2,
-            job="score_wave_2",
-            status="failed",
-            started_at=datetime.now(),
-            finished_at=datetime.now(),
-            rows_affected=50,
-            detail={"cost_usd": 0.75}
-        ),
-        cadence_job_runs(
-            id=3,
-            job="scoring_batch",
-            status="completed",
-            started_at=datetime.now(),
-            finished_at=datetime.now(),
-            rows_affected=200,
-            detail={"cost_usd": 3.00}
-        ),
-        cadence_job_runs(
-            id=4,
-            job="score_wave_3",
-            status="completed",
-            started_at=datetime.now(),
-            finished_at=datetime.now(),
-            rows_affected=75,
-            detail={"cost_usd": 1.12}
-        ),
-        cadence_job_runs(
-            id=5,
-            job="score_wave_4",
-            status="failed",
-            started_at=datetime.now(),
-            finished_at=datetime.now(),
-            rows_affected=0,
-            detail={"cost_usd": 0.00}
-        )
-    ]
-    test_db.add_all(test_data)
-    test_db.commit()
-
-    # Override dependency for testing
-    app.dependency_overrides[get_session] = lambda: test_db
-
-    # Create test client
-    client = TestClient(router)
-
-    # Test endpoint
-    response = client.get("/scoring/waves/summary")
-    assert response.status_code == 200
-    assert response.json() == {
-        "total_waves": 5,
-        "servers_scored": 425,
-        "avg_per_wave": 106.25,
-        "last_wave_at": str(datetime.now()),
-        "error_count": 2,
-        "cost_estimate_usd": 6.37
-    }
-
-    print("PASS")

@@ -1,0 +1,8 @@
+[service]
+name = "perspective_risk_summary"
+import_path = "services.active.perspective_risk_summary.router"
+prefix = "/api"
+tag = "perspective_risk_summary"
+origin = "service"
+auth = "public"
+needs_data_layer = true

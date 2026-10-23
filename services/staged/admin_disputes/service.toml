@@ -1,0 +1,8 @@
+[service]
+name = "admin_disputes"
+import_path = "services.active.admin_disputes.router"
+prefix = "/api"
+tag = "admin_disputes"
+origin = "service"
+auth = "public"
+needs_data_layer = true

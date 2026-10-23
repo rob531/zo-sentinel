@@ -1,0 +1,8 @@
+[service]
+name = "staged_dryrun_import_repairer"
+import_path = "services.active.staged_dryrun_import_repairer.router"
+prefix = "/api"
+tag = "staged_dryrun_import_repairer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

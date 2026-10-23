@@ -1,0 +1,8 @@
+[service]
+name = "oauth_login_service"
+import_path = "services.active.oauth_login_service.router"
+prefix = "/api"
+tag = "oauth_login_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true

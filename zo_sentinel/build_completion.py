@@ -172,6 +172,52 @@ def output_confirmed(directive: dict, home: str = DEFAULT_HOME,
     return output_present(out, min_bytes)
 
 
+def unmet_requires(directive: dict, home: str = DEFAULT_HOME) -> list:
+    """Repo-relative paths in `directive["requires"]` that are not on disk yet.
+
+    A directive may declare files that must already exist for its own output to
+    be TRUE rather than merely present. Empty list == nothing blocking (which is
+    also the answer for every directive that declares no `requires`, so this is
+    inert for all of them).
+
+    Why this exists (measured on origin/main @ 289f1f1ec, 2026-09-21, by running
+    tools/promote_staged_to_active.py itself -- not by scanning for it):
+
+        candidates: 1498   promote-eligible: 22   hold: 1476
+        1226 of those 1476 HOLDs are the single reason "router.py exposes no router"
+
+    tools/service_decomposer.py emits five directives per service. Two are
+    `write_raw` (__init__.py, service.toml) and land deterministically; three are
+    `generate_file` (logic/router/contract) and depend on an engine. service.toml
+    declares `import_path = "services.active.<name>.router"` -- a promise about a
+    file a LATER, less reliable directive is supposed to write. Nothing reconciles
+    the promise to reality, so the manifest is what makes an empty directory count
+    as a service. 1145 of 1499 staged services (76%) declare a router that is not
+    on disk; 251 of the 319 created in the 14d to 2026-09-21, including 20 of 20
+    on 2026-09-20.
+
+    This is harness-doctrine R1 in the producer: the artifact inspected (a
+    service.toml naming a router) is not the artifact that runs (there is no
+    router). The cure is ordering-by-construction, not another gate -- the
+    manifest simply cannot be written before the thing it describes. R7
+    (recovery over restriction): an unmet requirement DEFERS the directive, which
+    then lands by itself on a later pass once the router arrives. Nothing is
+    parked, nothing is rejected, and no LLM invocation is spent.
+    """
+    req = directive.get("requires")
+    if not isinstance(req, (list, tuple)):
+        return []
+    missing = []
+    for rel in req:
+        if not isinstance(rel, str) or not rel.strip():
+            continue
+        p = Path(rel)
+        if not p.is_absolute():
+            p = Path(home) / rel
+        if not output_present(p):
+            missing.append(rel)
+    return missing
+
 
 def workspace_diff_state(home: str = DEFAULT_HOME) -> Optional[Tuple[str, bool]]:
     """FU-015 ghost-edit guard support: fingerprint the build workspace's

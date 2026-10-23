@@ -1,0 +1,8 @@
+[service]
+name = "verdict_health"
+import_path = "services.active.verdict_health.router"
+prefix = "/api"
+tag = "verdict_health"
+origin = "service"
+auth = "public"
+needs_data_layer = true

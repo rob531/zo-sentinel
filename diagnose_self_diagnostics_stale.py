@@ -1,329 +1,217 @@
-#!/usr/bin/env python3
-"""
-Self-Diagnostics Stale Diagnostic Report
-Checks daemon health, connectivity, and data state
-"""
-
-import requests
-import time
-import json
 import os
-import subprocess
-from datetime import datetime, timedelta
+import sys
+import logging
+import requests
+import hashlib
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
-WRITE_SERVICE_URL = "http://127.0.0.1:8772"
-OUTPUT_FILE = "diagnose_self_diagnostics_stale.py"
+SERVICE_NAME = 'diagnose_self_diagnostics_stale'
+SERVICE_PORT = None
+WRITE_SERVICE_URL = 'http://localhost:8772'
+PID_FILE = None
+LOG_FILE = '/home/workspace/logs/diagnose_self_diagnostics_stale.log'
 
-def write_service_query(sql):
-    """Query write_service for data"""
-    try:
-        resp = requests.post(
-            f"{WRITE_SERVICE_URL}/query",
-            json={"sql": sql},
-            timeout=10
-        )
-        return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    handlers=[logging.FileHandler(LOG_FILE)]
+)
+logger = logging.getLogger(__name__)
 
-def write_service_execute(sql):
-    """Execute on write_service"""
-    try:
-        resp = requests.post(
-            f"{WRITE_SERVICE_URL}/execute",
-            json={"sql": sql},
-            timeout=10
-        )
-        return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
+DIAGNOSTIC_THRESHOLD_SECONDS = 600
+TARGET_DAEMON = 'self_diagnostics'
+DAEMON_LOG_PATH = '/home/workspace/logs/self_diagnostics.log'
+DB_PATH = '/home/workspace/Datasets/zo-mesh/mesh_memory.db'
+
+
+def ws_write(table, rows):
+    payload = {'table': table, 'rows': rows, 'wait': True}
+    resp = requests.post(WRITE_SERVICE_URL + '/write', json=payload, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ws_query(sql, params=None):
+    payload = {'sql': sql, 'params': params} if params else {'sql': sql}
+    resp = requests.post(WRITE_SERVICE_URL + '/query', json=payload, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
 
 def check_write_service_connectivity():
-    """Test write_service connectivity"""
-    result = {"connected": False, "latency_ms": None, "error": None}
     try:
-        start = time.time()
-        resp = requests.post(
-            f"{WRITE_SERVICE_URL}/query",
-            json={"sql": "SELECT 1 as test"},
-            timeout=5
-        )
-        latency = (time.time() - start) * 1000
-        result["latency_ms"] = round(latency, 2)
-        result["connected"] = resp.status_code == 200
-        if not result["connected"]:
-            result["error"] = f"Status code: {resp.status_code}"
+        resp = requests.post(WRITE_SERVICE_URL + '/query', json={'sql': 'SELECT 1'}, timeout=10)
+        if resp.status_code == 200:
+            return {'ok': True, 'latency_ms': resp.elapsed.total_seconds() * 1000}
+        return {'ok': False, 'error': f'HTTP {resp.status_code}'}
     except Exception as e:
-        result["error"] = str(e)
-    return result
+        return {'ok': False, 'error': str(e)}
 
-def check_daemon_logs():
-    """Check self_diagnostics daemon logs for startup time and errors"""
-    log_checks = {
-        "log_exists": False,
-        "last_startup_time": None,
-        "recent_exceptions": [],
-        "log_lines": []
+
+def check_daemon_log_for_startup_and_exceptions():
+    issues = []
+    if not os.path.exists(DAEMON_LOG_PATH):
+        return {
+            'log_exists': False,
+            'last_modified': None,
+            'startup_ts': None,
+            'exceptions': [],
+            'issues': ['Daemon log file not found']
+        }
+    stat = os.stat(DAEMON_LOG_PATH)
+    last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+    with open(DAEMON_LOG_PATH, 'r', encoding='utf-8', errors='replace') as f:
+        lines = f.readlines()
+    recent_lines = lines[-200:]
+    exceptions = []
+    startup_ts = None
+    for line in recent_lines:
+        if 'Starting self_diagnostics' in line or 'Entering run()' in line or 'self_diagnostics run loop started' in line:
+            try:
+                startup_ts = line.split('[')[0].strip()[:27]
+            except Exception:
+                pass
+        if 'Exception' in line or 'Error:' in line or 'Traceback' in line:
+            exceptions.append(line.strip()[:200])
+    return {
+        'log_exists': True,
+        'last_modified': last_modified,
+        'last_line': lines[-1].strip()[:200] if lines else None,
+        'startup_ts': startup_ts,
+        'exceptions': exceptions[:5],
+        'issues': issues
     }
-    
-    # Check common log locations
-    log_paths = [
-        "/tmp/self_diagnostics.log",
-        "/var/log/self_diagnostics.log",
-        "/home/workspace/self_diagnostics.log",
-        "/tmp/self_diagnostics.err"
-    ]
-    
-    found_log = None
-    for path in log_paths:
-        if os.path.exists(path):
-            found_log = path
-            break
-    
-    if found_log:
-        log_checks["log_exists"] = True
-        log_checks["log_path"] = found_log
-        try:
-            with open(found_log, 'r') as f:
-                lines = f.readlines()
-                log_checks["log_lines"] = len(lines)
-                
-                # Look for startup indicators
-                for line in lines:
-                    if "Starting" in line or "Started" in line or "Initializing" in line:
-                        log_checks["last_startup_time"] = line.strip()
-                    if "Exception" in line or "Error" in line or "Traceback" in line:
-                        log_checks["recent_exceptions"].append(line.strip())
-                
-                # Get last 20 lines
-                log_checks["last_lines"] = [l.strip() for l in lines[-20:]]
-        except Exception as e:
-            log_checks["read_error"] = str(e)
-    else:
-        log_checks["checked_paths"] = log_paths
-    
-    return log_checks
+
 
 def check_scheduled_run_table():
-    """Check scheduled_run table entries"""
-    result = {"table_exists": False, "row_count": 0, "recent_runs": [], "error": None}
-    
     try:
-        # Check if table exists
-        query_resp = write_service_query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='scheduled_run'"
+        result = ws_query(
+            "SELECT MAX(last_heartbeat) as last_hb, COUNT(*) as total FROM service_health WHERE service_name = 'self_diagnostics'"
         )
-        if query_resp.get("rows"):
-            result["table_exists"] = True
-            
-            # Get row count
-            count_resp = write_service_query("SELECT COUNT(*) as cnt FROM scheduled_run")
-            if count_resp.get("rows"):
-                result["row_count"] = count_resp["rows"][0].get("cnt", 0)
-            
-            # Get recent runs
-            recent_resp = write_service_query(
-                "SELECT * FROM scheduled_run ORDER BY run_at DESC LIMIT 10"
-            )
-            if recent_resp.get("rows"):
-                result["recent_runs"] = recent_resp["rows"]
+        rows = result.get('rows', [])
+        if rows:
+            row = rows[0]
+            last_hb = row.get('last_hb') or row.get('last_hb')
+            total = row.get('total', 0)
+            return {'query_ok': True, 'last_heartbeat': last_hb, 'total_entries': total}
+        return {'query_ok': True, 'last_heartbeat': None, 'total_entries': 0}
+    except Exception as e:
+        return {'query_ok': False, 'error': str(e)}
+
+
+def check_process_alive():
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['pgrep', '-f', '/home/workspace/zo_sentinel/self_diagnostics.py'],
+            capture_output=True, text=True, timeout=5
+        )
+        pids = result.stdout.strip().split('\n') if result.stdout.strip() else []
+        pids = [p for p in pids if p]
+        if pids:
+            return {'alive': True, 'pids': pids}
+        return {'alive': False, 'pids': []}
+    except Exception as e:
+        return {'alive': False, 'error': str(e)}
+
+
+def check_self_diagnostics_schedule():
+    try:
+        result = ws_query(
+            "SELECT MAX(last_heartbeat) as last_hb, COUNT(*) as cnt FROM service_health WHERE service_name = 'self_diagnostics'"
+        )
+        rows = result.get('rows', [])
+        if rows:
+            row = rows[0]
+            return {
+                'table_checked': 'service_health',
+                'last_heartbeat': row.get('last_hb'),
+                'entry_count': row.get('cnt', 0)
+            }
+        return {'table_checked': 'service_health', 'last_heartbeat': None, 'entry_count': 0}
+    except Exception as e:
+        return {'table_checked': 'service_health', 'error': str(e)}
+
+
+def compute_staleness(last_hb_iso):
+    if not last_hb_iso:
+        return None
+    try:
+        if last_hb_iso.endswith('Z'):
+            last_hb = datetime.fromisoformat(last_hb_iso.replace('Z', '+00:00'))
         else:
-            result["error"] = "Table 'scheduled_run' does not exist"
-    except Exception as e:
-        result["error"] = str(e)
-    
-    return result
+            last_hb = datetime.fromisoformat(last_hb_iso)
+        now = datetime.now(timezone.utc)
+        return (now - last_hb).total_seconds()
+    except Exception:
+        return None
 
-def check_service_health():
-    """Check self_diagnostics health from service_health table"""
-    result = {"record_exists": False, "last_heartbeat": None, "stale_minutes": None}
-    
-    try:
-        resp = write_service_query(
-            "SELECT * FROM service_health WHERE service='self_diagnostics'"
-        )
-        if resp.get("rows") and len(resp["rows"]) > 0:
-            record = resp["rows"][0]
-            result["record_exists"] = True
-            result["last_heartbeat"] = record.get("last_heartbeat")
-            
-            # Calculate staleness
-            if record.get("last_heartbeat"):
-                hb_time = datetime.fromisoformat(record["last_heartbeat"])
-                stale_seconds = (datetime.now() - hb_time).total_seconds()
-                result["stale_minutes"] = round(stale_seconds / 60, 1)
-                result["stale_seconds"] = round(stale_seconds, 0)
-    except Exception as e:
-        result["error"] = str(e)
-    
-    return result
 
-def check_process_status():
-    """Check if self_diagnostics process is running"""
-    result = {"running": False, "pid": None, "uptime_seconds": None}
-    
-    try:
-        # Check PID file
-        pid_file = "/tmp/self_diagnostics.pid"
-        if os.path.exists(pid_file):
-            with open(pid_file, 'r') as f:
-                pid = int(f.read().strip())
-            result["pid"] = pid
-            
-            # Check if process is actually running
-            try:
-                os.kill(pid, 0)  # Signal 0 just checks if process exists
-                result["running"] = True
-            except OSError:
-                result["running"] = False
-                result["pid_dead"] = True
-                
-        # Also check via ps command
-        ps_output = subprocess.run(
-            ["ps", "aux"],
-            capture_output=True,
-            text=True
-        )
-        for line in ps_output.stdout.split("\n"):
-            if "self_diagnostics" in line and "python" in line:
-                result["ps_line"] = line.strip()
-                break
-    except Exception as e:
-        result["error"] = str(e)
-    
-    return result
+def build_diagnostic_id(report):
+    content = str(report['timestamp']) + TARGET_DAEMON + str(report['conclusion']['stale'])
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
 
-def generate_diagnostic_report():
-    """Generate full diagnostic report"""
-    report = {
-        "generated_at": datetime.now().isoformat(),
-        "diagnostic_type": "self_diagnostics_stale",
-        "threshold_minutes": 10,
-        "findings": {}
-    }
-    
-    print("=" * 60)
-    print("SELF-DIAGNOSTICS STALE DIAGNOSTIC REPORT")
-    print("=" * 60)
-    print(f"Timestamp: {report['generated_at']}")
-    print(f"Threshold: {report['threshold_minutes']} minutes")
-    print()
-    
-    # 1. Daemon startup time from logs
-    print("[1/4] Checking daemon logs...")
-    log_info = check_daemon_logs()
-    report["findings"]["daemon_logs"] = log_info
-    if log_info.get("last_startup_time"):
-        print(f"  Last startup: {log_info['last_startup_time']}")
-    if log_info.get("recent_exceptions"):
-        print(f"  Exceptions found: {len(log_info['recent_exceptions'])}")
-        for exc in log_info["recent_exceptions"][:3]:
-            print(f"    - {exc[:100]}")
-    print()
-    
-    # 2. Any exceptions in recent output
-    print("[2/4] Checking recent exceptions...")
-    if log_info.get("recent_exceptions"):
-        report["findings"]["exceptions"] = {
-            "count": len(log_info["recent_exceptions"]),
-            "exceptions": log_info["recent_exceptions"]
+
+def run():
+    logger.info('Starting self_diagnostics stale diagnostic')
+    ts = datetime.now(timezone.utc).isoformat()
+
+    ws_conn = check_write_service_connectivity()
+    logger.info(f'write_service connectivity: {ws_conn}')
+
+    log_info = check_daemon_log_for_startup_and_exceptions()
+    logger.info(f'Daemon log info: {log_info}')
+
+    process_info = check_process_alive()
+    logger.info(f'Process alive check: {process_info}')
+
+    schedule_info = check_self_diagnostics_schedule()
+    logger.info(f'scheduled_run/service_health info: {schedule_info}')
+
+    last_hb = schedule_info.get('last_heartbeat') or log_info.get('startup_ts')
+    staleness = compute_staleness(last_hb) if last_hb else None
+
+    if staleness is not None:
+        is_stale = staleness > DIAGNOSTIC_THRESHOLD_SECONDS
+        conclusion = {
+            'stale': is_stale,
+            'staleness_seconds': round(staleness, 1),
+            'threshold_seconds': DIAGNOSTIC_THRESHOLD_SECONDS,
+            'message': f'Daemon stale for {staleness:.0f}s (threshold: {DIAGNOSTIC_THRESHOLD_SECONDS}s)' if is_stale else f'Daemon healthy, last heartbeat {staleness:.0f}s ago'
         }
-        print(f"  Found {len(log_info['recent_exceptions'])} exceptions")
     else:
-        print("  No exceptions found in logs")
-        report["findings"]["exceptions"] = {"count": 0}
-    print()
-    
-    # 3. Check scheduled_run table
-    print("[3/4] Checking scheduled_run table...")
-    scheduled_info = check_scheduled_run_table()
-    report["findings"]["scheduled_run"] = scheduled_info
-    print(f"  Table exists: {scheduled_info['table_exists']}")
-    print(f"  Row count: {scheduled_info['row_count']}")
-    if scheduled_info.get("recent_runs"):
-        print(f"  Recent runs: {len(scheduled_info['recent_runs'])}")
-    if scheduled_info.get("error"):
-        print(f"  Error: {scheduled_info['error']}")
-    print()
-    
-    # 4. write_service connectivity
-    print("[4/4] Checking write_service connectivity...")
-    conn_info = check_write_service_connectivity()
-    report["findings"]["write_service"] = conn_info
-    print(f"  Connected: {conn_info['connected']}")
-    if conn_info.get("latency_ms"):
-        print(f"  Latency: {conn_info['latency_ms']}ms")
-    if conn_info.get("error"):
-        print(f"  Error: {conn_info['error']}")
-    print()
-    
-    # Bonus: Check process status and health
-    print("[BONUS] Checking process status...")
-    proc_info = check_process_status()
-    report["findings"]["process_status"] = proc_info
-    print(f"  Running: {proc_info['running']}")
-    if proc_info.get("pid"):
-        print(f"  PID: {proc_info['pid']}")
-    print()
-    
-    print("[BONUS] Checking service_health table...")
-    health_info = check_service_health()
-    report["findings"]["service_health"] = health_info
-    if health_info.get("stale_minutes") is not None:
-        print(f"  Last heartbeat: {health_info['last_heartbeat']}")
-        print(f"  Stale for: {health_info['stale_minutes']} minutes")
-    print()
-    
-    # Summary
-    print("=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-    
-    stale_minutes = health_info.get("stale_minutes", 0)
-    is_stale = stale_minutes > report["threshold_minutes"]
-    
-    print(f"Daemon Stale: {'YES' if is_stale else 'NO'} ({stale_minutes} min)")
-    print(f"write_service OK: {'YES' if conn_info['connected'] else 'NO'}")
-    print(f"Process Running: {'YES' if proc_info['running'] else 'NO'}")
-    print(f"Exceptions Found: {len(log_info.get('recent_exceptions', []))}")
-    
-    report["summary"] = {
-        "is_stale": is_stale,
-        "stale_minutes": stale_minutes,
-        "write_service_ok": conn_info["connected"],
-        "process_running": proc_info["running"],
-        "exception_count": len(log_info.get("recent_exceptions", []))
+        conclusion = {
+            'stale': True,
+            'staleness_seconds': None,
+            'threshold_seconds': DIAGNOSTIC_THRESHOLD_SECONDS,
+            'message': 'Cannot determine staleness: no heartbeat found'
+        }
+
+    diagnostic_id = build_diagnostic_id({'timestamp': ts, 'conclusion': conclusion})
+    report = {
+        'diagnostic_id': diagnostic_id,
+        'target_daemon': TARGET_DAEMON,
+        'timestamp': ts,
+        'write_service': ws_conn,
+        'daemon_log': log_info,
+        'process': process_info,
+        'scheduled_run': schedule_info,
+        'staleness_seconds': staleness,
+        'conclusion': conclusion
     }
-    
-    # Recommendations
-    print()
-    print("RECOMMENDATIONS:")
-    if not conn_info["connected"]:
-        print("  - write_service connectivity issue - check service")
-    if not proc_info["running"]:
-        print("  - Process not running - restart self_diagnostics daemon")
-    if log_info.get("recent_exceptions"):
-        print("  - Exceptions in logs - review stack traces above")
-    if scheduled_info.get("row_count", 0) == 0:
-        print("  - No scheduled_run entries - may need initialization")
-    if is_stale:
-        print("  - Daemon heartbeat stale - investigate hang or crash")
-    
+
+    try:
+        ws_write('diagnostic_reports', [report])
+        logger.info(f'Diagnostic report written: {diagnostic_id}')
+    except Exception as e:
+        logger.error(f'Failed to write diagnostic report: {e}')
+
+    logger.info(f'Diagnostic complete: {conclusion["message"]}')
     return report
 
-def main():
-    report = generate_diagnostic_report()
-    
-    # Write report to file
-    report_json = json.dumps(report, indent=2, default=str)
-    
-    with open(OUTPUT_FILE.replace('.py', '_report.json'), 'w') as f:
-        f.write(report_json)
-    
-    print()
-    print(f"Report written to: {OUTPUT_FILE.replace('.py', '_report.json')}")
-    
-    return report
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    result = run()
+    print('DIAGNOSTIC_REPORT:', result)
+    sys.exit(0)

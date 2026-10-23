@@ -1,0 +1,8 @@
+[service]
+name = "integrate_staged_routers_into_main"
+import_path = "services.active.integrate_staged_routers_into_main.router"
+prefix = "/api"
+tag = "integrate_staged_routers_into_main"
+origin = "service"
+auth = "public"
+needs_data_layer = true

@@ -2,6 +2,21 @@
 """
 db_utils.py -- ZO-SENTINEL shared database utility module.
 Provides retry-aware wrappers for write_service operations.
+
+TABLE NAMES ON THE BUS
+    The registry table is `mcp_server_registry` and the per-signal table is
+    `mcp_signal_scores`. It is NOT `mcp_servers` / `signal_scores`. Those two
+    names come from archive/RETIRED_run_schema_bootstrap_now.py, a bootstrap
+    that proposed a schema the live write-service never adopted; the rest of
+    this module (get_server_signals, get_threat_associations) was already
+    written against the real names, and only the three registry readers were
+    left on the retired ones.
+
+    Reading `mcp_servers` did not error loudly -- ws_query raised, the caller
+    caught it, and every one of those three functions returned [] forever.
+    That is the failure this file's fix is about: a name that resolves to
+    nothing is syntactically perfect, and a caught exception is silent.
+    Refs #4080.
 """
 import requests
 import time
@@ -164,14 +179,17 @@ def get_unscored_servers(limit: int = 20) -> list:
     Returns:
         List of server records missing signal scores
     """
+    # `mcp_servers` is the RETIRED bootstrap name. The live bus registry is
+    # `mcp_server_registry`; see the module header. The columns below are its
+    # real ones -- the retired shape's id/definition_hash/
+    # director_maturity_level/status/tags never existed on it.
     sql = """
-    SELECT ms.id, ms.server_id, ms.name, ms.definition_hash,
-           ms.risk_tier, ms.director_maturity_level, ms.status,
-           ms.last_seen, ms.tags
-    FROM mcp_servers ms
-    LEFT JOIN mcp_signal_scores mss ON ms.server_id = mss.server_id
+    SELECT r.server_id, r.name, r.url, r.registry_source,
+           r.risk_tier, r.verdict, r.trust_score, r.last_seen
+    FROM mcp_server_registry r
+    LEFT JOIN mcp_signal_scores mss ON r.server_id = mss.server_id
     WHERE mss.id IS NULL
-    ORDER BY ms.last_seen DESC
+    ORDER BY r.last_seen DESC
     LIMIT ?
     """
     try:
@@ -191,9 +209,10 @@ def get_server_by_id(server_id: str) -> Optional[dict]:
         Server record dictionary or None if not found
     """
     sql = """
-    SELECT id, server_id, name, definition, definition_hash,
-           risk_tier, director_maturity_level, last_seen, status, tags
-    FROM mcp_servers
+    SELECT server_id, name, url, description, registry_source,
+           risk_tier, verdict, verdict_reasoning, trust_score, confidence,
+           first_seen, last_seen, last_assessed, last_scanned, scan_count
+    FROM mcp_server_registry
     WHERE server_id = ?
     """
     try:
@@ -283,9 +302,9 @@ def get_all_servers(limit: int = 100, offset: int = 0) -> list:
         List of server records
     """
     sql = """
-    SELECT id, server_id, name, definition_hash, risk_tier,
-           director_maturity_level, status, last_seen, tags
-    FROM mcp_servers
+    SELECT server_id, name, url, registry_source, risk_tier,
+           verdict, trust_score, last_seen, scan_count
+    FROM mcp_server_registry
     ORDER BY last_seen DESC
     LIMIT ? OFFSET ?
     """

@@ -5,7 +5,9 @@ import time
 import requests
 import hashlib
 import re
+import traceback
 from datetime import datetime, timedelta
+import singleton_lock  # identity-verified single-instance lock
 
 SERVICE_NAME = 'threat_intel_ingestor'
 SERVICE_PORT = 8788
@@ -37,16 +39,38 @@ def log(msg):
         f.write(line + '\n')
 
 def ws_write(table, rows):
+    """Write rows via write_service. Returns the response dict, or None on
+    TOTAL failure after 3 attempts.
+
+    None means NOTHING WAS PERSISTED. Callers must check it. Before FU-190 no
+    caller did, so `Recorded OSV vuln ...` was logged 18,560 times against
+    55,690 HTTP 500s and zero rows in the table -- the daemon's own success
+    message was the reason nobody noticed it had never written anything.
+    """
     payload = {'table': table, 'rows': rows, 'wait': True}
-    for attempt in range(3):
+    last = ''
+    # 5 attempts, not 3. The dominant NON-persist cause is not a per-row error
+    # (write_service reports total_errors:0) but the ~5-10s window in which the
+    # single-writer write_service is DOWN and respawning -- a DuckDB
+    # self-invalidation self-kill (os._exit(42)) or a daily wrapper restart.
+    # During that window every POST gets ConnectionRefused. The old 3x2s=6s
+    # budget just missed the far edge of that window, so a cycle straddling a
+    # restart dropped ~169 rows that were otherwise perfectly writable. 5
+    # attempts with a 3s gap spans ~15s -- comfortably past the restart -- and
+    # is still strictly bounded. A genuine total failure still returns None
+    # (honest drop), never raises: this must stay ADDITIVE, never essential.
+    for attempt in range(5):
         try:
             r = requests.post(WRITE_SERVICE_URL, json=payload, timeout=30)
             if r.status_code in (200, 201):
                 return r.json()
-            log(f'ws_write warning: {r.status_code} {r.text[:200]}')
+            last = f'HTTP {r.status_code} {r.text[:200]}'
+            log(f'ws_write warning ({table}): {last}')
         except Exception as e:
-            log(f'ws_write attempt {attempt+1} error: {e}')
-        time.sleep(2)
+            last = f'{type(e).__name__}: {e}'
+            log(f'ws_write attempt {attempt+1} error ({table}): {last}')
+        time.sleep(3)
+    log(f'ws_write FAILED after 5 attempts -- NOTHING PERSISTED to {table}: {last}')
     return None
 
 def ws_query(sql):
@@ -78,19 +102,15 @@ def ws_execute(sql):
 def send_heartbeat():
     ws_write('service_health', {'service': SERVICE_NAME, 'last_heartbeat': datetime.utcnow().isoformat()})
 
-def check_single_instance():
-    pid = os.getpid()
-    if os.path.exists(PID_FILE):
-        old_pid = int(open(PID_FILE).read().strip())
-        if old_pid != pid:
-            try:
-                os.kill(old_pid, 0)
-                log(f'Instance already running with PID {old_pid}, exiting')
-                sys.exit(1)
-            except OSError:
-                log(f'Stale PID file, overwriting')
-    with open(PID_FILE, 'w') as f:
-        f.write(str(pid))
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
+
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def remove_pid_file():
     if os.path.exists(PID_FILE):
@@ -190,6 +210,12 @@ def get_npm_packages_from_facts():
     return []
 
 def extract_package_name(url):
+    # A SQL NULL deserializes to None, and `server.get('url', '')` does NOT
+    # substitute the default for a key that is PRESENT with value None -- so
+    # None reaches this function and re.search() raises TypeError. Guard at the
+    # boundary rather than relying on the caller's default. (FU-187)
+    if not isinstance(url, str) or not url:
+        return None
     patterns = [
         r'npmjs\.com/(?:package/)?(@?[^/]+)',
         r'github\.com/([^/]+)/([^/]+)',
@@ -201,12 +227,56 @@ def extract_package_name(url):
             return m.group(1) if pattern.startswith(r'npmjs') else m.group(0).split('/')[-1]
     return None
 
+def cvss_base_score(raw):
+    """Return a numeric CVSS base score from an OSV severity `score`, or None.
+
+    OSV reports CVSS severity as a VECTOR STRING, not a number:
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}
+    The previous expression was `float(score.split(':')[0] if ':' in score else score)`,
+    which takes the first colon-delimited segment of exactly that shape and so
+    evaluates `float('CVSS')` -- a ValueError on EVERY CVSS_V3 entry, 100% of the
+    time. It could only ever have worked on a "7.5:..." shape that OSV does not
+    emit. A vector carries no scalar base score without full CVSS arithmetic, so
+    return None and let the caller fall back to keyword severity. (FU-189)
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    # "CVSS:3.1/AV:N/..." -- a vector. No scalar available.
+    return None
+
+
 def query_osv(ecosystem, package):
+    # Threat-intel is ADDITIVE, never essential (chairman directive): an
+    # upstream that is rate-limited, out of quota, or out of credit must make
+    # this cycle DEGRADE honestly, never crash, never hot-spin, never block the
+    # spine. OSV itself is free/keyless, but 402 (payment/credit) and 429
+    # (rate-limit/quota) are the generic exhaustion signals any enrichment
+    # upstream would raise, so recognise them explicitly and log the honest
+    # reason rather than swallowing it in the generic catch below. Returning []
+    # means "no vulns learned this cycle" -- scoring/verdicts are unaffected.
     try:
         payload = {'package': {'name': package, 'ecosystem': ecosystem}, 'version': ''}
         r = requests.post(f'{OSV_API_BASE}/query', json=payload, timeout=15)
         if r.status_code == 200:
             return r.json().get('vulns', [])
+        if r.status_code in (402, 429):
+            log(f'OSV upstream exhausted/limited (HTTP {r.status_code}) for '
+                f'{ecosystem}/{package} -- DEGRADING this cycle (additive, not '
+                f'essential): skipping enrichment, nothing persisted, no crash')
+            return []
+        log(f'OSV query non-200 (HTTP {r.status_code}) for {ecosystem}/{package}: '
+            f'{r.text[:120]}')
     except Exception as e:
         log(f'OSV query error for {ecosystem}/{package}: {e}')
     return []
@@ -278,21 +348,25 @@ def process_osv_vulns():
     
     vuln_count = 0
     scanned = 0
+    write_failures = 0
     
     for server in servers:
         server_id = server.get('server_id')
         name = server.get('name', '')
-        url = server.get('url', '')
+        # `or ''` (not just the .get default) -- a present-but-NULL column
+        # yields None, which the default never replaces.
+        url = server.get('url') or ''
         
         if not server_id:
             continue
         
         scanned += 1
         
+        package = extract_package_name(url)
+        if not package:
+            continue
+        
         for ecosystem in OSV_ECOSYSTEMS:
-            package = extract_package_name(url)
-            if not package:
-                continue
             
             vulns = query_osv(ecosystem, package)
             
@@ -307,38 +381,64 @@ def process_osv_vulns():
                 if threat_already_recorded(server_id, f'osv:{vuln_id}', f'osv:{vuln_id}'):
                     continue
                 
-                severity_level = 'medium'
-                if severity:
-                    for s in severity:
-                        if s.get('type') == 'CVSS_V3':
-                            score = float(s.get('score', '0').split(':')[0] if ':' in s.get('score', '0') else s.get('score', '0'))
-                            if score >= 9.0:
-                                severity_level = 'critical'
-                            elif score >= 7.0:
-                                severity_level = 'high'
-                            elif score >= 4.0:
-                                severity_level = 'medium'
-                            break
+                # Default to the keyword severity this module already computes,
+                # so a vector-only severity degrades to a real signal instead of
+                # a flat 'medium' (or, before FU-189, a ValueError).
+                # compute_threat_severity returns 'unknown' (not falsy) when no
+                # keyword matches; an OSV hit means a vuln definitely EXISTS, so
+                # 'unknown' would understate it -- floor it at 'medium'.
+                severity_level = compute_threat_severity(summary)
+                if severity_level in (None, '', 'unknown'):
+                    severity_level = 'medium'
+                for s in (severity or []):
+                    if not isinstance(s, dict):
+                        continue
+                    if not str(s.get('type', '')).upper().startswith('CVSS'):
+                        continue
+                    score = cvss_base_score(s.get('score'))
+                    if score is None:
+                        continue
+                    if score >= 9.0:
+                        severity_level = 'critical'
+                    elif score >= 7.0:
+                        severity_level = 'high'
+                    elif score >= 4.0:
+                        severity_level = 'medium'
+                    else:
+                        severity_level = 'low'
+                    break
                 
                 evidence = f'OSV:{vuln_id} | Summary: {sanitize_for_sql(summary[:500])} | Package: {package} | Ecosystem: {ecosystem}'
                 
                 try:
-                    ws_write('mcp_threat_associations', {
+                    # ws_write signals TOTAL failure by returning None rather
+                    # than raising, so a bare try/except cannot see it. Check
+                    # the return value before claiming the row exists. (FU-190)
+                    written = ws_write('mcp_threat_associations', {
                         'server_id': server_id,
                         'threat_type': f'osv:{vuln_id}',
                         'severity': severity_level,
                         'evidence': evidence,
                         'source': 'osv',
                     })
-                    vuln_count += 1
-                    log(f'Recorded OSV vuln {vuln_id} for server {server_id} (severity: {severity_level})')
+                    if written is None:
+                        write_failures += 1
+                        log(f'NOT RECORDED: OSV vuln {vuln_id} for server {server_id} -- write_service rejected the write')
+                    else:
+                        vuln_count += 1
+                        log(f'Recorded OSV vuln {vuln_id} for server {server_id} (severity: {severity_level})')
                 except Exception as e:
+                    write_failures += 1
                     log(f'Failed to write OSV vuln for {server_id}: {e}')
         
         if scanned >= 500:
             break
     
-    log(f'OSV scan complete: scanned {scanned} servers, recorded {vuln_count} vulnerabilities')
+    if write_failures:
+        log(f'OSV scan complete: scanned {scanned} servers, recorded {vuln_count} vulnerabilities, '
+            f'{write_failures} REJECTED by write_service (NOT persisted)')
+    else:
+        log(f'OSV scan complete: scanned {scanned} servers, recorded {vuln_count} vulnerabilities')
     return vuln_count
 
 def cycle():
@@ -365,7 +465,17 @@ def run():
     create_tables()
     send_heartbeat()
     
-    cycle()
+    # The priming cycle MUST be as protected as every later one. It used to be
+    # a bare `cycle()`, so any first-cycle exception killed the process BEFORE
+    # it reached the retry loop below -- the daemon could never survive to use
+    # the protection written for it, and the supervisor's only remedy (restart)
+    # re-entered the same unprotected line. That is how one TypeError kept this
+    # service down for 54 days across 184,818 spawns. (FU-187)
+    try:
+        cycle()
+    except Exception as e:
+        log(f'Priming cycle error (continuing into poll loop): {e}')
+        traceback.print_exc()
     
     while True:
         time.sleep(POLL_SECS)
@@ -374,6 +484,7 @@ def run():
             cycle()
         except Exception as e:
             log(f'Cycle error: {e}')
+            traceback.print_exc()
 
 if __name__ == '__main__':
     run()

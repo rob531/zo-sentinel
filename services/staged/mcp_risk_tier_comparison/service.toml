@@ -1,0 +1,8 @@
+[service]
+name = "mcp_risk_tier_comparison"
+import_path = "services.active.mcp_risk_tier_comparison.router"
+prefix = "/api"
+tag = "mcp_risk_tier_comparison"
+origin = "service"
+auth = "public"
+needs_data_layer = true

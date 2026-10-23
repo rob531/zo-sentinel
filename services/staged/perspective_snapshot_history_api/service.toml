@@ -1,0 +1,17 @@
+[service]
+name = "perspective_snapshot_history_api"
+import_path = "services.active.perspective_snapshot_history_api.router"
+prefix = "/api"
+tag = "perspective_snapshot_history_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app = { version = ">=1.0.0" }
+fastapi = { version = ">=0.104.0" }
+sqlalchemy = { version = ">=2.0.0" }
+pydantic = { version = ">=2.0.0" }
+httpx = { version = ">=0.25.0", dev = true }
+pytest = { version = ">=7.0.0", dev = true }
+pytest-asyncio = { version = ">=0.21.0", dev = true }

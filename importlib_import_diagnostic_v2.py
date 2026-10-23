@@ -1,349 +1,268 @@
 import importlib.util
-import importlib
-import sys
-import os
-import traceback
 import logging
+import os
+import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-import json
-import ast
-import requests
 
-SERVICE_NAME = 'importlib_import_diagnostic_v2'
-WRITE_SERVICE_URL = 'http://localhost:8772'
-LOG_PATH = f'/home/workspace/logs/{SERVICE_NAME}.log'
+SERVICE_NAME = "importlib_import_diagnostic"
+LOG_FILE = f"/home/workspace/logs/{SERVICE_NAME}.log"
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
-    handlers=[logging.FileHandler(LOG_PATH)]
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
-logger = logging.getLogger(SERVICE_NAME)
+logger = logging.getLogger(__name__)
+
+ZENTINEL_DIR = Path("/home/workspace/zo_sentinel")
+MESH_DIR = Path("/home/workspace/zo_mesh")
+DATASETS_DIR = Path("/home/workspace/Datasets")
 
 
-def ws_write(table, rows):
-    """Write rows via write_service HTTP API."""
-    payload = {'table': table, 'rows': rows, 'wait': True}
-    try:
-        resp = requests.post(WRITE_SERVICE_URL, json=payload, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        logger.error(f'write_service failed for {table}: {e}')
-        return None
-
-
-def ws_query(sql, params=None):
-    """Query via write_service HTTP API."""
-    payload = {'sql': sql, 'params': params or []}
-    try:
-        resp = requests.post(f'{WRITE_SERVICE_URL}/query', json=payload, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        logger.error(f'write_service query failed: {e}')
-        return None
-
-
-def send_heartbeat(status='running', meta=None):
-    """Send service heartbeat."""
-    row = {
-        'service_name': SERVICE_NAME,
-        'status': status,
-        'ts': datetime.now(timezone.utc).isoformat(),
-        'meta': json.dumps(meta or {})
-    }
-    ws_write('service_health', row)
-
-
-def try_import_module(module_name):
-    """Try to import a module and capture the result."""
+def probe_module_spec(module_name: str) -> dict:
+    """Probe a single module's import spec using importlib."""
     result = {
-        'module_name': module_name,
-        'success': False,
-        'error': None,
-        'error_type': None,
-        'traceback': None
-    }
-    try:
-        mod = importlib.import_module(module_name)
-        result['success'] = True
-        result['module'] = str(mod)
-        logger.info(f'Successfully imported: {module_name}')
-        return result
-    except ImportError as e:
-        result['error'] = str(e)
-        result['error_type'] = 'ImportError'
-        result['traceback'] = traceback.format_exc()
-        logger.warning(f'ImportError for {module_name}: {e}')
-        return result
-    except Exception as e:
-        result['error'] = str(e)
-        result['error_type'] = type(e).__name__
-        result['traceback'] = traceback.format_exc()
-        logger.error(f'Error importing {module_name}: {e}')
-        return result
-
-
-def find_spec_module(module_name):
-    """Use importlib.util.find_spec to check module availability."""
-    spec = importlib.util.find_spec(module_name)
-    if spec:
-        logger.info(f'Spec found for {module_name}: origin={spec.origin}, has_location={spec.has_location}')
-        return {
-            'module_name': module_name,
-            'found': True,
-            'origin': spec.origin,
-            'has_location': spec.has_location,
-            'parent': spec.parent if hasattr(spec, 'parent') else None
-        }
-    else:
-        logger.warning(f'No spec found for {module_name}')
-        return {
-            'module_name': module_name,
-            'found': False
-        }
-
-
-def try_module_from_spec(module_name):
-    """Use importlib.util.module_from_spec pattern to load a module."""
-    result = {
-        'module_name': module_name,
-        'success': False,
-        'spec_found': False,
-        'error': None
+        "module_name": module_name,
+        "found": False,
+        "error": None,
+        "spec": None,
+        "parent": None,
     }
     try:
         spec = importlib.util.find_spec(module_name)
-        if spec is None:
-            result['spec_found'] = False
-            result['error'] = f'No spec for {module_name}'
-            logger.warning(result['error'])
-            return result
-        
-        result['spec_found'] = True
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        result['success'] = True
-        logger.info(f'Successfully loaded {module_name} via module_from_spec')
-        return result
+        if spec is not None:
+            result["found"] = True
+            result["spec"] = {
+                "name": spec.name,
+                "origin": spec.origin,
+                "parent": spec.parent,
+                "submodule_search_locations": spec.submodule_search_locations,
+            }
+        else:
+            result["error"] = "Module spec not found"
     except Exception as e:
-        result['error'] = str(e)
-        result['error_type'] = type(e).__name__
-        result['traceback'] = traceback.format_exc()
-        logger.error(f'module_from_spec failed for {module_name}: {e}')
-        return result
+        result["error"] = str(e)
+    return result
 
 
-def extract_imports_from_file(filepath):
-    """Parse Python file and extract all import statements."""
-    imports = {'import': [], 'from_import': []}
+def try_import_module(module_name: str) -> dict:
+    """Attempt to import a module and capture any errors."""
+    result = {
+        "module_name": module_name,
+        "success": False,
+        "error_type": None,
+        "error_message": None,
+        "traceback": None,
+    }
     try:
-        with open(filepath, 'r') as f:
-            content = f.read()
-        tree = ast.parse(content)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imports['import'].append({
-                        'module': alias.name,
-                        'asname': alias.asname,
-                        'lineno': node.lineno
-                    })
-            elif isinstance(node, ast.ImportFrom):
-                imports['from_import'].append({
-                    'module': node.module,
-                    'names': [a.name for a in node.names],
-                    'level': node.level,
-                    'lineno': node.lineno
-                })
+        mod = importlib.import_module(module_name)
+        result["success"] = True
+        result["module"] = mod
     except Exception as e:
-        logger.error(f'Failed to parse {filepath}: {e}')
-    return imports
+        result["error_type"] = type(e).__name__
+        result["error_message"] = str(e)
+        result["traceback"] = traceback.format_exc()
+    return result
 
 
-def scan_zo_sentinel_files():
-    """Scan recently-built files in /home/workspace/zo_sentinel/."""
-    sentinel_dir = Path('/home/workspace/zo_sentinel')
-    if not sentinel_dir.exists():
-        logger.warning(f'Sentinel dir not found: {sentinel_dir}')
-        return []
+def scan_py_files_for_imports(directory: Path, extensions=None) -> dict:
+    """Scan Python files for import statements to build dependency graph."""
+    if extensions is None:
+        extensions = [".py"]
+    imports_found = {}
+    py_files = list(directory.rglob("*.py"))
     
-    files = list(sentinel_dir.glob('*.py'))
-    logger.info(f'Found {len(files)} Python files in {sentinel_dir}')
+    for py_file in py_files:
+        try:
+            content = py_file.read_text(encoding="utf-8", errors="ignore")
+            local_imports = []
+            from_imports = []
+            
+            for line in content.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("import ") and not stripped.startswith("import "):
+                    continue
+                if stripped.startswith("import "):
+                    parts = stripped[7:].split(",")
+                    for p in parts:
+                        mod = p.strip().split(".")[0]
+                        if mod and not mod.startswith("_"):
+                            local_imports.append(mod)
+                elif stripped.startswith("from "):
+                    if " import " in stripped:
+                        parts = stripped[5:].split(" import ")[0]
+                        mod = parts.strip().split(".")[0]
+                        if mod and not mod.startswith("_"):
+                            from_imports.append(mod)
+            
+            rel_path = py_file.relative_to(directory)
+            imports_found[str(rel_path)] = {
+                "local_imports": list(set(local_imports)),
+                "from_imports": list(set(from_imports)),
+            }
+        except Exception as e:
+            logger.warning(f"Could not scan {py_file}: {e}")
     
-    file_imports = []
-    for f in files:
-        logger.debug(f'Scanning {f.name}')
-        imports = extract_imports_from_file(f)
-        file_imports.append({
-            'file': f.name,
-            'imports': imports
-        })
-    
-    return file_imports
+    return imports_found
 
 
-def detect_circular_imports(files_imports):
-    """Detect potential circular import patterns."""
-    module_deps = {}
-    for entry in files_imports:
-        file_name = entry['file']
-        for imp in entry['imports']['import']:
-            mod = imp['module']
-            if mod not in module_deps:
-                module_deps[mod] = []
-            module_deps[mod].append(file_name)
-        for imp in entry['imports']['from_import']:
-            if imp['module']:
-                mod = imp['module']
-                if mod not in module_deps:
-                    module_deps[mod] = []
-                module_deps[mod].append(file_name)
+def detect_circular_imports(import_graph: dict) -> list:
+    """Detect potential circular import chains in the dependency graph."""
+    circular_chains = []
     
-    circular_candidates = []
-    for module, files in module_deps.items():
-        if len(files) > 1:
-            circular_candidates.append({
-                'module': module,
-                'imported_by': files
-            })
-    
-    return circular_candidates
-
-
-def probe_failed_imports(failed_modules):
-    """Probe specific failed imports with detailed diagnostics."""
-    results = []
-    for module_name in failed_modules:
-        logger.info(f'Probing failed import: {module_name}')
-        spec_result = find_spec_module(module_name)
-        import_result = try_import_module(module_name)
-        spec_loader_result = try_module_from_spec(module_name)
+    def find_chain(node, visited, path):
+        if node in path:
+            cycle_start = path.index(node)
+            cycle = path[cycle_start:] + [node]
+            return cycle
+        if node in visited:
+            return None
         
-        results.append({
-            'module_name': module_name,
-            'spec_result': spec_result,
-            'import_result': import_result,
-            'spec_loader_result': spec_loader_result
-        })
+        visited.add(node)
+        path.append(node)
+        
+        if node in import_graph:
+            for dep in import_graph[node].get("local_imports", []) + import_graph[node].get("from_imports", []):
+                chain = find_chain(dep, visited.copy(), path.copy())
+                if chain:
+                    circular_chains.append(chain)
+        
+        path.pop()
+        return None
+    
+    for module in import_graph:
+        find_chain(module, set(), [])
+    
+    return list(set(str(c) for c in circular_chains))
+
+
+def probe_sentinel_modules() -> list:
+    """Probe all Python modules in zo_sentinel directory."""
+    results = []
+    sentinel_modules = list(ZENTINEL_DIR.glob("*.py"))
+    
+    for py_file in sentinel_modules:
+        module_name = py_file.stem
+        logger.info(f"Probing module: {module_name}")
+        
+        probe_result = probe_module_spec(module_name)
+        import_result = try_import_module(module_name)
+        
+        combined = {
+            "module_name": module_name,
+            "file_path": str(py_file),
+            "spec_found": probe_result["found"],
+            "spec_origin": probe_result["spec"]["origin"] if probe_result["spec"] else None,
+            "import_success": import_result["success"],
+            "import_error": import_result["error_message"] if not import_result["success"] else None,
+            "import_traceback": import_result["traceback"] if not import_result["success"] else None,
+        }
+        results.append(combined)
+        
+        if not import_result["success"]:
+            logger.error(f"FAILED to import {module_name}: {import_result['error_message']}")
+            logger.debug(f"Traceback:\n{import_result['traceback']}")
+        else:
+            logger.info(f"OK: {module_name}")
+    
     return results
 
 
-def get_recent_smoke_failures():
-    """Query recent smoke failures from write_service."""
-    sql = """
-    SELECT service_name, status, last_heartbeat, meta
-    FROM service_health
-    WHERE status LIKE '%FAIL%' OR status LIKE '%ERROR%'
-    ORDER BY last_heartbeat DESC
-    LIMIT 20
-    """
-    result = ws_query(sql)
-    return result
+def scan_recent_files_for_patterns() -> dict:
+    """Scan recently-built files for common import issues."""
+    recent_failures = ["registry_api.py", "rug_pull_monitor.py", "signal_analyser.py"]
+    issues = {}
+    
+    for filename in recent_failures:
+        filepath = ZENTINEL_DIR / filename
+        if filepath.exists():
+            try:
+                content = filepath.read_text(encoding="utf-8", errors="ignore")
+                issues[filename] = {
+                    "exists": True,
+                    "has_from_import": "from " in content,
+                    "has_relative_import": "from ." in content,
+                    "has_importlib": "importlib" in content,
+                    "lines_with_import": [i+1 for i, line in enumerate(content.split("\n")) if "import" in line.lower()],
+                }
+            except Exception as e:
+                issues[filename] = {"exists": True, "error": str(e)}
+        else:
+            issues[filename] = {"exists": False}
+    
+    return issues
 
 
-def get_recent_build_artifacts():
-    """Get recent build artifacts that might have import issues."""
-    sql = """
-    SELECT artifact_name, file_path, interface
-    FROM mesh_memory.build_artifact
-    WHERE created_at > NOW() - INTERVAL '24 hours'
-    ORDER BY created_at DESC
-    LIMIT 50
-    """
-    result = ws_query(sql)
-    return result
+def main():
+    """Run all import diagnostics."""
+    logger.info("=" * 60)
+    logger.info("ImportLib Import Diagnostic Probe")
+    logger.info(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
+    logger.info("=" * 60)
+    
+    diagnostics = {}
+    
+    logger.info("\n[1] Probing sentinel modules...")
+    sentinel_results = probe_sentinel_modules()
+    diagnostics["sentinel_modules"] = sentinel_results
+    
+    failed_imports = [r for r in sentinel_results if not r["import_success"]]
+    logger.info(f"\nFailed imports: {len(failed_imports)}")
+    for fail in failed_imports:
+        logger.error(f"  - {fail['module_name']}: {fail['import_error']}")
+    
+    logger.info("\n[2] Scanning for circular imports...")
+    import_graph = scan_py_files_for_imports(ZENTINEL_DIR)
+    diagnostics["dependency_graph"] = import_graph
+    
+    circular_chains = detect_circular_imports(import_graph)
+    diagnostics["circular_chains"] = circular_chains
+    logger.info(f"Potential circular import chains found: {len(circular_chains)}")
+    for chain in circular_chains[:5]:
+        logger.warning(f"  Chain: {chain}")
+    
+    logger.info("\n[3] Checking recent failure files...")
+    recent_issues = scan_recent_files_for_patterns()
+    diagnostics["recent_failures"] = recent_issues
+    
+    logger.info("\n[4] System paths analysis...")
+    logger.info(f"sys.path: {sys.path[:5]}")
+    
+    sentinel_in_path = any("zo_sentinel" in p for p in sys.path)
+    logger.info(f"Sentinel in sys.path: {sentinel_in_path}")
+    
+    if not sentinel_in_path:
+        logger.warning("zo_sentinel not in sys.path - may cause import failures")
+        logger.info("Adding /home/workspace/zo_sentinel to sys.path")
+        sys.path.insert(0, str(ZENTINEL_DIR))
+    
+    logger.info("\n[5] Summary Report")
+    logger.info("-" * 40)
+    logger.info(f"Total modules probed: {len(sentinel_results)}")
+    logger.info(f"Successful imports: {len([r for r in sentinel_results if r['import_success']])}")
+    logger.info(f"Failed imports: {len(failed_imports)}")
+    logger.info(f"Circular chains detected: {len(circular_chains)}")
+    
+    if failed_imports:
+        logger.error("\nFAILED IMPORTS DETAIL:")
+        for fail in failed_imports:
+            logger.error(f"\n  Module: {fail['module_name']}")
+            logger.error(f"  Error: {fail['import_error']}")
+            if fail['import_traceback']:
+                for line in fail['import_traceback'].split('\n')[-10:]:
+                    logger.error(f"    {line}")
+    
+    logger.info("\n" + "=" * 60)
+    logger.info("Diagnostic complete")
+    logger.info("=" * 60)
+    
+    return 0
 
 
-def cycle():
-    """Run one diagnostic cycle."""
-    logger.info('Starting import diagnostic cycle')
-    diagnostics = {
-        'cycle_ts': datetime.now(timezone.utc).isoformat(),
-        'modules_tested': [],
-        'circular_imports_detected': [],
-        'files_scanned': 0,
-        'issues_found': []
-    }
-    
-    # Scan zo_sentinel files
-    logger.info('Scanning zo_sentinel files for imports')
-    files_imports = scan_zo_sentinel_files()
-    diagnostics['files_scanned'] = len(files_imports)
-    
-    # Detect circular imports
-    logger.info('Detecting circular import patterns')
-    circular = detect_circular_imports(files_imports)
-    diagnostics['circular_imports_detected'] = circular
-    
-    # Known problematic modules to probe
-    problematic_modules = [
-        'mcp_server_registry',
-        'mcp_registry_facts', 
-        'mcp_attestations',
-        'mcp_signal_scores',
-        'service_health',
-        'mesh_memory',
-        'threat_intel_ingestor',
-        'registry_api',
-        'rug_pull_monitor',
-        'signal_analyser'
-    ]
-    
-    logger.info(f'Probing {len(problematic_modules)} known modules')
-    for mod in problematic_modules:
-        probe_result = try_import_module(mod)
-        diagnostics['modules_tested'].append(probe_result)
-        
-        if not probe_result['success']:
-            diagnostics['issues_found'].append({
-                'module': mod,
-                'error': probe_result['error'],
-                'error_type': probe_result['error_type']
-            })
-    
-    # Get recent smoke failures
-    logger.info('Querying recent smoke failures')
-    smoke_failures = get_recent_smoke_failures()
-    diagnostics['smoke_failures'] = smoke_failures
-    
-    # Get recent build artifacts
-    logger.info('Querying recent build artifacts')
-    artifacts = get_recent_build_artifacts()
-    diagnostics['recent_artifacts'] = artifacts
-    
-    # Write diagnostics to service_health meta
-    send_heartbeat(
-        status='running',
-        meta={
-            'diagnostics': diagnostics,
-            'circular_count': len(circular),
-            'issues_count': len(diagnostics['issues_found']),
-            'files_scanned': len(files_imports)
-        }
-    )
-    
-    logger.info(f'Cycle complete: {len(diagnostics["issues_found"])} issues found, {len(circular)} circular candidates')
-    return diagnostics
-
-
-def run():
-    """Run the diagnostic loop."""
-    logger.info(f'{SERVICE_NAME} starting up')
-    import time
-    
-    while True:
-        try:
-            cycle()
-        except Exception as e:
-            logger.error(f'Cycle error: {e}')
-        
-        time.sleep(60)
-
-
-if __name__ == '__main__':
-    logger.info(f'{SERVICE_NAME} entrypoint')
-    run()
+if __name__ == "__main__":
+    sys.exit(main())

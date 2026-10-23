@@ -1,0 +1,8 @@
+[service]
+name = "diagnose_wisdom_synthesiser_staleness"
+import_path = "services.active.diagnose_wisdom_synthesiser_staleness.router"
+prefix = "/api"
+tag = "diagnose_wisdom_synthesiser_staleness"
+origin = "service"
+auth = "public"
+needs_data_layer = true

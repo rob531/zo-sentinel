@@ -1,0 +1,11 @@
+[service]
+name = "registry_source_distribution"
+import_path = "services.active.registry_source_distribution.router"
+prefix = "/api"
+tag = "registry_source_distribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

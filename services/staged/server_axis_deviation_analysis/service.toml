@@ -1,0 +1,54 @@
+[service]
+name = "server_axis_deviation_analysis"
+import_path = "services.active.server_axis_deviation_analysis.router"
+prefix = "/api"
+tag = "server_axis_deviation_analysis"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[router]
+class = "APIRouter"
+kwargs = { prefix = "/api", tags = ["server_axis_deviation_analysis"] }
+
+[dependencies]
+app_db = { import_path = "app.db", items = ["get_session"] }
+app_models = { import_path = "app.models", items = ["McpServerRegistry", "McpLlmAxisScore", "McpScoreDispute", "Org", "User"] }
+sqlalchemy = { import_path = "sqlalchemy", items = ["select", "and_", "or_", "func"] }
+fastapi = { import_path = "fastapi", items = ["APIRouter", "HTTPException", "Depends", "Query"] }
+pydantic = { import_path = "pydantic", items = ["BaseModel", "Field"] }
+httpx = { import_path = "httpx", items = ["AsyncClient"] }
+datetime = { import_path = "datetime", items = ["datetime", "timedelta"] }
+
+[mesh]
+write_service_url = "http://127.0.0.1:8772/query"
+
+[bus_tables]
+read = ["mcp_signal_scores", "mesh_memory"]
+
+[app_tables]
+read = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+
+[[endpoints]]
+path = "/deviation/servers"
+method = "GET"
+summary = "Get axis deviation analysis for servers"
+handler = "get_server_deviations"
+
+[[endpoints]]
+path = "/deviation/servers/{server_id}"
+method = "GET"
+summary = "Get deviation analysis for specific server"
+handler = "get_server_deviation_detail"
+
+[[endpoints]]
+path = "/deviation/axis"
+method = "GET"
+summary = "Get deviation breakdown by axis"
+handler = "get_axis_deviations"
+
+[[endpoints]]
+path = "/deviation/summary"
+method = "GET"
+summary = "Get overall deviation summary"
+handler = "get_deviation_summary"

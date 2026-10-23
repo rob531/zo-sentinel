@@ -1,0 +1,8 @@
+[service]
+name = "cve_severity_breakdown"
+import_path = "services.active.cve_severity_breakdown.router"
+prefix = "/api"
+tag = "cve_severity_breakdown"
+origin = "service"
+auth = "public"
+needs_data_layer = true

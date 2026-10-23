@@ -1,0 +1,8 @@
+[service]
+name = "risk_tier_distribution_by_family_router"
+import_path = "services.active.risk_tier_distribution_by_family_router.router"
+prefix = "/api"
+tag = "risk_tier_distribution_by_family_router"
+origin = "service"
+auth = "public"
+needs_data_layer = true

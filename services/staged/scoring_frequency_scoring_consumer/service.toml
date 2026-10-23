@@ -1,0 +1,12 @@
+[service]
+name = "scoring_frequency_scoring_consumer"
+import_path = "services.active.scoring_frequency_scoring_consumer.router"
+prefix = "/api"
+tag = "scoring_frequency_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mesh_store = true

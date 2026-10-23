@@ -1,0 +1,8 @@
+[service]
+name = "server_comparison"
+import_path = "services.active.server_comparison.router"
+prefix = "/api"
+tag = "server_comparison"
+origin = "service"
+auth = "public"
+needs_data_layer = true

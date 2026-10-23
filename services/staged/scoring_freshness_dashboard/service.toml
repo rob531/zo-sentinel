@@ -1,0 +1,8 @@
+[service]
+name = "scoring_freshness_dashboard"
+import_path = "services.active.scoring_freshness_dashboard.router"
+prefix = "/api"
+tag = "scoring_freshness_dashboard"
+origin = "service"
+auth = "public"
+needs_data_layer = true

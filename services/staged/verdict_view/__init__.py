@@ -1,171 +1,169 @@
-"""
-zo-sentinel staged service package __init__.
-
-Provides shared utilities for staged services:
-- reset_server_export_api_quarantine
-- get_mesh_memory
-- get_mesh_scores
-- get_signal_scores
-- router (FastAPI APIRouter)
-
-All DB access uses the canonical app DB session and models.
-External mesh data is fetched via HTTP POST with timeout.
-"""
-
-from __future__ import annotations
-
-import json
-from typing import Any, Dict, List
+import logging
+import sys
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import requests
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Query
 
-# ----------------------------------------------------------------------
-# App DB imports – must remain verbatim to satisfy the no‑hollow gate.
-# ----------------------------------------------------------------------
-from app.db import get_session  # noqa: F401
-from app.models import (  # noqa: F401
-    ServerRegistry,
-    LlmAxisScore,
-    ScoreDispute,
-    Org,
-    User,
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
+log = logging.getLogger("verdict_view")
 
-# ----------------------------------------------------------------------
-# FastAPI router – services may import this router directly.
-# ----------------------------------------------------------------------
+PROJECT_DIR = "/home/workspace/zo_sentinel"
+sys.path.insert(0, PROJECT_DIR)
+
+WRITE_SERVICE_URL = "http://localhost:8772"
+QUERY_SERVICE_URL = "http://localhost:8772"
+
 router = APIRouter()
 
 
-# ----------------------------------------------------------------------
-# Helper – safe HTTP POST with timeout.
-# ----------------------------------------------------------------------
-def _post_query(payload: Dict[str, Any], *, timeout: int = 5) -> Any:
-    """
-    POST ``payload`` to the mesh query endpoint.
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-    Args:
-        payload: JSON payload accepted by the mesh service.
-        timeout: Seconds before the request aborts.
 
-    Returns:
-        Parsed JSON response.
-
-    Raises:
-        requests.HTTPError: If the remote service returns an error status.
-    """
-    response = requests.post(
-        "http://127.0.0.1:8772/query",
+def ws_query(sql: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Execute a SELECT via write_service query endpoint."""
+    payload: Dict[str, Any] = {"sql": sql}
+    if params:
+        payload["params"] = params
+    resp = requests.post(
+        f"{QUERY_SERVICE_URL}/query",
         json=payload,
-        timeout=timeout,
+        timeout=10,
     )
-    response.raise_for_status()
-    return response.json()
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("rows", [])
 
 
-# ----------------------------------------------------------------------
-# Public API
-# ----------------------------------------------------------------------
-def reset_server_export_api_quarantine(
-    session: Session = Depends(get_session),
-) -> Dict[str, str]:
+def ws_write(table: str, rows: List[Dict[str, Any]]) -> None:
+    """Write rows to a table via write_service write endpoint."""
+    resp = requests.post(
+        f"{WRITE_SERVICE_URL}/write",
+        json={"table": table, "rows": rows, "wait": True},
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+
+def get_signal_scores(server_id: str) -> List[Dict[str, Any]]:
     """
-    Reset the quarantine flag for all servers in the registry.
+    Fetch all signal-score rows for a given server_id from mcp_signal_scores.
 
-    This is a no‑op placeholder that demonstrates a DB write
-    using the canonical session. Adjust the filter criteria as
-    needed by the consuming services.
+    Schema (verified against live information_schema):
+      server_id, signal_name, score, evidence, scored_at
     """
-    session.query(ServerRegistry).update({ServerRegistry.quarantine: False})
-    session.commit()
-    return {"status": "reset"}
-
-
-def get_mesh_memory() -> List[Dict[str, Any]]:
+    sql = """
+        SELECT server_id, signal_name, score, evidence, scored_at
+        FROM mcp_signal_scores
+        WHERE server_id = ?
+        ORDER BY signal_name
     """
-    Retrieve mesh memory records from the ZoComputer store.
+    return ws_query(sql, {"p1": server_id})
+
+
+def get_registry_record(server_id: str) -> Optional[Dict[str, Any]]:
     """
-    payload = {"query": "SELECT * FROM mesh_memory"}
-    return _post_query(payload)
-
-
-def get_mesh_scores() -> List[Dict[str, Any]]:
+    Fetch a single server row from mcp_server_registry.
     """
-    Retrieve mesh scores records from the ZoComputer store.
+    sql = "SELECT * FROM mcp_server_registry WHERE server_id = ?"
+    rows = ws_query(sql, {"p1": server_id})
+    return rows[0] if rows else None
+
+
+def get_verdict(server_id: str) -> Dict[str, Any]:
     """
-    payload = {"query": "SELECT * FROM mesh_scores"}
-    return _post_query(payload)
+    Return verdict decision data for a server: registry record + signal scores.
 
-
-def get_signal_scores() -> List[Dict[str, Any]]:
+    Returns a dict with keys: server, signals, verdict, risk_tier, computed_at.
     """
-    Retrieve signal scores records from the ZoComputer store.
+    reg = get_registry_record(server_id)
+    if not reg:
+        raise HTTPException(status_code=404, detail=f"server_id not found: {server_id}")
+
+    signals = get_signal_scores(server_id)
+    return {
+        "server": reg,
+        "signals": signals,
+        "verdict": reg.get("verdict"),
+        "trust_score": reg.get("trust_score"),
+        "risk_tier": reg.get("risk_tier"),
+        "computed_at": utc_now_iso(),
+    }
+
+
+def list_servers(
+    verdict: Optional[str] = None,
+    limit: int = Query(default=50, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
     """
-    payload = {"query": "SELECT * FROM mcp_signal_scores"}
-    return _post_query(payload)
+    Paginated list of servers, optionally filtered by verdict.
+
+    Schema (verified):
+      mcp_server_registry: server_id, name, url, description, trust_score,
+                            verdict, registry_source, scan_count
+    """
+    if verdict:
+        sql = """
+            SELECT server_id, name, url, verdict, trust_score, registry_source, scan_count
+            FROM mcp_server_registry
+            WHERE verdict = ?
+            ORDER BY trust_score DESC NULLS LAST
+            LIMIT ? OFFSET ?
+        """
+        rows = ws_query(sql, {"p1": verdict, "p2": limit, "p3": offset})
+    else:
+        sql = """
+            SELECT server_id, name, url, verdict, trust_score, registry_source, scan_count
+            FROM mcp_server_registry
+            ORDER BY trust_score DESC NULLS LAST
+            LIMIT ? OFFSET ?
+        """
+        rows = ws_query(sql, {"p1": limit, "p2": offset})
+
+    count_sql = (
+        "SELECT COUNT(*) AS cnt FROM mcp_server_registry WHERE verdict = ?"
+        if verdict
+        else "SELECT COUNT(*) AS cnt FROM mcp_server_registry"
+    )
+    count_params = {"p1": verdict} if verdict else None
+    count_rows = ws_query(count_sql, count_params)
+    total = count_rows[0]["cnt"] if count_rows else 0
+
+    return {"servers": rows, "total": total, "limit": limit, "offset": offset}
 
 
-# ----------------------------------------------------------------------
-# Example endpoint – services may extend this router.
-# ----------------------------------------------------------------------
 @router.get("/health")
-def health_check() -> Dict[str, str]:
-    """Simple health endpoint used by many staged services."""
-    return {"status": "ok"}
+def health() -> Dict[str, str]:
+    return {"status": "ok", "service": "verdict_view", "ts": utc_now_iso()}
 
 
-# ----------------------------------------------------------------------
-# Self‑test
-# ----------------------------------------------------------------------
+@router.get("/server/{server_id}")
+def get_server(server_id: str) -> Dict[str, Any]:
+    return get_verdict(server_id)
+
+
+@router.get("/servers")
+def list_servers_endpoint(
+    verdict: Optional[str] = None,
+    limit: int = Query(default=50, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    return list_servers(verdict=verdict, limit=limit, offset=offset)
+
+
 if __name__ == "__main__":
-    import sys
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    import uvicorn
 
-    # ------------------------------------------------------------------
-    # In‑memory SQLite session for self‑test only.
-    # ------------------------------------------------------------------
-    engine = create_engine("sqlite:///:memory:")
-    SessionLocal = sessionmaker(bind=engine)
+    from fastapi import FastAPI
 
-    def _test_session() -> Session:
-        return SessionLocal()
+    app = FastAPI(title="verdict_view")
+    app.include_router(router)
 
-    # ------------------------------------------------------------------
-    # Monkey‑patch requests.post to avoid external dependency.
-    # ------------------------------------------------------------------
-    class _DummyResponse:
-        def __init__(self, data: Any):
-            self._data = data
-            self.status_code = 200
-
-        def raise_for_status(self) -> None:
-            pass
-
-        def json(self) -> Any:
-            return self._data
-
-    def _dummy_post(url: str, json: Dict[str, Any], timeout: int) -> _DummyResponse:  # noqa: D401
-        """Return a deterministic dummy payload for any query."""
-        return _DummyResponse([{"dummy": "value"}])
-
-    requests.post = _dummy_post  # type: ignore[attr-defined]
-
-    # ------------------------------------------------------------------
-    # Execute basic sanity checks.
-    # ------------------------------------------------------------------
-    try:
-        # DB‑related call – uses the test session.
-        reset_server_export_api_quarantine(session=_test_session())
-
-        # Mesh‑related calls – use the patched HTTP client.
-        _ = get_mesh_memory()
-        _ = get_mesh_scores()
-        _ = get_signal_scores()
-
-        print("PASS")
-    except Exception as exc:  # pragma: no cover
-        print("FAIL", exc)
-        sys.exit(1)
+    log.info("Starting verdict_view service on port 0")
+    uvicorn.run(app, host="0.0.0.0", port=0)

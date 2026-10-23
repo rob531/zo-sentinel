@@ -1,0 +1,8 @@
+[service]
+name = "scoring_tier_consumer"
+import_path = "services.active.scoring_tier_consumer.router"
+prefix = "/api"
+tag = "scoring_tier_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

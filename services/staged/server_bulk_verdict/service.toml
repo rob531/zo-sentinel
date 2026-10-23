@@ -1,0 +1,11 @@
+[service]
+name = "server_bulk_verdict"
+import_path = "services.active.server_bulk_verdict.router"
+prefix = "/api"
+tag = "server_bulk_verdict"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

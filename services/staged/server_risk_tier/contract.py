@@ -51,7 +51,7 @@ def get_server_risk_tier(
         text(
             """
             SELECT score, weight
-            FROM mcp_llm_axis_scores
+            FROM McpLlmAxisScore
             WHERE server_id = :sid
             """
         ),
@@ -73,7 +73,7 @@ def get_server_risk_tier(
         text(
             """
             SELECT criteria_version
-            FROM mcp_server_registry
+            FROM McpServerRegistry
             WHERE server_id = :sid
             """
         ),
@@ -121,14 +121,14 @@ if __name__ == "__main__":
     metadata = MetaData()
 
     server_registry = Table(
-        "mcp_server_registry",
+        "McpServerRegistry",
         metadata,
         Column("server_id", Integer, primary_key=True),
         Column("criteria_version", String, nullable=True),
     )
 
     llm_axis_scores = Table(
-        "mcp_llm_axis_scores",
+        "McpLlmAxisScore",
         metadata,
         Column("id", Integer, primary_key=True, autoincrement=True),
         Column("server_id", Integer, nullable=False),

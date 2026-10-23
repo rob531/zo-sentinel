@@ -1,0 +1,12 @@
+[service]
+name = "data_sensitivity_scoring_consumer"
+import_path = "services.active.data_sensitivity_scoring_consumer.router"
+prefix = "/api"
+tag = "data_sensitivity_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.data_sensitivity_scoring_consumer"
+expected_output = "PASS"

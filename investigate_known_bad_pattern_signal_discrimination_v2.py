@@ -1,57 +1,151 @@
-#!/usr/bin/env python3
-"""
-investigate_known_bad_pattern_signal_discrimination_v2.py
-
-Investigate why known_bad_pattern signal has only 2 distinct values (69.0-95.0)
-across 1784 servers, indicating poor discrimination.
-
-Queries mcp_signal_scores for actual distribution, identifies which MCPs receive
-each value, and determines if the issue is in signal production (mcp_scanner) or
-downstream processing.
-
-All DB access via write_service HTTP API (127.0.0.1:8772).
-"""
-
+import hashlib
 import json
-import requests
-from datetime import datetime
+import logging
+import os
+import signal
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-WRITE_SERVICE = "http://127.0.0.1:8772"
+import requests
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+SERVICE_NAME = "investigate_known_bad_pattern_signal_discrimination_v2"
+PORT = None  # one-shot diagnostic, no HTTP port
+PID_FILE = f"/tmp/{SERVICE_NAME}.pid"
+LOG_FILE = f"/home/workspace/logs/{SERVICE_NAME}.log"
+WRITE_SERVICE_URL = "http://127.0.0.1:8772"
+QUERY_SERVICE_URL = WRITE_SERVICE_URL + "/query"
+EXECUTE_SERVICE_URL = WRITE_SERVICE_URL + "/execute"
+WRITE_SERVICE_API_URL = WRITE_SERVICE_URL + "/write"
+
+# ---------------------------------------------------------------------------
+# Logging (FileHandler only – no StreamHandler, no basicConfig duplication)
+# ---------------------------------------------------------------------------
+logger = logging.getLogger(SERVICE_NAME)
+_handler = logging.FileHandler(LOG_FILE)
+_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+)
+logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
 
 
-def ws_query(sql: str) -> list[dict[str, Any]]:
-    """Query write_service."""
-    payload = {"sql": sql}
+# ---------------------------------------------------------------------------
+# Single-instance guard helpers
+# ---------------------------------------------------------------------------
+def check_single_instance() -> None:
+    pid = str(os.getpid())
+    pid_path = Path(PID_FILE)
+    if pid_path.exists():
+        old = pid_path.read_text().strip()
+        if old != pid:
+            try:
+                os.kill(int(old), 0)
+                logger.error("Another instance already running (PID %s). Exiting.", old)
+                sys.exit(1)
+            except (OSError, ValueError):
+                logger.warning("Stale PID file %s (process %s is gone). Overwriting.", PID_FILE, old)
+    pid_path.write_text(pid)
+
+
+def remove_pid_file() -> None:
     try:
-        resp = requests.post(f"{WRITE_SERVICE}/query", json=payload, timeout=30)
+        Path(PID_FILE).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def signal_handler(signum: int, frame) -> None:
+    logger.info("Received signal %d – shutting down gracefully.", signum)
+    remove_pid_file()
+    sys.exit(0)
+
+
+# ---------------------------------------------------------------------------
+# Write-service helpers
+# ---------------------------------------------------------------------------
+def ws_query(sql: str) -> list[dict[str, Any]]:
+    """SELECT via write_service /query endpoint."""
+    try:
+        resp = requests.post(
+            QUERY_SERVICE_URL,
+            json={"sql": sql},
+            timeout=30,
+        )
         if resp.status_code == 200:
             return resp.json().get("rows", [])
-        else:
-            print(f"Query error {resp.status_code}: {sql[:100]}")
+        logger.warning("ws_query returned %d: %s", resp.status_code, sql[:200])
     except Exception as e:
-        print(f"Query failed: {e}")
+        logger.error("ws_query failed: %s", e)
     return []
 
 
-def ws_execute(sql: str) -> bool:
-    """Execute DDL/DML via write_service."""
-    payload = {"sql": sql, "wait": True}
+def ws_write(table: str, rows: list[dict[str, Any]]) -> bool:
+    """INSERT/UPSERT via write_service /write endpoint."""
+    if not rows:
+        return True
     try:
-        resp = requests.post(f"{WRITE_SERVICE}/execute", json=payload, timeout=30)
-        return resp.status_code == 200
+        resp = requests.post(
+            WRITE_SERVICE_API_URL,
+            json={"table": table, "rows": rows, "wait": True},
+            timeout=30,
+        )
+        ok = resp.status_code == 200 and resp.json().get("ok", False)
+        if not ok:
+            logger.warning("ws_write to %s returned %s: %s", table, resp.status_code, resp.text[:200])
+        return ok
     except Exception as e:
-        print(f"Execute failed: {e}")
+        logger.error("ws_write to %s failed: %s", table, e)
         return False
 
 
-def investigate_distribution() -> dict[str, Any]:
-    """Get distinct score distribution for known_bad_pattern."""
+def ws_execute(sql: str) -> bool:
+    """DDL/DML via write_service /execute endpoint."""
+    try:
+        resp = requests.post(
+            EXECUTE_SERVICE_URL,
+            json={"sql": sql, "wait": True},
+            timeout=30,
+        )
+        return resp.status_code == 200
+    except Exception as e:
+        logger.error("ws_execute failed: %s", e)
+        return False
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat
+# ---------------------------------------------------------------------------
+def send_heartbeat(status: str = "running", meta: str = "") -> None:
+    ws_write("service_health", [{
+        "service": SERVICE_NAME,
+        "last_heartbeat": utc_now_iso(),
+        "status": status,
+        "ts": utc_now_iso(),
+        "meta": meta,
+    }])
+
+
+# ---------------------------------------------------------------------------
+# Core investigation
+# ---------------------------------------------------------------------------
+
+def get_known_bad_pattern_distribution() -> list[dict[str, Any]]:
+    """Return distinct score distribution for known_bad_pattern across all servers."""
     sql = """
-    SELECT 
+    SELECT
         score,
-        COUNT(*) as cnt,
-        COUNT(DISTINCT server_id) as servers
+        COUNT(*)                   AS total_rows,
+        COUNT(DISTINCT server_id)  AS distinct_servers
     FROM mcp_signal_scores
     WHERE signal_name = 'known_bad_pattern'
     GROUP BY score
@@ -60,298 +154,305 @@ def investigate_distribution() -> dict[str, Any]:
     return ws_query(sql)
 
 
-def investigate_score_stats() -> dict[str, Any]:
-    """Get overall stats for the signal."""
-    sql = """
-    SELECT 
-        signal_name,
-        COUNT(*) as total_rows,
-        COUNT(DISTINCT server_id) as unique_servers,
-        COUNT(DISTINCT score) as distinct_scores,
-        MIN(score) as min_score,
-        MAX(score) as max_score,
-        AVG(score) as avg_score,
-        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY score) as median
-    FROM mcp_signal_scores
-    WHERE signal_name = 'known_bad_pattern'
-    GROUP BY signal_name
-    """
-    rows = ws_query(sql)
-    return rows[0] if rows else {}
-
-
-def investigate_servers_by_score() -> dict[str, Any]:
-    """Identify which MCPs/servers get each score value."""
-    sql = """
-    SELECT 
-        s.score,
+def get_sample_servers_by_score(score: float) -> list[dict[str, Any]]:
+    """Return up to 5 servers with their names for a given score value."""
+    sql = f"""
+    SELECT
         s.server_id,
+        r.name,
+        r.verdict,
+        r.trust_score,
+        s.score,
         s.evidence,
-        s.scored_at,
-        r.mcp_name,
-        r.registry_source,
-        r.submitted_at
+        s.scored_at
     FROM mcp_signal_scores s
-    LEFT JOIN mcp_server_registry r ON s.server_id = r.server_id
+    LEFT JOIN mcp_server_registry r
+           ON r.server_id = s.server_id
     WHERE s.signal_name = 'known_bad_pattern'
-    ORDER BY s.score DESC, s.server_id
-    LIMIT 50
+      AND s.score = {score}
+    LIMIT 5
     """
     return ws_query(sql)
 
 
-def investigate_evidence_samples() -> dict[str, Any]:
-    """Sample evidence to understand scoring logic."""
+def get_high_score_servers_without_signal() -> list[dict[str, Any]]:
+    """Find servers that are high-risk / known_threat but lack known_bad_pattern score."""
     sql = """
-    SELECT 
-        DISTINCT score,
-        evidence,
-        COUNT(*) as cnt
-    FROM mcp_signal_scores
-    WHERE signal_name = 'known_bad_pattern'
-    GROUP BY score, evidence
-    ORDER BY score DESC, cnt DESC
-    LIMIT 10
+    SELECT
+        r.server_id,
+        r.name,
+        r.verdict,
+        r.trust_score,
+        r.risk_tier
+    FROM mcp_server_registry r
+    WHERE r.verdict IN ('known_threat', 'untrusted')
+      AND NOT EXISTS (
+          SELECT 1 FROM mcp_signal_scores s
+           WHERE s.server_id = r.server_id
+             AND s.signal_name = 'known_bad_pattern'
+      )
+    LIMIT 20
     """
     return ws_query(sql)
 
 
-def investigate_which_mcp_scores() -> dict[str, Any]:
-    """Find servers with highest/lowest scores."""
-    sql = """
-    SELECT 
-        score,
-        COUNT(*) as cnt
-    FROM mcp_signal_scores
-    WHERE signal_name = 'known_bad_pattern'
-    GROUP BY score
-    ORDER BY score DESC
-    """
-    return ws_query(sql)
-
-
-def investigate_enrichment_production() -> dict[str, Any]:
-    """Check if known_bad_pattern is produced by mcp_scanner or signal_analyser."""
-    # First check what modules produce this signal by looking at mcp_signal_enrichments
-    sql = """
-    SELECT 
-        signal_type,
-        COUNT(*) as cnt,
-        MIN(computed_at) as first_computed,
-        MAX(computed_at) as last_computed
-    FROM mcp_signal_enrichments
-    WHERE signal_type = 'known_bad_pattern_enrichment_v4'
-       OR signal_type LIKE 'known_bad_pattern%'
-    GROUP BY signal_type
-    """
-    return ws_query(sql)
-
-
-def investigate_scanner_production() -> dict[str, Any]:
-    """Check mcp_scanner directly for known_bad_pattern production."""
-    sql = """
-    SELECT 
+def get_threat_associations_for_servers(server_ids: list[str]) -> list[dict[str, Any]]:
+    """Look up threat associations for a batch of server IDs."""
+    if not server_ids:
+        return []
+    # Parameterise via IN-list – safe because server_ids come from mcp_signal_scores
+    quoted = ", ".join(f"'{sid}'" for sid in server_ids)
+    sql = f"""
+    SELECT
         server_id,
-        name,
-        raw_metadata,
-        scanned_at
-    FROM mcp_scanner
-    WHERE name LIKE '%test%' OR name LIKE '%mock%' OR name LIKE '%suspicious%'
-    LIMIT 10
+        threat_type,
+        severity,
+        reported_at
+    FROM mcp_threat_associations
+    WHERE server_id IN ({quoted})
+    ORDER BY reported_at DESC
     """
     return ws_query(sql)
 
 
-def investigate_signal_bridge() -> dict[str, Any]:
-    """Check if known_bad_pattern comes through signal_bridge."""
-    # known_bad_pattern is NOT in ENRICHMENT_TO_SIGNAL mapping in signal_bridge
-    # So it might be produced directly by signal_analyser_v4
-    sql = """
-    SELECT 
+def get_all_signal_scores_for_server(server_id: str) -> list[dict[str, Any]]:
+    """Fetch all signals for a specific server (used to detect missing dimensions)."""
+    sql = f"""
+    SELECT
         signal_name,
-        COUNT(*) as cnt
-    FROM mcp_signal_scores
-    WHERE signal_name LIKE '%known_bad%'
-    GROUP BY signal_name
-    """
-    return ws_query(sql)
-
-
-def investigate_mcp_submissions() -> dict[str, Any]:
-    """Check submissions for pattern indicators."""
-    sql = """
-    SELECT 
-        server_id,
-        mcp_name,
-        registry_source,
-        submitted_at,
-        name_similarity_score
-    FROM mcp_submissions
-    WHERE name_similarity_score IS NOT NULL
-       OR registry_source = 'npm'
-    LIMIT 20
-    """
-    return ws_query(sql)
-
-
-def investigate_if_issue_in_analyser() -> dict[str, Any]:
-    """Determine if issue is in signal_analyser_v4 check_known_bad_patterns()."""
-    # Check what score values are produced by looking at recent scoring
-    sql = """
-    SELECT 
         score,
-        scored_at,
-        server_id,
-        LEFT(evidence, 200) as evidence_preview
+        evidence,
+        scored_at
     FROM mcp_signal_scores
-    WHERE signal_name = 'known_bad_pattern'
-    ORDER BY scored_at DESC
-    LIMIT 20
+    WHERE server_id = '{server_id}'
+    ORDER BY signal_name
     """
     return ws_query(sql)
 
 
-def main():
-    print("=" * 80)
-    print("KNOWN_BAD_PATTERN SIGNAL DISCRIMINATION INVESTIGATION v2")
-    print(f"Started: {datetime.utcnow().isoformat()}")
-    print("=" * 80)
+def get_distinct_signal_names() -> list[dict[str, Any]]:
+    """Return all signal types in the registry and how many servers have each."""
+    sql = """
+    SELECT
+        signal_name,
+        COUNT(DISTINCT server_id) AS servers_scored,
+        COUNT(*)                   AS total_rows,
+        MIN(score)                 AS min_score,
+        MAX(score)                 AS max_score,
+        COUNT(DISTINCT score)      AS distinct_scores
+    FROM mcp_signal_scores
+    GROUP BY signal_name
+    ORDER BY signal_name
+    """
+    return ws_query(sql)
 
-    findings = {}
 
-    # Step 1: Overall stats
-    print("\n[1] SIGNAL OVERALL STATS")
-    print("-" * 40)
-    stats = investigate_score_stats()
-    if stats:
-        print(f"Signal: {stats.get('signal_name')}")
-        print(f"Total rows: {stats.get('total_rows'):,}")
-        print(f"Unique servers: {stats.get('unique_servers'):,}")
-        print(f"Distinct scores: {stats.get('distinct_scores')}")
-        print(f"Score range: {stats.get('min_score')} - {stats.get('max_score')}")
-        print(f"Average score: {stats.get('avg_score', 0):.2f}")
-        print(f"Median score: {stats.get('median', 0):.2f}")
-        findings["stats"] = stats
+def compute_discrimination_entropy(distribution: list[dict[str, Any]]) -> float:
+    """
+    Compute Shannon entropy of the score distribution.
+    Higher entropy means better discrimination (scores spread across values).
+    """
+    total = sum(row["total_rows"] for row in distribution)
+    if total == 0:
+        return 0.0
+    import math
+    entropy = 0.0
+    for row in distribution:
+        p = row["total_rows"] / total
+        if p > 0:
+            entropy -= p * math.log2(p)
+    return round(entropy, 4)
 
-        # Check discrimination adequacy
-        if stats.get("distinct_scores", 0) < 5:
-            print(f"\n⚠️  DISCRIMINATION INADEQUATE: Only {stats.get('distinct_scores')} distinct values")
+
+# ---------------------------------------------------------------------------
+# Diagnostic output
+# ---------------------------------------------------------------------------
+
+def run_investigation() -> dict[str, Any]:
+    """Run the full investigation and return a summary dict."""
+    logger.info("=== Starting known_bad_pattern signal discrimination investigation ===")
+    result: dict[str, Any] = {
+        "investigated_at": utc_now_iso(),
+        "signal": "known_bad_pattern",
+    }
+
+    # 1. Distribution of known_bad_pattern scores
+    distribution = get_known_bad_pattern_distribution()
+    result["distribution"] = distribution
+    distinct_scores = len(distribution)
+    result["distinct_score_count"] = distinct_scores
+    logger.info("Distinct score values for known_bad_pattern: %d", distinct_scores)
+    for row in distribution:
+        logger.info("  score=%s  rows=%d  servers=%d",
+                    row.get("score"), row.get("total_rows"), row.get("distinct_servers"))
+
+    # 2. Shannon entropy as discrimination metric
+    entropy = compute_discrimination_entropy(distribution)
+    result["entropy"] = entropy
+    logger.info("Shannon entropy: %.4f (max for 2 values ≈ 1.0)", entropy)
+    result["entropy_interpretation"] = (
+        "HIGH discrimination" if entropy >= 1.0
+        else "MODERATE discrimination" if entropy >= 0.5
+        else "LOW discrimination – scores clustered"
+    )
+
+    # 3. Sample servers at each score value
+    sample_by_score: dict[float, list] = {}
+    for row in distribution:
+        score = float(row["score"])
+        samples = get_sample_servers_by_score(score)
+        sample_by_score[score] = samples
+        logger.info("  Samples at score %.1f:", score)
+        for s in samples:
+            logger.info("    server_id=%s  name=%s  verdict=%s",
+                        s.get("server_id"), s.get("name"), s.get("verdict"))
+    result["sample_servers_by_score"] = sample_by_score
+
+    # 4. Known-threat servers missing the signal (potential false negatives)
+    missing = get_high_score_servers_without_signal()
+    result["high_risk_servers_missing_signal"] = missing
+    logger.info("High-risk servers WITHOUT known_bad_pattern score: %d", len(missing))
+    for srv in missing[:5]:
+        logger.info("  server_id=%s  verdict=%s", srv.get("server_id"), srv.get("verdict"))
+
+    # 5. Deep-dive on a sample high-risk server to see full signal picture
+    if missing:
+        sample_server_id = missing[0]["server_id"]
+        full_signals = get_all_signal_scores_for_server(sample_server_id)
+        result["sample_server_full_signals"] = {
+            "server_id": sample_server_id,
+            "signals": full_signals,
+        }
+        logger.info("Full signal profile for %s:", sample_server_id)
+        for sig in full_signals:
+            logger.info("  %s score=%.2f", sig.get("signal_name"), sig.get("score"))
+
+    # 6. Compare discrimination against all other signals
+    all_signals = get_distinct_signal_names()
+    result["all_signal_discrimination"] = all_signals
+    known_bad = next(
+        (s for s in all_signals if s["signal_name"] == "known_bad_pattern"), None
+    )
+    if known_bad:
+        result["known_bad_pattern_stats"] = known_bad
+    logger.info("All signal discrimination summary:")
+    for sig in all_signals:
+        logger.info("  %-40s servers=%5d  distinct_scores=%2d  min=%.2f  max=%.2f",
+                    sig["signal_name"],
+                    sig["servers_scored"],
+                    sig["distinct_scores"],
+                    sig["min_score"] or 0,
+                    sig["max_score"] or 0)
+
+    # 7. Diagnosis verdict
+    if distinct_scores <= 2 and entropy < 0.8:
+        result["diagnosis"] = (
+            "POOR discrimination – known_bad_pattern has only %d distinct score(s) "
+            "and entropy %.4f. Likely cause: signal is produced by a threshold that "
+            "rarely fires, or downstream normalisation collapses many raw values "
+            "into one or two buckets. Check: (a) raw source in signal_analyser or "
+            "trust_synthesiser; (b) whether evidence blob varies at all; "
+            "(c) whether mcp_threat_associations table has entries that should be "
+            "driving this signal but are not being JOINed."
+        ) % (distinct_scores, entropy)
+        logger.warning("DIAGNOSIS: %s", result["diagnosis"])
     else:
-        print("No stats found - signal may not exist yet")
-        findings["stats"] = {"error": "no data"}
+        result["diagnosis"] = (
+            f"Discrimination is acceptable: {distinct_scores} distinct scores, "
+            f"entropy {entropy:.4f}. No immediate concern."
+        )
+        logger.info("DIAGNOSIS: %s", result["diagnosis"])
 
-    # Step 2: Score distribution
-    print("\n[2] SCORE VALUE DISTRIBUTION")
-    print("-" * 40)
-    dist = investigate_distribution()
-    if dist:
-        total = sum(r["cnt"] for r in dist)
-        for row in dist:
-            pct = (row["cnt"] / total) * 100 if total else 0
-            bar = "█" * int(pct / 2)
-            print(f"Score {row['score']:5.1f}: {row['cnt']:6,} servers ({pct:5.1f}%) {bar}")
-        findings["distribution"] = dist
-    else:
-        print("No distribution data found")
+    logger.info("=== Investigation complete ===")
+    return result
 
-    # Step 3: Which MCPs get each score
-    print("\n[3] SAMPLE SERVERS BY SCORE")
-    print("-" * 40)
-    servers = investigate_servers_by_score()
-    current_score = None
-    for s in servers[:20]:
-        if s["score"] != current_score:
-            current_score = s["score"]
-            print(f"\n=== Score {current_score} ===")
-        print(f"  Server: {s['server_id'][:40]}")
-        print(f"  MCP: {s.get('mcp_name', 'N/A')}")
-        print(f"  Registry: {s.get('registry_source', 'N/A')}")
-        try:
-            evid = json.loads(s["evidence"]) if s["evidence"] else {}
-            print(f"  Evidence: {json.dumps(evid)[:150]}")
-        except:
-            print(f"  Evidence: {str(s.get('evidence', ''))[:150]}")
-        print()
-    findings["servers"] = servers[:5]
 
-    # Step 4: Evidence samples
-    print("\n[4] EVIDENCE PATTERNS")
-    print("-" * 40)
-    evidence = investigate_evidence_samples()
-    for e in evidence[:5]:
-        print(f"\nScore {e['score']}:")
-        print(f"  Count: {e['cnt']}")
-        try:
-            evid = json.loads(e["evidence"]) if e["evidence"] else {}
-            print(f"  Evidence: {json.dumps(evid)[:200]}")
-        except:
-            print(f"  Evidence: {str(e.get('evidence', ''))[:200]}")
+# ---------------------------------------------------------------------------
+# Persist findings
+# ---------------------------------------------------------------------------
 
-    # Step 5: Check production source
-    print("\n[5] SIGNAL PRODUCTION SOURCE")
-    print("-" * 40)
+def ensure_diagnostic_table() -> None:
+    """Create the diagnostic results table if it does not exist."""
+    sql = """
+    CREATE TABLE IF NOT EXISTS investigate_known_bad_pattern_diagnostics (
+        investigated_at     TIMESTAMPTZ,
+        signal              VARCHAR(128),
+        distinct_score_count INTEGER,
+        entropy              DOUBLE,
+        entropy_interpretation VARCHAR(64),
+        diagnosis           TEXT,
+        distribution_json    TEXT,
+        all_signals_json     TEXT,
+        PRIMARY KEY (investigated_at, signal)
+    )
+    """
+    ws_execute(sql)
 
-    # Check mcp_signal_enrichments for known_bad_pattern production
-    enrichments = investigate_enrichment_production()
-    if enrichments:
-        print("Produced via enrichments:")
-        for e in enrichments:
-            print(f"  {e['signal_type']}: {e['cnt']} rows")
-    else:
-        print("No known_bad_pattern enrichments found in mcp_signal_enrichments")
 
-    # Check if signal_bridge handles it
-    bridge_signals = investigate_signal_bridge()
-    if bridge_signals:
-        print("\nIn mcp_signal_scores:")
-        for s in bridge_signals:
-            print(f"  {s['signal_name']}: {s['cnt']} rows")
+def persist_results(result: dict[str, Any]) -> None:
+    """Write investigation summary to a diagnostic table."""
+    ensure_diagnostic_table()
+    sql = """
+    INSERT INTO investigate_known_bad_pattern_diagnostics
+        (investigated_at, signal, distinct_score_count, entropy,
+         entropy_interpretation, diagnosis,
+         distribution_json, all_signals_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    payload = {
+        "sql": sql,
+        "params": [
+            result["investigated_at"],
+            result["signal"],
+            result["distinct_score_count"],
+            result["entropy"],
+            result["entropy_interpretation"],
+            result["diagnosis"],
+            json.dumps(result.get("distribution", [])),
+            json.dumps(result.get("all_signal_discrimination", [])),
+        ],
+    }
+    try:
+        resp = requests.post(EXECUTE_SERVICE_URL, json=payload, timeout=30)
+        if resp.status_code == 200:
+            logger.info("Diagnostic results persisted.")
+        else:
+            logger.warning("Failed to persist results: %s", resp.text[:200])
+    except Exception as e:
+        logger.error("persist_results failed: %s", e)
 
-    # Step 6: Analyze recent entries
-    print("\n[6] RECENT SCORING ENTRIES")
-    print("-" * 40)
-    recent = investigate_if_issue_in_analyser()
-    for r in recent[:5]:
-        print(f"\nServer: {r['server_id'][:40]}")
-        print(f"  Score: {r['score']}")
-        print(f"  At: {r['scored_at']}")
-        print(f"  Evidence: {r.get('evidence_preview', 'N/A')[:100]}")
 
-    # Step 7: Root cause determination
-    print("\n" + "=" * 80)
-    print("ROOT CAUSE ANALYSIS")
-    print("=" * 80)
+# ---------------------------------------------------------------------------
+# Daemon entry-points (one-shot, exits on completion)
+# ---------------------------------------------------------------------------
 
-    if dist and len(dist) <= 2:
-        print("""
-FINDING: Signal has severely limited discrimination (only 2 score values).
+def cycle() -> dict[str, Any]:
+    """One unit of work: run investigation and persist results."""
+    result = run_investigation()
+    persist_results(result)
+    send_heartbeat(status="complete", meta=f"distinct_scores={result['distinct_score_count']}")
+    return result
 
-POTENTIAL CAUSES:
-1. mcp_scanner produces flat raw data (all servers look similar)
-2. signal_analyser_v4's check_known_bad_patterns() uses binary logic
-3. known_bad_pattern_enrichment_v4 is NOT wired into signal_analyser_v2
-4. Signal bridge doesn't carry known_bad_pattern enrichment
 
-RECOMMENDED ACTIONS:
-1. Verify if known_bad_pattern_enrichment_v4 is called from signal_analyser_v2
-2. Check if check_known_bad_patterns() in signal_analyser_v4 has binary logic
-3. Consider wiring v4 enrichment into signal_analyser_v2 for better discrimination
-""")
-        findings["root_cause"] = "binary_detection_or_unwired_enrichment"
-    else:
-        print(f"""
-FINDING: Signal has {len(dist) if dist else 0} distinct values.
-Distribution appears adequate for discrimination.
-""")
-        findings["root_cause"] = "unknown"
+def run() -> None:
+    """Loop wrapper (kept for interface compatibility; one shot exits immediately)."""
+    check_single_instance()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    logger.info("Starting %s", SERVICE_NAME)
+    send_heartbeat(status="starting")
 
-    findings["timestamp"] = datetime.utcnow().isoformat()
-    return findings
+    try:
+        result = cycle()
+        logger.info("Cycle complete. Diagnosis: %s", result.get("diagnosis", "n/a")[:120])
+    except Exception as e:
+        logger.exception("Investigation failed: %s", e)
+        send_heartbeat(status="error", meta=str(e))
+    finally:
+        remove_pid_file()
+        logger.info("Exiting %s", SERVICE_NAME)
+        sys.exit(0)
 
 
 if __name__ == "__main__":
-    results = main()
-    print("\n" + "=" * 80)
-    print("INVESTIGATION COMPLETE")
-    print("=" * 80)
-    print(json.dumps(results, indent=2, default=str))
+    run()

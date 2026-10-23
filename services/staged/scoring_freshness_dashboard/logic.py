@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import mcp_llm_axis_scores, mcp_server_registry
+from app.models import McpLlmAxisScore, McpServerRegistry
 
 router = APIRouter()
 
@@ -33,24 +33,24 @@ def get_freshness(session: Session = Depends(get_session)):
     # Subquery: latest scored_at per server
     latest_scores_subq = (
         session.query(
-            mcp_llm_axis_scores.server_id,
-            func.max(mcp_llm_axis_scores.scored_at).label("last_scored_at"),
+            McpLlmAxisScore.server_id,
+            func.max(McpLlmAxisScore.scored_at).label("last_scored_at"),
         )
-        .group_by(mcp_llm_axis_scores.server_id)
+        .group_by(McpLlmAxisScore.server_id)
         .subquery()
     )
 
     # Outer join servers with their latest score (if any)
     rows = (
         session.query(
-            mcp_server_registry.id,
-            mcp_server_registry.name,
-            mcp_server_registry.risk_tier,
+            McpServerRegistry.id,
+            McpServerRegistry.name,
+            McpServerRegistry.risk_tier,
             latest_scores_subq.c.last_scored_at,
         )
         .outerjoin(
             latest_scores_subq,
-            mcp_server_registry.id == latest_scores_subq.c.server_id,
+            McpServerRegistry.id == latest_scores_subq.c.server_id,
         )
         .all()
     )
@@ -120,31 +120,31 @@ if __name__ == "__main__":
     sess = SessionLocal()
     now = datetime.utcnow()
     servers = [
-        mcp_server_registry(
+        McpServerRegistry(
             id=1,
             name="srv1",
             risk_tier="low",
             created_at=now,
         ),
-        mcp_server_registry(
+        McpServerRegistry(
             id=2,
             name="srv2",
             risk_tier="medium",
             created_at=now,
         ),
-        mcp_server_registry(
+        McpServerRegistry(
             id=3,
             name="srv3",
             risk_tier="high",
             created_at=now,
         ),
-        mcp_server_registry(
+        McpServerRegistry(
             id=4,
             name="srv4",
             risk_tier="low",
             created_at=now,
         ),
-        mcp_server_registry(
+        McpServerRegistry(
             id=5,
             name="srv5",
             risk_tier="medium",
@@ -154,9 +154,9 @@ if __name__ == "__main__":
     sess.add_all(servers)
 
     scores = [
-        mcp_llm_axis_scores(server_id=1, scored_at=now),
-        mcp_llm_axis_scores(server_id=2, scored_at=now),
-        mcp_llm_axis_scores(server_id=3, scored_at=now),
+        McpLlmAxisScore(server_id=1, scored_at=now),
+        McpLlmAxisScore(server_id=2, scored_at=now),
+        McpLlmAxisScore(server_id=3, scored_at=now),
     ]
     sess.add_all(scores)
     sess.commit()

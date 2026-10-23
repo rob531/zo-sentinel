@@ -1,0 +1,13 @@
+[service]
+name = "axis_scores_query_api"
+import_path = "axis_scores_query_api"
+prefix = ""
+tag = ""
+origin = "live"
+auth = "public"
+needs_data_layer = true
+
+# Mounted by tools/mount_deferred_router.py after OBSERVING the import succeed and
+# the routes not collide. Live pre-SOA router: the code stays at its module path;
+# this file registers it. See that tool's docstring for why a static MOUNTABLE
+# label was not accepted as evidence.

@@ -1,0 +1,8 @@
+[service]
+name = "admin_policies"
+import_path = "services.active.admin_policies.router"
+prefix = "/api"
+tag = "admin_policies"
+origin = "service"
+auth = "public"
+needs_data_layer = true

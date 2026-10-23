@@ -71,7 +71,7 @@ if __name__ == "__main__":
     # Insert test data
     with TestSessionLocal() as session:
         session.execute("""
-        INSERT INTO mcp_server_registry (server_id, org_id, risk_tier)
+        INSERT INTO McpServerRegistry (server_id, org_id, risk_tier)
         VALUES
             ('server1', 'org123', 'HIGH_RISK_ISOLATED'),
             ('server2', 'org123', 'CAUTION_LIMITED'),

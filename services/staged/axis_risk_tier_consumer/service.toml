@@ -1,0 +1,19 @@
+[service]
+name = "axis_risk_tier_consumer"
+import_path = "services.active.axis_risk_tier_consumer.router"
+prefix = "/api"
+tag = "axis_risk_tier_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+app_db = true
+mcp_signal_scores_store = true
+
+[model_aliases]
+mcp_signal_scores = "mcp_signal_scores"
+mesh_memory = "mesh_memory"
+McpLlmAxisScore = "McpLlmAxisScore"
+orgs = "orgs"
+users = "users"

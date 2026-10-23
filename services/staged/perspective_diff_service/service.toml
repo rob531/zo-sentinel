@@ -1,0 +1,8 @@
+[service]
+name = "perspective_diff_service"
+import_path = "services.active.perspective_diff_service.router"
+prefix = "/api"
+tag = "perspective_diff_service"
+origin = "service"
+auth = "public"
+needs_data_layer = true

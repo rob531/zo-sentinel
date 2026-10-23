@@ -1,0 +1,12 @@
+[service]
+name = "scoring_freshness"
+import_path = "services.active.scoring_freshness.router"
+prefix = "/api"
+tag = "scoring_freshness"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.scoring_freshness"
+expected_output = "PASS"

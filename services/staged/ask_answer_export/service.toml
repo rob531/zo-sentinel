@@ -1,0 +1,8 @@
+[service]
+name = "ask_answer_export"
+import_path = "services.active.ask_answer_export.router"
+prefix = "/api"
+tag = "ask_answer_export"
+origin = "service"
+auth = "public"
+needs_data_layer = true

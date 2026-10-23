@@ -1,0 +1,8 @@
+[service]
+name = "vuln_family_propagation"
+import_path = "services.active.vuln_family_propagation.router"
+prefix = "/api"
+tag = "vuln_family_propagation"
+origin = "service"
+auth = "public"
+needs_data_layer = true

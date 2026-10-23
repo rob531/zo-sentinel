@@ -1,0 +1,8 @@
+[service]
+name = "advisory_management"
+import_path = "services.active.advisory_management.router"
+prefix = "/api"
+tag = "advisory_management"
+origin = "service"
+auth = "public"
+needs_data_layer = true

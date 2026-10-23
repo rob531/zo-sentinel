@@ -1,0 +1,12 @@
+[service]
+name = "cve_severity_rollup_api"
+import_path = "services.active.cve_severity_rollup_api.router"
+prefix = "/api"
+tag = "cve_severity_rollup_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.cve_severity_rollup_api"
+expected_output = "PASS"

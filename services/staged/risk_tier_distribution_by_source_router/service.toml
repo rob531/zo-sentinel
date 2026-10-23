@@ -1,0 +1,11 @@
+[service]
+name = "risk_tier_distribution_by_source_router"
+import_path = "services.active.risk_tier_distribution_by_source_router.router"
+prefix = "/api"
+tag = "risk_tier_distribution_by_source_router"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -1,256 +1,313 @@
 #!/usr/bin/env python3
 """
-signal_drift_detector.py -- ZO-SENTINEL signal drift detection daemon.
-Every 43200s: compare current vs 7-day-old signal scores per server.
-Detect drift >20 for signals, >15 for trust_score. Trigger re-attestation.
+Signal Drift Detector - Detects anomalous drift in MCP server signal scores over time.
+Zo-Sentinel service module.
 """
-import requests
-import time
-import os
+
+import hashlib
+import logging
 import signal
 import sys
-from datetime import datetime, timezone, timedelta
+import time
+from datetime import datetime, timezone
+from typing import Any
 
-SERVICE_NAME = 'signal_drift_detector'
-WRITE_SERVICE_URL = 'http://127.0.0.1:8772/write'
-EXECUTE_URL = 'http://127.0.0.1:8773/execute'
-HEARTBEAT_INTERVAL = 60
-CYCLE_INTERVAL = 43200
+import requests
 
-DRIFT_THRESHOLD_SIGNAL = 20.0
-DRIFT_THRESHOLD_TRUST = 15.0
-HISTORICAL_WINDOW_DAYS = 7
-MIN_ASSESSMENTS = 2
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+SERVICE_NAME = "signal_drift_detector"
+PORT = None  # This is a daemon, not a FastAPI service
+WRITE_SERVICE_URL = "http://127.0.0.1:8772"
+PID_FILE = f"/tmp/{SERVICE_NAME}.pid"
+POLL_SECS = 300  # 5 minutes
+DRIFT_THRESHOLD = 0.15  # 15% change threshold
+LOOKBACK_CYCLES = 5  # Compare against this many previous cycles
 
-def ws_query(sql, params=None):
-    payload = {'sql': sql}
-    if params:
-        payload['params'] = params
-    resp = requests.post(EXECUTE_URL, json=payload, timeout=60)
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[logging.FileHandler(f"/home/workspace/logs/{SERVICE_NAME}.log")],
+)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Write Service Helpers
+# ---------------------------------------------------------------------------
+def ws_query(sql: str) -> list[dict[str, Any]]:
+    """Query write_service for SELECT statements."""
+    resp = requests.post(
+        f"{WRITE_SERVICE_URL}/query",
+        json={"sql": sql},
+        timeout=30,
+    )
     resp.raise_for_status()
-    return resp.json().get('data', [])
+    data = resp.json()
+    return data.get("rows", [])
 
-def ws_write(table, rows, wait=True):
-    payload = {'table': table, 'rows': rows, 'wait': wait}
-    resp = requests.post(WRITE_SERVICE_URL, json=payload)
-    resp.raise_for_status()
-    return resp.json()
 
-def send_heartbeat():
-    try:
-        ws_write('service_health', {
-            'service': SERVICE_NAME,
-            'last_heartbeat': datetime.now(timezone.utc).isoformat(),
-            'status': 'running'
-        })
-    except Exception as e:
-        print(f"Heartbeat failed: {e}")
+def ws_write(table: str, rows: list[dict[str, Any]]) -> None:
+    """Write rows via write_service."""
+    requests.post(
+        f"{WRITE_SERVICE_URL}/write",
+        json={"table": table, "rows": rows, "wait": True},
+        timeout=30,
+    )
+    logger.debug("Wrote %d rows to %s", len(rows), table)
 
-def check_single_instance():
-    pid_file = f'/var/run/zo/{SERVICE_NAME}.pid'
-    os.makedirs(os.path.dirname(pid_file), exist_ok=True)
-    
-    if os.path.exists(pid_file):
-        with open(pid_file) as f:
+
+def ws_execute(sql: str) -> None:
+    """Execute DDL/DML via write_service."""
+    requests.post(
+        f"{WRITE_SERVICE_URL}/execute",
+        json={"sql": sql},
+        timeout=30,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Single Instance Guard
+# ---------------------------------------------------------------------------
+def check_single_instance() -> None:
+    """Ensure only one instance runs at a time."""
+    import os
+    if os.path.exists(PID_FILE):
+        with open(PID_FILE) as f:
             old_pid = int(f.read().strip())
         try:
             os.kill(old_pid, 0)
-            print(f"Already running with PID {old_pid}")
+            logger.error("Another instance already running (PID %d). Exiting.", old_pid)
             sys.exit(1)
         except OSError:
-            pass
-    
-    with open(pid_file, 'w') as f:
+            logger.info("Stale PID file removed (PID %d). Proceeding.", old_pid)
+            os.remove(PID_FILE)
+    with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
-    
-    def cleanup(signum, frame):
-        if os.path.exists(pid_file):
-            os.remove(pid_file)
-        sys.exit(0)
-    
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
 
-def get_servers_with_history():
+
+def remove_pid_file() -> None:
+    """Remove PID file on exit."""
+    import os
+    if os.path.exists(PID_FILE):
+        os.remove(PID_FILE)
+
+
+def signal_handler(signum: int, frame) -> None:
+    """Handle SIGTERM/SIGINT gracefully."""
+    logger.info("Received signal %d, shutting down.", signum)
+    remove_pid_file()
+    sys.exit(0)
+
+
+# ---------------------------------------------------------------------------
+# Signal Drift Logic
+# ---------------------------------------------------------------------------
+def compute_deterministic_id(server_id: str, signal_name: str) -> str:
+    """Generate deterministic ID for drift alerts to ensure idempotent writes."""
+    content = f"{server_id}:{signal_name}".encode("utf-8")
+    return hashlib.sha256(content).hexdigest()[:32]
+
+
+def get_current_scores() -> list[dict[str, Any]]:
+    """Fetch current signal scores from mcp_signal_scores table."""
     sql = """
-    SELECT server_id, COUNT(*) as assessment_count
-    FROM mcp_signal_scores
-    GROUP BY server_id
-    HAVING COUNT(*) > ?
+        SELECT 
+            server_id,
+            signal_name,
+            score,
+            evidence,
+            scored_at
+        FROM mcp_signal_scores
+        ORDER BY server_id, signal_name
     """
-    return ws_query(sql, [MIN_ASSESSMENTS])
+    return ws_query(sql)
 
-def get_latest_scores(server_id):
-    sql = """
-    SELECT signal_name, score, scored_at
-    FROM mcp_signal_scores
-    WHERE server_id = ?
-    AND scored_at = (
-        SELECT MAX(scored_at) FROM mcp_signal_scores
-        WHERE server_id = ? AND signal_name = mcp_signal_scores.signal_name
-    )
+
+def get_baseline_for_server(server_id: str, signal_name: str) -> dict[str, Any] | None:
+    """Fetch the most recent baseline snapshot for a given server/signal pair."""
+    sql = f"""
+        SELECT 
+            server_id,
+            signal_name,
+            score,
+            evidence,
+            scored_at
+        FROM mcp_signal_scores
+        WHERE server_id = '{server_id}' AND signal_name = '{signal_name}'
+        ORDER BY scored_at DESC
+        LIMIT 1
     """
-    return ws_query(sql, [server_id, server_id])
+    rows = ws_query(sql)
+    return rows[0] if rows else None
 
-def get_historical_scores(server_id, days_ago):
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days_ago)
-    sql = """
-    SELECT signal_name, score, scored_at
-    FROM mcp_signal_scores
-    WHERE server_id = ?
-    AND scored_at <= ?
-    AND scored_at = (
-        SELECT MAX(scored_at) FROM mcp_signal_scores
-        WHERE server_id = ?
-        AND signal_name = mcp_signal_scores.signal_name
-        AND scored_at <= ?
-    )
-    """
-    return ws_query(sql, [server_id, cutoff.isoformat(), server_id, cutoff.isoformat()])
 
-def get_trust_score_history(server_id):
-    sql = """
-    SELECT trust_score, last_assessed
-    FROM mcp_servers
-    WHERE server_id = ?
-    ORDER BY last_assessed DESC
-    LIMIT 10
-    """
-    return ws_query(sql, [server_id])
+def get_drift_alerts_table() -> list[dict[str, Any]]:
+    """Fetch existing drift alert IDs to avoid duplicates."""
+    sql = "SELECT alert_id FROM signal_drift_alerts"
+    try:
+        return ws_query(sql)
+    except Exception:
+        return []
 
-def compute_signal_deltas(current_scores, historical_scores):
-    hist_dict = {s['signal_name']: s['score'] for s in historical_scores}
-    deltas = []
-    for curr in current_scores:
-        signal_name = curr['signal_name']
-        if signal_name in hist_dict:
-            old_score = hist_dict[signal_name]
-            delta = abs(curr['score'] - old_score)
-            deltas.append({
-                'signal': signal_name,
-                'old_score': old_score,
-                'new_score': curr['score'],
-                'delta': delta
+
+def compute_score_drift(current: float, baseline: float) -> float:
+    """Compute absolute drift between two scores."""
+    if baseline == 0:
+        return abs(current) if current != 0 else 0.0
+    return abs(current - baseline) / abs(baseline)
+
+
+def detect_drift() -> list[dict[str, Any]]:
+    """Detect signal score drift across all servers."""
+    alerts: list[dict[str, Any]] = []
+    scores = get_current_scores()
+
+    # Group by server_id + signal_name
+    by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in scores:
+        key = (row["server_id"], row["signal_name"])
+        by_key.setdefault(key, []).append(row)
+
+    existing_alert_ids = {r["alert_id"] for r in get_drift_alerts_table()}
+
+    ts = datetime.now(timezone.utc).isoformat()
+
+    for (server_id, signal_name), rows in by_key.items():
+        if len(rows) < 2:
+            continue
+
+        # Sort by scored_at descending
+        rows.sort(key=lambda x: x["scored_at"], reverse=True)
+        current = rows[0]
+        baseline = rows[-1]  # oldest in our window
+
+        drift = compute_score_drift(current["score"], baseline["score"])
+
+        if drift >= DRIFT_THRESHOLD:
+            alert_id = compute_deterministic_id(server_id, signal_name)
+            if alert_id in existing_alert_ids:
+                logger.debug("Alert %s already exists, skipping.", alert_id)
+                continue
+
+            direction = "increased" if current["score"] > baseline["score"] else "decreased"
+            evidence = (
+                f"Signal '{signal_name}' for server '{server_id}' {direction} by "
+                f"{drift:.1%} (baseline={baseline['score']:.3f}, current={current['score']:.3f})"
+            )
+
+            alerts.append({
+                "alert_id": alert_id,
+                "server_id": server_id,
+                "signal_name": signal_name,
+                "baseline_score": baseline["score"],
+                "current_score": current["score"],
+                "drift_pct": round(drift, 4),
+                "direction": direction,
+                "evidence": evidence,
+                "detected_at": ts,
+                "status": "open",
             })
-    return deltas
 
-def compute_trust_drift(server_id):
-    history = get_trust_score_history(server_id)
-    if len(history) < 2:
-        return None
-    latest = history[0]['trust_score']
-    cutoff = datetime.now(timezone.utc) - timedelta(days=HISTORICAL_WINDOW_DAYS)
-    for h in history:
-        if h['last_assessed']:
-            if isinstance(h['last_assessed'], str):
-                hdate = datetime.fromisoformat(h['last_assessed'].replace('Z', '+00:00'))
-            else:
-                hdate = h['last_assessed']
-            if hdate <= cutoff:
-                old = h['trust_score']
-                return abs(latest - old) if (latest is not None and old is not None) else None
-    return None
+    return alerts
 
-def record_signal_drift_event(server_id, signal, old_score, new_score, delta):
-    try:
-        ws_write('mesh_events', {
-            'event_type': 'signal_drift_detected',
-            'server_id': server_id,
-            'payload': {
-                'server_id': server_id,
-                'signal': signal,
-                'old_score': old_score,
-                'new_score': new_score,
-                'delta': delta,
-                'detected_at': datetime.now(timezone.utc).isoformat()
-            },
-            'severity': 'WARNING',
-            'detected_at': datetime.now(timezone.utc).isoformat()
-        })
-    except Exception as e:
-        print(f"Failed to write signal drift event: {e}")
 
-def trigger_re_attestation(server_id, trust_drift):
-    try:
-        directive = (
-            f"Re-attestation required for server {server_id}: "
-            f"trust_score drifted {trust_drift:.1f} points over "
-            f"{HISTORICAL_WINDOW_DAYS} days. Previous trust_score "
-            f"assessments show significant deviation from current baseline."
+def emit_drift_alerts(alerts: list[dict[str, Any]]) -> None:
+    """Write drift alerts to the signal_drift_alerts table."""
+    if not alerts:
+        logger.info("No drift detected in this cycle.")
+        return
+
+    ws_write("signal_drift_alerts", alerts)
+    logger.info(
+        "Emitted %d drift alerts: %s",
+        len(alerts),
+        [a["alert_id"] for a in alerts],
+    )
+
+
+def ensure_alerts_table() -> None:
+    """Create signal_drift_alerts table if it doesn't exist."""
+    sql = """
+        CREATE TABLE IF NOT EXISTS signal_drift_alerts (
+            alert_id     VARCHAR PRIMARY KEY,
+            server_id    VARCHAR,
+            signal_name  VARCHAR,
+            baseline_score DOUBLE,
+            current_score  DOUBLE,
+            drift_pct    DOUBLE,
+            direction    VARCHAR,
+            evidence     VARCHAR,
+            detected_at  VARCHAR,
+            status       VARCHAR DEFAULT 'open'
         )
-        ws_write('mesh_memory', {
-            'agent_id': 'zo_sentinel.directive',
-            'memory_type': 'build_directive',
-            'content': directive,
-            'server_id': server_id,
-            'trigger': 'trust_score_drift',
-            'drift_magnitude': trust_drift,
-            'created_at': datetime.now(timezone.utc).isoformat()
-        })
-        print(f"Triggered re-attestation for {server_id} (trust drift: {trust_drift:.1f})")
+    """
+    try:
+        ws_execute(sql)
+        logger.info("signal_drift_alerts table ready.")
     except Exception as e:
-        print(f"Failed to trigger re-attestation: {e}")
+        logger.warning("Table creation skipped (may already exist): %s", e)
 
-def cycle():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Starting signal drift detection cycle")
-    servers = get_servers_with_history()
-    print(f"Found {len(servers)} servers with sufficient assessment history")
-    
-    drift_events = 0
-    re_attest_triggers = 0
-    
-    for server_row in servers:
-        server_id = server_row['server_id']
-        
-        try:
-            current_scores = get_latest_scores(server_id)
-            if not current_scores:
-                continue
-                
-            historical_scores = get_historical_scores(server_id, HISTORICAL_WINDOW_DAYS)
-            if not historical_scores:
-                continue
-            
-            deltas = compute_signal_deltas(current_scores, historical_scores)
-            
-            for d in deltas:
-                if d['delta'] > DRIFT_THRESHOLD_SIGNAL:
-                    record_signal_drift_event(
-                        server_id,
-                        d['signal'],
-                        d['old_score'],
-                        d['new_score'],
-                        d['delta']
-                    )
-                    drift_events += 1
-                    print(f"  Signal drift: {server_id}/{d['signal']} "
-                          f"{d['old_score']:.1f} -> {d['new_score']:.1f} "
-                          f"(delta: {d['delta']:.1f})")
-            
-            trust_drift = compute_trust_drift(server_id)
-            if trust_drift and trust_drift > DRIFT_THRESHOLD_TRUST:
-                trigger_re_attestation(server_id, trust_drift)
-                re_attest_triggers += 1
-                
-        except Exception as e:
-            print(f"Error processing server {server_id}: {e}")
-    
-    print(f"Cycle complete: {drift_events} signal drifts detected, "
-          f"{re_attest_triggers} re-attestations triggered")
 
-def run():
-    check_single_instance()
-    print(f"Starting {SERVICE_NAME}")
-    send_heartbeat()
-    
-    while True:
-        try:
-            cycle()
-        except Exception as e:
-            print(f"Error in cycle: {e}")
-        
+def get_registry_trust_scores() -> list[dict[str, Any]]:
+    """Fetch trust scores from mcp_server_registry for additional context."""
+    sql = """
+        SELECT 
+            server_id,
+            name,
+            trust_score,
+            verdict,
+            last_seen = CAST('' AS VARCHAR) OR last_seen  -- alias for scan
+        FROM mcp_server_registry
+        WHERE trust_score IS NOT NULL
+        ORDER BY server_id
+        LIMIT 500
+    """
+    return ws_query(sql)
+
+
+def send_heartbeat() -> None:
+    """Write heartbeat to service_health table."""
+    ts = datetime.now(timezone.utc).isoformat()
+    ws_write("service_health", [{
+        "service": SERVICE_NAME,
+        "last_heartbeat": ts,
+    }])
+
+
+# ---------------------------------------------------------------------------
+# Cycle & Run Loop
+# ---------------------------------------------------------------------------
+def cycle() -> None:
+    """Execute one drift detection cycle."""
+    logger.info("Starting drift detection cycle.")
+    try:
+        ensure_alerts_table()
+        alerts = detect_drift()
+        emit_drift_alerts(alerts)
         send_heartbeat()
-        time.sleep(CYCLE_INTERVAL)
+        logger.info("Drift detection cycle complete. Alerts: %d", len(alerts))
+    except requests.RequestException as e:
+        logger.error("WriteService request failed: %s", e)
+    except Exception as e:
+        logger.exception("Unexpected error in drift detection cycle: %s", e)
 
-if __name__ == '__main__':
+
+def run() -> None:
+    """Main daemon loop."""
+    check_single_instance()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    logger.info("%s starting. PID=%d", SERVICE_NAME, signal.getpid())
+    logger.info("Drift threshold: %.1%%, lookback cycles: %d", DRIFT_THRESHOLD * 100, LOOKBACK_CYCLES)
+
+    while True:
+        cycle()
+        time.sleep(POLL_SECS)
+
+
+if __name__ == "__main__":
     run()

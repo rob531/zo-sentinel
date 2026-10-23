@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List
 
 from app.db import get_session, Base
-from app.models import McpLlmAxisScores
+from app.models import McpLlmAxisScore
 
 router = APIRouter()
 
@@ -34,7 +34,7 @@ class ScorecardResponse(BaseModel):
     tags=["scorecard"],
 )
 def get_scorecard(server_id: int, session: Session = Depends(get_session)):
-    stmt = select(McpLlmAxisScores).where(McpLlmAxisScores.server_id == server_id)
+    stmt = select(McpLlmAxisScore).where(McpLlmAxisScore.server_id == server_id)
     rows = session.execute(stmt).scalars().all()
     if not rows:
         raise HTTPException(status_code=404, detail="Scorecard not found")
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         now = datetime.datetime.utcnow()
         for i, axis in enumerate(axes):
             rows.append(
-                McpLlmAxisScores(
+                McpLlmAxisScore(
                     server_id=1,
                     axis_name=axis,
                     label=f"Label {axis}",

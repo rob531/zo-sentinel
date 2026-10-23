@@ -155,7 +155,13 @@ function viewExplore(){
   E('q').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch(0);});
   doSearch(0);
 }
+// Shadow mode (decide_shadow_api): report the typed search and the view actually shown.
+// Fire-and-forget; the server ignores it unless DECIDE_SHADOW=1. Never awaited, never surfaced.
+async function shadowDecide(q,risk){if(!q)return;try{const t=await tok();fetch('/api/decide/shadow',{method:'POST',
+  headers:Object.assign({'Content-Type':'application/json'},t?{Authorization:'Bearer '+t}:{}),
+  body:JSON.stringify({q:q.slice(0,300),actual:'explore',risk:risk||null}),keepalive:true}).catch(()=>{});}catch(e){}}
 async function doSearch(off){exState.q=E('q').value.trim();exState.risk=E('risk').value;exState.offset=Math.max(0,off);
+  if(off===0)shadowDecide(exState.q,exState.risk);
   E('results').innerHTML='<p class="muted">// searching…</p>';
   try{const d=await j(`/api/servers?q=${encodeURIComponent(exState.q)}&risk=${exState.risk}&limit=25&offset=${exState.offset}`);
     E('results').innerHTML=d.servers.length?d.servers.map(rowHtml).join(''):'<p class="muted">// no matches</p>';

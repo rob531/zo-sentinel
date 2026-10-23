@@ -21,7 +21,7 @@ class RiskTierRequest(BaseModel):
 
 @router.get("/api/risk/tier/{server_id}", response_model=RiskTierResponse)
 async def get_risk_tier(server_id: str, session: Session = Depends(get_session)):
-    # Get axis scores from mcp_llm_axis_scores
+    # Get axis scores from McpLlmAxisScore
     axis_scores = session.query(McpLlmAxisScore).filter(
         McpLlmAxisScore.server_id == server_id
     ).all()
@@ -29,7 +29,7 @@ async def get_risk_tier(server_id: str, session: Session = Depends(get_session))
     if not axis_scores:
         raise HTTPException(status_code=404, detail="No axis scores found for server")
 
-    # Get current trust override from mcp_server_registry
+    # Get current trust override from McpServerRegistry
     server = session.query(McpServerRegistry).filter(
         McpServerRegistry.server_id == server_id
     ).first()
@@ -71,7 +71,7 @@ async def get_risk_tier(server_id: str, session: Session = Depends(get_session))
 
 @router.post("/api/risk/tier/update")
 async def update_risk_tier(request: RiskTierRequest, session: Session = Depends(get_session)):
-    # Update risk tier in mcp_server_registry
+    # Update risk tier in McpServerRegistry
     server = session.query(McpServerRegistry).filter(
         McpServerRegistry.server_id == request.server_id
     ).first()

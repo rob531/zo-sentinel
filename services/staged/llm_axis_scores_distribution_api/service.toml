@@ -1,0 +1,8 @@
+[service]
+name = "llm_axis_scores_distribution_api"
+import_path = "services.active.llm_axis_scores_distribution_api.router"
+prefix = "/api"
+tag = "llm_axis_scores_distribution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

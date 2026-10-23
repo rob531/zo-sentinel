@@ -1,17 +1,18 @@
-#!/usr/bin/env python3
-import sys
-import os
-import time
-import signal
 import logging
-import requests
+import os
+import signal
+import sys
+import time
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Any, Dict, List, Optional
 
-SERVICE_NAME = 'signal_analyser_v2_enrichment_wiring'
-WRITE_SERVICE_URL = 'http://localhost:8772'
-SERVICE_PORT = None
-PID_FILE = '/home/workspace/zo_sentinel/.pids/signal_analyser_v2_enrichment_wiring.pid'
+import requests
+
+# HOUSE CONVENTIONS
+SERVICE_NAME = 'signal_analyser_v2_wiring_check'
+SERVICE_PORT = 8773
+WRITE_SERVICE_URL = f'http://localhost:{SERVICE_PORT}/write'
+PID_FILE = f'/home/workspace/logs/{SERVICE_NAME}.pid'
 POLL_SECS = 300
 
 logging.basicConfig(
@@ -19,76 +20,9 @@ logging.basicConfig(
     format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
     handlers=[logging.FileHandler(f'/home/workspace/logs/{SERVICE_NAME}.log')]
 )
-logger = logging.getLogger(__name__)
+log = logging.getLogger(SERVICE_NAME)
 
-_pid_file_created = False
-
-def check_single_instance():
-    global _pid_file_created
-    pid = str(os.getpid())
-    os.makedirs(os.path.dirname(PID_FILE), exist_ok=True)
-    if os.path.exists(PID_FILE):
-        try:
-            with open(PID_FILE, 'r') as f:
-                existing = f.read().strip()
-            if existing and existing != pid:
-                import subprocess
-                result = subprocess.run(['ps', '-p', existing, '-o', 'pid='], capture_output=True, text=True)
-                if result.returncode == 0:
-                    logger.error(f"Another instance running: {existing}")
-                    sys.exit(1)
-        except Exception:
-            pass
-    with open(PID_FILE, 'w') as f:
-        f.write(pid)
-    _pid_file_created = True
-
-def remove_pid_file():
-    if _pid_file_created and os.path.exists(PID_FILE):
-        try:
-            os.remove(PID_FILE)
-        except Exception:
-            pass
-
-def signal_handler(signum, frame):
-    logger.info(f"Received signal {signum}, shutting down gracefully")
-    remove_pid_file()
-    sys.exit(0)
-
-def ws_query(sql: str, params: tuple = None) -> List[Dict[str, Any]]:
-    payload = {'table': '__query__', 'sql': sql}
-    if params:
-        payload['params'] = params
-    try:
-        resp = requests.post(WRITE_SERVICE_URL, json=payload, timeout=30)
-        resp.raise_for_status()
-        result = resp.json()
-        return result.get('rows', [])
-    except Exception as e:
-        logger.error(f"ws_query failed: {e}")
-        return []
-
-def ws_write(table: str, rows: List[Dict[str, Any]]) -> bool:
-    payload = {'table': table, 'rows': rows, 'wait': True}
-    try:
-        resp = requests.post(WRITE_SERVICE_URL, json=payload, timeout=30)
-        resp.raise_for_status()
-        return True
-    except Exception as e:
-        logger.error(f"ws_write failed for {table}: {e}")
-        return False
-
-def send_heartbeat(status: str = 'running', meta: Dict[str, Any] = None):
-    row = {
-        'service_name': SERVICE_NAME,
-        'status': status,
-        'ts': datetime.now(timezone.utc).isoformat(),
-        'meta': json.dumps(meta) if meta else '{}'
-    }
-    ws_write('service_health', [row])
-
-import json
-
+# Enrichment signal types to track
 ENRICHMENT_TYPES = [
     'permission_scope',
     'temporal_stability',
@@ -97,89 +31,235 @@ ENRICHMENT_TYPES = [
     'community_signal_enrichment'
 ]
 
-def cycle() -> Dict[str, Any]:
-    results = {
+
+def check_single_instance() -> None:
+    if os.path.exists(PID_FILE):
+        with open(PID_FILE, 'r') as f:
+            old_pid = f.read().strip()
+        if old_pid and os.path.exists(f'/proc/{old_pid}'):
+            log.error(f"Another instance running with PID {old_pid}. Exiting.")
+            sys.exit(1)
+        else:
+            os.remove(PID_FILE)
+
+
+def remove_pid_file() -> None:
+    if os.path.exists(PID_FILE):
+        os.remove(PID_FILE)
+
+
+def signal_handler(signum: int, frame: Any) -> None:
+    log.info(f"Received signal {signum}, shutting down gracefully.")
+    remove_pid_file()
+    sys.exit(0)
+
+
+def ws_write(table: str, rows: Dict) -> None:
+    payload = {
+        'table': table,
+        'rows': rows,
+        'wait': True
+    }
+    try:
+        resp = requests.post(WRITE_SERVICE_URL, json=payload, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        log.error(f"write_service failed for table {table}: {e}")
+
+
+def ws_query(sql: str) -> List[Dict]:
+    payload = {
+        'sql': sql,
+        'wait': True
+    }
+    try:
+        resp = requests.post(WRITE_SERVICE_URL.replace('/write', '/query'), json=payload, timeout=30)
+        resp.raise_for_status()
+        result = resp.json()
+        return result.get('rows', [])
+    except requests.RequestException as e:
+        log.error(f"ws_query failed: {e}")
+        return []
+
+
+def send_heartbeat(status: str = 'running', meta: Optional[Dict] = None) -> None:
+    row = {
+        'service_name': SERVICE_NAME,
+        'status': status,
+        'last_heartbeat': datetime.now(timezone.utc).isoformat(),
+        'meta': meta or {}
+    }
+    ws_write('service_health', row)
+
+
+def get_enrichment_counts() -> Dict[str, int]:
+    counts = {}
+    for enrich_type in ENRICHMENT_TYPES:
+        sql = f"""
+        SELECT COUNT(*) as cnt FROM mcp_signal_enrichments
+        WHERE signal_type = '{enrich_type}'
+        """
+        rows = ws_query(sql)
+        counts[enrich_type] = rows[0]['cnt'] if rows else 0
+    return counts
+
+
+def get_total_servers() -> int:
+    sql = "SELECT COUNT(*) as cnt FROM mcp_server_registry"
+    rows = ws_query(sql)
+    return rows[0]['cnt'] if rows else 0
+
+
+def get_enriched_servers_count() -> int:
+    sql = """
+    SELECT COUNT(DISTINCT server_id) as cnt FROM mcp_signal_enrichments
+    WHERE signal_type IN ('permission_scope', 'temporal_stability', 'tool_description_safety', 'supply_chain_enrichment', 'community_signal_enrichment')
+    """
+    rows = ws_query(sql)
+    return rows[0]['cnt'] if rows else 0
+
+
+def get_servers_with_all_enrichments() -> int:
+    total = get_total_servers()
+    if total == 0:
+        return 0
+    
+    enrichment_types_str = "', '".join(ENRICHMENT_TYPES)
+    sql = f"""
+    SELECT COUNT(*) as cnt FROM (
+        SELECT server_id, COUNT(DISTINCT signal_type) as type_count
+        FROM mcp_signal_enrichments
+        WHERE signal_type IN ('{enrichment_types_str}')
+        GROUP BY server_id
+        HAVING COUNT(DISTINCT signal_type) = {len(ENRICHMENT_TYPES)}
+    )
+    """
+    rows = ws_query(sql)
+    return rows[0]['cnt'] if rows else 0
+
+
+def get_analyser_status() -> Dict[str, Any]:
+    sql = """
+    SELECT COUNT(*) as cnt FROM mcp_signal_scores
+    WHERE computed_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+    """
+    rows = ws_query(sql)
+    return {'scores_computed_24h': rows[0]['cnt'] if rows else 0}
+
+
+def run_wiring_diagnostics() -> Dict[str, Any]:
+    diagnostics = {
+        'ts': datetime.now(timezone.utc).isoformat(),
         'enrichment_counts': {},
         'total_servers': 0,
-        'servers_with_any_enrichment': 0,
+        'enriched_servers': 0,
+        'fully_enriched_servers': 0,
         'coverage_pct': 0.0,
-        'wiring_status': {},
-        'issues': []
+        'analyser_status': {},
+        'warnings': []
     }
     
-    for etype in ENRICHMENT_TYPES:
-        sql = f"""
-            SELECT COUNT(DISTINCT target_server_id) as cnt
-            FROM mcp_signal_enrichments
-            WHERE signal_type = ?
-        """
-        rows = ws_query(sql, (etype,))
-        cnt = rows[0]['cnt'] if rows else 0
-        results['enrichment_counts'][etype] = cnt
-        results['wiring_status'][etype] = 'OK' if cnt > 0 else 'MISSING'
-        if cnt == 0:
-            results['issues'].append(f"No data for enrichment type: {etype}")
+    try:
+        enrichment_counts = get_enrichment_counts()
+        diagnostics['enrichment_counts'] = enrichment_counts
+        
+        total_servers = get_total_servers()
+        diagnostics['total_servers'] = total_servers
+        
+        enriched_servers = get_enriched_servers_count()
+        diagnostics['enriched_servers'] = enriched_servers
+        
+        fully_enriched = get_servers_with_all_enrichments()
+        diagnostics['fully_enriched_servers'] = fully_enriched
+        
+        coverage_pct = (enriched_servers / total_servers * 100) if total_servers > 0 else 0.0
+        diagnostics['coverage_pct'] = round(coverage_pct, 2)
+        
+        analyser_status = get_analyser_status()
+        diagnostics['analyser_status'] = analyser_status
+        
+        missing_enrichments = [k for k, v in enrichment_counts.items() if v == 0]
+        if missing_enrichments:
+            diagnostics['warnings'].append(f"Missing enrichment data for: {', '.join(missing_enrichments)}")
+        
+        if total_servers > 0 and coverage_pct < 50:
+            diagnostics['warnings'].append(f"Low enrichment coverage: {coverage_pct}%")
+        
+        if analyser_status.get('scores_computed_24h', 0) == 0:
+            diagnostics['warnings'].append("No signal scores computed in last 24 hours")
+            
+    except Exception as e:
+        log.error(f"Error during wiring diagnostics: {e}")
+        diagnostics['warnings'].append(f"Diagnostic error: {str(e)}")
     
-    sql_total = "SELECT COUNT(*) as total FROM mcp_server_registry"
-    rows = ws_query(sql_total)
-    results['total_servers'] = rows[0]['total'] if rows else 0
-    
-    sql_enriched = """
-        SELECT COUNT(DISTINCT target_server_id) as cnt
-        FROM mcp_signal_enrichments
-    """
-    rows = ws_query(sql_enriched)
-    results['servers_with_any_enrichment'] = rows[0]['cnt'] if rows else 0
-    
-    if results['total_servers'] > 0:
-        results['coverage_pct'] = round(
-            (results['servers_with_any_enrichment'] / results['total_servers']) * 100, 2
-        )
-    
-    sql_scores = "SELECT COUNT(DISTINCT target_server_id) as cnt FROM mcp_signal_scores"
-    rows = ws_query(sql_scores)
-    scores_count = rows[0]['cnt'] if rows else 0
-    
-    results['signal_scores_count'] = scores_count
-    
-    sql_signal = "SELECT COUNT(DISTINCT target_server_id) as cnt FROM mcp_server_signals"
-    rows = ws_query(sql_signal)
-    signals_count = rows[0]['cnt'] if rows else 0
-    
-    results['server_signals_count'] = signals_count
-    
-    for etype in ENRICHMENT_TYPES:
-        cnt = results['enrichment_counts'].get(etype, 0)
-        logger.info(f"Enrichment [{etype}]: {cnt} servers")
-    
-    logger.info(f"Coverage: {results['servers_with_any_enrichment']}/{results['total_servers']} = {results['coverage_pct']}%")
-    logger.info(f"Signal scores count: {scores_count}, Server signals count: {signals_count}")
-    
-    if results['issues']:
-        for issue in results['issues']:
-            logger.warning(f"WIRING ISSUE: {issue}")
-        results['wiring_status']['overall'] = 'INCOMPLETE'
-    else:
-        results['wiring_status']['overall'] = 'COMPLETE'
-        logger.info("All enrichment types have data - wiring appears correct")
-    
-    return results
+    return diagnostics
 
-def run():
+
+def log_diagnostics_report(diagnostics: Dict[str, Any]) -> None:
+    log.info("=" * 60)
+    log.info("SIGNAL ANALYSER V2 WIRING CHECK REPORT")
+    log.info("=" * 60)
+    log.info(f"Timestamp: {diagnostics['ts']}")
+    log.info(f"Total MCP Servers: {diagnostics['total_servers']}")
+    log.info(f"Servers with any enrichment: {diagnostics['enriched_servers']}")
+    log.info(f"Servers with ALL enrichments: {diagnostics['fully_enriched_servers']}")
+    log.info(f"Enrichment coverage: {diagnostics['coverage_pct']}%")
+    log.info("")
+    log.info("Enrichment counts by type:")
+    for enrich_type, count in diagnostics['enrichment_counts'].items():
+        log.info(f"  {enrich_type}: {count}")
+    log.info("")
+    log.info(f"Analyser status (24h): {diagnostics['analyser_status']}")
+    if diagnostics['warnings']:
+        log.warning("WARNINGS:")
+        for warning in diagnostics['warnings']:
+            log.warning(f"  - {warning}")
+    else:
+        log.info("No warnings detected.")
+    log.info("=" * 60)
+
+
+def write_diagnostics_to_table(diagnostics: Dict[str, Any]) -> None:
+    ws_write('wiring_check_results', {
+        'check_service': SERVICE_NAME,
+        'ts': diagnostics['ts'],
+        'total_servers': diagnostics['total_servers'],
+        'enriched_servers': diagnostics['enriched_servers'],
+        'fully_enriched_servers': diagnostics['fully_enriched_servers'],
+        'coverage_pct': diagnostics['coverage_pct'],
+        'enrichment_counts_json': str(diagnostics['enrichment_counts']),
+        'analyser_status_json': str(diagnostics['analyser_status']),
+        'warnings_json': str(diagnostics['warnings'])
+    })
+
+
+def cycle() -> None:
+    log.info("Starting signal_analyser_v2 wiring diagnostic cycle...")
+    diagnostics = run_wiring_diagnostics()
+    log_diagnostics_report(diagnostics)
+    write_diagnostics_to_table(diagnostics)
+    send_heartbeat(status='running', meta={'coverage_pct': diagnostics['coverage_pct']})
+
+
+def run() -> None:
     check_single_instance()
+    with open(PID_FILE, 'w') as f:
+        f.write(str(os.getpid()))
+    
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    logger.info(f"Starting {SERVICE_NAME}")
     
-    while True:
-        try:
-            results = cycle()
-            send_heartbeat('running', results)
-        except Exception as e:
-            logger.error(f"Cycle error: {e}", exc_info=True)
-            send_heartbeat('error', {'error': str(e)})
-        
-        time.sleep(POLL_SECS)
+    log.info(f"{SERVICE_NAME} starting. PID={os.getpid()}, POLL_SECS={POLL_SECS}")
+    
+    try:
+        while True:
+            cycle()
+            time.sleep(POLL_SECS)
+    except KeyboardInterrupt:
+        log.info("Keyboard interrupt received.")
+    finally:
+        remove_pid_file()
+
 
 if __name__ == '__main__':
     run()

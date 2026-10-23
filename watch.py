@@ -167,7 +167,8 @@ def draw_header():
 def draw_daemons(daemons: List[Dict]):
     running = sum(1 for d in daemons if d["status"] == "RUNNING")
     total   = len(daemons)
-    print(f"{BOLD}{MAGENTA}\u250c\u2500 PERSISTENT DAEMONS  {running}/{total} running {'\u2500'*48}\u2510{ANSI_RESET}")
+    _fx0 = '\u2500'*48
+    print(f"{BOLD}{MAGENTA}\u250c\u2500 PERSISTENT DAEMONS  {running}/{total} running {_fx0}\u2510{ANSI_RESET}")
     for d in daemons:
         pid_str = f"PID:{d['pid']}" if d["pid"] else "---"
         uptime  = d["uptime"] or "-"
@@ -177,11 +178,13 @@ def draw_daemons(daemons: List[Dict]):
               f"{BOLD}{d['name']:<28}{RESET}  "
               f"{DIM}{pid_str:<12}{RESET}  "
               f"{CYAN}{uptime}{RESET}")
-    print(f"{MAGENTA}\u2514{'\u2500'*76}\u2518{ANSI_RESET}\n")
+    _fx1 = '\u2500'*76
+    print(f"{MAGENTA}\u2514{_fx1}\u2518{ANSI_RESET}\n")
 
 
 def draw_events(events: List[Dict]):
-    print(f"{BOLD}{BLUE}\u250c\u2500 RECENT MESH EVENTS {'\u2500'*60}\u2510{ANSI_RESET}")
+    _fx2 = '\u2500'*60
+    print(f"{BOLD}{BLUE}\u250c\u2500 RECENT MESH EVENTS {_fx2}\u2510{ANSI_RESET}")
     if not events:
         print(f"{BLUE}\u2502{ANSI_RESET}  {DIM}No events{ANSI_RESET}")
     for e in events:
@@ -193,12 +196,14 @@ def draw_events(events: List[Dict]):
               GREEN if "build_complete" in evtype else CYAN
         print(f"{BLUE}\u2502{ANSI_RESET} {col}{evtype:<22}{RESET}  "
               f"{DIM}{agent:<22}{RESET}  {DIM}{sev:<8}{RESET}  {DIM}{ts}{RESET}")
-    print(f"{BLUE}\u2514{'\u2500'*76}\u2518{ANSI_RESET}\n")
+    _fx3 = '\u2500'*76
+    print(f"{BLUE}\u2514{_fx3}\u2518{ANSI_RESET}\n")
 
 
 def draw_health(counts: Dict):
     total = sum(counts.values())
-    print(f"{BOLD}{GREEN}\u250c\u2500 SERVICE HEARTBEATS  ({total} services) {'\u2500'*44}\u2510{ANSI_RESET}")
+    _fx4 = '\u2500'*44
+    print(f"{BOLD}{GREEN}\u250c\u2500 SERVICE HEARTBEATS  ({total} services) {_fx4}\u2510{ANSI_RESET}")
     for label, col, key in [
         ("HEALTHY  (<10m)",  GREEN,  "healthy"),
         ("DEGRADED (<30m)",  YELLOW, "degraded"),
@@ -209,11 +214,13 @@ def draw_health(counts: Dict):
         bar = "\u2588" * min(n * 2, 30)
         print(f"{col}\u2502{ANSI_RESET} {col}{label:<16}{RESET}  "
               f"{col}{bar:<30}{RESET}  {BOLD}{col}{n}{RESET}")
-    print(f"{GREEN}\u2514{'\u2500'*76}\u2518{ANSI_RESET}\n")
+    _fx5 = '\u2500'*76
+    print(f"{GREEN}\u2514{_fx5}\u2518{ANSI_RESET}\n")
 
 
 def draw_threats(threats: List[Dict]):
-    print(f"{BOLD}{RED}\u250c\u2500 RECENT THREATS {'\u2500'*64}\u2510{ANSI_RESET}")
+    _fx6 = '\u2500'*64
+    print(f"{BOLD}{RED}\u250c\u2500 RECENT THREATS {_fx6}\u2510{ANSI_RESET}")
     if not threats:
         print(f"{RED}\u2502{ANSI_RESET}  {DIM}No threats{ANSI_RESET}")
     for t in threats:
@@ -224,25 +231,31 @@ def draw_threats(threats: List[Dict]):
         col  = RED if sev in ("CRITICAL", "HIGH") else YELLOW
         print(f"{RED}\u2502{ANSI_RESET} {col}{sev:<8}{RESET}  "
               f"{YELLOW}{sid:<25}{RESET}  {RED}{tt:<20}{RESET}  {DIM}{ts}{RESET}")
-    print(f"{RED}\u2514{'\u2500'*76}\u2518{ANSI_RESET}\n")
+    _fx7 = '\u2500'*76
+    print(f"{RED}\u2514{_fx7}\u2518{ANSI_RESET}\n")
 
 
 def draw_registry(depth: int, summary: Dict):
     total = summary.get("total", 0)
-    print(f"{BOLD}{YELLOW}\u250c\u2500 REGISTRY  {total} MCPs  avg_score={summary.get('avg_score',0)} {'\u2500'*50}\u2510{ANSI_RESET}")
+    _fx8 = '\u2500'*50
+    print(f"{BOLD}{YELLOW}\u250c\u2500 REGISTRY  {total} MCPs  avg_score={summary.get('avg_score',0)} {_fx8}\u2510{ANSI_RESET}")
     print(f"{YELLOW}\u2502{ANSI_RESET}  "
           f"Trusted: {GREEN}{summary.get('trusted',0)}{RESET}   "
           f"Risky: {RED}{summary.get('risky',0)}{RESET}   "
           f"Unscored: {CYAN}{depth}{RESET}")
     if total > 0:
         bar_len = min(int((summary.get('trusted', 0) / total) * 60), 60)
-        bar = f"{GREEN}{'\u2588' * bar_len}{DIM}{'\u2591' * (60 - bar_len)}{RESET}"
+        _fx9 = '\u2588' * bar_len
+        _fx10 = '\u2591' * (60 - bar_len)
+        bar = f"{GREEN}{_fx9}{DIM}{_fx10}{RESET}"
         print(f"{YELLOW}\u2502{ANSI_RESET}  Trust coverage: [{bar}]")
-    print(f"{YELLOW}\u2514{'\u2500'*76}\u2518{ANSI_RESET}\n")
+    _fx11 = '\u2500'*76
+    print(f"{YELLOW}\u2514{_fx11}\u2518{ANSI_RESET}\n")
 
 
 def draw_footer():
-    print(f"{DIM}{'\u2500'*80}{ANSI_RESET}")
+    _fx12 = '\u2500'*80
+    print(f"{DIM}{_fx12}{ANSI_RESET}")
     print(f"{DIM}zm watch  |  zm watch10  |  zm test  |  zm apis  |  refresh={INTERVAL}s{ANSI_RESET}")
 
 

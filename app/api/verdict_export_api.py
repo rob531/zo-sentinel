@@ -12,7 +12,7 @@ from __future__ import annotations
 import csv
 import io
 from collections import defaultdict
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse

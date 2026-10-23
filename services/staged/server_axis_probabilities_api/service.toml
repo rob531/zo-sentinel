@@ -1,0 +1,8 @@
+[service]
+name = "server_axis_probabilities_api"
+import_path = "services.active.server_axis_probabilities_api.router"
+prefix = "/api"
+tag = "server_axis_probabilities_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

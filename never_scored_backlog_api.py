@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScores
+from app.models import McpServerRegistry, McpLlmAxisScore
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ class NeverScoredResponse(BaseModel):
 
 def get_never_scored_servers(db: Session) -> List[ServerInfo]:
     """Get servers present in registry but absent from scores."""
-    subquery = db.query(McpLlmAxisScores.server_id).subquery()
+    subquery = db.query(McpLlmAxisScore.server_id).subquery()
     servers = (
         db.query(McpServerRegistry)
         .filter(~McpServerRegistry.server_id.in_(subquery))
@@ -56,7 +56,7 @@ async def never_scored_backlog(db: Session = Depends(get_session)) -> NeverScore
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import Base, get_session
-    from app.models import McpServerRegistry, McpLlmAxisScores
+    from app.models import McpServerRegistry, McpLlmAxisScore
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 

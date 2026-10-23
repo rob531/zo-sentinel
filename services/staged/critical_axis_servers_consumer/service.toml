@@ -1,0 +1,8 @@
+[service]
+name = "critical_axis_servers_consumer"
+import_path = "services.active.critical_axis_servers_consumer.router"
+prefix = "/api"
+tag = "critical_axis_servers_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true

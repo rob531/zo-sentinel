@@ -1,0 +1,9 @@
+# service.toml for compare_risk_tiers
+[service]
+name = "compare_risk_tiers"
+import_path = "services.active.compare_risk_tiers.router"
+prefix = "/api"
+tag = "compare_risk_tiers"
+origin = "service"
+auth = "public"
+needs_data_layer = true

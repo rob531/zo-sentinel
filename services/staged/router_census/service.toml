@@ -1,0 +1,8 @@
+[service]
+name = "router_census"
+import_path = "services.active.router_census.router"
+prefix = "/api"
+tag = "router_census"
+origin = "service"
+auth = "public"
+needs_data_layer = true

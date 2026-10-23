@@ -1,0 +1,8 @@
+[service]
+name = "verdict_distribution_api"
+import_path = "services.active.verdict_distribution_api.router"
+prefix = "/api"
+tag = "verdict_distribution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

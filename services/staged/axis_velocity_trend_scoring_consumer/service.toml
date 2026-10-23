@@ -1,0 +1,23 @@
+[service]
+name = "axis_velocity_trend_scoring_consumer"
+import_path = "services.active.axis_velocity_trend_scoring_consumer.router"
+prefix = "/api"
+tag = "axis_velocity_trend_scoring_consumer"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[dependencies]
+fastapi = "*"
+sqlalchemy = { extras = ["asyncio"] }
+httpx = "*"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "axis-velocity-trend-scoring-consumer"
+version = "0.1.0"
+description = "Axis velocity trend scoring consumer service"
+requires-python = ">=3.11"

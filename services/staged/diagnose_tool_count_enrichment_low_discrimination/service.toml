@@ -1,0 +1,8 @@
+[service]
+name = "diagnose_tool_count_enrichment_low_discrimination"
+import_path = "services.active.diagnose_tool_count_enrichment_low_discrimination.router"
+prefix = "/api"
+tag = "diagnose_tool_count_enrichment_low_discrimination"
+origin = "service"
+auth = "public"
+needs_data_layer = true

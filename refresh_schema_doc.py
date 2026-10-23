@@ -32,7 +32,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-import requests
+# Kept although this module no longer calls requests directly: the bus reads
+# below go through zo_sentinel.bus, which posts via this same `requests`
+# module object, and tests/test_information_schema_pagination.py patches
+# `refresh_schema_doc.requests.post` to intercept them. Removing the import
+# would silently break that interception rather than fail loudly.
+import requests  # noqa: F401
+
+from zo_sentinel import bus
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +94,18 @@ INFORMATION_SCHEMA_SQL = (
     "ORDER BY table_name, ordinal_position"
 )
 
+# The bus (:8772/query) silently caps a result set. Measured on the LIVE runtime
+# 2026-09-04: this statement returned 200 rows against a `count(*)` of 373, so
+# the committed DB_SCHEMA.md / duckdb_schema.json were generated from the first
+# 200 columns only -- every table sorting after `mcp_ecosystems_metadata` was
+# absent from the canonical doc, and the committed schema hash was a hash of a
+# partial read. The response's `count` field equals len(rows) on every query
+# and so cannot flag truncation (#3997). Paging does not need it: request pages
+# and stop at the first short one. `(table_name, ordinal_position)` is a total
+# order, so LIMIT/OFFSET is stable across pages.
+BUS_PAGE_ROWS = 200
+BUS_MAX_PAGES = 200
+
 
 # ---------------------------------------------------------------------------
 # Schema hash -- duplicated here so this script stays stdlib + requests only
@@ -109,14 +128,26 @@ def compute_schema_hash(rows: List[Dict[str, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def fetch_duckdb_rows() -> List[Dict[str, str]]:
-    resp = requests.post(
-        f"{WRITE_SERVICE}/query",
-        json={"sql": INFORMATION_SCHEMA_SQL},
+def _fetch_all_information_schema_rows() -> List[Dict[str, Any]]:
+    """Read every information_schema row, paging past the bus row cap.
+
+    Delegates to ``zo_sentinel.bus.query_all`` -- one paging implementation for
+    the tree, with the ``count(*)`` reconciliation this inlined copy lacked. The
+    committed schema doc and its hash are generated from this, so a partial read
+    here is a confidently-wrong canonical artefact; query_all raises instead.
+    """
+    return bus.query_all(
+        INFORMATION_SCHEMA_SQL,
+        url="%s/query" % WRITE_SERVICE,
         timeout=QUERY_TIMEOUT,
+        page_rows=BUS_PAGE_ROWS,
+        max_pages=BUS_MAX_PAGES,
+        what="information_schema",
     )
-    resp.raise_for_status()
-    raw = resp.json().get("rows", [])
+
+
+def fetch_duckdb_rows() -> List[Dict[str, str]]:
+    raw = _fetch_all_information_schema_rows()
     # Normalise type-string and drop skip tables -- match the historical
     # transformation so committed hashes stay comparable.
     return [

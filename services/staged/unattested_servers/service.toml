@@ -1,0 +1,8 @@
+[service]
+name = "unattested_servers"
+import_path = "services.active.unattested_servers.router"
+prefix = "/api"
+tag = "unattested_servers"
+origin = "service"
+auth = "public"
+needs_data_layer = true

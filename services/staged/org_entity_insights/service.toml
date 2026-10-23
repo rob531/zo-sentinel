@@ -1,0 +1,12 @@
+[service]
+name = "org_entity_insights"
+import_path = "services.active.org_entity_insights.router"
+prefix = "/api"
+tag = "org_entity_insights"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.org_entity_insights"
+expected_output = "PASS"

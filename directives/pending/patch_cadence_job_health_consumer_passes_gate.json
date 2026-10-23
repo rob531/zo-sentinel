@@ -1,0 +1,40 @@
+{
+  "task": "patch_cadence_job_health_consumer_passes_gate",
+  "directive_id": "patch_cadence_job_health_consumer_passes_gate",
+  "id": "patch_cadence_job_health_consumer_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/cadence_job_health_consumer/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'cadence_job_health_consumer' (services/staged/cadence_job_health_consumer; family cadence_job_health_consumer v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): mount probe FAILED (real router on the exemplar harness): router mounts but declares 0 routes. If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, which the Fly image cannot reach -- read through app.db (SQLAlchemy session via app.db.get_session) or declare the service a zo-side job. Otherwise: the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the exemplar contract's harness), failed as quoted. Fix the router/logic so every parameterless GET answers < 500 on an empty data layer, and make contract.py import THIS service's router (`from .router import router`) and assert it -- no re-implemented handler, no MagicMock router. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/cadence_job_health_consumer (service.toml valid, router.py exposes a router, `python -m services.staged.cadence_job_health_consumer.router` imports, `python -m services.staged.cadence_job_health_consumer.contract` exits 0). Then `python tools/staging_drain/census.py --only cadence_job_health_consumer --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/cadence_job_health_consumer/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/cadence_job_health_consumer/contract.py",
+    "services/staged/cadence_job_health_consumer/logic.py",
+    "services/staged/cadence_job_health_consumer/router.py",
+    "services/staged/cadence_job_health_consumer/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "cadence_job_health_consumer fails the promotion gate: mount_probe_failed",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "mount probe FAILED (real router on the exemplar harness): router mounts but declares 0 routes",
+    "failure_class": "mount_probe_failed",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, which the Fly image cannot reach -- read through app.db (SQLAlchemy session via app.db.get_session) or declare the service a zo-side job. Otherwise: the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the exemplar contract's harness), failed as quoted. Fix the router/logic so every parameterless GET answers < 500 on an empty data layer, and make contract.py import THIS service's router (`from .router import router`) and assert it -- no re-implemented handler, no MagicMock router.",
+  "details": {
+    "family": "cadence_job_health_consumer",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

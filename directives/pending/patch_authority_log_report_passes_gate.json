@@ -1,0 +1,40 @@
+{
+  "task": "patch_authority_log_report_passes_gate",
+  "directive_id": "patch_authority_log_report_passes_gate",
+  "id": "patch_authority_log_report_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/authority_log_report/__init__.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'authority_log_report' (services/staged/authority_log_report; family authority_log_report v1; runtime class lib) so it passes the promotion gate. GATE FAILURE (verbatim): source import FAILED: services.staged.authority_log_report.logic: NameError: name 'services' is not defined. Fix the quoted gate failure. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/authority_log_report (service.toml valid, router.py exposes a router, `python -m services.staged.authority_log_report.router` imports, `python -m services.staged.authority_log_report.contract` exits 0). Then `python tools/staging_drain/census.py --only authority_log_report --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/authority_log_report/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/authority_log_report/__init__.py",
+    "services/staged/authority_log_report/contract.py",
+    "services/staged/authority_log_report/logic.py",
+    "services/staged/authority_log_report/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "authority_log_report fails the promotion gate: import_undefined_name",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:15:13Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "source import FAILED: services.staged.authority_log_report.logic: NameError: name 'services' is not defined",
+    "failure_class": "import_undefined_name",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the quoted gate failure.",
+  "details": {
+    "family": "authority_log_report",
+    "version": 1,
+    "runtime_class": "lib",
+    "files": [
+      "__init__.py",
+      "contract.py",
+      "logic.py",
+      "service.toml"
+    ]
+  }
+}

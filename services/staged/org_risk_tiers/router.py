@@ -61,7 +61,7 @@ if __name__ == "__main__":
             sess.execute(
                 text(
                     """
-                    INSERT INTO mcp_server_registry
+                    INSERT INTO McpServerRegistry
                     (server_id, org_id, risk_tier, last_assessed)
                     VALUES (:server_id, :org_id, :risk_tier, :last_assessed)
                     """

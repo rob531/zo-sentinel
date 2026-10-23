@@ -105,7 +105,12 @@ def get_verdict_axis_detail(
     reg = db.get(McpServerRegistry, server_id)
     name = reg.name if reg else None
     url = reg.url if reg else None
-    verdict = reg.verdict if reg else None
+    # Surface the live `risk_tier`, not the legacy `verdict` column (~99.4% the
+    # worthless string 'unknown'). This endpoint is public/unauthenticated, so the
+    # legacy column must never leak. Keep the `verdict` response KEY (an external
+    # consumer may read it) but populate it from risk_tier -- matching the already-
+    # shipped pattern in server_scorecard_api.py (verdict = risk_tier).
+    verdict = reg.risk_tier if reg else None
 
     mv = _latest_model_version(db, server_id)
     if mv is None:

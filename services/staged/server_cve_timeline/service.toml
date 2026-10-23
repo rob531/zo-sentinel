@@ -1,0 +1,8 @@
+[service]
+name = "server_cve_timeline"
+import_path = "services.active.server_cve_timeline.router"
+prefix = "/api"
+tag = "server_cve_timeline"
+origin = "service"
+auth = "public"
+needs_data_layer = true

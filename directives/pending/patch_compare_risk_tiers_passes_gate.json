@@ -1,0 +1,38 @@
+{
+  "task": "patch_compare_risk_tiers_passes_gate",
+  "directive_id": "patch_compare_risk_tiers_passes_gate",
+  "id": "patch_compare_risk_tiers_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/compare_risk_tiers/contract.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'compare_risk_tiers' (services/staged/compare_risk_tiers; family compare_risk_tiers v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): contract FAILED: exit=1 line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/home/user/zo-sentinel/services/staged/compare_risk_tiers/contract.py\", line 9, in <module>\n    from fastapi.limiting import RateLimitExceeded, RateLimiter\nModuleNotFoundError: No module named 'fastapi.limiting'. Fix the quoted gate failure. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/compare_risk_tiers (service.toml valid, router.py exposes a router, `python -m services.staged.compare_risk_tiers.router` imports, `python -m services.staged.compare_risk_tiers.contract` exits 0). Then `python tools/staging_drain/census.py --only compare_risk_tiers --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/compare_risk_tiers/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/compare_risk_tiers/contract.py",
+    "services/staged/compare_risk_tiers/router.py",
+    "services/staged/compare_risk_tiers/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "compare_risk_tiers fails the promotion gate: contract_missing",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "contract FAILED: exit=1 line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/home/user/zo-sentinel/services/staged/compare_risk_tiers/contract.py\", line 9, in <module>\n    from fastapi.limiting import RateLimitExceeded, RateLimiter\nModuleNotFoundError: No module named 'fastapi.limiting'",
+    "failure_class": "contract_missing",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "Fix the quoted gate failure.",
+  "details": {
+    "family": "compare_risk_tiers",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "contract.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

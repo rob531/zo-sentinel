@@ -1,0 +1,8 @@
+[service]
+name = "sentinel_external_api"
+import_path = "services.active.sentinel_external_api.router"
+prefix = "/api"
+tag = "sentinel_external_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

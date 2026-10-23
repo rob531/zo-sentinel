@@ -1,0 +1,62 @@
+[service]
+name = "scoring_analytics_api"
+import_path = "services.active.scoring_analytics_api.router"
+prefix = "/api"
+tag = "scoring_analytics_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[files]
+router = "services/active/scoring_analytics_api/router.py"
+
+[dependencies]
+app = { version = "0.1.0", source = "internal" }
+fastapi = { version = "0.104.0", source = "pypi" }
+sqlalchemy = { version = "2.0.0", source = "pypi" }
+httpx = { version = "0.25.0", source = "pypi" }
+pydantic = { version = "2.0.0", source = "pypi" }
+
+[schema]
+tables = ["mcp_server_registry", "mcp_llm_axis_scores", "mcp_score_disputes", "orgs", "users"]
+bus_tables = ["mcp_signal_scores", "mesh_memory"]
+
+[[endpoints]]
+path = "/servers/{server_id}/scores"
+method = "GET"
+summary = "Get all scores for a server"
+
+[[endpoints]]
+path = "/servers/{server_id}/scores/axis"
+method = "GET"
+summary = "Get LLM axis scores for a server"
+
+[[endpoints]]
+path = "/servers/{server_id}/scores/signal"
+method = "GET"
+summary = "Get signal scores for a server"
+
+[[endpoints]]
+path = "/servers/{server_id}/analytics"
+method = "GET"
+summary = "Get combined analytics for a server"
+
+[[endpoints]]
+path = "/disputes"
+method = "GET"
+summary = "List score disputes"
+
+[[endpoints]]
+path = "/disputes"
+method = "POST"
+summary = "Create a score dispute"
+
+[[endpoints]]
+path = "/disputes/{dispute_id}"
+method = "GET"
+summary = "Get dispute details"
+
+[[endpoints]]
+path = "/servers/{server_id}/analytics/mesh"
+method = "GET"
+summary = "Get mesh memory analytics for a server"

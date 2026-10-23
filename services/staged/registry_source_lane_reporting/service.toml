@@ -1,0 +1,8 @@
+[service]
+name = "registry_source_lane_reporting"
+import_path = "services.active.registry_source_lane_reporting.router"
+prefix = "/api"
+tag = "registry_source_lane_reporting"
+origin = "service"
+auth = "public"
+needs_data_layer = true

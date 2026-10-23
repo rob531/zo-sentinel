@@ -1,0 +1,8 @@
+[service]
+name = "perspective_event_handler"
+import_path = "services.active.perspective_event_handler.router"
+prefix = "/api"
+tag = "perspective_event_handler"
+origin = "service"
+auth = "public"
+needs_data_layer = true

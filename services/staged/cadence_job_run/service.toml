@@ -1,0 +1,12 @@
+[service]
+name = "cadence_job_run"
+import_path = "services.active.cadence_job_run.router"
+prefix = "/api"
+tag = "cadence_job_run"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

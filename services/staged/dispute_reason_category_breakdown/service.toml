@@ -1,0 +1,12 @@
+[service]
+name = "dispute_reason_category_breakdown"
+import_path = "services.active.dispute_reason_category_breakdown.router"
+prefix = "/api"
+tag = "dispute_reason_category_breakdown"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+self_test = true
+expected_output = "PASS"

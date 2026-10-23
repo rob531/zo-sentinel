@@ -1,0 +1,11 @@
+[service]
+name = "server_axis_comparison"
+import_path = "services.active.server_axis_comparison.router"
+prefix = "/api"
+tag = "server_axis_comparison"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

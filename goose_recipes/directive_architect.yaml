@@ -121,12 +121,17 @@ prompt: |-
   reject downstream.
 
   RANGE ACROSS DOMAINS. Spread proposals across the app's domains, favouring
-  thin/underbuilt ones; do NOT keep proposing the same 3-5 subjects. Two
-  read-only code-graph tools exist (`list_domains`, `graph_neighbors(target)`)
-  but they are OPTIONAL and they are NOT a way to start the cycle -- you may
-  call at most ONE, and only AFTER you have already proposed at least one
-  directive. context.already_built_modules is the stronger dedup signal and it
-  is already in your context.
+  thin/underbuilt ones; do NOT keep proposing the same 3-5 subjects.
+  context.domain_map IS THE MAP: the graphify code-graph communities, largest
+  first, each with a module count and a real exemplar module. Pick your subjects
+  from DIFFERENT domains in that list, and prefer a domain you did not touch in
+  context.recent_proposals. If context.domain_map is absent the map could not be
+  measured this cycle (UNKNOWN, not "no domains") -- fall back to ranging by
+  gaps_map and recent_failures. Two read-only code-graph tools also exist
+  (`list_domains`, `graph_neighbors(target)`) but they are OPTIONAL and are NOT a
+  way to start the cycle -- you may call at most ONE, and only AFTER you have
+  already proposed at least one directive. context.already_built_modules is the
+  stronger dedup signal and it is already in your context.
 
   COVERAGE -- context.recent_proposals lists tasks you ALREADY proposed in the
   last few days (many were REJECTED downstream and are NOT in

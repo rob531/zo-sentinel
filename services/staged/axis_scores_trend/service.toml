@@ -1,0 +1,8 @@
+[service]
+name = "axis_scores_trend"
+import_path = "services.active.axis_scores_trend.router"
+prefix = "/api"
+tag = "axis_scores_trend"
+origin = "service"
+auth = "public"
+needs_data_layer = true

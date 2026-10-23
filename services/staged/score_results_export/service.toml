@@ -1,0 +1,8 @@
+[service]
+name = "score_results_export"
+import_path = "services.active.score_results_export.router"
+prefix = "/api"
+tag = "score_results_export"
+origin = "service"
+auth = "public"
+needs_data_layer = true

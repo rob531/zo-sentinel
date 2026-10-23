@@ -1,0 +1,12 @@
+[service]
+name = "scoring_latency_dashboard_api"
+import_path = "services.active.scoring_latency_dashboard_api.router"
+prefix = "/api"
+tag = "scoring_latency_dashboard_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.scoring_latency_dashboard_api"
+expected_output = "PASS"

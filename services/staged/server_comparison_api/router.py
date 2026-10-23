@@ -4,7 +4,7 @@ from typing import List, Dict, Optional
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
 from sqlalchemy.orm import Session
-from .logic import compare_servers
+from .contract import compare_servers
 
 router = APIRouter(prefix="/api/servers")
 

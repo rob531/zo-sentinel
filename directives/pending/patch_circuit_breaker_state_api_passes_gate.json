@@ -1,0 +1,40 @@
+{
+  "task": "patch_circuit_breaker_state_api_passes_gate",
+  "directive_id": "patch_circuit_breaker_state_api_passes_gate",
+  "id": "patch_circuit_breaker_state_api_passes_gate",
+  "handler": "generate_file",
+  "output_file": "services/staged/circuit_breaker_state_api/router.py",
+  "complexity": "low",
+  "phase": "staging_drain.S5",
+  "priority": 0.85,
+  "description": "REPAIR staged service 'circuit_breaker_state_api' (services/staged/circuit_breaker_state_api; family circuit_breaker_state_api v1; runtime class api) so it passes the promotion gate. GATE FAILURE (verbatim): mount probe FAILED (real router on the exemplar harness): GET /diagnostics/circuit-breaker -> 500 over an empty data layer: handler calls write_service at 127.0.0.1:8772 directly (ConnectionError) -- that bus is not reachable from the Fly image, so every request 500s in prod; an api service must read through app.db, or this is a zo-side job, not a Fly route. If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, which the Fly image cannot reach -- read through app.db (SQLAlchemy session via app.db.get_session) or declare the service a zo-side job. Otherwise: the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the exemplar contract's harness), failed as quoted. Fix the router/logic so every parameterless GET answers < 500 on an empty data layer, and make contract.py import THIS service's router (`from .router import router`) and assert it -- no re-implemented handler, no MagicMock router. ACCEPTANCE TEST: `python tools/promote_staged_to_active.py` reports [PROMOTE] for services/staged/circuit_breaker_state_api (service.toml valid, router.py exposes a router, `python -m services.staged.circuit_breaker_state_api.router` imports, `python -m services.staged.circuit_breaker_state_api.contract` exits 0). Then `python tools/staging_drain/census.py --only circuit_breaker_state_api --merge artifacts/staging_drain/census.json` shows verdict PROMOTE. MUST: import the REAL data layer (app.db.get_session, app.models) -- never a mock, placeholder or in-memory stand-in (hollow rule, zo_sentinel/gates/hollow.py). MUST: write only files under services/staged/circuit_breaker_state_api/. MUST NOT: edit zo_sentinel/__init__.py, app/__init__.py, the Dockerfile, or any file outside the service directory. MUST NOT: import duckdb. MUST NOT: add a `_v2`/`_v3` sibling -- repair THIS directory.",
+  "reads": [
+    "services/staged/circuit_breaker_state_api/contract.py",
+    "services/staged/circuit_breaker_state_api/logic.py",
+    "services/staged/circuit_breaker_state_api/router.py",
+    "services/staged/circuit_breaker_state_api/service.toml"
+  ],
+  "source": "staging_drain",
+  "summary": "circuit_breaker_state_api fails the promotion gate: mount_probe_failed",
+  "category": "staged_repair",
+  "severity": "medium",
+  "observed_at": "2026-10-04T21:39:10Z",
+  "evidence": {
+    "gate": "tools/promote_staged_to_active.py",
+    "first_failure": "mount probe FAILED (real router on the exemplar harness): GET /diagnostics/circuit-breaker -> 500 over an empty data layer: handler calls write_service at 127.0.0.1:8772 directly (ConnectionError) -- that bus is not reachable from the Fly image, so every request 500s in prod; an api service must read through app.db, or this is a zo-side job, not a Fly route",
+    "failure_class": "mount_probe_failed",
+    "ledger": "chairman/staging_drain/ledger.json"
+  },
+  "suggested_fix": "If the quoted cause names 127.0.0.1:8772: the handler talks to write_service directly, which the Fly image cannot reach -- read through app.db (SQLAlchemy session via app.db.get_session) or declare the service a zo-side job. Otherwise: the REAL router, mounted on a FastAPI app over an empty in-memory SQLite (the exemplar contract's harness), failed as quoted. Fix the router/logic so every parameterless GET answers < 500 on an empty data layer, and make contract.py import THIS service's router (`from .router import router`) and assert it -- no re-implemented handler, no MagicMock router.",
+  "details": {
+    "family": "circuit_breaker_state_api",
+    "version": 1,
+    "runtime_class": "api",
+    "files": [
+      "contract.py",
+      "logic.py",
+      "router.py",
+      "service.toml"
+    ]
+  }
+}

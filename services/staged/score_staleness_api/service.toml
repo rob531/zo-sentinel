@@ -1,0 +1,8 @@
+[service]
+name = "score_staleness_api"
+import_path = "services.active.score_staleness_api"
+prefix = "/api/score-staleness"
+tag = "score_staleness_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

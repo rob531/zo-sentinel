@@ -9,6 +9,7 @@ the code-graph query tools (graph_neighbors / graph_path). The legacy
 delegate_to_builder single-shot codegen path (MiniMax via ladder shim -> 8796)
 was retired -- goose no longer delegates code generation.
 """
+import ast
 import os
 import sys
 
@@ -41,12 +42,161 @@ async def _emit_build_artifact(client, target_file, content, context_type,
         pass
 
 
+def _reject_unparseable_py(target_file: str, content: str) -> str:
+    """Return a REGISTER_ERROR string if a .py artifact does not parse, else "".
+
+    FU-565. register_build's docstring has always ASKED the caller to register
+    a file "ONLY after ... `python -m py_compile` passed". It was asked and not
+    done. Measured 2026-09-29 on the live build host: 20 of 458 .py files in
+    the promoted tier do not parse, and 15 of those are HTML documents saved
+    under a .py name -- `<!DOCTYPE html>` as the first bytes of router.py.
+    They were registered through this hook and published into that tier, which
+    is the source of truth app/_spine_generated.py is generated from.
+
+    A sentence asking an agent to verify is not a verification, so the check
+    lives here, at the one choke point every build artifact passes through.
+    Pure function -- no I/O, no network -- so a test can exec this source with
+    the stdlib alone and observe it reject a real payload.
+    """
+    norm = target_file.replace("\\", "/")
+    if not norm.endswith(".py"):
+        return ""
+    try:
+        compile(content, norm, "exec")
+    except (SyntaxError, ValueError) as exc:
+        head = " ".join(content.lstrip()[:80].split())
+        lineno = getattr(exc, "lineno", None)
+        where = f"line {lineno}: " if lineno else ""
+        if head[:1] == "<":
+            hint = ("The first bytes are markup, not Python -- if this is a "
+                    "dashboard or a view, write the HTML to a template file and "
+                    "have router.py serve it. Do not save markup under a .py "
+                    "name. ")
+        else:
+            hint = ("Run `python -m py_compile` on the file and fix the syntax "
+                    "error before registering it. ")
+        return (f"REGISTER_ERROR: {target_file} does not parse as Python "
+                f"({where}{exc}). First bytes: {head[:80]!r}. " + hint +
+                "A .py artifact is not registered until it compiles. (FU-565)")
+    return ""
+
+
+def _load_referent_resolver(root: str = "/home/workspace/zo_sentinel"):
+    """Return (catalog, iter_sql, extract_refs, reason). NEVER raises.
+
+    The resolver is `tools/referent_verify.py` itself -- the single judge this
+    repo already uses in CI -- loaded by file path rather than re-implemented.
+    Two enforcement points, one definition: an emission gate carrying its own
+    copy of the catalog rules would drift from the judge and start refusing
+    builds the judge would pass, which is how a gate gets switched off.
+
+    On ANY failure (tool absent, catalog stale, snapshot unreadable) this
+    returns an EMPTY catalog with a reason. The caller must then ALLOW the
+    registration and say so out loud. Fail-closed here would stop every build
+    on this host the moment the bus snapshot ages out -- the exact shape
+    #4080 recorded on 2026-09-29: "an armed check whose input plane silently
+    ages out does not fail open, it fails closed across the entire repository."
+    """
+    import importlib.util
+    import os as _os
+    tool = _os.path.join(root, "tools", "referent_verify.py")
+    if not _os.path.exists(tool):
+        return {}, None, None, f"referent_verify.py not found at {tool}"
+    try:
+        spec = importlib.util.spec_from_file_location("_rv_for_register", tool)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_rv_for_register"] = mod
+        spec.loader.exec_module(mod)
+        catalog, _meta, unknown = mod.load_catalog()
+    except Exception as exc:                       # noqa: BLE001
+        return {}, None, None, f"{type(exc).__name__}: {exc}"
+    if unknown:
+        return {}, None, None, str(unknown)
+    if not catalog:
+        return {}, None, None, "catalog resolved to zero tables"
+    return catalog, mod._iter_sql_strings, mod.extract_refs, ""
+
+
+def _phantom_column_refs(content, catalog, iter_sql, extract_refs):
+    """PURE. Return sorted [(table, column, real_columns)] for every qualified
+    column referent in `content` whose table EXISTS on some plane and whose
+    column exists on none.
+
+    Scoped deliberately to that one case:
+      * table absent from every plane -> NOT our verdict. `referent-verify`
+        already enforces tables in CI; refusing here too would double-judge a
+        name and turn one defect into two refusals.
+      * table present, column absent  -> a reference that can never resolve.
+        `SELECT s.tool_count FROM mcp_server_registry s` is perfect SQL and a
+        400 from the bus, and the caller's `status_code == 200` gate turns
+        that 400 into an empty list (FU-562). It cannot be caught downstream
+        by anything except the report-only column check, whose backlog is 34
+        days old.
+    """
+    if not catalog or iter_sql is None or extract_refs is None:
+        return []
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError):
+        return []                                  # _reject_unparseable_py owns this
+    bad = {}
+    for sql, _lineno in iter_sql(tree):
+        _tables, cols = extract_refs(sql)
+        for table, col in cols:
+            real = catalog.get(table)
+            if real is None or col in real:
+                continue
+            bad[(table, col)] = sorted(real)
+    return sorted((t, c, r) for (t, c), r in bad.items())
+
+
+def _reject_phantom_columns(target_file, content, catalog, iter_sql, extract_refs):
+    """Return a REGISTER_ERROR string if a .py artifact names a column that
+    exists on no plane, else "".
+
+    FU-568. Measured 2026-09-29 against origin/main a7bc32da6: of 1022 builder
+    .py registrations in the trailing 45 days, 10 named a column that exists on
+    no plane -- 1.0% -- and every one of the 13 referents is also flagged by
+    `referent_verify` (0 false positives against the judge). The most recent
+    three landed on 2026-09-18, which is why the columns half of #4080 cannot
+    converge by hand: the emission path refills it faster than a cycle empties
+    it. The tables half got an emission-time block in #4068 and went 82 -> 0.
+    Columns never got one.
+
+    The message names the REAL columns of that table, so the refusal is a
+    correction the caller can act on rather than a wall it has to route around
+    (HARNESS_DOCTRINE R7). Pure function -- no I/O, no network -- so a test can
+    exec this source with the stdlib alone and observe it refuse a real payload.
+    """
+    if not target_file.replace("\\", "/").endswith(".py"):
+        return ""
+    bad = _phantom_column_refs(content, catalog, iter_sql, extract_refs)
+    if not bad:
+        return ""
+    lines = []
+    for table, col, real in bad:
+        shown = ", ".join(real[:12]) + (" ..." if len(real) > 12 else "")
+        lines.append(f"  {table}.{col} -- {table} has no such column. "
+                     f"Real columns: {shown}")
+    return ("REGISTER_ERROR: " + target_file + " names " + str(len(bad)) +
+            " column referent(s) that exist on no plane (bus schema, app "
+            "models, or migrations):\n" + "\n".join(lines) +
+            "\nA query naming a column that does not exist is valid SQL and a "
+            "400 from the write-service, and a `status_code == 200` gate turns "
+            "that 400 into an empty result instead of an error (FU-562). Use a "
+            "real column above, or add a migration that creates the one you "
+            "need, then re-register. (FU-568)")
+
+
 @mcp.tool()
 async def register_build(target_file: str, context_type: str) -> str:
     """Record a goose-built file as a build_artifact (provenance for the
     ingestor / governor / publisher). Call this ONCE, at the END of a build,
     ONLY after YOU (goose) wrote the file with the developer extension AND
-    `python -m py_compile` passed.
+    `python -m py_compile` passed. Since FU-565 the compile is ENFORCED here
+    for .py targets, not merely requested: an unparseable .py is refused.
+    Since FU-568 a .py naming a COLUMN that exists on no plane is refused
+    too, with the table's real column names in the message.
 
     This is the Phase 1 provenance hook: goose writes the file itself and
     verifies it, then registers the verified file so the ingestor/publisher
@@ -56,6 +206,24 @@ async def register_build(target_file: str, context_type: str) -> str:
         target_file: Path written, relative to /home/workspace/zo_sentinel/
         context_type: 'enricher', 'daemon', 'schema', 'utility'
     """
+    # FU-272: the service.toml `import_path` field contains `services.active.<name>.router`
+    # as a FORWARD REFERENCE to where the file lives AFTER promotion -- NOT the write
+    # destination. LLM agents running service_dir_from_exemplar.yaml confuse this and
+    # call register_build with target_file under services/active/ instead of services/staged/.
+    # The publisher then opens a PR into services/active/ with no service.toml, which
+    # triggers capmap-check STRICT failures and a broken active registry entry.
+    # CORRECT WRITE DESTINATION: always services/staged/<name>/<file>.
+    # The promoter (promote_staged_to_active.py) handles the staged->active move.
+    _norm = target_file.replace("\\", "/")
+    if _norm.startswith("services/active/"):
+        return (
+            f"REGISTER_ERROR: target_file {target_file!r} is under services/active/ -- "
+            "new service files must be written to services/staged/<name>/<file> instead. "
+            "The import_path in service.toml names services.active.<name>.router as a "
+            "FORWARD REFERENCE (where the file lives after promotion), not the write "
+            "destination. Write to services/staged/ and let promote_staged_to_active.py "
+            "handle the move. (FU-272)"
+        )
     out = f"/home/workspace/zo_sentinel/{target_file}"
     if not os.path.exists(out):
         return f"REGISTER_ERROR: {target_file} not on disk -- write it first."
@@ -64,14 +232,35 @@ async def register_build(target_file: str, context_type: str) -> str:
     if len(content.strip()) < 32:
         return (f"REGISTER_ERROR: {target_file} is {len(content)}b -- too small to be a "
                 "real build; do not register a stub.")
+    # FU-565: enforce the py_compile the docstring above only ASKS for. 15 HTML
+    # documents reached the promoted tier as router.py through this hook.
+    # (Keep the literal path out of this comment: the FU-272 negative control
+    # in tests/ greps register_build's whole body for it and would go vacuous.)
+    _bad_py = _reject_unparseable_py(target_file, content)
+    if _bad_py:
+        return _bad_py
+    # FU-568: a column referent that exists on no plane is valid SQL, a 400
+    # from the bus, and an empty result to any caller gating on 200. The
+    # tables half of #4080 got an emission block and went 82 -> 0; columns
+    # never did, and the builder added 16 new phantom column referents in
+    # September alone. UNKNOWN NEVER REFUSES: an unresolvable catalog allows
+    # the build and says so on the REGISTERED line, because fail-closed here
+    # stops every build on the host the moment the snapshot ages out.
+    _catalog, _iter_sql, _extract, _cat_reason = _load_referent_resolver()
+    _bad_cols = _reject_phantom_columns(target_file, content, _catalog,
+                                        _iter_sql, _extract)
+    if _bad_cols:
+        return _bad_cols
     tier = os.environ.get("ZO_BUILD_TIER", "zo-ladder-low")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             await _emit_build_artifact(client, target_file, content, context_type,
                                        tier, os.environ.get("GOOSE_MODEL", ""),
                                        "goose_developer")
+        _unchecked = ("" if not _cat_reason else
+                      f" [referents UNCHECKED: {_cat_reason}]")
         return (f"REGISTERED: {target_file} ({content.count(chr(10))} lines, "
-                f"tier={tier}, backend=goose_developer)")
+                f"tier={tier}, backend=goose_developer){_unchecked}")
     except Exception as e:
         return f"REGISTER_ERROR: {type(e).__name__}: {e}"
 

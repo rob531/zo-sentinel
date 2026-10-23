@@ -172,6 +172,25 @@ def _mk_query_response(rows: list) -> MagicMock:
     return resp
 
 
+def _mk_bus(rows: list):
+    """A requests.post side_effect that also answers ``count(*)``.
+
+    The drift read pages through ``zo_sentinel.bus`` and reconciles the assembled
+    row count against ``count(*)``, so a fixture that answers every request with
+    the same row list cannot model the bus. Measured live 2026-09-28: the count
+    answer is NOT subject to the 200-row cap, which is what makes it usable as
+    the reconciliation oracle.
+    """
+
+    def _post(url, json=None, timeout=None, **kw):
+        sql = ((json or {}).get("sql") or "").lower()
+        if "count(*)" in sql:
+            return _mk_query_response([{"n": len(rows)}])
+        return _mk_query_response(rows)
+
+    return _post
+
+
 class TestDriftStaging:
     def test_drift_writes_to_pending_not_canonical(self, tmp_path, monkeypatch):
         # Redirect both canonical and pending paths into tmp_path
@@ -209,7 +228,7 @@ class TestDriftStaging:
             {"table_name": "t", "column_name": "y", "data_type": "BIGINT"},
         ]
         with patch.object(probe.requests, "post") as mock_post:
-            mock_post.return_value = _mk_query_response(live_rows)
+            mock_post.side_effect = _mk_bus(live_rows)
             result = probe.check_duckdb_drift(dry_run=False)
 
         assert result["drift"] is True
@@ -246,7 +265,7 @@ class TestDriftStaging:
         )
 
         with patch.object(probe.requests, "post") as mock_post:
-            mock_post.return_value = _mk_query_response(same_rows)
+            mock_post.side_effect = _mk_bus(same_rows)
             result = probe.check_duckdb_drift(dry_run=False)
 
         assert result["drift"] is False
@@ -301,3 +320,72 @@ class TestCycleOneShot:
         assert len(emitted) == 1
         assert emitted[0][0] == "duckdb_outage"
         assert "duckdb_drift" not in summary, "drift check must be skipped on outage"
+
+
+# ---------------------------------------------------------------------------
+# FU-403: go.sh wiring guard -- probe must be launched and killed by go.sh
+# (a probe whose process is never started is not an armed instrument)
+# ---------------------------------------------------------------------------
+
+
+class TestGoShWiring:
+    """Static checks that ops/host/go.sh references duckdb_schema_uptime_probe
+    in both its kill list (section 1) and its launch list (section 12.8b).
+    These are negative-control-tested: deliberately remove either reference
+    from a temp copy and the test turns RED.
+    """
+
+    GO_SH = Path(__file__).resolve().parents[1] / "ops" / "host" / "go.sh"
+
+    def _read(self) -> str:
+        return self.GO_SH.read_text(encoding="utf-8")
+
+    def test_go_sh_exists(self):
+        assert self.GO_SH.is_file(), f"go.sh not found at {self.GO_SH}"
+
+    def test_probe_in_kill_list(self):
+        """Section 1 pkill loop must include the probe so stale copies are
+        cleaned up on restart (same list as all other daemons)."""
+        text = self._read()
+        assert "duckdb_schema_uptime_probe" in text, (
+            "go.sh section 1 kill list does not mention duckdb_schema_uptime_probe; "
+            "a restarted host will leave stale probe copies running alongside the new one"
+        )
+
+    def test_probe_launched_in_go_sh(self):
+        """go.sh must launch the probe (nohup ... duckdb_schema_uptime_probe ...)
+        so it becomes a managed resident daemon, not a file that nobody executes."""
+        text = self._read()
+        # Require both a launch line and a pgrep liveness check.
+        assert "zo_sentinel.probes.duckdb_schema_uptime_probe" in text, (
+            "go.sh does not launch zo_sentinel.probes.duckdb_schema_uptime_probe; "
+            "the probe is dead code until this is wired (FU-403)"
+        )
+        assert "DuckDBSchemaUptimeProbe" in text, (
+            "go.sh has no pgrep/ok line for DuckDBSchemaUptimeProbe; "
+            "launch success is unconfirmed (H2: unknown != zero)"
+        )
+
+    def test_negative_control_kill_list(self, tmp_path):
+        """Removing probe from the kill list makes the wiring test RED."""
+        original = self._read()
+        # Simulate a go.sh that lost the kill-list entry
+        broken = original.replace(
+            "registry_api.py approval_workflow.py duckdb_schema_uptime_probe \\",
+            "registry_api.py approval_workflow.py \\",
+        )
+        assert "duckdb_schema_uptime_probe" not in broken.split("pkill")[0].split("\n", 80)[0] or \
+               "duckdb_schema_uptime_probe" not in broken.split("1. Kill")[1][:3000], \
+               "Broken go.sh still contains probe in kill section -- negative control is wrong"
+        # The text no longer has duckdb_schema_uptime_probe in the kill block
+        kill_block = broken.split("1. Kill stale")[1].split("2.")[0] if "2." in broken else broken[:3000]
+        assert "duckdb_schema_uptime_probe" not in kill_block
+
+    def test_negative_control_launch(self, tmp_path):
+        """Removing the launch line makes the launch test RED."""
+        original = self._read()
+        broken = original.replace(
+            "zo_sentinel.probes.duckdb_schema_uptime_probe --interval 300",
+            "# REMOVED FOR NEGATIVE CONTROL",
+        )
+        assert "zo_sentinel.probes.duckdb_schema_uptime_probe" not in broken

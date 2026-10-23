@@ -1,0 +1,8 @@
+[service]
+name = "axis_attribution_api"
+import_path = "services.active.axis_attribution_api.router"
+prefix = "/api"
+tag = "axis_attribution_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true

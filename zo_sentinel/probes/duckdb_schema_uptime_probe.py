@@ -69,6 +69,8 @@ from typing import Any, Dict, List, Optional, Tuple
 # requests is already a tower dep (refresh_schema_doc.py imports it).
 import requests
 
+from zo_sentinel import bus
+
 # Loader lives in the same repo; import via package path so this script
 # works whether invoked as `python -m zo_sentinel.probes.duckdb_schema_uptime_probe`
 # or via supervisord's full module path.
@@ -107,6 +109,22 @@ INFORMATION_SCHEMA_SQL = (
     "FROM information_schema.columns WHERE table_schema='main' "
     "ORDER BY table_name, ordinal_position"
 )
+
+# The bus (:8772/query) silently caps a result set. Measured on the LIVE runtime
+# 2026-09-04: the unpaginated statement above returned exactly 200 rows while
+# `count(*)` over the same predicate returned 373 -- so this drift probe was
+# blind to 173 of 373 columns, every column of every table sorting after
+# `mcp_ecosystems_metadata`. It never reported drift there, and a probe that
+# cannot see a region does not report "unknown" for it; it reports "no drift".
+#
+# The response DOES carry a `count` field, but it equals len(rows) on every
+# query (7 for a 7-row read, 200 for the truncated read), so it cannot
+# distinguish "capped at 200" from "there were exactly 200". That is the gap
+# #3997 exists to close. Paging does NOT need it: ask for pages and stop when
+# one comes back short. `(table_name, ordinal_position)` is a total order, so
+# LIMIT/OFFSET is stable across pages.
+BUS_PAGE_ROWS = 200
+BUS_MAX_PAGES = 200  # 40k columns; a runaway loop is a bug, not a big schema
 
 SKIP_TABLES = {
     "agent_outputs",
@@ -298,16 +316,33 @@ def check_uptime() -> Tuple[bool, float, Optional[str]]:
 # ---------------------------------------------------------------------------
 
 
+def _fetch_all_information_schema_rows() -> List[Dict[str, Any]]:
+    """Read every information_schema row, paging past the bus row cap.
+
+    Delegates to ``zo_sentinel.bus.query_all``, which is the single paging
+    implementation in this tree. It stops on the first short page AND then
+    proves the assembled count against ``count(*)`` -- the step the inlined
+    version here could not do, and the reason a page size equal to the server
+    cap was unsafe on its own (see the negative control in
+    tests/test_bus_read_constructor.py).
+
+    ``BUS_PAGE_ROWS`` / ``BUS_MAX_PAGES`` stay module-level and are read at call
+    time, so they remain the knobs for this probe.
+    """
+    return bus.query_all(
+        INFORMATION_SCHEMA_SQL,
+        url="%s/query" % WRITE_SERVICE_URL,
+        timeout=QUERY_TIMEOUT,
+        page_rows=BUS_PAGE_ROWS,
+        max_pages=BUS_MAX_PAGES,
+        what="information_schema",
+    )
+
+
 def fetch_live_duckdb_columns() -> List[Dict[str, str]]:
     """Query the live information_schema. Returns the list of column rows
     suitable for ``compute_schema_hash``."""
-    r = requests.post(
-        f"{WRITE_SERVICE_URL}/query",
-        json={"sql": INFORMATION_SCHEMA_SQL},
-        timeout=QUERY_TIMEOUT,
-    )
-    r.raise_for_status()
-    rows = r.json().get("rows", [])
+    rows = _fetch_all_information_schema_rows()
     # Apply the same SKIP_TABLES filter the refresh script uses, so hashes
     # are comparable.
     return [

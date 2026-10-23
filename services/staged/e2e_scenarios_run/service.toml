@@ -1,0 +1,11 @@
+[service]
+name = "e2e_scenarios_run"
+import_path = "services.active.e2e_scenarios_run.router"
+prefix = "/api"
+tag = "e2e_scenarios_run"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -1,0 +1,8 @@
+[service]
+name = "org_api_key_manager"
+import_path = "services.active.org_api_key_manager.router"
+prefix = "/api"
+tag = "org_api_key_manager"
+origin = "service"
+auth = "public"
+needs_data_layer = true

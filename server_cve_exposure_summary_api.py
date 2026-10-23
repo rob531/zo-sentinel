@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import get_session
-from app.models import Base, McpServerRegistry, VulnLinks, VulnAdvisories
+from app.models import Base, McpServerRegistry, VulnLink, VulnAdvisories
 
 router = APIRouter()
 
@@ -55,8 +55,8 @@ def get_cve_exposure(
     # Fetch linked advisories
     advisories = (
         db.query(VulnAdvisories)
-        .join(VulnLinks, VulnAdvisories.id == VulnLinks.advisory_id)
-        .filter(VulnLinks.server_id == server_id)
+        .join(VulnLink, VulnAdvisories.id == VulnLink.advisory_id)
+        .filter(VulnLink.server_id == server_id)
         .options(joinedload(VulnAdvisories))
         .all()
     )
@@ -114,7 +114,7 @@ if __name__ == "__main__":
             published_at=datetime.utcnow(),
             source_url="http://example.com/adv1",
         )
-        link = VulnLinks(server_id="srv123", advisory_id="adv1", match_confidence=0.95)
+        link = VulnLink(server_id="srv123", advisory_id="adv1", match_confidence=0.95)
 
         db.add_all([srv, adv, link])
         db.commit()

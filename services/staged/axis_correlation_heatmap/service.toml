@@ -1,0 +1,8 @@
+[service]
+name = "axis_correlation_heatmap"
+import_path = "services.active.axis_correlation_heatmap.router"
+prefix = "/api"
+tag = "axis_correlation_heatmap"
+origin = "service"
+auth = "public"
+needs_data_layer = true

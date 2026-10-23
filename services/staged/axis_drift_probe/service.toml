@@ -1,0 +1,11 @@
+[service]
+name = "axis_drift_probe"
+import_path = "services.active.axis_drift_probe.router"
+prefix = "/api"
+tag = "axis_drift_probe"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

@@ -13,6 +13,25 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 
 import requests
+import singleton_lock  # identity-verified single-instance lock
+
+# The paginating read door (zo_sentinel/bus.py, PR #5877). #4003 counts "583
+# unbounded row reads across 313 files"; bus.py's own docstring states the cure:
+# a caller swaps this module's ws_query BODY for query_complete() and every
+# statement in the module is cured at once, including ones added later.
+#
+# Imported defensively ON PURPOSE: this file is a daemon started by
+# daemon_wrapper.sh and a missing package must not take the service down. When
+# the door is absent the fallback in ws_query still REFUSES to hand back a
+# silently capped page -- unknown is not a complete answer (R6).
+try:
+    from zo_sentinel.bus import BusTruncated as _BusTruncated
+    from zo_sentinel.bus import query_complete as _bus_query_complete
+except Exception:  # noqa: BLE001 -- absence is a degraded mode, not a crash
+    _bus_query_complete = None
+
+    class _BusTruncated(RuntimeError):
+        """Stand-in used only when zo_sentinel.bus is not importable."""
 
 # Configuration
 SERVICE_NAME = 'attestation_engine'
@@ -21,8 +40,22 @@ EXECUTE_URL = 'http://127.0.0.1:8772/execute'
 QUERY_URL = 'http://127.0.0.1:8772/query'
 HEARTBEAT_INTERVAL = 60
 CYCLE_INTERVAL = 21600  # 6 hours
-LOG_DIR = '/home/workspace/zo_sentinel/logs'
-REPORT_PATH = '/home/workspace/zo_sentinel/ATTESTATION_REPORT.md'
+# Backoff after a cycle that FAILED or whose writes could not be verified.
+# Measured 2026-10-04 on this daemon's own log: of the four cycles that day,
+# two died inside 180s on a transient write_service restart (ConnectionReset
+# at 14:51:21, ReadTimeout at 04:48:51) and run() then slept the full
+# CYCLE_INTERVAL, so a sub-minute bus outage cost the fleet a six-hour cycle.
+# The work queue is `server_id NOT IN (valid attestations)`, which is
+# self-healing, so an early retry re-attempts exactly the servers that were
+# missed and is idempotent by construction.
+RETRY_INTERVAL = int(os.environ.get('ZO_ATTESTATION_RETRY_INTERVAL', '300'))
+RETRY_BACKOFF_MAX = CYCLE_INTERVAL
+# Env-overridable so a test (or a second checkout) never writes into the live
+# service's log and report paths. The defaults are unchanged for the daemon.
+LOG_DIR = os.environ.get('ZO_ATTESTATION_LOG_DIR',
+                         '/home/workspace/zo_sentinel/logs')
+REPORT_PATH = os.environ.get('ZO_ATTESTATION_REPORT_PATH',
+                             '/home/workspace/zo_sentinel/ATTESTATION_REPORT.md')
 
 # Verdict to expiry mapping (days)
 VERDICT_EXPIRY = {
@@ -47,15 +80,25 @@ VERDICT_DESCRIPTIONS = {
     'INSUFFICIENT': 'Insufficient data for determination - requires manual review'
 }
 
-# Logging setup
-os.makedirs(LOG_DIR, exist_ok=True)
+# Logging setup.
+#
+# A FileHandler on an absolute host path, built at IMPORT time, is why this
+# module had no unit test for its entire life: importing it off the tower
+# raised before any test could run, so the FLOAT/VARCHAR write failure below
+# was only ever observable in a log file on one machine. The file handler is
+# now best-effort and the stream handler always attaches, so the module is
+# importable anywhere -- and a daemon whose log directory went read-only keeps
+# running and keeps reporting instead of dying at import.
+_log_handlers = [logging.StreamHandler()]
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+    _log_handlers.insert(0, logging.FileHandler(f'{LOG_DIR}/attestation_engine.log'))
+except OSError as _log_exc:  # unwritable path -- stderr still carries the log
+    print(f"attestation_engine: file logging disabled ({_log_exc})", file=sys.stderr)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'{LOG_DIR}/attestation_engine.log'),
-        logging.StreamHandler()
-    ]
+    handlers=_log_handlers,
 )
 logger = logging.getLogger(SERVICE_NAME)
 
@@ -77,7 +120,21 @@ def send_heartbeat():
 
 
 def ws_query(sql: str, params: list = None) -> list:
-    """Execute SELECT via write_service /query. Normalizes response to list."""
+    """Execute SELECT via the paginating bus door. Returns EVERY row.
+
+    Until 2026-10-04 this was one POST whose result the server caps at 200 rows
+    with no caller able to notice. `get_all_servers_needing_attestation()`
+    therefore asked "which servers in the registry need attesting" and was
+    handed 200 of 3630 -- measured live 2026-10-04 on :8772,
+    `count=200 truncated=true limit=200` against a derived `count(*)` of 3630,
+    i.e. 5.5% of the fleet. See #4003.
+    """
+    if _bus_query_complete is not None:
+        return _bus_query_complete(sql, params=params, url=QUERY_URL, timeout=30)
+
+    # Fallback: zo_sentinel.bus is not importable. Still one request, but a
+    # capped page RAISES instead of being returned as though it were the whole
+    # answer. R6 -- unknown is not zero, and a short page is not completeness.
     payload = {'sql': sql}
     if params:
         payload['params'] = params
@@ -87,11 +144,82 @@ def ws_query(sql: str, params: list = None) -> list:
     if isinstance(body, list):
         return body
     if isinstance(body, dict):
+        for _flag in ('truncated', 'is_truncated', 'row_limit_hit'):
+            if body.get(_flag):
+                raise _BusTruncated(
+                    'the bus declared this result truncated and zo_sentinel.bus '
+                    'is not importable, so it cannot be paged here: ' + sql[:160]
+                )
         if 'rows' in body:
             return body['rows']
         if 'results' in body:
             return body['results']
     return []
+
+
+CONFIDENCE_BANDS = (('HIGH', 0.85), ('MEDIUM', 0.60))
+
+_NUMERIC_TYPES = ('FLOAT', 'DOUBLE', 'REAL', 'DECIMAL', 'NUMERIC',
+                  'INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'HUGEINT')
+
+_COLUMN_TYPES: Dict[str, Dict[str, str]] = {}
+
+
+def confidence_band_of(confidence) -> str:
+    """The human band. DERIVED from the number, never stored instead of it."""
+    try:
+        value = float(confidence)
+    except (TypeError, ValueError):
+        return 'LOW'
+    for name, floor in CONFIDENCE_BANDS:
+        if value >= floor:
+            return name
+    return 'LOW'
+
+
+def column_types(table: str) -> Dict[str, str]:
+    """Live column types for `table`, resolved from information_schema.
+
+    R1: the schema that matters is the one write_service writes into, not the
+    CREATE TABLE in this file -- which has never matched it. Cached per
+    process. An empty dict means UNKNOWN (R6), not "no such column", and is
+    deliberately NOT cached so a later cycle can resolve it.
+    """
+    cached = _COLUMN_TYPES.get(table)
+    if cached:
+        return cached
+    types: Dict[str, str] = {}
+    try:
+        rows = ws_query(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = ?", [table])
+        for row in rows or []:
+            name = row.get('column_name')
+            if name:
+                types[str(name)] = str(row.get('data_type') or '').upper()
+    except Exception as exc:  # noqa: BLE001 -- UNKNOWN, reported not swallowed
+        logger.error(f"Could not resolve live column types for {table}: {exc}")
+        return {}
+    if types:
+        _COLUMN_TYPES[table] = types
+    return types
+
+
+def confidence_level_for_column(confidence, band: str):
+    """What `mcp_attestations.confidence_level` will actually accept.
+
+    Numeric live column -> the number. VARCHAR live column -> the band.
+    Type UNKNOWN -> the number, which is the type measured live on 2026-10-04;
+    a VARCHAR column accepts the band and nothing else, so the branch is chosen
+    by the live type rather than by this file's belief about it.
+    """
+    declared = column_types('mcp_attestations').get('confidence_level', '')
+    if declared and not any(t in declared for t in _NUMERIC_TYPES):
+        return band
+    try:
+        return float(confidence)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def ws_write(table: str, rows: Dict[str, Any], wait: bool = True) -> dict:
@@ -216,13 +344,20 @@ def generate_attestation(server_id: str) -> Optional[Dict[str, Any]]:
     else:
         scope = 'Manual review required before deployment'
     
-    # Determine confidence level
-    if confidence >= 0.85:
-        confidence_level = 'HIGH'
-    elif confidence >= 0.60:
-        confidence_level = 'MEDIUM'
-    else:
-        confidence_level = 'LOW'
+    # Determine confidence level.
+    #
+    # `mcp_attestations.confidence_level` is FLOAT on the live bus. This module
+    # used to write the VARCHAR band into it, which is why EVERY write since
+    # 2026-06-09 returned 500 `Conversion Error: Could not convert string 'LOW'
+    # to FLOAT` (write_service.log, verbatim) while this daemon logged
+    # "Cycle complete. Generated 0 attestations" at INFO -- 117 days, 0 valid
+    # attestations, 28 rows in the table all generated in one 13-minute window
+    # on 2026-06-09 and all expired on 2026-07-09.
+    #
+    # The band is DERIVED from the number, so the number is what is stored and
+    # the band is what is rendered. Which of the two the column takes is
+    # resolved from the LIVE type, not asserted here (R1).
+    confidence_band = confidence_band_of(confidence)
     
     # Standard caveats
     caveats = "Automated analysis only; not a formal security audit; verify conditions before deployment"
@@ -231,7 +366,8 @@ def generate_attestation(server_id: str) -> Optional[Dict[str, Any]]:
         'server_id': server_id,
         'attestation_text': attestation_text,
         'scope': scope,
-        'confidence_level': confidence_level,
+        'confidence_level': confidence_level_for_column(confidence,
+                                                        confidence_band),
         'valid_until': valid_until.isoformat(),
         'risk_tier': risk_tier,
         'caveats': caveats,
@@ -242,17 +378,27 @@ def generate_attestation(server_id: str) -> Optional[Dict[str, Any]]:
 
 
 def create_attestations_table():
-    """Create mcp_attestations table if not exists."""
+    """Create mcp_attestations table if not exists.
+
+    IF NOT EXISTS, so against the live table this is a no-op -- which is why
+    the divergence below went unseen for 117 days. Aligned 2026-10-04 to the
+    table write_service actually writes into, read from information_schema:
+    `attestation_id VARCHAR` (not `id BIGINT`), `confidence_level FLOAT` (not
+    VARCHAR) and a `status VARCHAR` column this file never knew about. The live
+    table is NOT altered by this change; only the DDL that would recreate it
+    from scratch, so a rebuild stops reintroducing the FLOAT/VARCHAR mismatch.
+    """
     sql = """
     CREATE TABLE IF NOT EXISTS mcp_attestations (
-        id                BIGINT PRIMARY KEY,
+        attestation_id    VARCHAR,
         server_id         VARCHAR NOT NULL,
-        attestation_text  TEXT,
+        attestation_text  VARCHAR,
         scope             VARCHAR,
-        confidence_level  VARCHAR,
+        confidence_level  FLOAT,
         valid_until       TIMESTAMPTZ,
         risk_tier         VARCHAR,
-        caveats           TEXT,
+        caveats           VARCHAR,
+        status            VARCHAR,
         generated_at      TIMESTAMPTZ DEFAULT now(),
         UNIQUE(server_id, generated_at)
     )
@@ -310,14 +456,72 @@ def get_all_servers_needing_attestation() -> list:
     try:
         return ws_query(sql)
     except Exception as e:
-        logger.error(f"Failed to query servers: {e}")
-        return []
+        # R6: unknown is not zero. Returning [] here told cycle() that NO
+        # server needed attestation, which is indistinguishable from a healthy
+        # fleet and is how a read failure presented as a clean cycle. Raise, so
+        # run()'s handler records a failed cycle instead of a quiet pass.
+        logger.error(f"Failed to query servers needing attestation: {e}")
+        raise
+
+
+class AttestationWritesLost(RuntimeError):
+    """The bus acknowledged attestation writes that the table does not hold.
+
+    Not a hypothetical. 2026-10-04, this daemon's own log and the live bus:
+
+        10:51 .. 11:49  1062 writes, each a 2xx {"ok":true,"queued":1}
+        11:49:33        [write_wrapper] Starting WriteService (restart)
+        12:07:22        [write_wrapper] Stale WAL (1072s old) -- removing
+        18:25           SELECT count(*) FROM mcp_attestations  ->  28
+                        max(generated_at)                      -> 2026-06-09
+
+    Every one of the 1062 was acknowledged and none was stored. The engine had
+    already logged "Cycle complete. Generated 1062 attestations" -- a count of
+    HTTP responses presented as a count of rows -- and slept six hours. R3/R6:
+    a 2xx is not a row, and a daemon must re-derive its own output from the
+    store before it reports it.
+    """
+
+
+def count_attestations_since(since_iso: str) -> Optional[int]:
+    """Rows in mcp_attestations with generated_at >= since_iso, FROM THE BUS.
+
+    Returns None for UNKNOWN. R6 -- a read that failed is not the value 0, and
+    this number decides whether writes were lost, so returning 0 on a network
+    blip would invent a data-loss alarm. The statement is an aggregate, so the
+    200-row page cap cannot reach it (gh#4003).
+    """
+    sql = ("SELECT count(*) AS n FROM mcp_attestations "
+           "WHERE generated_at >= '%s'" % since_iso)
+    try:
+        resp = requests.post(QUERY_URL, json={'sql': sql}, timeout=30)
+        resp.raise_for_status()
+        body = resp.json()
+    except Exception as exc:
+        logger.warning("UNKNOWN, not zero: could not verify stored "
+                       "attestations: %s", exc)
+        return None
+    rows = body.get('rows') if isinstance(body, dict) else body
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        logger.warning("UNKNOWN, not zero: verification query returned no "
+                       "usable count: %r", body)
+        return None
+    value = rows[0].get('n')
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        logger.warning("UNKNOWN, not zero: verification query returned no "
+                       "usable count: %r", rows[0])
+        return None
+    return int(value)
 
 
 def cycle():
     """Main work cycle - generate attestations for servers."""
     logger.info("Starting attestation cycle")
-    
+
+    # The lower bound of the verification window, taken BEFORE any write, so
+    # every row this cycle creates satisfies generated_at >= cycle_started.
+    cycle_started = datetime.now(timezone.utc).isoformat()
+
     # Ensure table exists
     create_attestations_table()
     
@@ -326,6 +530,7 @@ def cycle():
     logger.info(f"Found {len(servers)} servers needing attestation")
     
     all_attestations = []
+    failures = []
     
     for server in servers:
         server_id = server.get('server_id')
@@ -339,41 +544,71 @@ def cycle():
                 all_attestations.append(attestation)
                 logger.info(f"Generated attestation for {server_id}")
         except Exception as e:
+            failures.append((server_id, str(e)))
             logger.error(f"Failed to generate attestation for {server_id}: {e}")
     
     # Generate consolidated report if we have attestations
     if all_attestations:
         generate_report(all_attestations)
     
-    logger.info(f"Cycle complete. Generated {len(all_attestations)} attestations")
+    acknowledged = len(all_attestations)
+    stored = count_attestations_since(cycle_started) if acknowledged else None
+
+    # R5 -- publish the BASIS with the number. The line this replaces said
+    # "Generated 1062 attestations" on a day the table gained zero rows,
+    # because `acknowledged` counts 2xx responses and nothing re-read the
+    # store. Both numbers are now named, and so is where each came from.
+    logger.info(
+        "Cycle complete. Generated %d attestations "
+        "(acknowledged=%d stored=%s | basis: acknowledged=2xx from %s, "
+        "stored=count(*) on mcp_attestations where generated_at >= %s)",
+        acknowledged, acknowledged,
+        'UNKNOWN' if stored is None else stored,
+        WRITE_SERVICE_URL, cycle_started)
+
+    if servers and not all_attestations:
+        # The condition nobody saw from 2026-06-09 to 2026-10-04: a cycle that
+        # attempted work, produced nothing, and said so at INFO. Attempted > 0
+        # with 0 written is a service that is DOWN while its process is UP, so
+        # it is logged as such -- the one line that would have surfaced the
+        # FLOAT/VARCHAR mismatch on day one. Not a gate: no new required check,
+        # nothing blocks, and a cycle with nothing to do stays silent.
+        first_id, first_err = failures[0] if failures else (
+            None, 'every candidate was skipped before any write was attempted')
+        logger.error(
+            "ATTESTATION CYCLE PRODUCED NOTHING: attempted=%d written=0 "
+            "failed=%d first_failure=%s: %s",
+            len(servers), len(failures), first_id, first_err)
+
+    if acknowledged and stored == 0:
+        # Proven loss: the bus answered the count and the answer was zero.
+        # Raised rather than logged, so run() treats the cycle as failed and
+        # retries on the short backoff instead of sleeping six hours over a
+        # fleet whose attestations were just discarded.
+        raise AttestationWritesLost(
+            "the bus acknowledged %d attestation write(s) and "
+            "mcp_attestations holds 0 row(s) with generated_at >= %s -- "
+            "acknowledged is not stored" % (acknowledged, cycle_started))
+
+    if acknowledged and stored is not None and stored < acknowledged:
+        logger.error(
+            "ATTESTATION WRITES PARTIALLY LOST: acknowledged=%d stored=%d "
+            "since=%s -- the %d missing server(s) remain in the "
+            "NOT IN (valid attestations) queue and are retried next cycle",
+            acknowledged, stored, cycle_started, acknowledged - stored)
+
+    return acknowledged
 
 
-def check_single_instance():
-    """Ensure only one instance of daemon runs."""
-    pid_file = f'/var/run/zo/{SERVICE_NAME}.pid'
-    os.makedirs(os.path.dirname(pid_file), exist_ok=True)
-    
-    if os.path.exists(pid_file):
-        with open(pid_file) as f:
-            old_pid = int(f.read().strip())
-        try:
-            os.kill(old_pid, 0)
-            print(f"Already running with PID {old_pid}")
-            sys.exit(1)
-        except OSError:
-            pass
-    
-    with open(pid_file, 'w') as f:
-        f.write(str(os.getpid()))
-    
-    def cleanup():
-        if os.path.exists(pid_file):
-            os.remove(pid_file)
-    
-    import signal
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
+def check_single_instance(*_args, **_kwargs):
+    """Single-instance lock, identity-verified. See singleton_lock.py.
 
+    Was: os.kill(pid, 0) -- "does SOME process own this number?" That let a
+    recycled PID wedge this daemon shut permanently (2026-09-21, gh#5412).
+    """
+    _svc = globals().get("SERVICE_NAME") or os.path.splitext(
+        os.path.basename(__file__))[0]
+    return singleton_lock.check_single_instance(_svc, script=__file__)
 
 def run():
     """Main run loop with heartbeat and cycle management."""
@@ -381,15 +616,23 @@ def run():
     logger.info(f"{SERVICE_NAME} starting")
     
     send_heartbeat()
-    
+
+    backoff = RETRY_INTERVAL
     while True:
         try:
             cycle()
+            backoff = RETRY_INTERVAL
+            sleep_for = CYCLE_INTERVAL
         except Exception as e:
             logger.error(f"Error in cycle: {e}")
-        
+            # R7 -- prefer RECOVERY over RESTRICTION. Sleeping the full
+            # CYCLE_INTERVAL after a failure is what turned two sub-minute
+            # bus restarts into two lost six-hour cycles on 2026-10-04.
+            sleep_for = backoff
+            backoff = min(backoff * 2, RETRY_BACKOFF_MAX)
+
         send_heartbeat()
-        time.sleep(CYCLE_INTERVAL)
+        time.sleep(sleep_for)
 
 
 if __name__ == '__main__':

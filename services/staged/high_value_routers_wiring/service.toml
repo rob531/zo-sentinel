@@ -1,0 +1,11 @@
+[service]
+name = "high_value_routers_wiring"
+import_path = "services.active.high_value_routers_wiring.router"
+prefix = "/api"
+tag = "high_value_routers_wiring"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

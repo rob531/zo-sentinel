@@ -1,0 +1,8 @@
+[service]
+name = "dead_organ_report_monitor"
+import_path = "services.active.dead_organ_report_monitor.router"
+prefix = "/api"
+tag = "dead_organ_report_monitor"
+origin = "service"
+auth = "public"
+needs_data_layer = true

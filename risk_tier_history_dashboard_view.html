@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Tier History Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        select, input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        canvas {
+            width: 100%;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Risk Tier History Dashboard</h1>
+        <div class="controls">
+            <select id="serverSelect">
+                <option value="">Select a server</option>
+                <!-- Options will be populated by JavaScript -->
+            </select>
+            <input type="date" id="startDate">
+            <input type="date" id="endDate">
+            <button id="updateChart">Update Chart</button>
+        </div>
+        <div>
+            <canvas id="riskTierChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const serverSelect = document.getElementById('serverSelect');
+            const startDate = document.getElementById('startDate');
+            const endDate = document.getElementById('endDate');
+            const updateChartBtn = document.getElementById('updateChart');
+            const riskTierChart = document.getElementById('riskTierChart').getContext('2d');
+
+            // Mock data for demonstration
+            const mockServers = [
+                { id: 1, name: 'Server A' },
+                { id: 2, name: 'Server B' },
+                { id: 3, name: 'Server C' }
+            ];
+
+            const mockRiskTierChanges = [
+                { server_id: 1, date: '2023-01-01', tier: 'Low' },
+                { server_id: 1, date: '2023-02-01', tier: 'Medium' },
+                { server_id: 1, date: '2023-03-01', tier: 'High' },
+                { server_id: 2, date: '2023-01-15', tier: 'Low' },
+                { server_id: 2, date: '2023-02-15', tier: 'Medium' },
+                { server_id: 3, date: '2023-01-20', tier: 'High' }
+            ];
+
+            // Populate server dropdown
+            mockServers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.id;
+                option.textContent = server.name;
+                serverSelect.appendChild(option);
+            });
+
+            // Set default dates
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(today.getMonth() - 1);
+
+            startDate.value = oneMonthAgo.toISOString().split('T')[0];
+            endDate.value = today.toISOString().split('T')[0];
+
+            // Initialize chart with default data
+            let chart = new Chart(riskTierChart, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Risk Tier',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Function to update chart
+            function updateChart() {
+                const selectedServerId = serverSelect.value;
+                const selectedStartDate = startDate.value;
+                const selectedEndDate = endDate.value;
+
+                if (!selectedServerId) {
+                    alert('Please select a server');
+                    return;
+                }
+
+                // Filter data based on selected server and date range
+                const filteredData = mockRiskTierChanges.filter(change => {
+                    return change.server_id == selectedServerId &&
+                           change.date >= selectedStartDate &&
+                           change.date <= selectedEndDate;
+                });
+
+                // Update chart data
+                chart.data.labels = filteredData.map(change => change.date);
+                chart.data.datasets[0].data = filteredData.map(change => {
+                    switch(change.tier) {
+                        case 'Low': return 1;
+                        case 'Medium': return 2;
+                        case 'High': return 3;
+                        default: return 0;
+                    }
+                });
+                chart.update();
+            }
+
+            // Event listener for update button
+            updateChartBtn.addEventListener('click', updateChart);
+
+            // Initialize chart with default data
+            updateChart();
+        });
+    </script>
+</body>
+</html>

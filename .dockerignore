@@ -10,3 +10,5 @@ zo_sentinel/
 !zo_sentinel/policy_defaults.toml
 docs/
 .venv/
+!zo_sentinel/decide
+!zo_sentinel/decide/**

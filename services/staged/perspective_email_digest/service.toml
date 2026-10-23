@@ -1,0 +1,12 @@
+[service]
+name = "perspective_email_digest"
+import_path = "services.active.perspective_email_digest.router"
+prefix = "/api"
+tag = "perspective_email_digest"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+[test]
+command = "python -m services.active.perspective_email_digest"
+expected_output = "PASS"

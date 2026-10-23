@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy import and_, or_
 from app.db import get_session
-from app.models import MCPServerRegistry
+from app.models import McpServerRegistry
 
 router = APIRouter()
 
@@ -28,16 +28,16 @@ async def search_servers(
     limit: int = Query(10),
     db_session=Depends(get_session)
 ):
-    query = db_session.query(MCPServerRegistry)
+    query = db_session.query(McpServerRegistry)
 
     if name:
-        query = query.filter(MCPServerRegistry.name.ilike(f"%{name}%"))
+        query = query.filter(McpServerRegistry.name.ilike(f"%{name}%"))
 
     if registry_source:
-        query = query.filter(MCPServerRegistry.registry_source == registry_source)
+        query = query.filter(McpServerRegistry.registry_source == registry_source)
 
     if risk_tier:
-        query = query.filter(MCPServerRegistry.risk_tier == risk_tier)
+        query = query.filter(McpServerRegistry.risk_tier == risk_tier)
 
     results = query.limit(limit).all()
 
@@ -59,7 +59,7 @@ async def search_servers(
 if __name__ == "__main__":
     from fastapi.testclient import TestClient
     from app.db import Base, engine
-    from app.models import MCPServerRegistry
+    from app.models import McpServerRegistry
     from sqlalchemy.orm import sessionmaker
 
     # Setup test database
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     # Create test data
     test_servers = [
-        MCPServerRegistry(
+        McpServerRegistry(
             server_id="1",
             name="Test Server 1",
             registry_source="source1",
@@ -80,7 +80,7 @@ if __name__ == "__main__":
             risk_tier="low",
             last_assessed="2023-01-01"
         ),
-        MCPServerRegistry(
+        McpServerRegistry(
             server_id="2",
             name="Test Server 2",
             registry_source="source2",
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             risk_tier="medium",
             last_assessed="2023-01-02"
         ),
-        MCPServerRegistry(
+        McpServerRegistry(
             server_id="3",
             name="Partial Match Server",
             registry_source="source1",

@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel
 import requests
 from app.db import get_session
-from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Orgs, Users
+from app.models import McpServerRegistry, McpLlmAxisScore, McpScoreDispute, Org, User
 from sqlalchemy.orm import Session
 
 app = FastAPI()

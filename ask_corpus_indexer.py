@@ -31,7 +31,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import AskCorpusDoc, McpLlmAxisScore, McpServerRegistry
+from app.models import (AskCorpusDoc, McpLlmAxisScore, McpServerRegistry,
+                        VulnAdvisory, VulnLink)
 from facet_enum_service import latest_global_model_version
 from verdict_breakdown_api import Principal, require_admin
 
@@ -46,14 +47,24 @@ def tokenize(text: Optional[str]) -> List[str]:
 
 
 def build_doc(server: McpServerRegistry,
-              axis_labels: Dict[str, str]) -> dict:
+              axis_labels: Dict[str, str],
+              cves: Optional[List[str]] = None) -> dict:
     """One corpus doc: snippet (human-readable, citation-ready) + field-scoped
-    terms so retrieval can weight name > verdict/tier > axes > description."""
+    terms so retrieval can weight name > verdict/tier > axes > description.
+
+    FU-264: linked advisories (VulnLink -> VulnAdvisory) land in the snippet as
+    a `cve=` segment -- the retrieval identifier path matches CVE/GHSA ids ONLY
+    as exact snippet substrings, so until the ids are IN the snippet the
+    matcher can only ever return []. The segment and the `cve` terms field are
+    emitted ONLY when links exist, so unlinked docs keep their content_hash and
+    a reindex touches just the linked rows."""
     desc_head = (server.description or "")[:DESC_HEAD_CHARS]
     axis_text = " ".join(f"{a}={l}" for a, l in sorted(axis_labels.items()))
+    cve_text = " ".join(cves or [])
+    cve_seg = f"cve={cve_text} | " if cve_text else ""
     snippet = (f"{server.name or server.server_id} | verdict={server.verdict} "
                f"tier={server.risk_tier} source={server.registry_source} | "
-               f"{axis_text} | {desc_head}")
+               f"{axis_text} | {cve_seg}{desc_head}")
     terms = {
         "name": tokenize(server.name),
         "verdict": tokenize(f"{server.verdict} {server.risk_tier} "
@@ -62,6 +73,8 @@ def build_doc(server: McpServerRegistry,
                                   list(axis_labels.values()))),
         "desc": tokenize(desc_head),
     }
+    if cve_text:
+        terms["cve"] = tokenize(cve_text)
     return {"server_id": server.server_id, "snippet": snippet, "terms": terms}
 
 
@@ -83,6 +96,21 @@ def _axis_labels_for(db: Session, sids: Sequence[str],
             if label:
                 out.setdefault(sid, {})[axis] = str(label)
     return out
+
+
+def _cve_ids_for(db: Session, sids: Sequence[str]) -> Dict[str, List[str]]:
+    """Linked advisory ids (+severity) for ONE chunk of server_ids only --
+    never the whole fleet (mirrors _axis_labels_for; this pattern is what
+    keeps the indexer inside a 1GB Fly machine). Deterministic: sorted ids."""
+    out: Dict[str, List[str]] = {}
+    if sids:
+        for sid, aid, sev in db.execute(
+                select(VulnLink.server_id, VulnLink.advisory_id,
+                       VulnAdvisory.severity)
+                .join(VulnAdvisory, VulnAdvisory.id == VulnLink.advisory_id)
+                .where(VulnLink.server_id.in_(list(sids)))):
+            out.setdefault(sid, []).append(f"{aid}:{sev or 'UNKNOWN'}")
+    return {k: sorted(v) for k, v in out.items()}
 
 
 def reindex(db: Session, batch_size: int = 1000, limit: int = 0,
@@ -116,12 +144,14 @@ def reindex(db: Session, batch_size: int = 1000, limit: int = 0,
         sids = [s.server_id for s in servers]
         last_sid = sids[-1]
         axis_map = _axis_labels_for(db, sids, mv)
+        cve_map = _cve_ids_for(db, sids)
         existing = {r.server_id: r for r in db.execute(
             select(AskCorpusDoc)
             .where(AskCorpusDoc.server_id.in_(sids))).scalars()}
         for server in servers:
             stats["scanned"] += 1
-            doc = build_doc(server, axis_map.get(server.server_id, {}))
+            doc = build_doc(server, axis_map.get(server.server_id, {}),
+                            cve_map.get(server.server_id))
             h = _content_hash(doc)
             row = existing.get(server.server_id)
             if row is not None and row.content_hash == h:
@@ -176,6 +206,11 @@ if __name__ == "__main__":
           description="A middling server."),
         A(id=1, server_id="s1", axis_name="auth_strength", label="WEAK",
           model_version="v3"),
+        VulnAdvisory(id="CVE-2025-49596", feed="nvd", severity="CRITICAL",
+                     source_url="https://nvd.nist.gov/vuln/detail/CVE-2025-49596"),
+        VulnLink(advisory_id="CVE-2025-49596", server_id="s1",
+                 match_basis="package_exact", match_value="weak-auth-github",
+                 match_confidence=1.0),
     ])
     s.commit()
     # chunk_size=2 across 3 rows exercises the keyset chunk boundary
@@ -183,10 +218,25 @@ if __name__ == "__main__":
     assert st1["written"] == 3 and st1["scanned"] == 3, st1
     doc = s.get(AskCorpusDoc, "s1")
     assert "verdict=HIGH" in doc.snippet and "auth_strength=WEAK" in doc.snippet
+    # FU-264: the linked advisory must be IN the snippet (the retrieval
+    # identifier path matches ids only as exact snippet substrings) ...
+    assert "cve=CVE-2025-49596:CRITICAL" in doc.snippet, doc.snippet
+    assert "critical" in doc.terms.get("cve", []), doc.terms
+    # ... and an UNLINKED doc must not change shape (hash stability: a fleet
+    # reindex may only touch linked rows).
+    doc2 = s.get(AskCorpusDoc, "s2")
+    assert "cve=" not in doc2.snippet and "cve" not in doc2.terms, doc2.snippet
     st2 = reindex(s, chunk_size=2)   # idempotent: second run writes nothing
     assert st2["written"] == 0 and st2["unchanged"] == 3, st2
     st3 = reindex(s, chunk_size=1000)  # chunk-size independence
     assert st3["written"] == 0 and st3["unchanged"] == 3, st3
     st4 = reindex(s, limit=2, chunk_size=2)  # limit still honored
     assert st4["scanned"] == 2, st4
+    # FU-264 closing predicate, end-to-end: an identifier query now returns
+    # the linked server; negative control: an UNSEEN id still returns [].
+    from ask_retrieval_service import retrieve
+    hits = retrieve(s, "CVE-2025-49596")
+    assert hits and hits[0]["server_id"] == "s1", hits
+    assert "identifier" in hits[0]["provenance"]["matched_fields"], hits
+    assert retrieve(s, "CVE-2099-00001") == []
     print("PASS")

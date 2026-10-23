@@ -1,0 +1,11 @@
+[service]
+name = "scoring_latency_audit"
+import_path = "services.active.scoring_latency_audit.router"
+prefix = "/api"
+tag = "scoring_latency_audit"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

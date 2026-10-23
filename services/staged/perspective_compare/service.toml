@@ -1,0 +1,8 @@
+[service]
+name = "perspective_compare"
+import_path = "services.active.perspective_compare.router"
+prefix = "/api"
+tag = "perspective_compare"
+origin = "service"
+auth = "public"
+needs_data_layer = true

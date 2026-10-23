@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Perspective Membership Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .controls { margin-bottom: 20px; }
+        .controls label { margin-right: 10px; }
+        #chartContainer { width: 100%; max-width: 900px; }
+    </style>
+</head>
+<body>
+    <h1>Perspective Membership Trends</h1>
+
+    <div class="controls">
+        <label for="perspectiveSelect">Perspective:</label>
+        <select id="perspectiveSelect">
+            <option value="">All</option>
+        </select>
+
+        <label for="startDate">From:</label>
+        <input type="date" id="startDate">
+
+        <label for="endDate">To:</label>
+        <input type="date" id="endDate">
+
+        <button id="applyBtn">Apply</button>
+    </div>
+
+    <div id="chartContainer">
+        <canvas id="membershipChart"></canvas>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('membershipChart').getContext('2d');
+        let chartInstance = null;
+
+        async function fetchPerspectives() {
+            try {
+                const resp = await fetch('/api/perspectives');
+                if (!resp.ok) throw new Error();
+                const data = await resp.json();
+                const select = document.getElementById('perspectiveSelect');
+                data.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    select.appendChild(opt);
+                });
+            } catch (_) {
+                // mock perspectives
+                const mock = [
+                    {id: 1, name: 'Demo Perspective A'},
+                    {id: 2, name: 'Demo Perspective B'}
+                ];
+                const select = document.getElementById('perspectiveSelect');
+                mock.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
+        async function loadData() {
+            const perspectiveId = document.getElementById('perspectiveSelect').value;
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+
+            const params = new URLSearchParams();
+            if (perspectiveId) params.append('perspective_id', perspectiveId);
+            if (start) params.append('start', start);
+            if (end) params.append('end', end);
+
+            let snapshots = [];
+            try {
+                const resp = await fetch(`/api/perspective_snapshots?${params.toString()}`);
+                if (!resp.ok) throw new Error();
+                snapshots = await resp.json();
+            } catch (_) {
+                // mock data
+                snapshots = [
+                    {taken_at: '2024-01-01', membership: 120},
+                    {taken_at: '2024-02-01', membership: 135},
+                    {taken_at: '2024-03-01', membership: 150},
+                    {taken_at: '2024-04-01', membership: 165},
+                    {taken_at: '2024-05-01', membership: 180}
+                ];
+            }
+
+            const labels = snapshots.map(s => s.taken_at);
+            const data = snapshots.map(s => s.membership);
+
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Membership',
+                        data,
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        fill: true,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'month' } },
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('applyBtn').addEventListener('click', loadData);
+
+        // Initialize
+        (async () => {
+            await fetchPerspectives();
+            // set default dates to last 6 months
+            const today = new Date();
+            const prior = new Date();
+            prior.setMonth(prior.getMonth() - 5);
+            document.getElementById('startDate').value = prior.toISOString().slice(0,10);
+            document.getElementById('endDate').value = today.toISOString().slice(0,10);
+            await loadData();
+        })();
+    </script>
+</body>
+</html>

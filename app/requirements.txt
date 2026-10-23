@@ -15,6 +15,13 @@ cryptography>=42.0,<46.0
 # treewalk-smoke gate has been dead-red on every PR since. Undeclared runtime
 # dep = prod risk on any image rebuild that stops pulling it transitively.
 requests>=2.31,<3.0
+# requests[socks] pulls in PySocks so the SOCKS5 proxy on the tower-floor ladder
+# rung works (escalation.py _call_openai_compatible passes proxies={"http"/"https":
+# "socks5h://localhost:1055"} ONLY for that rung). zocompute runs Tailscale in
+# userspace-networking mode and reaches the tower 3060 ONLY via that local SOCKS
+# proxy; without PySocks requests raises InvalidSchema on a socks5h:// URL. Inert
+# for every other (cloud, direct) rung, which never set a proxy.
+requests[socks]>=2.31,<3.0
 
 # ---------------------------------------------------------------------------
 # Declared third-party deps for staged services (#4002 L1, bucket (a)).

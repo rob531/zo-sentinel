@@ -4,7 +4,6 @@ from typing import Optional, List
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.db import get_session
 from app.models import McpServerRegistry, McpLlmAxisScore
@@ -103,16 +102,22 @@ async def get_consistency_anomalies(
     session=Depends(get_session)
 ):
     min_severity_tier = convert_to_tier(min_severity)
-    stmt = select(McpServerRegistry).options(selectinload(McpServerRegistry.llm_axis_scores)).join(
+    # McpServerRegistry has no `llm_axis_scores` relationship; join to the scores
+    # table on server_id and group the axis scores per server in-process.
+    stmt = select(McpServerRegistry).join(
         McpLlmAxisScore, McpServerRegistry.server_id == McpLlmAxisScore.server_id
     ).distinct()
     result = session.execute(stmt)
     servers = result.unique().scalars().all()
 
+    scores_by_server: dict[str, list] = {}
+    for score in session.execute(select(McpLlmAxisScore)).scalars().all():
+        scores_by_server.setdefault(score.server_id, []).append(score)
+
     from trust_gating_override import trust_gate
     anomalies = []
     for server in servers:
-        all_scores = server.llm_axis_scores
+        all_scores = scores_by_server.get(server.server_id, [])
         if not all_scores:
             continue
         axes_dict = {s.axis_name: s.label for s in all_scores}

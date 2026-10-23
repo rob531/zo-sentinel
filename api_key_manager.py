@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List
 from app.db import get_session
-from app.models import ApiKey, Organization
+from app.models import APIKey, Organization
 from app.schemas import APIKeyCreate
 from app.utils import get_current_organization_id
 
@@ -20,7 +20,7 @@ def get_api_keys(
     db: Session = Depends(get_session),
     org_id: int = Depends(get_current_organization_id)
 ):
-    keys = db.query(ApiKey).filter(ApiKey.organization_id == org_id).all()
+    keys = db.query(APIKey).filter(APIKey.organization_id == org_id).all()
     return [{"id": key.id, "key": key.key, "organization_id": key.organization_id, "created_at": str(key.created_at)} for key in keys]
 
 @router.post("/", response_model=APIKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -35,7 +35,7 @@ def create_api_key(
         raise HTTPException(status_code=404, detail="Organization not found")
 
     # Create new API key
-    new_key = ApiKey(
+    new_key = APIKey(
         key=key_data.key,
         organization_id=org_id
     )

@@ -44,7 +44,7 @@ def get_server_scoring_status(
     axis_scores = session.query(
         McpLlmAxisScore.axis_name,
         func.count(McpLlmAxisScore.id).label('score_count'),
-        func.max(McpLlmAxisScore.created_at).label('latest_score_at')
+        func.max(McpLlmAxisScore.scored_at).label('latest_score_at')
     ).filter(
         McpLlmAxisScore.server_id == server_id
     ).group_by(
@@ -69,7 +69,7 @@ def get_server_scoring_status(
                 last_scored_at = axis['latest_score_at']
 
     # Determine if server is fresh (scanned in last 24 hours)
-    fresh = server.last_scan_at and server.last_scan_at >= datetime.utcnow() - timedelta(hours=24)
+    fresh = server.last_scanned and server.last_scanned >= datetime.utcnow() - timedelta(hours=24)
 
     # Determine if server is overall scored (at least one score in any axis)
     overall_scored = any(axis['score_count'] > 0 for axis in axes.values())
@@ -136,7 +136,7 @@ if __name__ == "__main__":
         name="Test Server",
         scan_count=5,
         registry_source="test",
-        last_scan_at=datetime.utcnow() - timedelta(hours=2)
+        last_scanned=datetime.utcnow() - timedelta(hours=2)
     )
     test_session.add(test_server)
     test_session.commit()

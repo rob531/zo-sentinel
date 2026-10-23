@@ -12,7 +12,7 @@ class SourceDistribution(BaseModel):
 
 @router.get("/registry/source-distribution", response_model=SourceDistribution)
 def get_source_distribution(db: Session = Depends(get_session)):
-    query = db.query(McpServerRegistry.source, McpServerRegistry.id).all()
+    query = db.query(McpServerRegistry.registry_source, McpServerRegistry.server_id).all()
     distribution = {}
     for source, _ in query:
         distribution[source] = distribution.get(source, 0) + 1
@@ -33,10 +33,10 @@ if __name__ == "__main__":
 
     # Seed test data
     test_data = [
-        McpServerRegistry(source="source1"),
-        McpServerRegistry(source="source2"),
-        McpServerRegistry(source="source1"),
-        McpServerRegistry(source="source3"),
+        McpServerRegistry(server_id="s1", registry_source="source1"),
+        McpServerRegistry(server_id="s2", registry_source="source2"),
+        McpServerRegistry(server_id="s3", registry_source="source1"),
+        McpServerRegistry(server_id="s4", registry_source="source3"),
     ]
     test_session.add_all(test_data)
     test_session.commit()

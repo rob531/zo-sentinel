@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.db import get_session
 from app.models import McpServerRegistry
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -32,9 +32,9 @@ def get_servers(
     query = select(McpServerRegistry)
 
     if cursor:
-        query = query.where(McpServerRegistry.id > cursor)
+        query = query.where(McpServerRegistry.server_id > cursor)
 
-    query = query.order_by(McpServerRegistry.id).limit(limit)
+    query = query.order_by(McpServerRegistry.server_id).limit(limit)
 
     result = db.execute(query)
     servers = result.scalars().all()
@@ -42,7 +42,7 @@ def get_servers(
     server_list = []
     for server in servers:
         server_list.append({
-            "server_id": server.id,
+            "server_id": server.server_id,
             "name": server.name,
             "registry_source": server.registry_source,
             "verdict": server.verdict,
@@ -54,7 +54,7 @@ def get_servers(
     if len(server_list) == limit:
         next_cursor = server_list[-1]["server_id"]
 
-    total = db.execute(select([func.count()]).select_from(McpServerRegistry)).scalar()
+    total = db.execute(select(func.count()).select_from(McpServerRegistry)).scalar()
 
     return ServerListResponse(
         servers=server_list,

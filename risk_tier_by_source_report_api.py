@@ -16,7 +16,7 @@ async def get_risk_tiers_by_source(db: Session = Depends(get_session)):
     try:
         # Query the database to get all server registries with their risk tiers
         registries = db.query(
-            McpServerRegistry.source,
+            McpServerRegistry.registry_source,
             McpServerRegistry.risk_tier
         ).all()
 
@@ -59,27 +59,33 @@ if __name__ == "__main__":
     with Session(test_engine) as session:
         session.add_all([
             McpServerRegistry(
-                source="source1",
+                server_id="s1",
+                registry_source="source1",
                 risk_tier="low"
             ),
             McpServerRegistry(
-                source="source1",
+                server_id="s2",
+                registry_source="source1",
                 risk_tier="medium"
             ),
             McpServerRegistry(
-                source="source1",
+                server_id="s3",
+                registry_source="source1",
                 risk_tier="high"
             ),
             McpServerRegistry(
-                source="source2",
+                server_id="s4",
+                registry_source="source2",
                 risk_tier="low"
             ),
             McpServerRegistry(
-                source="source2",
+                server_id="s5",
+                registry_source="source2",
                 risk_tier="low"
             ),
             McpServerRegistry(
-                source="source2",
+                server_id="s6",
+                registry_source="source2",
                 risk_tier="medium"
             ),
         ])

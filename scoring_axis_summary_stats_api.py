@@ -37,7 +37,7 @@ def get_axis_stats(session: Session, server_id: Optional[str] = None, axis_name:
         func.stddev(McpLlmAxisScore.p_top).label('p_top_stddev'),
         func.count(McpLlmAxisScore.server_id).label('servers_scored'),
         func.sum(func.case([
-            (McpLlmAxisScore.risk_tier == 'escalated', 1)
+            (McpServerRegistry.risk_tier == 'escalated', 1)
         ], else_=0)).label('servers_escalated')
     ).join(
         McpServerRegistry,
@@ -57,13 +57,13 @@ def get_axis_stats(session: Session, server_id: Optional[str] = None, axis_name:
 
 def get_tier_distribution(session: Session, server_id: Optional[str] = None, axis_name: Optional[str] = None, min_scored_at: Optional[datetime] = None):
     query = session.query(
-        McpLlmAxisScore.risk_tier,
+        McpServerRegistry.risk_tier,
         func.count(McpLlmAxisScore.server_id).label('count')
     ).join(
         McpServerRegistry,
         McpLlmAxisScore.server_id == McpServerRegistry.server_id
     ).group_by(
-        McpLlmAxisScore.risk_tier
+        McpServerRegistry.risk_tier
     )
 
     if server_id:
@@ -150,8 +150,8 @@ if __name__ == "__main__":
     # Populate test data
     with SessionLocal(bind=test_engine) as session:
         # Add test servers
-        server1 = McpServerRegistry(server_id="server1", name="Test Server 1")
-        server2 = McpServerRegistry(server_id="server2", name="Test Server 2")
+        server1 = McpServerRegistry(server_id="server1", name="Test Server 1", risk_tier="escalated")
+        server2 = McpServerRegistry(server_id="server2", name="Test Server 2", risk_tier="safe")
         session.add_all([server1, server2])
 
         # Add test scores
@@ -163,7 +163,6 @@ if __name__ == "__main__":
                 axis_name="axis1",
                 p_top=0.9,
                 p_critical=0.1,
-                risk_tier="safe",
                 scored_at=now - timedelta(days=1)
             ),
             McpLlmAxisScore(
@@ -171,7 +170,6 @@ if __name__ == "__main__":
                 axis_name="axis2",
                 p_top=0.8,
                 p_critical=0.2,
-                risk_tier="escalated",
                 scored_at=now - timedelta(days=1)
             ),
             McpLlmAxisScore(
@@ -179,7 +177,6 @@ if __name__ == "__main__":
                 axis_name="axis1",
                 p_top=0.7,
                 p_critical=0.3,
-                risk_tier="safe",
                 scored_at=now
             ),
             McpLlmAxisScore(
@@ -187,7 +184,6 @@ if __name__ == "__main__":
                 axis_name="axis2",
                 p_top=0.6,
                 p_critical=0.4,
-                risk_tier="safe",
                 scored_at=now
             ),
         ]

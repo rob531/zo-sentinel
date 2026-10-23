@@ -115,7 +115,10 @@ async def get_verdict(server_id: str, db: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Server not found")
     scores = db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).order_by(desc(McpLlmAxisScore.scored_at)).all()
     axes = [VerdictAxis(axis_name=s.axis_name, label=s.label, p_top=s.p_top, p_critical=s.p_critical, scored_at=s.scored_at.isoformat() if s.scored_at else "") for s in scores]
-    return VerdictResponse(server_id=server.server_id, name=server.name, risk_tier=server.risk_tier, verdict=server.verdict or "", axes=axes, criteria_version=server.criteria_version or "unknown")
+    # criteria_version is the decision rule the scores were produced under; it
+    # lives on the axis score (decision_rule_version), not on the registry row.
+    criteria_version = next((s.decision_rule_version for s in scores if s.decision_rule_version), "unknown")
+    return VerdictResponse(server_id=server.server_id, name=server.name, risk_tier=server.risk_tier, verdict=server.verdict or "", axes=axes, criteria_version=criteria_version)
 
 
 @router.get("/servers", response_model=ServersResponse)
@@ -189,9 +192,9 @@ if __name__ == "__main__":
         assert sr.json()["rows_written"] == 2
         print("PASS: POST /external/scoring-results-push")
 
-    srv = McpServerRegistry(server_id="srv-001", name="Test Server", risk_tier="low", verdict="clean", criteria_version="v1")
+    srv = McpServerRegistry(server_id="srv-001", name="Test Server", risk_tier="low", verdict="clean")
     test_session.add(srv)
-    sc = McpLlmAxisScore(server_id="srv-001", axis_name="security", label="low", p_top=0.8, p_critical=0.1, probs=[0.8, 0.15, 0.05], model_version="v1", scored_at=datetime(2024, 1, 1))
+    sc = McpLlmAxisScore(server_id="srv-001", axis_name="security", label="low", p_top=0.8, p_critical=0.1, probs=[0.8, 0.15, 0.05], model_version="v1", decision_rule_version="v1", scored_at=datetime(2024, 1, 1))
     test_session.add(sc)
     test_session.commit()
 

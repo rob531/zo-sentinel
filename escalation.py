@@ -146,14 +146,14 @@ class ModelSpec:
 LADDER = [
     # Tier 0 -- MiniMax direct, flat $10/mo
     ModelSpec("minimax_direct", "MiniMax-M2.7",                   205_000, 60, 0.0,
-              "MiniMax 2.7 (direct, flat $10/mo)"),
+              "MiniMax 2.7 (direct, flat $10/mo)", key_env="MINIMAX_API_KEY"),
 
     # Tier 0b -- MiniMax M3 direct (stronger coder; same key, 200 RPM). The pinned
     # builder for complexity=medium (builder_medium starts HERE) -- a MiniMax
     # primary so it returns non-empty and does NOT escalate mid-build (#73); 429s
     # back off + retry the same rung (see _call_minimax_direct).
     ModelSpec("minimax_direct", "MiniMax-M3",                     205_000, 200, 0.0,
-              "MiniMax M3 (direct, stronger coder, 200 RPM)"),
+              "MiniMax M3 (direct, stronger coder, 200 RPM)", key_env="MINIMAX_API_KEY"),
 
     # Tier 1a -- Gemini stable free-tier (confirmed RPM allocations)
     ModelSpec("gemini_direct",  "gemini-2.5-flash-lite",        1_000_000, 10, 0.0,
@@ -237,6 +237,47 @@ LADDER = [
               131_000, 30, 0.0,
               "Groq gpt-oss-120b (free ~14.4k rpd, OpenAI-compat, tool-calling; llama-3.3-70b 404 2026-09-06)",
               base_url="https://api.groq.com/openai/v1", key_env="GROQ_API_KEY"),
+
+    # ============================= TWO-TIER ROUTING =========================
+    # The ladder now has an explicit FREE FLOOR (the tower RTX 3060, local
+    # Ollama) and an ADVANCED CEILING (a capable cloud synthesizer via the
+    # already-stored OpenRouter key). Both use the generic openai_compatible
+    # adapter -- base_url + key_env on the spec, no adapter change (the adapter
+    # already honours arbitrary base_url + key_env, see _call_openai_compatible).
+    # APPENDED LAST so they never shift the index-based TASK_START_TIER map.
+
+    # Tier 5 -- FREE FLOOR: tower RTX 3060, local Ollama (OpenAI-compatible).
+    # The cheapest routine/low-complexity rung (cost_priority 0.0). GATED OFF by
+    # default (TOWER_OLLAMA_ENABLED unset) because the endpoint is firewall-
+    # blocked until a separate Tailscale admin step -- so this PR is INERT until
+    # the flag is set AND the endpoint is reachable. With the flag unset the rung
+    # is enabled=False (pruned at runtime, index-safe) and behaviour is identical
+    # to today: the ladder's existing fallthrough already gives tower-down ->
+    # cloud. Ollama ignores Authorization; key_env defaults to a dummy so the
+    # adapter's `if not key` guard passes.
+    ModelSpec("openai_compatible",
+              "hermes3:8b",
+              8_192, 60, 0.0,
+              "Tower RTX 3060 Ollama hermes3:8b (FREE floor, local; flag-gated)",
+              base_url=os.environ.get("TOWER_OLLAMA_BASE_URL",
+                                      "http://100.95.8.71:11434/v1"),
+              key_env="TOWER_OLLAMA_API_KEY",
+              extra_params={"num_ctx": 8192},
+              enabled=(os.environ.get("TOWER_OLLAMA_ENABLED", "") not in
+                       ("", "0", "false", "False", "no", "NO"))),
+
+    # Tier 6 -- ADVANCED CEILING: BEAM / Reflection, the capable cloud
+    # synthesizer, via OpenRouter (OPENROUTER_API_KEY already in the native
+    # store, hydrated by ladder_shim). Ranked ABOVE the floor for HARD synthesis:
+    # hard/synthesis task types START here (see TASK_START_TIER builder_high /
+    # builder_critical / wisdom_synthesis). cost_priority 2.5 marks it a paid
+    # rung so only PAID_OK_TASKS reach it via the normal failover tail; the
+    # start-tier map is what actually routes hard work here first.
+    ModelSpec("openai_compatible",
+              "reflection/Beam-1.0-501B-A23B",
+              256_000, 60, 2.5,
+              "BEAM/Reflection 501B-A23B (advanced ceiling, OpenRouter, capable synthesizer)",
+              base_url="https://openrouter.ai/api/v1", key_env="OPENROUTER_API_KEY"),
 ]
 
 TASK_START_TIER = {
@@ -266,7 +307,22 @@ TASK_START_TIER = {
     "builder_cerebras": 18,   # Cerebras gpt-oss-120b rung; opt-in capacity (free, fast)
     "builder_mistral":  19,   # Mistral Codestral rung; opt-in capacity (free, coder)
     "builder_groq":     20,   # Groq llama-3.3-70b rung; opt-in capacity (free, fastest)
+    # rung 21 = FREE FLOOR  (tower RTX 3060 Ollama hermes3:8b; flag-gated below)
+    # rung 22 = ADVANCED CEILING (BEAM/Reflection via OpenRouter; keyed)
 }
+
+# Index of the two new rungs in LADDER (APPENDED LAST, so these are stable and
+# the existing index-based TASK_START_TIER entries 0..20 never shift).
+_FLOOR_RUNG = 21     # tower RTX 3060 Ollama hermes3:8b (FREE floor)
+_CEILING_RUNG = 22   # BEAM/Reflection via OpenRouter (ADVANCED ceiling)
+
+# Baseline (today's) start tiers for the task types the two-tier routing may
+# rewrite -- so apply_two_tier_routing() is idempotent and can RESTORE the
+# baseline when a flag/key is cleared (important for tests + re-hydration).
+_BASELINE_START = {t: TASK_START_TIER[t] for t in
+                   ("builder_low", "generate", "signal_enrichment",
+                    "classification", "builder_high", "builder_critical",
+                    "wisdom_synthesis")}
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
 # Everything else is HARD-capped to the free rungs (0-11) -- a non-critical build
@@ -276,6 +332,63 @@ TASK_START_TIER = {
 PAID_OK_TASKS = {t.strip() for t in
                  os.environ.get("LADDER_PAID_OK_TASKS", "builder_critical").split(",")
                  if t.strip()}
+_PAID_OK_BASELINE = frozenset(PAID_OK_TASKS)
+
+
+def _tower_floor_enabled() -> bool:
+    """True iff TOWER_OLLAMA_ENABLED is set to a truthy value. Read at call time
+    so re-hydration (ladder_shim) and tests see the current env."""
+    return os.environ.get("TOWER_OLLAMA_ENABLED", "") not in (
+        "", "0", "false", "False", "no", "NO")
+
+
+def apply_two_tier_routing():
+    """(Re)apply the fail-graceful two-tier routing from the CURRENT env.
+
+    Idempotent and reversible: with the FLOOR flag unset AND no OpenRouter key,
+    TASK_START_TIER + PAID_OK_TASKS + the floor rung's `enabled` are RESTORED to
+    today's baseline -> behaviour is byte-identical to before this change. Called
+    at import (direct callers that set env first) and again by ladder_shim after
+    key hydration (OPENROUTER_API_KEY is hydrated AFTER escalation is imported).
+
+      FLOOR  (tower 3060): when enabled, routine/low-complexity build + judge
+      work STARTS on the free local floor (rung 21). The rung itself is only
+      enabled when the flag is set, so ask() prunes it and falls through to
+      cloud whenever the endpoint is not meant to be live.
+
+      CEILING (BEAM/Reflection): when OPENROUTER_API_KEY is present, HARD
+      synthesis task types START at/above the ceiling (rung 22), and are allowed
+      to spend there. The existing frontier rungs are KEPT -- failover still
+      cascades through them.
+    """
+    floor_on = _tower_floor_enabled()
+    ceiling_on = bool(os.environ.get("OPENROUTER_API_KEY"))
+
+    # Floor rung is live only while the flag is on (fail-graceful: pruned off).
+    LADDER[_FLOOR_RUNG].enabled = floor_on
+
+    # Start-tier rewrites, always from the frozen baseline so this is reversible.
+    for _t, _base in _BASELINE_START.items():
+        TASK_START_TIER[_t] = _base
+    if floor_on:
+        for _t in ("builder_low", "generate", "signal_enrichment", "classification"):
+            TASK_START_TIER[_t] = _FLOOR_RUNG
+    if ceiling_on:
+        for _t in ("builder_high", "builder_critical", "wisdom_synthesis"):
+            TASK_START_TIER[_t] = _CEILING_RUNG
+
+    # Paid-spend gate: when the ceiling is keyed, the hard-synthesis tasks routed
+    # there must be allowed to spend (else the ceiling start-tier is cost-gated
+    # dead). Always rebuilt from the frozen baseline so clearing the key restores
+    # it. An explicit LADDER_PAID_OK_TASKS override is preserved by union.
+    PAID_OK_TASKS.clear()
+    PAID_OK_TASKS.update(_PAID_OK_BASELINE)
+    if ceiling_on:
+        PAID_OK_TASKS.update({"builder_high", "wisdom_synthesis"})
+
+
+# Apply once at import for callers that set env BEFORE importing escalation.
+apply_two_tier_routing()
 
 # Maps the OpenAI `model` field a caller (Goose, via GOOSE_MODEL per recipe)
 # sends through the ladder_shim to one of the task types above. Lives here, with
@@ -641,9 +754,13 @@ def _call_gemini_direct(spec, prompt, system, max_tokens, temperature, tools=Non
     parsing, normalize) is unified.
     """
     import requests
-    key = os.environ.get("RcGeminiAPIKey") or os.environ.get("GEMINI_API_KEY")
+    # Native-key alignment: read the canonical GEMINI_API_KEY first, with the
+    # legacy Pixel RcGeminiAPIKey as a fallback ALIAS (not hardcoded), so a key
+    # dropped under either name resolves. ladder_shim mirrors GEMINI_API_KEY ->
+    # RcGeminiAPIKey at hydrate, so both paths stay in sync.
+    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("RcGeminiAPIKey")
     if not key:
-        return None, "RcGeminiAPIKey not set", None
+        return None, "GEMINI_API_KEY / RcGeminiAPIKey not set", None
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{spec.model_id}:generateContent")
 

@@ -86,7 +86,7 @@ DURABLE_QUARANTINE_DIR = Path("/home/workspace/zo_sentinel_state/quarantine")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY", "")
 MINIMAX_API_BASE = "https://api.minimax.chat/v1"
-SHIM_URL = "http://127.0.0.1:8796/v1/chat/completions"
+SHIM_URL = os.environ.get("GOOSE_CHAT_ENDPOINT", "http://127.0.0.1:8796/v1/chat/completions")
 
 # =============================================================================
 # UTILITY FUNCTIONS

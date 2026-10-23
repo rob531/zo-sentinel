@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_session
-from app.models import MCPLLMAxisScore
+from app.models import McpServerRegistry
 from typing import List, Dict
 
 router = APIRouter()
@@ -9,19 +9,20 @@ router = APIRouter()
 def get_risk_tier_summary(db: Session = Depends(get_session)) -> Dict[str, int]:
     """
     Aggregates risk tier counts across all MCP servers by grouping by risk_tier
-    and counting servers in each tier.
+    and counting servers in each tier. risk_tier is a column of the server
+    registry, so the count is per registered server.
     """
     results = db.query(
-        MCPLLMAxisScore.risk_tier,
-        MCPLLMAxisScore.server_id
+        McpServerRegistry.risk_tier,
+        McpServerRegistry.server_id
     ).group_by(
-        MCPLLMAxisScore.risk_tier
+        McpServerRegistry.risk_tier
     ).all()
 
     summary = {}
     for tier, _ in results:
-        count = db.query(MCPLLMAxisScore).filter(
-            MCPLLMAxisScore.risk_tier == tier
+        count = db.query(McpServerRegistry).filter(
+            McpServerRegistry.risk_tier == tier
         ).count()
         summary[tier] = count
 
@@ -44,14 +45,14 @@ if __name__ == "__main__":
     app.dependency_overrides[get_session] = lambda: TestSession()
 
     # Create test data
-    from app.models import MCPLLMAxisScore
+    from app.models import McpServerRegistry
     test_session = TestSession()
     test_session.add_all([
-        MCPLLMAxisScore(server_id=1, risk_tier="TRUSTED_GENERAL"),
-        MCPLLMAxisScore(server_id=2, risk_tier="TRUSTED_GENERAL"),
-        MCPLLMAxisScore(server_id=3, risk_tier="HIGH_RISK_ISOLATED"),
-        MCPLLMAxisScore(server_id=4, risk_tier="HIGH_RISK_ISOLATED"),
-        MCPLLMAxisScore(server_id=5, risk_tier="HIGH_RISK_ISOLATED"),
+        McpServerRegistry(server_id="1", risk_tier="TRUSTED_GENERAL"),
+        McpServerRegistry(server_id="2", risk_tier="TRUSTED_GENERAL"),
+        McpServerRegistry(server_id="3", risk_tier="HIGH_RISK_ISOLATED"),
+        McpServerRegistry(server_id="4", risk_tier="HIGH_RISK_ISOLATED"),
+        McpServerRegistry(server_id="5", risk_tier="HIGH_RISK_ISOLATED"),
     ])
     test_session.commit()
 

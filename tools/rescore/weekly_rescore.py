@@ -71,6 +71,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent                  # tools/rescore/
 RUNS_ROOT = Path(os.environ.get("RESCORE_RUNS_ROOT", r"D:\zo\runs\weekly_rescore"))
 LEDGER = RUNS_ROOT / "ledger.jsonl"
+# V06 lifecycle_changed priority queue (written by _tools/lifecycle_changed.py --detect).
+# Unconsumed entries are prepended to the refresh cohort during ph_export so that
+# servers with meaningful changes (description, url, cert/CA, verdict) are rescored
+# before the normal distrusted/age cohort.  Additive-not-essential: absent or
+# unreadable file is a silent no-op -- the harness falls back to normal cohort logic.
+CHANGED_QUEUE = RUNS_ROOT / "changed_priority.jsonl"
 
 MODEL_VERSION = "v3.0_40974559"
 ADAPTER_SHA_PIN = "bf842f5450347c19ac195ef32a7298a1579566a7b9b454a5381fda333e7198e3"
@@ -507,6 +513,32 @@ GROUP BY scored_at, axis_name, label
 """
 
 
+def _read_changed_priority() -> set:
+    """Return server_ids from the V06 lifecycle_changed priority queue.
+
+    Reads CHANGED_QUEUE (changed_priority.jsonl); returns the set of server_ids
+    whose `consumed` field is False (i.e. not yet rescored since the change).
+    Returns an empty set on any error so this never blocks the export phase.
+    """
+    try:
+        if not CHANGED_QUEUE.exists():
+            return set()
+        sids = set()
+        for line in CHANGED_QUEUE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+                if not e.get("consumed") and "server_id" in e:
+                    sids.add(e["server_id"])
+            except Exception:
+                pass
+        return sids
+    except Exception:
+        return set()
+
+
 def cohort_trust(conn, model_version: str = MODEL_VERSION):
     """Which scored_at cohorts already in the moat are NOT trustworthy?
 
@@ -601,9 +633,19 @@ def ph_export(run: Run, args) -> None:
         distrusted = set()
         log(f"export: trust audit FAILED ({exc.__class__.__name__}: {exc}) -- "
             f"falling back to oldest-first ordering; FU-093 priority NOT applied")
-    # sort key = (trust_rank, scored_at): False(0) sorts before True(1), so
-    # distrusted cohorts lead, then everything else oldest-scored first.
-    refresh_rows.sort(key=lambda r: (scored_at[r[0]] not in distrusted,
+    # V06 lifecycle_changed priority: read the changed-priority queue so that
+    # servers with meaningful changes (description, url, cert/CA, verdict) are
+    # prepended AHEAD of distrusted/age cohorts.  Fail-safe: an empty or absent
+    # queue file reduces to the existing (trust_rank, scored_at) two-key sort.
+    changed_priority = _read_changed_priority()
+    if changed_priority:
+        n_changed = sum(1 for r in refresh_rows if r[0] in changed_priority)
+        log(f"export: changed-priority queue: {n_changed} servers moved to front "
+            f"(total unconsumed queue size: {len(changed_priority)})")
+    # sort key = (changed_rank, trust_rank, scored_at):
+    #   changed first (False=0), then distrusted, then oldest-scored.
+    refresh_rows.sort(key=lambda r: (r[0] not in changed_priority,
+                                     scored_at[r[0]] not in distrusted,
                                      scored_at[r[0]]))
     if run.state["mode"] != "full":
         refresh_rows = refresh_rows[:args.refresh_cap]

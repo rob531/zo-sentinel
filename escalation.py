@@ -255,6 +255,18 @@ LADDER = [
     # to today: the ladder's existing fallthrough already gives tower-down ->
     # cloud. Ollama ignores Authorization; key_env defaults to a dummy so the
     # adapter's `if not key` guard passes.
+    #
+    # PROXY (2026-10-23): zocompute (the Modal container the ladder runs in) runs
+    # Tailscale in USERSPACE-NETWORKING mode -- it reaches tailnet peers (the tower
+    # 3060 at 100.95.8.71) ONLY through a local SOCKS5/HTTP proxy, NOT by dialing the
+    # tailnet IP directly. So THIS rung's HTTP call must go through that proxy;
+    # VERIFIED working: curl --socks5-hostname localhost:1055 http://100.95.8.71:11434
+    # returns a real hermes3:8b completion. Carried on extra_params["proxy"] (env
+    # TOWER_OLLAMA_PROXY, default socks5h://localhost:1055 -- the h variant resolves
+    # DNS proxy-side, harmless for a bare IP). _call_openai_compatible applies it
+    # ONLY when a rung specifies it, so CLOUD rungs (no proxy) are unaffected --
+    # they still go direct to the internet. socks5h:// needs PySocks (declared in
+    # app/requirements.txt as requests[socks]).
     ModelSpec("openai_compatible",
               "hermes3:8b",
               8_192, 60, 0.0,
@@ -262,7 +274,9 @@ LADDER = [
               base_url=os.environ.get("TOWER_OLLAMA_BASE_URL",
                                       "http://100.95.8.71:11434/v1"),
               key_env="TOWER_OLLAMA_API_KEY",
-              extra_params={"num_ctx": 8192},
+              extra_params={"num_ctx": 8192,
+                            "proxy": os.environ.get("TOWER_OLLAMA_PROXY",
+                                                    "socks5h://localhost:1055")},
               enabled=(os.environ.get("TOWER_OLLAMA_ENABLED", "") not in
                        ("", "0", "false", "False", "no", "NO"))),
 
@@ -852,8 +866,18 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
     messages.append({"role": "user", "content": prompt})
     payload = {"model": spec.model_id, "messages": messages,
                "max_tokens": max_tokens, "temperature": temperature}
-    if spec.extra_params:                      # provider-specific tuning (reasoning_effort, ...)
-        payload.update(spec.extra_params)
+    # `proxy` is a TRANSPORT hint for this rung, not a model parameter -- pull it
+    # out before spreading extra_params into the request body so it never leaks
+    # into the JSON payload. Only the tower-floor rung sets it (to reach the 3060
+    # over zocompute's userspace Tailscale SOCKS proxy). The `proxies=` kwarg is
+    # passed ONLY when a proxy is set, so a cloud rung's call is byte-identical to
+    # before this change (no extra kwarg -> requests' own default = DIRECT).
+    # socks5h:// requires PySocks (declared as requests[socks] in requirements).
+    extra = dict(spec.extra_params or {})
+    proxy = extra.pop("proxy", None)
+    req_kwargs = {"proxies": {"http": proxy, "https": proxy}} if proxy else {}
+    if extra:                                  # provider-specific tuning (reasoning_effort, ...)
+        payload.update(extra)
     if tools:
         payload["tools"] = tools
     try:
@@ -863,7 +887,7 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
                                    # browser UA: Cerebras (Cloudflare) 403s the
                                    # default python-requests UA with error 1010.
                                    "User-Agent": _OAI_USER_AGENT},
-                          json=payload, timeout=240)
+                          json=payload, timeout=240, **req_kwargs)
         try:  # best-effort quota capture (remaining-headers / 429 park)
             rung_quota.record(spec.model_id, dict(r.headers), r.status_code,
                               r.headers.get("retry-after") or r.headers.get("Retry-After"))

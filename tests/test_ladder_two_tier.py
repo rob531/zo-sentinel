@@ -129,3 +129,92 @@ def test_ask_starts_hard_work_at_ceiling_when_keyed(monkeypatch):
     assert called[0] == escalation.LADDER[escalation._CEILING_RUNG].model_id
     # cleanup: restore baseline so later tests are unaffected
     _reset(monkeypatch, floor=False, ceiling=False)
+
+
+# --- PROXY: tower floor goes through the SOCKS proxy; cloud rungs go direct ----
+#
+# zocompute runs Tailscale in userspace-networking mode and reaches the tower 3060
+# ONLY via a local SOCKS5 proxy. The tower-floor rung must therefore carry a proxy
+# and _call_openai_compatible must apply it to the HTTP call -- but ONLY for a rung
+# that specifies one, so cloud rungs behave exactly as before (proxies=None).
+# The requests.post is mocked -- no live tower, no network in CI.
+
+class _FakeResp:
+    status_code = 200
+    headers: dict = {}
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"choices": [{"message": {"content": "pong", "tool_calls": None}}]}
+
+
+def _capture_post(monkeypatch):
+    """Patch requests.post (imported inside the adapter) + rung_quota.record;
+    return the list that captures each call's kwargs."""
+    captured = []
+
+    def fake_post(url, headers=None, json=None, proxies=None, timeout=None, **kw):
+        captured.append({"url": url, "proxies": proxies})
+        return _FakeResp()
+
+    import requests
+    monkeypatch.setattr(requests, "post", fake_post)
+    # rung_quota.record touches r.headers; _FakeResp.headers is a plain dict -> ok.
+    monkeypatch.setattr(escalation.rung_quota, "record",
+                        lambda *a, **k: None, raising=False)
+    return captured
+
+
+def test_floor_rung_carries_proxy():
+    """The tower-floor rung declares a SOCKS proxy on extra_params; it is NOT a
+    model-payload parameter (num_ctx stays, proxy is the transport hint)."""
+    sp = escalation.LADDER[escalation._FLOOR_RUNG]
+    assert sp.extra_params.get("proxy", "").startswith("socks5")
+    assert sp.extra_params.get("num_ctx") == 8192
+
+
+def test_adapter_applies_proxy_only_for_floor_rung(monkeypatch):
+    """_call_openai_compatible routes the floor rung's HTTP call through the proxy
+    and does NOT leak the proxy into the JSON body; a cloud rung gets proxies=None."""
+    monkeypatch.setenv("TOWER_OLLAMA_API_KEY", "dummy")      # adapter key guard
+    captured = _capture_post(monkeypatch)
+
+    floor = escalation.LADDER[escalation._FLOOR_RUNG]
+    proxy = floor.extra_params["proxy"]
+    sent_body = {}
+
+    import requests
+
+    def fake_post(url, headers=None, json=None, proxies=None, timeout=None, **kw):
+        captured.append({"url": url, "proxies": proxies})
+        sent_body.clear()
+        sent_body.update(json or {})
+        return _FakeResp()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    text, err, _tc = escalation._call_openai_compatible(
+        floor, "hi", None, 16, 0.5, None)
+    assert err is None and text == "pong"
+    assert captured[-1]["proxies"] == {"http": proxy, "https": proxy}
+    # proxy is a transport hint only -- it must not ride in the model payload,
+    # while the real model param (num_ctx) must.
+    assert "proxy" not in sent_body
+    assert sent_body.get("num_ctx") == 8192
+
+
+def test_adapter_no_proxy_for_cloud_rung(monkeypatch):
+    """A cloud rung (BEAM/Reflection ceiling -- no proxy on its spec) calls with
+    proxies=None, i.e. direct to the internet, exactly as before this change."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-dummy")
+    captured = _capture_post(monkeypatch)
+
+    ceiling = escalation.LADDER[escalation._CEILING_RUNG]
+    assert "proxy" not in (ceiling.extra_params or {})      # no proxy on cloud spec
+
+    text, err, _tc = escalation._call_openai_compatible(
+        ceiling, "hi", None, 16, 0.5, None)
+    assert err is None and text == "pong"
+    assert captured[-1]["proxies"] is None                  # DIRECT, unaffected

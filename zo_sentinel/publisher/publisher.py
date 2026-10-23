@@ -59,6 +59,23 @@ from typing import Callable, List, Optional
 from zo_sentinel.ingestor.contracts import static_safety_scan
 from zo_sentinel.publisher.gitops import GitOps, PublishPlan
 
+# Shadow-corpus PR<->build join capture: REPORT-ONLY, flag-gated
+# (SHADOW_CORPUS_CAPTURE, default OFF), fail-graceful. Import is best-effort so a
+# missing helper can never break publishing; the helper itself swallows all
+# errors and is completely inert when the flag is off.
+try:
+    import shadow_corpus_capture as _shadow_corpus
+except Exception:  # pragma: no cover - import must never break the publisher
+    class _ShadowCorpusStub:
+        @staticmethod
+        def capture_pr_publish(**_kw):
+            return False
+
+        @staticmethod
+        def pr_number_from_url(_u):
+            return None
+    _shadow_corpus = _ShadowCorpusStub()
+
 PUBLISHER_AGENT_ID = "zo_sentinel.pr_publisher"
 SENTINEL_NAME = ".pr_publisher_enabled"
 DEFAULT_HOME = "/home/workspace/zo_sentinel"
@@ -438,6 +455,25 @@ class ProducerCommit:
             # stalled the _tools ff for 9 ticks. Measured by this module's own
             # two-pole test before this line existed.
             ev = self.evict(rel, f"in flight: {res.pr_url or 'noop'}", bucket="in_flight")
+            # --- shadow-corpus PR<->build join (REPORT-ONLY, flag-gated) -----
+            # Only when a real PR was opened (noop = nothing to join). Capture is
+            # OFF by default and the helper swallows all errors, so this never
+            # changes the publish outcome. build_id/model are not carried on the
+            # outbox entry today -> logged as null (directive_id == task).
+            if not noop:
+                try:
+                    _shadow_corpus.capture_pr_publish(
+                        directive_id=e.get("task") or None,
+                        pr_number=_shadow_corpus.pr_number_from_url(res.pr_url),
+                        pr_url=res.pr_url,
+                        branch=getattr(res, "branch", None) or plan.branch,
+                        file=rel,
+                        built_at=e.get("built_at") or None,
+                        task=e.get("task") or None,
+                        tier=e.get("tier") or None,
+                    )
+                except Exception:
+                    pass  # defense-in-depth: helper already swallows everything
             self._close(e, "noop" if noop else "published", res.detail or "",
                         pr_url=res.pr_url, eviction=ev)
             return {"file": rel, "action": "noop" if noop else "published",

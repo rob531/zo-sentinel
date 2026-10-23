@@ -42,6 +42,18 @@ from typing import Any, List, Optional
 
 import escalation
 
+# Shadow-corpus capture is REPORT-ONLY and flag-gated (SHADOW_CORPUS_CAPTURE,
+# default OFF). Import is itself best-effort: if the helper is somehow absent the
+# shim must still start and serve, so fall back to an inert stub.
+try:
+    import shadow_corpus_capture as _shadow_corpus
+except Exception:  # pragma: no cover - import must never break the shim
+    class _ShadowCorpusStub:
+        @staticmethod
+        def capture_prompt_response(**_kw):
+            return False
+    _shadow_corpus = _ShadowCorpusStub()
+
 SHIM_VERSION = "1.2"
 LADDER_MODEL_ID = "zo-ladder-v1"
 DEFAULT_TASK = "builder"
@@ -114,6 +126,23 @@ async def chat_completions(request: ChatCompletionRequest):
     if result.tool_calls:
         message["tool_calls"] = result.tool_calls
         finish_reason = "tool_calls"
+
+    # --- shadow-corpus capture (REPORT-ONLY, flag-gated, fail-graceful) ------
+    # Single choke-point for builder model I/O. Capture is OFF by default
+    # (SHADOW_CORPUS_CAPTURE unset) -> this line is completely inert and the
+    # response path below is byte-identical. The helper swallows ALL errors and
+    # never raises, so the shim's behavior cannot change whether it is on or off.
+    # escalation.ask() exposes no usage counts -> token fields log as null.
+    try:
+        _shadow_corpus.capture_prompt_response(
+            model=result.model or (request.model or LADDER_MODEL_ID),
+            prompt=prompt,
+            response=result.text or None,
+            finish_reason=finish_reason,
+            tier=request.model,  # Goose sends the ladder tier as the model id
+        )
+    except Exception:
+        pass  # defense-in-depth: the helper already swallows everything
 
     cmpl_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())

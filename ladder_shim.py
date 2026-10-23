@@ -197,7 +197,10 @@ async def chat_completions(request: ChatCompletionRequest):
 
 
 KEY_HYDRATOR = "/home/workspace/zo_mesh/key_hydrator.py"
-HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NVIDIA_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY")
+# OPENROUTER_API_KEY added for the advanced-ceiling (BEAM/Reflection) rung --
+# already present in the native store, previously unused by the ladder. Pulled
+# into THIS process's env here so escalation.ask() can reach the ceiling rung.
+HYDRATE_KEYS = ("MINIMAX_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NVIDIA_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY")
 
 
 # /root/.zo_secrets stores keys under provider-token names (minimax, gemini,
@@ -213,6 +216,9 @@ _ZO_SECRET_TOKENS = {
     "CEREBRAS_API_KEY": "cereb",
     "MISTRAL_API_KEY": "mistral",
     "GROQ_API_KEY": "groq",
+    # advanced-ceiling synthesizer (BEAM/Reflection via OpenRouter). Matches a
+    # store line named `openrouter=...` OR `OPENROUTER_API_KEY=...`.
+    "OPENROUTER_API_KEY": "openrouter",
 }
 
 
@@ -358,5 +364,9 @@ def _self_hydrate_keys(kh=KEY_HYDRATOR, runner=None, attempts=3, sleep=time.slee
 
 if __name__ == "__main__":
     _self_hydrate_keys()   # keyed regardless of launch path (bare or wrapper)
+    # OPENROUTER_API_KEY (advanced ceiling) and TOWER_OLLAMA_ENABLED (free floor)
+    # are resolved into env by the hydrate step above AFTER escalation was
+    # imported, so re-apply the two-tier routing now that the env is final.
+    escalation.apply_two_tier_routing()
     # 0.0.0.0 required on Modal (see v1.1 note). Reached via 127.0.0.1 loopback.
     uvicorn.run(app, host="0.0.0.0", port=8796, log_level="info")

@@ -292,6 +292,52 @@ LADDER = [
               256_000, 60, 2.5,
               "BEAM/Reflection 501B-A23B (advanced ceiling, OpenRouter, capable synthesizer)",
               base_url="https://openrouter.ai/api/v1", key_env="OPENROUTER_API_KEY"),
+
+    # Tier 7 -- LOCAL $0 CODING rung: tower RTX 3060, local Ollama serving
+    # qwen2.5-coder:14b (OpenAI-compatible). A code-specialist $0 option for
+    # LIGHTER coding task types (the new `code_local` task type starts HERE and
+    # the ladder falls THROUGH to MiniMax/cloud if the local rung is off or the
+    # tower is unreachable/busy). It does NOT touch where builder/builder_high/
+    # builder_critical start -- MiniMax remains the default builder start tier.
+    # APPENDED LAST so it never shifts the index-based TASK_START_TIER map
+    # (0..20) or the floor/ceiling indices (21/22).
+    #
+    # GATED OFF by default (TOWER_CODER_ENABLED unset) -> enabled=False -> pruned
+    # at runtime (index-safe), behaviour byte-identical to today.
+    #
+    # PROXY: reaches the tower 3060 (100.95.8.71) over zocompute's userspace
+    # Tailscale SOCKS proxy, same as the hermes floor rung. Carried on
+    # extra_params["proxy"]; _call_openai_compatible applies it ONLY for a rung
+    # that sets one, so cloud rungs are unaffected.
+    #
+    # FAIL-GRACEFUL TIMEOUT: a SHORT per-request timeout (extra_params["timeout"],
+    # env TOWER_CODER_TIMEOUT, default 50s) so if the tower is unreachable, busy
+    # with scoring, or the model is loading/hung, the adapter returns promptly
+    # (ConnectionError / ReadTimeout) and the ladder ESCALATES to the next rung
+    # (MiniMax -> cloud). The local rung must NEVER block the builder. Cloud rungs
+    # keep their existing 240s timeout (they do not set extra_params["timeout"]).
+    #
+    # CLEAN SYNTAX OUTPUT: the builder consumes CODE, not prose. extra_params
+    # carries code_only=True (+ a system directive prepended in the adapter) so
+    # the response is reduced to just the fenced code block(s): any
+    # reasoning_content / <think> block + surrounding prose is stripped. This
+    # post-processing is rung-local (keyed off extra_params["code_only"]) -- it
+    # never alters cloud rungs' outputs.
+    ModelSpec("openai_compatible",
+              "qwen2.5-coder:14b",
+              32_768, 60, 0.0,
+              "Tower RTX 3060 Ollama qwen2.5-coder:14b (LOCAL $0 coder, flag-gated)",
+              base_url=os.environ.get("TOWER_CODER_BASE_URL",
+                                      "http://100.95.8.71:11434/v1"),
+              key_env="TOWER_CODER_API_KEY",
+              extra_params={"num_ctx": 32768,
+                            "code_only": True,
+                            "timeout": float(os.environ.get(
+                                "TOWER_CODER_TIMEOUT", "50")),
+                            "proxy": os.environ.get("TOWER_OLLAMA_PROXY",
+                                                    "socks5h://localhost:1055")},
+              enabled=(os.environ.get("TOWER_CODER_ENABLED", "") not in
+                       ("", "0", "false", "False", "no", "NO"))),
 ]
 
 TASK_START_TIER = {
@@ -323,12 +369,20 @@ TASK_START_TIER = {
     "builder_groq":     20,   # Groq llama-3.3-70b rung; opt-in capacity (free, fastest)
     # rung 21 = FREE FLOOR  (tower RTX 3060 Ollama hermes3:8b; flag-gated below)
     # rung 22 = ADVANCED CEILING (BEAM/Reflection via OpenRouter; keyed)
+    # rung 23 = LOCAL $0 CODER (tower RTX 3060 qwen2.5-coder:14b; flag-gated below)
+    #
+    # LIGHTER CODING tasks start on the local $0 coder when it is enabled, and
+    # fall THROUGH to MiniMax/cloud otherwise (additive -- does NOT displace the
+    # MiniMax builder start tiers above). Baseline (coder off) = rung 0 (MiniMax),
+    # so with the flag unset `code_local` behaves exactly like a plain builder.
+    "code_local":        0,
 }
 
-# Index of the two new rungs in LADDER (APPENDED LAST, so these are stable and
-# the existing index-based TASK_START_TIER entries 0..20 never shift).
+# Index of the three appended rungs in LADDER (APPENDED LAST, so these are stable
+# and the existing index-based TASK_START_TIER entries 0..20 never shift).
 _FLOOR_RUNG = 21     # tower RTX 3060 Ollama hermes3:8b (FREE floor)
 _CEILING_RUNG = 22   # BEAM/Reflection via OpenRouter (ADVANCED ceiling)
+_CODER_RUNG = 23     # tower RTX 3060 qwen2.5-coder:14b (LOCAL $0 coder)
 
 # Baseline (today's) start tiers for the task types the two-tier routing may
 # rewrite -- so apply_two_tier_routing() is idempotent and can RESTORE the
@@ -336,7 +390,7 @@ _CEILING_RUNG = 22   # BEAM/Reflection via OpenRouter (ADVANCED ceiling)
 _BASELINE_START = {t: TASK_START_TIER[t] for t in
                    ("builder_low", "generate", "signal_enrichment",
                     "classification", "builder_high", "builder_critical",
-                    "wisdom_synthesis")}
+                    "wisdom_synthesis", "code_local")}
 
 # Cost gate: which task types may spend on PAID rungs (cost_priority > 0).
 # Everything else is HARD-capped to the free rungs (0-11) -- a non-critical build
@@ -353,6 +407,14 @@ def _tower_floor_enabled() -> bool:
     """True iff TOWER_OLLAMA_ENABLED is set to a truthy value. Read at call time
     so re-hydration (ladder_shim) and tests see the current env."""
     return os.environ.get("TOWER_OLLAMA_ENABLED", "") not in (
+        "", "0", "false", "False", "no", "NO")
+
+
+def _tower_coder_enabled() -> bool:
+    """True iff TOWER_CODER_ENABLED is set to a truthy value. Read at call time
+    so re-hydration (ladder_shim) and tests see the current env. The local $0
+    qwen coder rung is pruned off (fail-graceful) whenever this is false."""
+    return os.environ.get("TOWER_CODER_ENABLED", "") not in (
         "", "0", "false", "False", "no", "NO")
 
 
@@ -377,9 +439,12 @@ def apply_two_tier_routing():
     """
     floor_on = _tower_floor_enabled()
     ceiling_on = bool(os.environ.get("OPENROUTER_API_KEY"))
+    coder_on = _tower_coder_enabled()
 
-    # Floor rung is live only while the flag is on (fail-graceful: pruned off).
+    # Floor + coder rungs are live only while their flag is on (fail-graceful:
+    # pruned off -> ask() falls through to MiniMax/cloud exactly as today).
     LADDER[_FLOOR_RUNG].enabled = floor_on
+    LADDER[_CODER_RUNG].enabled = coder_on
 
     # Start-tier rewrites, always from the frozen baseline so this is reversible.
     for _t, _base in _BASELINE_START.items():
@@ -390,6 +455,13 @@ def apply_two_tier_routing():
     if ceiling_on:
         for _t in ("builder_high", "builder_critical", "wisdom_synthesis"):
             TASK_START_TIER[_t] = _CEILING_RUNG
+    # LIGHTER coding work starts on the local $0 coder when enabled; ADDITIVE --
+    # this only moves the dedicated `code_local` task type, NOT the MiniMax
+    # builder start tiers (builder/builder_low/_medium/_high/_critical untouched).
+    # With the flag off, `code_local` stays at its baseline (rung 0 = MiniMax),
+    # and the failover tail still reaches the coder rung IF it were ever enabled.
+    if coder_on:
+        TASK_START_TIER["code_local"] = _CODER_RUNG
 
     # Paid-spend gate: when the ceiling is keyed, the hard-synthesis tasks routed
     # there must be allowed to spend (else the ceiling start-tier is cost-gated
@@ -419,6 +491,10 @@ MODEL_TASK_MAP = {
     "zo-ladder-cerebras": "builder_cerebras",
     "zo-ladder-mistral":  "builder_mistral",
     "zo-ladder-groq":     "builder_groq",
+    # Lighter coding / low-complexity codegen / code-review: starts on the local
+    # $0 qwen coder (tower 3060) when TOWER_CODER_ENABLED, else falls through to
+    # MiniMax. Opt-in via GOOSE_MODEL=zo-ladder-code-local.
+    "zo-ladder-code-local": "code_local",
 }
 
 
@@ -847,6 +923,40 @@ _OAI_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
                    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 
 
+# --- code-only post-processing (LOCAL qwen coder rung, FU-coder) -------------
+# The builder consumes CODE, not prose. A local reasoning-capable coder
+# (qwen2.5-coder) can emit a <think>...</think> block and chatty prose around
+# the actual code. The system directive below tells it to output only code, and
+# _extract_code_only() reduces the response to just the fenced code block(s):
+#   1. strip any <think>/<reasoning>/<thinking>/<analysis> block (closed or a
+#      dangling-open leader) via the shared strip_reasoning apparatus;
+#   2. if the result contains ```lang fenced block(s), concatenate ONLY their
+#      bodies (dropping the prose between/around them);
+#   3. otherwise return the reasoning-stripped text (never destroy a payload).
+# This is applied ONLY to a rung whose extra_params sets code_only=True, so
+# cloud/other rungs' outputs are byte-identical to before.
+_CODE_ONLY_SYSTEM = ("Output ONLY code. No explanation, no reasoning, no prose, "
+                     "no markdown commentary. Return the code itself.")
+# Fenced block bodies: ```[lang]\n <body> ```  (lang optional; body non-greedy).
+_FENCE_BLOCK_RX = re.compile(r"```[ \t]*[\w.+-]*[ \t]*\r?\n?(.*?)```", re.S)
+
+
+def _extract_code_only(text: str) -> str:
+    """Reduce a coder rung's response to just code. Reasoning + prose out; the
+    fenced code block body/bodies in. Conservative: if nothing is fenced, returns
+    the reasoning-stripped text; if that is empty, returns the original."""
+    if not text:
+        return text
+    original = text
+    stripped = _strip_reasoning_preamble(text)        # drop <think>/<reasoning>...
+    blocks = [b.strip("\n") for b in _FENCE_BLOCK_RX.findall(stripped)]
+    blocks = [b for b in blocks if b.strip()]
+    if blocks:
+        return "\n\n".join(blocks).strip()
+    cleaned = (stripped or "").strip()
+    return cleaned if cleaned else original
+
+
 def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools=None):
     """Generic OpenAI SDK-compatible chat/completions rung. base_url + key_env come
     from the ModelSpec, so adding an OpenAI-compatible provider (NVIDIA NIM, Cerebras,
@@ -860,22 +970,36 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
     base = (spec.base_url or "").rstrip("/")
     if not base:
         return None, "no base_url on spec", None
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-    payload = {"model": spec.model_id, "messages": messages,
-               "max_tokens": max_tokens, "temperature": temperature}
-    # `proxy` is a TRANSPORT hint for this rung, not a model parameter -- pull it
-    # out before spreading extra_params into the request body so it never leaks
-    # into the JSON payload. Only the tower-floor rung sets it (to reach the 3060
-    # over zocompute's userspace Tailscale SOCKS proxy). The `proxies=` kwarg is
-    # passed ONLY when a proxy is set, so a cloud rung's call is byte-identical to
-    # before this change (no extra kwarg -> requests' own default = DIRECT).
+    # `proxy`, `timeout`, `code_only` are per-rung TRANSPORT/post-processing hints,
+    # NOT model parameters -- pull them out before spreading extra_params into the
+    # request body so they never leak into the JSON payload.
+    #   proxy    -- only the tower rungs set it (reach the 3060 over zocompute's
+    #               userspace Tailscale SOCKS proxy). `proxies=` passed ONLY when
+    #               set, so cloud rungs' calls are byte-identical (DIRECT).
+    #   timeout  -- per-rung request timeout; defaults to 240s (cloud rungs keep
+    #               their existing 240s -- they do not set it). The local coder
+    #               rung sets a SHORT timeout (~50s) so an unreachable/busy/hung
+    #               tower returns promptly and the ladder ESCALATES to the next
+    #               rung rather than blocking the builder.
+    #   code_only -- post-process the response down to just code (coder rung).
     # socks5h:// requires PySocks (declared as requests[socks] in requirements).
     extra = dict(spec.extra_params or {})
     proxy = extra.pop("proxy", None)
+    req_timeout = extra.pop("timeout", 240)
+    code_only = bool(extra.pop("code_only", False))
     req_kwargs = {"proxies": {"http": proxy, "https": proxy}} if proxy else {}
+    messages = []
+    # code_only: prepend an "output only code" directive. Merge with any caller
+    # system prompt so the builder's own instructions are preserved.
+    sys_prompt = system
+    if code_only:
+        sys_prompt = (f"{_CODE_ONLY_SYSTEM}\n\n{system}" if system
+                      else _CODE_ONLY_SYSTEM)
+    if sys_prompt:
+        messages.append({"role": "system", "content": sys_prompt})
+    messages.append({"role": "user", "content": prompt})
+    payload = {"model": spec.model_id, "messages": messages,
+               "max_tokens": max_tokens, "temperature": temperature}
     if extra:                                  # provider-specific tuning (reasoning_effort, ...)
         payload.update(extra)
     if tools:
@@ -887,7 +1011,7 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
                                    # browser UA: Cerebras (Cloudflare) 403s the
                                    # default python-requests UA with error 1010.
                                    "User-Agent": _OAI_USER_AGENT},
-                          json=payload, timeout=240, **req_kwargs)
+                          json=payload, timeout=req_timeout, **req_kwargs)
         try:  # best-effort quota capture (remaining-headers / 429 park)
             rung_quota.record(spec.model_id, dict(r.headers), r.status_code,
                               r.headers.get("retry-after") or r.headers.get("Retry-After"))
@@ -903,6 +1027,13 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
         raw = (msg.get("content", "") or "").strip()
         tool_calls = msg.get("tool_calls")
         content = _normalize_response(raw) if raw else ""
+        # code_only (local coder rung): the builder consumes CODE, not prose.
+        # Some reasoning-capable servers also return a separate reasoning_content
+        # field -- ignore it entirely (we take ONLY message.content). Then reduce
+        # content to just the fenced code block(s), dropping any <think> block and
+        # surrounding prose. Rung-local: cloud/other rungs never hit this branch.
+        if code_only and content:
+            content = _extract_code_only(content)
         # Mistral-lineage rungs (NVIDIA NIM / Cerebras / Groq / Mistral) emit the
         # call as [TOOL_CALLS]-marked TEXT rather than the structured field. goose
         # acts only on structured tool_calls, so without this the call is silently

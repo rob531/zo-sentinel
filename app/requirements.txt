@@ -15,3 +15,19 @@ cryptography>=42.0,<46.0
 # treewalk-smoke gate has been dead-red on every PR since. Undeclared runtime
 # dep = prod risk on any image rebuild that stops pulling it transitively.
 requests>=2.31,<3.0
+
+# ---------------------------------------------------------------------------
+# Declared third-party deps for staged services (#4002 L1, bucket (a)).
+# Each of these is imported at module scope by a service under
+# services/staged/<name>/ that the #3989 dry-run import gate blocks from
+# promotion until its import resolves. Declared here -- the runtime image --
+# because they are genuine runtime deps of the service once promoted, and the
+# `requests` precedent above establishes this file as the home for a wired
+# module's undeclared import. Loose-but-bounded pins per the file's style.
+elasticsearch>=8.0,<9.0        # ask_query_expansion_v3 (contract/logic/router)
+elasticsearch-dsl>=8.0,<9.0    # ask_query_expansion_v3 (contract)
+Levenshtein>=0.25,<1.0         # registry_family_dedup_report (contract)
+fuzzywuzzy>=0.18,<1.0          # registry_family_dedup_report (logic)
+celery>=5.3,<6.0               # cve_feed_processing (logic)
+sqlglot>=25.0,<31.0            # daemon_roster_coverage_api (logic)
+fastapi-cache2>=0.2,<1.0       # server_compare (router): provides `fastapi_cache`

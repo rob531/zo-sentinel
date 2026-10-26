@@ -180,7 +180,11 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
     if args.mounts:
         m = discover_mounts()
-        print(f"{len(m)} mounts (source={'live' if _SPINE_FILE.exists() else 'fallback'}): {', '.join(m)}")
+        try:
+            from tools.bounded import sample
+        except Exception:
+            from bounded import sample
+        print(f"{len(m)} mounts (source={'live' if _SPINE_FILE.exists() else 'fallback'}): {sample(m)}")
         return 0
     if not args.goal:
         ap.print_help()

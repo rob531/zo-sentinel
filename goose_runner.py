@@ -41,6 +41,17 @@ try:
 except Exception:  # tools/ not importable in some launch contexts -> gate becomes a no-op
     run_gates = None
 
+# Spine gate (PR #10208 router): route an app-surface build directive to its canonical
+# mountpoint BEFORE spending a builder token; REJECT_UNSPINED = no mounted app route.
+# Deterministic/lexical (no network -- Clef is tower-local; zocompute uses the fallback).
+# No-op if the router is absent; fail-open on any error.
+try:
+    from tools.spine_mount_router import route_deterministic as _spine_route, REJECT as _SPINE_REJECT  # noqa: E402
+except Exception:
+    _spine_route, _SPINE_REJECT = None, "REJECT_UNSPINED"
+_SPINE_APP_RECIPES = {"webapp_backend_fastapi", "webapp_frontend_react",
+                      "webapp_fullstack", "service_dir_from_exemplar"}
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -2324,6 +2335,26 @@ def run():
                 _routed_env = build_env_for(directive, attempt=_attempt,
                                             matrix_rows=failure_matrix_cached())
                 _routed_model = _routed_env.get("GOOSE_MODEL", "")
+                # Spine gate: for app-surface builds (webapp/service recipes only), route to a
+                # canonical mountpoint before spend. ADVISORY by default (logs the decision);
+                # set ZO_SPINE_GATE_ENFORCE=1 to PARK a REJECT_UNSPINED (no mounted app route).
+                # Scoped to _SPINE_APP_RECIPES + fail-open so no non-app directive is ever blocked.
+                try:
+                    if _spine_route and directive.get("recipe") in _SPINE_APP_RECIPES:
+                        _goal = " ".join(str(directive.get(k, "")) for k in
+                                         ("title", "description", "content", "task"))
+                        _mount = _spine_route(_goal)
+                        log(f"[SPINE] directive_id={directive_id} recipe={directive.get('recipe')} -> {_mount}")
+                        if _mount == _SPINE_REJECT:
+                            if os.environ.get("ZO_SPINE_GATE_ENFORCE") == "1":
+                                park_directive(directive_id,
+                                               "spine: REJECT_UNSPINED (no mounted app route)",
+                                               get_utc_now(), DIRECTIVES_PATH, DURABLE_QUARANTINE_DIR)
+                                log(f"[SPINE] PARKED (enforce) un-spined app directive: {directive_id}")
+                                continue
+                            log(f"[SPINE] ADVISORY would-reject (set ZO_SPINE_GATE_ENFORCE=1 to park): {directive_id}")
+                except Exception as _se:
+                    log(f"[SPINE] gate skipped (fail-open): {_se}")
                 produced = False
                 # Compose the fully-grounded task ONCE, for BOTH engines. The
                 # engine-fallback fix (2026-07-02): the deterministic engine used

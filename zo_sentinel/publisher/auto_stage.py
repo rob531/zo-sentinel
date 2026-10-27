@@ -234,6 +234,112 @@ def staged_companions(clone_dir, rel_path: str, content: str):
         return []
 
 
+# ---------------------------------------------------------------------------
+# service.toml -> its declared import_path MODULE  (FU-447)
+# ---------------------------------------------------------------------------
+#
+# THE FAILURE THIS ENDS
+#
+# staged_companions() above ships the missing MANIFEST when a router is
+# published alone. The inverse -- the far more common scaffold shape -- had no
+# companion: the publisher emits a single file, and for a
+# `scaffold_<name>_service_toml` directive that file IS the service.toml. Its
+# `import_path = "services.active.<name>.router"` then names a router.py the PR
+# does not ship and (until a later, engine-dependent directive lands it) main
+# does not carry either. The result:
+#   * tests/test_dockerfile_copy_covers_active_services.py
+#     ::test_every_active_service_declares_a_resolvable_import_path goes RED on
+#     that PR -- it asserts over the WHOLE services/active tree, so the PR can
+#     never go green without a hand-written router, and auto PRs are never hand
+#     fixed. They sit open forever (FU-447).
+#   * even staged, a manifest naming a module that does not exist is an ORPHAN
+#     promote_staged_to_active cannot satisfy ("router.py exposes no router"
+#     was 1226 of 1476 staged HOLDs on 2026-09-21).
+#
+# THE FIX: a manifest never ships without the module its import_path names. When
+# a service.toml is published and that module is absent from the clone, co-ship
+# a minimal, self-contained, importable router.py (and the package marker)
+# BESIDE it -- in the SAME directory, so the file lands at exactly the path
+# resolve_module_path() / the FU-447 verifier derive from the import_path. The
+# build lane's router.py pass later overwrites this stand-in with the real
+# data-layer-backed surface (an EDIT, not a creation, so nothing is forked).
+#
+# THE BOUNDARY THAT KEEPS THIS SAFE (same discipline as stage_root_router)
+#
+#   * Only a MISSING module is filled. If router.py already exists on disk --
+#     the `requires` ordering landed it first, or it is live on main -- the
+#     import_path already resolves and nothing is written.
+#   * The module is written into the service's OWN directory (staged stays in
+#     staged, active stays in active): the last dotted segment of import_path is
+#     the module name, and it sits next to the manifest exactly as the exemplar
+#     and service_decomposer lay a service out. A staged manifest is never
+#     given a file under services/active/ -- that would defeat redirect().
+#   * The stand-in is a real APIRouter with a live top-level body, so it is not
+#     a hollow service member (zo_sentinel/gates/hollow.py) and imports cleanly
+#     on its own (no `from .logic import` dangling at mount).
+#   * Staged manifests are not mounted. generate_spine builds SPINE_MOUNTS from
+#     services/active/ only, so co-shipping a staged router self-mounts nothing.
+
+_IMPORT_PATH_RE = re.compile(
+    r'^\s*import_path\s*=\s*["\']([^"\']+)["\']', re.M)
+
+
+def _placeholder_router(import_path: str) -> str:
+    """A minimal, self-contained, importable router module.
+
+    Self-contained on purpose: no `from .logic import ...`, so it resolves AND
+    imports with nothing else present -- the manifest's promise cannot outlive
+    the module even for a single PR. The build lane replaces it with the real
+    surface; until then this stand-in makes the declared import_path true."""
+    return (
+        '"""Placeholder router co-emitted with this service\'s manifest so its\n'
+        "declared import_path (%s) resolves to a real, importable module in the\n"
+        "SAME change (FU-447). A manifest that names a module the change does not\n"
+        "ship is an orphan the promoter cannot read and a guaranteed\n"
+        "ModuleNotFoundError at mount. The build lane's router.py pass replaces\n"
+        'this stand-in with the data-layer-backed surface."""\n'
+        "from fastapi import APIRouter\n"
+        "\n"
+        "router = APIRouter()\n"
+        % import_path
+    )
+
+
+def manifest_companions(clone_dir, rel_path: str, content: str):
+    """Missing import_path MODULE for a service.toml landing alone.
+
+    The symmetric twin of staged_companions(): that one ships the manifest a
+    router needs; this ships the router (and package marker) a manifest names.
+    Returns a list of (rel, text), possibly empty. Never raises -- a routing
+    helper must never fail the publish.
+    """
+    try:
+        rel = (rel_path or "").replace("\\", "/").lstrip("./")
+        if not rel.endswith("/" + STAGED_MANIFEST):
+            return []
+        if not (rel.startswith(STAGED_PREFIX) or rel.startswith(ACTIVE_PREFIX)):
+            return []
+        m = _IMPORT_PATH_RE.search(content or "")
+        if not m:
+            return []
+        import_path = m.group(1).strip()
+        module = import_path.rsplit(".", 1)[-1]
+        if not _IDENT_RE.match(module):
+            return []
+        svc_dir = rel.rsplit("/", 1)[0]           # services/<lane>/<name>
+        root = str(clone_dir)
+        out = []
+        module_rel = svc_dir + "/" + module + ".py"
+        if not os.path.exists(os.path.join(root, module_rel.replace("/", os.sep))):
+            out.append((module_rel, _placeholder_router(import_path)))
+        init_rel = svc_dir + "/__init__.py"
+        if not os.path.exists(os.path.join(root, init_rel.replace("/", os.sep))):
+            out.append((init_rel, ""))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def fix_manifests(clone_dir, manifests, timeout: int = 60):
     """Run the clone's own tools/check_service_manifests.py --fix on the given
     repo-relative manifests. Returns (ok, detail). ok=True also when the tool is

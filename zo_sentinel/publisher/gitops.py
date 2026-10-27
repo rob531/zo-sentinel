@@ -349,6 +349,14 @@ class CliGitOps:
             # manifest and becomes an ORPHAN-DIR the promoter can never read.
             writes += auto_stage.staged_companions(
                 self.clone_dir, rel_path, plan.content)
+            # The inverse, and the common scaffold_<name>_service_toml shape: a
+            # service.toml arrives alone, so its import_path names a router.py
+            # the PR does not ship -- which makes
+            # test_every_active_service_declares_a_resolvable_import_path RED
+            # and the PR unmergeable forever (FU-447). Co-ship the declared
+            # module so the manifest never names what the change omits.
+            writes += auto_stage.manifest_companions(
+                self.clone_dir, rel_path, plan.content)
 
         for w_rel, w_text in writes:
             target = self.clone_dir / w_rel

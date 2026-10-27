@@ -99,7 +99,18 @@ async def chat_completions(request: ChatCompletionRequest):
     system = "\n\n".join(system_parts) if system_parts else None
     prompt = "\n\n".join(convo_parts) if convo_parts else ""
 
-    task_type = escalation.task_for_model(request.model)
+    # Shadow-corpus: a directive_id may ride on the model id as "<tier>#<directive_id>"
+    # (encoded by goose_runner) so this single capture choke-point can stamp it into the
+    # prompt ledger -> harvest key-joins prompt->build instead of time-guessing the model.
+    # Parse it back off; everything downstream uses the bare tier, so un-suffixed traffic
+    # (all of today's) is byte-identical.
+    _base_model = request.model
+    _directive_id = None
+    if _base_model and "#" in _base_model:
+        _base_model, _, _directive_id = _base_model.partition("#")
+        _directive_id = _directive_id or None
+
+    task_type = escalation.task_for_model(_base_model)
 
     try:
         result = escalation.ask(
@@ -135,18 +146,19 @@ async def chat_completions(request: ChatCompletionRequest):
     # escalation.ask() exposes no usage counts -> token fields log as null.
     try:
         _shadow_corpus.capture_prompt_response(
-            model=result.model or (request.model or LADDER_MODEL_ID),
+            model=result.model or (_base_model or LADDER_MODEL_ID),
             prompt=prompt,
             response=result.text or None,
             finish_reason=finish_reason,
-            tier=request.model,  # Goose sends the ladder tier as the model id
+            tier=_base_model,  # Goose sends the ladder tier as the model id
+            directive_id=_directive_id,  # rode in on "<tier>#<id>"; NULL until goose_runner encodes it
         )
     except Exception:
         pass  # defense-in-depth: the helper already swallows everything
 
     cmpl_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
-    model_id = request.model or LADDER_MODEL_ID
+    model_id = _base_model or LADDER_MODEL_ID
 
     # --- streaming path: Goose (and most agentic clients) request stream:true
     # and parse the body as SSE. Our ladder produces the COMPLETE result at once,
@@ -213,7 +225,7 @@ async def chat_completions(request: ChatCompletionRequest):
         "id": f"chatcmpl-{uuid.uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": request.model or LADDER_MODEL_ID,
+        "model": _base_model or LADDER_MODEL_ID,
         "choices": [{
             "index": 0,
             "message": message,

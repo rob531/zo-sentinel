@@ -206,5 +206,49 @@ class WorkflowCallSitesAreCensused(unittest.TestCase):
                          "look up one branch.)")
 
 
+class PopulationAudit(unittest.TestCase):
+    """FU-445 check #3, as a triage-tool self-audit. `_capped` can only see a
+    list that is full to its own page size; `population_audit` corroborates the
+    list against a page-less Search census, so it also catches the case _capped
+    is blind to -- a list UNDER its --limit that is still not the whole
+    population. All three outcomes are pinned, offline."""
+
+    def setUp(self):
+        self._orig = pr_triage._gh
+
+    def tearDown(self):
+        pr_triage._gh = self._orig
+
+    def _route(self, list_rc=0, list_rows=None, search_rc=0, search_total="0"):
+        def stub(*args, **kw):
+            if args[:1] == ("api",):
+                return _cp(search_rc, search_total)
+            return _cp(list_rc, json.dumps(list_rows or []))
+        return stub
+
+    def test_agreement_is_a_count(self):
+        pr_triage._gh = self._route(list_rows=[{"number": i} for i in range(7)],
+                                    search_total="7")
+        self.assertEqual(pr_triage.population_audit("o/r"), 0)
+
+    def test_disagreement_under_the_limit_is_still_a_page(self):
+        """The case _capped cannot see: 7 rows, well under --limit 1000, yet the
+        page-less census says 42. The list was never the whole population."""
+        pr_triage._gh = self._route(list_rows=[{"number": i} for i in range(7)],
+                                    search_total="42")
+        self.assertEqual(pr_triage.population_audit("o/r"), 1)
+
+    def test_unreadable_corroborator_is_cannot_evaluate_not_a_pass(self):
+        pr_triage._gh = self._route(list_rows=[{"number": 1}], search_rc=1,
+                                    search_total="")
+        self.assertEqual(pr_triage.population_audit("o/r"), 2,
+                         "an unreadable second basis must be CANNOT EVALUATE "
+                         "(2), never mistaken for agreement (0)")
+
+    def test_list_failure_is_cannot_evaluate(self):
+        pr_triage._gh = self._route(list_rc=1)
+        self.assertEqual(pr_triage.population_audit("o/r"), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

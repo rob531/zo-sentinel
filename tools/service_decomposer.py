@@ -149,10 +149,24 @@ def decompose(name: str, spec: str, prefix: str = "/api", tag: str = "",
     })
 
     # code files (generate_file, engine/exemplar-mirrored, one per concern)
+    #
+    # Intra-service build order. contract.py imports .router and router.py imports
+    # .logic, so a concern's __main__ self-test fails to import a not-yet-built
+    # sibling if it builds first -- RED self-test, blocked. We express the order as
+    # the SAME `requires` the service.toml line uses (goose_runner / build_completion
+    # unmet_requires() defer a directive until the listed repo-relative files exist),
+    # giving the acyclic DAG logic -> router -> contract with no engine change:
+    #   build_<svc>_logic    : no requires (leaf, built first)
+    #   build_<svc>_router   : requires <staged>/logic.py
+    #   build_<svc>_contract : requires <staged>/router.py
+    REQUIRES_BY_STEM = {
+        "router": ["%s/logic.py" % staged],
+        "contract": ["%s/router.py" % staged],
+    }
     for fname, role in CODE_FILES:
         stem = fname[:-3]
         exemplar_file = "%s/%s" % (exemplar_dir, fname)
-        directives.append({
+        directive = {
             "task": "build_%s_%s" % (name, stem),
             "handler": "generate_file",
             "recipe": "service_dir_from_exemplar",
@@ -166,7 +180,10 @@ def decompose(name: str, spec: str, prefix: str = "/api", tag: str = "",
                 % (name, fname, name, exemplar_file, role.format(name=name), spec)
             ),
             "complexity": "medium",
-        })
+        }
+        if stem in REQUIRES_BY_STEM:
+            directive["requires"] = REQUIRES_BY_STEM[stem]
+        directives.append(directive)
     return directives
 
 

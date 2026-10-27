@@ -775,7 +775,34 @@ def _soa_service_name(directive_id):
 _SCHEMA_HEADER = (
     "REAL SCHEMA -- authoritative, read from the live app.models KL. Use ONLY "
     "these columns; a column not listed here DOES NOT EXIST, and inventing one "
-    "is the single most common reason a build is rejected:\n")
+    "is the single most common reason a build is rejected. Per-column flags: "
+    "[PK]=primary key, [required]=NOT NULL with no default (a seed INSERT MUST "
+    "set it), [default]=DB fills it if omitted; unflagged=nullable:\n")
+
+
+def _fmt_cols(meta):
+    """Columns + constraint flags from the KL (column_meta / required_construct),
+    so a generated self-test seeds every required (NOT NULL, no-default) column
+    and respects PK/defaults -- the fix for 'NOT NULL constraint failed' seed
+    gaps. Falls back to the bare column name when no metadata is present (R6: a
+    column with unknown constraints is emitted as its name, never dropped)."""
+    cols = [c for c in (meta.get("columns") or []) if c]
+    cmeta = meta.get("column_meta") or {}
+    required = set(meta.get("required_construct") or [])
+    parts = []
+    for c in cols:
+        m = cmeta.get(c) or {}
+        flags = []
+        if m.get("primary_key"):
+            flags.append("PK")
+        if c in required:
+            flags.append("required")
+        elif m.get("nullable") is False:
+            flags.append("NOT NULL")
+        if m.get("has_default"):
+            flags.append("default")
+        parts.append("%s [%s]" % (c, ",".join(flags)) if flags else c)
+    return ", ".join(parts)
 
 
 def _soa_schema_excerpt(directive):
@@ -814,7 +841,7 @@ def _soa_schema_excerpt(directive):
             cols = [c for c in (meta.get("columns") or []) if c]
             if not cols:
                 continue
-            hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
+            hits.append("  %s (table %s): %s" % (name, table, _fmt_cols(meta)))
     if not hits:
         return ""
     return _SCHEMA_HEADER + "\n".join(sorted(hits)[:8])
@@ -894,7 +921,7 @@ def _schema_ground_context(directive):
             cols = [c for c in (meta.get("columns") or []) if c]
             if not cols:
                 continue
-            hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
+            hits.append("  %s (table %s): %s" % (name, table, _fmt_cols(meta)))
     if not hits:
         return "", "no_table_matched"
     return (_SCHEMA_HEADER + "\n".join(sorted(hits)[:8])), "matched"

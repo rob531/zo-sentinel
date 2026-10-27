@@ -1168,6 +1168,15 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive
             log(f"[recipe] {directive_id} -> {recipe_path.name}")
         task_desc = json.dumps(content)
         env = {**os.environ, **(extra_env or {})}
+        # Shadow-corpus (flag-gated, default OFF): ride directive_id on the model id
+        # goose sends to the shim ("<tier>#<id>") so harvest can key-join prompt->build.
+        # The shim strips the suffix before routing. Gated behind ZO_SHADOW_DID_IN_MODEL
+        # until a live smoke-test confirms goose forwards a '#'-suffixed GOOSE_MODEL
+        # verbatim (goose, unlike our own fallback POST, builds the request body itself).
+        if os.environ.get("ZO_SHADOW_DID_IN_MODEL") == "1":
+            _gm = env.get("GOOSE_MODEL")
+            if _gm and directive_id and "#" not in _gm:
+                env["GOOSE_MODEL"] = f"{_gm}#{directive_id}"
         if GOOSE_BIN != "goose":
             # FU-017: isolated store for a versioned goose (see GOOSE_BIN note).
             _iso = os.environ.get("ZO_BUILDER_GOOSE_HOME", "/home/workspace/.goose_builder")
@@ -1318,7 +1327,10 @@ def call_minimax_fallback(directive):
     log(f"Routing directive {directive_id} through ladder shim")
     try:
         resp = requests.post(SHIM_URL, json={
-            "model": "zo-ladder-nvidia",  # capable tool/coder window (was zo-ladder-v1=MiniMax rung0)
+            # Shadow-corpus: ride directive_id on the model id ("<tier>#<id>") so the
+            # shim can stamp it into the prompt ledger. This is goose_runner's own POST
+            # (goose is not involved), so it is safe + always on; the shim strips it.
+            "model": f"zo-ladder-nvidia#{directive_id}" if directive_id else "zo-ladder-nvidia",  # capable tool/coder window (was zo-ladder-v1=MiniMax rung0)
             "messages": [
                 {"role": "system", "content": "You are an autonomous builder for zo-sentinel. Output only the completed code/results."},
                 {"role": "user", "content": f"Complete this task: {content}"},

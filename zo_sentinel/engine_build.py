@@ -195,9 +195,14 @@ def _local_check(out: Path) -> tuple:
 
 
 def _chat(post: Callable, shim_url: str, model: str, system: str, user: str,
-          timeout: int) -> str:
+          timeout: int, directive_id: Optional[str] = None) -> str:
+    # Shadow-corpus: ride directive_id on the model id ("<rung>#<id>") so the
+    # shim stamps it into the prompt ledger -> harvest key-joins prompt->build.
+    # Direct POST (no goose), so safe + always on; the shim strips the suffix.
+    wire_model = (f"{model}#{directive_id}"
+                  if directive_id and "#" not in model else model)
     resp = post(shim_url, json={
-        "model": model,
+        "model": wire_model,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
         "temperature": 0.2,
@@ -230,6 +235,7 @@ def build_with_engine(directive: dict, task_text: str, attempt: int = 0,
     stays with goose_runner's gate chain.
     """
     model = rung_for_attempt(attempt)
+    _did = directive.get("directive_id") or directive.get("task")  # shadow-corpus join key
     res = {"success": False, "result": "", "model": model, "repairs": 0,
            "fallback": "engine_build"}
     try:
@@ -247,7 +253,7 @@ def build_with_engine(directive: dict, task_text: str, attempt: int = 0,
         log(f"[engine-ground] {out.name if out is not None else '?'}: "
             f"schema_in_sent_prompt={'REAL SCHEMA --' in _user} "
             f"prompt_chars={len(_user)}")
-        txt = _chat(post, shim_url, model, _SYSTEM, _user, timeout)
+        txt = _chat(post, shim_url, model, _SYSTEM, _user, timeout, directive_id=_did)
         res["result"] = txt
         if out is None:
             # Edit-class directive: no single declared file to write/verify --
@@ -275,7 +281,7 @@ def build_with_engine(directive: dict, task_text: str, attempt: int = 0,
                 f"not a diff. It must compile and its __main__ self-test must "
                 f"print PASS."
             )
-            txt = _chat(post, shim_url, model, _SYSTEM, fix_prompt, timeout)
+            txt = _chat(post, shim_url, model, _SYSTEM, fix_prompt, timeout, directive_id=_did)
             code = strip_code_fences(txt)
             if not code.strip():
                 break

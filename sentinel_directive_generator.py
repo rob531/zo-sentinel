@@ -59,10 +59,11 @@ SCHEMA_PATH     = PROJECT_DIR / "SENTINEL_DIRECTIVE_SCHEMA.md"
 REGISTRY_PATH   = PROJECT_DIR / ".build_registry.json"
 BUILD_STATE_PATH= PROJECT_DIR / "BUILD_STATE.md"
 SERVICE_NAME    = "sentinel_directive_generator"
-POLL_SECS       = 2700   # 45 minutes
-MIN_QUEUE_TO_SKIP = 5    # skip generation if >5 directives already queued
-MAX_DIRECTIVES  = 8      # max to generate per run
-FALLBACK_MAX    = 3      # max standing-goal directives to emit per cycle
+# Cadence knobs (env-overridable; throttled defaults to curb the auto/build PR backlog).
+POLL_SECS         = int(os.environ.get("ZO_DIRGEN_POLL_SECS", "5400"))  # 90 min (throttled from 45m)
+MIN_QUEUE_TO_SKIP = int(os.environ.get("ZO_DIRGEN_MIN_QUEUE", "3"))     # skip generation if queue >= this (tightened from 5)
+MAX_DIRECTIVES    = int(os.environ.get("ZO_DIRGEN_MAX", "4"))           # max to generate per run (throttled from 8)
+FALLBACK_MAX      = int(os.environ.get("ZO_DIRGEN_FALLBACK_MAX", "2"))  # max standing-goal directives per cycle (throttled from 3)
 
 # Inference call budgets (2026-04-21: bumped from 120s due to MiniMax-M2.7
 # reasoning mode pushing round-trip past the previous ceiling)

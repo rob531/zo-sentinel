@@ -41,6 +41,17 @@ try:
 except Exception:  # tools/ not importable in some launch contexts -> gate becomes a no-op
     run_gates = None
 
+# Spine gate (PR #10208 router): route an app-surface build directive to its canonical
+# mountpoint BEFORE spending a builder token; REJECT_UNSPINED = no mounted app route.
+# Deterministic/lexical (no network -- Clef is tower-local; zocompute uses the fallback).
+# No-op if the router is absent; fail-open on any error.
+try:
+    from tools.spine_mount_router import classify_directive as _spine_classify, REJECT as _SPINE_REJECT  # noqa: E402
+except Exception:
+    _spine_classify, _SPINE_REJECT = None, "REJECT_UNSPINED"
+_SPINE_APP_RECIPES = {"webapp_backend_fastapi", "webapp_frontend_react",
+                      "webapp_fullstack", "service_dir_from_exemplar"}
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -764,7 +775,34 @@ def _soa_service_name(directive_id):
 _SCHEMA_HEADER = (
     "REAL SCHEMA -- authoritative, read from the live app.models KL. Use ONLY "
     "these columns; a column not listed here DOES NOT EXIST, and inventing one "
-    "is the single most common reason a build is rejected:\n")
+    "is the single most common reason a build is rejected. Per-column flags: "
+    "[PK]=primary key, [required]=NOT NULL with no default (a seed INSERT MUST "
+    "set it), [default]=DB fills it if omitted; unflagged=nullable:\n")
+
+
+def _fmt_cols(meta):
+    """Columns + constraint flags from the KL (column_meta / required_construct),
+    so a generated self-test seeds every required (NOT NULL, no-default) column
+    and respects PK/defaults -- the fix for 'NOT NULL constraint failed' seed
+    gaps. Falls back to the bare column name when no metadata is present (R6: a
+    column with unknown constraints is emitted as its name, never dropped)."""
+    cols = [c for c in (meta.get("columns") or []) if c]
+    cmeta = meta.get("column_meta") or {}
+    required = set(meta.get("required_construct") or [])
+    parts = []
+    for c in cols:
+        m = cmeta.get(c) or {}
+        flags = []
+        if m.get("primary_key"):
+            flags.append("PK")
+        if c in required:
+            flags.append("required")
+        elif m.get("nullable") is False:
+            flags.append("NOT NULL")
+        if m.get("has_default"):
+            flags.append("default")
+        parts.append("%s [%s]" % (c, ",".join(flags)) if flags else c)
+    return ", ".join(parts)
 
 
 def _soa_schema_excerpt(directive):
@@ -803,7 +841,7 @@ def _soa_schema_excerpt(directive):
             cols = [c for c in (meta.get("columns") or []) if c]
             if not cols:
                 continue
-            hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
+            hits.append("  %s (table %s): %s" % (name, table, _fmt_cols(meta)))
     if not hits:
         return ""
     return _SCHEMA_HEADER + "\n".join(sorted(hits)[:8])
@@ -883,7 +921,7 @@ def _schema_ground_context(directive):
             cols = [c for c in (meta.get("columns") or []) if c]
             if not cols:
                 continue
-            hits.append("  %s (table %s): %s" % (name, table, ", ".join(cols)))
+            hits.append("  %s (table %s): %s" % (name, table, _fmt_cols(meta)))
     if not hits:
         return "", "no_table_matched"
     return (_SCHEMA_HEADER + "\n".join(sorted(hits)[:8])), "matched"
@@ -1157,6 +1195,15 @@ def run_goose_task(directive_id, content, extra_env=None, recipe=None, directive
             log(f"[recipe] {directive_id} -> {recipe_path.name}")
         task_desc = json.dumps(content)
         env = {**os.environ, **(extra_env or {})}
+        # Shadow-corpus (flag-gated, default OFF): ride directive_id on the model id
+        # goose sends to the shim ("<tier>#<id>") so harvest can key-join prompt->build.
+        # The shim strips the suffix before routing. Gated behind ZO_SHADOW_DID_IN_MODEL
+        # until a live smoke-test confirms goose forwards a '#'-suffixed GOOSE_MODEL
+        # verbatim (goose, unlike our own fallback POST, builds the request body itself).
+        if os.environ.get("ZO_SHADOW_DID_IN_MODEL") == "1":
+            _gm = env.get("GOOSE_MODEL")
+            if _gm and directive_id and "#" not in _gm:
+                env["GOOSE_MODEL"] = f"{_gm}#{directive_id}"
         if GOOSE_BIN != "goose":
             # FU-017: isolated store for a versioned goose (see GOOSE_BIN note).
             _iso = os.environ.get("ZO_BUILDER_GOOSE_HOME", "/home/workspace/.goose_builder")
@@ -1307,7 +1354,10 @@ def call_minimax_fallback(directive):
     log(f"Routing directive {directive_id} through ladder shim")
     try:
         resp = requests.post(SHIM_URL, json={
-            "model": "zo-ladder-nvidia",  # capable tool/coder window (was zo-ladder-v1=MiniMax rung0)
+            # Shadow-corpus: ride directive_id on the model id ("<tier>#<id>") so the
+            # shim can stamp it into the prompt ledger. This is goose_runner's own POST
+            # (goose is not involved), so it is safe + always on; the shim strips it.
+            "model": f"zo-ladder-nvidia#{directive_id}" if directive_id else "zo-ladder-nvidia",  # capable tool/coder window (was zo-ladder-v1=MiniMax rung0)
             "messages": [
                 {"role": "system", "content": "You are an autonomous builder for zo-sentinel. Output only the completed code/results."},
                 {"role": "user", "content": f"Complete this task: {content}"},
@@ -2324,6 +2374,28 @@ def run():
                 _routed_env = build_env_for(directive, attempt=_attempt,
                                             matrix_rows=failure_matrix_cached())
                 _routed_model = _routed_env.get("GOOSE_MODEL", "")
+                # Spine gate: for app-surface builds (webapp/service recipes only), classify the
+                # directive before spend. route (existing mount) + new_service (legitimate spine
+                # GROWTH -- a structured build of a not-yet-mounted service) both PROCEED and are
+                # never parked; only reject (orphan / no service structure) is gated. ADVISORY by
+                # default; ZO_SPINE_GATE_ENFORCE=1 parks a reject. Scoped + fail-open: no non-app
+                # directive is ever blocked, and any router error lets the build proceed.
+                try:
+                    if _spine_classify and directive.get("recipe") in _SPINE_APP_RECIPES:
+                        _goal = " ".join(str(directive.get(k, "")) for k in
+                                         ("title", "description", "content", "task"))
+                        _decision, _target = _spine_classify(_goal, directive_id)
+                        log(f"[SPINE] directive_id={directive_id} recipe={directive.get('recipe')} -> {_decision}:{_target}")
+                        if _decision == "reject":
+                            if os.environ.get("ZO_SPINE_GATE_ENFORCE") == "1":
+                                park_directive(directive_id,
+                                               "spine: REJECT_UNSPINED (orphan / no mounted route, not a service build)",
+                                               get_utc_now(), DIRECTIVES_PATH, DURABLE_QUARANTINE_DIR)
+                                log(f"[SPINE] PARKED (enforce) orphan directive: {directive_id}")
+                                continue
+                            log(f"[SPINE] ADVISORY would-reject orphan (set ZO_SPINE_GATE_ENFORCE=1 to park): {directive_id}")
+                except Exception as _se:
+                    log(f"[SPINE] gate skipped (fail-open): {_se}")
                 produced = False
                 # Compose the fully-grounded task ONCE, for BOTH engines. The
                 # engine-fallback fix (2026-07-02): the deterministic engine used

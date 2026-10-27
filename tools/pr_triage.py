@@ -555,6 +555,82 @@ def _capped(rows, where: str, limit: int) -> bool:
     return False
 
 
+# FU-445: a --limit is a population CAP, not a COUNT. `_capped` above catches
+# the ONE failure mode a single list can see for itself -- a page filled exactly
+# to its own --limit. It is BLIND to the other mode: a page that is NOT full and
+# therefore looks complete, yet is still wrong because the basis it came from
+# disagrees with an independent census. A list cannot prove its own completeness
+# from the inside; the only proof is a SECOND measurement of the same population
+# that shares NO page size with the first -- here, the Search API's total_count,
+# which carries no --limit at all. If the two disagree, the smaller is a page.
+_AUDIT_PAGE = 1000  # must exceed the real population or basis A is itself a page
+
+
+def _search_build_total(repo: str):
+    """Open autonomous-build population on a basis that has NO page size.
+
+    Returns the int total_count, or None if the Search API could not be read
+    (so the caller reports CANNOT EVALUATE rather than a false agreement)."""
+    q = f'repo:{repo} is:pr is:open label:"{BUILD_LABEL}"'
+    res = _gh("api", "-X", "GET", "search/issues", "-f", f"q={q}",
+              "--jq", ".total_count")
+    if res is None or res.returncode != 0:
+        return None
+    try:
+        return int((res.stdout or "").strip())
+    except ValueError:
+        return None
+
+
+def population_audit(repo: str) -> int:
+    """Measure the open autonomous-build population two ways and warn on drift.
+
+    The triage-tool analogue of fu445_verify.py's check #3. `_capped` fires only
+    when a list is full to its page size; this fires whenever the list and a
+    page-less census DISAGREE -- the strictly larger net, because a list short
+    of its --limit still lies if it was never the whole population to begin with.
+
+    Read-only. Returns 1 on disagreement (so a workflow step MAY gate on it),
+    2 when a basis is unreadable (CANNOT EVALUATE -- never a verdict), 0 when the
+    two independent bases agree.
+    """
+    res = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state",
+              "open", "--limit", str(_AUDIT_PAGE), "--json", "number")
+    if res is None or res.returncode != 0:
+        err = (res.stderr or "").strip() if res is not None else "no result from gh"
+        print(f"CANNOT EVALUATE population: gh pr list: {err[:200]}", file=sys.stderr)
+        return 2
+    try:
+        rows = json.loads(res.stdout or "[]")
+    except json.JSONDecodeError as e:
+        print(f"CANNOT EVALUATE population: bad JSON from gh: {e}", file=sys.stderr)
+        return 2
+    _capped(rows, "population audit list", _AUDIT_PAGE)
+    listed = len(rows)
+    searched = _search_build_total(repo)
+    if searched is None:
+        print("CANNOT EVALUATE population: Search API total_count unreadable",
+              file=sys.stderr)
+        return 2
+    print(f"[population] basis A -- gh pr list --limit {_AUDIT_PAGE} : {listed}",
+          file=sys.stderr)
+    print(f"[population] basis B -- search total_count (no page)  : {searched}",
+          file=sys.stderr)
+    if listed != searched:
+        print(f"::warning title=pr-triage population disagreement::the open "
+              f"{BUILD_LABEL} population measured two ways DISAGREES "
+              f"(list={listed} vs search total_count={searched}). When a bounded "
+              f"list and a page-less census disagree, the smaller one is a PAGE, "
+              f"not a count: PRs past the boundary are invisible to every sweep "
+              f"keyed on that list. Raise the --limit past the population or page "
+              f"through it -- do not report the list length as the population.",
+              file=sys.stderr)
+        return 1
+    print(f"[population] OK: two independent bases agree ({listed}) -- the list "
+          f"is a count, not a page.", file=sys.stderr)
+    return 0
+
+
 def _is_transient(stderr: str) -> bool:
     e = (stderr or "").lower()
     return any(t in e for t in _TRANSIENT_GH)
@@ -672,6 +748,16 @@ def main() -> int:
         except Exception:  # pragma: no cover - very old interpreters
             pass
     repo = _repo()
+
+    # FU-445 self-audit: an opt-in, read-only census that measures the open
+    # build-PR population two ways (bounded list vs page-less Search API) and
+    # exits non-zero if they disagree. Default triage runs do NOT trigger it --
+    # it costs one extra Search call and this job is already wall-clock-bound --
+    # so a workflow step must ask for it explicitly. No labels, no digest, no
+    # mutation on this path.
+    if "--population-audit" in sys.argv:
+        return population_audit(repo)
+
     prs, mode, dropped = fetch_open_build_prs(repo)
 
     if mode == "rate_limited":

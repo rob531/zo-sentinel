@@ -527,6 +527,16 @@ def _pending_is_terminal(pending_file: Path, directives_root: Path) -> bool:
     return done.exists() or failed.exists() or _durably_quarantined(did)
 
 
+def _unmet_requires(d: dict) -> list:
+    """Repo-relative `requires` paths that do NOT yet exist on disk. Empty list =
+    the directive's chain prerequisites are satisfied (or it is a leaf with no
+    requires). Used to hold chain-dependents in proposed/ until their root builds."""
+    reqs = d.get("requires") or []
+    if not isinstance(reqs, (list, tuple)):
+        return []
+    return [str(r) for r in reqs if str(r) and not (REPO_ROOT / str(r)).exists()]
+
+
 def _do_promote(
     src: Path,
     pending_dir: Path,
@@ -590,6 +600,23 @@ def _do_promote(
                 if not dry_run:
                     _rename_duplicate(src)
                 return "already_resolved"
+
+    # CHAIN-ROOT GATE (2026-10-29): a service fan-out emits a COMPLETE chain
+    # (logic -> router -> {contract, service.toml}), each dependent `requires` the
+    # prior file. Promoting a dependent into the small pending/ queue BEFORE its
+    # chain-root logic.py exists just DEFERS it forever (unmet requires) and clogs
+    # the queue -- the orphaned-chain stall (builder dark ~15h, 2026-10-29). Keep a
+    # dependent in proposed/ until every `requires` path EXISTS on disk; it promotes
+    # naturally once the leaf (logic/router) builds. Leave it in place (NOT rejected)
+    # so a never-built root never clogs pending/ and the chain promotes IN ORDER. A
+    # leaf (no requires) is always promotable. The post-promote orphan-park
+    # (goose_runner) remains the backstop for anything already in pending/.
+    _unmet = _unmet_requires(d)
+    if _unmet:
+        log.info("defer %s: chain-root not on disk yet %s -> hold in proposed/",
+                 src.name, _unmet)
+        counters.skipped += 1
+        return "deferred_requires"
 
     dest = pending_dir / src.name
     if dest.exists():

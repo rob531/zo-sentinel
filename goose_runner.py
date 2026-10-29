@@ -303,9 +303,35 @@ def topup_quarantine():
         log(f"quarantine top-up unavailable (non-fatal): {e}")
 
 
+def park_orphan_chains_safe():
+    """Self-heal the pending/ queue each cycle: park directives whose `requires`
+    name a file that no live pending directive produces (orphaned chain roots) so
+    the queue cannot silently JAM -- the 2026-10-29 ~15h stall, where orphaned
+    contract/router/service.toml dependents (their `logic` root never generated)
+    filled pending/, so it never ran thin, so topup never refilled, so nothing
+    built. Deterministic + reversible (parked dirs are revived once buildable).
+
+    Fail-soft + flag-gated (ZO_ORPHAN_PARK=0 disables): resolved by FILE PATH like
+    topup_quarantine, since tools/ is not importable in every launch context, and a
+    seam-audit that silently degrades to a no-op is the defect it exists to close."""
+    if os.environ.get("ZO_ORPHAN_PARK", "1") in ("0", "false", "False", "no", "NO"):
+        return
+    try:
+        import importlib.util as _ilu
+        _src = Path(__file__).resolve().parent / "tools" / "park_orphan_chain_directives.py"
+        _spec = _ilu.spec_from_file_location("park_orphan_chain_directives", _src)
+        _mod = _ilu.module_from_spec(_spec)
+        sys.modules["park_orphan_chain_directives"] = _mod
+        _spec.loader.exec_module(_mod)
+        _mod.park_orphan_chains(apply=True, log=log)
+    except Exception as e:                                       # noqa: BLE001
+        log(f"orphan-park unavailable (non-fatal): {e}")
+
+
 def load_directives_from_mesh():
     """Load directives from BOTH mesh_memory DB and pending dir (merged)."""
     prune_done_pending()   # keep pending/ from growing unbounded with done files
+    park_orphan_chains_safe()  # un-jam: park dependents whose chain-root has no producer
     topup_quarantine()     # keep the queue non-empty from the #4079 backlog
     directives = []
     seen_ids = set()

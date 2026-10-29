@@ -36,6 +36,13 @@ COMPLEXITY_TO_ALIAS = {
 }
 DEFAULT_ALIAS = "zo-ladder-low"          # rung 0 (MiniMax) -- prior behaviour
 _CAPABLE_RECIPES = {"module_from_exemplar", "webapp_backend_fastapi", "webapp_frontend_react", "webapp_fullstack", "service_dir_from_exemplar"}
+
+
+def _m3_trial_on() -> bool:
+    """True iff the BUILDER_M3_TRIAL flag is set (bounded, reversible M3 trial on
+    low/high/critical). Read at call time so the daemon/tests see current env."""
+    return os.environ.get("BUILDER_M3_TRIAL", "") not in (
+        "", "0", "false", "False", "no", "NO")
 # NOTE (chairman steer 2026-07-24): rungs are ALIASES resolved by the ladder shim,
 # never vendor pins -- provider TOS/pricing shifts (MiniMax stays paid/stable, others
 # vary) are absorbed by re-pointing the alias, not by editing routing code.
@@ -162,6 +169,15 @@ def build_env_for(directive: dict, attempt: int = 0, matrix_rows=None) -> dict:
     # delegate_to_builder fallback + build_artifact provenance.
     # Static route (prior behaviour): medium -> MiniMax-M3 rung, else rung-0 MiniMax.
     static_model = "zo-ladder-medium" if complexity == "medium" else DEFAULT_ALIAS
+    # M3 TRIAL (2026-10-29, flag-gated + reversible via BUILDER_M3_TRIAL): also pin
+    # low/high/critical to the MiniMax-M3 rung so the failure_matrix accrues M3 success
+    # evidence on those classes (today they pin to rung-0 M2.7). The matrix-driven
+    # override below still wins where it has data, and escalation is unchanged -- this
+    # only moves the STATIC default. Flag unset -> byte-identical to prior behaviour, so
+    # promotion stays EVIDENCE-driven: the trial just lets the matrix see M3 on these
+    # classes; the deterministic matrix router decides whether M3 actually wins.
+    if complexity != "medium" and _m3_trial_on():
+        static_model = "zo-ladder-medium"
     # CAPABLE-RUNG ROUTING (2026-06-28): the validated module_from_exemplar lane needs a
     # tool-capable, schema-competent rung. MiniMax (the default builder pin) reliably
     # hallucinates the real columns even with the schema injected, while the genuinely

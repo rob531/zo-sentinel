@@ -67,27 +67,32 @@ def test_feedback_adds_orm_directive_only_when_raw_sql():
 
 # --- _selftest_gate stash: set on RED, clear on PASS ---------------------------
 
-def _run_gate(tmp_path, body, did):
+def _run_gate(tmp_path, monkeypatch, body, did):
+    # Hermetic: point PROJECT_DIR at tmp (so the self-test subprocess cwd exists and the
+    # module resolves under `python -m`) and silence log() -- the CI sandbox has no
+    # /home/workspace, so an unpatched log/cwd would FileNotFound before the verdict.
+    monkeypatch.setattr(gr, "PROJECT_DIR", tmp_path)
+    monkeypatch.setattr(gr, "log", lambda *a, **k: None)
     p = tmp_path / f"{did}.py"
     p.write_text(body, encoding="utf-8")
     directive = {"output_file": str(p)}   # absolute -> declared_output returns it as-is
     return gr._selftest_gate(directive, did)
 
 
-def test_selftest_gate_stashes_red(tmp_path):
+def test_selftest_gate_stashes_red(tmp_path, monkeypatch):
     did = "red_case"
     gr._LAST_SELFTEST_RED.pop(did, None)
     body = "if __name__ == '__main__':\n    print('about to fail')\n    raise SystemExit(1)\n"
-    ok = _run_gate(tmp_path, body, did)
+    ok = _run_gate(tmp_path, monkeypatch, body, did)
     assert ok is False                                   # RED blocks completion
     assert did in gr._LAST_SELFTEST_RED                  # ... and the error is stashed
     assert "about to fail" in gr._LAST_SELFTEST_RED[did]
 
 
-def test_selftest_gate_clears_stash_on_pass(tmp_path):
+def test_selftest_gate_clears_stash_on_pass(tmp_path, monkeypatch):
     did = "pass_case"
     gr._LAST_SELFTEST_RED[did] = "stale error from a prior attempt"
     body = "if __name__ == '__main__':\n    print('PASS')\n"
-    ok = _run_gate(tmp_path, body, did)
+    ok = _run_gate(tmp_path, monkeypatch, body, did)
     assert ok is True                                    # PASS
     assert did not in gr._LAST_SELFTEST_RED              # stale error must not leak

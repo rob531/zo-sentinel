@@ -2682,9 +2682,8 @@ def run():
                             _repair_result = None
                         if _repair_result is None:
                             _repair_result = call_minimax_fallback(directive)
-                        _ok, _failed_gate = _gate_chain(
-                            directive, directive_id, _pre_diff,
-                            bool(_repair_result.get("success")))
+                        _ok, _failed_gate = _gate_chain(directive, directive_id, _pre_diff,
+                                                        bool(_repair_result.get("success")))
                         if _ok:
                             log(f"[selftest-repair] {directive_id}: repair cleared the gate chain")
                             _complete(directive, directive_id,

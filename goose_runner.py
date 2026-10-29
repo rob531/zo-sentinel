@@ -1808,6 +1808,14 @@ def _no_hollow_gate(directive, directive_id):
         return True
 
 
+# FU: deterministic self-test feedback-repair. _selftest_gate logs the RED stdout+stderr
+# but returns only a bool, and _gate_chain depends on that bool signature. Rather than
+# thread the error through the whole gate chain, stash the last RED output here keyed by
+# directive_id; the build loop reads it to feed the model its own failure for ONE bounded
+# repair re-run. Cleared on PASS so a stale error can never leak into a later repair.
+_LAST_SELFTEST_RED: dict = {}
+
+
 def _selftest_gate(directive, directive_id):
     """Run the module's __main__ self-test and require PASS before completing. Degrades to
     True (Tier-0 only) when there is no self-test or it fails purely on an environment/import
@@ -1906,16 +1914,73 @@ def _selftest_gate(directive, directive_id):
     _verdict, _reason = _classify(proc.returncode, combined, proc.stdout or "")
     if _verdict == _V_PASS:
         log(f"[selftest] {directive_id}: self-test PASS")
+        _LAST_SELFTEST_RED.pop(directive_id, None)
         return True
     if _verdict == _V_RED:
         # Distinct string per meaning: one string for two meanings is why 39 events
         # read as one problem for nine days.
         log(f"[selftest] {directive_id}: self-test RED ({_reason}) -- blocking completion :: "
             + combined.strip()[-400:])
+        # Stash the full RED output for the one-shot feedback-repair in the build loop.
+        _LAST_SELFTEST_RED[directive_id] = combined.strip()
         return False
     log(f"[selftest] {directive_id}: self-test UNKNOWN ({_reason}) -- could not evaluate, "
         f"degrading to Tier-0 (not blocking) :: " + combined.strip()[-400:])
     return True
+
+
+# Deterministic raw-SQL lint. The ORM idiom passes a select()/insert() CONSTRUCT to
+# execute() and seeds via session.add(Model(...)); raw SQL passes a QUOTED STRING. That
+# string boundary is what distinguishes the two cheaply and with near-zero false positives:
+# `.execute(select(...))` never matches `execute(` + quote, but `.execute("INSERT ...")`
+# does. VALUES(...) placeholder lists and text("...") are raw-only constructs.
+_RAW_SQL_PATTERNS = [
+    ("raw INSERT statement", re.compile(r"\bINSERT\s+INTO\b", re.I)),
+    ("VALUES (...) placeholder list", re.compile(r"\bVALUES\s*\(", re.I)),
+    ("execute()/executemany() on a SQL string literal",
+     re.compile(r"\.execute(?:many)?\s*\(\s*[\"']", re.I)),
+    ("sqlalchemy text() wrapping a SQL string", re.compile(r"\btext\s*\(\s*[\"']", re.I)),
+    ("raw DBAPI cursor", re.compile(r"\.cursor\s*\(", re.I)),
+]
+
+
+def _raw_sql_lint(code):
+    """Return a short hint naming the raw-SQL signals in `code`, or '' when it looks
+    ORM-clean. Used only to SHARPEN the feedback-repair message -- never as a hard gate,
+    so a false positive costs at most one needless ORM reminder, not a blocked build."""
+    if not code:
+        return ""
+    hits = sorted({name for name, rx in _RAW_SQL_PATTERNS if rx.search(code)})
+    return ("raw-SQL signals: " + "; ".join(hits)) if hits else ""
+
+
+def _selftest_feedback(err, code):
+    """Build the corrective block appended to the engine task for ONE bounded self-test
+    repair re-run: quote the model's OWN self-test failure, and when the raw-SQL lint
+    fires, point it hard at the ORM. Deterministic -- no model call here."""
+    tail = (err or "").strip()[-1200:]
+    lines = [
+        "",
+        "## PREVIOUS ATTEMPT FAILED ITS ACCEPTANCE SELF-TEST -- FIX EXACTLY THIS",
+        "Your last output was written to disk and its __main__ self-test was run.",
+        "It did NOT print PASS. The captured stdout+stderr tail was:",
+        "```",
+        tail or "(no output captured)",
+        "```",
+        "Correct the specific error shown above and re-emit the COMPLETE file.",
+    ]
+    lint = _raw_sql_lint(code)
+    if lint:
+        lines += [
+            "",
+            f"Static check of your last output -- {lint}. You wrote raw SQL; do NOT. "
+            "Use the SQLAlchemy ORM only: import the model class from app.models, query "
+            "with select()/session, and SEED rows via session.add(ModelName(col=value, "
+            "...)) setting every required column -- never an INSERT/SELECT string, "
+            "execute() on a string, or a hand-counted VALUES (?, ?, ...) placeholder list "
+            "(that placeholder/column mismatch is exactly what failed).",
+        ]
+    return "\n".join(lines)
 
 
 def _edit_diff_gate(directive, directive_id, pre_diff_state):
@@ -2579,6 +2644,59 @@ def run():
                                   fallback_result.get("result", ""), fallback_used=True,
                                   routed_model=_routed_model)
                         produced = True
+
+                if (not produced and _failed_gate == "selftest"
+                        and os.environ.get("ZO_SELFTEST_REPAIR", "1") != "0"):
+                    # Deterministic self-test feedback-repair (ONE bounded re-run). Both
+                    # prompt-level fixes -- exemplar inlining (#11750) and the ORM-mandate
+                    # schema header (#11751) -- left logic-leaf builds RED because the cheap
+                    # rung still improvised a raw-SQL seed INSERT (placeholder/column
+                    # mismatch) against the 15-col scoring table. A BLIND ghost retry just
+                    # re-rolls the same dice. This re-runs the engine ONCE with the model's
+                    # own quoted self-test failure (+ a deterministic raw-SQL lint) so the
+                    # repair is informed, not random; it REPLACES a blind retry rather than
+                    # adding a round, so the cost ceiling is unchanged. The gate chain still
+                    # owns completion. Kill with ZO_SELFTEST_REPAIR=0.
+                    try:
+                        _err = _LAST_SELFTEST_RED.get(directive_id, "")
+                        _rout = declared_output(directive)
+                        _code = (_rout.read_text(encoding="utf-8", errors="ignore")
+                                 if (_rout and _rout.exists()) else "")
+                        _lint = _raw_sql_lint(_code)
+                        log(f"[selftest-repair] {directive_id}: one bounded re-run with "
+                            f"quoted self-test error"
+                            + (f" (+{_lint})" if _lint else ""))
+                        _repair_task = (_engine_task(_task, directive, log)
+                                        + _selftest_feedback(_err, _code))
+                        _repair_result = None
+                        try:
+                            from zo_sentinel import engine_build as _engine
+                            if _engine.enabled(DIRECTIVES_PATH):
+                                _repair_result = _engine.build_with_engine(
+                                    directive, _repair_task, attempt=_attempt, log=log)
+                                if _repair_result.get("model"):
+                                    _routed_model = f"engine:{_repair_result['model']}:repair"
+                        except Exception as _ree:
+                            log(f"[selftest-repair] {directive_id}: engine unavailable "
+                                f"({type(_ree).__name__}: {_ree}) -- legacy fallback")
+                            _repair_result = None
+                        if _repair_result is None:
+                            _repair_result = call_minimax_fallback(directive)
+                        _ok, _failed_gate = _gate_chain(
+                            directive, directive_id, _pre_diff,
+                            bool(_repair_result.get("success")))
+                        if _ok:
+                            log(f"[selftest-repair] {directive_id}: repair cleared the gate chain")
+                            _complete(directive, directive_id,
+                                      _repair_result.get("result", ""), fallback_used=True,
+                                      routed_model=_routed_model)
+                            produced = True
+                        else:
+                            log(f"[selftest-repair] {directive_id}: still rejected by gate "
+                                f"'{_failed_gate}' -- routing to ghost/retry")
+                    except Exception as _rex:
+                        log(f"[selftest-repair] {directive_id}: repair error "
+                            f"({type(_rex).__name__}: {_rex})")
 
                 if not produced:
                     # Neither path cleared the gate chain -> ghost build. Retry

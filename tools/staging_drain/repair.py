@@ -302,7 +302,13 @@ def main(argv=None):
         if not args.quiet:
             print("=== staging_drain S5 mechanical repairs ===")
         res = apply_mechanical(quiet=args.quiet)
-        with open(os.path.join(os.path.dirname(args.census), "repair_apply.json"), "w", encoding="utf-8") as fh:
+        _apply_out = os.path.join(os.path.dirname(args.census), "repair_apply.json")
+        # The mechanical repairs ALREADY ran above; never let a missing output dir
+        # crash the tool AFTER the work is done (observed 2026-10-29: it had applied
+        # fixes, then FileNotFoundError'd here because artifacts/staging_drain/ was
+        # absent, so the scheduled tick reports failure despite repairing).
+        os.makedirs(os.path.dirname(_apply_out), exist_ok=True)
+        with open(_apply_out, "w", encoding="utf-8") as fh:
             json.dump(res, fh, indent=1)
         if any(r.get("rc") not in (0, 1) for r in res["scripts"]):
             rc = 1

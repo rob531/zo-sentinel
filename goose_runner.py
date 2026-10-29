@@ -1046,8 +1046,45 @@ def _bus_table_context():
     return out
 
 
+def _reads_context(directive):
+    """Inline the directive's declared `reads` files into the ENGINE prompt.
+
+    The engine fallback is a single-shot completion with NO filesystem. A
+    service_dir_from_exemplar directive's goose/canary path mirrors
+    services/_exemplar via its `reads`; the engine gets NONE of that unless it is
+    inlined here. Root cause of the 2026-10-29 service-chain logic-build stall:
+    the engine already had schema-COLUMN parity with the canary (via
+    _schema_ground_context) but NOT exemplar-PATTERN parity -- it knew the real
+    columns but not the ORM idiom, so it improvised a raw SQL INSERT with a
+    placeholder-count bug and the self-test went RED. Inlining the exemplar
+    anchors the cheap engine model to the ORM idiom (no premium model needed).
+    Bounded (8KB/file) + fail-soft; empty string when the directive has no reads.
+    """
+    reads = directive.get("reads") or []
+    if not isinstance(reads, (list, tuple)):
+        return ""
+    blocks = []
+    for rel in reads:
+        rel = str(rel)
+        try:
+            p = PROJECT_DIR / rel
+            if not p.is_file():
+                continue
+            body = p.read_text(encoding="utf-8")[:8000]
+        except Exception:                                   # noqa: BLE001
+            continue
+        if body.strip():
+            blocks.append(
+                "REFERENCE FILE -- mirror this structure and idioms (imports, the "
+                "ORM query/write style over app.models, docstring shape); ADAPT to "
+                "THIS service, do not copy verbatim, and do NOT write raw SQL:\n"
+                "# %s\n%s" % (rel, body))
+    return "\n\n".join(blocks)
+
+
 def _engine_task(task_text, directive, log=None):
-    """The engine's task text = the shared _task plus inlined REAL SCHEMA.
+    """The engine's task text = the shared _task plus inlined REAL SCHEMA and the
+    directive's exemplar `reads` (pattern parity with the goose canary path).
 
     Scoped to the ENGINE call only (ruling condition 1): the goose path already
     receives the excerpt via _soa_service_spec, and goose is the orchestrator --
@@ -1058,20 +1095,29 @@ def _engine_task(task_text, directive, log=None):
     # A directive that matches no app.models class is precisely the one most
     # likely to write bus SQL, and it used to receive no table names at all.
     bus = _bus_table_context()
+    # Exemplar PATTERN parity: the canary mirrors services/_exemplar via `reads`;
+    # the engine (single-shot, no filesystem) must have those files INLINED or it
+    # has no idiom to copy. See _reads_context.
+    ref = _reads_context(directive)
+    if ref and log:
+        log("[exemplar-inline] %s: inlined %d reference file(s) into engine prompt"
+            % (directive.get("directive_id") or directive.get("task") or "?",
+               len(directive.get("reads") or [])))
     if klass != "matched":
         if log:
             log("[schema-ground] %s: %s -- engine prompt UNGROUNDED%s"
                 % (directive.get("directive_id") or directive.get("task") or "?",
                    klass,
                    " (bus table list still attached)" if bus else ""))
-        return "%s\n\n%s" % (task_text, bus) if bus else task_text
+        parts = [task_text] + ([bus] if bus else []) + ([ref] if ref else [])
+        return "\n\n".join(parts)
     grounded = _SYMBOL_TABLE_POINTER.sub("", task_text)
     if log:
         log("[schema-ground] %s: matched, %d model(s), %d chars -> engine"
             % (directive.get("directive_id") or directive.get("task") or "?",
                len([ln for ln in text.splitlines() if ln.startswith("  ")]),
                len(text)))
-    parts = [grounded, text] + ([bus] if bus else [])
+    parts = [grounded, text] + ([bus] if bus else []) + ([ref] if ref else [])
     return "\n\n".join(parts)
 
 

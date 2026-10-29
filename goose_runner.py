@@ -79,7 +79,13 @@ GOOSE_BIN = os.environ.get("ZO_BUILDER_GOOSE_BIN", "goose")
 
 PROJECT_DIR = Path("/home/workspace/zo_sentinel")
 LOGS_DIR = Path("/home/workspace/logs")
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    # Import-safe: a read-only or absent /home/workspace (CI, unit tests, a
+    # non-prod host) must not crash `import goose_runner`. The daemon re-ensures
+    # its dirs at runtime (ensure_dirs()); this module-level call is best-effort.
+    pass
 LOG_FILE = LOGS_DIR / "goose_runner.log"
 
 SHARED_OUTPUTS = Path("/home/workspace/shared/outputs/goose")

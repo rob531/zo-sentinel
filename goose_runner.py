@@ -807,9 +807,15 @@ def _soa_service_name(directive_id):
 _SCHEMA_HEADER = (
     "REAL SCHEMA -- authoritative, read from the live app.models KL. Use ONLY "
     "these columns; a column not listed here DOES NOT EXIST, and inventing one "
-    "is the single most common reason a build is rejected. Per-column flags: "
-    "[PK]=primary key, [required]=NOT NULL with no default (a seed INSERT MUST "
-    "set it), [default]=DB fills it if omitted; unflagged=nullable:\n")
+    "is the single most common reason a build is rejected. Access this data "
+    "ONLY through the SQLAlchemy ORM (app.models classes + select()/session). "
+    "NEVER write raw SQL -- no execute() with an INSERT/SELECT string, no hand-"
+    "counted 'VALUES (?, ?, ...)' list: a placeholder/column mismatch there is "
+    "the top cause of a RED self-test. To seed a row in a self-test, construct "
+    "the ORM object -- session.add(ModelName(col=value, ...)) -- setting every "
+    "[required] column. Per-column flags: [PK]=primary key, [required]=NOT NULL "
+    "with no default (the ORM constructor MUST set it), [default]=DB fills it if "
+    "omitted; unflagged=nullable:\n")
 
 
 def _fmt_cols(meta):

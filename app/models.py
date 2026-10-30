@@ -256,7 +256,8 @@ class McpUnauthAccess(Base):
     """Live-probe EXPOSURE signal, isolated from mcp_llm_axis_scores on purpose: the
     serving overview reads newest-scored_at, so a score row would be a live serving
     change (POSTMORTEM_20261030). This separate table is consumed only via an explicit
-    resolver (unauth_access.resolve_unauth_access). unauth_access in {OPEN,GATED,UNREACHABLE}."""
+    resolver (unauth_access.resolve_unauth_access). unauth_access in
+    {OPEN_EXEC, OPEN_BENIGN, OPEN, GATED, UNREACHABLE} (max len 11 -> fits String(16))."""
     __tablename__ = "mcp_unauth_access"
     server_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     url: Mapped[Optional[str]] = mapped_column(Text)

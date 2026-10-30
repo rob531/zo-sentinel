@@ -17,7 +17,7 @@ class AxisScore(BaseModel):
 
 class RiskAxesResponse(BaseModel):
     axes: Dict[str, AxisScore]
-    unauth_access: Optional[str] = None  # OPEN/GATED/UNREACHABLE from the isolated live-probe table
+    unauth_access: Optional[str] = None  # OPEN_EXEC/OPEN_BENIGN/OPEN/GATED/UNREACHABLE from the isolated live-probe table
 
 def get_server_risk_axes(server_id: str, version: Optional[str] = None) -> dict:
     # Query the write_service for axis scores

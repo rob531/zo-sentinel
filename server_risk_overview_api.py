@@ -12,8 +12,7 @@ from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-import os
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -37,7 +36,6 @@ class ServerRiskOverview(BaseModel):
     server_id: str
     risk_tier: Optional[str] = None
     overall_risk: Optional[str] = None
-    unauth_access: Optional[str] = None
     axis_scores: list[AxisScoreItem]
 
 
@@ -89,25 +87,10 @@ def get_server_risk_overview(server_id: str, db: Session) -> dict:
     gate = trust_gate(reg.url if reg else None, reg.name if reg else None, labels)
     published_overall_risk = gate.get("published_overall_risk") or labels.get("overall_risk")
 
-    # unauth_access: WAF-robust exposure signal from the ISOLATED mcp_unauth_access table
-    # (NOT mcp_llm_axis_scores). Fail-open + flag-gated: flag off or table absent -> None,
-    # overview byte-identical to before (POSTMORTEM_20261030: serving reads newest-scored_at,
-    # so this signal is deliberately kept out of the axis-scores table).
-    unauth_access = None
-    if os.environ.get("UNAUTH_ACCESS_ENABLED", "1") != "0":
-        try:
-            _ua = db.execute(text("SELECT unauth_access FROM mcp_unauth_access WHERE server_id = :sid"),
-                             {"sid": server_id}).first()
-            if _ua:
-                unauth_access = _ua[0]
-        except Exception:
-            unauth_access = None
-
     return {
         "server_id": server_id,
         "risk_tier": risk_tier,
         "overall_risk": published_overall_risk,
-        "unauth_access": unauth_access,
         "axis_scores": axis_scores,
     }
 
@@ -143,10 +126,6 @@ if __name__ == "__main__":  # CI-safe self-test: real imports, SQLite via depend
                               model_version="v3.0_40974559"))
     s.commit(); s.close()
 
-    with eng.begin() as _cx:
-        _cx.execute(text("CREATE TABLE mcp_unauth_access (server_id varchar, url varchar, unauth_access varchar, source varchar, updated_at varchar)"))
-        _cx.execute(text("INSERT INTO mcp_unauth_access (server_id, unauth_access) VALUES ('srv1', 'OPEN')"))
-
     app = FastAPI(); app.include_router(router)
 
     def _override_session():
@@ -170,7 +149,6 @@ if __name__ == "__main__":  # CI-safe self-test: real imports, SQLite via depend
     assert len(j["axis_scores"]) == 7, j
     axis_names = {a["axis_name"] for a in j["axis_scores"]}
     assert axis_names == set(AXES), axis_names
-    assert j["unauth_access"] == "OPEN", j  # served from the isolated mcp_unauth_access table
 
     # 404 for unknown server
     assert c.get("/api/servers/nope/risk-overview").status_code == 404

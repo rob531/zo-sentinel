@@ -4,6 +4,7 @@ from typing import Dict, Optional
 import requests
 from app.db import get_session
 from app.models import McpServerRegistry
+from unauth_access import resolve_unauth_access
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ class AxisScore(BaseModel):
 
 class RiskAxesResponse(BaseModel):
     axes: Dict[str, AxisScore]
+    unauth_access: Optional[str] = None  # OPEN/GATED/UNREACHABLE from the isolated live-probe table
 
 def get_server_risk_axes(server_id: str, version: Optional[str] = None) -> dict:
     # Query the write_service for axis scores
@@ -64,7 +66,11 @@ async def read_server_risk_axes(
     if not db_session.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first():
         raise HTTPException(status_code=404, detail="Server not found")
 
-    return get_server_risk_axes(server_id, version)
+    result = get_server_risk_axes(server_id, version)
+    # additive, fail-open: resolve_unauth_access returns None if the feature is off,
+    # the table is absent, or any error -- never degrades the axes response.
+    result["unauth_access"] = resolve_unauth_access(db_session, server_id)
+    return result
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient

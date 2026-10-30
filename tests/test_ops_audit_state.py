@@ -253,6 +253,66 @@ def test_show_actually_emits_the_budget_block(statefile, capsys):
     assert out["budget"]["red_at_usd"] == 20.0
 
 
+# --- FU-035 cure: MTD-when-dense basis selection -----------------------------
+# (peer decision budget-basis-mtd-when-dense, CLEARED 2026-10-25). since_funding
+# is a LIFETIME figure that only climbs on drawdown, so once it crosses $20 it
+# latches RED forever on a healthy account (latched 2026-09-29). The budget is a
+# MONTHLY one, so a DENSE month (complete_month and basis_days >= 7) is judged on
+# month-to-date instead. BOTH poles are pinned: the cure must still RED a real
+# monthly overspend, or it is a blind GREEN. A fixed month= is passed so the
+# verdict never depends on today() -- that scar (a test that expires unattended)
+# already cost this suite a red month-boundary once.
+
+
+def _dense_month(first_date, first_balance, last_date, last_balance, credits):
+    st = oas.empty_state()
+    st["entries"] = [{"date": first_date, "at": "x", "balance": first_balance},
+                     {"date": last_date, "at": "x", "balance": last_balance}]
+    st["credits"] = [{"date": d, "at": "x", "amount": a, "id": i}
+                     for (d, a, i) in credits]
+    return st
+
+
+def test_dense_month_is_judged_on_mtd_not_the_latched_lifetime_red():
+    # The live 2026-10 shape: MTD $11.23 is GREEN while lifetime since_funding
+    # $31.32 would latch RED. A dense month must read the MONTHLY figure. This
+    # test REDS on the old since_funding-only code -- it is the discriminator.
+    st = _dense_month("2026-10-01", 4.91, "2026-10-29", 3.68,
+                      [("2026-10-06", 10.0, "a"), ("2026-07-17", 25.0, "b")])
+    b = oas.budget_status(st, month="2026-10")
+    assert b["metric"] == "mtd__dense"
+    assert b["spend_usd"] == pytest.approx(11.23)
+    assert b["level"] == "GREEN"
+    # the lifetime figure is still REPORTED (so the operator sees it) and WOULD
+    # have tripped RED -- it simply no longer triggers.
+    assert b["since_funding_usd"] == pytest.approx(31.32)
+    assert b["since_funding_usd"] >= b["red_at_usd"]
+
+
+def test_dense_month_still_REDS_a_real_monthly_overspend():
+    # POSITIVE CONTROL: the cure is not a blind GREEN. Open the month at $25 and
+    # draw down to $3 => $22 spent in-month, with no in-month top-up to mask it.
+    st = _dense_month("2026-11-01", 25.0, "2026-11-20", 3.0,
+                      [("2026-10-15", 25.0, "a")])
+    b = oas.budget_status(st, month="2026-11")
+    assert b["metric"] == "mtd__dense"
+    assert b["spend_usd"] == pytest.approx(22.0)
+    assert b["level"] == "RED"
+
+
+def test_basis_flips_to_since_funding_when_the_month_is_too_thin():
+    # complete_month but only 3 days of span (< MTD_DENSE_MIN_DAYS) is NOT dense:
+    # a 3-day MTD can understate the month, so the exact prepaid since_funding
+    # figure governs and catches the burn the thin MTD would have hidden.
+    st = _dense_month("2026-10-01", 5.0, "2026-10-04", 4.0,
+                      [("2026-07-17", 25.0, "a")])
+    assert oas.month_to_date(st, month="2026-10")["spend_usd"] == 1.0  # thin GREEN
+    b = oas.budget_status(st, month="2026-10")
+    assert b["metric"] == "since_funding__thin_fallback"
+    assert b["spend_usd"] == pytest.approx(21.0)
+    assert b["level"] == "RED"
+
+
 # --- observation coverage (FU-207 class) -------------------------------------
 # The audit is the only writer of entries[], so a missing date is a missed run.
 # These pin a REPORT, not a gate: no exit code or verdict depends on them.

@@ -5,7 +5,7 @@
     "app/db.py"
   ],
   "app_models": {
-    "count": 15,
+    "count": 16,
     "classes": [
       "Org",
       "User",
@@ -21,7 +21,8 @@
       "VulnLink",
       "ThreatIntelRef",
       "CadenceJobRun",
-      "FreshnessStat"
+      "FreshnessStat",
+      "McpUnauthAccess"
     ],
     "detail": [
       {
@@ -283,6 +284,20 @@
           "computed_at",
           "compute_seconds"
         ]
+      },
+      {
+        "class": "McpUnauthAccess",
+        "tablename": "mcp_unauth_access",
+        "bases": [
+          "Base"
+        ],
+        "columns": [
+          "server_id",
+          "url",
+          "unauth_access",
+          "source",
+          "updated_at"
+        ]
       }
     ],
     "public_names": [
@@ -302,6 +317,7 @@
       "McpLlmAxisScore",
       "McpScoreDispute",
       "McpServerRegistry",
+      "McpUnauthAccess",
       "Optional",
       "Org",
       "Perspective",

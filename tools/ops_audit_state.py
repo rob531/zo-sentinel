@@ -54,11 +54,20 @@ DEFAULT_PATH = Path(os.environ.get("ZO_OPS_AUDIT_STATE",
 SCHEMA = 2
 
 # THE BUDGET LINE, IN CODE (FU-035).
-# Chairman ruling 2026-07-17: $25 must last the month; alert at >=$20 spent.
-# Judged against since_funding (exact for a prepaid account), NOT the MTD
-# delta, whose basis can be a few days old and structurally understate burn.
+# Chairman ruling 2026-07-17: $25 must last the MONTH; alert at >=$20 spent.
+# BASIS SELECTION (peer decision budget-basis-mtd-when-dense, CLEARED
+# 2026-10-25, clause redefining_the_metric): the rule is a MONTHLY budget, so
+# the RED/GREEN level is judged on month-to-date spend WHEN the month is DENSE
+# (complete_month AND basis_days >= MTD_DENSE_MIN_DAYS); it falls back to
+# since_funding when the month is too thin to trust, and to UNKNOWN when
+# neither is computable. since_funding is still REPORTED but is no longer the
+# RED trigger: as a prepaid LIFETIME figure it only climbs on drawdown, so once
+# crossed it latches a false RED forever (latched 2026-09-29) on a healthy
+# account -- the exact false-RED this basis selection cures. Both re-anchor
+# formulas tried before this were FALSIFIED as unsound on live data.
 BUDGET_USD = 25.0
 RED_AT_USD = 20.0
+MTD_DENSE_MIN_DAYS = 7
 
 
 def _utcnow() -> str:
@@ -317,32 +326,68 @@ def since_funding(state: dict) -> dict:
 
 
 def budget_status(state: dict, budget: float = BUDGET_USD,
-                  red_at: float = RED_AT_USD) -> dict:
+                  red_at: float = RED_AT_USD,
+                  month: Optional[str] = None) -> dict:
     """Evaluate burn against the budget line and return a machine-readable verdict.
 
-    Encodes the chairman's $25/month rule so the audit does not depend on a
+    Encodes the chairman's $25/MONTH rule so the audit does not depend on a
     reading agent applying a threshold written in prose (FU-035: a guard whose
     only failure mode is a silent all-clear is not a guard).
 
-    FAILS LOUD, NOT OPEN: when no credit event has been recorded the burn is
-    unknowable from local state, so ``level`` is ``UNKNOWN`` -- never ``GREEN``.
-    An UNKNOWN is a finding the audit must surface, not a pass.
+    BASIS SELECTION (peer budget-basis-mtd-when-dense, CLEARED 2026-10-25):
+    the budget is MONTHLY, so the RED/GREEN level is judged on month-to-date
+    spend WHEN the month is DENSE -- ``complete_month`` AND
+    ``basis_days >= MTD_DENSE_MIN_DAYS``. A thin month (few samples, or history
+    that did not start on the 1st) falls back to ``since_funding``, and when
+    neither figure is computable the level is ``UNKNOWN``. ``since_funding`` is
+    still REPORTED (``since_funding_usd``) but is no longer the RED trigger:
+    being a prepaid LIFETIME figure it only climbs on drawdown and so latches a
+    false RED forever once crossed, on an otherwise healthy account.
+
+    FAILS LOUD, NOT OPEN: when neither a dense MTD nor a since_funding figure is
+    computable the burn is unknowable from local state, so ``level`` is
+    ``UNKNOWN`` -- never ``GREEN``. An UNKNOWN is a finding, not a pass.
     """
     sf = since_funding(state)
-    spend = sf.get("spend_usd")
-    if spend is None:
+    mtd = month_to_date(state, month)
+    sf_spend = sf.get("spend_usd")
+    mtd_spend = mtd.get("spend_usd")
+    dense = (bool(mtd.get("complete_month"))
+             and (mtd.get("basis_days") or 0) >= MTD_DENSE_MIN_DAYS)
+
+    if dense and mtd_spend is not None:
+        spend = mtd_spend
+        metric = "mtd__dense"
+        basis = ("month_to_date.spend_usd -- month is DENSE (complete_month and "
+                 "basis_days %s >= %d); since_funding %s reported below but is no "
+                 "longer the RED trigger (FU-035 lifetime false-RED cure)"
+                 % (mtd.get("basis_days"), MTD_DENSE_MIN_DAYS,
+                    "n/a" if sf_spend is None else ("$%.4f" % sf_spend)))
+    elif sf_spend is not None:
+        spend = sf_spend
+        metric = "since_funding__thin_fallback"
+        basis = ("since_funding.spend_usd -- month too THIN for MTD "
+                 "(complete_month=%s, basis_days=%s); %s"
+                 % (mtd.get("complete_month"), mtd.get("basis_days"),
+                    sf.get("basis")))
+    else:
         return {"level": "UNKNOWN", "spend_usd": None, "budget_usd": budget,
                 "red_at_usd": red_at, "remaining_usd": None,
-                "metric": "since_funding",
-                "basis": "no credit events recorded -- burn is not computable "
-                         "from local state; treat as a finding, not a pass"}
+                "metric": "none_computable",
+                "since_funding_usd": sf_spend, "mtd_usd": mtd_spend,
+                "basis": "neither a dense MTD nor a since_funding figure is "
+                         "computable -- burn is not computable from local "
+                         "state; treat as a finding, not a pass"}
+
     return {"level": "RED" if spend >= red_at else "GREEN",
             "spend_usd": spend,
             "budget_usd": budget,
             "red_at_usd": red_at,
             "remaining_usd": round(budget - spend, 4),
-            "metric": "since_funding",
-            "basis": "since_funding.spend_usd vs red_at (%s)" % sf.get("basis")}
+            "metric": metric,
+            "since_funding_usd": sf_spend,
+            "mtd_usd": mtd_spend,
+            "basis": basis}
 
 
 def main(argv=None) -> int:
@@ -372,7 +417,7 @@ def main(argv=None) -> int:
                       "mtd": month_to_date(state, a.month),
                       "coverage": coverage(state),
                       "since_funding": since_funding(state),
-                      "budget": budget_status(state)}, indent=2))
+                      "budget": budget_status(state, month=a.month)}, indent=2))
     return 0
 
 

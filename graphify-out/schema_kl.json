@@ -1,6 +1,6 @@
 {
-  "built_at": "2026-10-20T10:55:15+00:00",
-  "built_at_commit": "0d5cddc4a",
+  "built_at": "2026-10-31T04:58:03+00:00",
+  "built_at_commit": "28fa40980",
   "models": {
     "ApiKey": {
       "column_meta": {
@@ -461,6 +461,45 @@
       "relationships": [],
       "required_construct": [],
       "table": "mcp_server_registry"
+    },
+    "McpUnauthAccess": {
+      "column_meta": {
+        "server_id": {
+          "has_default": false,
+          "nullable": false,
+          "primary_key": true
+        },
+        "source": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "unauth_access": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        },
+        "updated_at": {
+          "has_default": true,
+          "nullable": true,
+          "primary_key": false
+        },
+        "url": {
+          "has_default": false,
+          "nullable": true,
+          "primary_key": false
+        }
+      },
+      "columns": [
+        "server_id",
+        "source",
+        "unauth_access",
+        "updated_at",
+        "url"
+      ],
+      "relationships": [],
+      "required_construct": [],
+      "table": "mcp_unauth_access"
     },
     "Org": {
       "column_meta": {

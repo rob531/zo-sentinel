@@ -1,57 +1,42 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Dict, Optional
-import requests
 from app.db import get_session
-from app.models import McpServerRegistry
+from app.models import McpServerRegistry, McpLlmAxisScore
 from unauth_access import resolve_unauth_access
 
 router = APIRouter()
 
 class AxisScore(BaseModel):
-    label: str
-    p_top: float
-    p_critical: float
-    p_danger: float
-    escalated: bool
+    # nullable: p_critical/p_danger/label are routinely NULL in the data
+    label: Optional[str] = None
+    p_top: Optional[float] = None
+    p_critical: Optional[float] = None
+    p_danger: Optional[float] = None
+    escalated: Optional[bool] = None
 
 class RiskAxesResponse(BaseModel):
     axes: Dict[str, AxisScore]
     unauth_access: Optional[str] = None  # OPEN_EXEC/OPEN_BENIGN/OPEN/GATED/UNREACHABLE from the isolated live-probe table
 
-def get_server_risk_axes(server_id: str, version: Optional[str] = None) -> dict:
-    # Query the write_service for axis scores
-    query = """
-    SELECT axis_name, label, p_top, p_critical, p_danger, escalated
-    FROM mcp_llm_axis_scores
-    WHERE server_id = ?
-    """
-    params = [server_id]
+def get_server_risk_axes(db, server_id: str, version: Optional[str] = None) -> dict:
+    # DB-direct (was an HTTP hop to the :8772 write-service that isn't running in the
+    # prod container -> 500 Connection refused, zo-sentinel #12368). Same query, local session.
+    q = db.query(
+        McpLlmAxisScore.axis_name, McpLlmAxisScore.label, McpLlmAxisScore.p_top,
+        McpLlmAxisScore.p_critical, McpLlmAxisScore.p_danger, McpLlmAxisScore.escalated,
+    ).filter(McpLlmAxisScore.server_id == server_id)
     if version:
-        query += " AND decision_rule_version = ?"
-        params.append(version)
+        q = q.filter(McpLlmAxisScore.decision_rule_version == version)
 
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={"query": query, "params": params}
-        )
-        response.raise_for_status()
-        rows = response.json()
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Server not found")
-        raise
-
-    # Format the response
     axes = {}
-    for row in rows:
-        axes[row['axis_name']] = {
-            'label': row['label'],
-            'p_top': row['p_top'],
-            'p_critical': row['p_critical'],
-            'p_danger': row['p_danger'],
-            'escalated': bool(row['escalated'])
+    for row in q.all():
+        axes[row.axis_name] = {
+            'label': row.label,
+            'p_top': row.p_top,
+            'p_critical': row.p_critical,
+            'p_danger': row.p_danger,
+            'escalated': bool(row.escalated) if row.escalated is not None else None,
         }
 
     return {"axes": axes}
@@ -66,7 +51,7 @@ async def read_server_risk_axes(
     if not db_session.query(McpServerRegistry).filter(McpServerRegistry.server_id == server_id).first():
         raise HTTPException(status_code=404, detail="Server not found")
 
-    result = get_server_risk_axes(server_id, version)
+    result = get_server_risk_axes(db_session, server_id, version)
     # additive, fail-open: resolve_unauth_access returns None if the feature is off,
     # the table is absent, or any error -- never degrades the axes response.
     result["unauth_access"] = resolve_unauth_access(db_session, server_id)

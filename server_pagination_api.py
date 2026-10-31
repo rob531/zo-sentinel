@@ -22,7 +22,7 @@ class ServerItem(BaseModel):
     last_assessed: str
 
 def get_servers(
-    db: Session = Depends(get_session),
+    db: Session,
     cursor: Optional[str] = None,
     limit: int = 20
 ) -> ServerListResponse:
@@ -65,9 +65,13 @@ def get_servers(
 @router.get("/servers", response_model=ServerListResponse)
 async def list_servers(
     cursor: Optional[str] = Query(None),
-    limit: int = Query(20, le=100)
+    limit: int = Query(20, le=100),
+    db: Session = Depends(get_session),
 ):
-    return get_servers(cursor=cursor, limit=limit)
+    # Bugfix: db must be injected here and passed in. Previously get_servers was
+    # called without db, so its `Depends(get_session)` DEFAULT (a Depends marker,
+    # not a Session) was used -> db.execute(...) raised -> 500 on every /servers call.
+    return get_servers(db=db, cursor=cursor, limit=limit)
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient

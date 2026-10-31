@@ -387,7 +387,7 @@ def merge_declared(a: dict, b: dict) -> dict:
 # 2. THE RUNNING SET  (canonical path, launchers excluded)
 # ---------------------------------------------------------------------------
 
-def _script_of(argv: str) -> str | None:
+def _script_of(argv: str, pid: str | None = None) -> str | None:
     """The script a command line actually executes, as an absolute path.
 
     Returns None for anything that is not running a script we could name --
@@ -397,7 +397,18 @@ def _script_of(argv: str) -> str | None:
     for t in toks:
         if t.endswith((".py", ".sh")):
             try:
-                return str(Path(t).resolve())
+                p = Path(t)
+                # A daemon launched with a RELATIVE argv (e.g. `python3
+                # run_manager.py daemon` from its own cwd) must resolve against
+                # the TARGET process's cwd, not this checker's -- else a
+                # genuinely running daemon reads as missing. Anchor the relative
+                # token on /proc/<pid>/cwd when we have the pid.
+                if pid and not p.is_absolute():
+                    try:
+                        p = Path(os.readlink("/proc/%s/cwd" % pid)) / p
+                    except OSError:
+                        pass
+                return str(p.resolve())
             except OSError:
                 return t
     if " -m " in argv:
@@ -424,7 +435,7 @@ def running_processes() -> tuple[list[dict], list[dict]]:
         argv = argv.strip()
         if not argv or argv.startswith("["):
             continue
-        script = _script_of(argv)
+        script = _script_of(argv, pid)
         if not script:
             continue
         rec = {"pid": pid, "script": script, "argv": argv[:300]}

@@ -1,0 +1,1 @@
+{"tool_calls":[{"name":"cat","arguments":{"file_path":"/app/services/_exemplar/logic.py"}}]}

@@ -8,6 +8,7 @@ from app.db import get_session
 from app.models import McpLlmAxisScore
 from sqlalchemy import func, and_, or_, desc
 from sqlalchemy.orm import Session
+from serving_model_allowlist import serving_model_allowlist
 import requests
 
 router = APIRouter()
@@ -182,17 +183,32 @@ async def get_server_axis_summary(
     # non-aggregated columns -- invalid in Postgres (500; sqlite tolerated it, which
     # is why it passed the self-test). Use a row_number() window (newest scored_at per
     # axis = rn 1); portable across Postgres AND sqlite (unlike DISTINCT ON). #12368.
+    #
+    # SERVING-READ HAZARD (POSTMORTEM_20261030): this "newest scored_at per axis" is a
+    # LIVE serving read that honored NO allowlist -- any current-timestamp write to
+    # mcp_llm_axis_scores (a partial-axis live probe, an experimental model_version, a
+    # v6 rescore) silently became "latest" and hijacked the served product (it degraded
+    # 1541 servers' overviews once). FIX: when the operator has armed a serving
+    # allowlist, restrict to rows whose model_version is on it BEFORE picking
+    # latest-per-axis, so an off-allowlist write can never be served on timestamp alone.
+    # DEFAULT OFF (allowlist is None) -> the filter is NOT applied and this read is
+    # byte-for-byte the prior newest-scored_at-per-axis behavior. See
+    # serving_model_allowlist.py and SERVING_FULL_MODEL_ALLOWLIST.
+    allowlist = serving_model_allowlist()
+    base = db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id)
+    if allowlist is not None:
+        base = base.filter(McpLlmAxisScore.model_version.in_(allowlist))
+    base_sq = base.subquery()
     rn = func.row_number().over(
-        partition_by=McpLlmAxisScore.axis_name,
-        order_by=desc(McpLlmAxisScore.scored_at),
+        partition_by=base_sq.c.axis_name,
+        order_by=desc(base_sq.c.scored_at),
     ).label("rn")
     sub = (
         db.query(
-            McpLlmAxisScore.axis_name, McpLlmAxisScore.label, McpLlmAxisScore.label_index,
-            McpLlmAxisScore.p_top, McpLlmAxisScore.p_critical, McpLlmAxisScore.p_danger,
-            McpLlmAxisScore.escalated, McpLlmAxisScore.scored_at, rn,
+            base_sq.c.axis_name, base_sq.c.label, base_sq.c.label_index,
+            base_sq.c.p_top, base_sq.c.p_critical, base_sq.c.p_danger,
+            base_sq.c.escalated, base_sq.c.scored_at, rn,
         )
-        .filter(McpLlmAxisScore.server_id == server_id)
         .subquery()
     )
     results = db.query(sub).filter(sub.c.rn == 1).all()
@@ -304,5 +320,11 @@ if __name__ == '__main__':
     response = client.get("/axis-scores?limit=1")
     assert response.status_code == 200
     assert len(response.json()["rows"]) == 1
+
+    # Serving-allowlist two-pole (OFF=newest-scored_at as today; ON=off-allowlist newer
+    # partial row is IGNORED, armed full model served): see
+    # test_serving_allowlist_two_pole.py -- a hermetic, DB-direct test that does not need
+    # the full-app client above, so it runs in environments where this __main__ block's
+    # `from app import app` wiring cannot build the schema.
 
     print("PASS")

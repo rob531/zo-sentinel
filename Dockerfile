@@ -10,6 +10,11 @@ COPY app /srv/app
 # so a new root file MUST be listed or it is absent from the image -> ModuleNotFoundError
 # at mount/handler time (why unauth_access was dark after #12256).
 COPY unauth_access.py /srv/
+# Serving FULL-model allowlist: a ROOT module imported at load time by the mounted
+# axis_scores_query_api.py (`from serving_model_allowlist import serving_model_allowlist`),
+# so it MUST be in the image or the endpoint ModuleNotFoundErrors on mount -- same class
+# as unauth_access above. Default OFF (SERVING_FULL_MODEL_ALLOWLIST unset) = no behavior change.
+COPY serving_model_allowlist.py /srv/
 COPY verdict_breakdown_api.py server_compare_api.py trust_gating_override.py score_dispute_api.py /srv/
 # v1.1 Perspectives + v2 Ask slice (feature routers + root-served views)
 COPY facet_enum_service.py perspective_model.py perspective_query_api.py perspective_admin_api.py perspective_diff_service.py ask_corpus_indexer.py ask_retrieval_service.py ask_answer_api.py dashboard_summary_api.py vuln_identity.py vuln_osv_ingestor.py vuln_registry_linker.py vuln_exposure_api.py config_scan_api.py otx_threat_refs.py vuln_pkg_enricher.py \

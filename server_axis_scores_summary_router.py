@@ -1,24 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-import requests
 from datetime import datetime
 from app.db import get_session
-from app.models import McpServerRegistry
+from app.models import McpServerRegistry, McpLlmAxisScore
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 class AxisScoreSummary(BaseModel):
     axis_name: str
-    label: str
-    label_index: int
-    p_top: float
-    p_critical: float
-    p_danger: float
-    escalated: bool
-    scored_at: str
-    model_version: str
-    decision_rule_version: str
+    # nullable columns in mcp_llm_axis_scores
+    label: Optional[str] = None
+    label_index: Optional[int] = None
+    p_top: Optional[float] = None
+    p_critical: Optional[float] = None
+    p_danger: Optional[float] = None
+    escalated: Optional[bool] = None
+    scored_at: Optional[str] = None
+    model_version: Optional[str] = None
+    decision_rule_version: Optional[str] = None
 
 class ServerAxisScoresSummary(BaseModel):
     server_id: str
@@ -27,40 +28,31 @@ class ServerAxisScoresSummary(BaseModel):
     fetched_at: str
 
 @router.get("/servers/{server_id}/axis-scores-summary", response_model=ServerAxisScoresSummary)
-async def get_server_axis_scores_summary(server_id: str):
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8772/query",
-            json={
-                "query": f"SELECT * FROM mcp_llm_axis_scores WHERE server_id = '{server_id}'"
-            }
+async def get_server_axis_scores_summary(server_id: str, db: Session = Depends(get_session)):
+    # DB-direct (was an HTTP hop + f-string SQL to the :8772 write-service that isn't
+    # running in prod -> 500, zo-sentinel #12368). Parameterized ORM, no injection.
+    rows = db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id).all()
+    axes = [
+        AxisScoreSummary(
+            axis_name=r.axis_name,
+            label=r.label,
+            label_index=r.label_index,
+            p_top=r.p_top,
+            p_critical=r.p_critical,
+            p_danger=r.p_danger,
+            escalated=bool(r.escalated) if r.escalated is not None else None,
+            scored_at=r.scored_at.isoformat() if r.scored_at else None,
+            model_version=r.model_version,
+            decision_rule_version=r.decision_rule_version,
         )
-        response.raise_for_status()
-        data = response.json()
-
-        axes = []
-        for row in data:
-            axes.append(AxisScoreSummary(
-                axis_name=row["axis_name"],
-                label=row["label"],
-                label_index=row["label_index"],
-                p_top=row["p_top"],
-                p_critical=row["p_critical"],
-                p_danger=row["p_danger"],
-                escalated=row["escalated"],
-                scored_at=row["scored_at"],
-                model_version=row["model_version"],
-                decision_rule_version=row["decision_rule_version"]
-            ))
-
-        return ServerAxisScoresSummary(
-            server_id=server_id,
-            axes=axes,
-            count=len(axes),
-            fetched_at=datetime.utcnow().isoformat()
-        )
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        for r in rows
+    ]
+    return ServerAxisScoresSummary(
+        server_id=server_id,
+        axes=axes,
+        count=len(axes),
+        fetched_at=datetime.utcnow().isoformat(),
+    )
 
 if __name__ == "__main__":
     from fastapi.testclient import TestClient

@@ -15,13 +15,14 @@ router = APIRouter()
 class AxisScoreRow(BaseModel):
     server_id: str
     axis_name: str
-    label: str
-    label_index: int
-    p_top: float
-    p_critical: float
-    p_danger: float
-    escalated: bool
-    scored_at: str
+    # nullable columns in mcp_llm_axis_scores (p_critical/p_danger etc. are routinely NULL)
+    label: Optional[str] = None
+    label_index: Optional[int] = None
+    p_top: Optional[float] = None
+    p_critical: Optional[float] = None
+    p_danger: Optional[float] = None
+    escalated: Optional[bool] = None
+    scored_at: Optional[str] = None
 
 class AxisScoresResponse(BaseModel):
     rows: List[AxisScoreRow]
@@ -30,13 +31,13 @@ class AxisScoresResponse(BaseModel):
 
 class SummaryRow(BaseModel):
     axis_name: str
-    label: str
-    label_index: int
-    p_top: float
-    p_critical: float
-    p_danger: float
-    escalated: bool
-    scored_at: str
+    label: Optional[str] = None
+    label_index: Optional[int] = None
+    p_top: Optional[float] = None
+    p_critical: Optional[float] = None
+    p_danger: Optional[float] = None
+    escalated: Optional[bool] = None
+    scored_at: Optional[str] = None
 
 class SummaryResponse(BaseModel):
     rows: List[SummaryRow]
@@ -160,7 +161,7 @@ async def get_server_axis_scores(
             p_critical=result.p_critical,
             p_danger=result.p_danger,
             escalated=result.escalated,
-            scored_at=result.scored_at.isoformat()
+            scored_at=result.scored_at.isoformat() if result.scored_at else None
         )
         rows.append(row)
 
@@ -177,24 +178,24 @@ async def get_server_axis_summary(
     server_id: str,
     db: Session = Depends(get_session)
 ):
-    query = db.query(McpLlmAxisScore).filter(
-        McpLlmAxisScore.server_id == server_id
-    ).order_by(desc(McpLlmAxisScore.scored_at))
-
-    subquery = query.subquery()
-
-    latest_query = db.query(
-        subquery.c.axis_name,
-        subquery.c.label,
-        subquery.c.label_index,
-        subquery.c.p_top,
-        subquery.c.p_critical,
-        subquery.c.p_danger,
-        subquery.c.escalated,
-        subquery.c.scored_at
-    ).group_by(subquery.c.axis_name)
-
-    results = latest_query.all()
+    # Latest row per axis. Was `GROUP BY axis_name` while selecting non-grouped,
+    # non-aggregated columns -- invalid in Postgres (500; sqlite tolerated it, which
+    # is why it passed the self-test). Use a row_number() window (newest scored_at per
+    # axis = rn 1); portable across Postgres AND sqlite (unlike DISTINCT ON). #12368.
+    rn = func.row_number().over(
+        partition_by=McpLlmAxisScore.axis_name,
+        order_by=desc(McpLlmAxisScore.scored_at),
+    ).label("rn")
+    sub = (
+        db.query(
+            McpLlmAxisScore.axis_name, McpLlmAxisScore.label, McpLlmAxisScore.label_index,
+            McpLlmAxisScore.p_top, McpLlmAxisScore.p_critical, McpLlmAxisScore.p_danger,
+            McpLlmAxisScore.escalated, McpLlmAxisScore.scored_at, rn,
+        )
+        .filter(McpLlmAxisScore.server_id == server_id)
+        .subquery()
+    )
+    results = db.query(sub).filter(sub.c.rn == 1).all()
 
     rows = []
     for result in results:
@@ -206,7 +207,7 @@ async def get_server_axis_summary(
             p_critical=result.p_critical,
             p_danger=result.p_danger,
             escalated=result.escalated,
-            scored_at=result.scored_at.isoformat()
+            scored_at=result.scored_at.isoformat() if result.scored_at else None
         )
         rows.append(row)
 

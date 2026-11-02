@@ -1,0 +1,12 @@
+[service]
+name = "unauth_access_exposure_api"
+import_path = "services.active.unauth_access_exposure_api.router"
+prefix = "/api/exposure/unauth-access"
+tag = "unauth_access_exposure_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by zo_sentinel/publisher/auto_stage.py for a root-level builder
+# router. import_path names services.ACTIVE because that is where router.py
+# lives AFTER promote_staged_to_active passes it.

@@ -24,6 +24,8 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 MOD_PATH = REPO / "tools" / "quarantine_topup.py"
 RUNNER = REPO / "goose_runner.py"
+# After chain rebase_godfiles S20, load_directives_from_mesh/topup_quarantine live in the seam file.
+RUNNER_CORE = REPO / "goose_runner_lib" / "core.py"
 TOOL_REL = "requeue_quarantined.py"
 
 
@@ -157,7 +159,7 @@ def _calls_in(tree) -> set:
 def test_goose_runner_actually_calls_the_seam():
     """THE point of this cycle. Parsed, not grepped: a mention in a comment or
     a docstring is not an invocation."""
-    tree = ast.parse(RUNNER.read_text(encoding="utf-8", errors="replace"))
+    tree = ast.parse(RUNNER_CORE.read_text(encoding="utf-8", errors="replace"))
     assert "topup" in _calls_in(tree), (
         "goose_runner.py does not CALL quarantine_topup.topup -- the "
         "re-emission tool is dark again")
@@ -172,7 +174,7 @@ def test_the_seam_is_reached_from_the_directive_poll_path():
     """Called from somewhere is not called from the path that RUNS. The chain
     load_directives_from_mesh -> topup_quarantine -> topup must be unbroken;
     every builder poll executes the first link."""
-    tree = ast.parse(RUNNER.read_text(encoding="utf-8", errors="replace"))
+    tree = ast.parse(RUNNER_CORE.read_text(encoding="utf-8", errors="replace"))
     poll = _func(tree, "load_directives_from_mesh")
     assert poll is not None, "the poll entrypoint was renamed -- re-anchor this test"
     assert "topup_quarantine" in _calls_in(poll), (

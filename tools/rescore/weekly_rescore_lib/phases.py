@@ -504,7 +504,7 @@ def _pod_progress(run) -> str:
     # carried forward is indistinguishable from a number measured, so publish
     # the fragment only while the snapshot is actually moving, and say once
     # that the instrument is blind rather than printing a comfortable digit.
-    digest = _hashlib.md5(str(text).encode("utf-8", "replace")).hexdigest()
+    digest = _hashlib.md5(str(text).encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
     if text and digest == run.state.get("_pod_log_md5"):
         if not run.state.get("_pod_log_frozen_said"):
             log("watch: vast log snapshot unchanged between polls -- pod progress "

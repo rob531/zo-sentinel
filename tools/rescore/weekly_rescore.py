@@ -52,24 +52,24 @@ from __future__ import annotations
 
 import os as _sg_os, sys as _sg_sys
 _sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.abspath(__file__)))
-from spend_guard import scaled_budget, scaled_deadline_min  # FU-090 #1784
+from spend_guard import scaled_budget, scaled_deadline_min  # FU-090 #1784  # noqa: F401
 
 # FU-151: one shared credential path for every flyctl caller in this repo.
 _sg_sys.path.insert(0, _sg_os.path.dirname(_sg_os.path.dirname(_sg_os.path.abspath(__file__))))
-from fly_token import hydrate_fly_token  # noqa: E402
+from fly_token import hydrate_fly_token  # noqa: E402,F401
 
-import argparse
-import gzip
-import hashlib
-import json
+import argparse  # noqa: F401
+import gzip  # noqa: F401
+import hashlib  # noqa: F401
+import json  # noqa: F401
 import os
-import re
-import shutil
-import socket
-import subprocess
-import sys
-import time
-from datetime import datetime, timezone
+import re  # noqa: F401
+import shutil  # noqa: F401
+import socket  # noqa: F401
+import subprocess  # noqa: F401
+import sys  # noqa: F401
+import time  # noqa: F401
+from datetime import datetime, timezone  # noqa: F401
 from pathlib import Path
 
 # ---------------------------------------------------------------- constants
@@ -179,4 +179,4 @@ _weekly_rescore_lib_exec("complete")
 
 
 if __name__ == "__main__":
-    main()
+    main()  # noqa: F821

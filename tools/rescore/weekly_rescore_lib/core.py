@@ -67,7 +67,7 @@ def _driver_provenance() -> dict:
     try:
         import hashlib as _hashlib
         prov["launch_dir"] = str(HERE)
-        prov["driver_md5"] = _hashlib.md5(Path(__file__).resolve().read_bytes()).hexdigest()
+        prov["driver_md5"] = _hashlib.md5(Path(__file__).resolve().read_bytes(), usedforsecurity=False).hexdigest()
     except Exception:  # noqa: BLE001
         pass
     try:

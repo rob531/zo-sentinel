@@ -1,3 +1,4 @@
+# ruff: noqa: F821  -- names injected into globals at exec time by weekly_rescore.py
 # weekly_rescore_lib/preflight.py -- PART OF weekly_rescore.py, not a standalone module.
 # Fly proxy setup, PostgreSQL connection, freshness checks, preflight phase.
 # weekly_rescore.py runs this file via _weekly_rescore_lib_exec("preflight") INSIDE

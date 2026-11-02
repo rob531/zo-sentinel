@@ -1,3 +1,4 @@
+# ruff: noqa: F821  -- names injected into globals at exec time by weekly_rescore.py
 # weekly_rescore_lib/phases.py -- PART OF weekly_rescore.py, not a standalone module.
 # export, bundle, fire, vast instance lifecycle, watch and collect phases.
 # weekly_rescore.py runs this file via _weekly_rescore_lib_exec("phases") INSIDE

@@ -1,3 +1,4 @@
+# ruff: noqa: F821  -- names injected into globals at exec time by weekly_rescore.py
 # weekly_rescore_lib/complete.py -- PART OF weekly_rescore.py, not a standalone module.
 # import, backfill, postcheck phases, and main entrypoint.
 # weekly_rescore.py runs this file via _weekly_rescore_lib_exec("complete") INSIDE

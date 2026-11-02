@@ -1,3 +1,4 @@
+# ruff: noqa: F821  -- names injected into globals at exec time by weekly_rescore.py
 # weekly_rescore_lib/core.py -- PART OF weekly_rescore.py, not a standalone module.
 # utilities, Run dataclass, run state tracking and lifecycle management.
 # weekly_rescore.py runs this file via _weekly_rescore_lib_exec("core") INSIDE

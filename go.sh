@@ -1,0 +1,1 @@
+/home/workspace/zo_sentinel/ops/host/go.sh

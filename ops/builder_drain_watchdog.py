@@ -236,16 +236,25 @@ def self_test() -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="deterministic drain/starvation guardian for the zo-sentinel builder")
     ap.add_argument("--report", action="store_true", help="analyse + print, write/park NOTHING")
+    ap.add_argument("--daemon", action="store_true",
+                    help="loop forever: one pass every DRAIN_POLL_SECS (default 900). This is the "
+                         "durable form on ZoComputer -- go.sh launches it under daemon_wrapper.sh "
+                         "(crontabs here can be inert after a cold boot; daemons are not).")
     ap.add_argument("--self-test", dest="self_test", action="store_true")
     ap.add_argument("--sentinel-dir", default=None, help="override ZO_SENTINEL_DIR (for tests)")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
     root = Path(a.sentinel_dir) if a.sentinel_dir else SENTINEL_DIR
-    try:
-        run(root, time.time(), report=a.report)
-    except Exception as e:  # noqa: BLE001 -- FAIL-SAFE: never break the cron (rc 0 like chain_stall_watchdog)
-        print("[drain-watchdog] ERROR (non-fatal, cron continues): %r" % e)
+    poll = int(os.environ.get("DRAIN_POLL_SECS", "900"))
+    while True:
+        try:
+            run(root, time.time(), report=a.report)
+        except Exception as e:  # noqa: BLE001 -- FAIL-SAFE: a pass never kills the daemon/cron (rc0 ethos)
+            print("[drain-watchdog] ERROR (non-fatal): %r" % e)
+        if not a.daemon:
+            break
+        time.sleep(poll)
     return 0
 
 

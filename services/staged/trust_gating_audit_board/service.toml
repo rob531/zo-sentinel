@@ -1,0 +1,11 @@
+[service]
+name = "trust_gating_audit_board"
+import_path = "services.active.trust_gating_audit_board.router"
+prefix = "/api"
+tag = "trust_gating_audit_board"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

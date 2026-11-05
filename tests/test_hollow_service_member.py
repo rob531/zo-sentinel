@@ -94,11 +94,74 @@ def test_inert_contract_is_rejected():
     assert why is not None and "cannot fail" in why
 
 
-def test_limb_2_does_not_apply_to_logic_or_router():
-    """Only contract.py carries the assert/__main__ obligation."""
-    for name in ("services/staged/widget/logic.py",
-                 "services/staged/widget/router.py"):
-        assert hollow_service_member_scan(name, INERT_CONTRACT) is None
+def test_limb_2_does_not_apply_to_logic():
+    """Only contract.py carries the assert/__main__ obligation; logic.py with
+    real statements (and no router obligation) is fine."""
+    assert hollow_service_member_scan(
+        "services/staged/widget/logic.py", INERT_CONTRACT) is None
+
+
+# --- LIMB 3: a router that binds no module-level `router` -------------------
+
+# Byte-exact prod blobs (services/staged/<n>/router.py, 2026-11-05) -- each
+# PARSES (so the Tier-0 syntax gate passed it) and has >=1 top-level statement
+# (so limb 1 misses it), but binds no `router`, so the spine cannot mount it.
+PROD_BARE_PATH_ROUTER = "services/staged/app_scoring_consumer_base/router.py"
+PROD_JSON_PATH_ROUTER = '{"path": "services/staged/cve_risk_tier_cross_api/router.py"}'
+PROD_LOGIC_IN_ROUTER = (
+    "# services/staged/axis_score_drift/logic.py\n"
+    "from datetime import datetime, timedelta\n"
+    "from typing import List, Optional\n"
+    "def compute_drift(a, b):\n"
+    "    return a - b\n"
+)
+
+
+@pytest.mark.parametrize("src", [
+    PROD_BARE_PATH_ROUTER, PROD_JSON_PATH_ROUTER, PROD_LOGIC_IN_ROUTER,
+])
+def test_router_without_router_binding_is_rejected(src):
+    why = hollow_service_member_scan("services/staged/widget/router.py", src)
+    assert why is not None and "hollow router" in why
+
+
+def test_real_router_binding_passes():
+    src = ("from fastapi import APIRouter\n"
+           "from app.db import get_session\n"
+           'router = APIRouter(prefix="/api/x")\n'
+           '@router.get("/y")\n'
+           "def y():\n"
+           "    return []\n")
+    assert hollow_service_member_scan(
+        "services/staged/widget/router.py", src) is None
+
+
+def test_router_imported_not_assigned_passes():
+    """A router brought in by import (alias or relative) is a real binding."""
+    for src in ("from .app import router\n",
+                "import router\n",
+                "from fastapi import APIRouter as X\nrouter = X()\n"):
+        assert hollow_service_member_scan(
+            "services/staged/widget/router.py", src) is None
+
+
+def test_router_limb_does_not_apply_to_logic_or_contract():
+    """The router obligation is router.py-only: a logic.py / contract.py that
+    binds no `router` must not be flagged by limb 3."""
+    src = "X = 1\ndef f():\n    return X\n"
+    assert hollow_service_member_scan("services/staged/widget/logic.py", src) is None
+    # contract.py has its own limb-2 obligation, not the router one; a contract
+    # that DOES assert is fine even with no `router`.
+    ok_contract = "def t():\n    assert True\n"
+    assert hollow_service_member_scan(
+        "services/staged/widget/contract.py", ok_contract) is None
+
+
+def test_router_limb_unparseable_is_not_this_rules_finding():
+    """Prose that does not parse is the syntax gate's finding, not limb 3's."""
+    assert hollow_service_member_scan(
+        "services/staged/widget/router.py",
+        "Let me first check the exemplar router\n") is None
 
 
 # --- The real population must stay green ------------------------------------

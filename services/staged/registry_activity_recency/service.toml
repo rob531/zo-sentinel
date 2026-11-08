@@ -1,0 +1,11 @@
+[service]
+name = "registry_activity_recency"
+import_path = "services.active.registry_activity_recency.router"
+prefix = "/api"
+tag = "registry_activity_recency"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

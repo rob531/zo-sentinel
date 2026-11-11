@@ -28,13 +28,27 @@ dispatcher only *records* intent — it never launches a GPU.
 
 So importing or exercising this package can never start a cloud job by accident.
 
-## When the student model is ready
+## When the student model is ready — ONE flag
 
-1. Wire a real dispatcher (shells out to the sft repo's `dispatch_vast_v3.sh` /
-   `install_sky_dispatcher.sh`) and set `dispatch.dry_run=False` on the job.
-2. Open an activation latch (`SFT_BATCH_ENABLED=1` or drop `.batch_enabled`).
-3. `BatchRunner(queue, dispatcher=RunpodDispatcher()).drain()` claims queued
-   jobs and dispatches them.
+`ZO_SFT_LABEL_LOOP_ARMED=1` is the single documented switch
+(design of record: `docs/SCORER_DISCRIMINATION_DESIGN_2026-10-09.md` §3.5).
+`zo_sentinel.sft.dispatcher.build_runner(queue)` reads it and returns either
+the stock dormant runner (flag closed — NoopDispatcher, latches shut) or an
+armed runner with the real `ShellDispatcher`, which shells out to
+`$ZO_SFT_DISPATCH_CMD` (the sft repo's `dispatch_vast_v3.sh` /
+`install_sky_dispatcher.sh`) and still honours per-job `dispatch.dry_run`.
+The two legacy latches below remain underneath as defense in depth —
+`ShellDispatcher` independently refuses when the flag is closed — but no
+operator coordinates them by hand anymore:
+
+1. ~~Wire a real dispatcher~~ → `build_runner` selects it from the flag.
+2. ~~Open an activation latch~~ → the flag opens it.
+3. `build_runner(queue).drain()` claims queued jobs and dispatches them.
+
+The corpus/retrain producer that FEEDS this queue is `zo_sentinel.label_loop`
+(1k-registry-row trigger, teacher pass, quarantine for empty teacher returns,
+discrimination gate). `python -m zo_sentinel.label_loop status` shows both
+sides' state in one JSON.
 
 ## CLI
 

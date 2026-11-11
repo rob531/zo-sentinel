@@ -75,6 +75,34 @@ async def lifespan(app: FastAPI):
             "freshness snapshot refreshers not started at boot; routes will lazy-start",
             exc_info=True,
         )
+    # Warm the /api/facets TTL cache off the request path so the FIRST user hit
+    # serves the cached aggregate instead of eating the cold GROUP-BY compute
+    # over the 596k-row registry (the ~25s+ first-paint perf finding). Runs in a
+    # daemon thread with its own session so it never blocks boot; the route's own
+    # TTL cache still lazy-computes if this warm is skipped or fails. BEST-EFFORT,
+    # NEVER FATAL -- same invariant as the daemons above.
+    def _warm_facets() -> None:
+        try:
+            from facet_enum_service import cached_facets
+            from .db import SessionLocal
+
+            db = SessionLocal()
+            try:
+                cached_facets(db)
+            finally:
+                db.close()
+        except Exception:  # noqa: BLE001 -- an optional warm must never halt the API
+            logging.getLogger(__name__).warning(
+                "facets cache not warmed at boot; route will lazy-compute on first hit",
+                exc_info=True,
+            )
+
+    try:
+        threading.Thread(target=_warm_facets, daemon=True).start()
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "facets warm thread not started; route will lazy-compute", exc_info=True
+        )
     yield
 
 

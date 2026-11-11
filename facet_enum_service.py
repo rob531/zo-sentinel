@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
-from verdict_breakdown_api import Principal, get_principal
+from clerk_m2m_auth import Principal, get_principal
 
 router = APIRouter(prefix="/api", tags=["perspectives"])
 

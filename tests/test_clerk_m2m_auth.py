@@ -1,9 +1,15 @@
-"""clerk_m2m_auth: the shared get_principal accepts a Clerk session JWT OR a
-Clerk M2M token, without any live Clerk / JWKS / Postgres call.
+"""clerk_m2m_auth: the shared get_principal accepts a Clerk session JWT (user)
+OR a Clerk M2M JWT (machine), with no live Clerk / JWKS / Postgres call.
 
-Two-pole: both the ACCEPT poles (valid session JWT, valid M2M token) and the
-REJECT poles (no creds, garbage token, M2M disabled) are proven. All network
-(JWKS fetch, jwt.decode, the Clerk M2M verify POST) is mocked.
+A Clerk M2M token is a JWT signed by the SAME instance JWKS as session tokens,
+carrying a machine subject (sub = "mch_...") and no "role" claim -- so the
+existing JWKS decode already verifies it statelessly. The only new behaviour is
+a machine short-circuit: a verified "mch_..." sub returns a read-only public
+principal WITHOUT calling _resolve_role (whose Clerk users-API lookup errors on a
+machine sub -> the live 500 this also fixes).
+
+Two-pole: ACCEPT poles (machine JWT, user JWT) and REJECT poles (no creds, bad
+decode) are both proven. All network (JWKS fetch, jwt.decode) is mocked.
 
 Import-time note: both clerk_m2m_auth and its parent verdict_breakdown_api read
 CLERK_PUBLISHABLE_KEY at import to derive the issuer. We set a deterministic test
@@ -38,19 +44,16 @@ class _FakeSigningKey:
     key = "unused-mock-key"
 
 
-def _mount(monkeypatch, *, machine_sk: str = "", session_claims=None, m2m_status=None,
-           m2m_body=None):
+def _mount(monkeypatch, *, session_claims, resolve_role_spy=None):
     """Build a one-route FastAPI app guarded by cm.get_principal with the Clerk
-    network surface mocked.
+    JWKS + jwt.decode surface mocked.
 
-    session_claims: dict -> jwt.decode returns it; None -> jwt.decode raises
-                    (simulates an invalid/garbage session token).
-    m2m_status:     int  -> requests.post returns this status with m2m_body json;
-                    None -> the M2M verify endpoint is never expected to succeed
-                            (we still install a 401 responder so a stray call fails).
+    session_claims: dict -> jwt.decode returns it (a verified token);
+                    None -> jwt.decode raises (bad/garbage token).
+    resolve_role_spy: optional list; _resolve_role appends its sub arg so a test
+                    can assert the Clerk users API was (not) consulted.
     """
     monkeypatch.setattr(cm, "_CLERK_ISS", _EXPECTED_ISS, raising=False)
-    monkeypatch.setattr(cm, "_CLERK_MACHINE_SK", machine_sk, raising=False)
 
     # JWKS: never hit the network -- always hand back a fake signing key.
     monkeypatch.setattr(cm, "_jwks_client",
@@ -58,31 +61,17 @@ def _mount(monkeypatch, *, machine_sk: str = "", session_claims=None, m2m_status
                             "get_signing_key_from_jwt": staticmethod(
                                 lambda tok: _FakeSigningKey())})())
 
-    # jwt.decode: either return the session claims, or raise (bad token).
     def _fake_decode(token, key, **kw):
         if session_claims is None:
-            raise ValueError("invalid session token")
+            raise ValueError("invalid token")
         return session_claims
     monkeypatch.setattr(cm.jwt, "decode", _fake_decode)
 
-    # Role resolution must never hit Clerk's users API in a unit test.
-    monkeypatch.setattr(cm, "_resolve_role", lambda sub: "public")
-
-    class _Resp:
-        def __init__(self, status, body):
-            self.status_code = status
-            self._body = body or {}
-
-        def json(self):
-            return self._body
-
-    def _fake_post(url, **kw):
-        assert url == cm._M2M_VERIFY_URL
-        assert kw["headers"]["Authorization"] == f"Bearer {machine_sk}"
-        assert kw["json"] == {"token": _sent_token}
-        status = m2m_status if m2m_status is not None else 401
-        return _Resp(status, m2m_body)
-    monkeypatch.setattr(cm.requests, "post", _fake_post)
+    def _spy_resolve(sub):
+        if resolve_role_spy is not None:
+            resolve_role_spy.append(sub)
+        return "insider"
+    monkeypatch.setattr(cm, "_resolve_role", _spy_resolve)
 
     app = FastAPI()
 
@@ -93,77 +82,53 @@ def _mount(monkeypatch, *, machine_sk: str = "", session_claims=None, m2m_status
     return TestClient(app, raise_server_exceptions=True)
 
 
-# Captured so the mocked requests.post can assert the body it received.
-_sent_token = "m2m_tok_abc"
-
-
-def test_valid_m2m_token_accepted_as_public_machine(monkeypatch):
-    """Session JWT fails, M2M verify -> 200: machine principal, role public."""
-    client = _mount(monkeypatch, machine_sk="sk_machine_xyz",
-                    session_claims=None,  # session path fails -> fall to M2M
-                    m2m_status=200, m2m_body={"subject": "mch_123"})
-    r = client.get("/guarded", headers={"Authorization": f"Bearer {_sent_token}"})
+def test_machine_jwt_accepted_as_public_without_user_lookup(monkeypatch):
+    """Verified JWT with sub 'mch_...' -> 200, role public, and _resolve_role
+    (the Clerk users API) is NOT called -- this is the live-500 fix."""
+    spy = []
+    client = _mount(monkeypatch,
+                    session_claims={"sub": "mch_3LwSNRGbLoekGqTXAPyKqkUtM4B", "aud": []},
+                    resolve_role_spy=spy)
+    r = client.get("/guarded", headers={"Authorization": "Bearer machine.jwt.token"})
     assert r.status_code == 200, r.text
-    assert r.json() == {"user_id": "mch_123", "role": "public"}
+    assert r.json() == {"user_id": "mch_3LwSNRGbLoekGqTXAPyKqkUtM4B", "role": "public"}
+    assert spy == [], "machine sub must not trigger a Clerk user lookup"
 
 
-def test_m2m_id_falls_back_to_id_field(monkeypatch):
-    client = _mount(monkeypatch, machine_sk="sk_machine_xyz",
-                    session_claims=None, m2m_status=200, m2m_body={"id": "mch_fromid"})
-    r = client.get("/guarded", headers={"Authorization": f"Bearer {_sent_token}"})
+def test_user_jwt_still_resolves_via_role_path(monkeypatch):
+    """A user_ sub with no role claim still resolves via _resolve_role (unchanged)."""
+    spy = []
+    client = _mount(monkeypatch,
+                    session_claims={"sub": "user_abc"},  # no role claim
+                    resolve_role_spy=spy)
+    r = client.get("/guarded", headers={"Authorization": "Bearer session.jwt.token"})
     assert r.status_code == 200
-    assert r.json()["user_id"] == "mch_fromid"
-    assert r.json()["role"] == "public"
+    assert r.json() == {"user_id": "user_abc", "role": "insider"}  # from _resolve_role spy
+    assert spy == ["user_abc"], "user sub must still consult the role resolver"
+
+
+def test_user_jwt_with_role_claim_unchanged(monkeypatch):
+    """An embedded role claim is honoured without any lookup (unchanged)."""
+    spy = []
+    client = _mount(monkeypatch,
+                    session_claims={"sub": "user_xyz", "role": "admin"},
+                    resolve_role_spy=spy)
+    r = client.get("/guarded", headers={"Authorization": "Bearer session.jwt.token"})
+    assert r.status_code == 200
+    assert r.json() == {"user_id": "user_xyz", "role": "admin"}
+    assert spy == [], "an embedded role claim must short-circuit the resolver"
 
 
 def test_no_auth_header_is_401_authentication_required(monkeypatch):
-    client = _mount(monkeypatch, machine_sk="sk_machine_xyz", session_claims=None)
+    client = _mount(monkeypatch, session_claims=None)
     r = client.get("/guarded")
     assert r.status_code == 401
     assert r.json()["detail"] == "Authentication required"
 
 
-def test_garbage_token_rejected_401(monkeypatch):
-    """Session decode raises AND M2M verify -> non-200: the original 401."""
-    client = _mount(monkeypatch, machine_sk="sk_machine_xyz",
-                    session_claims=None, m2m_status=403)
-    r = client.get("/guarded", headers={"Authorization": f"Bearer {_sent_token}"})
-    assert r.status_code == 401
-    assert r.json()["detail"] == "Invalid or expired session token"
-
-
-def test_valid_session_jwt_still_works(monkeypatch):
-    """Prove the existing session-JWT path is unbroken: valid claims -> principal."""
-    client = _mount(monkeypatch, machine_sk="sk_machine_xyz",
-                    session_claims={"sub": "user_abc", "role": "admin"})
-    r = client.get("/guarded", headers={"Authorization": "Bearer session.jwt.token"})
-    assert r.status_code == 200
-    assert r.json() == {"user_id": "user_abc", "role": "admin"}
-
-
-def test_machine_secret_unset_rejects_m2m_session_only(monkeypatch):
-    """CLERK_MACHINE_SECRET_KEY unset -> M2M fallback skipped, no crash, 401."""
-    # machine_sk empty: _verify_m2m returns None immediately; requests.post must
-    # NOT be called (we make it explode to prove the short-circuit).
-    client = _mount(monkeypatch, machine_sk="", session_claims=None)
-
-    def _boom(*a, **k):
-        raise AssertionError("requests.post must not be called when machine SK is unset")
-    monkeypatch.setattr(cm.requests, "post", _boom)
-
-    r = client.get("/guarded", headers={"Authorization": f"Bearer {_sent_token}"})
-    assert r.status_code == 401
-    assert r.json()["detail"] == "Invalid or expired session token"
-
-
-def test_m2m_network_error_fails_closed(monkeypatch):
-    """A raising requests.post (network error) fails closed to the session 401."""
-    client = _mount(monkeypatch, machine_sk="sk_machine_xyz", session_claims=None)
-
-    def _raise(*a, **k):
-        raise ConnectionError("clerk unreachable")
-    monkeypatch.setattr(cm.requests, "post", _raise)
-
-    r = client.get("/guarded", headers={"Authorization": f"Bearer {_sent_token}"})
+def test_bad_token_fails_jwks_decode_401(monkeypatch):
+    """A token that fails JWKS verification -> the original 401."""
+    client = _mount(monkeypatch, session_claims=None)
+    r = client.get("/guarded", headers={"Authorization": "Bearer garbage.token"})
     assert r.status_code == 401
     assert r.json()["detail"] == "Invalid or expired session token"

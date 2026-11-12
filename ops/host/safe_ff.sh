@@ -49,6 +49,29 @@ if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
     exit 0
 fi
 
+# --- 0. stale index.lock sweep (FU-195, 2026-11-12) ---------------------------
+# A crashed/killed git op (an interrupted merge, or a concurrent fetch cut by
+# the MCP transport) leaves a 0-byte .git/index.lock behind. `git stash` and
+# `git merge --ff-only` then refuse with "Unable to create '.git/index.lock':
+# File exists", and the deploy halts until a human clears it -- a 23h-old orphan
+# blocked the 2026-11-12 deploy exactly this way. Clear it AUTOMATICALLY, but
+# ONLY when unambiguously orphaned: EMPTY (size 0 -- a partially-written index
+# is never touched) AND older than SAFE_FF_LOCK_STALE_SECS (default 600s; any
+# live git op writes the index within milliseconds, so a 0-byte lock this old
+# holds nothing). A fresh or non-empty lock is left in place and the ff refuses
+# as before -- never race a live operation.
+LOCK=".git/index.lock"
+STALE_SECS="${SAFE_FF_LOCK_STALE_SECS:-600}"
+if [ -f "$LOCK" ]; then
+    lsize="$(stat -c %s "$LOCK" 2>/dev/null || echo 1)"
+    lage=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
+    if [ "$lsize" -eq 0 ] && [ "$lage" -ge "$STALE_SECS" ]; then
+        rm -f "$LOCK" && echo "SWEPT stale index.lock (0B, ${lage}s old) -- orphan from a crashed git op"
+    else
+        echo "NOTE: index.lock present (size=${lsize}B age=${lage}s) but not provably stale -- left in place"
+    fi
+fi
+
 # --- 1. back up untracked files that the incoming tree will add ---------------
 # --no-renames: keep renamed-in paths visible as plain adds so colliders at a
 # rename destination are caught here too (FU-007).

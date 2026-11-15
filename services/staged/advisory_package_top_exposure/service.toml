@@ -1,0 +1,11 @@
+[service]
+name = "advisory_package_top_exposure"
+import_path = "services.active.advisory_package_top_exposure.router"
+prefix = "/api"
+tag = "advisory_package_top_exposure"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

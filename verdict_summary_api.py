@@ -26,11 +26,23 @@ def get_verdict_summary(server_id: str, session: Session = Depends(get_session))
             "p_danger": score.p_danger
         }
 
+    # Additive live-probe EXPOSURE signal (OPEN_EXEC/OPEN_BENIGN/OPEN/GATED/UNREACHABLE).
+    # Flag-gated + fail-open in resolve_unauth_access; the import is lazy + wrapped so a
+    # resolver/import problem can NEVER orphan or 500 this live public endpoint (it just
+    # yields null). Reads the ISOLATED mcp_unauth_access table, never mcp_llm_axis_scores.
+    unauth_access = None
+    try:
+        from unauth_access import resolve_unauth_access
+        unauth_access = resolve_unauth_access(session, server_id)
+    except Exception:
+        unauth_access = None
+
     # Prepare response
     response = {
         "overall_risk": server_registry.confidence,
         "risk_tier": server_registry.risk_tier,
         "axes": axes,
+        "unauth_access": unauth_access,
         "meta": {
             "timestamp": datetime.utcnow().isoformat(),
             "source_version": "1.0"
@@ -47,9 +59,12 @@ if __name__ == "__main__":
     from app.models import McpServerRegistry, McpLlmAxisScore
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
-    # Setup in-memory test database
-    test_engine = create_engine("sqlite:///:memory:")
+    # Setup in-memory test database (StaticPool + check_same_thread so TestClient's request
+    # thread shares the one in-memory connection)
+    test_engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                                poolclass=StaticPool)
     TestSession = sessionmaker(bind=test_engine)
     test_session = TestSession()
 
@@ -57,13 +72,11 @@ if __name__ == "__main__":
     McpServerRegistry.__table__.create(test_engine)
     McpLlmAxisScore.__table__.create(test_engine)
 
-    # Override dependency for testing
-    app.dependency_overrides[get_session] = lambda: test_session
-
-    # Create test app
+    # Create test app + override dependency for testing (test_app must exist first)
     from fastapi import FastAPI
     test_app = FastAPI()
     test_app.include_router(router)
+    test_app.dependency_overrides[get_session] = lambda: test_session
 
     # Insert test data
     test_server_id = "test_server_123"
@@ -77,6 +90,7 @@ if __name__ == "__main__":
 
     test_axes = [
         McpLlmAxisScore(
+            id=1,
             server_id=test_server_id,
             axis_name="axis1",
             label="Label 1",
@@ -89,6 +103,7 @@ if __name__ == "__main__":
             scored_at=datetime.utcnow()
         ),
         McpLlmAxisScore(
+            id=2,
             server_id=test_server_id,
             axis_name="axis2",
             label="Label 2",
@@ -114,5 +129,8 @@ if __name__ == "__main__":
     # Verify response contains all axes and correct risk_tier
     assert len(data["axes"]) >= 2  # At least 2 axes in test data
     assert data["risk_tier"] == "high"
+    # Additive exposure field is always present; None here (flag off + no isolated table in test)
+    assert "unauth_access" in data, "unauth_access field must be present"
+    assert data["unauth_access"] is None, "flag-off/no-table must fail open to null, never 500"
 
     print("PASS verdict_summary_api")

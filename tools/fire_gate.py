@@ -558,6 +558,144 @@ def apply_boot(verdict: str, boot: dict) -> "tuple[str, bool]":
     return verdict, False
 
 
+
+# ------------------------------------------------------- CLASS (A/B) + CLASS-B AUTHORITY
+# IS THIS A CLASS-B DEPLOY, and if so, is the `prod_deploy_class_b` clause ACTUALLY
+# CLEARED. Until this fold existed the clause was INERT at the fire path -- prose-only
+# since 2026-09-01 (authority.json's own `the_remaining_wiring` note lines 267-268 +
+# THE_HONEST_CAVEAT line 312: "the clause has NEVER been run through the mechanism").
+# deploy_prod.ps1 fires on `prod_deploy_fire`, which is delegated and granted, so
+# authority.py `may()` short-circuits ALLOWED before the class_b clause is ever
+# dispatched; nothing on the fire path computed the migration class or consulted
+# `may('prod_deploy_class_b')`. That is the FU-182 / FU-973 "permission no code reads"
+# defect -- the exact shape of the OWNERSHIP, BOOT and CI gaps this file already closed,
+# one clause later.
+#
+# CLASS is MECHANICAL and is the SKILL's own rule (step 6): the `migrations` tree OBJECT
+# at the running/baseline sha vs the candidate.
+#     identical -> Class A. `alembic upgrade head` is a no-op, the moat schema/data is
+#                  untouched, rollback is a pure image swap. This gate has NO input ->
+#                  NOT-ENGAGED, and the verdict path is byte-identical to before this
+#                  block existed (a skip is never a pass, R3).
+#     differ    -> Class B. fly.toml `release_command = "alembic upgrade head"` applies
+#                  a migration against the moat; there is no true Fly rollback. This is
+#                  the ATTENDED IRREVERSIBLE EDGE, and authority.json routes it
+#                  ESCALATE-ONLY / PEER-CLEARABLE.
+#
+# The class tree sha is read AUTHORITATIVELY from the GitHub trees API, NOT from the
+# shallow lane clone: local `rev-parse <sha>:migrations` on a shallow graft can return a
+# WRONG-BUT-PLAUSIBLE object, not merely an empty one (FU-666, measured 2026-10-30). An
+# unreachable API is UNKNOWN, never "Class A".
+#
+# DELIBERATELY STRICTER THAN THE R6 "UNKNOWN IS NOT RED" CONVENTION the three folds above
+# use -- and the asymmetry is the opposite one on purpose:
+#
+#   Class B + authority ALLOWED (rc=0) -> VERDICT UNCHANGED. The clause cleared through
+#                               the mechanism (peer-ref cited); proceed on the other folds.
+#   Class B + authority BLOCKED (rc=1) -> RESTAGE. Firing a Class-B deploy without the
+#                               cleared clause was NEVER permitted by authority.json, so
+#                               this forecloses nothing that previously worked.
+#   Class B + authority UNKNOWN (rc=2 / unavailable) -> RESTAGE, reported loudly. This is
+#                               the deliberate deviation: for the three folds above the
+#                               PRIOR behaviour on UNKNOWN was "proceed", so UNKNOWN-is-
+#                               not-red preserved it; here the PRIOR behaviour was NO GATE
+#                               AT ALL (fail-open on the irreversible edge). A Class-B
+#                               fire requires a POSITIVE clearance -- absence of one is
+#                               not a licence. authority.py is tower-local and normally
+#                               present; its absence is a reason to re-stage, not to fire
+#                               a migration blind. --no-class-gate exists for the genuine
+#                               GitHub-trees-unreachable recovery case and always prints
+#                               that it was used (a skip is never a pass).
+#   Class A (any authority)    -> NOT-ENGAGED. No migration applies; nothing to clear.
+#
+# authority.py is tower-local (`_tools\` is not a git repo), resolved by path and invoked
+# as a subprocess rather than imported. Absent -> UNKNOWN -> (for Class B) RESTAGE.
+AUTHORITY_PATHS = (
+    pathlib.Path(r"D:\zo\Zocomputer Agents\_tools\authority.py"),
+    pathlib.Path(__file__).resolve().parent / "authority.py",
+)
+
+
+def migration_tree_sha(repo: str, sha: str) -> str | None:
+    """The `migrations` subtree OBJECT sha at `sha`, read from the GitHub trees API.
+
+    Authoritative (not the shallow lane clone): FU-666 measured a shallow graft return
+    a wrong-but-plausible object for `rev-parse <sha>:migrations`. Returns None only when
+    the tree has no top-level `migrations` entry; raises on an unreachable API so the
+    caller can map it to UNKNOWN rather than silently to "no migrations".
+    """
+    raw = _gh(["api", f"repos/{repo}/git/trees/{sha}", "--jq",
+               '.tree[]|select(.path=="migrations").sha'])
+    s = raw.strip()
+    return s or None
+
+
+def migration_class(repo: str, baseline: str, head: str) -> dict:
+    """Class A (migrations tree identical) vs Class B (differ), read authoritatively.
+
+    Never raises: an exception becomes UNKNOWN, exactly as the other probes do."""
+    try:
+        base_tree = migration_tree_sha(repo, baseline)
+        head_tree = migration_tree_sha(repo, head)
+    except Exception as exc:  # noqa: BLE001
+        return {"klass": "UNKNOWN", "source": "unavailable",
+                "detail": f"migrations tree could not be read from the GitHub API: {exc}",
+                "baseline_tree": None, "head_tree": None}
+    klass = "A" if base_tree == head_tree else "B"
+    return {"klass": klass, "source": "github-trees",
+            "detail": f"migrations tree {base_tree} @baseline vs {head_tree} @head",
+            "baseline_tree": base_tree, "head_tree": head_tree}
+
+
+def resolve_authority() -> "pathlib.Path | None":
+    for cand in AUTHORITY_PATHS:
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def class_b_authority(peer_ref: str | None) -> dict:
+    """Ask authority.py whether `prod_deploy_class_b` is ALLOWED (optionally citing a
+    peer-ref). Never raises: an exception becomes UNKNOWN."""
+    tool = resolve_authority()
+    if tool is None:
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": "authority.py not found at any known path"}
+    argv = [sys.executable, str(tool), "--may", "prod_deploy_class_b"]
+    if peer_ref:
+        argv += ["--peer-ref", peer_ref]
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        rc = proc.returncode
+        verdict = {0: "ALLOWED", 1: "BLOCKED", 2: "UNKNOWN"}.get(rc, "UNKNOWN")
+        tail = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return {"verdict": verdict, "rc": rc if rc in (0, 1, 2) else 2,
+                "source": str(tool), "detail": tail[-600:]}
+    except Exception as exc:  # noqa: BLE001
+        return {"verdict": "UNKNOWN", "rc": 2, "source": "unavailable",
+                "detail": f"authority.py could not be consulted: {exc}"}
+
+
+def apply_class(verdict: str, mclass: dict, auth: dict) -> "tuple[str, bool]":
+    """Fold the class + class-B authority into the delta verdict. Pure, so it is testable
+    without a network, and so the stricter asymmetry above is one readable expression.
+
+    Class A, or the class itself UNKNOWN -> no change (an unknowable class is not a
+    positive Class-B finding, and re-staging on it would stall the pipe on every API
+    hiccup). Only a POSITIVE Class-B reading without a POSITIVE authority ALLOWED forces
+    a RESTAGE."""
+    if mclass.get("klass") != "B":
+        return verdict, False
+    if verdict != "SAFE":
+        return verdict, False
+    if auth.get("rc") == 0:  # ALLOWED
+        return verdict, False
+    return "RESTAGE", True  # Class B, not positively cleared (BLOCKED or UNKNOWN)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--staged", required=True, help="the vetted/staged SHA (40 chars)")
@@ -576,6 +714,14 @@ def main() -> int:
                     help="skip the migration OWNERSHIP probe. The delta question\n"
                          "stays answerable when the prod DB is unreachable; the\n"
                          "output always says the check was skipped.")
+    ap.add_argument("--peer-ref", default=None, dest="peer_ref",
+                    help="peer-decision slug cited to authority.py for the\n"
+                         "prod_deploy_class_b clause on a Class-B target.")
+    ap.add_argument("--no-class-gate", action="store_true", dest="no_class",
+                    help="skip the CLASS-B AUTHORITY gate. The delta question stays\n"
+                         "answerable when the GitHub trees API is unreachable; the\n"
+                         "output always says the check was skipped. A Class-B fire\n"
+                         "skipped here is UNPROVEN, never cleared.")
     ap.add_argument(
         "--repo-path", default=None, dest="repo_path",
         help="local clone used ONLY when the compare API caps out; "
@@ -627,6 +773,21 @@ def main() -> int:
         boot = boot_proof(a.repo_path or _default_repo_path(), head)
     verdict, boot_forced = apply_boot(verdict, boot)
 
+    if a.no_class:
+        mclass = {"klass": "SKIPPED", "source": "skipped",
+                  "detail": "--no-class-gate: the migration class was NOT computed",
+                  "baseline_tree": None, "head_tree": None}
+        auth = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
+                "detail": "--no-class-gate: prod_deploy_class_b was NOT consulted"}
+    else:
+        # Class is the migrations tree at the BASELINE (`--staged`, the running/vetted
+        # sha the owner probe also treats as prod) vs the target head that will deploy.
+        mclass = migration_class(a.repo, a.staged, head)
+        auth = (class_b_authority(a.peer_ref) if mclass.get("klass") == "B"
+                else {"verdict": "NOT-ENGAGED", "rc": None, "source": "class-A",
+                      "detail": "Class A: migrations tree identical, no clause to clear"})
+    verdict, class_forced = apply_class(verdict, mclass, auth)
+
     if a.json:
         print(json.dumps({
             "verdict": verdict, "staged": a.staged, "target": a.target,
@@ -637,6 +798,8 @@ def main() -> int:
             "target_ci": ci, "restaged_by_ci": ci_forced,
             "migration_owner": owner, "restaged_by_owner": owner_forced,
             "boot_proof": boot, "restaged_by_boot": boot_forced,
+            "migration_class": mclass, "class_b_authority": auth,
+            "restaged_by_class": class_forced,
         }, indent=2))
     else:
         print(f"staged   : {a.staged}")
@@ -671,6 +834,18 @@ def main() -> int:
                   "           candidate's image-reaching code has ever been built and\n"
                   "           booted could not be established, so it has NOT changed\n"
                   "           the verdict below. Establish it before firing.")
+        if mclass["klass"] == "B":
+            _authrc = f" (rc={auth['rc']})" if auth.get("rc") is not None else ""
+            _classline = f" -> class_b authority {auth['verdict']}{_authrc}"
+        else:
+            _classline = ""
+        print(f"class    : {mclass['klass']}{_classline} via {mclass['source']}")
+        if mclass["klass"] == "B" and auth["verdict"] == "UNKNOWN":
+            print("           CLASS B with an UNKNOWN authority reading. Unlike CI/\n"
+                  "           owner/boot, this does NOT leave the verdict unchanged: a\n"
+                  "           Class-B fire requires a POSITIVE prod_deploy_class_b\n"
+                  "           clearance, so an unreadable one RE-STAGES rather than\n"
+                  "           firing a migration on the irreversible edge blind.")
         if a.staged == head:
             print("note     : staged == target head, so the delta is empty BY\n"
                   "           CONSTRUCTION and a SAFE below is tautological -- the\n"
@@ -711,6 +886,20 @@ def main() -> int:
                   "from a red sha is still a red sha; deploy_prod.ps1 has always\n"
                   "required a CI-green commit. Fire the ORIGINAL staged sha, which is\n"
                   "still vetted, or wait for main to go green.")
+        elif class_forced:
+            print("\nVERDICT: RESTAGE -- the delta is image-inert, CI-green,\n"
+                  "ownership-clear and boot-proven, but this is a CLASS-B DEPLOY\n"
+                  "(the `migrations` tree OBJECT differs between the running sha and\n"
+                  "the target) and the `prod_deploy_class_b` clause is NOT POSITIVELY\n"
+                  "CLEARED. fly.toml runs `alembic upgrade head` as release_command\n"
+                  "against the moat and there is no true Fly rollback -- this is the\n"
+                  "attended irreversible edge, routed ESCALATE-ONLY / PEER-CLEARABLE.\n"
+                  "Clear it, then re-run citing the peer-ref:\n"
+                  "  peer_review.py --propose --clause prod_deploy_class_b ...  (adversary != filer)\n"
+                  "  fire_gate.py --staged <baseline> --target <main> --peer-ref <slug>\n"
+                  "Until then, fire only a Class-A prefix (walk the cut point) or HOLD.\n"
+                  "Detail:")
+            print("  " + str(auth.get("detail", ""))[:400].replace("\n", "\n  "))
         else:
             print("\nVERDICT: SAFE -- nothing in the delta can reach the image.")
             print(f"Firing {a.target} builds a byte-equivalent image to the staged one.")

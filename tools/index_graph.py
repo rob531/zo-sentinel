@@ -50,6 +50,13 @@ from pathlib import Path
 LADDER_URL = os.environ.get("ZO_LADDER_URL", "http://127.0.0.1:8796/v1")
 LADDER_HEALTH = LADDER_URL.rsplit("/v1", 1)[0] + "/health"
 
+# Timeout (seconds) for the `graphify update` graph-build subprocess.
+# Env-configurable because the graph outgrew the old hardcoded 1800s ceiling
+# (FU-884: a fixed 30min guillotine froze the KL 15d / 700 commits behind).
+# Bounded default kept so a genuinely HUNG indexer is still caught; raise
+# ZO_GRAPHIFY_TIMEOUT_S if the repo keeps growing past this budget.
+GRAPHIFY_TIMEOUT_S = int(os.environ.get("ZO_GRAPHIFY_TIMEOUT_S", "7200"))
+
 
 def _has(tool: str) -> bool:
     return shutil.which(tool) is not None
@@ -78,13 +85,13 @@ def _ladder_up() -> bool:
 def _run(cmd: list[str], root: Path, env: dict | None = None) -> int:
     print(f"[index_graph] {' '.join(cmd)}")
     try:
-        return subprocess.run(cmd, cwd=str(root), text=True, timeout=1800,
+        return subprocess.run(cmd, cwd=str(root), text=True, timeout=GRAPHIFY_TIMEOUT_S,
                               env=env).returncode
     except FileNotFoundError as e:
         print(f"[index_graph] {e}", file=sys.stderr)
         return 3
     except subprocess.TimeoutExpired:
-        print("[index_graph] indexing timed out after 1800s", file=sys.stderr)
+        print(f"[index_graph] indexing timed out after {GRAPHIFY_TIMEOUT_S}s", file=sys.stderr)
         return 4
 
 

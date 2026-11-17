@@ -60,6 +60,24 @@ MIN_SOLID_ADDITIONS = 12  # changes adding fewer lines than this are stub scaffo
 DEADLINE_SEC = float(os.environ.get("PR_TRIAGE_DEADLINE_SEC", "390"))  # 6.5 min
 _STARTED = time.monotonic()
 
+# UNLABELLED-FIRST SWEEP (FU-448 companion, 2026-11-17). Default ON.
+#
+# At >300 open build PRs a full re-sweep can never finish inside the deadline, so
+# the primary query -- fetching the NEWEST _FULL_LIMIT rows -- only ever sees the
+# same recent ~300 and re-triages them every run, never reaching the older
+# thousands. With a ~3,843-PR backlog the result is a total drain stall: every
+# triage: bucket at 0, nothing reaches triage:solid, auto-merge starves.
+#
+# When ON, the primary (and degraded) queries target only build PRs that lack
+# ALL FOUR triage: labels, so each run converges by labelling the unlabelled
+# remainder (newest-first is fine -- each run strictly shrinks the unlabelled
+# set). If that query returns ZERO rows the backlog is fully labelled, so we FALL
+# BACK to the full-population query for normal idempotent re-triage/drift (which,
+# together with pr-relander, handles labels that need to change). Set the env to
+# "0"/"false" to revert to the original full-population behaviour.
+UNLABELED_FIRST = os.environ.get("PR_TRIAGE_UNLABELED_FIRST", "1") not in (
+    "", "0", "false", "False")
+
 
 def _elapsed() -> float:
     return time.monotonic() - _STARTED
@@ -636,6 +654,29 @@ def _is_transient(stderr: str) -> bool:
     return any(t in e for t in _TRANSIENT_GH)
 
 
+# UNLABELLED-FIRST QUERY ARGS (2026-11-17). The `--label/--state` selector that
+# every list below shares, OR -- when UNLABELED_FIRST is on -- a `--search` that
+# names the same population MINUS the four triage: buckets. `is:open` preserves
+# the `--state open` semantics inside the search, and `label:"autonomous-build"`
+# preserves the `--label` filter; gh rejects passing `--search` alongside
+# `--label`/`--state`, so when searching we pass ONLY `--search`. Returning this
+# as a list lets both the primary and the degraded `cheap` list use the SAME
+# population selector, so the two paths can never disagree on what they sweep.
+def _build_pr_selector():
+    if not UNLABELED_FIRST:
+        return ["--label", BUILD_LABEL, "--state", "open"]
+    q = (f'is:open label:"{BUILD_LABEL}" '
+         f'-label:"{TRIAGE_PREFIX}solid" -label:"{TRIAGE_PREFIX}dup" '
+         f'-label:"{TRIAGE_PREFIX}scaffold" -label:"{TRIAGE_PREFIX}stale"')
+    return ["--search", q]
+
+
+# The full-population selector, used when UNLABELED_FIRST is off AND as the
+# zero-unlabelled-rows FALLBACK below (backlog drained -> resume normal
+# idempotent re-triage of every open build PR).
+_FULL_SELECTOR = ["--label", BUILD_LABEL, "--state", "open"]
+
+
 def fetch_open_build_prs(repo: str):
     """Return (prs, mode, dropped) for every OPEN autonomous-build PR.
 
@@ -650,13 +691,35 @@ def fetch_open_build_prs(repo: str):
     the dup and scaffold buckets, so a PR judged without it is judged wrongly,
     and a wrong label is worse than no label. Same fail-closed reflex as
     _manifest_is_valid -- a gate that cannot read its subject must not judge it.
+
+    UNLABELLED-FIRST (2026-11-17): when UNLABELED_FIRST is on, the primary and
+    degraded list queries target only build PRs that lack all four triage:
+    labels (via `--search`), so a >300 backlog converges one page at a time
+    instead of the newest ~300 being re-swept forever. If that query returns
+    ZERO rows the backlog is fully labelled and we fall back to the
+    full-population query so normal idempotent re-triage/drift still happens.
     """
+    # Pick the population selector once; both the primary combined query and the
+    # degraded cheap list reuse it so they sweep the SAME set.
+    selector = _build_pr_selector()
+
     # retries=1, deliberately. THE DEGRADED PATH IS THE RETRY, and a better one:
     # re-asking an over-budget query the default four times cost 71s of an
     # 8-minute job on 2026-07-28T03:33Z and could never have succeeded. One retry
     # still absorbs a genuine one-off blip; the rest was pure loss.
-    res = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
+    res = _gh("pr", "list", "-R", repo, *selector,
               "--limit", str(_FULL_LIMIT), "--json", _FULL_FIELDS, retries=1)
+    # ZERO unlabelled rows -> backlog fully labelled. Re-run the primary query
+    # against the FULL population so steady-state idempotent re-triage/drift
+    # still happens (pr-relander covers the rest). Only meaningful when searching.
+    if (UNLABELED_FIRST and res is not None and res.returncode == 0
+            and (res.stdout or "").strip() in ("", "[]")):
+        print("[unlabelled-first] no unlabelled build PRs remain -> falling back "
+              "to the full-population query (steady-state re-triage)",
+              file=sys.stderr)
+        selector = _FULL_SELECTOR
+        res = _gh("pr", "list", "-R", repo, *selector,
+                  "--limit", str(_FULL_LIMIT), "--json", _FULL_FIELDS, retries=1)
     if res is not None and res.returncode == 0:
         try:
             full = json.loads(res.stdout or "[]")
@@ -682,7 +745,10 @@ def fetch_open_build_prs(repo: str):
               f"({err[:180]}); retrying as metadata list + per-PR hydration",
               file=sys.stderr)
 
-    cheap = _gh("pr", "list", "-R", repo, "--label", BUILD_LABEL, "--state", "open",
+    # Same population selector as the primary query (the unlabelled-first search
+    # or the full-population filter, incl. any zero-rows fallback above), so the
+    # fast and degraded paths always agree on WHICH PRs are being swept.
+    cheap = _gh("pr", "list", "-R", repo, *selector,
                 "--limit", str(_CHEAP_LIMIT), "--json", _CHEAP_FIELDS)
     if cheap is None or cheap.returncode != 0:
         cerr = (cheap.stderr or "").strip() if cheap is not None else "no result from gh"

@@ -141,6 +141,10 @@ class ModelSpec:
     enabled: bool = True       # False = pruned (skipped at runtime, index-safe)
     tool_capable: bool = True  # False = text-only; skipped when caller passes tools
                                                        # (e.g. gpt-oss reasoning_effort)
+    key_optional: bool = False # True = a local/keyless rung (e.g. tower Ollama);
+                               # a missing key_env is NOT fatal -- the adapter sends a
+                               # dummy bearer (Ollama ignores Authorization). Cloud rungs
+                               # keep the default False so their key guard is unchanged.
 
 
 LADDER = [
@@ -274,6 +278,7 @@ LADDER = [
               base_url=os.environ.get("TOWER_OLLAMA_BASE_URL",
                                       "http://100.95.8.71:11434/v1"),
               key_env="TOWER_OLLAMA_API_KEY",
+              key_optional=True,   # local Ollama: no real key needed (see adapter)
               extra_params={"num_ctx": 8192,
                             "proxy": os.environ.get("TOWER_OLLAMA_PROXY",
                                                     "socks5h://localhost:1055")},
@@ -330,6 +335,7 @@ LADDER = [
               base_url=os.environ.get("TOWER_CODER_BASE_URL",
                                       "http://100.95.8.71:11434/v1"),
               key_env="TOWER_CODER_API_KEY",
+              key_optional=True,   # local Ollama: no real key needed (see adapter)
               extra_params={"num_ctx": 32768,
                             "code_only": True,
                             "timeout": float(os.environ.get(
@@ -966,7 +972,14 @@ def _call_openai_compatible(spec, prompt, system, max_tokens, temperature, tools
     import requests
     key = os.environ.get(spec.key_env) if spec.key_env else None
     if not key:
-        return None, f"{spec.key_env or 'key'} not set", None
+        if spec.key_optional:
+            # Local/keyless rung (tower Ollama): Ollama ignores Authorization, but a
+            # non-empty bearer is still sent so the header is well-formed. This is what
+            # the floor/coder rung comments always intended; without it the rung died
+            # instantly with "<key_env> not set" and the ladder fell through to cloud.
+            key = "ollama"
+        else:
+            return None, f"{spec.key_env or 'key'} not set", None
     base = (spec.base_url or "").rstrip("/")
     if not base:
         return None, "no base_url on spec", None

@@ -1,0 +1,11 @@
+[service]
+name = "dispute_reason_category_mix"
+import_path = "services.active.dispute_reason_category_mix.router"
+prefix = "/api"
+tag = "dispute_reason_category_mix"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

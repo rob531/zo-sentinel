@@ -25,8 +25,17 @@ except Exception:
 ROOT = os.environ.get("ZO_SENTINEL_DIR", "/home/workspace/zo_sentinel")
 BUS  = os.environ.get("ZO_WRITE_SERVICE", "http://127.0.0.1:8772") + "/query"
 PY   = sys.executable or "python3"
-INDEX_TIMEOUT = int(os.environ.get("GR_INDEX_TIMEOUT", 2000))
-LOAD_TIMEOUT  = int(os.environ.get("GR_LOAD_TIMEOUT", 600))
+# Outer wrappers around the two build stages. These OUTER ceilings must not sit
+# BELOW the stage's own inner budget, or the inner budget is dead code: FU-884
+# fix (A) raised index_graph.py's inner `graphify update` timeout to 7200s, but
+# graph_refresh kept killing the whole index_graph call at the old 2000s here --
+# so the daemon logged `index_graph TIMEOUT` 33x and the KL stayed frozen 18d /
+# 735 commits behind. Fixed-ceiling-vs-growing-payload: the 161k-file / 2.46GB
+# graph outgrew both. INDEX aligned to the 7200s inner budget; LOAD raised for
+# the 2.46GB load_graph_to_bus post. Still bounded (a genuinely hung stage is
+# caught) and still env-overridable.
+INDEX_TIMEOUT = int(os.environ.get("GR_INDEX_TIMEOUT", 7200))
+LOAD_TIMEOUT  = int(os.environ.get("GR_LOAD_TIMEOUT", 3600))
 IDLE_MIN      = int(os.environ.get("GR_IDLE_MIN", 8))   # defer reindex while a build is active
 
 

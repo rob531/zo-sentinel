@@ -103,7 +103,9 @@ def _builder_writes(home: Path):
     rules refuse (a hollow scaffold, a saturated-family permutation)."""
     files = {
         "real_api.py": GOOD_API,
-        "services/active/new_svc/router.py": "ROUTES = []\n",
+        "services/active/new_svc/router.py":
+            "from fastapi import APIRouter\nrouter = APIRouter()\n"
+            "@router.get('/n')\ndef n():\n    return 1\n",
         "hollow_api.py": HOLLOW_API,
         "fleet_risk_permutation_api.py": "x = 1\n",
     }

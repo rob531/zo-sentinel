@@ -44,6 +44,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write          # bank the tighten via a PR, not a push to protected main
 
 concurrency:
   group: ratchet-nightly
@@ -105,19 +106,52 @@ jobs:
             echo "changed=yes" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Commit tightened baseline
+      # main is a PROTECTED branch (8 required checks); a bare `git push` to it
+      # is declined by the branch-protection hook (GH006), which failed this job
+      # every night it had an improvement to bank. Open a PR instead and let it
+      # auto-merge once the required checks pass.
+      #
+      # TOKEN CHOICE (same read/write split pr-relander.yml documents): a PR
+      # opened with the default GITHUB_TOKEN does NOT fire the `pull_request`
+      # check workflows (GitHub's recursion guard), so its required checks stay
+      # "Expected" forever and auto-merge never fires. RELANDER_TOKEN (a PAT)
+      # opens the PR as a real actor, the checks run natively, and the PR lands.
+      - name: Open PR for tightened baseline (down-only)
         if: ${{ steps.tighten.outputs.changed == 'yes' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELANDER_TOKEN || github.token }}
+          HAVE_PAT: ${{ secrets.RELANDER_TOKEN != '' }}
+          RUN_ID: ${{ github.run_id }}
         run: |
+          set -e
+          branch="ratchet/tighten-baseline-${RUN_ID}"
           git config user.name  "ratchet-nightly"
           git config user.email "noreply@anthropic.com"
+          git checkout -b "$branch"
           git add tools/reachability_baseline.json
           git commit -m "chore(ratchet): tighten baseline from nightly census
 
           Measured on main by .github/workflows/ratchet-nightly.yml. This job
           can only lower a baseline -- write_baseline() refuses to raise
           (_RATCHET_NO_RAISE_v1), so an improvement is banked here and a
-          regression is reported rather than absorbed."
-          git push
+          regression is reported rather than absorbed.
+
+          Opened as a PR (not a push) because main is protected: a direct push
+          is declined with GH006, which is what this job used to die on."
+          git push -u origin "$branch"
+          pr_url=$(gh pr create \
+            --base main --head "$branch" \
+            --title "chore(ratchet): tighten reachability baseline from nightly census" \
+            --body "Automated **down-only** baseline tighten measured on \`main\` by \`ratchet-nightly\`. Banks an improvement the tree already paid for; \`write_baseline()\` is mechanically unable to raise a pin (\`_RATCHET_NO_RAISE_v1\`). Opened as a PR because main is protected — a direct push is declined (GH006).")
+          echo "opened $pr_url"
+          # Land it on its own once the required checks pass. If auto-merge is
+          # disabled or checks can't be enabled, leave it for manual merge
+          # rather than fail the census.
+          gh pr merge --auto --squash "$pr_url" \
+            || echo "::warning::auto-merge not enabled on $pr_url -- merge it manually"
+          if [ "$HAVE_PAT" != "true" ]; then
+            echo "::warning::no RELANDER_TOKEN secret -> PR opened with GITHUB_TOKEN; required-check workflows will NOT fire natively, so auto-merge will stall. Merge $pr_url manually (or set RELANDER_TOKEN)."
+          fi
 
       # ---- one loud place for a main regression -------------------------
       - name: Report regression on main

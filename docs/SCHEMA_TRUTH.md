@@ -11,7 +11,7 @@ This file is DESCRIPTIVE. It reports what exists; it does not propose what shoul
 
 ```python
 from app.db import get_session                  # the one session dependency
-from app.models import <Model>                  # <Model> MUST be one of the 15 below
+from app.models import <Model>                  # <Model> MUST be one of the 16 below
 ```
 
 Test-time dependency override -- the only correct spelling:
@@ -51,7 +51,7 @@ case/plural variants of classes that DO exist:
 Python matches class names character for character: `MCP...` is never right, and no class
 is plural. Copy the spelling out of the table below rather than reconstructing it.
 
-## `app.models` -- all 15 classes, exhaustive
+## `app.models` -- all 16 classes, exhaustive
 
 | class | `__tablename__` | columns |
 | --- | --- | --- |
@@ -70,6 +70,7 @@ is plural. Copy the spelling out of the table below rather than reconstructing i
 | `ThreatIntelRef` | `threat_intel_refs` | 10 |
 | `CadenceJobRun` | `cadence_job_runs` | 7 |
 | `FreshnessStat` | `freshness_stats` | 4 |
+| `McpUnauthAccess` | `mcp_unauth_access` | 5 |
 
 ### columns per class
 
@@ -88,10 +89,11 @@ is plural. Copy the spelling out of the table below rather than reconstructing i
 - `ThreatIntelRef` (`threat_intel_refs`): `id`, `indicator_type`, `indicator_value`, `pulse_id`, `pulse_name`, `pulse_created`, `is_aggregator`, `source`, `source_url`, `fetched_at`
 - `CadenceJobRun` (`cadence_job_runs`): `id`, `job`, `status`, `started_at`, `finished_at`, `rows_affected`, `detail`
 - `FreshnessStat` (`freshness_stats`): `surface`, `payload`, `computed_at`, `compute_seconds`
+- `McpUnauthAccess` (`mcp_unauth_access`): `server_id`, `url`, `unauth_access`, `source`, `updated_at`
 
 ## `app.models` -- all public top-level names, exhaustive
 
-`ApiKey`, `AskCorpusDoc`, `Base`, `BigInteger`, `Boolean`, `CadenceJobRun`, `DateTime`, `Float`, `ForeignKey`, `FreshnessStat`, `Integer`, `JSON`, `Mapped`, `McpLlmAxisScore`, `McpScoreDispute`, `McpServerRegistry`, `Optional`, `Org`, `Perspective`, `PerspectiveEvent`, `PerspectiveSnapshot`, `String`, `Text`, `ThreatIntelRef`, `UniqueConstraint`, `User`, `VulnAdvisory`, `VulnLink`, `datetime`, `func`, `mapped_column`
+`ApiKey`, `AskCorpusDoc`, `Base`, `BigInteger`, `Boolean`, `CadenceJobRun`, `DateTime`, `Float`, `ForeignKey`, `FreshnessStat`, `Integer`, `JSON`, `Mapped`, `McpLlmAxisScore`, `McpScoreDispute`, `McpServerRegistry`, `McpUnauthAccess`, `Optional`, `Org`, `Perspective`, `PerspectiveEvent`, `PerspectiveSnapshot`, `String`, `Text`, `ThreatIntelRef`, `UniqueConstraint`, `User`, `VulnAdvisory`, `VulnLink`, `datetime`, `func`, `mapped_column`
 
 (That list includes third-party names re-exported by the module -- `Base` is genuinely
 importable from `app.models`, but prefer importing SQLAlchemy names from SQLAlchemy.)

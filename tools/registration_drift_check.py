@@ -210,12 +210,26 @@ def declared_from_go(text: str) -> dict[str, dict]:
         add(nm, sc, "go.sh")
 
     # (b) nohup python3 <PATH>.py     (bare, no wrapper)
-    for sc in re.findall(r"nohup\s+(?:env\s+\S+=\S+\s+)?python3?\s+(\S+\.py)", text):
+    #     A RELATIVE launch token (`run.py`, not `$MESH/x.py`) is anchored on
+    #     the nearest preceding `cd <abs-dir>` in the same script -- go.sh does
+    #     `cd /home/workspace/world_agent; nohup python run.py --daemon`, so the
+    #     real install path is world_agent/run.py, NOT the checker-cwd-relative
+    #     resolve of a bare `run.py`. This is the declaration-side mirror of the
+    #     #12768 process-side fix: both sides must resolve a relative token
+    #     against the cwd that actually applies, or a live daemon reads MISSING.
+    for mo in re.finditer(r"nohup\s+(?:env\s+\S+=\S+\s+)?python3?\s+(\S+\.py)", text):
+        sc = mo.group(1)
         if "$" in sc and not sc.startswith(("$MESH", "$SENTINEL")):
             continue
         p = Path(_expand(sc))
         if "$" in str(p):
             continue                      # loop variable, handled in (d)
+        if not p.is_absolute():
+            cds = re.findall(r"(?m)^\s*cd\s+(\S+)", text[:mo.start()])
+            if cds:
+                base = Path(_expand(cds[-1]))
+                if "$" not in str(base) and base.is_absolute():
+                    p = base / p
         add(p.stem, str(p), "go.sh")
 
     # (b2) the self-looping monitors: nohup bash -c "while true; do python3 X"
@@ -387,7 +401,7 @@ def merge_declared(a: dict, b: dict) -> dict:
 # 2. THE RUNNING SET  (canonical path, launchers excluded)
 # ---------------------------------------------------------------------------
 
-def _script_of(argv: str) -> str | None:
+def _script_of(argv: str, pid: str | None = None) -> str | None:
     """The script a command line actually executes, as an absolute path.
 
     Returns None for anything that is not running a script we could name --
@@ -397,7 +411,18 @@ def _script_of(argv: str) -> str | None:
     for t in toks:
         if t.endswith((".py", ".sh")):
             try:
-                return str(Path(t).resolve())
+                p = Path(t)
+                # A daemon launched with a RELATIVE argv (e.g. `python3
+                # run_manager.py daemon` from its own cwd) must resolve against
+                # the TARGET process's cwd, not this checker's -- else a
+                # genuinely running daemon reads as missing. Anchor the relative
+                # token on /proc/<pid>/cwd when we have the pid.
+                if pid and not p.is_absolute():
+                    try:
+                        p = Path(os.readlink("/proc/%s/cwd" % pid)) / p
+                    except OSError:
+                        pass
+                return str(p.resolve())
             except OSError:
                 return t
     if " -m " in argv:
@@ -424,7 +449,7 @@ def running_processes() -> tuple[list[dict], list[dict]]:
         argv = argv.strip()
         if not argv or argv.startswith("["):
             continue
-        script = _script_of(argv)
+        script = _script_of(argv, pid)
         if not script:
             continue
         rec = {"pid": pid, "script": script, "argv": argv[:300]}

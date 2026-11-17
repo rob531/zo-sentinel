@@ -87,7 +87,8 @@ def test_builder_completion_chains_all_call_the_gate():
     completion path must go through it -- so this test asserts that shape
     rather than counting occurrences of an inline expression.
     """
-    src = io.open(os.path.join(ROOT, "goose_runner.py"), encoding="utf-8").read()
+    # After chain rebase_godfiles S20, _gate_chain/_no_hollow_gate live in the seam file.
+    src = io.open(os.path.join(ROOT, "goose_runner_lib", "completion.py"), encoding="utf-8").read()
 
     # 1. The single chain exists and runs the no-hollow gate.
     assert "def _gate_chain(" in src, "the builder's completion gate chain is gone"
@@ -99,8 +100,10 @@ def test_builder_completion_chains_all_call_the_gate():
         assert gate in chain_body, f"{gate} dropped out of the completion chain"
 
     # 2. Both completion paths route through it, and NOTHING completes without it.
-    chain_calls = src.count("_gate_chain(directive, directive_id")
-    completions = src.count("_complete(directive, directive_id")
+    # After chain rebase_godfiles S20, the CALLS live in the runner seam file.
+    runner_src = io.open(os.path.join(ROOT, "goose_runner_lib", "runner.py"), encoding="utf-8").read()
+    chain_calls = runner_src.count("_gate_chain(directive, directive_id")
+    completions = runner_src.count("_complete(directive, directive_id")
     assert chain_calls >= 2, (
         f"expected both completion paths to run the gate chain, found {chain_calls}")
     assert completions == chain_calls, (
@@ -109,7 +112,8 @@ def test_builder_completion_chains_all_call_the_gate():
 
 
 def test_the_gate_records_a_lesson_so_the_retry_is_grounded():
-    src = io.open(os.path.join(ROOT, "goose_runner.py"), encoding="utf-8").read()
+    # After chain rebase_godfiles S20, _no_hollow_gate lives in the seam file.
+    src = io.open(os.path.join(ROOT, "goose_runner_lib", "completion.py"), encoding="utf-8").read()
     body = src.split("def _no_hollow_gate(")[1].split("\ndef ")[0]
     assert 'record_lesson(' in body and '"no_hollow"' in body, (
         "a blocked build that teaches the builder nothing will just be rebuilt hollow")

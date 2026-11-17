@@ -35,12 +35,30 @@ concurrency:
   # only re-burns the same GraphQL quota. Bursts of build PRs used to queue
   # N identical sweeps and exhaust the installation rate limit, which fails the
   # job outright and leaves every PR unlabelled (a silent total gate outage).
-  cancel-in-progress: true
+  #
+  # FU-448 MIRROR, 2026-11-17. This line used to read `cancel-in-progress: true`
+  # on the same "a cancelled sweep is superseded by an identical newer one, so
+  # collapsing a burst loses nothing" reasoning. auto-merge.yml already proved
+  # that reasoning false in STEADY STATE (2026-09-24): the successor is itself
+  # cancelled before it finishes, so a sustained burst of build PRs + the 6h
+  # cron collapses to NOTHING rather than to one sweep -- which is exactly the
+  # drain-stall observed here (no successful pr-triage run since 2026-11-08,
+  # every triage bucket at 0, the whole open backlog UNLABELLED). `false` keeps
+  # at most one run in progress plus one pending and a newer trigger supersedes
+  # the PENDING one, so a burst still coalesces -- but to ONE COMPLETED SWEEP
+  # instead of none. Utilisation is well under 1 (one sweep per ~6h cron + the
+  # occasional build-PR push, each << the 25-min budget below), so the queue is
+  # stable: this does not trade starvation for an unbounded backlog.
+  cancel-in-progress: false
 
 jobs:
   triage:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # Raised 8 -> 25 (2026-11-17): the unlabelled-first sweep (PR_TRIAGE_UNLABELED_FIRST
+    # below) labels the older backlog remainder a full page at a time, which needs
+    # more wall-clock than the old newest-300 re-sweep did. PR_TRIAGE_DEADLINE_SEC
+    # stops the tool itself well inside this, leaving margin for the digest write.
+    timeout-minutes: 25
     steps:
       # Base-repo checkout (pull_request_target context); we never execute PR code.
       - uses: actions/checkout@v7
@@ -50,10 +68,21 @@ jobs:
       - name: Triage open autonomous-build PRs (read-only -- labels + digest)
         env:
           GH_TOKEN: ${{ github.token }}
-          # Self-imposed budget, comfortably inside timeout-minutes below. A job
+          # Self-imposed budget, comfortably inside timeout-minutes above. A job
           # killed by the RUNNER writes no digest and no summary; a tool that
           # stops itself writes both. See tools/pr_triage.py DEADLINE_SEC.
-          PR_TRIAGE_DEADLINE_SEC: "390"
+          # Raised 390 -> 1300 (2026-11-17): well inside the 25-min timeout with
+          # margin for the digest write, so each run labels as much of the
+          # unlabelled backlog as it can before stopping itself.
+          PR_TRIAGE_DEADLINE_SEC: "1300"
+          # UNLABELLED-FIRST SWEEP (2026-11-17, default ON). At backlog scale
+          # (~3,843 open build PRs) a full re-sweep of the newest ~300 can never
+          # reach the older ~3,500, so the triage->auto-merge drain stalls with
+          # the whole backlog unlabelled. This flag makes the primary query fetch
+          # only PRs that lack all four triage: labels, so each run shrinks the
+          # unlabelled set until the backlog is drained; set to "0" to revert to
+          # the full-population query. See tools/pr_triage.py PR_TRIAGE_UNLABELED_FIRST.
+          PR_TRIAGE_UNLABELED_FIRST: "1"
         # -u is not cosmetic. stdout here is a PIPE, so it is block buffered by
         # default, and the two 8-minute timeout kills on 2026-07-28 (06:11Z,
         # 06:23Z) discarded every line the tool had printed -- 16 minutes of work

@@ -62,10 +62,9 @@ exactly as 0006 does; sqlite (CI/dev) keeps the plain IF NOT EXISTS path.
 
 Additive and reversible -- no column change, EXPAND-ONLY / GREEN.
 
-PROD-SCHEMA CHANGE: this is a schema migration and requires chairman review
-before it is applied/deployed. It is low-risk (additive, CONCURRENTLY-created on
-prod, trivially reversible) but it IS a prod-schema change. Do not run it against
-any live DB without that review.
+Authority note (authority.json, 2026-09-01): prod_deploy_class_b is PEER-CLEARABLE
+via _tools/peer_review.py when _tools/migration_content_class.py reports GREEN
+(additive indexes only; RED or UNKNOWN migrations remain FOREVER_HELD).
 """
 from alembic import op
 

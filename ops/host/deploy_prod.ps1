@@ -87,7 +87,9 @@ param(
     [string]$App = "mcplookup",
     [string]$BaseUrl = "https://mcprisky.io",
     [int]$PollSeconds = 120,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$DecoupleClassA,
+    [string]$ProdSha = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -181,11 +183,46 @@ try {
 
     $head = (git rev-parse HEAD).Trim()
     if ($head -ne $Sha) { Die "worktree HEAD $head != requested $Sha" }
+
+    $decoupleTool = "D:\zo\Zocomputer Agents\_tools\decoupled_release_plan.py"
+    $pinnedArg = ""
+    if ($DecoupleClassA) {
+        if (-not $ProdSha) {
+            try {
+                $verResp = Invoke-RestMethod -Uri ($BaseUrl + "/version") -TimeoutSec 15
+                $ProdSha = ($verResp.git_sha).Trim()
+            } catch {
+                Die "-DecoupleClassA could not read $BaseUrl/version: $($_.Exception.Message)"
+            }
+        }
+        if ($ProdSha -notmatch '^[0-9a-f]{40}$') { Die "-DecoupleClassA requires 40-char -ProdSha (got '$ProdSha')" }
+        if (-not (Test-Path $decoupleTool)) { Die "decoupled_release_plan.py not found at $decoupleTool -- refusing fail-closed" }
+        $planJson = & python $decoupleTool --repo $Repo --prod-sha $ProdSha --target-sha $Sha --json
+        if ($LASTEXITCODE -ne 0) { Die "decoupled_release_plan failed rc=$LASTEXITCODE -- refusing to decouple" }
+        $planObj = $planJson | ConvertFrom-Json
+        if (-not $planObj.class_a_decouple.eligible) {
+            Die ("decoupled_release_plan REFUSED Class-A decouple: " + ($planObj.class_a_decouple.blockers -join ","))
+        }
+        Say "DECOUPLE-CLASS-A ELIGIBLE: restoring migrations/ from $ProdSha into disposable worktree"
+        & git checkout $ProdSha -- migrations
+        if ($LASTEXITCODE -ne 0) { Die "git checkout $ProdSha -- migrations failed rc=$LASTEXITCODE" }
+        $expectedMig = (& git -C $Repo rev-parse "${ProdSha}:migrations").Trim()
+        & git -c user.email="release-decouple@local" -c user.name="DecoupleRelease" commit --no-verify -m "release(decouple-class-a): pin migrations to $ProdSha for $Sha" | Out-Null
+        $actualMig = (& git rev-parse 'HEAD:migrations').Trim()
+        if ($actualMig -ne $expectedMig) { Die "Pinned migrations tree $actualMig != expected $expectedMig -- aborting" }
+        $pinnedArg = $ProdSha
+        Say "Verified HEAD:migrations == $actualMig (Class-A no-op for alembic upgrade head)"
+    }
+
     $tree = (git rev-parse 'HEAD^{tree}').Trim()
     $buildTime = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     Say "head=$head tree=$tree build_time=$buildTime"
-    Say "release_command = 'alembic upgrade head' WILL run against the prod moat PG."
+    if ($pinnedArg) {
+        Say "release_command = 'alembic upgrade head' is a PINNED CLASS-A NO-OP (migrations == $pinnedArg)."
+    } else {
+        Say "release_command = 'alembic upgrade head' WILL run against the prod moat PG."
+    }
 
     $deployCmd = "flyctl deploy --app $App --yes --build-arg GIT_SHA=$Sha --build-arg BUILD_TIME=$buildTime"
     Say "DEPLOY COMMAND: $deployCmd"

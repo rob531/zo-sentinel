@@ -498,13 +498,24 @@ def live_quality_map() -> str:
     return '\n'.join(parts)
 
 
+def live_prod_spine_map_section() -> str:
+    """5th Layer-1 section: deployed Fly mcprisky.io/spine/health + /version truth ($0)."""
+    try:
+        from zo_sentinel.live_spine_source import live_prod_spine_map
+        return live_prod_spine_map()
+    except Exception as e:
+        log.debug("live_prod_spine_map unavailable: %s", e)
+        return "## Live Prod Spine (mcprisky.io)\n- unavailable (UNKNOWN)\n"
+
+
 def assemble_layer1_context() -> dict[str, str]:
     """Returns a dict of prompt-ready sections. Generator inserts by key."""
     return {
-        "product_spec":  load_product_spec(),
-        "wiring_map":    live_wiring_map(),
-        "gaps_map":      live_gaps_map(),
-        "quality_map":   live_quality_map(),
+        "product_spec":   load_product_spec(),
+        "wiring_map":     live_wiring_map(),
+        "gaps_map":       live_gaps_map(),
+        "quality_map":    live_quality_map(),
+        "prod_spine_map": live_prod_spine_map_section(),
     }
 
 

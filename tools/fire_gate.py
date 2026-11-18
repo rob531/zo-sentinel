@@ -614,6 +614,10 @@ AUTHORITY_PATHS = (
     pathlib.Path(r"D:\zo\Zocomputer Agents\_tools\authority.py"),
     pathlib.Path(__file__).resolve().parent / "authority.py",
 )
+DECOUPLE_PLANNER_PATHS = (
+    pathlib.Path(r"D:\zo\Zocomputer Agents\_tools\decoupled_release_plan.py"),
+    pathlib.Path(__file__).resolve().parent / "decoupled_release_plan.py",
+)
 
 
 def migration_tree_sha(repo: str, sha: str) -> str | None:
@@ -679,6 +683,66 @@ def class_b_authority(peer_ref: str | None) -> dict:
                 "detail": f"authority.py could not be consulted: {exc}"}
 
 
+def resolve_decouple_planner() -> "pathlib.Path | None":
+    for cand in DECOUPLE_PLANNER_PATHS:
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def eval_decouple_plan(repo_path: str, prod_sha: str, target_sha: str) -> dict:
+    """Ask decoupled_release_plan whether migrations/ may be safely pinned to prod_sha.
+    Fail-closed on error or missing tool."""
+    tool = resolve_decouple_planner()
+    if tool is None:
+        return {
+            "overall_migration_content_class": "UNKNOWN",
+            "class_a_decouple": {"eligible": False, "blockers": ["PLANNER_UNAVAILABLE"]},
+            "error": "decoupled_release_plan.py not found",
+        }
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(tool), "--repo", repo_path,
+             "--prod-sha", prod_sha, "--target-sha", target_sha, "--json"],
+            capture_output=True, text=True, timeout=180,
+        )
+        if proc.returncode != 0:
+            return {
+                "overall_migration_content_class": "UNKNOWN",
+                "class_a_decouple": {"eligible": False, "blockers": [f"PLANNER_RC_{proc.returncode}"]},
+                "error": (proc.stderr or proc.stdout or "")[-400:],
+            }
+        return json.loads(proc.stdout)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "overall_migration_content_class": "UNKNOWN",
+            "class_a_decouple": {"eligible": False, "blockers": ["PLANNER_EXCEPTION"]},
+            "error": str(exc),
+        }
+
+
+def apply_decouple(
+    verdict: str,
+    mclass: dict,
+    plan: dict,
+    *,
+    requested: bool,
+) -> "tuple[str, bool, bool, str]":
+    """Pure decision helper for `--decouple-class-a`. Fail-closed!
+    Returns (verdict, decoupled_to_class_a, restaged_by_decouple, detail)."""
+    if not requested or mclass.get("klass") != "B":
+        return verdict, False, False, "not-engaged"
+    ca = plan.get("class_a_decouple") if isinstance(plan, dict) else None
+    eligible = isinstance(ca, dict) and ca.get("eligible") is True
+    if not eligible or (isinstance(plan, dict) and plan.get("error")):
+        blockers = (ca or {}).get("blockers") if isinstance(ca, dict) else ["INVALID_PLAN"]
+        return "RESTAGE", False, True, f"REFUSED Class-A decouple (fail-closed): {blockers}"
+    return verdict, True, False, "ELIGIBLE: migrations/ safe to pin to prod_sha; alembic upgrade head is a no-op"
+
+
 def apply_class(verdict: str, mclass: dict, auth: dict) -> "tuple[str, bool]":
     """Fold the class + class-B authority into the delta verdict. Pure, so it is testable
     without a network, and so the stricter asymmetry above is one readable expression.
@@ -717,6 +781,10 @@ def main() -> int:
     ap.add_argument("--peer-ref", default=None, dest="peer_ref",
                     help="peer-decision slug cited to authority.py for the\n"
                          "prod_deploy_class_b clause on a Class-B target.")
+    ap.add_argument("--decouple-class-a", action="store_true", dest="decouple_class_a",
+                    help="when Class B is held only by an uncoupled migration, consult\n"
+                         "decoupled_release_plan.py; if eligible=true, allow Class-A deploy\n"
+                         "with migrations/ pinned to --staged (fail-closed on coupling/error).")
     ap.add_argument("--no-class-gate", action="store_true", dest="no_class",
                     help="skip the CLASS-B AUTHORITY gate. The delta question stays\n"
                          "answerable when the GitHub trees API is unreachable; the\n"
@@ -742,8 +810,29 @@ def main() -> int:
         print("verdict=ERROR -- do NOT read this as SAFE; re-run or let the sentinel re-verify.")
         return 2
 
-    hits = [(p, why) for p in changed if (why := classify(p, files, prefixes))]
-    verdict = "RESTAGE" if hits else "SAFE"
+    if a.no_class:
+        mclass = {"klass": "SKIPPED", "source": "skipped",
+                  "detail": "--no-class-gate: the migration class was NOT computed",
+                  "baseline_tree": None, "head_tree": None}
+    else:
+        mclass = migration_class(a.repo, a.staged, head)
+
+    decouple_plan = {}
+    decouple_detail = "not-engaged"
+    decoupled_to_class_a = False
+    restaged_by_decouple = False
+    if a.decouple_class_a and mclass.get("klass") == "B":
+        decouple_plan = eval_decouple_plan(a.repo_path or _default_repo_path(), a.staged, head)
+        _, decoupled_to_class_a, restaged_by_decouple, decouple_detail = apply_decouple(
+            "SAFE", mclass, decouple_plan, requested=True
+        )
+
+    effective_changed = (
+        [p for p in changed if not p.replace("\\", "/").startswith("migrations/")]
+        if decoupled_to_class_a else changed
+    )
+    hits = [(p, why) for p in effective_changed if (why := classify(p, files, prefixes))]
+    verdict = "RESTAGE" if (hits or restaged_by_decouple) else "SAFE"
 
     if a.no_ci:
         ci = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
@@ -753,13 +842,15 @@ def main() -> int:
                        else "main")
     verdict, ci_forced = apply_ci(verdict, ci)
 
-    if a.no_owner:
+    if decoupled_to_class_a:
+        owner = {"verdict": "NOT-ENGAGED", "rc": None, "source": "decoupled-class-A",
+                 "detail": "Class-A decouple pins migrations/ to --staged; no migration runs",
+                 "migrations": []}
+    elif a.no_owner:
         owner = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
                  "detail": "--no-owner-probe: migration ownership was NOT consulted",
                  "migrations": migration_paths_in_delta(changed)}
     else:
-        # The probe's --repo is a local clone PATH, not an owner/name slug. Passing
-        # the slug yielded rc=128 and, before the probe was fixed, a false GREEN.
         owner_repo_path = a.repo_path or _default_repo_path()
         owner = migration_owner(owner_repo_path, a.staged, head, changed)
     verdict, owner_forced = apply_owner(verdict, owner)
@@ -768,21 +859,16 @@ def main() -> int:
         boot = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
                 "detail": "--no-boot-proof: the candidate's boot proof was NOT consulted"}
     else:
-        # The sha that will actually be DEPLOYED is the target head, not the staged
-        # sha -- deploy_prod.ps1 builds from whatever it is handed. Ask about that.
         boot = boot_proof(a.repo_path or _default_repo_path(), head)
     verdict, boot_forced = apply_boot(verdict, boot)
 
     if a.no_class:
-        mclass = {"klass": "SKIPPED", "source": "skipped",
-                  "detail": "--no-class-gate: the migration class was NOT computed",
-                  "baseline_tree": None, "head_tree": None}
         auth = {"verdict": "SKIPPED", "rc": None, "source": "skipped",
                 "detail": "--no-class-gate: prod_deploy_class_b was NOT consulted"}
+    elif decoupled_to_class_a:
+        auth = {"verdict": "DECOUPLED-TO-CLASS-A", "rc": 0, "source": "decoupled-class-A",
+                "detail": decouple_detail}
     else:
-        # Class is the migrations tree at the BASELINE (`--staged`, the running/vetted
-        # sha the owner probe also treats as prod) vs the target head that will deploy.
-        mclass = migration_class(a.repo, a.staged, head)
         auth = (class_b_authority(a.peer_ref) if mclass.get("klass") == "B"
                 else {"verdict": "NOT-ENGAGED", "rc": None, "source": "class-A",
                       "detail": "Class A: migrations tree identical, no clause to clear"})
@@ -800,6 +886,11 @@ def main() -> int:
             "boot_proof": boot, "restaged_by_boot": boot_forced,
             "migration_class": mclass, "class_b_authority": auth,
             "restaged_by_class": class_forced,
+            "decouple_class_a": {"requested": a.decouple_class_a,
+                                 "decoupled": decoupled_to_class_a,
+                                 "restaged_by_decouple": restaged_by_decouple,
+                                 "detail": decouple_detail,
+                                 "plan_summary": decouple_plan.get("class_a_decouple")},
         }, indent=2))
     else:
         print(f"staged   : {a.staged}")

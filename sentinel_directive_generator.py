@@ -263,6 +263,7 @@ def build_prompt(schema: str, failed: list, failures_detail: str,
     wiring_map   = layer1.get('wiring_map',   '[wiring_map unavailable]')
     gaps_map     = layer1.get('gaps_map',     '[gaps_map unavailable]')
     quality_map  = layer1.get('quality_map',  '[quality_map unavailable]')
+    prod_spine_map = layer1.get('prod_spine_map', '[prod_spine_map unavailable]')
     return f"""You are the Sentinel Directive Generator for ZO-SENTINEL.
 
 Your job: analyze the current build state and generate a JSON array of
@@ -293,7 +294,9 @@ The heuristic is: BAD SIGNAL = SAME SIGNAL across all inputs.
 
 {quality_map}
 
-## How to use the four sections above
+{prod_spine_map}
+
+## How to use the sections above
 
 - PRODUCT_SPEC.md is the target v1.0 definition. Propose directives that
   close gaps IT lists. Do NOT propose items explicitly excluded from v1.0.
@@ -756,7 +759,8 @@ def run_cycle():
         layer1 = {"product_spec": "[Layer 1 unavailable]",
                   "wiring_map": "[Layer 1 unavailable]",
                   "gaps_map": "[Layer 1 unavailable]",
-                  "quality_map": "[Layer 1 unavailable]"}
+                  "quality_map": "[Layer 1 unavailable]",
+                  "prod_spine_map": "[Layer 1 unavailable]"}
     prompt = build_prompt(schema, failed, failures_detail, reg_summary, queue,
                           layer1=layer1)
     log.info("Prompt: %d chars", len(prompt))

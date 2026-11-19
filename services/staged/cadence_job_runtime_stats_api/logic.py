@@ -1,11 +1,12 @@
-"""Logic and read-only API for cadence job runtime statistics."""
+"""Read-only runtime statistics for cadence job runs."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from math import ceil
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,11 +14,7 @@ from app.db import get_session
 from app.models import CadenceJobRun
 
 
-router = APIRouter(prefix="/api/cadence/jobs", tags=["cadence"])
-
-
-def _clamp_days(days: int) -> int:
-    return max(1, min(90, int(days)))
+router = APIRouter(prefix="/api", tags=["cadence"])
 
 
 def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
@@ -28,58 +25,67 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value.astimezone(timezone.utc)
 
 
-def _duration_seconds(row: CadenceJobRun) -> Optional[float]:
-    started_at = _as_utc(row.started_at)
-    finished_at = _as_utc(row.finished_at)
-    if started_at is None or finished_at is None:
-        return None
-    return max(0.0, (finished_at - started_at).total_seconds())
+def _duration_seconds(started_at: datetime, finished_at: datetime) -> float:
+    start = _as_utc(started_at)
+    finish = _as_utc(finished_at)
+    if start is None or finish is None:
+        return 0.0
+    return max(0.0, (finish - start).total_seconds())
 
 
-def _percentile_95(values: List[float]) -> Optional[float]:
+def _p95(values: List[float]) -> float:
     if not values:
-        return None
+        return 0.0
     ordered = sorted(values)
-    # Nearest-rank percentile: ceil(0.95 * n) - 1.
-    rank = max(1, (95 * len(ordered) + 99) // 100)
-    return ordered[rank - 1]
+    index = max(0, ceil(0.95 * len(ordered)) - 1)
+    return float(ordered[index])
 
 
-def read_job_runtime_stats(session: Session, days: int) -> Dict[str, Any]:
-    """Return runtime statistics for cadence jobs over the requested window."""
-    window_days = _clamp_days(days)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
-    rows = session.execute(
-        select(CadenceJobRun).where(
-            CadenceJobRun.started_at.is_not(None),
-            CadenceJobRun.started_at >= cutoff,
-        )
-    ).scalars().all()
+def read_job_runtime_stats(
+    session: Session,
+    days: int,
+    job: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return aggregate execution statistics for recent cadence job runs."""
+    days = max(1, min(90, int(days)))
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
-    grouped: Dict[str, List[CadenceJobRun]] = {}
+    statement = select(
+        CadenceJobRun.job,
+        CadenceJobRun.status,
+        CadenceJobRun.started_at,
+        CadenceJobRun.finished_at,
+        CadenceJobRun.rows_affected,
+    ).where(CadenceJobRun.started_at >= cutoff)
+
+    rows = session.execute(statement).all()
+
+    grouped: Dict[str, List[Any]] = {}
     for row in rows:
-        grouped.setdefault(row.job or "unknown", []).append(row)
+        if job is not None and row.job != job:
+            continue
+        grouped.setdefault(row.job, []).append(row)
 
     jobs: List[Dict[str, Any]] = []
-    for job, job_rows in grouped.items():
-        completed_durations: List[float] = []
+    for job_name, job_rows in sorted(grouped.items()):
+        runs = len(job_rows)
         ok_runs = 0
         failed_runs = 0
         incomplete_runs = 0
+        durations: List[float] = []
         total_rows_affected = 0
 
         for row in job_rows:
-            duration = _duration_seconds(row)
-            if duration is None:
+            status = (row.status or "").strip().lower()
+            if status in {"ok", "success", "succeeded"}:
+                ok_runs += 1
+            elif status in {"failed", "failure", "error"}:
+                failed_runs += 1
+
+            if row.finished_at is None:
                 incomplete_runs += 1
             else:
-                completed_durations.append(duration)
-
-            status = str(row.status or "").strip().lower()
-            if status in {"ok", "success", "succeeded", "completed", "complete", "passed"}:
-                ok_runs += 1
-            elif status in {"failed", "failure", "error", "errored"}:
-                failed_runs += 1
+                durations.append(_duration_seconds(row.started_at, row.finished_at))
 
             if row.rows_affected is not None:
                 total_rows_affected += int(row.rows_affected)
@@ -88,51 +94,48 @@ def read_job_runtime_stats(session: Session, days: int) -> Dict[str, Any]:
             job_rows,
             key=lambda row: _as_utc(row.started_at) or datetime.min.replace(tzinfo=timezone.utc),
         )
-        runs = len(job_rows)
-        failure_rate = failed_runs / runs if runs else 0.0
+        latest_started = _as_utc(latest.started_at)
 
         jobs.append(
             {
-                "job": job,
+                "job": job_name,
                 "runs": runs,
                 "ok_runs": ok_runs,
                 "failed_runs": failed_runs,
                 "incomplete_runs": incomplete_runs,
-                "failure_rate": failure_rate,
+                "failure_rate": (failed_runs / runs) if runs else 0.0,
                 "avg_duration_seconds": (
-                    sum(completed_durations) / len(completed_durations)
-                    if completed_durations
-                    else None
+                    sum(durations) / len(durations) if durations else 0.0
                 ),
-                "p95_duration_seconds": _percentile_95(completed_durations),
+                "p95_duration_seconds": _p95(durations),
                 "total_rows_affected": total_rows_affected,
                 "last_status": latest.status,
-                "last_started_at": latest.started_at,
+                "last_started_at": latest_started.isoformat() if latest_started else None,
             }
         )
 
-    jobs.sort(key=lambda item: item["job"])
     return {
-        "days": window_days,
+        "days": days,
         "jobs": jobs,
-        "generated_at": datetime.now(timezone.utc),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-@router.get("/runtime-stats")
-def get_runtime_stats(
-    days: int = Query(7),
+@router.get("/cadence/jobs/runtime-stats")
+def runtime_stats(
+    days: int = Query(7, ge=1, le=90),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     return read_job_runtime_stats(session, days)
 
 
-@router.get("/{job}/runtime-stats")
-def get_job_runtime_stats(
+@router.get("/cadence/jobs/{job}/runtime-stats")
+def job_runtime_stats(
     job: str,
-    days: int = Query(7),
+    days: int = Query(7, ge=1, le=90),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    result = read_job_runtime_stats(session, days)
-    result["jobs"] = [item for item in result["jobs"] if item["job"] == job]
+    result = read_job_runtime_stats(session, days, job=job)
+    if not result["jobs"]:
+        raise HTTPException(status_code=404, detail="Cadence job not found")
     return result

@@ -70,6 +70,21 @@ def spawn_detached(args, out_path):
     return subprocess.Popen([PYEXE, SCRIPT] + args, stdout=out, stderr=subprocess.STDOUT,
                             creationflags=flags)
 
+def launch_guard(cwd=None):
+    """Spawn THIS watchdog's main() loop as a DETACHED background process and return
+    at once (the caller must not block on the guard's own polling loop).
+
+    This is the wiring point: weekly_rescore's ph_fire calls it right after a fire so
+    the load->running boot phase is always watched, instead of the guard sitting dark.
+    The guard exits on its own once the instance reaches 'running' or nothing is live.
+    On a wedge it refires via fire-all; that refire is marked WEDGE_GUARD_REFIRE so
+    ph_fire does NOT spawn a second guard -- this one keeps watching across refires."""
+    flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    out = open(LOG, "a", encoding="utf-8")
+    return subprocess.Popen([PYEXE, os.path.abspath(__file__)],
+                            stdout=out, stderr=subprocess.STDOUT,
+                            creationflags=flags, cwd=cwd)
+
 def main():
     refires = 0
     log(f"wedge_guard start (WEDGE_MIN={WEDGE_MIN}m, MAX_REFIRES={MAX_REFIRES})")
@@ -113,7 +128,10 @@ def main():
                           f"destroyed by wedge_guard at {now()}; run closed for refire.")
             kill_collect_watchers()
             log("refiring via fire-all (managed pipeline)")
-            r = subprocess.run([PYEXE, SCRIPT] + FIRE_ARGS, capture_output=True, text=True, timeout=1800)
+            # Mark the refire so ph_fire does not spawn a SECOND guard: this guard
+            # keeps watching across refires (newest_open_run picks up the new run).
+            refire_env = {**os.environ, "WEDGE_GUARD_REFIRE": "1"}
+            r = subprocess.run([PYEXE, SCRIPT] + FIRE_ARGS, capture_output=True, text=True, timeout=1800, env=refire_env)
             tail = (r.stdout or "")[-500:] + (r.stderr or "")[-300:]
             log(f"fire-all rc={r.returncode} tail: {tail}")
             if r.returncode != 0:

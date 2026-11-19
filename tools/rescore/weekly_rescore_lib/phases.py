@@ -300,6 +300,21 @@ def ph_fire(run: Run, args) -> None:
              machine_id=best.get("machine_id"), fired_at=utcnow())
     log(f"fire OK: instance={iid} {best.get('gpu_name')} ${dph}/hr "
         f"(cap ${_eff_cost_cap(run, args):.2f}, deadline {_eff_deadline(run, args)}m)")
+    # Boot-phase watchdog. In the SPLIT scheduled path (`--phase fire-all` then a
+    # separate `--phase collect-all` ~4h later) the load->running transition is
+    # otherwise unwatched until collect-all starts; a machine wedged in `loading`
+    # past ~15m rarely recovers (chairman policy 2026-07-17). wedge_guard watches
+    # that gap and refires up to 3x. `--run` watches inline, so no guard there; a
+    # wedge_guard-driven refire sets WEDGE_GUARD_REFIRE so we do not spawn a second
+    # guard (the existing one keeps watching across refires). Spawn failure must
+    # never fail the fire -- the inline wedge-grace check in collect-all still binds.
+    if getattr(args, "phase", None) == "fire-all" and not os.environ.get("WEDGE_GUARD_REFIRE"):
+        try:
+            import wedge_guard
+            wedge_guard.launch_guard(cwd=str(HERE))
+            log("wedge_guard: boot-phase watchdog spawned (detached)")
+        except Exception as e:  # noqa: BLE001
+            log(f"wedge_guard: spawn failed ({e.__class__.__name__}: {e}); boot unguarded")
 
 
 def _results_state(run: Run, pat: str) -> str:

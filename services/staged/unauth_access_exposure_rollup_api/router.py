@@ -1,11 +1,5 @@
-"""router.py -- the unauthenticated access exposure rollup HTTP surface.
-
-Exposes `router` and delegates all data access to the service's real
-SQLAlchemy-backed logic layer.
-"""
+"""HTTP surface for the unauthenticated-access exposure rollup."""
 from __future__ import annotations
-
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -29,7 +23,7 @@ class WorstServer(BaseModel):
     name: str | None = None
     risk_tier: str | None = None
     unauth_access: str
-    updated_at: datetime | None = None
+    updated_at: str | None = None
 
 
 class UnauthAccessRollupResponse(BaseModel):
@@ -42,9 +36,9 @@ class UnauthAccessRollupResponse(BaseModel):
     "/exposure/unauth-access-rollup",
     response_model=UnauthAccessRollupResponse,
 )
-def get_unauth_access_rollup_endpoint(
+def get_unauth_access_exposure_rollup(
     db: Session = Depends(get_session),
     limit: int = Query(default=25, ge=1, le=100),
 ) -> UnauthAccessRollupResponse:
     rollup = get_unauth_access_rollup(db, limit=limit)
-    return UnauthAccessRollupResponse.model_validate(rollup)
+    return UnauthAccessRollupResponse.parse_obj(rollup)

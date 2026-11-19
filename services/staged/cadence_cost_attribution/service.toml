@@ -1,0 +1,12 @@
+[service]
+name = "cadence_cost_attribution"
+import_path = "services.active.cadence_cost_attribution.router"
+prefix = "/cadence-cost-attribution"
+tag = "cadence_cost_attribution"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by zo_sentinel/publisher/auto_stage.py for a root-level builder
+# router. import_path names services.ACTIVE because that is where router.py
+# lives AFTER promote_staged_to_active passes it.

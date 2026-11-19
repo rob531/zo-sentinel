@@ -1,9 +1,32 @@
-"""Placeholder router co-emitted with this service's manifest so its
-declared import_path (services.active.cadence_job_runtime_stats_api.router) resolves to a real, importable module in the
-SAME change (FU-447). A manifest that names a module the change does not
-ship is an orphan the promoter cannot read and a guaranteed
-ModuleNotFoundError at mount. The build lane's router.py pass replaces
-this stand-in with the data-layer-backed surface."""
-from fastapi import APIRouter
+"""HTTP surface for cadence job runtime statistics."""
+from __future__ import annotations
 
-router = APIRouter()
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from app.db import get_session
+
+from .logic import read_job_runtime_stats
+
+router = APIRouter(prefix="/api/cadence/jobs", tags=["cadence"])
+
+
+@router.get("/runtime-stats")
+def get_runtime_stats(
+    days: int = Query(default=7, ge=1, le=90),
+    db: Session = Depends(get_session),
+) -> dict:
+    return read_job_runtime_stats(db, days)
+
+
+@router.get("/{job}/runtime-stats")
+def get_job_runtime_stats(
+    job: str,
+    days: int = Query(default=7, ge=1, le=90),
+    db: Session = Depends(get_session),
+) -> dict:
+    result = read_job_runtime_stats(db, days)
+    result["jobs"] = [
+        job_stats for job_stats in result.get("jobs", []) if job_stats.get("job") == job
+    ]
+    return result

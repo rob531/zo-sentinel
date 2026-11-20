@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waivers, Exports &amp; Keys — MCPRisky</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--mut:#a99cc7;--cyan:#34e3ff;--gold:#ecdcae;
+        --LOW:#5cf0a0;--MEDIUM:#ffd84a;--HIGH:#ff9d54;--CRITICAL:#ff6f9a}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'JetBrains Mono','Courier New',monospace;font-size:13.5px;line-height:1.5;
+       background:radial-gradient(900px 460px at 80% -28%,rgba(86,52,150,.16),transparent 62%),var(--bg) fixed}
+  header{padding:.75rem 1.3rem;border-bottom:1px solid var(--line);background:#0b0814;display:flex;gap:.9rem;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  header h1{font-size:1.05rem;margin:0;font-weight:800} header h1 span{color:var(--cyan)}
+  header nav{display:flex;gap:.75rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
+  a{color:var(--cyan);text-decoration:none}
+  main{max-width:1040px;margin:0 auto;padding:1.3rem 1.1rem}
+  h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;margin-top:1rem}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem} @media(max-width:800px){.grid{grid-template-columns:1fr}}
+  label{display:block;font-size:.78rem;color:var(--mut);margin:.55rem 0 .25rem}
+  input,select{width:100%;padding:.55rem .75rem;background:#0d0a16;border:1px solid var(--line);border-radius:8px;color:var(--txt);font-family:inherit;font-size:.86rem}
+  input:focus,select:focus{outline:none;border-color:var(--cyan)}
+  button{padding:.55rem .95rem;background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;border-radius:8px;color:#02141a;font-family:inherit;font-weight:800;cursor:pointer}
+  button.ghost{background:#15101f;color:var(--mut);border:1px solid var(--line)}
+  button.sm{padding:.25rem .6rem;font-size:.74rem}
+  .controls{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.8rem;align-items:center}
+  .row{padding:.6rem .4rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+  .row:last-child{border-bottom:0}
+  .nm{flex:1;min-width:180px} .nm b{display:block;word-break:break-word}
+  .nm span{display:block;color:var(--mut);font-size:.75rem;word-break:break-word}
+  .badge{font-size:.7rem;font-weight:800;padding:.18rem .5rem;border-radius:6px;border:1px solid currentColor;white-space:nowrap}
+  .b-CRITICAL{color:var(--CRITICAL)} .b-HIGH{color:var(--HIGH)} .b-MEDIUM{color:var(--MEDIUM)} .b-LOW{color:var(--LOW)}
+  .secret-box{background:#0b1a14;border:1px solid var(--LOW);border-radius:9px;padding:.75rem 1rem;margin-top:.8rem;color:var(--LOW);word-break:break-all;font-size:.82rem;display:none}
+  .note{font-size:.76rem;color:var(--mut);margin-top:.6rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>MCP<span>Risky</span> · Waivers, Exports &amp; Keys</h1>
+  <nav>
+    <a href="/app">Dashboard →</a>
+    <a href="/app/explore">Explore →</a>
+    <a href="/scan">Scan →</a>
+    <a href="/app/admin">Admin →</a>
+  </nav>
+</header>
+<main>
+  <div class="grid">
+    <div class="panel">
+      <h2>Add Server Watch / Risk Waiver</h2>
+      <label for="wSid">Server ID</label>
+      <input id="wSid" placeholder="e.g. 1214adf3db70382b">
+      <label for="wDec">Decision</label>
+      <select id="wDec">
+        <option value="watching">watching (monitor score drift)</option>
+        <option value="approved">approved (allowed)</option>
+        <option value="approved_with_conditions">approved_with_conditions</option>
+        <option value="waived">waived (risk acceptance)</option>
+        <option value="blocked">blocked</option>
+      </select>
+      <label for="wCond">Scope / Condition (flag, pinned version, environment)</label>
+      <input id="wCond" placeholder="e.g. --read-only pinned to v1.2.0">
+      <label for="wExp">Expiration date (optional)</label>
+      <input id="wExp" type="date">
+      <label for="wReason">Justification</label>
+      <input id="wReason" placeholder="Business need and compensating controls">
+      <div class="controls">
+        <button onclick="saveWatch()">Save entry</button>
+        <span class="note" id="wStatus"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Audit CSV Report Exports</h2>
+      <p class="note">Download verifiable CSV snapshots for compliance reviews or CI policy audits.</p>
+      <label for="eRisk">Filter Portfolio Export by Risk Tier (optional)</label>
+      <select id="eRisk">
+        <option value="">All tiers</option>
+        <option value="CRITICAL">CRITICAL</option>
+        <option value="HIGH">HIGH</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="LOW">LOW</option>
+      </select>
+      <div class="controls">
+        <button onclick="dlPortfolio()">⬇ Portfolio CSV</button>
+      </div>
+      <label for="eSid" style="margin-top:1rem">Single Server 7-Axis CSV</label>
+      <div class="controls">
+        <input id="eSid" placeholder="server_id" style="flex:1">
+        <button class="ghost" onclick="dlServer()">⬇ Server CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Active Watchlist &amp; Scoped Exemptions</h2>
+    <div id="wList"><p class="muted">// loading watchlist &amp; exemptions…</p></div>
+  </div>
+
+  <div class="panel" id="adminPanel">
+    <h2>Admin · Accounts &amp; Service API Keys</h2>
+    <p class="note">Provision local service accounts (password hashed server-side; save shown password immediately) and SHA-256 hashed API keys.</p>
+    <div class="grid">
+      <div>
+        <h3 style="font-size:.9rem;margin:.4rem 0">Create Service / Team Account</h3>
+        <label for="uEmail">Email</label>
+        <input id="uEmail" placeholder="argon-svc@mcprisky.io">
+        <label for="uPass">Password (min 12 chars)</label>
+        <div class="controls" style="margin-top:0">
+          <input id="uPass" type="text" placeholder="Generate or enter >=12 chars" style="flex:1">
+          <button class="ghost sm" type="button" onclick="genPass()">Generate</button>
+        </div>
+        <label for="uOrg">Org ID</label>
+        <input id="uOrg" value="default">
+        <label for="uRole">Role</label>
+        <select id="uRole">
+          <option value="member">member</option>
+          <option value="viewer">viewer</option>
+          <option value="admin">admin</option>
+        </select>
+        <div class="controls"><button onclick="createUser()">Create account</button></div>
+        <div class="secret-box" id="uOut"></div>
+      </div>
+
+      <div>
+        <h3 style="font-size:.9rem;margin:.4rem 0">Issue Service API Key</h3>
+        <label for="kOrg">Org ID</label>
+        <input id="kOrg" value="default">
+        <label for="kLabel">Key Label</label>
+        <input id="kLabel" placeholder="e.g. ci-scanner or argon-eval">
+        <div class="controls"><button onclick="createKey()">Issue API key</button></div>
+        <div class="secret-box" id="kOut"></div>
+        <div id="kList" style="margin-top:.8rem"></div>
+      </div>
+    </div>
+    <div id="uList" style="margin-top:.8rem"></div>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
+async function api(u,o){
+  o=o||{}; const t=await tok();
+  o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
+  const r=await fetch(u,o);
+  if(!r.ok)throw new Error('HTTP '+r.status+': '+(await r.text()).slice(0,180));
+  return r.json();
+}
+
+async function loadWatchlist(){
+  try{
+    const d=await api('/api/watchlist');
+    const items=d.items||[];
+    $('wList').innerHTML=items.map(it=>`<div class="row">
+      <div class="nm"><b><a href="/app/server/${esc(it.server_id)}">${esc(it.server_name||it.server_id)}</a> · ${esc(it.decision)}</b>
+      <span>${it.condition?'condition: '+esc(it.condition)+' · ':''}${it.expires_at?'expires: '+esc(it.expires_at)+' · ':''}${esc(it.reason||'')}</span></div>
+      <span class="badge b-${esc((it.risk_tier||'').toUpperCase())}">${esc(it.risk_tier||'unassessed')}</span>
+      <button class="ghost sm" onclick="delWatch('${esc(it.id)}')">Remove</button></div>`).join('')
+      ||'<p class="muted">// no active watches or exemptions yet</p>';
+  }catch(e){$('wList').innerHTML='<p class="note" style="color:var(--HIGH)">// '+esc(e.message)+'</p>';}
+}
+
+async function saveWatch(){
+  $('wStatus').textContent='// saving…';
+  try{
+    await api('/api/watchlist',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        server_id:$('wSid').value.trim(),
+        decision:$('wDec').value,
+        condition:$('wCond').value.trim(),
+        expires_at:$('wExp').value||null,
+        reason:$('wReason').value.trim()
+      })
+    });
+    $('wStatus').textContent='✓ saved';
+    loadWatchlist();
+  }catch(e){$('wStatus').textContent='// '+e.message;}
+}
+
+async function delWatch(id){
+  try{await api('/api/watchlist/'+encodeURIComponent(id),{method:'DELETE'});loadWatchlist();}
+  catch(e){alert(e.message);}
+}
+
+async function dlFile(url,fname){
+  try{
+    const t=await tok();
+    const r=await fetch(url,{headers:t?{Authorization:'Bearer '+t}:{}});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(await r.blob()); a.download=fname; a.click();
+  }catch(e){alert('Export failed: '+e.message);}
+}
+function dlPortfolio(){
+  const rk=$('eRisk').value;
+  dlFile('/api/export/portfolio.csv'+(rk?'?risk='+encodeURIComponent(rk):''),'mcprisky_portfolio.csv');
+}
+function dlServer(){
+  const sid=$('eSid').value.trim();
+  if(!sid){alert('Enter a server_id first');return;}
+  dlFile('/api/export/server/'+encodeURIComponent(sid)+'.csv',sid+'.csv');
+}
+
+function genPass(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+  const arr=new Uint32Array(20); window.crypto.getRandomValues(arr);
+  $('uPass').value=Array.from(arr,x=>chars[x%chars.length]).join('');
+}
+
+async function loadAdmin(){
+  try{
+    const [ku, uu]=await Promise.all([api('/api/admin/api-keys'), api('/api/admin/users')]);
+    $('kList').innerHTML=(ku.api_keys||[]).map(k=>`<div class="row">
+      <div class="nm"><b>${esc(k.label)}</b><span>org=${esc(k.org_id)} · id=${esc(k.id)}</span></div>
+      <button class="ghost sm" onclick="revokeKey('${esc(k.id)}')">Revoke</button></div>`).join('')||'<p class="note">// no keys issued</p>';
+    $('uList').innerHTML='<h3>Provisioned Local Users ('+(uu.users||[]).length+')</h3>'+(uu.users||[]).map(u=>`<div class="row">
+      <div class="nm"><b>${esc(u.email)}</b><span>org=${esc(u.org_id)} · role=${esc(u.role)}</span></div></div>`).join('');
+  }catch(e){
+    $('adminPanel').innerHTML='<h2>Admin · Accounts &amp; Service API Keys</h2><p class="note">// admin access required ('+esc(e.message)+')</p>';
+  }
+}
+
+async function createUser(){
+  const email=$('uEmail').value.trim(), password=$('uPass').value;
+  try{
+    const r=await api('/api/admin/users',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password,org_id:$('uOrg').value.trim()||'default',role:$('uRole').value})
+    });
+    $('uOut').style.display='block';
+    $('uOut').textContent='Account created — save credentials now:\nemail='+r.email+'\npassword='+password+'\norg='+r.org_id+' role='+r.role;
+    loadAdmin();
+  }catch(e){alert('Create account failed: '+e.message);}
+}
+
+async function createKey(){
+  try{
+    const r=await api('/api/admin/api-keys',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({org_id:$('kOrg').value.trim()||'default',label:$('kLabel').value.trim()})
+    });
+    $('kOut').style.display='block';
+    $('kOut').textContent='Save this API key now (shown once):\n'+r.api_key;
+    loadAdmin();
+  }catch(e){alert('Issue API key failed: '+e.message);}
+}
+
+async function revokeKey(id){
+  try{await api('/api/admin/api-keys/'+encodeURIComponent(id),{method:'DELETE'});loadAdmin();}
+  catch(e){alert(e.message);}
+}
+
+function boot(){loadWatchlist();loadAdmin();}
+const CLERK_PK="__CLERK_PK__";
+function clerkHost(pk){try{return atob(pk.split('_')[2]).replace(/\$+$/,'');}catch(e){return '';}}
+if(CLERK_PK.indexOf("pk_")===0&&clerkHost(CLERK_PK)){
+  const s=document.createElement('script');
+  s.setAttribute('data-clerk-publishable-key',CLERK_PK);
+  s.src='https://'+clerkHost(CLERK_PK)+'/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+  s.onload=async()=>{await window.Clerk.load();boot();};
+  document.head.appendChild(s);
+}else{boot();}
+</script>
+</body>
+</html>

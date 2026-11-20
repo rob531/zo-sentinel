@@ -32,7 +32,7 @@ COPY zo_sentinel/decide /srv/zo_sentinel/decide
 # (7 failures live on /spine/health since v64, 2026-07-25). Keep this list in sync
 # with services/active/*/ -- a service dir with a root <name>.py MUST be COPY'd.
 COPY entity_report_exporter.py org_api_key_manager.py org_entity_search_api.py overview_dashboard_api.py server_axis_scores_summary_router.py threat_intel_summary_api.py verdict_watchlist_service.py /srv/
-COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html server_threat_intel_view.html /srv/
+COPY perspective_tree_view.html ask_search_view.html roadmap_announcement.html scan_view.html server_threat_intel_view.html dispute_view.html mcp_exemptions_dashboard_view.html /srv/
 COPY migrations /srv/migrations
 COPY alembic.ini /srv/alembic.ini
 # FU-239: operational tools must be IN the image, not only in the repo.

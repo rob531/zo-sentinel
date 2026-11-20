@@ -197,8 +197,20 @@ def scan(root: str, only_tracked: bool = True) -> list:
 # ------------------------------------------------------------------ the oracle
 
 
-# [c191] top-level import/def/class/decorator -- see is_module_shaped() below.
-_MODULE_SHAPE_RE = __import__("re").compile(r"^(import |from |def |class |@|async def )")
+# [c234, 2026-11-20 improvement-loop] SINGLE SOURCE for "is this staged file a module
+# body?". is_module_shaped() below and tools/staged_module_shape_census.py were BOTH
+# written for the same c191 incident (cve_risk_summary/logic.py was four file paths, not
+# code) and had drifted into two copies of one classifier -- with the census, the richer
+# and authoritative one (it also names PATH_LISTING / TREE_ART / NO_CODE / EMPTY and
+# carries its own R5 self-test), CONSULTED BY NOTHING (dark_tools census, cycle-0234). A
+# reimplemented guard beside a dark authority is the four-copies-three-decoys hazard the
+# dark_tools census exists to catch: the next edit fixes one copy and the other rots.
+# Consult classify() so there is ONE classifier and it cannot drift. Resolved from THIS
+# file's own directory -- the tool is launched as a subprocess by
+# tools/staging_drain/chain_tick.py, so tools/ is already sys.path[0]; the insert makes
+# the import hold under `python -m tools...` and direct invocation too.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from staged_module_shape_census import classify as _shape_classify  # noqa: E402
 REFUSALS = (
     "NEVER_IN_HISTORY",  # the name was never in that sibling -- nothing was renamed
     "NO_REMOVING_COMMIT",  # present in history but never observed going absent
@@ -214,49 +226,33 @@ REFUSALS = (
 )
 
 
-def is_module_shaped(src: str) -> bool:
+def is_module_shaped(src: str, basename: str = "logic.py") -> bool:
     """True when `src` plausibly IS a Python module body.
 
+    [c234] Delegates to staged_module_shape_census.classify() -- the single
+    authoritative classifier (see the import note above). classify() returns None
+    for a module body and a class name (NOT_PARSEABLE / PATH_LISTING / TREE_ART /
+    NO_CODE / EMPTY) for a non-module, so `module-shaped == classify() is None`.
+    `basename` is forwarded so classify() can apply its __init__.py exemption (an
+    empty package marker is a legitimate module, a hollow `logic.py` is not); the
+    call sites pass the real sibling name. This is behaviour-identical to the old
+    inline test on every staged-service sibling the repair path actually sees -- the
+    change is single-sourcing, not a new rule -- so the c191/c234 self-test poles
+    (13 "path-listing COMPILES but is not module-shaped", 14 "both oracles REFUSE
+    SIBLING_NOT_A_MODULE", 15 "a real module is still PROVEN_MODULE") stand unchanged.
+
     [c191] WHY THIS GUARD EXISTS, and it is not hypothetical. On 2026-10-07 the
-    ONLY PROVEN_MODULE repair in the live tree was
-    `services/staged/cve_risk_summary/router.py:3  get_cve_risk_summary  .logic -> .contract`.
-    The oracle was CORRECT -- `contract.py` really does define that name. But
-    `logic.py` in that service is not code at all; its entire body is four lines
-    of FILE PATHS, the builder's own manifest output written where the module
-    should be:
-
-        services/staged/cve_risk_summary/contract.py
-        services/staged/cve_risk_summary/router.py
-        services/staged/cve_risk_summary/service.toml
-        services/_exemplar/logic.py
-
-    Applying the repair would have moved the import to `.contract`, the import
-    gate would have gone GREEN, the census site would have DISAPPEARED, and the
-    service would have been promotable with no business logic behind its route.
-    A Potemkin service, passed by a gate. The defect is a MISSING MODULE BODY,
-    not a mis-addressed import, and the two have different cures.
-
-    Why py_compile cannot see it (R6: unknown is not zero): a line like
-    `services/staged/x/contract.py` is SYNTACTICALLY VALID Python -- it parses as
-    division between undefined names -- so the file compiles and the symbol
-    census reads it as "a module that merely does not export the wanted name".
-    The whole class was invisible to every instrument pointed at it.
-
-    The test is deliberately the weakest one that separates the two: a real
-    module body carries at least one top-level import, def, class or decorator.
-    A file with none of those is refused. That direction is safe -- the cost of a
-    false positive is one REFUSED site a human reads, while the cost of a false
-    negative is a hollow service promoted into the spine.
+    only PROVEN_MODULE repair in the live tree pointed at `cve_risk_summary`, whose
+    `logic.py` was not code at all but four lines of FILE PATHS (the builder's own
+    manifest output written where the module should be). Rewriting the import to
+    `.contract` would have greened the promoter's import gate over a service with no
+    logic body -- a Potemkin service, passed by a gate. The defect is a MISSING
+    MODULE BODY, not a mis-addressed import, and the two have different cures. That
+    listing is SYNTACTICALLY VALID Python (each line parses as division between
+    undefined names), so py_compile and the symbol census were blind to it (R6:
+    unknown is not zero). The full basis lives in staged_module_shape_census.py.
     """
-    try:
-        import ast
-        ast.parse(src)
-    except SyntaxError:
-        return False
-    for line in src.splitlines():
-        if _MODULE_SHAPE_RE.match(line):
-            return True
-    return False
+    return _shape_classify(src, basename) is None
 def resolve_module(root: str, hit: dict) -> tuple:
     """Second oracle, and the one that fires in practice.
 
@@ -275,7 +271,7 @@ def resolve_module(root: str, hit: dict) -> tuple:
         _sib_src = open(_sib_abs, encoding="utf-8", errors="replace").read()
     except OSError:
         return ("REFUSED", "SIBLING_UNREADABLE")
-    if not is_module_shaped(_sib_src):
+    if not is_module_shaped(_sib_src, os.path.basename(hit["sibling"])):
         return ("REFUSED", "SIBLING_NOT_A_MODULE")
     sdir = os.path.join(root, "services", "staged", svc)
     cur = os.path.basename(hit["sibling"])[:-3]
@@ -305,7 +301,8 @@ def resolve(root: str, hit: dict) -> tuple:
     # import whose named sibling has no module body. See is_module_shaped().
     try:
         if not is_module_shaped(open(os.path.join(root, sib_rel),
-                                    encoding="utf-8", errors="replace").read()):
+                                    encoding="utf-8", errors="replace").read(),
+                                os.path.basename(sib_rel)):
             return ("REFUSED", "SIBLING_NOT_A_MODULE")
     except OSError:
         return ("REFUSED", "SIBLING_UNREADABLE")
@@ -660,6 +657,21 @@ def self_test() -> int:
         v3, n3 = resolve_module(root, h[("wrongmod2", "moved2")])
         pole("15 genuine module sibling still PROVEN_MODULE (guard discriminates)",
              (v3, n3) == ("PROVEN_MODULE", "contract"), detail="%s/%s" % (v3, n3))
+
+        # pole 16 [c234]: the guard now rides staged_module_shape_census.classify(),
+        # the single authoritative classifier -- NOT a second inline copy. classify()
+        # is basename-aware: an empty `__init__.py` is a legitimate package marker
+        # (module-shaped), an empty or hollow `logic.py` is not. The pre-c234 inline
+        # is_module_shaped() ignored basename and called EVERY empty file not-a-module,
+        # so this pole is RED under it and GREEN only when classify() is truly consulted
+        # -- i.e. it goes red the moment someone reintroduces an inline copy. That makes
+        # the single-source wire itself falsifiable, not just asserted.
+        _init_ok = is_module_shaped("", "__init__.py") is True
+        _logic_no = is_module_shaped("", "logic.py") is False
+        pole("16 guard delegates to classify (basename-aware __init__ exemption)",
+             _init_ok and _logic_no,
+             detail="init=%s logic=%s" % (is_module_shaped("", "__init__.py"),
+                                          is_module_shaped("", "logic.py")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -678,7 +690,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--root", default=".", help="repo root (default: cwd)")
     ap.add_argument("--self-test", action="store_true",
-                    help="run the 8-pole negative control and exit")
+                    help="run the module's negative-control poles and exit")
     ap.add_argument("--report", action="store_true",
                     help="scan + classify every site, change nothing")
     ap.add_argument("--apply", action="store_true", help="write the PROVEN repairs")

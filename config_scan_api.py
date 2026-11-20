@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -31,6 +31,7 @@ from verdict_breakdown_api import Principal, charge_lookup, get_principal
 
 router = APIRouter(prefix="/api", tags=["scan"])
 MAX_ENTRIES = 50
+_SCAN_CANDIDATE_LIMIT = 250
 _URL_RX = re.compile(r"https?://[^\s\"']+")
 
 
@@ -72,10 +73,42 @@ def extract_servers(config_text: str) -> List[dict]:
     return servers
 
 
+def _candidate_like_tokens(hint: Optional[str], wanted: set[str]) -> List[str]:
+    """Build bounded SQL LIKE tokens so Postgres narrows candidates before
+    exact `server_identities` intersection, avoiding a full-table 600k-row scan.
+    """
+    tokens: List[str] = []
+    for ident in wanted:
+        if ident.startswith("repo:"):
+            # ident form: repo:github.com/owner/repo -> match owner/repo in URL or name
+            rest = ident[len("repo:"):]
+            parts = rest.split("/", 2)
+            if len(parts) == 3:
+                tokens.append(f"{parts[1]}/{parts[2]}")
+        elif ident.startswith("pkg:npm/"):
+            pkg = ident[len("pkg:npm/"):]
+            if pkg:
+                tokens.append(pkg)
+                if "/" in pkg:
+                    tokens.append(pkg.rsplit("/", 1)[-1])
+    if hint:
+        h = hint.strip()
+        if h.startswith("@") and h not in tokens:
+            tokens.append(h)
+    deduped: List[str] = []
+    seen = set()
+    for t in tokens:
+        tl = t.lower()
+        if tl and len(tl) >= 3 and tl not in seen:
+            seen.add(tl)
+            deduped.append(t)
+    return deduped[:6]
+
+
 def _resolve_registry_server(db: Session, name: str,
                              hint: Optional[str]) -> Optional[McpServerRegistry]:
-    """Deterministic identity resolution: repo/package key match on the hint,
-    else exact name match. None => UNKNOWN (never fuzzy)."""
+    """Deterministic identity resolution: indexed candidate prefilter + exact
+    repo/package key intersection, else exact name match. None => UNKNOWN."""
     wanted = set()
     rk = repo_key(hint)
     if rk:
@@ -83,10 +116,33 @@ def _resolve_registry_server(db: Session, name: str,
     if hint and hint.startswith("@"):        # npm scoped package hint
         wanted.add(f"pkg:npm/{hint.lower()}")
     if wanted:
-        for srv in db.execute(select(McpServerRegistry).where(
-                McpServerRegistry.url.is_not(None))).scalars():
-            if server_identities(srv.url, srv.name) & wanted:
-                return srv
+        tokens = _candidate_like_tokens(hint, wanted)
+        if tokens:
+            like_clauses = []
+            for tok in tokens:
+                pat = f"%{tok}%"
+                like_clauses.append(McpServerRegistry.url.ilike(pat))
+                like_clauses.append(McpServerRegistry.name.ilike(pat))
+            candidates = db.execute(
+                select(McpServerRegistry)
+                .where(or_(*like_clauses))
+                .limit(_SCAN_CANDIDATE_LIMIT)
+            ).scalars().all()
+            for srv in candidates:
+                meta = None
+                if srv.meta and isinstance(srv.meta, str) and srv.meta.startswith("{"):
+                    try:
+                        meta = json.loads(srv.meta)
+                    except Exception:
+                        meta = None
+                if server_identities(srv.url, srv.name, meta=meta) & wanted:
+                    return srv
+                if hint and hint.startswith("@"):
+                    h_low = hint.lower()
+                    if (srv.name and srv.name.strip().lower() == h_low) or (
+                        srv.url and f"/package/{h_low}" in srv.url.lower()
+                    ):
+                        return srv
     # exact name fallback (case-insensitive)
     row = db.execute(select(McpServerRegistry).where(
         McpServerRegistry.name.ilike(name))).scalars().first()
@@ -153,6 +209,13 @@ if __name__ == "__main__":
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)
     s = sessionmaker(bind=eng)()
+    for i in range(60):
+        s.add(McpServerRegistry(server_id=f"noise-{i}", name=f"noise-{i}",
+                                url=f"https://github.com/other/noise-{i}",
+                                risk_tier="LOW", verdict="LOW"))
+    s.add(McpServerRegistry(server_id="s-fork", name="inspector-fork",
+                            url="https://github.com/anthropics/mcp-inspector-fork",
+                            risk_tier="LOW", verdict="LOW"))
     s.add(McpServerRegistry(server_id="s1", name="mcp-inspector",
                             url="https://github.com/anthropics/mcp-inspector",
                             risk_tier="HIGH", verdict="HIGH"))
@@ -162,17 +225,17 @@ if __name__ == "__main__":
 
     cfg = json.dumps({"mcpServers": {
         "inspector": {"command": "npx", "args": ["-y", "github.com/anthropics/mcp-inspector"]},
+        "fork-miss": {"command": "npx", "args": ["-y", "github.com/anthropics/mcp-inspector-unrelated"]},
         "mystery": {"command": "node", "args": ["./local.js"]},
     }})
     entries = extract_servers(cfg)
-    assert len(entries) == 2
+    assert len(entries) == 3
     out = scan_config(s, cfg)
-    assert out["summary"]["scanned"] == 2
-    assert out["summary"]["identified"] == 1 and out["summary"]["unknown"] == 1
+    assert out["summary"]["scanned"] == 3
+    assert out["summary"]["identified"] == 1 and out["summary"]["unknown"] == 2
     scored = [r for r in out["results"] if r["status"] == "scored"][0]
     assert scored["server_id"] == "s1" and scored["risk_tier"] == "HIGH"
     assert scored["axes"]["auth_strength"]["label"] == "WEAK"
-    # honest unknown, never a guess
-    unk = [r for r in out["results"] if r["status"] == "unknown"][0]
-    assert unk["name"] == "mystery"
+    unk_names = {r["name"] for r in out["results"] if r["status"] == "unknown"}
+    assert unk_names == {"fork-miss", "mystery"}
     print("PASS")

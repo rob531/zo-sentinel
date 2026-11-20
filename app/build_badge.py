@@ -43,7 +43,7 @@ BADGE_ID = "zo-build-badge"
 IDEMPOTENCY_MARK = 'id="%s"' % BADGE_ID
 
 _BASE_STYLE = (
-    "position:fixed;top:6px;right:8px;z-index:2147483000;"
+    "position:fixed;bottom:8px;right:10px;z-index:2147483000;"
     "font:600 10px/1.4 'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;"
     "letter-spacing:.04em;padding:2px 7px;border-radius:99px;"
     "text-decoration:none;opacity:.62;transition:opacity .15s;"

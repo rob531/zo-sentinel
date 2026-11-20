@@ -55,12 +55,24 @@ class AskResponse(BaseModel):
     llm_polished: bool = False
 
 
+def _trim_snippet(snippet: str, max_chars: int = 240) -> str:
+    """Trim snippet cleanly on a whitespace or separator boundary, never mid-word."""
+    text = (snippet or "").strip()
+    if len(text) <= max_chars:
+        return text
+    cut = text[: max_chars + 1]
+    split_at = max(cut.rfind(" "), cut.rfind("|"), cut.rfind(";"), cut.rfind(","))
+    if split_at >= max_chars // 2:
+        return cut[:split_at].rstrip(" |;,") + "…"
+    return text[:max_chars].rstrip() + "…"
+
+
 def compose_answer(query: str, hits: List[dict]) -> str:
     """Deterministic templating from retrieved rows only."""
     lines = [f"Results for: {query!r} ({len(hits)} match(es) from the scored registry)"]
     for h in hits:
         prov = h["provenance"]
-        lines.append(f"- {h['snippet'][:180]}  "
+        lines.append(f"- {_trim_snippet(h['snippet'], max_chars=240)}  "
                      f"[matched: {', '.join(prov['matched_fields'])} -> "
                      f"{', '.join(prov['matched_terms'][:6])}]")
     lines.append("Every line above cites a scored registry row; open a server's "
@@ -136,6 +148,12 @@ if __name__ == "__main__":
         def connect(self, *a, **k):  # any connect attempt = test failure
             raise AssertionError("network attempted with ASK_LLM off")
     socket.socket = _NoNet  # type: ignore
+
+    # Clean boundary trim check (never slices mid-word like 'exploit_surfac')
+    long_snip = ("demo/srv | " + " ".join(f"exploit_surface=MODERATE_{i}" for i in range(18)))
+    trimmed = _trim_snippet(long_snip, max_chars=240)
+    assert len(trimmed) <= 241 and trimmed.endswith("…")
+    assert "exploit_surfac…" not in trimmed
 
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)

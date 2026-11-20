@@ -11,10 +11,11 @@ exist). Zero per-query LLM. Imports the REAL app data layer (app.db /
 app.models) -- no stubs, no write_service round-trips.
 
 Pure business fn: compute_facets(db) -> {facet_key: [{"value","count"}]}.
-Router: GET /api/facets (authenticated), 60s in-process TTL cache.
+Router: GET /api/facets (authenticated), stale-while-revalidate TTL cache.
 """
 from __future__ import annotations
 
+import threading
 import time
 from typing import Dict, List, Optional
 
@@ -34,11 +35,11 @@ AXES = ("overall_risk", "auth_strength", "capability_breadth", "data_sensitivity
 TRUST_BANDS = ("0-25%", "25-50%", "50-75%", "75-100%")
 
 _CACHE: dict = {"at": 0.0, "facets": None}
-# 5 min: the corpus changes on scoring-run cadence (hours), not per request.
-# Cold compute over 65k registry + 458k score rows was the ~25s first paint
-# found in the 2026-07-02 treewalk; the SQL-side banding below plus this TTL
-# keeps every subsequent hit instant.
+_REFRESH_LOCK = threading.Lock()
+# 5 min fresh TTL + 1h stale-while-revalidate window: hot requests serve in
+# <5ms without blocking on full-table GROUP BYs over 600k+ registry rows.
 CACHE_TTL_SECS = 300
+STALE_MAX_SECS = 3600
 
 
 def latest_global_model_version(db: Session) -> Optional[str]:
@@ -121,14 +122,46 @@ def compute_facets(db: Session) -> Dict[str, List[dict]]:
     return facets
 
 
-def cached_facets(db: Session) -> Dict[str, List[dict]]:
-    """The TTL-cached facet universe -- shared by the /facets route AND every
-    consumer that validates filters (admin CRUD, ad-hoc queries), so hot paths
-    never recompute the aggregate."""
+def _trigger_bg_refresh(session_factory=None) -> None:
+    """Refresh `_CACHE["facets"]` asynchronously under a non-blocking lock."""
+    if not _REFRESH_LOCK.acquire(blocking=False):
+        return
+
+    def _worker() -> None:
+        db = None
+        try:
+            if session_factory is None:
+                from app.db import SessionLocal
+                db = SessionLocal()
+            else:
+                db = session_factory()
+            _CACHE["facets"] = compute_facets(db)
+            _CACHE["at"] = time.time()
+        except Exception:
+            pass
+        finally:
+            if db is not None:
+                db.close()
+            _REFRESH_LOCK.release()
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def cached_facets(db: Session, *, session_factory=None) -> Dict[str, List[dict]]:
+    """Stale-while-revalidate facet cache shared by `/facets` and perspective
+    queries: warm within CACHE_TTL_SECS, instant stale + async refresh up to
+    STALE_MAX_SECS, synchronous compute only on completely cold start or expiry."""
     now = time.time()
-    if _CACHE["facets"] is None or now - _CACHE["at"] > CACHE_TTL_SECS:
-        _CACHE["facets"] = compute_facets(db)
-        _CACHE["at"] = now
+    age = now - float(_CACHE["at"] or 0.0)
+    cached = _CACHE["facets"]
+    if cached is not None:
+        if age <= CACHE_TTL_SECS:
+            return cached
+        if age <= STALE_MAX_SECS:
+            _trigger_bg_refresh(session_factory=session_factory)
+            return cached
+    _CACHE["facets"] = compute_facets(db)
+    _CACHE["at"] = time.time()
     return _CACHE["facets"]
 
 
@@ -148,7 +181,8 @@ if __name__ == "__main__":
     from app.models import McpLlmAxisScore as A, McpServerRegistry as R
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)
-    s = sessionmaker(bind=eng)()
+    LocalS = sessionmaker(bind=eng)
+    s = LocalS()
     s.add_all([
         R(server_id="s1", risk_tier="HIGH", verdict="HIGH", registry_source="github", trust_score=10.0),
         R(server_id="s2", risk_tier="LOW", verdict="LOW", registry_source="npm", trust_score=90.0),
@@ -163,4 +197,10 @@ if __name__ == "__main__":
     assert "axis:auth_strength" in f, "axis facets must be keyed axis:<name>"
     assert sum(d["count"] for d in f["registry_source"]) == 3
     assert sum(d["count"] for d in f["trust_band"]) == 3
+
+    # SWR test: aged cache between CACHE_TTL_SECS and STALE_MAX_SECS serves cached immediately
+    _CACHE["facets"] = {"sentinel": [{"value": "cached", "count": 1}]}
+    _CACHE["at"] = time.time() - (CACHE_TTL_SECS + 10)
+    served = cached_facets(s, session_factory=LocalS)
+    assert "sentinel" in served
     print("PASS")

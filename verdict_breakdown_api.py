@@ -57,7 +57,7 @@ def _clerk_host() -> str:
         return ""
 
 
-_CLERK_ISS = f"https://{_clerk_host()}" if _clerk_host() else ""
+_CLERK_ISS = f"https://{_clerk_host()}" if _CLERK_PK and _clerk_host() else ""
 _jwks: Optional[PyJWKClient] = None
 
 
@@ -186,6 +186,10 @@ class Verdict(BaseModel):
     server_id: str
     name: Optional[str] = None
     url: Optional[str] = None
+    registry_source: Optional[str] = None
+    description: Optional[str] = None
+    status: str = "scored"                         # "scored" | "unassessed"
+    scored_at: Optional[str] = None
     model_version: Optional[str] = None
     axes: Dict[str, AxisScore]
     model_overall_risk: Optional[str] = None       # raw model overall_risk label
@@ -212,10 +216,33 @@ def _latest_model_version(db: Session, server_id: str) -> Optional[str]:
 def get_verdict(server_id: str, db: Session = Depends(get_session),
                 principal: Principal = Depends(get_principal)) -> Verdict:
     """Per-server verdict = its 7 axis rows for the latest model_version, with the
-    trust-gating override applied to the published overall_risk."""
+    trust-gating override applied to the published overall_risk. If a server exists
+    in mcp_server_registry without scores yet, return an explicit unassessed payload
+    instead of HTTP 404."""
     mv = _latest_model_version(db, server_id)
+    reg = db.get(McpServerRegistry, server_id)
     if mv is None:
-        raise HTTPException(status_code=404, detail=f"No scores for server_id {server_id!r}")
+        if reg is None:
+            raise HTTPException(status_code=404, detail=f"No scores for server_id {server_id!r}")
+        return Verdict(
+            server_id=server_id,
+            name=reg.name,
+            url=reg.url,
+            registry_source=reg.registry_source,
+            description=reg.description,
+            status="unassessed",
+            scored_at=(reg.last_assessed.isoformat() if reg.last_assessed else None),
+            model_version=None,
+            axes={},
+            model_overall_risk=None,
+            published_overall_risk="UNASSESSED",
+            trusted_override=False,
+            override_reason=None,
+            trusted=False,
+            trust_basis=None,
+            masquerade_flag=False,
+            display_label="Queued for automated 7-axis assessment",
+        )
     charge_lookup(db, principal)   # opening a server's breakdown counts as a lookup
 
     rows = db.execute(
@@ -225,9 +252,12 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
         )
     ).scalars().all()
 
-    reg = db.get(McpServerRegistry, server_id)
     name = reg.name if reg else None
     url = reg.url if reg else None
+    scored_ts = max((r.scored_at for r in rows if r.scored_at), default=None)
+    scored_at = scored_ts.isoformat() if scored_ts else (
+        reg.last_assessed.isoformat() if reg and reg.last_assessed else None
+    )
 
     axes: Dict[str, AxisScore] = {}
     labels: Dict[str, str] = {}
@@ -247,18 +277,6 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
     trusted_override = bool(gate.get("trusted")) or bool(gate.get("masquerade_flag"))
     override_reason = trust_basis if trusted_override else None
 
-    # Audit: log override application to write_service (fire-and-forget).
-    #
-    # This wrote to `trust_gating_audit_log`, a table that exists on no plane --
-    # not on the bus, not as a __tablename__, in no migration, and nothing in
-    # the tree ever created it. The write is fire-and-forget inside a bare
-    # `except: pass`, so every trust-gate override since this code landed was
-    # audited into nothing, silently. An audit trail that cannot fail loudly is
-    # the one kind of code where a swallowed exception is worst. Refs #4080.
-    #
-    # The bus has exactly one audit table, `audit_log`, and it is shaped for
-    # precisely this: an actor, an action, a target server, and a details_json
-    # for the payload-shaped remainder. That is the intended referent.
     if trusted_override:
         try:
             requests.post(
@@ -295,7 +313,15 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
             pass  # never fail the request on audit write failure
 
     return Verdict(
-        server_id=server_id, name=name, url=url, model_version=mv, axes=axes,
+        server_id=server_id,
+        name=name,
+        url=url,
+        registry_source=(reg.registry_source if reg else None),
+        description=(reg.description if reg else None),
+        status="scored",
+        scored_at=scored_at,
+        model_version=mv,
+        axes=axes,
         model_overall_risk=gate.get("original_overall_risk") or labels.get("overall_risk"),
         published_overall_risk=gate.get("published_overall_risk") or labels.get("overall_risk"),
         trusted_override=trusted_override,
@@ -510,7 +536,11 @@ if __name__ == "__main__":  # CI-safe self-test: real imports, SQLite via depend
     TS = sessionmaker(bind=eng, autoflush=False, autocommit=False)
     s = TS()
     s.add(McpServerRegistry(server_id="srv1", name="Stripe MCP",
-                            url="https://github.com/stripe/agent-toolkit"))
+                            url="https://github.com/stripe/agent-toolkit",
+                            registry_source="github"))
+    s.add(McpServerRegistry(server_id="srv_unassessed", name="Pending MCP",
+                            url="https://github.com/example/pending-mcp",
+                            registry_source="github", risk_tier="unassessed"))
     for _i, (ax, lbl) in enumerate((("overall_risk", "HIGH"), ("auth_strength", "STRONG"),
                     ("capability_breadth", "BROAD"), ("data_sensitivity", "CRITICAL"),
                     ("network_egress", "EXTERNAL"), ("maintainer_trust", "ESTABLISHED"),
@@ -533,9 +563,14 @@ if __name__ == "__main__":  # CI-safe self-test: real imports, SQLite via depend
     c = TestClient(app)
     r = c.get("/api/verdict/srv1"); assert r.status_code == 200, r.text
     j = r.json()
+    assert j["status"] == "scored", j
     assert j["model_overall_risk"] == "HIGH", j
     assert j["published_overall_risk"] == "MEDIUM", j   # Stripe = verified -> capped
     assert j["trusted"] is True, j
     assert len(j["axes"]) == 7, j
+
+    ru = c.get("/api/verdict/srv_unassessed"); assert ru.status_code == 200, ru.text
+    ju = ru.json()
+    assert ju["status"] == "unassessed" and ju["published_overall_risk"] == "UNASSESSED", ju
     assert c.get("/api/verdict/nope").status_code == 404
     print("PASS")

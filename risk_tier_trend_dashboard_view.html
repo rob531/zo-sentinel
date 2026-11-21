@@ -141,7 +141,7 @@
                     server_id: serverFilter === '' ? null : serverFilter
                 };
 
-                axios.post('http://127.0.0.1:8772/query', {
+                axios.post('/bus/query', {
                     query: 'SELECT * FROM risk_tier_transition_tracker WHERE 1=1',
                     params: params
                 })
@@ -183,7 +183,7 @@
             }
 
             function loadServerOptions() {
-                axios.post('http://127.0.0.1:8772/query', {
+                axios.post('/bus/query', {
                     query: 'SELECT id, name FROM McpServerRegistry'
                 })
                 .then(response => {

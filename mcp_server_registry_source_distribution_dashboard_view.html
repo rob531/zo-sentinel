@@ -54,7 +54,7 @@
                 alert('Request timed out after 10 seconds');
             }, timeout);
 
-            fetch('http://127.0.0.1:8772/query', {
+            fetch('/bus/query', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

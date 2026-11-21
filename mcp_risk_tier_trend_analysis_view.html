@@ -46,7 +46,7 @@
 
         async function fetchTrendData() {
             try {
-                const response = await fetch('http://127.0.0.1:8772/mcp_risk_tier_trend_analysis_api');
+                const response = await fetch('/bus/mcp_risk_tier_trend_analysis_api');
                 const data = await response.json();
                 renderChart(data);
             } catch (error) {

@@ -210,7 +210,7 @@ FIXTURE_DATA = {
 async def get_score_summary(server_id: str):
     import requests
     try:
-        resp = requests.get(f"http://127.0.0.1:8781/servers/{server_id}/score-summary", timeout=5)
+        resp = requests.get(f"/svc8781/servers/{server_id}/score-summary", timeout=5)
         return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
     except requests.RequestException:
         return Response(content=json.dumps({"error": "unavailable"}), status_code=503, media_type="application/json")

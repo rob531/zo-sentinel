@@ -1,0 +1,71 @@
+/* Canonical Obsidian-Cyan Design Tokens & Base Accessibility Utilities */
+:root {
+  --bg: #08060e;
+  --bg2: #0e0a18;
+  --panel: #110d1d;
+  --line: #2a2340;
+  --txt: #efeaf8;
+  --mut: #a99cc7;
+  --dim: #a99cc7;
+  --cyan: #34e3ff;
+  --acc: #34e3ff;
+  --gold: #ecdcae;
+  --LOW: #5cf0a0;
+  --MEDIUM: #ffd84a;
+  --HIGH: #ff9d54;
+  --CRITICAL: #ff6f9a;
+  --low: #5cf0a0;
+  --med: #ffd84a;
+  --high: #ff9d54;
+  --hi: #ff6f9a;
+  --warn: #ffd84a;
+  --ok: #5cf0a0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--txt);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.55;
+  background: radial-gradient(900px 460px at 80% -28%, rgba(86, 52, 150, .16), transparent 62%), var(--bg) fixed;
+}
+
+a {
+  color: var(--acc);
+}
+
+.muted {
+  color: var(--mut);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}

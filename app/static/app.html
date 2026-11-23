@@ -4,7 +4,10 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MCPRisky</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
   :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--mut:#a99cc7;--cyan:#34e3ff;--gold:#ecdcae;
         --LOW:#5cf0a0;--MEDIUM:#ffd84a;--HIGH:#ff9d54;--CRITICAL:#ff6f9a}
@@ -13,13 +16,14 @@
        background:radial-gradient(900px 460px at 80% -28%,rgba(86,52,150,.16),transparent 62%),var(--bg) fixed}
   a{color:var(--cyan);text-decoration:none}
   header{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.7rem 1.3rem;border-bottom:1px solid var(--line);background:#0b0814;position:sticky;top:0;z-index:5}
-  .logo{font-weight:800;font-size:1.1rem} .logo span{color:var(--cyan);text-shadow:0 0 12px rgba(52,227,255,.5)}
+  .logo{font-weight:800;font-size:1.1rem;color:var(--txt);text-decoration:none} .logo span{color:var(--cyan);text-shadow:0 0 12px rgba(52,227,255,.5)}
   nav{display:flex;gap:.25rem;flex-wrap:wrap}
   nav a{padding:.4rem .65rem;border-radius:7px;color:var(--mut);font-weight:600;cursor:pointer;font-size:.84rem;white-space:nowrap}
   nav a:hover{color:var(--txt);background:rgba(52,227,255,.06)} nav a.on{color:var(--cyan);background:rgba(52,227,255,.1)}
   #userbtn{margin-left:auto;display:flex;align-items:center;gap:.6rem;max-width:100%}
-  .wrap{max-width:1080px;margin:0 auto;padding:1.3rem}
-  h2{font-size:1.05rem;margin:.2rem 0 .9rem;letter-spacing:.3px}
+  .wrap{max-width:1080px;margin:0 auto;padding:1.3rem 1.3rem 3.5rem}
+  h1.page-h1{font-size:1.15rem;margin:.1rem 0 .85rem;letter-spacing:.3px}
+  h2{font-size:1.02rem;margin:.2rem 0 .85rem;letter-spacing:.3px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:.8rem}
   .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.9rem 1rem}
   .stat .n{font-size:1.45rem;font-weight:800;color:var(--cyan)} .stat .l{color:var(--mut);font-size:.76rem}
@@ -28,14 +32,15 @@
   .distrow .k{width:80px;font-size:.78rem;font-weight:700} .distrow .bar{flex:1;height:14px;background:#0d0a16;border-radius:99px;overflow:hidden}
   .distrow .bar i{display:block;height:100%;border-radius:99px}
   .distrow .v{min-width:118px;width:auto;white-space:nowrap;text-align:right;color:var(--mut);font-size:.78rem}
-  .row{padding:.55rem .35rem;border-bottom:1px solid var(--line);cursor:pointer;display:flex;align-items:center;gap:.6rem}
+  .row{padding:.55rem .35rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.6rem}
   .row:hover{background:rgba(52,227,255,.05)} .row:last-child{border-bottom:0}
-  .nm{flex:1;min-width:0} .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .nm{flex:1;min-width:0;color:inherit;text-decoration:none;display:block}
+  .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
   .nm span{color:var(--mut);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
   .badge{font-size:.7rem;font-weight:800;padding:.2rem .5rem;border-radius:6px;border:1px solid currentColor;white-space:nowrap}
   .b-LOW{color:var(--LOW)} .b-MEDIUM{color:var(--MEDIUM)} .b-HIGH{color:var(--HIGH)} .b-CRITICAL{color:var(--CRITICAL)} .b-UNASSESSED{color:var(--mut);border-color:var(--line)}
   input,select{padding:.6rem .8rem;background:#0d0a16;border:1px solid var(--line);border-radius:8px;color:var(--txt);font-family:inherit;font-size:.9rem}
-  input:focus,select:focus{outline:none;border-color:var(--cyan)}
+  input:focus-visible,select:focus-visible,:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   button{padding:.55rem .95rem;background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;border-radius:8px;color:#02141a;font-family:inherit;font-weight:800;cursor:pointer}
   button.ghost{background:#15101f;color:var(--mut);border:1px solid var(--line)}
   button.sm{padding:.22rem .55rem;font-size:.72rem;border-radius:6px}
@@ -56,27 +61,42 @@
 </head>
 <body>
 <header>
-  <div class="logo" onclick="go('/app')" style="cursor:pointer">MCP<span>Risky</span></div>
-  <nav>
-    <a data-r="/app">Dashboard</a>
-    <a data-r="/app/explore">Explore</a>
-    <a href="/perspectives" style="text-decoration:none">Perspectives</a>
-    <a href="/ask" style="text-decoration:none">Ask</a>
-    <a href="/scan" style="text-decoration:none">Scan</a>
-    <a data-r="/app/submit">Submit</a>
-    <a data-r="/app/reports">Reports</a>
-    <a data-r="/app/disputes">Disputes</a>
-    <a href="/dashboard/exemptions" style="text-decoration:none">Waivers &amp; Keys</a>
-    <a data-r="/app/admin" id="navadmin" style="display:none">Admin</a>
+  <a class="logo" href="/app" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();go('/app');}">MCP<span>Risky</span></a>
+  <nav aria-label="Primary">
+    <a href="/app" data-r="/app">Dashboard</a>
+    <a href="/app/explore" data-r="/app/explore">Explore</a>
+    <a href="/perspectives">Perspectives</a>
+    <a href="/ask">Ask</a>
+    <a href="/scan">Scan</a>
+    <a href="/app/reports" data-r="/app/reports">Reports</a>
   </nav>
+  <details class="nav-more" id="navMore">
+    <summary aria-label="More pages">More ▾</summary>
+    <div class="nav-menu">
+      <a href="/app/submit" data-r="/app/submit">Submit</a>
+      <a href="/app/disputes" data-r="/app/disputes">Disputes</a>
+      <a href="/dashboard/exemptions">Waivers &amp; Keys</a>
+      <a href="/app/admin" data-r="/app/admin" id="navadmin" style="display:none">Admin</a>
+    </div>
+  </details>
   <span id="userbtn"><span class="muted" style="font-size:.8rem" id="who"></span><span id="ubtn"></span></span>
 </header>
-<div class="wrap"><div id="view"><p class="muted">// loading…</p></div></div>
+<main class="wrap">
+  <h1 class="page-h1" id="pageTitle">Overview</h1>
+  <div id="view">
+    <!--__SSR_DASHBOARD_STAT__-->
+    <div class="skel-grid" aria-hidden="true">
+      <div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>
+    </div>
+    <p class="muted" role="status" aria-live="polite">// loading…</p>
+  </div>
+</main>
 <script>
 const E=(s)=>document.getElementById(s);
 const esc=(s)=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const RC={LOW:'var(--LOW)',MEDIUM:'var(--MEDIUM)',HIGH:'var(--HIGH)',CRITICAL:'var(--CRITICAL)',UNASSESSED:'var(--mut)'};
 const badge=(r)=>{r=(r||'UNASSESSED').toUpperCase();return `<span class="badge b-${r}">${r}</span>`;};
+const API_TIMEOUT_MS = 15000;
 
 const SEV_MAP={
   CRITICAL:{pct:95,col:'var(--CRITICAL)'}, ARBITRARY:{pct:92,col:'var(--CRITICAL)'},
@@ -90,12 +110,30 @@ const SEV_MAP={
   UNKNOWN:{pct:18,col:'#6e628c'}
 };
 
-async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null;}catch(e){return null;}}
-async function j(u,o){o=o||{};const t=await tok();o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
-  const r=await fetch(u,o);
-  if(r.status===401){location.href='/';throw new Error('Sign in required');}
-  if(r.status===429){let d={};try{d=await r.json();}catch(e){}throw new Error((d&&d.detail)||'Daily lookup limit reached.');}
-  if(!r.ok)throw new Error('HTTP '+r.status);if(r.status===204)return null;const _b=await r.text();return _b?JSON.parse(_b):null;}
+function navLink(path, label, cls=''){
+  return `<a ${cls?`class="${cls}" `:''}href="${esc(path)}" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();go('${esc(path)}');}">${label}</a>`;
+}
+
+async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null;}}
+async function j(u,o){
+  o=o||{};
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), API_TIMEOUT_MS);
+  try{
+    const t=await tok();
+    o.signal=ctrl.signal;
+    o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
+    const r=await fetch(u,o);
+    if(r.status===401){location.href='/';throw new Error('Sign in required');}
+    if(r.status===429){let d={};try{d=await r.json();}catch(e){}throw new Error((d&&d.detail)||'Daily lookup limit reached.');}
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(r.status===204)return null;
+    const _b=await r.text();return _b?JSON.parse(_b):null;
+  }catch(e){
+    if(e&&e.name==='AbortError')throw new Error('Request timed out after 15s');
+    throw e;
+  }finally{clearTimeout(timer);}
+}
 async function refreshMe(){try{const m=await j('/api/me');
   const em=(window.Clerk&&window.Clerk.user&&window.Clerk.user.primaryEmailAddress&&window.Clerk.user.primaryEmailAddress.emailAddress)||'';
   E('who').textContent=m.unlimited?(em+' · '+m.role):(em+' · '+m.remaining+'/'+m.cap+' lookups');
@@ -120,9 +158,14 @@ function renderCmpBar(){
     `<button class="sm" ${cmpIds.length<2?'disabled':''} onclick="go('/app/compare?ids='+encodeURIComponent(cmpIds.join(',')))">Compare side-by-side →</button></span>`;
 }
 
-function setNav(path){document.querySelectorAll('nav a[data-r]').forEach(a=>a.classList.toggle('on',a.dataset.r===path||(path.startsWith('/app/server')&&a.dataset.r==='/app/explore')||(path.startsWith('/app/compare')&&a.dataset.r==='/app/explore')));}
+function setNav(path){document.querySelectorAll('header a[data-r]').forEach(a=>a.classList.toggle('on',a.dataset.r===path||(path.startsWith('/app/server')&&a.dataset.r==='/app/explore')||(path.startsWith('/app/compare')&&a.dataset.r==='/app/explore')));}
 function go(path,push=true){ if(push) history.pushState({},'',path); setNav(path.split('?')[0]); render(path); }
-document.querySelectorAll('nav a[data-r]').forEach(a=>a.addEventListener('click',()=>go(a.dataset.r)));
+document.querySelectorAll('header a[data-r]').forEach(a=>a.addEventListener('click',e=>{
+  if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+  e.preventDefault();
+  const more=E('navMore'); if(more)more.open=false;
+  go(a.dataset.r);
+}));
 window.addEventListener('popstate',()=>{setNav(location.pathname);render(location.pathname+location.search);});
 
 function render(path){
@@ -138,28 +181,28 @@ function render(path){
 }
 
 async function viewAdmin(){
-  E('view').innerHTML='<p class="muted">// loading admin…</p>';
+  E('pageTitle').textContent='Admin · governance & review queue';
+  E('view').innerHTML='<p class="muted" role="status" aria-live="polite">// loading admin…</p>';
   try{
     const [d, dq] = await Promise.all([
       j('/api/admin/submissions?limit=100'),
       j('/api/admin/disputes?status=pending').catch(()=>[])
     ]);
     const disputes=Array.isArray(dq)?dq:[];
-    const dRows=disputes.map(x=>`<div class="row" style="cursor:default;align-items:flex-start">
-      <div class="nm"><b>#${esc(x.id)} · <a onclick="go('/app/server/${esc(x.server_id)}')" style="cursor:pointer">${esc(x.server_id)}</a> · proposed ${esc(x.proposed_overall_risk)}</b>
+    const dRows=disputes.map(x=>`<div class="row" style="align-items:flex-start">
+      <div class="nm"><b>#${esc(x.id)} · ${navLink('/app/server/'+x.server_id, esc(x.server_id))} · proposed ${esc(x.proposed_overall_risk)}</b>
       <span>${esc(x.reason_category)} — ${esc(x.explanation)}</span></div>
       <span style="display:flex;gap:.35rem;flex-wrap:wrap">
         <button class="sm" onclick="resolveDispute(${Number(x.id)},'approved',this)">Approve</button>
         <button class="ghost sm" onclick="resolveDispute(${Number(x.id)},'rejected',this)">Reject</button>
       </span></div>`).join('') || '<p class="muted">// no pending score disputes</p>';
 
-    const rows=d.submissions.map(x=>`<div class="row" onclick="go('/app/server/${esc(x.server_id)}')">
-      <div class="nm"><b>${esc(x.name||x.server_id)}</b><span>${esc(x.url||'')}</span></div>
+    const rows=d.submissions.map(x=>`<div class="row"><a class="nm" href="/app/server/${esc(x.server_id)}" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();go('/app/server/${esc(x.server_id)}');}">
+      <b>${esc(x.name||x.server_id)}</b><span>${esc(x.url||'')}</span></a>
       <span class="badge ${x.verdict==='unreviewed'?'b-MEDIUM':'b-LOW'}">${esc(x.verdict)}</span></div>`).join('')
       ||'<p class="muted">// no user submissions yet</p>';
 
-    E('view').innerHTML=`<h2>Admin · governance &amp; review queue</h2>
-      <div class="cards">
+    E('view').innerHTML=`<div class="cards">
         <div class="stat"><div class="n">${fmt(disputes.length)}</div><div class="l">pending disputes</div></div>
         <div class="stat"><div class="n">${fmt(d.count)}</div><div class="l">user submissions</div></div>
         <div class="stat"><div class="n" style="color:var(--MEDIUM)">${fmt(d.pending)}</div><div class="l">awaiting scoring</div></div>
@@ -170,7 +213,7 @@ async function viewAdmin(){
       </div>
       <div class="panel"><h2>Pending score disputes (live queue)</h2>${dRows}</div>
       <div class="panel"><h2>User-submitted MCPs</h2>${rows}</div>`;
-  }catch(e){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p class="muted">// error: '+esc(e.message)+'</p>';}}
+  }catch(e){E('view').innerHTML='<a href="/app" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();history.back();}">‹ back</a><p class="muted">// error: '+esc(e.message)+'</p>';}}
 
 async function resolveDispute(did, decision, btn){
   const note=window.prompt('Optional admin note for dispute #'+did+':','')||'';
@@ -189,7 +232,8 @@ async function doRefresh(btn){btn.textContent='// recomputing… (≈40s)';btn.d
   catch(e){btn.textContent='// error: '+e.message;btn.disabled=false;}}
 
 async function viewDashboard(){
-  E('view').innerHTML='<p class="muted">// loading dashboard…</p>';
+  E('pageTitle').textContent='Overview';
+  E('view').innerHTML='<div class="skel-grid" aria-hidden="true"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div><p class="muted" role="status" aria-live="polite">// loading dashboard…</p>';
   try{const s=await j('/api/dashboard/summary');
     const order=['CRITICAL','HIGH','MEDIUM','LOW'];
     const total=order.reduce((a,k)=>a+(s.risk_distribution[k]||0),0)||1;
@@ -199,9 +243,8 @@ async function viewDashboard(){
     const top=await j('/api/top?risk=CRITICAL&limit=12');
     const tl=top.locked?'<p class="muted">🔒 Flagged-server lists are insider-only. Open any server from Explore to see its full breakdown (counts toward your daily lookups).</p>':(top.servers.map(x=>rowHtml(x,false)).join('')||'<p class="muted">none</p>');
     const src=s.by_source.map(x=>`<div class="distrow"><div class="k" style="width:auto;flex:1;color:var(--mut);font-weight:600">${esc(x.source)}</div><div class="v">${fmt(x.count)}</div></div>`).join('');
-    E('view').innerHTML=`<h2>Overview</h2>
-      <div class="cards">
-        <div class="stat"><div class="n">${fmt(s.scored)}</div><div class="l">servers tiered</div></div>
+    E('view').innerHTML=`<div class="cards">
+        <div class="stat"><div class="n">${fmt(s.scored)}</div><div class="l">servers scored</div></div>
         <div class="stat"><div class="n" style="color:var(--mut)">${fmt(unassessed)}</div><div class="l">unassessed</div></div>
         <div class="stat"><div class="n">${fmt(s.registry_total)}</div><div class="l">in registry</div></div>
         <div class="stat"><div class="n" style="color:var(--CRITICAL)">${fmt(s.risk_distribution.CRITICAL||0)}</div><div class="l">critical</div></div>
@@ -221,16 +264,18 @@ function rowHtml(x,showCmp=true){
   const cb=(showCmp&&!x.hidden&&x.published_overall_risk&&x.published_overall_risk.toUpperCase()!=='UNASSESSED')
     ?`<button class="ghost sm" data-cmp="${esc(x.server_id)}" onclick="toggleCmp('${esc(x.server_id)}',event)">${cmpIds.includes(x.server_id)?'✓ compare':'+ compare'}</button>`
     :'';
-  return `<div class="row" onclick="go('/app/server/${esc(x.server_id)}')">
-  <div class="nm"><b>${esc(x.name||x.server_id)}</b><span>${esc(x.url||x.registry_source||'')}</span></div>${cb}${b}</div>`;}
+  return `<div class="row"><a class="nm" href="/app/server/${esc(x.server_id)}" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();go('/app/server/${esc(x.server_id)}');}">
+  <b>${esc(x.name||x.server_id)}</b><span>${esc(x.url||x.registry_source||'')}</span></a>${cb}${b}</div>`;}
 
 let exState={q:'',risk:'',offset:0};
 function viewExplore(){
-  E('view').innerHTML=`<h2>Explore the registry</h2>
-    <div id="cmpbar" class="cmpbar" style="display:none"></div>
+  E('pageTitle').textContent='Explore the registry';
+  E('view').innerHTML=`<div id="cmpbar" class="cmpbar" style="display:none"></div>
     <div class="controls">
-      <input id="q" placeholder="wildcard search: stripe, github.com/microsoft, *-mcp…" value="${esc(exState.q)}" style="flex:1;min-width:220px">
-      <select id="risk"><option value="">any risk</option>${['CRITICAL','HIGH','MEDIUM','LOW'].map(r=>`<option ${exState.risk===r?'selected':''}>${r}</option>`).join('')}</select>
+      <label for="q" class="sr-only">Search MCP servers</label>
+      <input id="q" aria-label="Search MCP servers" placeholder="wildcard search: stripe, github.com/microsoft, *-mcp…" value="${esc(exState.q)}" style="flex:1;min-width:220px">
+      <label for="risk" class="sr-only">Filter by risk tier</label>
+      <select id="risk" aria-label="Filter by risk tier"><option value="">any risk</option>${['CRITICAL','HIGH','MEDIUM','LOW'].map(r=>`<option ${exState.risk===r?'selected':''}>${r}</option>`).join('')}</select>
       <button onclick="doSearch(0)">Search</button>
     </div>
     <div class="panel"><div id="results"><p class="muted">// search, or browse below</p></div></div>
@@ -253,34 +298,41 @@ async function doSearch(off){exState.q=E('q').value.trim();exState.risk=E('risk'
 function page(d){doSearch(exState.offset+d*25);}
 
 async function viewCompare(){
+  E('pageTitle').textContent='Side-by-side comparison';
   const p=new URLSearchParams(location.search);
   const ids=(p.get('ids')||cmpIds.join(',')).split(',').map(x=>x.trim()).filter(Boolean).slice(0,8);
-  E('view').innerHTML='<a onclick="go(\'/app/explore\')" style="cursor:pointer">‹ back to explore</a><h2>Side-by-side comparison</h2><p class="muted">// loading compare matrix…</p>';
-  if(ids.length<2){E('view').innerHTML='<a onclick="go(\'/app/explore\')" style="cursor:pointer">‹ back to explore</a><p class="muted">// select at least 2 servers in Explore to compare.</p>';return;}
+  const back=navLink('/app/explore','‹ back to explore');
+  E('view').innerHTML=`${back}<p class="muted">// loading compare matrix…</p>`;
+  if(ids.length<2){E('view').innerHTML=`${back}<p class="muted">// select at least 2 servers in Explore to compare.</p>`;return;}
   try{
     const d=await j('/api/compare?ids='+encodeURIComponent(ids.join(',')));
     const srvs=(d.servers||[]).filter(x=>x.found);
     const axes=['overall_risk','auth_strength','capability_breadth','data_sensitivity','network_egress','maintainer_trust','exploit_surface'];
-    const th=srvs.map(s=>`<th><a onclick="go('/app/server/${esc(s.server_id)}')" style="cursor:pointer">${esc(s.name||s.server_id)}</a><div>${badge(s.published_overall_risk)}</div></th>`).join('');
+    const th=srvs.map(s=>`<th>${navLink('/app/server/'+s.server_id, esc(s.name||s.server_id))}<div>${badge(s.published_overall_risk)}</div></th>`).join('');
     const body=axes.map(ax=>'<tr><td><b>'+esc(ax.replace(/_/g,' '))+'</b></td>'+srvs.map(s=>{
       const c=(s.axes&&s.axes[ax])||{};
       const lbl=(c.label||'—').toUpperCase();
       const meta=SEV_MAP[lbl]||{pct:40,col:'var(--mut)'};
       return `<td style="color:${meta.col}">${esc(c.label||'—')}</td>`;
     }).join('')+'</tr>').join('');
-    E('view').innerHTML=`<a onclick="go('/app/explore')" style="cursor:pointer">‹ back to explore</a>
+    E('view').innerHTML=`${back}
       <h2>Side-by-side 7-axis matrix (${srvs.length} servers)</h2>
       <div class="panel tbl-wrap"><table><thead><tr><th>Axis</th>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
-  }catch(e){E('view').innerHTML='<a onclick="go(\'/app/explore\')" style="cursor:pointer">‹ back to explore</a><p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}
+  }catch(e){E('view').innerHTML=`${back}<p style="color:var(--HIGH)">⚠ `+esc(e.message)+'</p>';}
 }
 
 async function viewDetail(id){
+  E('pageTitle').textContent='Server verdict';
   E('view').innerHTML='<p class="muted">// loading…</p>';
+  const back='<a href="/app/explore" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();history.back();}">‹ back</a>';
   try{const _tk=await tok();const r=await fetch('/api/verdict/'+encodeURIComponent(id),_tk?{headers:{Authorization:'Bearer '+_tk}}:{});
-    if(r.status===404){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p class="muted">// server not found in registry</p>';return;}
+    if(r.status===404){E('view').innerHTML=`${back}<p class="muted">// server not found in registry</p>`;return;}
+    if(r.status===429){const d=await r.json().catch(()=>({}));E('view').innerHTML=`${back}<p style="color:var(--HIGH)">⚠ `+esc(d.detail||'Daily lookup limit reached.')+'</p>';return;}
+    if(!r.ok)throw new Error('HTTP '+r.status);
     const _vb=await r.text();const v=_vb?JSON.parse(_vb):{};
+    E('pageTitle').textContent=v.name||v.server_id||'Server verdict';
     if(v.status==='unassessed'||!Object.keys(v.axes||{}).length){
-      E('view').innerHTML=`<a onclick="history.back()" style="cursor:pointer">‹ back</a>
+      E('view').innerHTML=`${back}
         <div class="panel"><div style="display:flex;align-items:center;gap:.6rem"><b style="flex:1;min-width:0;font-size:1.05rem">${esc(v.name||v.server_id)}</b>${badge('UNASSESSED')}</div>
         <div class="muted" style="font-size:.8rem">${esc(v.url||'')}</div>
         <p class="note">source ${esc(v.registry_source||'unknown')} · status <b>UNASSESSED</b> — queued for 7-axis scoring.</p>
@@ -296,17 +348,17 @@ async function viewDetail(id){
       return `<div class="ax"><div class="lab"><small>${esc(k==='overall_risk'?'model risk (raw)':k.replace(/_/g,' '))}</small><b><span style="color:${sev.col}">${esc(a.label||'—')}</span><span class="conf">(conf ${conf}%)</span></b></div><div class="barx"><i style="width:${sev.pct}%;background:${sev.col}"></i></div></div>`;
     }).join('');
     const assessed=(v.scored_at||'').slice(0,10)||'—';
-    E('view').innerHTML=`<a onclick="history.back()" style="cursor:pointer">‹ back</a>
+    E('view').innerHTML=`${back}
       <div class="panel"><div style="display:flex;align-items:center;gap:.6rem"><b style="flex:1;min-width:0;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.name||v.server_id)}</b>${badge(v.published_overall_risk)}</div>
       <div class="muted" style="font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.url||'')}</div>
       ${v.trusted?`<p class="note" style="color:var(--LOW)">✓ ${esc(v.display_label||'verified / established maintainer')}</p>`:''}
       ${bars}
       <p class="note">model ${esc(v.model_version||'')} · assessed ${esc(assessed)} · source ${esc(v.registry_source||'—')} · raw ${esc(v.model_overall_risk||'—')} → published ${esc(v.published_overall_risk||'—')}</p>
-      <p class="note"><a onclick="toggleDispute()" style="cursor:pointer">⚑ Dispute this score</a> · <a onclick="go('/app/disputes')" style="cursor:pointer">My disputes →</a></p>
+      <p class="note"><a href="#dispute" onclick="event.preventDefault();toggleDispute();">⚑ Dispute this score</a> · ${navLink('/app/disputes','My disputes →')}</p>
       <div id="dpanel" style="display:none;border-top:1px solid var(--line);margin-top:.6rem;padding-top:.8rem">
-        <label>Proposed overall risk</label>
+        <label for="drisk">Proposed overall risk</label>
         <select id="drisk">${['LOW','MEDIUM','HIGH','CRITICAL'].map(r=>`<option>${r}</option>`).join('')}</select>
-        <label>Reason</label>
+        <label for="dreason">Reason</label>
         <select id="dreason">
           <option value="official_or_established_maintainer">Official / established maintainer</option>
           <option value="false_positive_overrated">False positive — risk overrated</option>
@@ -315,7 +367,7 @@ async function viewDetail(id){
           <option value="incorrect_capability_or_axis">Incorrect capability / axis label</option>
           <option value="other">Other</option>
         </select>
-        <label>Explanation (min 10 chars)</label>
+        <label for="dexp">Explanation (min 10 chars)</label>
         <input id="dexp" placeholder="What's wrong, and what evidence supports the change?" style="width:100%">
         <div style="margin-top:.8rem"><button onclick="doDispute('${esc(v.server_id||id)}')">Submit dispute</button></div>
         <p class="note" id="dmsg">Disputes are recorded and reviewed by an admin; they don't change the published score until accepted.</p>
@@ -323,7 +375,7 @@ async function viewDetail(id){
       <div class="panel" id="vulnpanel"><h2>Known vulnerabilities</h2><p class="muted">// checking advisories…</p></div>`;
     loadVulns(v.server_id||id);
     refreshMe();
-  }catch(e){E('view').innerHTML='<a onclick="history.back()">‹ back</a><p style="color:var(--HIGH)">⚠ '+esc(e.message)+'</p>';}}
+  }catch(e){E('view').innerHTML=`${back}<p style="color:var(--HIGH)">⚠ `+esc(e.message)+'</p>';}}
 
 async function loadVulns(id){const el=E('vulnpanel');if(!el)return;
   try{const d=await j('/api/servers/'+encodeURIComponent(id)+'/vulns');
@@ -339,21 +391,22 @@ async function loadVulns(id){const el=E('vulnpanel');if(!el)return;
   }catch(e){el.innerHTML='<h2>Known vulnerabilities</h2><p class="muted">⚠ '+esc(e.message)+'</p>';}}
 
 async function viewDisputes(){
+  E('pageTitle').textContent='My score disputes';
   E('view').innerHTML='<p class="muted">// loading your disputes…</p>';
   try{const rows=await j('/api/disputes/mine');
-    const list=(Array.isArray(rows)?rows:[]).map(x=>`<div class="row" onclick="go('/app/server/${esc(x.server_id)}')">
-      <div class="nm"><b>${esc(x.server_id)} · proposed ${esc(x.proposed_overall_risk)} (${esc(x.reason_category)})</b>
-      <span>${esc(x.explanation)}${x.admin_note?' · Admin note: '+esc(x.admin_note):''}</span></div>
+    const list=(Array.isArray(rows)?rows:[]).map(x=>`<div class="row"><a class="nm" href="/app/server/${esc(x.server_id)}" onclick="if(!event.metaKey&&!event.ctrlKey){event.preventDefault();go('/app/server/${esc(x.server_id)}');}">
+      <b>${esc(x.server_id)} · proposed ${esc(x.proposed_overall_risk)} (${esc(x.reason_category)})</b>
+      <span>${esc(x.explanation)}${x.admin_note?' · Admin note: '+esc(x.admin_note):''}</span></a>
       <span class="badge ${x.status==='approved'?'b-LOW':(x.status==='rejected'?'b-CRITICAL':'b-MEDIUM')}">${esc(x.status)}</span></div>`).join('')
       || '<p class="muted">// you have not submitted any score disputes yet</p>';
-    E('view').innerHTML=`<h2>My score disputes</h2><div class="panel">${list}</div>`;
-  }catch(e){E('view').innerHTML='<h2>My score disputes</h2><p class="muted">// error: '+esc(e.message)+'</p>';}}
+    E('view').innerHTML=`<div class="panel">${list}</div>`;
+  }catch(e){E('view').innerHTML='<p class="muted">// error: '+esc(e.message)+'</p>';}}
 
 function viewSubmit(){
-  E('view').innerHTML=`<h2>Submit an MCP server</h2>
-    <div class="panel" style="max-width:520px">
-      <label>Server URL *</label><input id="surl" placeholder="https://github.com/org/your-mcp" style="width:100%">
-      <label>Name (optional)</label><input id="sname" placeholder="My MCP" style="width:100%">
+  E('pageTitle').textContent='Submit an MCP server';
+  E('view').innerHTML=`<div class="panel" style="max-width:520px">
+      <label for="surl">Server URL *</label><input id="surl" placeholder="https://github.com/org/your-mcp" style="width:100%">
+      <label for="sname">Name (optional)</label><input id="sname" placeholder="My MCP" style="width:100%">
       <div style="margin-top:1rem"><button onclick="doSubmit()">Submit for scoring</button></div>
       <p class="note" id="smsg">Submitted servers enter the registry as <b>unreviewed</b> and get scored on the next pass.</p>
     </div>`;
@@ -362,8 +415,9 @@ async function doSubmit(){const url=E('surl').value.trim();const name=E('sname')
   if(!/^https?:\/\//.test(url)){E('smsg').innerHTML='<span style="color:var(--HIGH)">// please enter a valid http(s) URL</span>';return;}
   E('smsg').textContent='// submitting…';
   try{const d=await j('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,name})});
-    E('smsg').innerHTML=d.status==='exists'?`<span style="color:var(--MEDIUM)">// already in the registry —</span> <a onclick="go('/app/server/${esc(d.server_id)}')">view</a>`
-      :`<span style="color:var(--LOW)">✓ submitted —</span> <a onclick="go('/app/server/${esc(d.server_id)}')">view</a> (scoring pending)`;
+    const link=navLink('/app/server/'+d.server_id, 'view');
+    E('smsg').innerHTML=d.status==='exists'?`<span style="color:var(--MEDIUM)">// already in the registry —</span> ${link}`
+      :`<span style="color:var(--LOW)">✓ submitted —</span> ${link} (scoring pending)`;
   }catch(e){E('smsg').innerHTML='<span style="color:var(--HIGH)">// error: '+esc(e.message)+'</span>';}}
 
 function toggleDispute(){const d=E('dpanel');d.style.display=d.style.display==='none'?'':'none';}
@@ -376,17 +430,21 @@ async function doDispute(sid){const exp=E('dexp').value.trim();
   }catch(e){E('dmsg').innerHTML='<span style="color:var(--HIGH)">// error: '+esc(e.message)+'</span>';}}
 
 async function downloadPortfolioCsv(){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), API_TIMEOUT_MS);
   try{
     const t=await tok();
-    const r=await fetch('/api/export/portfolio.csv',{headers:t?{Authorization:'Bearer '+t}:{}});
+    const r=await fetch('/api/export/portfolio.csv',{signal:ctrl.signal,headers:t?{Authorization:'Bearer '+t}:{}});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const blob=await r.blob();
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
     a.download='mcprisky_portfolio.csv'; a.click();
   }catch(e){alert('Export unavailable: '+e.message);}
+  finally{clearTimeout(timer);}
 }
 
 async function viewReports(){
+  E('pageTitle').textContent='Reports & audit exports';
   E('view').innerHTML='<p class="muted">// loading reports…</p>';
   try{const s=await j('/api/dashboard/summary');
     const order=['CRITICAL','HIGH','MEDIUM','LOW'];
@@ -396,8 +454,7 @@ async function viewReports(){
       return `<div class="distrow"><div class="k" style="color:${RC[k]}">${k}</div><div class="bar"><i style="width:${p}%;background:${RC[k]}"></i></div><div class="v">${fmt(v)} · ${p}%</div></div>`;}).join('');
     const flagged=(s.risk_distribution.HIGH||0)+(s.risk_distribution.CRITICAL||0);
     const src=s.by_source.map(x=>`<div class="distrow"><div class="k" style="width:auto;flex:1;color:var(--mut);font-weight:600">${esc(x.source)}</div><div class="v">${fmt(x.count)}</div></div>`).join('');
-    E('view').innerHTML=`<h2>Reports &amp; audit exports</h2>
-      <div class="cards">
+    E('view').innerHTML=`<div class="cards">
         <div class="stat"><div class="n">${fmt(s.scored)}</div><div class="l">tiered servers</div></div>
         <div class="stat"><div class="n" style="color:var(--mut)">${fmt(unassessed)}</div><div class="l">unassessed</div></div>
         <div class="stat"><div class="n" style="color:var(--HIGH)">${fmt(flagged)}</div><div class="l">flagged HIGH+</div></div>

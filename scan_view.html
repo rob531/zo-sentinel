@@ -6,7 +6,10 @@
 <title>Scan my config — MCPRisky</title>
 <meta name="description" content="Paste your MCP client config (mcp.json) and get a per-server risk report — verdict tier, seven risk axes, and known vulnerabilities — each with provenance. Honest UNKNOWN where we haven't scored.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
   :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--dim:#a99cc7;--acc:#34e3ff;--gold:#ecdcae;
         --hi:#ff6f9a;--high:#ff9d54;--med:#ffd84a;--low:#5cf0a0;--warn:#ffd84a}
@@ -18,11 +21,11 @@
   header h1 span{color:var(--acc)}
   header nav{display:flex;gap:.7rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
   header a{color:var(--acc);text-decoration:none}
-  main{max-width:960px;margin:0 auto;padding:1.4rem 1.1rem}
+  main{max-width:960px;margin:0 auto;padding:1.4rem 1.1rem 3.5rem}
   h2{margin:0 0 .3rem;font-size:1.1rem}.sub{color:var(--dim);margin:0 0 1rem;font-size:.84rem}
   textarea{width:100%;height:190px;background:#0d0a16;border:1px solid var(--line);
     color:var(--txt);border-radius:10px;padding:12px;font:13px/1.5 'JetBrains Mono',ui-monospace,Menlo,monospace;resize:vertical}
-  textarea:focus{outline:none;border-color:var(--acc)}
+  textarea:focus-visible,:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
   .bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin-top:.75rem}
   button{background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;color:#02141a;border-radius:8px;padding:.65rem 1.1rem;font-family:inherit;font-weight:800;cursor:pointer}
   button:disabled{opacity:.55;cursor:not-allowed}
@@ -48,13 +51,12 @@
   .vuln a{color:var(--acc);text-decoration:none;font-weight:700}
   .vuln .prov{color:var(--dim);font-size:.74rem;margin-top:3px}
   .unknown{color:var(--dim);font-style:italic;font-size:.82rem;margin-top:.4rem}
-  .example{color:var(--acc);cursor:pointer;font-size:.84rem;text-decoration:underline}
 </style>
 </head>
 <body>
 <header>
   <h1>MCP<span>Risky</span> · Scan config</h1>
-  <nav>
+  <nav aria-label="Primary">
     <a href="/perspectives">Perspectives →</a>
     <a href="/ask">Ask →</a>
     <a href="/threat-intel">Threat Intel →</a>
@@ -66,7 +68,8 @@
   <p class="sub">Paste your <code>mcp.json</code> (Claude Desktop / any MCP client). Every server
      gets a risk report — verdict tier, the seven axes, and any known vulnerabilities — each with
      provenance. Where we haven't scored a server, you get an honest <b>UNKNOWN</b>, never a guess.</p>
-  <textarea id="cfg" spellcheck="false" placeholder='{ "mcpServers": { "inspector": { "command": "npx", "args": ["-y", "github.com/anthropics/mcp-inspector"] } } }'></textarea>
+  <label for="cfg" class="sr-only">MCP client config JSON</label>
+  <textarea id="cfg" aria-label="MCP client config JSON" spellcheck="false" placeholder='{ "mcpServers": { "inspector": { "command": "npx", "args": ["-y", "github.com/anthropics/mcp-inspector"] } } }'></textarea>
   <div class="bar">
     <button id="scanBtn">Scan config</button>
     <button id="ex" class="ghost" type="button">Load example</button>
@@ -109,7 +112,7 @@ function render(d){
     '<div class="stat"><div class="n" style="color:var(--hi)">'+s.with_vulns+'</div><div class="l">with advisories</div></div>'+
     (s.worst_tier?'<div class="stat"><div class="n"><span class="tier '+esc(s.worst_tier)+'">'+esc(s.worst_tier)+'</span></div><div class="l">worst tier</div></div>':'')+
     '</div>';
-  $('results').innerHTML=d.results.map(r=>{
+  $('results').innerHTML=(d.results||[]).map(r=>{
     if(r.status==='unknown') return '<div class="srv"><h3>'+esc(r.name)+
       ' <span class="tier unknown">UNKNOWN</span></h3>'+
       (r.hint?'<div class="u">'+esc(r.hint)+'</div>':'')+
@@ -118,7 +121,7 @@ function render(d){
       '<span class="tier '+esc(r.risk_tier||'unknown')+'">'+esc(r.risk_tier||'?')+'</span></h3>'+
       '<div class="u">'+esc(r.url||'')+'</div>'+
       '<div class="axes">'+axisChips(r.axes)+'</div>'+vulnRows(r)+'</div>';
-  }).join('');
+  }).join('') || '<div class="unknown">No servers found in config.</div>';
 }
 async function scan(){
   const cfg=$('cfg').value.trim();
@@ -126,7 +129,7 @@ async function scan(){
   st.classList.remove('err');
   if(!cfg){st.textContent='// paste a config first';return;}
   $('scanBtn').disabled=true;
-  st.textContent='// scanning config…'; $('summary').innerHTML=''; $('results').innerHTML='';
+  st.textContent='// loading scan…'; $('summary').innerHTML=''; $('results').innerHTML='';
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(), SCAN_TIMEOUT_MS);
   try{

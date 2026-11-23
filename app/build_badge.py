@@ -46,11 +46,11 @@ _BASE_STYLE = (
     "position:fixed;bottom:8px;right:10px;z-index:2147483000;"
     "font:600 10px/1.4 'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;"
     "letter-spacing:.04em;padding:2px 7px;border-radius:99px;"
-    "text-decoration:none;opacity:.62;transition:opacity .15s;"
+    "text-decoration:none;opacity:.92;transition:opacity .15s;"
     "backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);"
 )
-_OK_STYLE = "background:rgba(17,13,29,.72);border:1px solid #2a2340;color:#a99cc7;"
-_DEGRADED_STYLE = "background:rgba(60,40,0,.82);border:1px solid #ecdcae;color:#ecdcae;"
+_OK_STYLE = "background:rgba(17,13,29,.92);border:1px solid #3a3158;color:#d5cce8;"
+_DEGRADED_STYLE = "background:rgba(60,40,0,.92);border:1px solid #ecdcae;color:#ecdcae;"
 
 
 def build_identity() -> dict:
@@ -118,7 +118,7 @@ def badge_html(identity: dict | None = None) -> str:
     return (
         '<a id="{id}" {attr}="{sha}" data-built-at="{built}" href="/version" '
         'title="{title}" style="{style}" '
-        'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.62"'
+        'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.92"'
         '>{label}</a>'
     ).format(
         id=BADGE_ID,

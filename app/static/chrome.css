@@ -1,0 +1,177 @@
+/* Shared Sticky Header Chrome, Responsive Nav Disclosure, Badge Padding & Skeletons */
+header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .7rem 1.3rem;
+  border-bottom: 1px solid var(--line);
+  background: #0b0814;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+header .logo,
+header h1 {
+  font-weight: 800;
+  font-size: 1.05rem;
+  margin: 0;
+  color: var(--txt);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+header .logo span,
+header h1 span {
+  color: var(--cyan);
+  text-shadow: 0 0 12px rgba(52, 227, 255, .5);
+}
+
+header nav {
+  display: flex;
+  gap: .25rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+header nav a {
+  padding: .38rem .6rem;
+  border-radius: 7px;
+  color: var(--mut);
+  font-weight: 600;
+  font-size: .84rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+header nav a:hover {
+  color: var(--txt);
+  background: rgba(52, 227, 255, .06);
+}
+
+header nav a.on {
+  color: var(--cyan);
+  background: rgba(52, 227, 255, .1);
+}
+
+.nav-more {
+  position: relative;
+}
+
+.nav-more summary {
+  list-style: none;
+  cursor: pointer;
+  padding: .38rem .6rem;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: #15101f;
+  color: var(--mut);
+  font-weight: 600;
+  font-size: .82rem;
+  white-space: nowrap;
+}
+
+.nav-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-more[open] summary {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.nav-menu {
+  position: absolute;
+  top: calc(100% + .35rem);
+  right: 0;
+  min-width: 190px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: .35rem;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .55);
+  z-index: 20;
+}
+
+.nav-menu a {
+  padding: .42rem .65rem;
+  border-radius: 7px;
+  color: var(--mut);
+  font-weight: 600;
+  font-size: .82rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-menu a:hover,
+.nav-menu a.on {
+  color: var(--cyan);
+  background: rgba(52, 227, 255, .1);
+}
+
+/* Reserve bottom clearance so fixed #zo-build-badge never collides with last-row interactive controls */
+main,
+.wrap {
+  padding-bottom: 3.5rem;
+}
+
+.page-h1 {
+  font-size: 1.15rem;
+  margin: 0 0 .85rem;
+  letter-spacing: .3px;
+}
+
+.skel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: .8rem;
+  margin-bottom: .9rem;
+}
+
+.skel,
+.skel-card {
+  background: linear-gradient(90deg, rgba(42, 35, 64, .32), rgba(52, 227, 255, .08), rgba(42, 35, 64, .32));
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  min-height: 76px;
+}
+
+.skel-line {
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(42, 35, 64, .45);
+  margin: .45rem 0;
+}
+
+.retry-btn {
+  margin-left: .6rem;
+  padding: .3rem .7rem;
+  font-size: .78rem;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: #15101f;
+  color: var(--txt);
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  header {
+    padding: .55rem .85rem;
+    gap: .45rem;
+  }
+  header nav {
+    gap: .15rem;
+  }
+  header nav a {
+    padding: .3rem .45rem;
+    font-size: .78rem;
+  }
+  .nav-menu {
+    right: auto;
+    left: 0;
+  }
+}

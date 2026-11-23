@@ -311,6 +311,46 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: App-graph gap PROMOTE queue (REPORT-ONLY -- the human-review gate reads the proposals)
+        # improvement-loop cycle-0237, 2026-11-23, FU-1123. The FINAL link of the capmap
+        # chain. FU-311 wired graph_gap_directives (the producer) into this job; the gate
+        # that reads its proposals for human review -- promote_graph_directives (stem
+        # written without its tools/ prefix on purpose, like the step above: dark_tools
+        # counts a prefixed path string as invocation-shaped and a comment is not a
+        # caller) -- stayed "consulted by NOTHING". So the producer wrote proposals to
+        # artifacts/graph_directives on every PR and nothing read them: a generated
+        # queue with no reader is exactly how schema/app_graph.sql drifted for two months
+        # in silence (FU-304). This LISTS that queue, giving it a reader.
+        #
+        # LIST MODE ONLY -- no --approve / --all. That is the air-gap. --approve is the
+        # HUMAN mutation that moves a proposal toward goose_runner, and CI must never
+        # promote graph-driven directives (they are PROPOSAL-ONLY by the tool's own
+        # contract, "they never auto-build"). List mode is read-only -- it never creates
+        # directives/proposed/ -- and exits 0 on an empty or absent --graph-dir, so it
+        # cannot dirty the tree or fail the gate. continue-on-error anyway, matching the
+        # producer step above: this is a reader, not a gate (adding a required check is
+        # what produced the losses this repo has paid for).
+        #
+        # The machine-checkable claims -- the step exists, runs LIST mode (no
+        # --approve/--all), reads artifacts/graph_directives, and the tool's read-only vs
+        # --approve-mutation contract -- live in the ALREADY-REQUIRED pytest
+        # tests/test_promote_graph_directives_wired.py, with YAML negative controls AND
+        # tmp_path behavioral controls that execute the tool against a non-empty queue
+        # (so the wire is proved, never Potemkin).
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          python tools/promote_graph_directives.py --graph-dir artifacts/graph_directives 2>&1 \
+            | tee artifacts/promote_graph_directives.txt
+          {
+            echo "### app-graph gap promote queue (report-only, LIST mode -- no auto-promote)"
+            echo ""
+            echo '```'
+            cat artifacts/promote_graph_directives.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload app-graph gap directives
         if: always()
         uses: actions/upload-artifact@v7

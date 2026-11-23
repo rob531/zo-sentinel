@@ -1,95 +1,111 @@
-"""Data and computation layer for the threat intelligence top-indicators service."""
+"""Logic for threat intelligence top-indicator aggregation."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import datetime
+from typing import Dict, List, Optional
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, distinct, func, select
 from sqlalchemy.orm import Session
 
-from app.db import get_session
 from app.models import ThreatIntelRef
 
 
-def _pulse_age_days(value: Any) -> int | None:
-    """Return the age of a pulse timestamp in whole days."""
-    if value is None:
-        return None
-    if not isinstance(value, datetime):
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    else:
-        value = value.astimezone(timezone.utc)
-    return max(0, (datetime.now(timezone.utc) - value).days)
+def get_top_indicators(
+    db: Session,
+    top_n: int = 10,
+    limit: Optional[int] = None,
+) -> Dict[str, List[Dict[str, object]]]:
+    """Return the most frequent indicator values grouped by indicator type."""
+    if limit is not None:
+        top_n = limit
+    if top_n < 1:
+        return {"types": []}
 
-
-def get_top_indicators(db: Session, top_n: int = 10) -> Dict[str, List[Dict[str, Any]]]:
-    """Return the most frequently observed indicators for each indicator type.
-
-    The count for a type is the number of references in that type.  Counts
-    for individual values are the number of references containing that value.
-    Distinct values are counted independently from references so repeated
-    observations do not inflate the distinct-value metric.
-    """
-    top_n = max(1, int(top_n))
     rows = db.execute(
         select(
             ThreatIntelRef.indicator_type,
             ThreatIntelRef.indicator_value,
-            func.count().label("reference_count"),
-            func.count(func.distinct(ThreatIntelRef.pulse_id)).label("pulse_count"),
-            func.max(ThreatIntelRef.pulse_created).label("latest_pulse_created"),
+            func.count(),
+            func.count(distinct(ThreatIntelRef.pulse_name)),
+            func.max(ThreatIntelRef.pulse_created),
             func.sum(
-                case((ThreatIntelRef.is_aggregator.is_(True), 1), else_=0)
-            ).label("aggregator_count"),
+                case(
+                    (ThreatIntelRef.is_aggregator.is_(True), 1),
+                    else_=0,
+                )
+            ),
         )
         .group_by(
             ThreatIntelRef.indicator_type,
             ThreatIntelRef.indicator_value,
         )
+        .order_by(
+            ThreatIntelRef.indicator_type,
+            func.count().desc(),
+            ThreatIntelRef.indicator_value,
+        )
     ).all()
 
-    grouped: Dict[str, List[Any]] = {}
-    for row in rows:
-        grouped.setdefault(row.indicator_type, []).append(row)
-
-    types: List[Dict[str, Any]] = []
-    for indicator_type, indicator_rows in grouped.items():
-        indicator_rows.sort(
-            key=lambda row: (-int(row.reference_count), str(row.indicator_value))
-        )
-        latest_pulse_created = max(
-            (row.latest_pulse_created for row in indicator_rows if row.latest_pulse_created is not None),
-            default=None,
-        )
-        types.append(
+    grouped: Dict[str, Dict[str, object]] = {}
+    for (
+        indicator_type,
+        indicator_value,
+        value_count,
+        _distinct_pulses,
+        latest_pulse_created,
+        aggregator_count,
+    ) in rows:
+        type_key = indicator_type or "unknown"
+        entry = grouped.setdefault(
+            type_key,
             {
-                "indicator_type": indicator_type,
-                "count": sum(int(row.reference_count) for row in indicator_rows),
-                "distinct_values": len({row.indicator_value for row in indicator_rows}),
-                "top_values": [
-                    {
-                        "value": row.indicator_value,
-                        "count": int(row.reference_count),
-                    }
-                    for row in indicator_rows[:top_n]
-                ],
-                "latest_pulse_created": latest_pulse_created,
-                "is_aggregator_count": sum(
-                    int(row.aggregator_count or 0) for row in indicator_rows
-                ),
-            }
+                "indicator_type": indicator_type or "unknown",
+                "count": 0,
+                "distinct_values": 0,
+                "top_values": [],
+                "latest_pulse_created": None,
+                "is_aggregator_count": 0,
+            },
         )
+        entry["count"] = int(entry["count"]) + int(value_count)
+        entry["distinct_values"] = int(entry["distinct_values"]) + 1
+        entry["is_aggregator_count"] = int(entry["is_aggregator_count"]) + int(
+            aggregator_count or 0
+        )
+        if latest_pulse_created is not None:
+            current_latest = entry["latest_pulse_created"]
+            if current_latest is None or latest_pulse_created > current_latest:
+                entry["latest_pulse_created"] = latest_pulse_created
+        top_values = entry["top_values"]
+        assert isinstance(top_values, list)
+        if len(top_values) < top_n:
+            top_values.append(
+                {
+                    "value": indicator_value,
+                    "count": int(value_count),
+                }
+            )
 
-    types.sort(key=lambda item: (-item["count"], str(item["indicator_type"])))
-    return {"types": types}
+    return {"types": list(grouped.values())}
 
 
-def top_indicators(db: Session, top_n: int = 10) -> Dict[str, List[Dict[str, Any]]]:
-    """Compatibility alias for callers using the resource name directly."""
-    return get_top_indicators(db, top_n=top_n)
+def top_indicators(
+    db: Session,
+    top_n: int = 10,
+    limit: Optional[int] = None,
+) -> Dict[str, List[Dict[str, object]]]:
+    """Compatibility name for the top-indicator query."""
+    return get_top_indicators(db, top_n=top_n, limit=limit)
+
+
+def get_threat_intel_top_indicators(
+    db: Session,
+    top_n: int = 10,
+    limit: Optional[int] = None,
+) -> Dict[str, List[Dict[str, object]]]:
+    """Compatibility name for the top-indicator query."""
+    return get_top_indicators(db, top_n=top_n, limit=limit)
 
 
 if __name__ == "__main__":
@@ -98,8 +114,10 @@ if __name__ == "__main__":
     from fastapi import Depends, FastAPI
     from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.orm import Session, sessionmaker
     from sqlalchemy.pool import StaticPool
+
+    from app.db import get_session
 
     test_engine = create_engine(
         "sqlite://",
@@ -107,81 +125,75 @@ if __name__ == "__main__":
         poolclass=StaticPool,
     )
     ThreatIntelRef.__table__.create(bind=test_engine)
-    TestSession = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
+    TestSession = sessionmaker(bind=test_engine, expire_on_commit=False)
 
     def override_get_session():
-        session = TestSession()
-        try:
+        with TestSession() as session:
             yield session
-        finally:
-            session.close()
 
     test_app = FastAPI()
-    test_app.dependency_overrides[get_session] = override_get_session
 
     @test_app.get("/api/threat-intel/top-indicators")
-    def test_route(db: Session = Depends(get_session)):
-        return get_top_indicators(db, top_n=10)
+    def top_indicators_endpoint(db: Session = Depends(get_session)):
+        return get_top_indicators(db)
 
-    now = datetime.now(timezone.utc) - timedelta(days=2)
-    test_session = TestSession()
-    test_session.add_all(
-        [
-            ThreatIntelRef(
-                id=1,
-                indicator_type="ip",
-                indicator_value="192.0.2.10",
-                pulse_id="pulse-1",
-                pulse_name="Pulse 1",
-                pulse_created=now,
-                source="test",
-                source_url="https://example.test/pulse-1",
-                is_aggregator=False,
-            ),
-            ThreatIntelRef(
-                id=2,
-                indicator_type="ip",
-                indicator_value="192.0.2.10",
-                pulse_id="pulse-2",
-                pulse_name="Pulse 2",
-                pulse_created=now - timedelta(days=1),
-                source="test",
-                source_url="https://example.test/pulse-2",
-                is_aggregator=True,
-            ),
-            ThreatIntelRef(
-                id=3,
-                indicator_type="ip",
-                indicator_value="192.0.2.11",
-                pulse_id="pulse-3",
-                pulse_name="Pulse 3",
-                pulse_created=now - timedelta(days=1),
-                source="test",
-                source_url="https://example.test/pulse-3",
-                is_aggregator=False,
-            ),
-            ThreatIntelRef(
-                id=4,
-                indicator_type="domain",
-                indicator_value="example.test",
-                pulse_id="pulse-4",
-                pulse_name="Pulse 4",
-                pulse_created=now,
-                source="test",
-                source_url="https://example.test/pulse-4",
-                is_aggregator=False,
-            ),
-        ]
-    )
-    test_session.commit()
-    test_session.close()
+    test_app.dependency_overrides[get_session] = override_get_session
+
+    now = datetime.utcnow()
+    with TestSession() as session:
+        session.add_all(
+            [
+                ThreatIntelRef(
+                    id=1,
+                    indicator_type="ip",
+                    indicator_value="192.0.2.1",
+                    pulse_name="pulse-one",
+                    pulse_created=now - timedelta(days=2),
+                    pulse_id="pulse-1",
+                    source="internal",
+                    source_url="https://example.invalid/one",
+                ),
+                ThreatIntelRef(
+                    id=2,
+                    indicator_type="ip",
+                    indicator_value="192.0.2.1",
+                    pulse_name="pulse-two",
+                    pulse_created=now - timedelta(days=1),
+                    pulse_id="pulse-2",
+                    source="internal",
+                    source_url="https://example.invalid/two",
+                ),
+                ThreatIntelRef(
+                    id=3,
+                    indicator_type="domain",
+                    indicator_value="example.invalid",
+                    pulse_name="pulse-three",
+                    pulse_created=now - timedelta(days=3),
+                    pulse_id="pulse-3",
+                    source="aggregator",
+                    source_url="https://example.invalid/three",
+                ),
+                ThreatIntelRef(
+                    id=4,
+                    indicator_type="domain",
+                    indicator_value="other.invalid",
+                    pulse_name="pulse-four",
+                    pulse_created=now - timedelta(days=4),
+                    pulse_id="pulse-4",
+                    source="aggregator",
+                    source_url="https://example.invalid/four",
+                ),
+            ]
+        )
+        session.commit()
 
     response = TestClient(test_app).get("/api/threat-intel/top-indicators")
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     payload = response.json()
-    type_rows = {row["indicator_type"]: row for row in payload["types"]}
-    assert type_rows["ip"]["count"] == 3
-    assert type_rows["domain"]["count"] == 1
-    assert type_rows["ip"]["top_values"][0]["value"] == "192.0.2.10"
-    assert type_rows["ip"]["top_values"][0]["count"] == 2
+    assert len(payload["types"]) == 2
+    by_type = {item["indicator_type"]: item for item in payload["types"]}
+    assert by_type["ip"]["count"] == 2
+    assert by_type["domain"]["count"] == 2
+    assert by_type["ip"]["top_values"][0]["value"] == "192.0.2.1"
+    assert by_type["ip"]["top_values"][0]["count"] == 2
     print("PASS")

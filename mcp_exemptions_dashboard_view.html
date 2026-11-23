@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Waivers, Exports &amp; Keys — MCPRisky</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
   :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--mut:#a99cc7;--cyan:#34e3ff;--gold:#ecdcae;
         --LOW:#5cf0a0;--MEDIUM:#ffd84a;--HIGH:#ff9d54;--CRITICAL:#ff6f9a}
@@ -16,13 +19,14 @@
   header h1{font-size:1.05rem;margin:0;font-weight:800} header h1 span{color:var(--cyan)}
   header nav{display:flex;gap:.75rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
   a{color:var(--cyan);text-decoration:none}
-  main{max-width:1040px;margin:0 auto;padding:1.3rem 1.1rem}
+  .muted{color:var(--mut)}
+  main{max-width:1040px;margin:0 auto;padding:1.3rem 1.1rem 3.5rem}
   h2{font-size:1.05rem;margin:.2rem 0 .8rem}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;margin-top:1rem}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem} @media(max-width:800px){.grid{grid-template-columns:1fr}}
   label{display:block;font-size:.78rem;color:var(--mut);margin:.55rem 0 .25rem}
   input,select{width:100%;padding:.55rem .75rem;background:#0d0a16;border:1px solid var(--line);border-radius:8px;color:var(--txt);font-family:inherit;font-size:.86rem}
-  input:focus,select:focus{outline:none;border-color:var(--cyan)}
+  input:focus-visible,select:focus-visible,:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   button{padding:.55rem .95rem;background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;border-radius:8px;color:#02141a;font-family:inherit;font-weight:800;cursor:pointer}
   button.ghost{background:#15101f;color:var(--mut);border:1px solid var(--line)}
   button.sm{padding:.25rem .6rem;font-size:.74rem}
@@ -40,7 +44,7 @@
 <body>
 <header>
   <h1>MCP<span>Risky</span> · Waivers, Exports &amp; Keys</h1>
-  <nav>
+  <nav aria-label="Primary">
     <a href="/app">Dashboard →</a>
     <a href="/app/explore">Explore →</a>
     <a href="/scan">Scan →</a>
@@ -69,7 +73,7 @@
       <input id="wReason" placeholder="Business need and compensating controls">
       <div class="controls">
         <button onclick="saveWatch()">Save entry</button>
-        <span class="note" id="wStatus"></span>
+        <span class="note" id="wStatus" role="status" aria-live="polite"></span>
       </div>
     </div>
 
@@ -141,14 +145,24 @@
 </main>
 <script>
 const $=id=>document.getElementById(id);
+const API_TIMEOUT_MS = 15000;
 function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
 async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
 async function api(u,o){
-  o=o||{}; const t=await tok();
-  o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
-  const r=await fetch(u,o);
-  if(!r.ok)throw new Error('HTTP '+r.status+': '+(await r.text()).slice(0,180));
-  return r.json();
+  o=o||{};
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), API_TIMEOUT_MS);
+  try{
+    const t=await tok();
+    o.signal=ctrl.signal;
+    o.headers=Object.assign({},o.headers||{},t?{Authorization:'Bearer '+t}:{});
+    const r=await fetch(u,o);
+    if(!r.ok)throw new Error('HTTP '+r.status+': '+(await r.text()).slice(0,180));
+    return await r.json();
+  }catch(e){
+    if(e&&e.name==='AbortError')throw new Error('Request timed out after 15s');
+    throw e;
+  }finally{clearTimeout(timer);}
 }
 
 async function loadWatchlist(){
@@ -188,13 +202,16 @@ async function delWatch(id){
 }
 
 async function dlFile(url,fname){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), API_TIMEOUT_MS);
   try{
     const t=await tok();
-    const r=await fetch(url,{headers:t?{Authorization:'Bearer '+t}:{}});
+    const r=await fetch(url,{signal:ctrl.signal,headers:t?{Authorization:'Bearer '+t}:{}});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const a=document.createElement('a');
     a.href=URL.createObjectURL(await r.blob()); a.download=fname; a.click();
   }catch(e){alert('Export failed: '+e.message);}
+  finally{clearTimeout(timer);}
 }
 function dlPortfolio(){
   const rk=$('eRisk').value;

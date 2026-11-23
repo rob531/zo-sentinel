@@ -4,37 +4,51 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Roadmap — MCPRisky</title>
-<meta name="description" content="MCPRisky roadmap: 65,532 scored MCP servers today; Perspectives and grounded Ask search now; explainable verdicts, freshness SLAs and signed scorecards ahead.">
+<meta name="description" content="MCPRisky roadmap: automated risk scoring across the MCP ecosystem; Perspectives and grounded Ask search now; explainable verdicts, freshness SLAs and signed scorecards ahead.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
-  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;--ok:#39d98a}
-  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
-    font:16px/1.6 system-ui,Segoe UI,Roboto,sans-serif}
-  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
-  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
-  main{max-width:760px;margin:0 auto;padding:36px 20px}
-  h2{margin-top:0}
+  :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--dim:#a99cc7;--acc:#34e3ff;--ok:#5cf0a0}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'JetBrains Mono','Courier New',monospace;font-size:14px;line-height:1.6;
+       background:radial-gradient(900px 460px at 80% -28%,rgba(86,52,150,.16),transparent 62%),var(--bg) fixed}
+  header{padding:.75rem 1.3rem;border-bottom:1px solid var(--line);background:#0b0814;display:flex;gap:.9rem;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  header h1{font-size:1.05rem;margin:0;font-weight:800}
+  header h1 span{color:var(--acc)}
+  header nav{display:flex;gap:.75rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
+  header a{color:var(--acc);text-decoration:none}
+  main{max-width:760px;margin:0 auto;padding:2rem 1.25rem 3.5rem}
+  h2{margin-top:0;font-size:1.15rem}
   .phase{border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:10px;
     background:var(--panel);padding:16px 18px;margin:16px 0}
   .phase.done{border-left-color:var(--ok)}
-  .phase h3{margin:0 0 6px;font-size:15px}
+  .phase h3{margin:0 0 6px;font-size:.96rem}
   .tag{font-size:11px;font-weight:700;border-radius:99px;padding:2px 10px;margin-left:8px;vertical-align:middle}
-  .tag.live{background:rgba(57,217,138,.15);color:var(--ok)}
-  .tag.next{background:rgba(91,140,255,.15);color:var(--acc)}
-  .tag.ahead{background:rgba(154,167,199,.15);color:var(--dim)}
+  .tag.live{background:rgba(92,240,160,.15);color:var(--ok)}
+  .tag.next{background:rgba(52,227,255,.15);color:var(--acc)}
+  .tag.ahead{background:rgba(169,156,199,.15);color:var(--dim)}
   p.dim{color:var(--dim)}
-  ul{margin:6px 0 0 18px;padding:0}li{margin:4px 0}
+  ul{margin:6px 0 0 18px;padding:0}li{margin:4px 0;font-size:.88rem}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 </style>
 </head>
 <body>
 <header>
-  <h1>MCPRisky</h1><span style="color:var(--dim)">roadmap</span>
-  <span style="flex:1"></span>
-  <a href="/perspectives">Perspectives</a> <a href="/ask">Ask</a> <a href="/app">App</a>
+  <h1>MCP<span>Risky</span> · Roadmap</h1>
+  <nav aria-label="Primary">
+    <a href="/perspectives">Perspectives</a>
+    <a href="/ask">Ask</a>
+    <a href="/scan">Scan</a>
+    <a href="/app">App</a>
+  </nav>
 </header>
 <main>
   <h2>A foundation, not just a lookup</h2>
   <p class="dim">MCPRisky scores the Model Context Protocol server ecosystem —
-  65,532 servers assessed across seven risk axes (auth strength, capability
+  <span id="roadmap-scored-count" aria-live="polite">loading live registry count…</span> across seven risk axes (auth strength, capability
   breadth, data sensitivity, network egress, maintainer trust, exploit surface,
   overall risk) with trust-gating so established, official publishers aren't
   false-flagged for being powerful. Here is where it goes.</p>
@@ -90,7 +104,29 @@
   </div>
 
   <p class="dim">Assessments are automated heuristics to support — never replace —
-  your own review. <a href="/disclaimer" style="color:var(--acc)">Full disclaimer</a>.</p>
+  your own review. <a href="/disclaimer">Full disclaimer</a>.</p>
 </main>
+<script>
+(function(){
+  var el = document.getElementById("roadmap-scored-count");
+  if (!el) { return; }
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, 5000);
+  fetch("/freshness", {cache: "no-store", signal: ctrl.signal})
+    .then(function(r){ if (!r.ok) { throw new Error("HTTP " + r.status); } return r.json(); })
+    .then(function(d){
+      var n = (d && typeof d.scored_servers === "number") ? d.scored_servers : null;
+      if (n && n > 0) {
+        el.textContent = n.toLocaleString("en-US") + " servers assessed";
+      } else {
+        el.textContent = "live registry count unavailable (none)";
+      }
+    })
+    .catch(function(){
+      el.textContent = "hundreds of thousands of servers assessed (error fetching live count)";
+    })
+    .finally(function(){ clearTimeout(timer); });
+})();
+</script>
 </body>
 </html>

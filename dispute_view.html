@@ -5,41 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dispute a score — MCPRisky</title>
 <meta name="description" content="Think we got a server's risk score wrong? Submit a dispute — pick the server, the risk tier you believe is right, and your reasoning. Every dispute is reviewed by an admin and logged.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
-  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;
-        --hi:#ff5b6a;--med:#ffb84d;--low:#39d98a;--warn:#ffb84d}
-  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
-    font:15px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
-  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
-  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
-  main{max-width:760px;margin:0 auto;padding:26px 20px}
-  h2{margin:0 0 4px}.sub{color:var(--dim);margin:0 0 16px}
-  label{display:block;margin:14px 0 4px;font-weight:600;font-size:13px}
-  input,select,textarea{width:100%;background:var(--panel);border:1px solid var(--line);
-    color:var(--txt);border-radius:10px;padding:10px 12px;font:inherit}
+  :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--dim:#a99cc7;--acc:#34e3ff;
+        --hi:#ff6f9a;--med:#ffd84a;--low:#5cf0a0;--warn:#ffd84a}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'JetBrains Mono','Courier New',monospace;font-size:14px;line-height:1.55;
+       background:radial-gradient(900px 460px at 80% -28%,rgba(86,52,150,.16),transparent 62%),var(--bg) fixed}
+  header{padding:.75rem 1.3rem;border-bottom:1px solid var(--line);background:#0b0814;display:flex;gap:.9rem;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  header h1{font-size:1.05rem;margin:0;font-weight:800}
+  header h1 span{color:var(--acc)}
+  header nav{display:flex;gap:.75rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
+  header a{color:var(--acc);text-decoration:none}
+  main{max-width:760px;margin:0 auto;padding:1.6rem 1.25rem 3.5rem}
+  h2{margin:0 0 .25rem;font-size:1.1rem}.sub{color:var(--dim);margin:0 0 1rem;font-size:.84rem}
+  label{display:block;margin:14px 0 4px;font-weight:600;font-size:.8rem;color:var(--dim)}
+  input,select,textarea{width:100%;background:#0d0a16;border:1px solid var(--line);
+    color:var(--txt);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:.88rem}
   textarea{height:130px;resize:vertical}
-  .hint{color:var(--dim);font-size:12px;margin-top:3px}
-  .bar{display:flex;gap:10px;align-items:center;margin-top:16px}
-  button{background:var(--acc);border:0;color:#fff;border-radius:10px;padding:11px 18px;font:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .hint{color:var(--dim);font-size:.76rem;margin-top:3px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+  button{background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;color:#02141a;border-radius:8px;padding:11px 18px;font-family:inherit;font-weight:800;cursor:pointer}
   button:disabled{opacity:.5;cursor:default}
-  #status{color:var(--dim)}
+  #status{color:var(--dim);font-size:.84rem}
   #status.ok{color:var(--low)} #status.err{color:var(--hi)}
   .mine{margin-top:34px}
-  .row{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;font-size:13px}
-  .row .id{color:var(--dim);font-size:11px}
+  .row{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;font-size:.82rem}
+  .row .id{color:var(--dim);font-size:.74rem}
   .st{padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800;margin-left:8px}
-  .st.pending{background:rgba(255,184,77,.15);color:var(--med)}
-  .st.approved{background:rgba(57,217,138,.15);color:var(--low)}
-  .st.rejected{background:rgba(255,91,106,.15);color:var(--hi)}
-  .signin{background:rgba(255,184,77,.08);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:14px 0;color:var(--dim)}
+  .st.pending{background:rgba(255,216,74,.15);color:var(--med)}
+  .st.approved{background:rgba(92,240,160,.15);color:var(--low)}
+  .st.rejected{background:rgba(255,111,154,.15);color:var(--hi)}
+  .signin{background:rgba(255,216,74,.08);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:14px 0;color:var(--dim)}
   .signin a{color:var(--acc)}
 </style>
 </head>
 <body>
 <header>
-  <h1>MCPRisky</h1><span style="color:var(--dim)">Dispute a score</span>
-  <span style="flex:1"></span>
-  <a href="/scan">Scan →</a> <a href="/perspectives">Perspectives →</a> <a href="/ask">Ask →</a> <a href="/app">App →</a>
+  <h1>MCP<span>Risky</span> · Dispute a score</h1>
+  <nav aria-label="Primary">
+    <a href="/scan">Scan →</a>
+    <a href="/perspectives">Perspectives →</a>
+    <a href="/ask">Ask →</a>
+    <a href="/app">App →</a>
+  </nav>
 </header>
 <main>
   <h2>Dispute a risk score</h2>
@@ -82,7 +96,7 @@
   </div>
 
   <div class="mine">
-    <h2 style="font-size:16px">My disputes</h2>
+    <h2 style="font-size:1rem">My disputes</h2>
     <div id="mine"><span class="hint">Sign in to see your submitted disputes.</span></div>
   </div>
 </main>
@@ -91,13 +105,17 @@ async function tok(){try{return (window.Clerk&&window.Clerk.session)?await windo
 const $=id=>document.getElementById(id);
 function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
 function setStatus(msg,cls){const el=$('status');el.textContent=msg;el.className=cls||'';}
+const DISPUTE_TIMEOUT_MS = 15000;
 
 async function loadMine(){
   const t=await tok(); if(!t){$('signinNote').style.display='block';return;}
   $('signinNote').style.display='none';
+  $('mine').innerHTML='<span class="hint">// loading your disputes…</span>';
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), DISPUTE_TIMEOUT_MS);
   try{
-    const r=await fetch('/api/disputes/mine',{headers:{Authorization:'Bearer '+t}});
-    if(!r.ok) return;
+    const r=await fetch('/api/disputes/mine',{signal:ctrl.signal,headers:{Authorization:'Bearer '+t}});
+    if(!r.ok){$('mine').innerHTML='<span class="hint">// error loading disputes (HTTP '+r.status+')</span>';return;}
     const d=await r.json();
     const rows=(d.disputes||d||[]);
     if(!rows.length){$('mine').innerHTML='<span class="hint">No disputes submitted yet.</span>';return;}
@@ -106,7 +124,9 @@ async function loadMine(){
       ' → proposed <b>'+esc(x.proposed_overall_risk)+'</b>'+
       '<div class="id">'+esc(x.reason_category)+' · '+esc((x.created_at||'').slice(0,10))+
       (x.admin_note?' · admin: '+esc(x.admin_note):'')+'</div></div>').join('');
-  }catch(e){}
+  }catch(e){
+    $('mine').innerHTML='<span class="hint">// error: '+esc((e&&e.name==='AbortError')?'timed out after 15s':e.message)+'</span>';
+  }finally{clearTimeout(timer);}
 }
 
 async function send(){
@@ -115,16 +135,18 @@ async function send(){
   if(why.length<10){setStatus('explanation must be at least 10 characters','err');return;}
   const t=await tok();
   if(!t){setStatus('sign in first (via /app)','err');$('signinNote').style.display='block';return;}
-  $('sendBtn').disabled=true; setStatus('submitting…');
+  $('sendBtn').disabled=true; setStatus('// loading submission…');
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), DISPUTE_TIMEOUT_MS);
   try{
-    const r=await fetch('/api/disputes',{method:'POST',
+    const r=await fetch('/api/disputes',{method:'POST',signal:ctrl.signal,
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},
       body:JSON.stringify({server_id:sid,proposed_overall_risk:risk,reason_category:cat,explanation:why})});
     if(!r.ok){setStatus('error '+r.status+': '+(await r.text()).slice(0,200),'err');}
     else{const d=await r.json();setStatus('submitted (id '+d.id+') — thank you','ok');
       $('sid').value='';$('risk').value='';$('cat').value='';$('why').value='';loadMine();}
-  }catch(e){setStatus('error: '+e.message,'err');}
-  $('sendBtn').disabled=false;
+  }catch(e){setStatus((e&&e.name==='AbortError')?'error: request timed out after 15s':'error: '+e.message,'err');}
+  finally{clearTimeout(timer);$('sendBtn').disabled=false;}
 }
 $('sendBtn').onclick=send;
 

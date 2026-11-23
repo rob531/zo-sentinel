@@ -10,8 +10,8 @@ import logging
 import pathlib
 import threading
 
-from fastapi import Depends, FastAPI
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth, clerk_webhook
@@ -139,9 +139,71 @@ import os as _os
 from app.build_badge import inject as _inject_build_badge
 
 
-def _render(name: str) -> str:
+_SCORED_COUNT_CACHE: dict = {"at": 0.0, "count": None}
+_SCORED_COUNT_TTL_SECS = 120.0
+_SCORED_COUNT_ERR_TTL_SECS = 5.0
+
+
+def _get_scored_server_count() -> int | None:
+    """Return cached count of scored (non-unassessed) MCP servers for SSR.
+
+    Read-only, short-timeout, best-effort: returns None if DB is unavailable
+    (e.g. unit tests without a DB) so HTML rendering never 500s.
+    """
+    import logging as _logging
+    import time as _time
+
+    now = _time.monotonic()
+    cached = _SCORED_COUNT_CACHE["count"]
+    ttl = _SCORED_COUNT_TTL_SECS if (cached and cached > 0) else _SCORED_COUNT_ERR_TTL_SECS
+    if _SCORED_COUNT_CACHE["at"] > 0.0 and (now - _SCORED_COUNT_CACHE["at"]) < ttl:
+        return cached
+    try:
+        from sqlalchemy import func as _func, select as _select, text as _text
+        from .db import SessionLocal as _SessionLocal
+        from .models import McpServerRegistry as _McpServerRegistry
+
+        with _SessionLocal() as db:
+            if db.bind is not None and db.bind.dialect.name == "postgresql":
+                db.execute(_text("SELECT set_config('statement_timeout', '1500', true)"))
+            n = db.execute(
+                _select(_func.count())
+                .select_from(_McpServerRegistry)
+                .where(
+                    _McpServerRegistry.risk_tier.is_not(None),
+                    _func.lower(_McpServerRegistry.risk_tier) != "unassessed",
+                )
+            ).scalar()
+        val = int(n) if n and int(n) > 0 else None
+    except Exception as exc:  # noqa: BLE001 -- SSR fallback must never crash HTML routes
+        _logging.getLogger(__name__).debug("ssr scored-count fallback: %s", exc)
+        val = None
+    _SCORED_COUNT_CACHE["at"] = now
+    _SCORED_COUNT_CACHE["count"] = val
+    return val
+
+
+def _render(name: str, *, ssr_dashboard_stat: bool = False) -> str:
     html = (_STATIC / name).read_text(encoding="utf-8")
     html = html.replace("__CLERK_PK__", _os.getenv("CLERK_PUBLISHABLE_KEY", ""))
+    need_scored = "__SCORED_COUNT__" in html or (
+        ssr_dashboard_stat and "<!--__SSR_DASHBOARD_STAT__-->" in html
+    )
+    scored = _get_scored_server_count() if need_scored else None
+    if "__SCORED_COUNT__" in html:
+        html = html.replace(
+            "__SCORED_COUNT__",
+            f"{scored:,}" if (scored and scored > 0) else "live",
+        )
+    if "<!--__SSR_DASHBOARD_STAT__-->" in html:
+        ssr_block = (
+            f'<div class="cards" style="margin-bottom:.8rem">'
+            f'<div class="stat"><div class="n">{scored:,}</div>'
+            f'<div class="l">servers scored</div></div></div>'
+            if (ssr_dashboard_stat and scored and scored > 0)
+            else ""
+        )
+        html = html.replace("<!--__SSR_DASHBOARD_STAT__-->", ssr_block)
     # Stamp the build that served this page (app/build_badge.py). Injected here
     # rather than written into each static file: the version must come from the
     # IMAGE, and a literal in a checked-in .html is a number someone has to
@@ -172,6 +234,32 @@ def disclaimer_page():
 # postmortem (FU-044) exists to kill. Source of truth is services/active/.
 from ._spine_generated import include_spine
 include_spine(app)  # boot-anyway in prod; strict raise is a CI-only gate
+
+
+_STATIC_TOKENS_CSS = _STATIC / "tokens.css"
+_STATIC_CHROME_CSS = _STATIC / "chrome.css"
+
+
+def _serve_static_css(path: pathlib.Path):
+    if not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/static/tokens.css")
+def static_tokens_css():
+    """Serve shared design tokens CSS."""
+    return _serve_static_css(_STATIC_TOKENS_CSS)
+
+
+@app.get("/static/chrome.css")
+def static_chrome_css():
+    """Serve shared chrome CSS."""
+    return _serve_static_css(_STATIC_CHROME_CSS)
 
 
 # The Postgres tables the freshness / registry / scoring read routes query.
@@ -325,7 +413,7 @@ def explore_redirect():
 
 @app.get("/app", response_class=HTMLResponse)
 def app_page():
-    return _render("app.html")
+    return _render("app.html", ssr_dashboard_stat=True)
 
 
 @app.get("/app/{rest:path}", response_class=HTMLResponse)

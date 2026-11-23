@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ask — MCPRisky</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
   :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--dim:#a99cc7;--acc:#34e3ff;--warn:#ffd84a;--hi:#ff6f9a}
   *{box-sizing:border-box}
@@ -16,11 +19,11 @@
   header h1 span{color:var(--acc)}
   header nav{display:flex;gap:.75rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
   header a{color:var(--acc);text-decoration:none}
-  main{max-width:860px;margin:0 auto;padding:1.4rem 1.1rem}
+  main{max-width:860px;margin:0 auto;padding:1.4rem 1.1rem 3.5rem}
   form{display:flex;gap:8px;flex-wrap:wrap}
   input[type=search]{flex:1;min-width:220px;background:#0d0a16;border:1px solid var(--line);color:var(--txt);
     border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px}
-  input[type=search]:focus{outline:none;border-color:var(--acc)}
+  input[type=search]:focus-visible,:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
   button{background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;color:#02141a;border-radius:10px;padding:11px 18px;
     font-family:inherit;font-weight:800;cursor:pointer}
   #answer{background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -39,7 +42,7 @@
 <body>
 <header>
   <h1>MCP<span>Risky</span> · Ask</h1>
-  <nav>
+  <nav aria-label="Primary">
     <a href="/perspectives">Perspectives →</a>
     <a href="/scan">Scan →</a>
     <a href="/threat-intel">Threat Intel →</a>
@@ -48,6 +51,7 @@
 </header>
 <main>
   <form id="f" role="search">
+    <label for="q" class="sr-only">Ask a question about MCP servers</label>
     <input id="q" type="search" placeholder="e.g. weak auth github servers touching sensitive data"
            aria-label="Ask a question about MCP servers" autofocus>
     <button type="submit">Ask</button>
@@ -64,19 +68,22 @@
 async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
 const $=id=>document.getElementById(id);
 function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+const ASK_TIMEOUT_MS = 15000;
 
 async function ask(q){
-  $('status').textContent='// searching…';
+  $('status').textContent='// loading answer…';
   $('answer').style.display='none'; $('insufficient').style.display='none'; $('cites').innerHTML='';
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), ASK_TIMEOUT_MS);
   try{
     const t=await tok();
-    const r=await fetch('/api/ask',{method:'POST',
+    const r=await fetch('/api/ask',{method:'POST',signal:ctrl.signal,
       headers:Object.assign({'Content-Type':'application/json'},t?{Authorization:'Bearer '+t}:{}),
       body:JSON.stringify({query:q})});
     if(!r.ok){$('status').textContent='error '+r.status+': '+await r.text();return}
     const d=await r.json();
     $('status').textContent='';
-    if(d.status!=='ok'){$('insufficient').style.display='block';return}
+    if(d.status!=='ok'){$('insufficient').style.display='block';$('status').textContent='insufficient evidence';return}
     $('answer').textContent=d.answer; $('answer').style.display='block';
     $('cites').innerHTML=d.citations.map((c,i)=>
       '<div class="cite" id="c'+i+'">'+
@@ -87,7 +94,11 @@ async function ask(q){
         'aria-label="Why this result">why this result ▾</button>'+
         '<div class="why">matched fields: '+esc(c.matched_fields.join(', '))+
         '<br>matched terms: '+esc(c.matched_terms.join(', '))+'</div></div>').join('');
-  }catch(e){$('status').textContent='error: '+e.message}
+  }catch(e){
+    $('status').textContent=(e&&e.name==='AbortError')
+      ? '// error: request timed out after '+(ASK_TIMEOUT_MS/1000)+'s'
+      : 'error: '+e.message;
+  }finally{clearTimeout(timer);}
 }
 $('f').addEventListener('submit',e=>{e.preventDefault();const q=$('q').value.trim();if(q)ask(q);});
 

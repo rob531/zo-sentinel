@@ -5,41 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Threat intel — MCPRisky</title>
 <meta name="description" content="Known vulnerabilities and threat-intel references for an MCP server — every claim with a verifiable source. Curated reports separated from bulk aggregator pulses. INSUFFICIENT when the surface is disabled, never a guess.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/chrome.css">
 <style>
-  :root{--bg:#0b1020;--panel:#121a33;--line:#26314f;--txt:#e8ecf8;--dim:#9aa7c7;--acc:#5b8cff;
-        --hi:#ff5b6a;--med:#ffb84d;--low:#39d98a}
-  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
-    font:15px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
-  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
-  header h1{font-size:16px;margin:0}header a{color:var(--acc);text-decoration:none}
-  main{max-width:900px;margin:0 auto;padding:26px 20px}
-  h2{margin:0 0 4px}.sub{color:var(--dim);margin:0 0 16px}
-  input{background:var(--panel);border:1px solid var(--line);color:var(--txt);
-    border-radius:10px;padding:10px 12px;font:inherit;width:340px}
-  button{background:var(--acc);border:0;color:#fff;border-radius:10px;padding:10px 18px;font:inherit;cursor:pointer}
-  .bar{display:flex;gap:10px;align-items:center;margin-bottom:18px}
-  #status{color:var(--dim)}
+  :root{--bg:#08060e;--panel:#110d1d;--line:#2a2340;--txt:#efeaf8;--dim:#a99cc7;--acc:#34e3ff;
+        --hi:#ff6f9a;--med:#ffd84a;--low:#5cf0a0}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'JetBrains Mono','Courier New',monospace;font-size:14px;line-height:1.55;
+       background:radial-gradient(900px 460px at 80% -28%,rgba(86,52,150,.16),transparent 62%),var(--bg) fixed}
+  header{padding:.75rem 1.3rem;border-bottom:1px solid var(--line);background:#0b0814;display:flex;gap:.9rem;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  header h1{font-size:1.05rem;margin:0;font-weight:800}
+  header h1 span{color:var(--acc)}
+  header nav{display:flex;gap:.75rem;flex-wrap:wrap;margin-left:auto;font-size:.84rem}
+  header a{color:var(--acc);text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:1.6rem 1.25rem 3.5rem}
+  h2{margin:0 0 .25rem;font-size:1.1rem}.sub{color:var(--dim);margin:0 0 1rem;font-size:.84rem}
+  input{background:#0d0a16;border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:10px 12px;font-family:inherit;font-size:.88rem;width:100%;max-width:340px}
+  button{background:linear-gradient(180deg,#1b9fb3,#0e7c8c);border:0;color:#02141a;border-radius:8px;padding:10px 18px;font-family:inherit;font-weight:800;cursor:pointer}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  #status{color:var(--dim);font-size:.84rem}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px}
-  .card h3{margin:0 0 8px;font-size:14px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
-  .vuln{border-left:3px solid var(--hi);background:rgba(255,91,106,.06);border-radius:6px;
-    padding:8px 10px;margin-top:8px;font-size:13px}
+  .card h3{margin:0 0 8px;font-size:.82rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+  .vuln{border-left:3px solid var(--hi);background:rgba(255,111,154,.07);border-radius:6px;
+    padding:8px 10px;margin-top:8px;font-size:.82rem}
   .vuln a,.ref a{color:var(--acc);text-decoration:none;font-weight:700}
-  .prov{color:var(--dim);font-size:11px;margin-top:3px}
-  .ref{border-left:3px solid var(--acc);background:rgba(91,140,255,.06);border-radius:6px;
-    padding:8px 10px;margin-top:8px;font-size:13px}
+  .prov{color:var(--dim);font-size:.74rem;margin-top:3px}
+  .ref{border-left:3px solid var(--acc);background:rgba(52,227,255,.06);border-radius:6px;
+    padding:8px 10px;margin-top:8px;font-size:.82rem}
   .ref.agg{border-left-color:var(--dim);opacity:.75}
   .pill{padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800;margin-left:6px}
-  .pill.curated{background:rgba(91,140,255,.15);color:var(--acc)}
-  .pill.agg{background:rgba(154,167,199,.15);color:var(--dim)}
+  .pill.curated{background:rgba(52,227,255,.15);color:var(--acc)}
+  .pill.agg{background:rgba(169,156,199,.15);color:var(--dim)}
   .insufficient{color:var(--dim);font-style:italic}
   .clean{color:var(--low)}
 </style>
 </head>
 <body>
 <header>
-  <h1>MCPRisky</h1><span style="color:var(--dim)">Threat intel</span>
-  <span style="flex:1"></span>
-  <a href="/scan">Scan →</a> <a href="/perspectives">Perspectives →</a> <a href="/app">App →</a>
+  <h1>MCP<span>Risky</span> · Threat intel</h1>
+  <nav aria-label="Primary">
+    <a href="/scan">Scan →</a>
+    <a href="/perspectives">Perspectives →</a>
+    <a href="/ask">Ask →</a>
+    <a href="/app">App →</a>
+  </nav>
 </header>
 <main>
   <h2>Server threat intel</h2>
@@ -48,7 +62,8 @@
      Every claim carries a verifiable source. When this surface is disabled you see
      <b>INSUFFICIENT</b>, never a guess.</p>
   <div class="bar">
-    <input id="sid" placeholder="server_id" spellcheck="false">
+    <label for="sid" class="sr-only">Server ID</label>
+    <input id="sid" aria-label="Server ID" placeholder="server_id" spellcheck="false">
     <button id="go">Look up</button>
     <span id="status" role="status" aria-live="polite"></span>
   </div>
@@ -58,6 +73,7 @@
 async function tok(){try{return (window.Clerk&&window.Clerk.session)?await window.Clerk.session.getToken():null}catch(e){return null}}
 const $=id=>document.getElementById(id);
 function esc(s){const d=document.createElement('span');d.textContent=String(s==null?'':s);return d.innerHTML}
+const INTEL_TIMEOUT_MS = 15000;
 
 function vulnCard(v){
   if(v.status==='disabled') return '<div class="card"><h3>Known advisories</h3>'+
@@ -88,17 +104,21 @@ function refCard(t){
 }
 async function load(){
   const sid=$('sid').value.trim(); if(!sid){$('status').textContent='enter a server_id';return;}
-  $('status').textContent='loading…'; $('out').innerHTML='';
+  $('status').textContent='// loading threat intel…'; $('out').innerHTML='';
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), INTEL_TIMEOUT_MS);
   try{
     const t=await tok(); const h=t?{Authorization:'Bearer '+t}:{};
     const [rv,rt]=await Promise.all([
-      fetch('/api/servers/'+encodeURIComponent(sid)+'/vulns',{headers:h}),
-      fetch('/api/servers/'+encodeURIComponent(sid)+'/threat_refs',{headers:h})]);
+      fetch('/api/servers/'+encodeURIComponent(sid)+'/vulns',{signal:ctrl.signal,headers:h}),
+      fetch('/api/servers/'+encodeURIComponent(sid)+'/threat_refs',{signal:ctrl.signal,headers:h})]);
     if(!rv.ok||!rt.ok){$('status').textContent='error '+(rv.ok?rt.status:rv.status);return;}
     $('status').textContent='';
     $('out').innerHTML=vulnCard(await rv.json())+refCard(await rt.json());
     history.replaceState(null,'','?server_id='+encodeURIComponent(sid));
-  }catch(e){$('status').textContent='error: '+e.message;}
+  }catch(e){
+    $('status').textContent=(e&&e.name==='AbortError')?'error: request timed out after 15s':'error: '+e.message;
+  }finally{clearTimeout(timer);}
 }
 $('go').onclick=load;
 $('sid').addEventListener('keydown',e=>{if(e.key==='Enter')load();});

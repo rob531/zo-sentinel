@@ -24,11 +24,13 @@ os.environ.pop("ASK_LLM", None)            # never call the ladder from CI
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.main import app  # noqa: E402
+from clerk_m2m_auth import get_principal as m2m_get_principal  # noqa: E402
 from verdict_breakdown_api import Principal, get_principal, require_admin  # noqa: E402
 
 _CI_ADMIN = Principal(user_id="ci_admin", role="admin")
 
 app.dependency_overrides[get_principal] = lambda: _CI_ADMIN
+app.dependency_overrides[m2m_get_principal] = lambda: _CI_ADMIN
 app.dependency_overrides[require_admin] = lambda: _CI_ADMIN
 
 

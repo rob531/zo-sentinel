@@ -362,6 +362,37 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Image module completeness (REPORT-ONLY -- root modules the spine mounts must ship)
+        # tools/check_image_module_completeness.py exits 1 if a root module that
+        # the mounted API surface depends on (a SPINE_MOUNTS import_path, or a
+        # module imported at module scope by one) is NOT on a Dockerfile COPY line.
+        # The Dockerfile COPYs root modules EXPLICITLY, file by file (no `COPY . .`
+        # for the repo root), so a new root module that nobody adds to the
+        # Dockerfile is simply absent from the image and every `from <module>
+        # import ...` raises ModuleNotFoundError at spine mount -- the exact failure
+        # that kept the whole unauth_access signal dark (#12256) until #12312 added
+        # its COPY line. The guard existed for that class but ran NOWHERE: the
+        # dark-tool census scored it consulted-by-NOTHING (FU-1141).
+        #
+        # Wired here in capmap-check, the lane that already parses
+        # app/_spine_generated.py + the Dockerfile, so the tool has a producer (the
+        # CI run) and a reader (the step summary) from day one. REPORT-ONLY on
+        # purpose: it is GREEN on main today (all 72 mount-required modules COPY'd),
+        # so there is no inherited debt to grandfather -- but keeping it
+        # continue-on-error matches every sibling spine step above and lets the
+        # same report-only-then-ratchet path (promote to blocking once a NEW gap
+        # appears) follow later. Rollback is deleting this step.
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "### Image module completeness (report-only)"
+            echo ""
+            echo '```'
+            python tools/check_image_module_completeness.py || true
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   static-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 6

@@ -439,6 +439,36 @@ jobs:
           CI_FE_JUNIT: "artifacts/ci_frontend_junit.xml"
         run: python -m tests.ci.run_ci_frontend
 
+      - name: Hardcoded-localhost UI scan (REPORT-ONLY -- surfaces the codemod debt per PR)
+        # tools/check_no_hardcoded_localhost.py exits 1 if any product HTML pins
+        # http://localhost:PORT / 127.0.0.1:PORT -- a pattern that breaks every UI
+        # behind the real mcprisky.app origin. Its own docstring names pr-gates as
+        # the subscriber ("run it so the build loop stops MINTING new localhost
+        # UIs"), yet nothing ran it: the dark-tool census scored it consulted-by-
+        # NOTHING, and the debt silently REGREW to 13 hits / 9 files on main
+        # (measured 2026-11-22, daily-chairman-review; FU-1103).
+        #
+        # Wired here, in the front-end lane that already owns HTML, so the tool has
+        # a producer and a reader (the step summary) from day one. REPORT-ONLY on
+        # purpose: as a blocking gate it would fail every PR on the 13 inherited
+        # hits (ports 5000/8000/8080 have no app_routes.RAW_PORT_PREFIX mapping, so
+        # the relativize codemod cannot clear them -- that drain is a routing
+        # decision tracked in FU-1103, not a $0 blind apply). Promoting it to
+        # blocking-on-the-derivative (grandfather the 13, fail NEW hits) is the
+        # follow-on once that baseline exists -- the same report-only-then-ratchet
+        # path reachability_ratchet and the app-graph steps above already took.
+        # Rollback is deleting this step.
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "### Hardcoded-localhost UI scan (report-only)"
+            echo ""
+            echo '```'
+            python tools/check_no_hardcoded_localhost.py || true
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Upload frontend junit
         if: always()
         uses: actions/upload-artifact@v7

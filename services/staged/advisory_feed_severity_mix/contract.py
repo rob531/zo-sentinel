@@ -1,4 +1,4 @@
-"""contract.py -- acceptance self-test for the advisory feed severity mix service."""
+"""Acceptance self-test for the advisory feed severity mix service."""
 from __future__ import annotations
 
 import sys
@@ -13,7 +13,7 @@ def run() -> bool:
     from sqlalchemy.pool import StaticPool
 
     from app.db import get_session
-    from app.models import Base, VulnAdvisory
+    from app.models import VulnAdvisory
 
     from .router import router
 
@@ -22,113 +22,110 @@ def run() -> bool:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    VulnAdvisory.__table__.create(engine)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-    now = datetime.utcnow()
-    old = now - timedelta(days=30)
-    recent = now - timedelta(days=1)
+    now = datetime.now().replace(tzinfo=None)
+    rows = [
+        VulnAdvisory(
+            id=1,
+            feed="osv",
+            summary="Critical advisory",
+            severity="critical",
+            ecosystem="npm",
+            package="pkg-a",
+            affected_ranges=">=1.0.0",
+            aliases="CVE-2024-0001",
+            source_url="https://example.test/1",
+            published_at=now - timedelta(days=30),
+            fetched_at=now,
+            identities="pkg-a",
+            content_hash="hash-1",
+        ),
+        VulnAdvisory(
+            id=2,
+            feed="osv",
+            summary="High advisory",
+            severity="high",
+            ecosystem="pypi",
+            package="pkg-b",
+            affected_ranges=">=2.0.0",
+            aliases="CVE-2024-0002",
+            source_url="https://example.test/2",
+            published_at=now - timedelta(days=20),
+            fetched_at=now,
+            identities="pkg-b",
+            content_hash="hash-2",
+        ),
+        VulnAdvisory(
+            id=3,
+            feed="osv",
+            summary="Medium advisory",
+            severity="medium",
+            ecosystem="npm",
+            package="pkg-c",
+            affected_ranges=">=3.0.0",
+            aliases="CVE-2024-0003",
+            source_url="https://example.test/3",
+            published_at=now - timedelta(days=10),
+            fetched_at=now,
+            identities="pkg-c",
+            content_hash="hash-3",
+        ),
+        VulnAdvisory(
+            id=4,
+            feed="github",
+            summary="Critical advisory",
+            severity="critical",
+            ecosystem="pypi",
+            package="pkg-d",
+            affected_ranges=">=4.0.0",
+            aliases="CVE-2024-0004",
+            source_url="https://example.test/4",
+            published_at=now - timedelta(days=1),
+            fetched_at=now,
+            identities="pkg-d",
+            content_hash="hash-4",
+        ),
+        VulnAdvisory(
+            id=5,
+            feed="github",
+            summary="High advisory",
+            severity="high",
+            ecosystem="npm",
+            package="pkg-e",
+            affected_ranges=">=5.0.0",
+            aliases="CVE-2024-0005",
+            source_url="https://example.test/5",
+            published_at=now - timedelta(days=15),
+            fetched_at=now,
+            identities="pkg-e",
+            content_hash="hash-5",
+        ),
+        VulnAdvisory(
+            id=6,
+            feed="github",
+            summary="Advisory without severity",
+            severity=None,
+            ecosystem="pypi",
+            package="pkg-f",
+            affected_ranges=">=6.0.0",
+            aliases="CVE-2024-0006",
+            source_url="https://example.test/6",
+            published_at=now - timedelta(days=25),
+            fetched_at=now,
+            identities="pkg-f",
+            content_hash="hash-6",
+        ),
+    ]
 
-    session = testing_session()
-    session.add_all(
-        [
-            VulnAdvisory(
-                id=1,
-                feed="feed-a",
-                summary="critical advisory",
-                severity="critical",
-                ecosystem="pypi",
-                package="alpha",
-                affected_ranges="<1.0",
-                aliases=None,
-                source_url="https://example.test/a1",
-                published_at=old,
-                fetched_at=old,
-                identities=None,
-                content_hash="a1",
-            ),
-            VulnAdvisory(
-                id=2,
-                feed="feed-a",
-                summary="high advisory",
-                severity="high",
-                ecosystem="npm",
-                package="beta",
-                affected_ranges="<2.0",
-                aliases=None,
-                source_url="https://example.test/a2",
-                published_at=old,
-                fetched_at=old,
-                identities=None,
-                content_hash="a2",
-            ),
-            VulnAdvisory(
-                id=3,
-                feed="feed-a",
-                summary="medium advisory",
-                severity="medium",
-                ecosystem="pypi",
-                package="gamma",
-                affected_ranges="<3.0",
-                aliases=None,
-                source_url="https://example.test/a3",
-                published_at=old,
-                fetched_at=old,
-                identities=None,
-                content_hash="a3",
-            ),
-            VulnAdvisory(
-                id=4,
-                feed="feed-b",
-                summary="advisory without severity",
-                severity=None,
-                ecosystem="npm",
-                package="delta",
-                affected_ranges="<4.0",
-                aliases=None,
-                source_url="https://example.test/b1",
-                published_at=old,
-                fetched_at=old,
-                identities=None,
-                content_hash="b1",
-            ),
-            VulnAdvisory(
-                id=5,
-                feed="feed-b",
-                summary="recent advisory",
-                severity="critical",
-                ecosystem="npm",
-                package="epsilon",
-                affected_ranges="<5.0",
-                aliases=None,
-                source_url="https://example.test/b2",
-                published_at=recent,
-                fetched_at=recent,
-                identities=None,
-                content_hash="b2",
-            ),
-            VulnAdvisory(
-                id=6,
-                feed="feed-b",
-                summary="another advisory",
-                severity="high",
-                ecosystem="pypi",
-                package="zeta",
-                affected_ranges="<6.0",
-                aliases=None,
-                source_url="https://example.test/b3",
-                published_at=old,
-                fetched_at=old,
-                identities=None,
-                content_hash="b3",
-            ),
-        ]
-    )
+    session = TestingSession()
+    session.add_all(rows)
     session.commit()
     session.close()
 
-    def override_session():
-        db = testing_session()
+    def override_get_session():
+        db = TestingSession()
         try:
             yield db
         finally:
@@ -136,13 +133,12 @@ def run() -> bool:
 
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_session] = override_get_session
 
-    with TestClient(app) as client:
-        response = client.get("/api/vuln/advisory-feed-severity-mix")
-        assert response.status_code == 200, response.text
-        body = response.json()
-
+    client = TestClient(app)
+    response = client.get("/api/vuln/advisory-feed-severity-mix")
+    assert response.status_code == 200, response.text
+    body = response.json()
     assert body["total"] == 6, body
     assert body["null_severity"] == 1, body
     assert body["recent_7d"] == 1, body

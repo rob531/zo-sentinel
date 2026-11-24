@@ -15,12 +15,14 @@ Router: GET /api/facets (authenticated), stale-while-revalidate TTL cache.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import json
 import threading
 import time
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -36,10 +38,12 @@ TRUST_BANDS = ("0-25%", "25-50%", "50-75%", "75-100%")
 
 _CACHE: dict = {"at": 0.0, "facets": None}
 _REFRESH_LOCK = threading.Lock()
-# 5 min fresh TTL + 1h stale-while-revalidate window: hot requests serve in
-# <5ms without blocking on full-table GROUP BYs over 600k+ registry rows.
+# 5 min fresh TTL + 1h stale-while-revalidate window kept for config compatibility;
+# warm/persisted caches ALWAYS serve stale-while-revalidate immediately so user requests
+# never block on full-table GROUP BYs over 600k+ registry rows.
 CACHE_TTL_SECS = 300
 STALE_MAX_SECS = 3600
+FACETS_STATS_KEY = "facets_cache"
 
 
 def latest_global_model_version(db: Session) -> Optional[str]:
@@ -122,47 +126,195 @@ def compute_facets(db: Session) -> Dict[str, List[dict]]:
     return facets
 
 
+def _parse_updated_at(raw) -> float:
+    """Convert persisted app_stats.updated_at into UTC epoch seconds (0.0 fallback)."""
+    if raw is None:
+        return 0.0
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, datetime):
+        dt = raw if raw.tzinfo is not None else raw.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    if isinstance(raw, str):
+        s = raw.strip()
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except Exception:
+            try:
+                return float(s)
+            except Exception:
+                return 0.0
+    return 0.0
+
+
+def _dialect_name(db: Session) -> str:
+    bind = db.get_bind() if hasattr(db, "get_bind") else getattr(db, "bind", None)
+    return (getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+
+
+def _load_persisted_facets(db: Session) -> Optional[tuple[Dict[str, List[dict]], float]]:
+    """Best-effort cold-start hydrate from app_stats (returns None if absent/empty)."""
+    try:
+        row = db.execute(
+            text("SELECT value, updated_at FROM app_stats WHERE key = :k"),
+            {"k": FACETS_STATS_KEY},
+        ).first()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None
+    if not row or not row[0]:
+        return None
+    raw_val, raw_ts = row[0], row[1]
+    try:
+        parsed = raw_val if isinstance(raw_val, dict) else json.loads(raw_val)
+    except Exception:
+        return None
+    if not isinstance(parsed, dict) or not parsed:
+        return None
+    return parsed, _parse_updated_at(raw_ts)
+
+
+def _save_persisted_facets(db: Session, facets: Dict[str, List[dict]]) -> None:
+    """Best-effort upsert of computed facets into app_stats across PG and SQLite."""
+    try:
+        payload = json.dumps(facets)
+        if _dialect_name(db) == "postgresql":
+            db.execute(
+                text(
+                    "INSERT INTO app_stats(key, value, updated_at) "
+                    "VALUES (:k, CAST(:v AS jsonb), now()) "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()"
+                ),
+                {"k": FACETS_STATS_KEY, "v": payload},
+            )
+        else:
+            db.execute(
+                text(
+                    "INSERT INTO app_stats(key, value, updated_at) "
+                    "VALUES (:k, :v, :ts) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+                ),
+                {"k": FACETS_STATS_KEY, "v": payload, "ts": datetime.now(timezone.utc).isoformat()},
+            )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
+def _run_locked_refresh(session_factory=None) -> None:
+    """Execute one refresh under already-acquired `_REFRESH_LOCK`, always releasing it."""
+    db = None
+    try:
+        if session_factory is None:
+            from app.db import SessionLocal
+            db = SessionLocal()
+        else:
+            db = session_factory()
+        facets = compute_facets(db)
+        _CACHE["facets"] = facets
+        _CACHE["at"] = time.time()
+        _save_persisted_facets(db, facets)
+    except Exception:
+        pass
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+        _REFRESH_LOCK.release()
+
+
 def _trigger_bg_refresh(session_factory=None) -> None:
     """Refresh `_CACHE["facets"]` asynchronously under a non-blocking lock."""
     if not _REFRESH_LOCK.acquire(blocking=False):
         return
+    try:
+        threading.Thread(
+            target=_run_locked_refresh,
+            args=(session_factory,),
+            daemon=True,
+        ).start()
+    except Exception:
+        _REFRESH_LOCK.release()
 
-    def _worker() -> None:
-        db = None
-        try:
-            if session_factory is None:
-                from app.db import SessionLocal
-                db = SessionLocal()
-            else:
-                db = session_factory()
-            _CACHE["facets"] = compute_facets(db)
-            _CACHE["at"] = time.time()
-        except Exception:
-            pass
-        finally:
-            if db is not None:
-                db.close()
-            _REFRESH_LOCK.release()
 
-    threading.Thread(target=_worker, daemon=True).start()
+def start_periodic_refresher(
+    interval_secs: int = 1800,
+    session_factory=None,
+) -> threading.Event:
+    """Warm facets on boot (hydrating from app_stats first) and refresh every `interval_secs`."""
+    stop_event = threading.Event()
+
+    def _loop() -> None:
+        if _CACHE["facets"] is None:
+            db = None
+            try:
+                if session_factory is None:
+                    from app.db import SessionLocal
+                    db = SessionLocal()
+                else:
+                    db = session_factory()
+                loaded = _load_persisted_facets(db)
+                if loaded is not None and _CACHE["facets"] is None:
+                    _CACHE["facets"], _CACHE["at"] = loaded
+            except Exception:
+                pass
+            finally:
+                if db is not None:
+                    try:
+                        db.close()
+                    except Exception:
+                        pass
+        while not stop_event.is_set():
+            age = time.time() - float(_CACHE["at"] or 0.0)
+            if _CACHE["facets"] is None or age > CACHE_TTL_SECS:
+                if _REFRESH_LOCK.acquire(blocking=False):
+                    _run_locked_refresh(session_factory=session_factory)
+            if stop_event.wait(interval_secs):
+                break
+
+    threading.Thread(target=_loop, daemon=True, name="facets-refresher").start()
+    return stop_event
 
 
 def cached_facets(db: Session, *, session_factory=None) -> Dict[str, List[dict]]:
     """Stale-while-revalidate facet cache shared by `/facets` and perspective
-    queries: warm within CACHE_TTL_SECS, instant stale + async refresh up to
-    STALE_MAX_SECS, synchronous compute only on completely cold start or expiry."""
+    queries: serves warm RAM snapshots or persisted `app_stats` snapshots
+    immediately (refreshing in background whenever age > CACHE_TTL_SECS), and
+    computes synchronously only when both RAM cache and `app_stats` are empty."""
     now = time.time()
-    age = now - float(_CACHE["at"] or 0.0)
     cached = _CACHE["facets"]
     if cached is not None:
+        age = now - float(_CACHE["at"] or 0.0)
         if age <= CACHE_TTL_SECS:
             return cached
-        if age <= STALE_MAX_SECS:
+        _trigger_bg_refresh(session_factory=session_factory)
+        return cached
+
+    persisted = _load_persisted_facets(db)
+    if persisted is not None:
+        facets, persisted_at = persisted
+        _CACHE["facets"] = facets
+        _CACHE["at"] = persisted_at
+        if (now - persisted_at) > CACHE_TTL_SECS:
             _trigger_bg_refresh(session_factory=session_factory)
-            return cached
-    _CACHE["facets"] = compute_facets(db)
+        return facets
+
+    facets = compute_facets(db)
+    _CACHE["facets"] = facets
     _CACHE["at"] = time.time()
-    return _CACHE["facets"]
+    _save_persisted_facets(db, facets)
+    return facets
 
 
 @router.get("/facets")
@@ -198,9 +350,15 @@ if __name__ == "__main__":
     assert sum(d["count"] for d in f["registry_source"]) == 3
     assert sum(d["count"] for d in f["trust_band"]) == 3
 
-    # SWR test: aged cache between CACHE_TTL_SECS and STALE_MAX_SECS serves cached immediately
+    # SWR test: aged cache between CACHE_TTL_SECS and STALE_MAX_SECS AND past STALE_MAX_SECS
+    # must serve cached immediately without blocking synchronously
     _CACHE["facets"] = {"sentinel": [{"value": "cached", "count": 1}]}
     _CACHE["at"] = time.time() - (CACHE_TTL_SECS + 10)
     served = cached_facets(s, session_factory=LocalS)
     assert "sentinel" in served
+
+    _CACHE["facets"] = {"sentinel_expired": [{"value": "stale", "count": 1}]}
+    _CACHE["at"] = time.time() - (STALE_MAX_SECS + 120)
+    served_old = cached_facets(s, session_factory=LocalS)
+    assert "sentinel_expired" in served_old
     print("PASS")

@@ -86,10 +86,15 @@ function esc(s){const d=document.createElement('span');d.textContent=String(s==n
 
 const SCAN_TIMEOUT_MS = 15000;
 
-$('ex').onclick=()=>{$('cfg').value=JSON.stringify({mcpServers:{
-  inspector:{command:"npx",args:["-y","github.com/anthropics/mcp-inspector"]},
-  filesystem:{command:"npx",args:["-y","@modelcontextprotocol/server-filesystem","/tmp"]},
-  "my-local":{command:"node",args:["./server.js"]}}},null,2);};
+$('ex').onclick=()=>{
+  const st=$('status');
+  st.classList.remove('err');
+  st.textContent='';
+  $('cfg').value=JSON.stringify({mcpServers:{
+    inspector:{command:"npx",args:["-y","github.com/anthropics/mcp-inspector"]},
+    filesystem:{command:"npx",args:["-y","@modelcontextprotocol/server-filesystem","/tmp"]},
+    "my-local":{command:"node",args:["./server.js"]}}},null,2);
+};
 
 function axisChips(axes){
   return Object.entries(axes||{}).map(([k,v])=>

@@ -25,7 +25,7 @@ from jwt import PyJWKClient
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from sqlalchemy import select, or_, and_, func, text
+from sqlalchemy import select, or_, and_, func, text, exists
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -338,23 +338,48 @@ class SubmitMCP(BaseModel):
     name: Optional[str] = None
 
 
+def _hits_batch(db: Session, rows, reveal: bool = True) -> list[dict]:
+    """Batch registry rows -> search-result dicts in O(1) queries (eliminates N+1)."""
+    if not rows:
+        return []
+    if not reveal:
+        return [{"server_id": r.server_id, "name": r.name, "url": r.url,
+                 "registry_source": r.registry_source,
+                 "published_overall_risk": None, "trusted": None, "hidden": True}
+                for r in rows]
+    sids = [r.server_id for r in rows]
+    score_rows = db.execute(
+        select(
+            McpLlmAxisScore.server_id,
+            McpLlmAxisScore.axis_name,
+            McpLlmAxisScore.label,
+        )
+        .where(
+            McpLlmAxisScore.server_id.in_(sids),
+            McpLlmAxisScore.axis_name.in_(("overall_risk", "maintainer_trust")),
+        )
+        .order_by(McpLlmAxisScore.scored_at.asc().nulls_first(), McpLlmAxisScore.id.asc())
+    ).all()
+    by_sid: Dict[str, Dict[str, Optional[str]]] = {}
+    for sid, axis_name, label in score_rows:
+        by_sid.setdefault(sid, {})[axis_name] = label
+    out = []
+    for r in rows:
+        lab = by_sid.get(r.server_id, {})
+        gate = trust_gate(r.url, r.name, {k: lab.get(k) for k in lab})
+        out.append({
+            "server_id": r.server_id, "name": r.name, "url": r.url,
+            "registry_source": r.registry_source,
+            "published_overall_risk": gate.get("published_overall_risk") or lab.get("overall_risk"),
+            "trusted": bool(gate.get("trusted")), "hidden": False,
+        })
+    return out
+
+
 def _hit(db: Session, r, reveal: bool = True) -> dict:
     """Registry row -> search-result dict. For public users (reveal=False) the risk
     tier is withheld -> they must open the detail (spend a lookup) to see it."""
-    if not reveal:
-        return {"server_id": r.server_id, "name": r.name, "url": r.url,
-                "registry_source": r.registry_source,
-                "published_overall_risk": None, "trusted": None, "hidden": True}
-    lab = dict(db.execute(
-        select(McpLlmAxisScore.axis_name, McpLlmAxisScore.label).where(
-            McpLlmAxisScore.server_id == r.server_id,
-            McpLlmAxisScore.axis_name.in_(("overall_risk", "maintainer_trust")))
-    ).all())
-    gate = trust_gate(r.url, r.name, {k: lab.get(k) for k in lab})
-    return {"server_id": r.server_id, "name": r.name, "url": r.url,
-            "registry_source": r.registry_source,
-            "published_overall_risk": gate.get("published_overall_risk") or lab.get("overall_risk"),
-            "trusted": bool(gate.get("trusted")), "hidden": False}
+    return _hits_batch(db, [r], reveal=reveal)[0]
 
 
 @router.get("/servers")
@@ -375,19 +400,28 @@ def search_servers(q: str = "", risk: str = "", source: str = "",
     if source.strip():
         conds.append(McpServerRegistry.registry_source == source.strip())
     if risk.strip() and reveal:   # public can't enumerate by risk tier (preserves mystery)
-        sub = select(McpLlmAxisScore.server_id).where(
-            McpLlmAxisScore.axis_name == "overall_risk",
-            McpLlmAxisScore.label == risk.strip().upper())
-        conds.append(McpServerRegistry.server_id.in_(sub))
+        want = risk.strip().upper()
+        conds.append(
+            exists(
+                select(McpLlmAxisScore.id).where(
+                    and_(
+                        McpLlmAxisScore.server_id == McpServerRegistry.server_id,
+                        McpLlmAxisScore.axis_name == "overall_risk",
+                        McpLlmAxisScore.label == want,
+                    )
+                )
+            )
+        )
     if not q.strip():   # default browse: hide blank/1-char junk-named rows from the first impression
         conds.append(McpServerRegistry.name.isnot(None))
         conds.append(func.length(func.trim(McpServerRegistry.name)) >= 2)
     stmt = select(McpServerRegistry)
     if conds:
         stmt = stmt.where(and_(*conds))
-    stmt = stmt.order_by(func.lower(McpServerRegistry.name)).offset(offset).limit(limit)
+    # PK-ordered early termination: avoids sorting 80k+ matching rows in memory on broad queries.
+    stmt = stmt.order_by(McpServerRegistry.server_id).offset(offset).limit(limit)
     rows = db.execute(stmt).scalars().all()
-    hits = [_hit(db, r, reveal) for r in rows]
+    hits = _hits_batch(db, rows, reveal)
     if risk.strip() and reveal:   # keep results consistent with badges (published tier)
         want = risk.strip().upper()
         hits = [h for h in hits if (h.get("published_overall_risk") or "").upper() == want]
@@ -484,8 +518,7 @@ def top_servers(risk: str = "CRITICAL", limit: int = 24,
     cands = db.execute(select(McpServerRegistry).where(
         McpServerRegistry.server_id.in_(sub)).limit(limit * 8)).scalars().all()
     out = []
-    for r in cands:
-        h = _hit(db, r, True)
+    for h in _hits_batch(db, cands, True):
         if (h.get("published_overall_risk") or "").upper() == want:
             out.append(h)
             if len(out) >= limit:

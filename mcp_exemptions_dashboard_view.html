@@ -48,7 +48,7 @@
     <a href="/app">Dashboard →</a>
     <a href="/app/explore">Explore →</a>
     <a href="/scan">Scan →</a>
-    <a href="/app/admin">Admin →</a>
+    <a href="/app/admin" id="navAdmin" style="display:none">Admin →</a>
   </nav>
 </header>
 <main>
@@ -272,7 +272,19 @@ async function revokeKey(id){
   catch(e){alert(e.message);}
 }
 
-function boot(){loadWatchlist();loadAdmin();}
+async function boot(){
+  loadWatchlist();
+  try{
+    const me=await api('/api/me');
+    if(me&&me.role==='admin'){
+      const nav=$('navAdmin');
+      if(nav)nav.style.display='';
+      loadAdmin();
+      return;
+    }
+  }catch(e){}
+  $('adminPanel').innerHTML='<h2>Admin · Accounts &amp; Service API Keys</h2><p class="note">// admin access required</p>';
+}
 const CLERK_PK="__CLERK_PK__";
 function clerkHost(pk){try{return atob(pk.split('_')[2]).replace(/\$+$/,'');}catch(e){return '';}}
 if(CLERK_PK.indexOf("pk_")===0&&clerkHost(CLERK_PK)){

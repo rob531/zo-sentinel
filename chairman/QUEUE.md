@@ -28,6 +28,7 @@ set and an organism (chairman assessment, 2026-08-29 EOD).
 
 ## 0b. The chairman->emitter bridge — shape-changing tasks
 - grade C0 -> target C3 | the protean organ the loop is starving for
+- status (2026-11-26): **C2** -- built as zo-fleet-tools `protean_bridge.py` (#654, `PROTEAN_BRIDGE.md`); root cause named (the register had no emitter) and fixed at the origin. First drive took GR-6 DIAGNOSE->EVAL->BUILD->PROPOSE and moved the row C0 -> C3 (`chairman/grade_proposals/GR-6.json`). Not C3 yet: the EVAL/BUILD directives were executed by the emitting session, not by `zo_sentinel_builder`. C3 = a second row driven with the builder consuming the emitted directives from `pending/`.
 - shape: queue/register entries become TYPED directives the pipeline consumes:
   DIAGNOSE (emit a probe — referent_verify/census shape), EVAL (emit an
   acceptance harness — F2 antipattern-suite shape), BUILD (emit the fix —
@@ -106,7 +107,7 @@ through them. The tools live in zo-fleet-tools, and the prompts live on the towe
 - evidence for move: failing repro of the string-literal corruption; fix; sweep of every `--fix` call site; #4000 updated.
 
 ## 2. GR-6 — 7 FU predicates query nonexistent tables; UNKNOWN never escalates
-- grade C0 -> target C4 | class GC-1
+- grade **C3** (2026-11-26) -> target C4 | class GC-1 | see register row; remaining for C4: disarm-hardening of both harnesses + the tower FU-verify task's rc 5 reaching the alert channel (GR-11)
 - first command: `sed -n '80,130p' tools/fu/fu_seed_predicates.py`
 - evidence for move: names repointed per MERGE_AUDIT B1 suggestion; an age budget on UNKNOWN in `sql_assert`; a test that a catalog error cannot rest as UNKNOWN past budget.
 

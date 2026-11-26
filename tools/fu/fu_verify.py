@@ -61,6 +61,13 @@ STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fu_verify
 GREENS_TO_CLOSE = 2
 CMD_TIMEOUT_S = 60
 SWEEP_CEILING_S = 900
+# GR-6 (LOCO_CHAIRMAN.md 6.1, class GC-1): UNKNOWN may not rest. A predicate
+# that has been UNKNOWN for longer than this, without one GREEN or RED in
+# between, is escalated: its row carries action ESCALATE-UNKNOWN and the sweep
+# exits 5. Before this, the per-FU state kept no time for an UNKNOWN streak, so
+# a catalog error (a predicate on a table that exists nowhere, sql_assert rc 2)
+# read as UNKNOWN on every sweep forever -- indistinguishable from a quiet day.
+UNKNOWN_AGE_BUDGET_H = 48
 CLOSED_STATES = ("resolved", "done")
 
 # Shell messages that mean "I could not run this", across cmd.exe, PowerShell
@@ -536,8 +543,21 @@ def run_probe(cmd: str, timeout: int = CMD_TIMEOUT_S) -> dict:
     return first
 
 
-def sweep(lines, state, dry_run=False):
-    """Run all runnable verifies; return (results, mutations)."""
+def _parse_stamp(s):
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def sweep(lines, state, dry_run=False, clock=None):
+    """Run all runnable verifies; return (results, mutations).
+
+    `clock` (an aware datetime) stands in for "now" in the UNKNOWN age
+    budget, so the budget edge is testable without sleeping.
+    """
+    clock = clock or datetime.now(timezone.utc)
+    clock_s = clock.strftime("%Y-%m-%dT%H:%M:%SZ")
     entries = fu_ledger.parse(lines)
     results, mutations = [], []
     t_start = time.time()
@@ -570,6 +590,14 @@ def sweep(lines, state, dry_run=False):
         # UNKNOWN leaves the green streak untouched: an unevaluable probe is
         # not evidence in either direction, so it must neither advance nor
         # reset progress toward a close.
+        # GR-6: an UNKNOWN streak carries its start time; any real verdict
+        # ends the streak. An unparseable stamp restarts it rather than
+        # escalating on garbage.
+        if r["verdict"] == "UNKNOWN":
+            if _parse_stamp(rec.get("unknown_since")) is None:
+                rec["unknown_since"] = clock_s
+        else:
+            rec.pop("unknown_since", None)
         rec["last"] = r["verdict"]
         rec["last_run"] = now()
         rec["history"] = (rec.get("history", []) + [r["verdict"][0]])[-20:]
@@ -590,6 +618,18 @@ def sweep(lines, state, dry_run=False):
         for k in ("recovered", "resolved_by", "tried"):
             if k in r:
                 row[k] = r[k]
+
+        if r["verdict"] == "UNKNOWN":
+            age_h = (clock - _parse_stamp(rec["unknown_since"])).total_seconds() / 3600
+            row["unknown_since"] = rec["unknown_since"]
+            row["unknown_age_h"] = round(age_h, 1)
+            if age_h > UNKNOWN_AGE_BUDGET_H:
+                # Escalation, not a verdict: no close/reopen/stamp, and the
+                # green streak stays untouched (UNKNOWN is still no evidence).
+                row["action"] = "ESCALATE-UNKNOWN"
+                row["note"] = ("UNKNOWN for %.0fh > budget %sh: this predicate cannot be "
+                               "evaluated and that is now a finding, not a quiet day. %s"
+                               % (age_h, UNKNOWN_AGE_BUDGET_H, row.get("note") or ""))
 
         # --- observing RED is itself the evidence that the predicate works ----
         # This is what makes the loop self-bootstrapping. A newly written verify
@@ -791,6 +831,8 @@ def main() -> int:
         "refused": sum(1 for r in results if r["verdict"] == "REFUSED"),
         "closed": [f for k, f in applied if k == "close"],
         "reopened": [f for k, f in applied if k == "reopen"],
+        "unknown_over_budget": [r["fu"] for r in results if r.get("action") == "ESCALATE-UNKNOWN"],
+        "unknown_age_budget_h": UNKNOWN_AGE_BUDGET_H,
         "dry_run": args.dry_run,
         "results": results,
     }
@@ -803,7 +845,8 @@ def main() -> int:
                  summary["unknown"], summary["refused"],
                  "  [DRY RUN]" if args.dry_run else ""))
         for r in results:
-            flag = {"CLOSE": "  >> AUTO-RESOLVED", "REOPEN": "  >> AUTO-REOPENED"}.get(
+            flag = {"CLOSE": "  >> AUTO-RESOLVED", "REOPEN": "  >> AUTO-REOPENED",
+                    "ESCALATE-UNKNOWN": "  >> UNKNOWN PAST BUDGET"}.get(
                 r.get("action"), "")
             print("  %-9s %-8s %-14s %s%s" % (r["verdict"], r["fu"], r.get("status", ""),
                                               (r.get("note") or r.get("reason") or
@@ -812,8 +855,14 @@ def main() -> int:
             print("AUTO-RESOLVED: %s" % ", ".join(summary["closed"]))
         if summary["reopened"]:
             print("AUTO-REOPENED (regression): %s" % ", ".join(summary["reopened"]))
+        if summary["unknown_over_budget"]:
+            print("UNKNOWN PAST %sh BUDGET (GR-6, escalation owed): %s"
+                  % (UNKNOWN_AGE_BUDGET_H, ", ".join(summary["unknown_over_budget"])))
 
-    return 0
+    # rc 5: the sweep ran, but at least one predicate has been UNKNOWN past its
+    # budget. Distinct from 2 (no ledger) and 3/4 (aborted write), so the
+    # scheduled task's result code carries the escalation.
+    return 5 if summary["unknown_over_budget"] else 0
 
 
 if __name__ == "__main__":

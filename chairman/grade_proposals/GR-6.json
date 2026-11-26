@@ -1,0 +1,44 @@
+{
+  "id": "gr_6_propose_20261126T224539Z",
+  "source": "protean_bridge",
+  "shape": "PROPOSE",
+  "register_row": "GR-6",
+  "register_grade": "C0",
+  "register_cap": "C4",
+  "category": "register_propose",
+  "severity": "high",
+  "observed_at": "2026-11-26T22:45:39Z",
+  "phase": "chairman.0b",
+  "evidence": {
+    "register": "LOCO_CHAIRMAN.md 6.1 GR-6",
+    "grade_text": "**C0**",
+    "decision": "post-build re-diagnosis: every symptom absent; the GREEN build fix_gr_6 carries evidence for C3",
+    "queue_evidence_for_move": "names repointed per MERGE_AUDIT B1 suggestion; an age budget on UNKNOWN in `sql_assert`; a test that a catalog error cannot rest as UNKNOWN past budget."
+  },
+  "details": {
+    "classes": [
+      "GC-1"
+    ],
+    "gap": "7 FU predicates query nonexistent tables; UNKNOWN unescalated in `sql_assert`"
+  },
+  "task": "propose_gr_6",
+  "handler": "grade_move_proposal",
+  "output_file": "chairman/grade_proposals/GR-6.json",
+  "from_grade": "C0",
+  "to_grade": "C3",
+  "symptoms_closed": [
+    "A-dead-table-names",
+    "B-unknown-has-no-age-budget",
+    "C-fleet-dead-table-names",
+    "D-fleet-unknown-has-no-age-budget"
+  ],
+  "description": "Proposal only: move GR-6 C0 -> C3. Why: post-build re-diagnosis: every symptom absent; the GREEN build fix_gr_6 carries evidence for C3. The bridge does not edit the register; a human or the 0a gate applies it with the cited evidence.",
+  "summary": "GR-6: grade-move proposal C0 -> C3",
+  "suggested_fix": "apply the move in LOCO_CHAIRMAN.md 6.1 citing this proposal, or reject it",
+  "ledger_trail": "chairman/grade_proposals/GR-6.ledger.jsonl",
+  "applied": {
+    "by": "protean_bridge drive session 2026-11-26 (cloud)",
+    "register_edit": "LOCO_CHAIRMAN.md 6.1 GR-6 C0 -> C3, same commit"
+  },
+  "caveat": "The BUILD and EVAL directives were executed by the emitting session acting as builder, not by zo_sentinel_builder. The tower's live FOLLOWUPS.md verify lines (seeded earlier) were not read from the cloud: if any still carry dead table names they now escalate within 48h via ESCALATE-UNKNOWN rc 5, which is the gate doing its job."
+}

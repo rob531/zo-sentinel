@@ -1,0 +1,11 @@
+[service]
+name = "cadence_freshness_slo_api"
+import_path = "services.active.cadence_freshness_slo_api.router"
+prefix = "/api"
+tag = "cadence_freshness_slo_api"
+origin = "service"
+auth = "public"
+needs_data_layer = true
+
+# Emitted by tools/service_decomposer.py. import_path names services.ACTIVE
+# because that is where router.py lives AFTER promotion.

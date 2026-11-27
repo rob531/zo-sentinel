@@ -70,6 +70,18 @@ SWEEP_CEILING_S = 900
 UNKNOWN_AGE_BUDGET_H = 48
 CLOSED_STATES = ("resolved", "done")
 
+# GR-30: declared shared core kept in parity across zo-sentinel tools/fu/fu_verify.py
+# and zo-fleet-tools fu_verify.py (checked by zo-fleet-tools/fu_twin_parity.py).
+# Intentional divergences (fleet CURSOR_PATH/_read_cursor/_write_cursor/WSL_STUB_HINTS/
+# verify_semantics_latch; sentinel host-local settings) stay outside SHARED_CORE.
+SHARED_CORE = (
+    "GREENS_TO_CLOSE",
+    "UNKNOWN_AGE_BUDGET_H",
+    "CLOSED_STATES",
+    "sweep",
+    "apply_mutations",
+)
+
 # Shell messages that mean "I could not run this", across cmd.exe, PowerShell
 # and sh. Needed because cmd.exe reports a missing binary as rc=1.
 NOT_FOUND_HINTS = (

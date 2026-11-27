@@ -211,6 +211,29 @@ jobs:
       - name: Capmap drift (observe)
         run: python tools/pull_check.py --quiet || true
 
+      # Standing fence for the publisher-trust allow-list (CLAUDE-D1-74). A
+      # VERIFIED_HOST_SUFFIXES entry that shares a domain subtree with a public,
+      # tenant-provisionable provider namespace lets an attacker-provisioned host
+      # earn verified_publisher:host and cap its own CRITICAL->MEDIUM (the class
+      # CLAUDE-D1-73 found live: .amazonaws.com/.windows.net/.supabase.co). This
+      # re-measures that invariant nightly so a future mis-add by either party is
+      # caught. Report-only: it surfaces to the summary + warns, never gates.
+      - name: Verified-host-suffix trust fence (observe)
+        id: vhsr
+        run: |
+          set +e
+          python verified_host_suffix_ratchet.py | tee vhsr.txt
+          echo "### Verified-host-suffix trust fence" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; cat vhsr.txt >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python verified_host_suffix_ratchet.py --check > vhsr_check.txt 2>&1
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 1 ]; then
+            echo "::warning::a NEW verified host suffix overlaps a tenant-provisionable namespace -- see summary (verified_host_suffix_ratchet.py --check)"
+          elif [ "$rc" -eq 2 ]; then
+            echo "::warning::verified_host_suffix_ratchet UNKNOWN -- trust module unreadable/degenerate"
+          fi
+
       # ---- bank improvements; refuse regressions ------------------------
       - name: Tighten baselines (DOWN ONLY)
         id: tighten
@@ -326,6 +349,8 @@ jobs:
             reach.txt
             spine.txt
             tighten.txt
+            vhsr.txt
+            vhsr_check.txt
             artifacts/reachability_ratchet.json
             artifacts/deferred_aging.json
             artifacts/row_predicates.json

@@ -65,6 +65,9 @@ import re
 import sys
 from collections import Counter, defaultdict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from model_import_linter import _substitute_names  # noqa: E402  GR-8: one tokenizer rename, shared
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE_MODULES = {
     "app.models": os.path.join("app", "models.py"),
@@ -212,9 +215,14 @@ def plan_file(path: str, pools: dict[str, set[str]], idxs: dict[str, dict[str, s
 
 def apply_file(path: str, rewrites: dict[str, str], redirects) -> bool:
     src = io.open(path, encoding="utf-8", errors="replace").read()
-    out = src
-    for old, new in rewrites.items():
-        out = re.sub(r"\b%s\b" % re.escape(old), new, out)
+    # GR-8 sibling (class swept 2026-11-27): this was a whole-file
+    #   re.sub(r"\b<old>\b", new, out)
+    # -- the exact defect fixed in model_import_linter (#4000): `re` cannot see
+    # Python syntax, so it rewrote the name inside SQL string literals, docstrings
+    # and comments too (`"SELECT ... FROM Users"` -> `"... FROM User"`). Renames
+    # now go through the linter's tokenizer splice: NAME tokens only, every other
+    # byte preserved, and an untokenizable file is returned UNCHANGED (fail safe).
+    out = _substitute_names(src, rewrites) if rewrites else src
     for module, name, new_module in redirects:
         # drop `name` from the app.* import, then add a correct import line.
         def _strip(m):

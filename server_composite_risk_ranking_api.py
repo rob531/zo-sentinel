@@ -4,8 +4,10 @@ GR-29 (2026-11-27): rewritten DB-direct. The previous version, for every row, PO
 an f-string SQL (server id formatted into the text) to the factory write_service on
 127.0.0.1:8772 -- a bus that is not in the Fly image -- and read `server.id`, a
 column McpServerRegistry does not have. On Fly the route could only answer 500.
-`verdict` is now the registry's own verdict column instead of a threshold on a
-"composite" that summed a column mcp_llm_axis_scores never had.
+`verdict` was briefly the registry's raw verdict column; that column is ~99% the
+legacy string 'unknown' and is not served publicly (tests/test_public_verdict_column_leak.py).
+The `verdict` KEY is kept for consumers and populated from risk_tier, the same as
+server_scorecard_api.py and verdict_axis_detail_api.py.
 """
 from typing import List, Optional
 
@@ -60,7 +62,7 @@ async def get_servers_ranked_by_risk(
                 "trust_score": s.trust_score,
                 "risk_tier": s.risk_tier,
                 "last_scanned": s.last_scanned.isoformat() if s.last_scanned else None,
-                "verdict": s.verdict,
+                "verdict": s.risk_tier,
             }
             for s in servers
         ],
@@ -106,7 +108,8 @@ if __name__ == "__main__":
     assert r.status_code == 200, r.text
     j = r.json()
     assert j["total"] == 3 and [x["server_id"] for x in j["servers"]] == ["b", "a", "c"], j
-    assert j["servers"][0]["verdict"] == "CAUTION_LIMITED"
+    assert j["servers"][0]["verdict"] == "HIGH", "verdict is derived from risk_tier"
+    assert "CAUTION_LIMITED" not in r.text and "TRUSTED_RESEARCH" not in r.text, "raw verdict column leaked"
     r = c.get("/servers/ranked-by-risk?risk_tier=HIGH")
     assert r.json()["total"] == 2
     print("PASS")

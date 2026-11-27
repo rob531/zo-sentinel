@@ -635,17 +635,38 @@ def _reads_context(directive):
 # AP-009, AP-010). The gate refuses the output; this teaches the emitter not to
 # produce it, so a refusal is the exception rather than the loop. One line each,
 # attached only when the directive's text makes the class reachable.
+# Outbound HTTP, not any "fetch": "fetch rows from mcp_server_registry" is a DB
+# read and must not get an HTTP steer. Needs a URL / client / a named external
+# source next to the verb.
+_OUTBOUND_RX = re.compile(
+    r"https?://|requests\.|httpx|\bwebhook|external api|\bcrawl|"
+    r"\b(fetch|poll|ingest|pull|download)\w*\s+(\w+\s+){0,3}"
+    r"(feed|api|url|endpoint|osv|nvd|ghsa|otx|github|npm|pypi|registry api|upstream)\b",
+    re.I)
+
+# Fly-bound output (the product app image) does not ship http_retry.py -- the
+# Dockerfile COPYs root modules by name -- so an import of it would die at mount.
+_FLY_BOUND_RX = re.compile(r"(^|/)(app|services)/|_api\.py$|_router\.py$|router\.py$", re.I)
+
+_STEER_AP009_FACTORY = (
+    "AP-009: every outbound HTTP call goes through "
+    "http_retry.request_with_retry(method, url, idempotent=...). A read is "
+    "idempotent=True; a write is idempotent=False and is retried only on "
+    "ConnectionError. Never a bare requests.get/post.")
+_STEER_AP009_FLY = (
+    "AP-009: this output ships in the Fly image, which does NOT include "
+    "http_retry.py -- do not import it. Wrap each outbound read in a bounded "
+    "retry loop in this module (3 tries, backoff, retry on ConnectionError/"
+    "Timeout/5xx); never retry a write that may have applied.")
+_STEER_AP010 = (
+    "AP-010: no signal may read trust_score, verdict or last_assessed -- "
+    "process_server writes those back from the composite, so reading them "
+    "scores the previous pass. Score from evidence columns only.")
+
+# (ap, trigger) pairs; the AP-009 line is chosen per plane in _steer_context.
 _STEERS = (
-    ("AP-009", re.compile(r"requests\.|httpx|https?://|\bfetch|\bingest|"
-                          r"\bwebhook|\bpoll|external api|\bcrawl", re.I),
-     "AP-009: every outbound HTTP call goes through "
-     "http_retry.request_with_retry(method, url, idempotent=...). A read is "
-     "idempotent=True; a write is idempotent=False and is retried only on "
-     "ConnectionError. Never a bare requests.get/post."),
-    ("AP-010", re.compile(r"\bsignal|compute_|\bscor(e|er|ing)\b|composite", re.I),
-     "AP-010: no signal may read trust_score, verdict or last_assessed -- "
-     "process_server writes those back from the composite, so reading them "
-     "scores the previous pass. Score from evidence columns only."),
+    ("AP-009", _OUTBOUND_RX, _STEER_AP009_FACTORY),
+    ("AP-010", re.compile(r"\bsignal|compute_|\bscor(e|er|ing)\b|composite", re.I), _STEER_AP010),
 )
 
 
@@ -653,7 +674,12 @@ def _steer_context(directive):
     """The steer lines whose trigger the directive's text hits, or ""."""
     hay = " ".join(str(directive.get(k) or "") for k in
                    ("task", "goal", "summary", "suggested_fix", "output_path"))
-    lines = [line for _ap, rx, line in _STEERS if rx.search(hay)]
+    out_path = str(directive.get("output_path") or directive.get("output_file") or "")
+    fly = bool(_FLY_BOUND_RX.search(out_path.replace("\\", "/")))
+    lines = []
+    for ap, rx, line in _STEERS:
+        if rx.search(hay):
+            lines.append(_STEER_AP009_FLY if (ap == "AP-009" and fly) else line)
     return ("EMITTER STEERS (BUILDER_ANTIPATTERNS.md):\n" + "\n".join(lines)) if lines else ""
 
 

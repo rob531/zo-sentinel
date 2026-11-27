@@ -294,7 +294,7 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
                 "outcome": "applied",
                 "url": url,
                 "name": name,
-                "trusted": trusted,
+                "verified_basis": bool(trust_basis),  # == gate["trusted"]
                 "trust_basis": trust_basis,
                 "masquerade_flag": masquerade_flag,
                 "model_overall_risk": (gate.get("original_overall_risk")

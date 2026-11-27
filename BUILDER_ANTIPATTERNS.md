@@ -1,4 +1,4 @@
-# Builder Antipatterns -- v0.2 (seeded 2026-04-26, extended 2026-08-27)
+# Builder Antipatterns -- v0.3 (seeded 2026-04-26, extended 2026-08-27, 2026-11-27)
 
 This file is the canonical, builder-readable index of failure patterns the
 generation pipeline must avoid. It is consumed by `sentinel_directive_generator.py`
@@ -208,6 +208,57 @@ file. Manual edits should be made via PR-style suggestion in
                 self-tests excluded), BLOCKING via tests/test_gr29_fly_bus_plane.py
                 in the required pytest context.
 
+## AP-009  single_shot_outbound_http
+
+  signature   : A bare requests.get/post (or httpx) call to an external host that
+                is not inside a retry loop and does not go through http_retry.
+  occurrences : 5 files in this repo, census 2026-11-27 (GR-4):
+                ecosystems_metadata_fetcher, otx_ingestor, mcp_registry_ingestor,
+                mcp_reference_servers_ingestor, signal_bridge. 6 more on the
+                ZoComputer host (GR-31: zo_mesh/* and zo_sentinel_builder).
+  cause       : The emitter writes the happy path. One request, one response,
+                parse, done -- which is what every example it learned from shows.
+  why it hid  : A transient 5xx or reset kills one cycle, the daemon logs it and
+                tries again next interval. Nothing is ever "down"; an ingestor
+                just quietly misses a fraction of its sources every day.
+  rule        : Every outbound call goes through
+                http_retry.request_with_retry(method, url, idempotent=...).
+                Reads are idempotent=True. Writes are idempotent=False and are
+                retried only on ConnectionError -- never re-send a write that may
+                already have applied. A deliberate single shot is listed with its
+                reason, not left implicit.
+  detect_pre  : goose_runner_lib/context.py _steer_context -- the AP-009 line is
+                attached to the engine prompt when the directive mentions HTTP,
+                fetch, ingest, poll, webhook or crawl.
+  detect_post : tests/test_gr4_retry_sweep.py (required pytest): AST census of
+                bare calls in the swept files, INTENTIONAL_SINGLE_SHOT allowlist,
+                and the helper's contract.
+
+## AP-010  signal_reads_its_own_output
+
+  signature   : A compute_* signal function reads trust_score, verdict or
+                last_assessed -- columns process_server writes back from the
+                composite.
+  occurrences : 1 -- `reputation` (weight 0.20) in signal_analyser.py returned
+                the stored trust_score (GR-28, removed in #16244).
+  cause       : "Reputation" sounds like an input. The emitter reached for the
+                column that looked most like reputation, and that column is the
+                scorer's own previous answer.
+  why it hid  : The input-hash gate excludes trust_score, so the loop was
+                invisible to it, and the output looked stable -- because it was
+                partly scoring itself. A fifth of the composite carried no
+                information and nothing failed.
+  rule        : A signal scores evidence (registry fields, fingerprints, threat
+                rows, scan results), never a column the scorer writes. If a
+                signal needs history, read mcp_assessment_history and say so.
+  detect_pre  : goose_runner_lib/context.py _steer_context -- the AP-010 line is
+                attached when the directive mentions signal, score, scorer,
+                scoring, composite or compute_.
+  detect_post : tests/test_gr28_no_trust_echo.py (required pytest): AST check that
+                no compute_* names a written-back column (negative control on the
+                old reputation source), and the composite is invariant to the
+                prior trust_score.
+
 ---
 
 ## Curation history
@@ -235,3 +286,8 @@ file. Manual edits should be made via PR-style suggestion in
                     prose, which is the point: AP-001's rule lived in this file
                     and in directive prompts and leaked anyway, until it lived
                     in code.
+
+  2026-11-27  v0.3  AP-009 (GR-4) and AP-010 (GR-28) added after their gates
+                    were armed, so the emitter is taught what the gate already
+                    refuses. Both carry a detect_pre steer in the engine prompt
+                    (_steer_context) as well as the blocking detect_post.

@@ -87,8 +87,12 @@ async def get_org_fleet_risk_summary(
     for server in servers:
         score = server_scores.get(server.server_id)
         if score:
-            # Update tier distribution
-            tier_distribution[score.risk_tier] += 1
+            # Update tier distribution. Control-(a): tolerate a present-but-
+            # unmodeled tier (this literal has no KNOWN_THREAT key, which the
+            # registry does emit) -- a bare `[tier] += 1` would KeyError/500 the
+            # endpoint on a valid row; .get() surfaces it as its own bucket.
+            _tier = score.risk_tier or "INSUFFICIENT"
+            tier_distribution[_tier] = tier_distribution.get(_tier, 0) + 1
 
             # Collect scores for averages
             if score.overall_risk_p_top is not None:

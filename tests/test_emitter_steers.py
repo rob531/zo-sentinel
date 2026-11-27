@@ -47,7 +47,7 @@ def test_steer_also_on_matched_path(monkeypatch):
     _hermetic(monkeypatch)
     monkeypatch.setattr(gr, "_schema_ground_context",
                         lambda d: ("REAL SCHEMA\n  Foo (table foo): a", "matched"))
-    out = gr._engine_task("T", {"task": "poll the webhook queue"})
+    out = gr._engine_task("T", {"task": "register the webhook receiver"})
     assert "REAL SCHEMA" in out and "AP-009" in out
 
 
@@ -69,3 +69,32 @@ def test_detect_post_files_exist():
             if not os.path.exists(os.path.join(ROOT, path)):
                 missing.append((block[:6], path))
     assert not missing, missing
+
+
+def test_db_fetch_is_not_outbound_http(monkeypatch):
+    """Review of #16289: `fetch` alone over-matched DB reads."""
+    _hermetic(monkeypatch)
+    for task in ("fetch rows from mcp_server_registry and render a table",
+                 "poll the directive queue table every 10 min",
+                 "ingest the scored rows into the report"):
+        assert "AP-009" not in gr._engine_task("T", {"task": task}), task
+    for task in ("fetch the OSV feed for each package", "poll the GitHub API for releases",
+                 "ingest advisories from the NVD api", "call https://example.test/x"):
+        assert "AP-009" in gr._engine_task("T", {"task": task}), task
+
+
+def test_fly_bound_output_is_not_told_to_import_http_retry(monkeypatch):
+    """Review of #16289: http_retry.py is not in the Fly image."""
+    _hermetic(monkeypatch)
+    fly = gr._engine_task("T", {"task": "fetch the OSV feed",
+                                "output_path": "services/staged/osv_x/router.py"})
+    assert "AP-009" in fly and "do not import it" in fly
+    assert "request_with_retry" not in fly
+    factory = gr._engine_task("T", {"task": "fetch the OSV feed", "output_path": "osv_ingestor_v2.py"})
+    assert "request_with_retry" in factory
+
+
+def test_http_retry_is_not_shipped_to_fly():
+    """The premise of the Fly steer: if this ever changes, the steer can be unified."""
+    df = open(os.path.join(ROOT, "Dockerfile"), encoding="utf-8").read()
+    assert "http_retry" not in df

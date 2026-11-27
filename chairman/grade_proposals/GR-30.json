@@ -1,0 +1,36 @@
+{
+  "id": "gr_30_propose_20261127T075026Z",
+  "source": "protean_bridge",
+  "shape": "PROPOSE",
+  "register_row": "GR-30",
+  "register_grade": "C0",
+  "register_cap": "C4",
+  "category": "register_propose",
+  "severity": "medium",
+  "observed_at": "2026-11-27T07:50:26Z",
+  "phase": "chairman.0b",
+  "evidence": {
+    "register": "LOCO_CHAIRMAN.md 6.1 GR-30",
+    "grade_text": "**C0** -- found by the GR-6 census 2026-11-26",
+    "decision": "harness RED-before -> GREEN-after; evidence supports C2",
+    "queue_evidence_for_move": ""
+  },
+  "details": {
+    "classes": [
+      "GC-8",
+      "GC-4"
+    ],
+    "gap": "Twin drift: `fu_verify.py` / `fu_seed_predicates.py` live twice (zo-sentinel `tools/fu/` and zo-fleet-tools root, which the tower runs) with no parity check, so a fix to one copy (GR-6 half A, 2026-08) never reached the other. The copies already diverge on purpose (fleet: rotating cursor, WSL-stub hints; sentinel: FLY_PROBE), so the fix is a declared shared core, not a byte-equality test"
+  },
+  "task": "propose_gr_30",
+  "handler": "grade_move_proposal",
+  "output_file": "chairman/grade_proposals/GR-30.json",
+  "from_grade": "C0",
+  "to_grade": "C2",
+  "symptoms_closed": [
+    "C-twin-parity-guard-missing"
+  ],
+  "description": "Proposal only: move GR-30 C0 -> C2. Why: harness RED-before -> GREEN-after; evidence supports C2. The bridge does not edit the register; a human or the 0a gate applies it with the cited evidence.",
+  "summary": "GR-30: grade-move proposal C0 -> C2",
+  "suggested_fix": "apply the move in LOCO_CHAIRMAN.md 6.1 citing this proposal, or reject it"
+}

@@ -25,6 +25,12 @@ import unicodedata
 
 RISK_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 CAP_TIER = "MEDIUM"   # trusted publishers are never published above this
+# Recognized overall_risk vocabulary for the Control-(a) degenerate-input guard. The model's
+# overall_risk head emits exactly RISK_ORDER's 4 tiers (every live row is LOW/MEDIUM/HIGH/
+# CRITICAL); INFO/UNKNOWN are included as a defensive superset of every risk-tier token seen
+# across the consumers so a benign extended tier can NEVER be misread as degenerate. A label
+# outside this set is corrupt/unassessable -> UNKNOWN (see trust_gate).
+RECOGNIZED_RISK = frozenset(RISK_ORDER) | {"INFO", "UNKNOWN"}
 
 # --- verified official GitHub orgs (EXACT, case-insensitive; never substring) ---
 VERIFIED_GITHUB_ORGS = frozenset({
@@ -147,8 +153,25 @@ def trust_gate(url: str | None, name: str | None, axis_labels: dict) -> dict:
         capped = CAP_TIER
         changed = True
 
+    # Control-(a) degenerate-input guard: a PRESENT overall_risk label that is not a
+    # recognized tier is corrupt / unassessable input, not a verdict. Normalize it to the
+    # explicit UNKNOWN sentinel (mirroring risk_tier_from_axes' canonical UNKNOWN) instead
+    # of publishing the raw garbage verbatim. A truthy sentinel also short-circuits the
+    # consumer's `gate["published_overall_risk"] or labels[...]` fallback, so an invalid
+    # label cannot leak downstream either. Scope is safe-by-construction: the empty/missing
+    # case (original == "") is left as "" (consumer falls back as before), and every
+    # recognized tier -- including the defensive INFO/UNKNOWN superset -- passes through
+    # verbatim, so no real row's verdict can change. Only a genuinely out-of-vocabulary
+    # label (whitespace-only, 'BANANA', ...) is normalized.
+    unrecognized_label = bool(original) and original not in RECOGNIZED_RISK
+    if unrecognized_label:
+        capped = "UNKNOWN"
+        changed = False
+
     if masquerade:
         display = "Possible impersonation of a well-known brand - automated heuristic; treat with caution"
+    elif unrecognized_label:
+        display = "Unrecognized risk label - unassessable (automated heuristic; treat as UNKNOWN)"
     elif trust_basis:
         display = "High-capability tool from a verified/established maintainer (automated heuristic assessment)"
     else:

@@ -16,13 +16,14 @@ backlog below for that session; they are the difference between an instruction
 set and an organism (chairman assessment, 2026-08-29 EOD).
 
 ## 0a. Enforcement predicates — the doctrine must be un-ignorable
-- grade: claim-gate half **C4**, per-row-predicate half still C1 (2026-11-27) | class GC-3 — `tools/gap_claim_gate.py` runs BLOCKING in the required
+- grade: both halves **C4** (2026-11-27). Per-row half: `tools/row_predicates.py` runs BLOCKING in `static-analysis` against `chairman/row_predicates.json` -- every C3/C4 row names its predicate (P1), a `test` predicate must be a pytest-collected file that exists (P2), no orphan predicates (P3), and no grade may be RAISED on tower/sibling evidence past its age budget (P4). UNKNOWN evidence (`measured`/`sibling`) carries `measured_on` + `budget_days` (default 30); past budget `ratchet-nightly` opens 'chairman: C3+ rows held by stale evidence'. First run: GR-18 (89 days) and GR-24 (54 days) are stale. Pinned by `tests/test_row_predicates.py`.
+- was: claim-gate half C4, per-row-predicate half C1 (2026-11-27) | class GC-3 — `tools/gap_claim_gate.py` runs BLOCKING in the required
   `static-analysis` job: "closes GR-n" below C4 (R1), a fix claim whose row grade did not move (R2),
   a grade raised to C3/C4 citing no existing path or PR link (R3), a claim on a missing row (R4) are red;
   unreadable register is UNKNOWN and red. Acceptance met: `tests/test_gap_claim_gate.py` runs a
   "closed at C1" claim on the real register (red) and a genuine move (green), and pins the step
   (present, not continue-on-error, PR text via env, full-history checkout). Backtested GREEN on every
-  register-touching merge in history. Not yet built: FU-style per-row predicates with UNKNOWN age budgets.
+  register-touching merge in history.
 - was: grade C1 -> target C4 | class GC-3 (the doctrine itself is report-only today)
 - shape: FU-style machine-closeable predicates for Gap Register rows + a CI
   step (pr-gates or its own workflow) that fails when a PR claims a gap fix

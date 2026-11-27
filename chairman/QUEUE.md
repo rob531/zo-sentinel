@@ -36,7 +36,7 @@ set and an organism (chairman assessment, 2026-08-29 EOD).
 
 ## 0b. The chairman->emitter bridge — shape-changing tasks
 - grade C0 -> target C3 | the protean organ the loop is starving for
-- status (2026-11-26): **C2** -- built as zo-fleet-tools `protean_bridge.py` (#654, `PROTEAN_BRIDGE.md`); root cause named (the register had no emitter) and fixed at the origin. First drive took GR-6 DIAGNOSE->EVAL->BUILD->PROPOSE and moved the row C0 -> C3 (`chairman/grade_proposals/GR-6.json`). Not C3 yet: the EVAL/BUILD directives were executed by the emitting session, not by `zo_sentinel_builder`. C3 = a second row driven with the builder consuming the emitted directives from `pending/`.
+- status (2026-11-27): **C3** -- evidence for move met: GR-6 (emitter-executed, C0->C3, #16205) and GR-30 (driven by Argon, a builder other than the emitter, consuming the bridge's DIAGNOSE/EVAL/BUILD directives; register row moved C0->C2 by the outcome, `chairman/grade_proposals/GR-30.json`). zo-fleet-tools `protean_bridge.py` (#654, #662), `PROTEAN_BRIDGE.md`. C4 owes: the builder (`zo_sentinel_builder`) consuming bridge directives from `pending/` natively + writing `.done.json` with shape/verdict, and 0a applying proposals by gate.
 - shape: queue/register entries become TYPED directives the pipeline consumes:
   DIAGNOSE (emit a probe — referent_verify/census shape), EVAL (emit an
   acceptance harness — F2 antipattern-suite shape), BUILD (emit the fix —

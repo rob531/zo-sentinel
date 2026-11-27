@@ -1,0 +1,24 @@
+{
+  "id": "gr_8_propose_20261127",
+  "source": "claude_code cloud session (credit-burn backlog thread)",
+  "shape": "PROPOSE",
+  "register_row": "GR-8",
+  "from_grade": "C0",
+  "to_grade": "C3",
+  "register_cap": "C3",
+  "observed_at": "2026-11-27T04:30:00Z",
+  "root_cause": "Identifier rename implemented as a whole-file re.sub(r'\\b<wrong>\\b', canon, src); regex cannot distinguish NAME tokens from STRING/COMMENT tokens, so SQL table-name literals and docstrings were rewritten.",
+  "origin_diff": "tools/model_import_linter.py::_substitute_names (tokenizer splice; landed in #16175, ungraded)",
+  "census": {
+    "command": "grep -rnE --include=*.py 're\\.sub\\(\\s*r?[\"\\x27]\\\\\\\\?b%s' . ; grep -rnE --include=*.py 're\\.sub\\(\\s*(rf|fr|f)[\"\\x27]\\\\\\\\?b\\{' . ; AST walk in tests/test_gr8_rename_preserves_strings.py",
+    "sites": ["tools/model_import_linter.py (origin, fixed in #16175)", "tools/repair_staged_model_names.py::apply_file (sibling, fixed here)"],
+    "census_remainder": 0
+  },
+  "harness": {
+    "file": "tests/test_gr8_rename_preserves_strings.py",
+    "red_before": "2 failed, 5 passed (pre-fix repair_staged_model_names.py)",
+    "green_after": "7 passed",
+    "gate": "required pytest check (tools/ci_pytest.py collects every tests/test_*.py minus quarantine)"
+  },
+  "applied": {"by": "same session, in the PR that carries the sibling fix", "register": "LOCO_CHAIRMAN.md 6.1 GR-8"}
+}

@@ -124,7 +124,13 @@ def scan_imports(src: str, full_norm_map: dict[str, str]) -> dict[str, str]:
     canon_exact = set(full_norm_map.values())
     out: dict[str, str] = {}
     for m in IMPORT_FROM_MODELS.finditer(src):
-        for tok in IDENT.findall(m.group(1) or m.group(2) or ""):
+        # Drop `# ...` comments first: `from app.models import User  # the user model`
+        # used to yield `user` -> User, and a whole-file rename of the NAME `user`
+        # (any local variable) would then follow. Only the imported names count.
+        blob = re.sub(r"#[^\n]*", "", m.group(1) or m.group(2) or "")
+        for tok in IDENT.findall(blob):
+            if tok in ("as",):
+                continue
             if tok in canon_exact:
                 continue
             canon = full_norm_map.get(_norm(tok))
@@ -133,12 +139,35 @@ def scan_imports(src: str, full_norm_map: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def _code_names(src: str):
+    """The identifiers that appear as CODE (tokenize NAME tokens), or None when the
+    file cannot be tokenized.
+
+    GR-8, detection half (2026-11-27): scan_text used `IDENT.findall` over the raw
+    text, so a table name in a docstring or SQL literal (`mcp_server_registry.risk_tier`)
+    was reported as model drift. `--fix` -- correctly -- never touches strings, so the
+    report could never clear: `--check` stayed exit 1 on 503 staged files,
+    promote_staged_to_active recorded `casing_fixed` for renames it did not make, and
+    orphanage labelled the service BROKEN_IMPORT "--fix likely revives". Detection now
+    sees exactly what the fix may change."""
+    import io
+    import tokenize as _tok
+    try:
+        return {t.string for t in _tok.generate_tokens(io.StringIO(src).readline)
+                if t.type == _tok.NAME}
+    except (_tok.TokenError, IndentationError, SyntaxError):
+        return None
+
+
 def scan_text(src: str, norm_map: dict[str, str]) -> dict[str, str]:
-    """Return {wrong_token: canonical} found in src (token != canonical but
-    normalises to a canonical model name)."""
+    """Return {wrong_token: canonical} found in src's CODE (token != canonical but
+    normalises to a canonical model name). Strings and comments are not code.
+    An untokenizable file falls back to the raw-text scan: a file that cannot be
+    parsed is reported, never silently cleared."""
     canon_exact = set(norm_map.values())
     out: dict[str, str] = {}
-    for tok in set(IDENT.findall(src)):
+    names = _code_names(src)
+    for tok in (names if names is not None else set(IDENT.findall(src))):
         if tok in canon_exact:
             continue
         canon = norm_map.get(_norm(tok))

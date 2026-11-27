@@ -33,6 +33,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+import bounded  # noqa: E402
 import gap_claim_gate as gcg  # noqa: E402
 
 PREDICATES = os.path.join(ROOT, "chairman", "row_predicates.json")
@@ -171,8 +172,9 @@ def main(argv=None) -> int:
                 json.dump(out, fh, indent=2)
         print(json.dumps(out, indent=2))
         return GREEN
-    print(f"row_predicates: {'RED' if bad else 'GREEN'} ({len(rep)} C3+ rows; {len(stale)} stale UNKNOWN: "
-          f"{', '.join(r['row'] + ' ' + str(r['age_days']) + 'd' for r in stale) or 'none'})")
+    shown = bounded.sample(stale, where="the --report JSON",
+                           render=lambda r: f"{r['row']} {r['age_days']}d")
+    print(f"row_predicates: {'RED' if bad else 'GREEN'} ({len(rep)} C3+ rows; {len(stale)} stale UNKNOWN: {shown})")
     for v in bad:
         print("  " + v)
     return RED if bad else GREEN

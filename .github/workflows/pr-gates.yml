@@ -414,6 +414,16 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python tools/gap_claim_gate.py --base-ref "$BASE_SHA"
 
+      # QUEUE 0a per-row half: every C3/C4 row names the predicate that holds it
+      # (chairman/row_predicates.json). A C3+ row with none, a deleted or
+      # uncollected census test, an orphan predicate, or a grade RAISED on stale
+      # tower/sibling evidence is red. Stale evidence on an unmoved row is the
+      # nightly's escalation, not this PR's problem. UNKNOWN (rc 2) fails too.
+      - name: Row predicates (BLOCKING -- every C3+ grade names its check)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python tools/row_predicates.py ${BASE_SHA:+--base-ref "$BASE_SHA"}
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:

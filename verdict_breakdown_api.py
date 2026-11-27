@@ -32,7 +32,9 @@ from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
 from trust_gating_override import trust_gate
 
-WRITE_SERVICE = "http://127.0.0.1:8772"
+import logging
+
+_audit_log = logging.getLogger("zo.audit.trust_gating")
 
 router = APIRouter(prefix="/api", tags=["verdict"])
 
@@ -278,39 +280,30 @@ def get_verdict(server_id: str, db: Session = Depends(get_session),
     override_reason = trust_basis if trusted_override else None
 
     if trusted_override:
+        # GR-29 (2026-11-27): this was a fire-and-forget POST of an audit_log INSERT to
+        # the factory write_service on 127.0.0.1:8772 -- not in the Fly image, so every
+        # trust-gating override went unrecorded behind a bare `except: pass`. Postgres
+        # has no audit_log table; the override is now a structured log line, which Fly
+        # keeps, instead of a write to a plane this process cannot reach.
         try:
-            requests.post(
-                f"{WRITE_SERVICE}/execute",
-                json={
-                    "sql": (
-                        "INSERT INTO audit_log "
-                        "(event_type, actor, action, target_server_id, "
-                        " details_json, outcome, timestamp) "
-                        "VALUES ('trust_gating', 'verdict_breakdown_api', "
-                        " :action, :sid, :details, 'applied', now())"
-                    ),
-                    "params": {
-                        "action": ("masquerade_flagged" if masquerade_flag
-                                   else "trusted_cap_applied"),
-                        "sid": server_id,
-                        "details": json.dumps({
-                            "url": url,
-                            "name": name,
-                            "trusted": trusted,
-                            "trust_basis": trust_basis,
-                            "masquerade_flag": masquerade_flag,
-                            "model_overall_risk": (gate.get("original_overall_risk")
-                                                   or labels.get("overall_risk")),
-                            "published_overall_risk": (gate.get("published_overall_risk")
-                                                       or labels.get("overall_risk")),
-                        }),
-                    },
-                    "wait": False,
-                },
-                timeout=5,
-            )
+            _audit_log.info("trust_gating %s", json.dumps({
+                "event_type": "trust_gating",
+                "actor": "verdict_breakdown_api",
+                "action": "masquerade_flagged" if masquerade_flag else "trusted_cap_applied",
+                "target_server_id": server_id,
+                "outcome": "applied",
+                "url": url,
+                "name": name,
+                "verified_basis": bool(trust_basis),  # == gate["trusted"]
+                "trust_basis": trust_basis,
+                "masquerade_flag": masquerade_flag,
+                "model_overall_risk": (gate.get("original_overall_risk")
+                                       or labels.get("overall_risk")),
+                "published_overall_risk": (gate.get("published_overall_risk")
+                                           or labels.get("overall_risk")),
+            }, default=str))
         except Exception:
-            pass  # never fail the request on audit write failure
+            pass  # never fail the request on an audit-log failure
 
     return Verdict(
         server_id=server_id,

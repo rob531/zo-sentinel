@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import McpServerRegistry, VulnAdvisory, VulnLink
 
 from .logic import get_orphan_links
 

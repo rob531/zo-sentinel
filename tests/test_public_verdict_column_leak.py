@@ -156,3 +156,14 @@ if __name__ == "__main__":
     test_verdict_axis_detail_does_not_leak_legacy_unknown()
     test_org_risk_summary_does_not_leak_legacy_unknown(_MP())
     print("PASS")
+
+
+def test_ranked_by_risk_does_not_leak_legacy_verdict():
+    """#16236 rewrote /servers/ranked-by-risk DB-direct and served `s.verdict` again."""
+    import server_composite_risk_ranking_api as ranked
+    eng, TS = _engine_with_server()
+    r = _client(ranked.router, TS).get("/servers/ranked-by-risk")
+    assert r.status_code == 200, r.text
+    row = r.json()["servers"][0]
+    assert row["verdict"] == "MEDIUM", row
+    assert "unknown" not in r.text, r.text

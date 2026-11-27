@@ -50,11 +50,17 @@ VERDICT_THRESHOLDS = {
 
 VERDICT_ORDER = ['BLOCKED', 'HIGH_RISK', 'REVIEW', 'TRUSTED_RESEARCH', 'TRUSTED']
 
+# GR-28 / SCORER_DISCRIMINATION_DESIGN 2.1: `reputation` (was 0.20) is removed at the
+# origin. It read `trust_score`, which process_server writes back from this composite,
+# so pass N+1 echoed pass N (a feedback loop the input-hash gate could not see) and 20%
+# of the weight carried no information. compute_composite_score divides by the summed
+# weight, so the remaining four keep their relative weights (effective 0.25 / 0.3125 /
+# 0.25 / 0.1875). A future reputation signal must be external-evidence-only and must
+# never read a column this pipeline writes (tests/test_gr28_no_trust_echo.py).
 SIGNAL_WEIGHTS = {
     'url_safety': 0.20,
     'tool_security': 0.25,
     'supply_chain': 0.20,
-    'reputation': 0.20,
     'domain_trust': 0.15,
 }
 
@@ -314,43 +320,6 @@ def compute_supply_chain_score(server: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def compute_reputation_score(server: Dict[str, Any]) -> Dict[str, Any]:
-    name = (server.get('name') or '')
-    description = (server.get('description') or '')
-    trust_score = (server.get('trust_score') or 0)
-    
-    score = 70.0
-    evidence_parts = []
-    
-    if trust_score > 80:
-        score = trust_score
-        evidence_parts.append(f"existing_trust:{trust_score}")
-    elif trust_score > 50:
-        score = trust_score
-        evidence_parts.append(f"moderate_trust:{trust_score}")
-    elif trust_score > 0:
-        score = trust_score * 0.8
-        evidence_parts.append(f"low_trust:{trust_score}")
-    else:
-        score = 70.0
-        evidence_parts.append("no_existing_trust")
-    
-    if len(name) < 3:
-        score -= 10
-        evidence_parts.append("suspicious_name_length")
-    
-    if description and len(description) > 200:
-        score += 5
-        evidence_parts.append("detailed_description")
-    
-    score = max(0.0, min(100.0, score))
-    return {
-        'signal_name': 'reputation',
-        'score': score,
-        'evidence': json.dumps({'checks': evidence_parts, 'existing_trust': trust_score})
-    }
-
-
 def compute_domain_trust_score(server: Dict[str, Any]) -> Dict[str, Any]:
     url = (server.get('url') or '')
     registry_source = (server.get('registry_source') or '')
@@ -486,8 +455,8 @@ def get_servers_needing_signals() -> List[Dict[str, Any]]:
     An empty list is now a real answer, and the caller idles on it.
     """
     return ws_query(f'''
-        SELECT r.server_id, r.name, r.url, r.description, r.trust_score,
-               r.registry_source, r.scan_count, r.verdict, r.metadata
+        SELECT r.server_id, r.name, r.url, r.description,
+               r.registry_source, r.scan_count, r.metadata
         FROM mcp_server_registry r
         LEFT JOIN (
             SELECT server_id, MAX(scored_at) as latest_score
@@ -524,7 +493,6 @@ def process_server(server: Dict[str, Any]) -> str:
     signals.append(compute_url_safety_score(server))
     signals.append(compute_tool_security_score(server))
     signals.append(compute_supply_chain_score(server))
-    signals.append(compute_reputation_score(server))
     signals.append(compute_domain_trust_score(server))
 
     composite = compute_composite_score(signals)

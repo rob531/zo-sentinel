@@ -69,6 +69,8 @@ from urllib.parse import urlparse
 
 import requests
 
+from http_retry import request_with_retry  # GR-4: retry/backoff, bare-call contract
+
 LOG = logging.getLogger("otx_ingestor")
 logging.basicConfig(
     level=logging.INFO,
@@ -134,8 +136,8 @@ def ws_execute(sql: str, params: Optional[list] = None) -> dict:
     payload = {"sql": sql, "wait": True}
     if params is not None:
         payload["params"] = params
-    r = requests.post(
-        WRITE_SERVICE_BASE + "/execute",
+    r = request_with_retry(
+        "POST", WRITE_SERVICE_BASE + "/execute",
         json=payload,
         timeout=EXECUTE_TIMEOUT_SEC,
     )
@@ -147,8 +149,8 @@ def ws_query(sql: str, params: Optional[list] = None) -> list:
     payload = {"sql": sql}
     if params is not None:
         payload["params"] = params
-    r = requests.post(
-        WRITE_SERVICE_BASE + "/query",
+    r = request_with_retry(
+        "POST", WRITE_SERVICE_BASE + "/query", idempotent=True,
         json=payload,
         timeout=EXECUTE_TIMEOUT_SEC,
     )
@@ -158,8 +160,8 @@ def ws_query(sql: str, params: Optional[list] = None) -> list:
 
 def heartbeat() -> None:
     try:
-        requests.post(
-            WRITE_SERVICE_BASE + "/write",
+        request_with_retry(
+            "POST", WRITE_SERVICE_BASE + "/write",
             json={
                 "table": "service_health",
                 "rows": {
@@ -206,8 +208,8 @@ def ensure_schema() -> None:
 
 def fetch_pulses_page(api_key: str, page: int) -> dict:
     """Fetch one page of subscribed pulses. Never echoes the key."""
-    r = requests.get(
-        OTX_BASE + SUBSCRIBED_ENDPOINT,
+    r = request_with_retry(
+        "GET", OTX_BASE + SUBSCRIBED_ENDPOINT, idempotent=True,
         params={"limit": PAGE_LIMIT, "page": page},
         headers={
             "X-OTX-API-KEY": api_key,

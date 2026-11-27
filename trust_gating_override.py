@@ -67,7 +67,7 @@ VERIFIED_HOST_SUFFIXES = (
     ".stripe.com", ".googleapis.com", ".cloud.google.com", ".microsoft.com",
     ".azure.com", ".azure.net", ".cloudflare.com",
     ".supabase.com", ".openai.com", ".anthropic.com",
-    ".atlassian.com", ".atlassian.net", ".databricks.com",
+    ".atlassian.com", ".databricks.com",
     ".twilio.com", ".sendgrid.com", ".shopify.com", ".paypal.com",
 )
 # Multi-tenant hosts: a verified-looking suffix here proves NOTHING about the
@@ -75,6 +75,11 @@ VERIFIED_HOST_SUFFIXES = (
 SHARED_TENANT_SUFFIXES = (
     ".workers.dev", ".vercel.app", ".herokuapp.com", ".onrender.com",
     ".netlify.app", ".pages.dev", ".web.app", ".firebaseapp.com",
+    # SaaS tenant platform: <site>.atlassian.net Jira/Confluence clouds are
+    # self-serve/free-tier provisionable, so the suffix proves the HOSTER, not
+    # the publisher. Atlassian's own identity stays verified via .atlassian.com
+    # (api.atlassian.com, marketplace.atlassian.com). CLAUDE-D1-77 demonstrated-then-moved.
+    ".atlassian.net",
     ".azurewebsites.net", ".github.io", ".glama.ai", ".smithery.ai",
     # Provider namespaces where ANY member of the public can provision a host
     # (S3 buckets, Azure Storage accounts, Supabase projects) -- the suffix

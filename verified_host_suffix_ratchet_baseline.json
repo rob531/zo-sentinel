@@ -1,13 +1,6 @@
 {
   "_note": "Reviewed VERIFIED_HOST_SUFFIXES entries that overlap a KNOWN_TENANT_PROVISIONABLE namespace. Each is a candidate MOVE to SHARED_TENANT_SUFFIXES pending a demonstrated live trust_gate proof (anti-vanity: surface here, move only what is proven). --check REDs only on a NEW overlap not listed here, a REJECTED status, or a tenant_ns not covered here.",
   "reviewed": {
-    ".atlassian.net": {
-      "ref": "CLAUDE-D1-74: Atlassian cloud customer sites <site>.atlassian.net are self-serve/free-tier provisionable, so this grants verified_publisher:host to any tenant. Needs a live trust_gate proof before MOVING to SHARED_TENANT (official Atlassian endpoints at api.atlassian.com / .atlassian.com stay verified).",
-      "status": "REVIEW_REQUIRED",
-      "tenant_ns": [
-        "atlassian.net"
-      ]
-    },
     ".azure.com": {
       "ref": "ARGON-REFEREE-CLAUDE-D1-74 demonstrated LIVE: attacker.{cloudapp,openai,documents}.azure.com each earn verified_publisher:host and cap CRITICAL->MEDIUM. Proof-required MOVE scopes the tenant subdomains, NOT all of .azure.com (portal/management.azure.com are MS first-party).",
       "status": "REVIEW_REQUIRED",

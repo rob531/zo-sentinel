@@ -155,3 +155,58 @@ def test_no_whole_file_identifier_regex_left_in_fixers():
                 for ln in _bare_identifier_regex_subs(os.path.join(ROOT, base, fn)):
                     hits.append(f"{base}/{fn}:{ln}")
     assert hits == [], "GR-8 class regression:\n" + "\n".join(hits)
+
+
+# --- GR-8 detection half (2026-11-27) -------------------------------------------
+# The fix half above was code-only; the DETECTION half still read raw text. Two
+# consequences, both measured on services/staged before this change:
+#   * scan_text reported 673 "wrong refs" in 503 files -- table names in docstrings
+#     and SQL -- that --fix (correctly) could never clear, so --check stayed red,
+#     promote_staged_to_active recorded casing_fixed renames it never made, and
+#     orphanage labelled services BROKEN_IMPORT "--fix likely revives". After: 0.
+#   * scan_imports read the trailing comment of `from app.models import User  # the
+#     user model`, mapped `user` -> User, and --fix then renamed every NAME `user`
+#     (parameters, locals) to the model class: `def f(user)` became `def f(User)`.
+
+DETECT_FIXTURE = textwrap.dedent('''\
+    from app.models import User  # the user model
+    Q = "SELECT * FROM mcp_server_registry"
+    """Writes mcp_server_registry.risk_tier."""
+
+
+    def f(user):
+        return User, user, Q
+    ''')
+
+
+def test_scan_text_ignores_strings_and_docstrings():
+    nm = MIL.build_map(MIL.canonical_models())
+    assert "McpServerRegistry" in nm.values()
+    assert MIL.scan_text(DETECT_FIXTURE, nm) == {}
+    # positive control: the same name as CODE is still caught
+    assert MIL.scan_text("x = mcp_server_registry\n", nm) == {"mcp_server_registry": "McpServerRegistry"}
+
+
+def test_scan_text_untokenizable_still_reports():
+    nm = MIL.build_map(MIL.canonical_models())
+    broken = 'x = mcp_server_registry\ny = """unterminated\n'
+    assert "mcp_server_registry" in MIL.scan_text(broken, nm)
+
+
+def test_import_comment_does_not_rename_a_local():
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "svc.py")
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(DETECT_FIXTURE)
+        r = subprocess.run([sys.executable, os.path.join(TOOLS, "model_import_linter.py"), "--fix", p],
+                           capture_output=True, text=True, timeout=60)
+        with open(p, encoding="utf-8") as f:
+            out = f.read()
+    assert out == DETECT_FIXTURE, "--fix rewrote a file with no real drift:\n" + out
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_import_scan_still_catches_real_drift():
+    full = MIL.build_map(MIL.all_models())
+    got = MIL.scan_imports("from app.models import Users  # users\n", full)
+    assert got == {"Users": "User"}, got

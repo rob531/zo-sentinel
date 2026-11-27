@@ -13,7 +13,8 @@ check. Every cloud session appends one row to Sessions before it ends, with
 | provider | balance_usd | measured_at (UTC) | expires (UTC) | source |
 |---|---|---|---|---|
 | claude-cloud-credit | ? | 2026-11-27 | 2026-11-27T22:21Z | Robin via the project chat 2026-11-26: the credit expires 2026-11-27 22:21Z (5:21 PM EST), not 11-05 as read on 10-06. Balance not visible from any session: was 50.00 est on 2026-10-06, with unmeasured sessions since. Re-read the console before quoting a number |
-| anthropic-api | 20.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (+$20 topup; unblocks auth_evidence E14b) |
+| anthropic-api | 19.95 | 2026-11-27T19:25Z | - | Robin read the Anthropic console 2026-11-27 (screenshot in the project chat): purchased balance 19.95, auto-reload OFF (requests stop at 0). Covers auth_evidence E14b (reserve 6.00) |
+| anthropic-api-promo | 90.40 | 2026-11-27T19:25Z | 2026-12-15T00:00Z | Same console read: promotional "API credit (Max)" 90.40 of 100.00, granted 2026-11-12, expires 2026-12-14 7:00 PM EST. Applies to Agent SDK, API, Batch API, Playground, Managed Agents. Not a separate account: anthropic-api spend may draw on it first, so re-read the console rather than netting by hand |
 | mistral | 0.00 | 2026-09-29 | - | out |
 | vast | 10.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (refill; was 5.50) |
 | glide | 5.00 | 2026-10-06 | - | Robin in-session 2026-10-06 (new LLM-gateway provider; proposer/tie-breaker only, GLIDE_DECISION_SURROGATE_POLICY.md) |

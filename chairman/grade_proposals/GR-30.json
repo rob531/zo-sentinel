@@ -1,18 +1,18 @@
 {
-  "id": "gr_30_propose_20261127T075026Z",
+  "id": "gr_30_propose_20261127T105426Z",
   "source": "protean_bridge",
   "shape": "PROPOSE",
   "register_row": "GR-30",
-  "register_grade": "C0",
+  "register_grade": "C2",
   "register_cap": "C4",
   "category": "register_propose",
   "severity": "medium",
-  "observed_at": "2026-11-27T07:50:26Z",
+  "observed_at": "2026-11-27T10:54:26Z",
   "phase": "chairman.0b",
   "evidence": {
     "register": "LOCO_CHAIRMAN.md 6.1 GR-30",
-    "grade_text": "**C0** -- found by the GR-6 census 2026-11-26",
-    "decision": "harness RED-before -> GREEN-after; evidence supports C2",
+    "grade_text": "**C2** (2026-11-27) -- driven DIAGNOSE->EVAL->BUILD by Argon from protean-bridge directives (second builder, not the emitter). Root cause: the fu twins were hand-copied with no declared shared-core contract and no cross-repo parity check. Fixed at the origin: zo-fleet-tools `fu_twin_parity.py` + `tests/test_gr_30_acceptance.py` in `fu-verify-budget.yml` (checks out zo-sentinel main), merged zo-sen",
+    "decision": "harness RED-before -> GREEN-after; evidence supports C3",
     "queue_evidence_for_move": ""
   },
   "details": {
@@ -25,12 +25,12 @@
   "task": "propose_gr_30",
   "handler": "grade_move_proposal",
   "output_file": "chairman/grade_proposals/GR-30.json",
-  "from_grade": "C0",
-  "to_grade": "C2",
+  "from_grade": "C2",
+  "to_grade": "C3",
   "symptoms_closed": [
     "C-twin-parity-guard-missing"
   ],
-  "description": "Proposal only: move GR-30 C0 -> C2. Why: harness RED-before -> GREEN-after; evidence supports C2. The bridge does not edit the register; a human or the 0a gate applies it with the cited evidence.",
-  "summary": "GR-30: grade-move proposal C0 -> C2",
+  "description": "Proposal only: move GR-30 C2 -> C3. Why: harness RED-before -> GREEN-after; evidence supports C3. The bridge does not edit the register; a human or the 0a gate applies it with the cited evidence.",
+  "summary": "GR-30: grade-move proposal C2 -> C3",
   "suggested_fix": "apply the move in LOCO_CHAIRMAN.md 6.1 citing this proposal, or reject it"
 }

@@ -79,7 +79,6 @@ jobs:
         run: |
           set +e
           python tools/deferred_aging_report.py --out artifacts/deferred_aging.json
-            artifacts/row_predicates.json
           rc=$?
           if [ "$rc" -ne 0 ]; then
             echo "::warning::deferred_aging_report rc=$rc (UNKNOWN) -- deferral list unreadable"
@@ -329,7 +328,6 @@ jobs:
             tighten.txt
             artifacts/reachability_ratchet.json
             artifacts/deferred_aging.json
-            artifacts/row_predicates.json
             aging.md
           if-no-files-found: ignore
 

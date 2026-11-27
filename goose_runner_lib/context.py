@@ -631,6 +631,32 @@ def _reads_context(directive):
     return "\n\n".join(blocks)
 
 
+# Emitter steers for failure classes the gates already catch (BUILDER_ANTIPATTERNS
+# AP-009, AP-010). The gate refuses the output; this teaches the emitter not to
+# produce it, so a refusal is the exception rather than the loop. One line each,
+# attached only when the directive's text makes the class reachable.
+_STEERS = (
+    ("AP-009", re.compile(r"requests\.|httpx|https?://|\bfetch|\bingest|"
+                          r"\bwebhook|\bpoll|external api|\bcrawl", re.I),
+     "AP-009: every outbound HTTP call goes through "
+     "http_retry.request_with_retry(method, url, idempotent=...). A read is "
+     "idempotent=True; a write is idempotent=False and is retried only on "
+     "ConnectionError. Never a bare requests.get/post."),
+    ("AP-010", re.compile(r"\bsignal|compute_|\bscor(e|er|ing)\b|composite", re.I),
+     "AP-010: no signal may read trust_score, verdict or last_assessed -- "
+     "process_server writes those back from the composite, so reading them "
+     "scores the previous pass. Score from evidence columns only."),
+)
+
+
+def _steer_context(directive):
+    """The steer lines whose trigger the directive's text hits, or ""."""
+    hay = " ".join(str(directive.get(k) or "") for k in
+                   ("task", "goal", "summary", "suggested_fix", "output_path"))
+    lines = [line for _ap, rx, line in _STEERS if rx.search(hay)]
+    return ("EMITTER STEERS (BUILDER_ANTIPATTERNS.md):\n" + "\n".join(lines)) if lines else ""
+
+
 def _engine_task(task_text, directive, log=None):
     """The engine's task text = the shared _task plus inlined REAL SCHEMA and the
     directive's exemplar `reads` (pattern parity with the goose canary path).
@@ -648,6 +674,7 @@ def _engine_task(task_text, directive, log=None):
     # the engine (single-shot, no filesystem) must have those files INLINED or it
     # has no idiom to copy. See _reads_context.
     ref = _reads_context(directive)
+    steer = _steer_context(directive)
     if ref and log:
         log("[exemplar-inline] %s: inlined %d reference file(s) into engine prompt"
             % (directive.get("directive_id") or directive.get("task") or "?",
@@ -658,7 +685,8 @@ def _engine_task(task_text, directive, log=None):
                 % (directive.get("directive_id") or directive.get("task") or "?",
                    klass,
                    " (bus table list still attached)" if bus else ""))
-        parts = [task_text] + ([bus] if bus else []) + ([ref] if ref else [])
+        parts = ([task_text] + ([bus] if bus else []) + ([steer] if steer else [])
+                 + ([ref] if ref else []))
         return "\n\n".join(parts)
     grounded = _SYMBOL_TABLE_POINTER.sub("", task_text)
     if log:
@@ -666,7 +694,8 @@ def _engine_task(task_text, directive, log=None):
             % (directive.get("directive_id") or directive.get("task") or "?",
                len([ln for ln in text.splitlines() if ln.startswith("  ")]),
                len(text)))
-    parts = [grounded, text] + ([bus] if bus else []) + ([ref] if ref else [])
+    parts = ([grounded, text] + ([bus] if bus else []) + ([steer] if steer else [])
+             + ([ref] if ref else []))
     return "\n\n".join(parts)
 
 

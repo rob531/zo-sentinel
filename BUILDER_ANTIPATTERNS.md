@@ -221,15 +221,19 @@ file. Manual edits should be made via PR-style suggestion in
   why it hid  : A transient 5xx or reset kills one cycle, the daemon logs it and
                 tries again next interval. Nothing is ever "down"; an ingestor
                 just quietly misses a fraction of its sources every day.
-  rule        : Every outbound call goes through
+  rule        : Factory (host) code: every outbound call goes through
                 http_retry.request_with_retry(method, url, idempotent=...).
+                Fly-bound code (app/, services/, routers): http_retry.py is NOT
+                in the Fly image, so a bounded retry loop lives in the module.
                 Reads are idempotent=True. Writes are idempotent=False and are
                 retried only on ConnectionError -- never re-send a write that may
                 already have applied. A deliberate single shot is listed with its
                 reason, not left implicit.
   detect_pre  : goose_runner_lib/context.py _steer_context -- the AP-009 line is
-                attached to the engine prompt when the directive mentions HTTP,
-                fetch, ingest, poll, webhook or crawl.
+                attached when the directive names outbound HTTP (a URL, requests/
+                httpx, webhook, crawl, or fetch/poll/ingest next to a feed, API or
+                named source -- not a DB "fetch rows"); the Fly variant is chosen
+                when output_path is Fly-bound.
   detect_post : tests/test_gr4_retry_sweep.py (required pytest): AST census of
                 bare calls in the swept files, INTENTIONAL_SINGLE_SHOT allowlist,
                 and the helper's contract.

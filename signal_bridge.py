@@ -49,8 +49,9 @@ def utc_now_iso() -> str:
 
 def ws_query(sql: str) -> Optional[List[Dict[str, Any]]]:
     try:
-        import requests
-        resp = requests.post(f'{QUERY_SERVICE_URL}/query', json={'sql': sql}, timeout=30)
+        from http_retry import request_with_retry  # GR-4: local bus, short backoff
+        resp = request_with_retry('POST', f'{QUERY_SERVICE_URL}/query', idempotent=True,
+                                  retries=4, backoff=0.5, json={'sql': sql}, timeout=30)
         if resp.status_code == 200:
             data = resp.json()
             return data.get('rows', [])
@@ -64,8 +65,9 @@ def ws_query(sql: str) -> Optional[List[Dict[str, Any]]]:
 
 def ws_write(table: str, rows: List[Dict[str, Any]]) -> bool:
     try:
-        import requests
-        resp = requests.post(f'{WRITE_SERVICE_URL}/write', json={'table': table, 'rows': rows}, timeout=30)
+        from http_retry import request_with_retry  # GR-4: retried only on connection refused
+        resp = request_with_retry('POST', f'{WRITE_SERVICE_URL}/write', retries=4, backoff=0.5,
+                                  json={'table': table, 'rows': rows}, timeout=30)
         if resp.status_code == 200:
             return True
         else:

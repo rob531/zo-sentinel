@@ -51,3 +51,41 @@ def test_cap_never_raises_risk():
 def test_unknown_publisher_passthrough():
     r = g("https://github.com/nobody/whatever", "whatever", "HIGH")
     assert not r["trusted"] and r["published_overall_risk"] == "HIGH"
+
+
+# --- Control-(a): degenerate / unrecognized overall_risk -> UNKNOWN, never published verbatim ---
+# A present-but-invalid risk label is corrupt/unassessable input (schema drift, partial write,
+# a new model emitting an out-of-vocab label). It must NOT be surfaced to the consumer as a
+# verdict, and must NOT silently bypass the trust cap. These poles FAIL against the pre-guard
+# code (which did `capped = original` and published 'BANANA'/'  ' verbatim) and pass after.
+
+def test_unrecognized_label_normalized_to_unknown():
+    # trusted publisher + garbage label: identity is still trusted, but the risk is UNKNOWN,
+    # not the raw 'BANANA' (pre-fix published_overall_risk == 'BANANA').
+    r = g("https://github.com/stripe/agent-toolkit", "Stripe", "BANANA")
+    assert r["published_overall_risk"] == "UNKNOWN"
+    assert r["capped"] is False            # cannot "cap" a non-tier
+    assert r["trusted"] is True            # publisher identity is unaffected by the bad label
+
+def test_whitespace_label_not_published_verbatim():
+    r = g("https://github.com/stripe/agent-toolkit", "Stripe", "   ")
+    assert r["published_overall_risk"] == "UNKNOWN"   # pre-fix leaked '   '
+
+def test_unrecognized_label_untrusted_publisher_is_unknown_not_garbage():
+    r = g("https://rando.example.com/mcp", "rando", "SEVERE")
+    assert r["published_overall_risk"] == "UNKNOWN"   # pre-fix leaked 'SEVERE'
+    assert r["trusted"] is False
+
+def test_recognized_tiers_and_empty_are_untouched():
+    # zero-ripple guarantee: every recognized tier + the empty/missing case behaves exactly
+    # as before the guard (empty -> '' passthrough, consumer still falls back to labels[...]).
+    for tier in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+        assert g("https://github.com/nobody/x", "x", tier)["published_overall_risk"] == tier
+    assert g("https://github.com/nobody/x", "x", None)["published_overall_risk"] == ""
+    assert g("https://github.com/nobody/x", "x", "")["published_overall_risk"] == ""
+
+def test_extended_vocab_tiers_pass_through_not_normalized():
+    # INFO/UNKNOWN are recognized (defensive superset) -> a benign extended tier is NEVER
+    # mistaken for degenerate input and swept to UNKNOWN. Guards against over-firing.
+    assert g("https://github.com/nobody/x", "x", "INFO")["published_overall_risk"] == "INFO"
+    assert g("https://github.com/nobody/x", "x", "UNKNOWN")["published_overall_risk"] == "UNKNOWN"

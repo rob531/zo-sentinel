@@ -172,6 +172,37 @@ def _str_tuple_literal(node: ast.AST) -> Optional[Tuple[str, ...]]:
     return tuple(vals)
 
 
+def _binds_vname(node: ast.AST) -> bool:
+    """True iff ``node`` is a plain or annotated assignment binding ``_VNAME``."""
+    if isinstance(node, ast.Assign):
+        return any(isinstance(t, ast.Name) and t.id == _VNAME for t in node.targets)
+    if isinstance(node, ast.AnnAssign) and node.value is not None:
+        return isinstance(node.target, ast.Name) and node.target.id == _VNAME
+    return False
+
+
+def _iter_module_scope(body: List[ast.stmt]):
+    """Yield every statement that executes in MODULE scope: descend into
+    control-flow blocks (if/for/while/with/try) but NOT into function/class
+    bodies -- those are a separate scope where a plain ``X = (...)`` is a local,
+    not a rebind of the module constant (the function-local-shadow-stays-OK case
+    D1-75 established). A binding found here that is NOT directly in ``tree.body``
+    is a conditionally-executed module rebind -> not statically verifiable."""
+    for stmt in body:
+        yield stmt
+        if isinstance(stmt, (ast.If, ast.For, ast.AsyncFor, ast.While)):
+            yield from _iter_module_scope(stmt.body)
+            yield from _iter_module_scope(stmt.orelse)
+        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
+            yield from _iter_module_scope(stmt.body)
+        elif isinstance(stmt, ast.Try):
+            yield from _iter_module_scope(stmt.body)
+            for h in stmt.handlers:
+                yield from _iter_module_scope(h.body)
+            yield from _iter_module_scope(stmt.orelse)
+            yield from _iter_module_scope(stmt.finalbody)
+
+
 def extract_verified(source: str) -> Tuple[Optional[Tuple[str, ...]], Optional[str]]:
     """AST-extract the VERIFIED_HOST_SUFFIXES literal from ``source``.
     Returns (suffixes, None) on success, or (None, reason) -> UNKNOWN when the
@@ -190,8 +221,12 @@ def extract_verified(source: str) -> Tuple[Optional[Tuple[str, ...]], Optional[s
         tree = ast.parse(source)
     except SyntaxError as exc:
         return None, f"parse_error: {exc}"
-    # Any augmented assignment or deletion of the name, at ANY scope, means the
-    # final runtime value cannot be read statically from a single literal.
+    # Any augmented assignment, deletion, walrus bind, ``global`` declaration, or
+    # ``globals()[name] = ...`` of the name, at ANY scope, means the final runtime
+    # value cannot be read statically from a single top-level literal. Each ->
+    # UNKNOWN, never a confident read of the wrong/stale tuple (Control-(a): a
+    # construct the tool cannot statically reason about is UNKNOWN, not CLEAN).
+    # (ARGON-REFEREE-CLAUDE-D1-75 non-blocking evasions: walrus / global / globals()).
     for node in ast.walk(tree):
         if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) \
                 and node.target.id == _VNAME:
@@ -199,6 +234,27 @@ def extract_verified(source: str) -> Tuple[Optional[Tuple[str, ...]], Optional[s
         if isinstance(node, ast.Delete) and any(
                 isinstance(t, ast.Name) and t.id == _VNAME for t in node.targets):
             return None, f"{_VNAME} is deleted -- not statically verifiable"
+        if isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name) \
+                and node.target.id == _VNAME:
+            return None, f"{_VNAME} is bound via walrus (:=) -- not statically verifiable"
+        if isinstance(node, ast.Global) and _VNAME in node.names:
+            return None, f"{_VNAME} is declared global (a function may rebind it) -- not statically verifiable"
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Call) \
+                        and isinstance(t.value.func, ast.Name) and t.value.func.id == "globals" \
+                        and isinstance(t.slice, ast.Constant) and t.slice.value == _VNAME:
+                    return None, f"{_VNAME} is bound via globals()[...] -- not statically verifiable"
+    # A module-scope binding nested in a control-flow block (``if True: X = (...)``)
+    # rebinds the module constant conditionally -- the top-level literal loop below
+    # reads ONLY ``tree.body`` and would miss it, confidently auditing the wrong
+    # tuple. Any such nested module-scope bind -> UNKNOWN. A binding inside a
+    # function/class body is a separate scope (a harmless local) and is NOT walked
+    # here, preserving the function-local-shadow-stays-OK semantics.
+    _toplevel_ids = {id(n) for n in tree.body if _binds_vname(n)}
+    for stmt in _iter_module_scope(tree.body):
+        if _binds_vname(stmt) and id(stmt) not in _toplevel_ids:
+            return None, f"{_VNAME} is conditionally bound in module scope -- not statically verifiable"
     # Only top-level (module-body) bindings define the module constant.
     literals: List[Optional[Tuple[str, ...]]] = []
     for node in tree.body:
@@ -277,7 +333,14 @@ def _new_overlaps(overlaps: Dict[str, List[str]], reviewed: Dict[str, Dict]) -> 
             new[v] = hits
             continue
         covered = entry.get("tenant_ns", [])
-        if not isinstance(covered, list) or not set(hits).issubset(set(covered)):
+        # Fail CLOSED to NEW on a degenerate tenant_ns: a non-list, or a list
+        # carrying a non-string (hence possibly unhashable) element, must not
+        # clear an overlap -- and must never raise. ``set(covered)`` would throw
+        # TypeError('unhashable type') on e.g. ``[{"bad": 1}]`` (a corrupt
+        # operator baseline entry), crashing the ratchet instead of surfacing the
+        # overlap. Control-(a) on the baseline: degenerate -> NEW, never a crash.
+        if not isinstance(covered, list) or not all(isinstance(x, str) for x in covered) \
+                or not set(hits).issubset(set(covered)):
             new[v] = hits
     return new
 
@@ -455,6 +518,35 @@ def _selftest() -> int:
     shadow = audit('VERIFIED_HOST_SUFFIXES = (".amazonaws.com",)\ndef _l():\n    VERIFIED_HOST_SUFFIXES = (".stripe.com",)\n', _TENANT)
     check("function-local shadow reads MODULE constant (flags .amazonaws.com)",
           shadow["status"] == "OK" and ".amazonaws.com" in shadow["overlaps"])
+
+    # Control-(a) HARDENING (ARGON-REFEREE-CLAUDE-D1-75 non-blocking AST evasions):
+    # a construct that silently rebinds the module constant past the top-level
+    # literal loop must be UNKNOWN, not a confident read of the stale tuple.
+    # Pole B for each: WITHOUT the guard, extract_verified reads ".stripe.com"
+    # (the top-level literal) and audits CLEAN while the real value is elsewhere.
+    check("nested-if module rebind -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\nif True:\n    VERIFIED_HOST_SUFFIXES = (".amazonaws.com",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("try-block module rebind -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\ntry:\n    VERIFIED_HOST_SUFFIXES = (".amazonaws.com",)\nexcept Exception:\n    pass\n', _TENANT)["status"] == "UNKNOWN")
+    check("global rebind in a function -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\ndef _r():\n    global VERIFIED_HOST_SUFFIXES\n    VERIFIED_HOST_SUFFIXES = (".amazonaws.com",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("walrus rebind past a top-level literal -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\n(VERIFIED_HOST_SUFFIXES := (".amazonaws.com",))\n', _TENANT)["status"] == "UNKNOWN")
+    check("globals()[name] rebind -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\nglobals()["VERIFIED_HOST_SUFFIXES"] = (".amazonaws.com",)\n', _TENANT)["status"] == "UNKNOWN")
+    # No over-fire: a plain top-level literal + an UNRELATED nested assign stays OK.
+    check("unrelated nested assign does NOT trip the guard (stays OK)",
+          audit('VERIFIED_HOST_SUFFIXES = (".amazonaws.com",)\nif True:\n    OTHER = (".stripe.com",)\n', _TENANT)["status"] == "OK")
+
+    # Control-(a) HARDENING (D1-75 referee): a degenerate tenant_ns in the reviewed
+    # baseline must fail CLOSED to NEW, never raise TypeError('unhashable').
+    ov2 = {".azure.net": ["vault.azure.net"]}
+    check("unhashable tenant_ns (dict) -> NEW, no crash",
+          _new_overlaps(ov2, {".azure.net": {"status": "REVIEW_REQUIRED", "tenant_ns": [{"bad": 1}]}}) == ov2)
+    check("non-list tenant_ns -> NEW, no crash",
+          _new_overlaps(ov2, {".azure.net": {"status": "REVIEW_REQUIRED", "tenant_ns": "vault.azure.net"}}) == ov2)
+    check("non-string element in tenant_ns -> NEW, no crash",
+          _new_overlaps(ov2, {".azure.net": {"status": "REVIEW_REQUIRED", "tenant_ns": ["vault.azure.net", 7]}}) == ov2)
 
     # Control-(a) HARDENING (gap 3): baseline status-awareness via _new_overlaps.
     ov = {".azure.net": ["vault.azure.net"]}

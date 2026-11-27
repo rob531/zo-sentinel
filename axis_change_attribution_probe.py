@@ -2,14 +2,16 @@
 
 Detects axis label changes between model versions and attributes them to
 signals/enrichments available in the mesh/pipeline store.
-Reads app tables via SQLAlchemy; mesh signals via write_service :8772.
+Reads app tables via SQLAlchemy only. (GR-29, 2026-11-27: signal/mesh attribution
+used to come from the factory write_service bus, which is not in the Fly image, so
+every lookup failed silently and returned nothing. mcp_signal_scores and mesh_memory
+have no Postgres plane; attribution is the model label until they do.)
 """
 from __future__ import annotations
 
 from typing import Optional
 from datetime import datetime
 
-import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, func, text
@@ -19,7 +21,6 @@ from app.db import get_session
 from app.models import McpLlmAxisScore, McpServerRegistry
 from trust_gating_override import trust_gate
 
-WRITE_SERVICE = "http://127.0.0.1:8772"
 router = APIRouter(prefix="/api/probes", tags=["probes"])
 
 AXES = ("overall_risk", "auth_strength", "capability_breadth", "data_sensitivity",
@@ -44,59 +45,9 @@ class AttributionResponse(BaseModel):
     since_version: Optional[str] = None
 
 
-def _fetch_signal_scores(server_id: str) -> list[dict]:
-    """Fetch enrichment/signal scores for a server from the mesh store."""
-    try:
-        resp = requests.post(
-            f"{WRITE_SERVICE}/query",
-            json={
-                "sql": (
-                    "SELECT signal_name, score, enrichment_type, source "
-                    "FROM mcp_signal_scores WHERE server_id = :sid"
-                ),
-                "params": [server_id],
-            },
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            return resp.json().get("rows", []) or resp.json().get("data", []) or []
-    except Exception:
-        pass
-    return []
-
-
-def _fetch_mesh_memory(server_id: str) -> list[dict]:
-    """Fetch pipeline memory/artifact links from the mesh store."""
-    try:
-        resp = requests.post(
-            f"{WRITE_SERVICE}/query",
-            json={
-                "sql": (
-                    "SELECT artifact_type, artifact_key, enrichment_name "
-                    "FROM mesh_memory WHERE server_id = :sid"
-                ),
-                "params": [server_id],
-            },
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            return resp.json().get("rows", []) or resp.json().get("data", []) or []
-    except Exception:
-        pass
-    return []
-
-
 def _attribution_sources(server_id: str, axis_name: str, new_label: Optional[str]) -> list[str]:
     """Gather attribution sources for an axis label change."""
     sources = []
-    for row in _fetch_signal_scores(server_id):
-        sig = row.get("signal_name") or row.get("source") or ""
-        if sig:
-            sources.append(sig)
-    for row in _fetch_mesh_memory(server_id):
-        art = row.get("enrichment_name") or row.get("artifact_type") or ""
-        if art:
-            sources.append(art)
     if new_label:
         sources.append(f"model_label:{new_label}")
     return list(dict.fromkeys(sources))  # dedupe preserve order

@@ -79,6 +79,7 @@ jobs:
         run: |
           set +e
           python tools/deferred_aging_report.py --out artifacts/deferred_aging.json
+            artifacts/row_predicates.json
           rc=$?
           if [ "$rc" -ne 0 ]; then
             echo "::warning::deferred_aging_report rc=$rc (UNKNOWN) -- deferral list unreadable"
@@ -120,6 +121,70 @@ jobs:
         with:
           script: |
             const title = 'ratchet: deferred routers aged past review';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: 'ratchet',
+            });
+            const hit = open.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: hit.number,
+                state: 'closed', state_reason: 'completed',
+              });
+            }
+
+      # QUEUE 0a per-row half: a C3/C4 row held only by tower or sibling-repo
+      # evidence reads UNKNOWN here, and UNKNOWN carries an age budget (GC-1).
+      # Past budget the grade is escalated for re-measurement, never left as a
+      # quiet green. tools/row_predicates.py; chairman/row_predicates.json.
+      - name: Row predicate aging (observe; escalates via issue)
+        id: rowpred
+        run: |
+          set +e
+          python tools/row_predicates.py --report --out artifacts/row_predicates.json > /dev/null
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::row_predicates rc=$rc (UNKNOWN) -- register or predicate file unreadable"
+            echo "escalate=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          esc=$(python -c "import json;print('yes' if json.load(open('artifacts/row_predicates.json'))['escalate'] else 'no')")
+          echo "escalate=$esc" >> "$GITHUB_OUTPUT"
+
+      - name: Escalate stale row predicates
+        if: ${{ steps.rowpred.outputs.escalate == 'yes' && !inputs.dry_run }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const rep = JSON.parse(require('fs').readFileSync('artifacts/row_predicates.json', 'utf8'));
+            const lines = rep.rows.filter(r => r.state !== 'ARMED' && r.state !== 'UNKNOWN-IN-BUDGET')
+              .map(r => `| ${r.row} | C${r.grade} | ${r.kind} | ${r.age_days ?? 'undated'} | ${r.budget_days ?? ''} | ${r.state} |`);
+            const body = `Gap Register rows graded C3/C4 whose holding evidence is past its age budget (${rep.generated_on}).\n\n` +
+              '| row | grade | kind | age (days) | budget | state |\n|---|---|---|---|---|---|\n' + lines.join('\n') +
+              (rep.violations.length ? '\n\nViolations:\n' + rep.violations.map(v => '- ' + v).join('\n') : '') +
+              '\n\nRe-measure each row and bump `measured_on` in `chairman/row_predicates.json` with the citation, ' +
+              'or lower the grade. Updated in place by `ratchet-nightly` (QUEUE 0a); closes itself when clear.';
+            const title = 'chairman: C3+ rows held by stale evidence';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: 'ratchet',
+            });
+            const hit = open.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: hit.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['ratchet', 'needs-decision'],
+              });
+            }
+
+      - name: Close stale-row-predicate issue when clear
+        if: ${{ steps.rowpred.outputs.escalate == 'no' && !inputs.dry_run }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = 'chairman: C3+ rows held by stale evidence';
             const open = await github.rest.issues.listForRepo({
               owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: 'ratchet',
             });
@@ -264,6 +329,7 @@ jobs:
             tighten.txt
             artifacts/reachability_ratchet.json
             artifacts/deferred_aging.json
+            artifacts/row_predicates.json
             aging.md
           if-no-files-found: ignore
 

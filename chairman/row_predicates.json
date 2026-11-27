@@ -1,0 +1,18 @@
+{
+  "_doc": "QUEUE 0a per-row predicates. Every Gap Register row graded C3 or C4 names the machine check that holds it there. kind 'test': repo paths that tools/ci_pytest.py collects, so the required pytest job IS the predicate (a red test is a red build). kind 'measured' / 'sibling': the evidence lives on the tower or in a sibling repo, so this repo's CI can only read it as UNKNOWN -- and UNKNOWN carries an age budget (GC-1): measured_on + budget_days. Past budget the row is STALE: the nightly escalates, and no PR may raise a row to C3+ on stale evidence. Re-measure, then bump measured_on with the citation. Checked by tools/row_predicates.py.",
+  "default_budget_days": 30,
+  "rows": {
+    "GR-2":  {"kind": "test", "paths": ["tests/test_gr2_app_main_owned.py"]},
+    "GR-4":  {"kind": "test", "paths": ["tests/test_gr4_retry_sweep.py"]},
+    "GR-6":  {"kind": "test", "paths": ["tests/test_gr_6_acceptance.py"]},
+    "GR-8":  {"kind": "test", "paths": ["tests/test_gr8_rename_preserves_strings.py"]},
+    "GR-10": {"kind": "test", "paths": ["tests/test_gr10_phantom_overrides.py"]},
+    "GR-29": {"kind": "test", "paths": ["tests/test_gr29_fly_bus_plane.py"]},
+    "GR-18": {"kind": "measured", "measured_on": "2026-08-30",
+              "where": "relander drain: 9 builder PRs auto-merged unattended (#4247-#4259), queries 2026-08-30T00:10Z"},
+    "GR-24": {"kind": "measured", "measured_on": "2026-10-04",
+              "where": "tower: events store baseline tick + idempotent re-tick + check rc 0 (zo-fleet-tools#50)"},
+    "GR-27": {"kind": "sibling", "measured_on": "2026-11-27",
+              "where": "zo-fleet-tools ring_liveness.py in ring-liveness.yml, disarm-hardened by tests/test_gr_27_ring_liveness.py (zo-fleet-tools#683)"}
+  }
+}

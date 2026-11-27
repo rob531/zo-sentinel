@@ -71,6 +71,23 @@ FORBIDDEN = (
     ">>", "tee ", "chmod ", "chown ", "--force", "sudo ",
 )
 
+# GR-30: declared shared core kept in parity across zo-sentinel tools/fu/fu_ledger.py
+# and zo-fleet-tools fu_ledger.py (checked by fu_twin_parity.py). Host/porting
+# divergences outside SHARED_CORE (e.g. fleet FU-653/654 JSONB ->> & FU-717 replace
+# terminator patches; sentinel _is_wrapped_log_line) stay tracked separately.
+SHARED_CORE = (
+    "VALID_CLASS",
+    "VALID_STATUS",
+    "NO_VERIFY",
+    "NEVER_RED",
+    "FORBIDDEN",
+    "FU",
+    "parse",
+    "by_id",
+    "insert_key",
+    "append_log",
+)
+
 
 def _forbidden_matcher(tok: str):
     """Compile the matcher for one forbidden token.

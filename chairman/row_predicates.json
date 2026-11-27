@@ -14,6 +14,8 @@
               "where": "tower: events store baseline tick + idempotent re-tick + check rc 0 (zo-fleet-tools#50)"},
     "GR-14": {"kind": "sibling", "measured_on": "2026-11-27",
               "where": "zo-fleet-tools tests/test_zo_call_tag.py (adopt / rotate / resume-from-registry poles, zo-fleet-tools#702) + the --tag census in the register row"},
+    "GR-30": {"kind": "sibling", "measured_on": "2026-11-27",
+              "where": "zo-fleet-tools fu_twin_parity.py + tests/test_gr_30_acceptance.py in fu-verify-budget.yml (checks out zo-sentinel main; 4 fu_* twins guarded), zo-fleet-tools#713 + #716, zo-sentinel #16262 + #16278"},
     "GR-27": {"kind": "sibling", "measured_on": "2026-11-27",
               "where": "zo-fleet-tools ring_liveness.py in ring-liveness.yml, disarm-hardened by tests/test_gr_27_ring_liveness.py (zo-fleet-tools#683)"}
   }

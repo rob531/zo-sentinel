@@ -61,6 +61,8 @@ from typing import Optional
 
 import requests
 
+from http_retry import request_with_retry  # GR-4: retry/backoff, bare-call contract
+
 LOG = logging.getLogger("mcp_registry_ingestor")
 logging.basicConfig(
     level=logging.INFO,
@@ -156,8 +158,8 @@ def ws_execute(sql: str, params: Optional[list] = None) -> dict:
     payload = {"sql": sql, "wait": True}
     if params is not None:
         payload["params"] = params
-    r = requests.post(
-        WRITE_SERVICE_BASE + "/execute",
+    r = request_with_retry(
+        "POST", WRITE_SERVICE_BASE + "/execute",
         json=payload,
         timeout=EXECUTE_TIMEOUT_SEC,
     )
@@ -169,8 +171,8 @@ def ws_query(sql: str, params: Optional[list] = None) -> list:
     payload = {"sql": sql}
     if params is not None:
         payload["params"] = params
-    r = requests.post(
-        WRITE_SERVICE_BASE + "/query",
+    r = request_with_retry(
+        "POST", WRITE_SERVICE_BASE + "/query", idempotent=True,
         json=payload,
         timeout=EXECUTE_TIMEOUT_SEC,
     )
@@ -180,8 +182,8 @@ def ws_query(sql: str, params: Optional[list] = None) -> list:
 
 def heartbeat() -> None:
     try:
-        requests.post(
-            WRITE_SERVICE_BASE + "/write",
+        request_with_retry(
+            "POST", WRITE_SERVICE_BASE + "/write",
             json={
                 "table": "service_health",
                 "rows": {
@@ -216,8 +218,8 @@ def fetch_page(cursor: Optional[str] = None) -> dict:
         "From": FROM_HEADER,
         "Accept": "application/json",
     }
-    r = requests.get(
-        REGISTRY_BASE + LIST_ENDPOINT,
+    r = request_with_retry(
+        "GET", REGISTRY_BASE + LIST_ENDPOINT, idempotent=True,
         params=params,
         headers=headers,
         timeout=FETCH_TIMEOUT_SEC,

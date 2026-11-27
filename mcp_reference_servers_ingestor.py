@@ -49,6 +49,8 @@ from typing import Optional
 
 import requests
 
+from http_retry import request_with_retry  # GR-4: retry/backoff, bare-call contract
+
 LOG = logging.getLogger("mcp_reference_servers_ingestor")
 logging.basicConfig(
     level=logging.INFO,
@@ -118,8 +120,8 @@ def ws_execute(sql: str, params: Optional[list] = None) -> dict:
     payload = {"sql": sql, "wait": True}
     if params is not None:
         payload["params"] = params
-    r = requests.post(
-        WRITE_SERVICE_BASE + "/execute",
+    r = request_with_retry(
+        "POST", WRITE_SERVICE_BASE + "/execute",
         json=payload,
         timeout=EXECUTE_TIMEOUT_SEC,
     )
@@ -131,8 +133,8 @@ def ws_query(sql: str, params: Optional[list] = None) -> list:
     payload = {"sql": sql}
     if params is not None:
         payload["params"] = params
-    r = requests.post(
-        WRITE_SERVICE_BASE + "/query",
+    r = request_with_retry(
+        "POST", WRITE_SERVICE_BASE + "/query", idempotent=True,
         json=payload,
         timeout=EXECUTE_TIMEOUT_SEC,
     )
@@ -143,8 +145,8 @@ def ws_query(sql: str, params: Optional[list] = None) -> list:
 def heartbeat() -> None:
     """Best-effort heartbeat. Failures are logged but non-fatal."""
     try:
-        requests.post(
-            WRITE_SERVICE_BASE + "/write",
+        request_with_retry(
+            "POST", WRITE_SERVICE_BASE + "/write",
             json={
                 "table": "service_health",
                 "rows": {
@@ -175,7 +177,8 @@ def fetch_readme() -> str:
         "From": FROM_HEADER,
         "Accept": "text/plain, text/markdown",
     }
-    r = requests.get(README_URL, headers=headers, timeout=FETCH_TIMEOUT_SEC)
+    r = request_with_retry("GET", README_URL, idempotent=True, headers=headers,
+                           timeout=FETCH_TIMEOUT_SEC)
     r.raise_for_status()
     return r.text
 

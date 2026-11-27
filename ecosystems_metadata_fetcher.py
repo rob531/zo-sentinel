@@ -41,6 +41,7 @@ from datetime import datetime, timedelta, timezone as _tz
 from email.utils import parsedate_to_datetime as _parse_dt
 from pathlib import Path
 import requests as _req
+from http_retry import request_with_retry  # GR-4: retry/backoff, bare-call contract
 import singleton_lock  # identity-verified single-instance lock
 
 # ---------------------------------------------------------------
@@ -144,8 +145,8 @@ def _save_rate_budget(source: str):
     budget_key = config["key"]
     reset_iso = datetime.fromtimestamp(budget["reset_at"], tz=_tz.utc).isoformat()
     try:
-        _req.post(
-            f"{_WRITE_SVC}/write",
+        request_with_retry(
+            "POST", f"{_WRITE_SVC}/write",
             json={
                 "table": "service_health",
                 "rows": {
@@ -394,7 +395,7 @@ def ws_query(sql: str, strict: bool = False) -> list[dict]:
     means "nothing to do" must pass strict=True.
     """
     try:
-        resp = _req.post(_QUERY_URL, json={"sql": sql}, timeout=30)
+        resp = request_with_retry("POST", _QUERY_URL, idempotent=True, json={"sql": sql}, timeout=30)
         if resp.status_code == 200:
             return resp.json().get("rows", [])
         msg = f"ws_query error {resp.status_code}: {resp.text[:200]}"
@@ -408,7 +409,7 @@ def ws_query(sql: str, strict: bool = False) -> list[dict]:
 
 def ws_write(table: str, rows: dict) -> bool:
     try:
-        resp = _req.post(_WRITE_URL, json={"table": table, "rows": rows, "wait": True}, timeout=30)
+        resp = request_with_retry("POST", _WRITE_URL, json={"table": table, "rows": rows, "wait": True}, timeout=30)
         if resp.status_code == 200:
             return True
         log(f"ws_write error {resp.status_code}: {resp.text[:200]}")
@@ -419,7 +420,7 @@ def ws_write(table: str, rows: dict) -> bool:
 
 def ws_execute(sql: str) -> bool:
     try:
-        resp = _req.post(_EXECUTE_URL, json={"sql": sql}, timeout=30)
+        resp = request_with_retry("POST", _EXECUTE_URL, json={"sql": sql}, timeout=30)
         if resp.status_code == 200:
             return True
         log(f"ws_execute error {resp.status_code}: {resp.text[:200]}")

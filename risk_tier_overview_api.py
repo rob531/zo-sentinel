@@ -34,12 +34,14 @@ def get_risk_tier_overview(db: Session = Depends(get_session)):
         "INSUFFICIENT": 0
     }
 
-    # Count the servers in each risk tier
+    # Count the servers in each risk tier. Control-(a): a present-but-unmodeled
+    # tier (the registry writes tiers this literal omits, e.g. KNOWN_THREAT) must
+    # never KeyError the endpoint -- accumulate tolerantly so an unexpected tier
+    # surfaces as its own bucket instead of 500-ing, and an empty tier folds to
+    # INSUFFICIENT (prior behaviour).
     for server in servers:
-        if server.risk_tier:
-            tier_counts[server.risk_tier] += 1
-        else:
-            tier_counts["INSUFFICIENT"] += 1
+        tier = server.risk_tier or "INSUFFICIENT"
+        tier_counts[tier] = tier_counts.get(tier, 0) + 1
 
     # Calculate the total number of servers
     total_servers = sum(tier_counts.values())

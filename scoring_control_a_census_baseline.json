@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "files": {
+    "mcp_threat_associations_writer.py": 2,
+    "risk_tier_threshold_calibration_probe.py": 1,
+    "services/staged/cve_family_severity_api/logic.py": 2,
+    "services/staged/mcp_risk_register_api/logic.py": 1,
+    "services/staged/risk_tier_threshold_calibration/router.py": 3,
+    "services/staged/risk_tier_transition_timeline/logic.py": 1,
+    "services/staged/server_score_summary/logic.py": 1,
+    "services/staged/trust_score_regression_api/contract.py": 2,
+    "services/staged/vuln_link_confidence_report/router.py": 1
+  }
+}

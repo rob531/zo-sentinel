@@ -210,3 +210,58 @@ def test_non_string_maintainer_trust_and_url_never_crash():
 def test_api_github_urls_are_not_extracted_as_github_orgs():
     assert github_org("https://api.github.com/graphql") is None
     assert github_org("https://api.github.com/repos/stripe/agent-toolkit") is None
+
+
+# --- CLAUDE-D1-73: multi-tenant host suffix must NOT grant verified_publisher trust ---
+# Control-(b): an attacker can provision ANY host under .amazonaws.com (S3/API-GW),
+# .windows.net (Azure Storage), or .supabase.co (Supabase projects), so the suffix
+# proves the HOSTER, never the publisher identity. These must never cap CRITICAL->MEDIUM.
+import trust_gating_override as _tgo
+
+
+def test_multitenant_suffixes_are_shared_tenant_not_verified():
+    for suf in (".amazonaws.com", ".windows.net", ".supabase.co"):
+        assert suf in _tgo.SHARED_TENANT_SUFFIXES, f"{suf} must be shared-tenant"
+        assert suf not in _tgo.VERIFIED_HOST_SUFFIXES, f"{suf} must not be verified"
+
+
+def test_attacker_s3_bucket_not_trusted():
+    r = g("https://evil-attacker-bucket.s3.amazonaws.com/mcp", "evil", "CRITICAL")
+    assert not r["trusted"] and not r["capped"]
+    assert r["published_overall_risk"] == "CRITICAL"
+
+
+def test_attacker_azure_blob_not_trusted():
+    r = g("https://evilacct.blob.core.windows.net/mcp", "evil", "CRITICAL")
+    assert not r["trusted"] and not r["capped"]
+    assert r["published_overall_risk"] == "CRITICAL"
+
+
+def test_attacker_supabase_project_not_trusted():
+    r = g("https://attacker-proj-ref.supabase.co/mcp", "evil", "CRITICAL")
+    assert not r["trusted"] and not r["capped"]
+    assert r["published_overall_risk"] == "CRITICAL"
+
+
+def test_vendor_identity_still_verified_via_github_org():
+    # AWS / Supabase prove identity through their verified GitHub org, not the host.
+    for url, nm in (("https://github.com/aws/mcp", "AWS"),
+                    ("https://github.com/supabase/mcp", "Supabase")):
+        r = g(url, nm, "CRITICAL")
+        assert r["trusted"] and r["capped"] and r["published_overall_risk"] == "MEDIUM"
+
+
+def test_single_tenant_corporate_suffixes_still_capped():
+    # Single-tenant corporate hosts remain verified publishers (no regression).
+    for url in ("https://x.supabase.com/mcp", "https://api.stripe.com/mcp",
+                "https://foo.cloudflare.com/mcp"):
+        r = g(url, "legit", "CRITICAL")
+        assert r["trusted"] and r["published_overall_risk"] == "MEDIUM"
+
+
+def test_flipped_hosts_do_not_false_flag_masquerade():
+    # Moving to shared-tenant must not create a masquerade false-positive storm.
+    for url in ("https://mybucket.s3.amazonaws.com/mcp",
+                "https://acct.blob.core.windows.net/mcp",
+                "https://proj.supabase.co/mcp"):
+        assert _tgo.is_masquerade(url, "x") is False

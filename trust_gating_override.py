@@ -65,9 +65,9 @@ VERIFIED_GITHUB_ORGS = frozenset({
 # --- verified official hosts (EXACT host or dotted-suffix match) ---
 VERIFIED_HOST_SUFFIXES = (
     ".stripe.com", ".googleapis.com", ".cloud.google.com", ".microsoft.com",
-    ".azure.com", ".azure.net", ".windows.net", ".cloudflare.com",
-    ".supabase.co", ".supabase.com", ".openai.com", ".anthropic.com",
-    ".amazonaws.com", ".atlassian.com", ".atlassian.net", ".databricks.com",
+    ".azure.com", ".azure.net", ".cloudflare.com",
+    ".supabase.com", ".openai.com", ".anthropic.com",
+    ".atlassian.com", ".atlassian.net", ".databricks.com",
     ".twilio.com", ".sendgrid.com", ".shopify.com", ".paypal.com",
 )
 # Multi-tenant hosts: a verified-looking suffix here proves NOTHING about the
@@ -76,6 +76,12 @@ SHARED_TENANT_SUFFIXES = (
     ".workers.dev", ".vercel.app", ".herokuapp.com", ".onrender.com",
     ".netlify.app", ".pages.dev", ".web.app", ".firebaseapp.com",
     ".azurewebsites.net", ".github.io", ".glama.ai", ".smithery.ai",
+    # Provider namespaces where ANY member of the public can provision a host
+    # (S3 buckets, Azure Storage accounts, Supabase projects) -- the suffix
+    # proves the HOSTER, never the publisher identity. The vendors' own
+    # identity is verified via VERIFIED_GITHUB_ORGS (aws/awslabs, supabase)
+    # or their single-tenant corporate suffix (.supabase.com), not these.
+    ".amazonaws.com", ".windows.net", ".supabase.co",
 )
 
 # brand tokens we defend against impersonation (homoglyph / typosquat)

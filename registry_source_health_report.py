@@ -1,4 +1,4 @@
-# deps: fastapi, pydantic, sqlalchemy, requests
+# deps: fastapi, pydantic, sqlalchemy
 """Registry Source Health Report API
 
 Provides a FastAPI router exposing GET /registry-source-health.
@@ -14,7 +14,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 
-import requests
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func, select, text
@@ -24,7 +23,6 @@ from sqlalchemy.pool import StaticPool
 from app.db import get_session
 from app.models import Base, McpServerRegistry
 
-WRITE_SERVICE = "http://127.0.0.1:8772"
 router = APIRouter(prefix="/api", tags=["registry_source_health"])
 
 

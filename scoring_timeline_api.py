@@ -5,26 +5,27 @@ from datetime import datetime
 from app.db import get_session
 from app.models import McpLlmAxisScore
 from sqlalchemy.orm import Session
-import requests
 
 router = APIRouter()
 
+AXES = ("overall_risk", "auth_strength", "capability_breadth", "data_sensitivity",
+        "network_egress", "maintainer_trust", "exploit_surface")
+
+
 class AxisSnapshot(BaseModel):
-    overall_risk: dict
-    auth_strength: dict
-    capability_breadth: dict
-    data_sensitivity: dict
-    network_egress: dict
-    maintainer_trust: dict
-    exploit_surface: dict
+    # An axis a scoring pass did not emit is None, not a 500.
+    overall_risk: Optional[dict] = None
+    auth_strength: Optional[dict] = None
+    capability_breadth: Optional[dict] = None
+    data_sensitivity: Optional[dict] = None
+    network_egress: Optional[dict] = None
+    maintainer_trust: Optional[dict] = None
+    exploit_surface: Optional[dict] = None
+
 
 class ScoringTimelineResponse(BaseModel):
     snapshots: List[AxisSnapshot]
 
-def get_write_service_query(url: str, query: str, params: dict) -> dict:
-    response = requests.post(url, json={"query": query, "params": params})
-    response.raise_for_status()
-    return response.json()
 
 @router.get("/servers/{server_id}/scoring-timeline", response_model=ScoringTimelineResponse)
 async def get_scoring_timeline(
@@ -35,98 +36,64 @@ async def get_scoring_timeline(
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_session),
 ):
-    query = """
-    SELECT scored_at, axis_name, p_top, label
-    FROM mcp_llm_axis_scores
-    WHERE server_id = :server_id
-    """
-
-    params = {"server_id": server_id}
-
+    # GR-29 (2026-11-27): DB-direct. This used to POST its SQL to the factory
+    # write_service on 127.0.0.1:8772, which is not in the Fly image, so on Fly the
+    # route could only answer 500 (Errno 111). Same rows, parameterized ORM.
+    q = db.query(McpLlmAxisScore).filter(McpLlmAxisScore.server_id == server_id)
     if start_date:
-        query += " AND scored_at >= :start_date"
-        params["start_date"] = start_date
+        q = q.filter(McpLlmAxisScore.scored_at >= start_date)
     if end_date:
-        query += " AND scored_at <= :end_date"
-        params["end_date"] = end_date
+        q = q.filter(McpLlmAxisScore.scored_at <= end_date)
+    rows = (q.order_by(McpLlmAxisScore.scored_at.desc())
+             .limit(limit).offset(offset).all())
 
-    query += " ORDER BY scored_at DESC LIMIT :limit OFFSET :offset"
-    params["limit"] = limit
-    params["offset"] = offset
+    snapshots: dict = {}
+    for r in rows:
+        key = r.scored_at.isoformat() if r.scored_at else None
+        if r.axis_name in AXES:
+            snapshots.setdefault(key, {})[r.axis_name] = {"p_top": r.p_top, "label": r.label}
 
-    try:
-        result = get_write_service_query("http://127.0.0.1:8772/query", query, params)
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"snapshots": [AxisSnapshot(**snap) for snap in snapshots.values()]}
 
-    snapshots = {}
-    for row in result:
-        scored_at = row["scored_at"]
-        if scored_at not in snapshots:
-            snapshots[scored_at] = {}
-        snapshots[scored_at][row["axis_name"]] = {"p_top": row["p_top"], "label": row["label"]}
-
-    snapshots_list = [AxisSnapshot(**snapshot) for snapshot in snapshots.values()]
-    return {"snapshots": snapshots_list}
 
 if __name__ == "__main__":
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient  # smoke-test only; kept out of import scope
-    from app.db import get_session
+    from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models import Base
 
-    app = FastAPI()
-    app.include_router(router)
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    TS = sessionmaker(bind=eng)
+    s = TS()
+    i = 1
+    for day in (1, 2, 3):
+        for ax in AXES:
+            s.add(McpLlmAxisScore(id=i, server_id="test-server-1", axis_name=ax, label="LOW",
+                                  p_top=0.1 * day, model_version=f"v{day}",
+                                  scored_at=datetime(2023, 1, day)))
+            i += 1
+    s.add(McpLlmAxisScore(id=i, server_id="other", axis_name="overall_risk", label="HIGH",
+                          model_version="v1", scored_at=datetime(2023, 1, 1)))
+    s.commit(); s.close()
 
-    test_data = [
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "overall_risk", "p_top": 0.8, "label": "High"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "auth_strength", "p_top": 0.6, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "capability_breadth", "p_top": 0.7, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "data_sensitivity", "p_top": 0.5, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "network_egress", "p_top": 0.9, "label": "High"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "maintainer_trust", "p_top": 0.4, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-01", "axis_name": "exploit_surface", "p_top": 0.3, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "overall_risk", "p_top": 0.7, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "auth_strength", "p_top": 0.5, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "capability_breadth", "p_top": 0.6, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "data_sensitivity", "p_top": 0.4, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "network_egress", "p_top": 0.8, "label": "High"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "maintainer_trust", "p_top": 0.5, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-02", "axis_name": "exploit_surface", "p_top": 0.4, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "overall_risk", "p_top": 0.6, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "auth_strength", "p_top": 0.7, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "capability_breadth", "p_top": 0.5, "label": "Low"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "data_sensitivity", "p_top": 0.6, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "network_egress", "p_top": 0.7, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "maintainer_trust", "p_top": 0.6, "label": "Medium"},
-        {"server_id": "test-server-1", "scored_at": "2023-01-03", "axis_name": "exploit_surface", "p_top": 0.5, "label": "Low"},
-    ]
+    def _override():
+        d = TS()
+        try:
+            yield d
+        finally:
+            d.close()
 
-    def mock_get_write_service_query(url: str, query: str, params: dict) -> dict:
-        filtered_data = [row for row in test_data if row["server_id"] == params["server_id"]]
-        if "start_date" in params:
-            filtered_data = [row for row in filtered_data if row["scored_at"] >= params["start_date"]]
-        if "end_date" in params:
-            filtered_data = [row for row in filtered_data if row["scored_at"] <= params["end_date"]]
-        filtered_data = filtered_data[params["offset"]:params["offset"] + params["limit"]]
-        return filtered_data
-
-    app.dependency_overrides[get_write_service_query] = mock_get_write_service_query
-
-    client = TestClient(app)
-    response = client.get("/servers/test-server-1/scoring-timeline")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data["snapshots"]) >= 2
-    for snapshot in data["snapshots"]:
-        assert set(snapshot.keys()) == {
-            "overall_risk",
-            "auth_strength",
-            "capability_breadth",
-            "data_sensitivity",
-            "network_egress",
-            "maintainer_trust",
-            "exploit_surface",
-        }
+    app = FastAPI(); app.include_router(router)
+    app.dependency_overrides[get_session] = _override
+    c = TestClient(app)
+    r = c.get("/servers/test-server-1/scoring-timeline?limit=100")
+    assert r.status_code == 200, r.text
+    snaps = r.json()["snapshots"]
+    assert len(snaps) == 3, snaps
+    assert all(set(k for k, v in sn.items() if v) == set(AXES) for sn in snaps), snaps
+    r = c.get("/servers/nobody/scoring-timeline")
+    assert r.status_code == 200 and r.json()["snapshots"] == []
     print("PASS")

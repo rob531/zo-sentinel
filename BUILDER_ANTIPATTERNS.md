@@ -183,6 +183,31 @@ file. Manual edits should be made via PR-style suggestion in
                 plane. It does NOT catch a real-but-never-written table -- for
                 that, a zero-row producer check is still owed.
 
+## AP-008  fly_route_addresses_the_factory_bus
+
+  signature   : A module the Dockerfile copies into the Fly image calls
+                http://127.0.0.1:8772 (/query, /execute, /write) in a request path.
+  occurrences : 10 files, 18 sites, census 2026-11-27 (GR-29): 5 mounted root
+                routers, 4 services/active package __init__ files, 1 dead constant.
+                Earlier: /registry/freshness-report, /scoring/waves/summary (#7016).
+  cause       : Plane confusion. :8772 is the factory write_service on the
+                ZoComputer host; the product app on Fly reads Postgres through
+                app.db.get_session. The emitter learned "data lives behind :8772"
+                from the factory side and applied it to Fly-bound routers.
+  why it hid  : On Fly the call fails with ECONNREFUSED. Half the sites wrapped it
+                in `except: pass` and returned [] -- an empty answer that looks
+                like no data. AP-006 checks the TABLE names inside :8772 SQL; it
+                never asked whether the module may address :8772 at all.
+  rule        : Fly-bound code reads and writes through get_session (SQLAlchemy,
+                parameterized). If the data has no Postgres plane, the route does
+                not exist yet -- do not reach across to the factory bus.
+  detect_pre  : Grounding for any directive whose output_path the Dockerfile
+                ships: "read via app.db.get_session; never 127.0.0.1:8772".
+  detect_post : tools/fly_bus_plane_check.py (AST over every Dockerfile COPY
+                source outside tools/; docstrings, comments and __main__
+                self-tests excluded), BLOCKING via tests/test_gr29_fly_bus_plane.py
+                in the required pytest context.
+
 ---
 
 ## Curation history

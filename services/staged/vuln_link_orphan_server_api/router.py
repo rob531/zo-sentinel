@@ -1,4 +1,4 @@
-"""HTTP surface for vulnerability links whose servers are no longer registered."""
+"""HTTP surface for orphaned vulnerability-link discovery."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app.models import McpServerRegistry, VulnAdvisory, VulnLink
 
 from .logic import get_orphan_links
 
-router = APIRouter(prefix="/api", tags=["vulnerability"])
+router = APIRouter(prefix="/api/vuln/links", tags=["vuln-links"])
 
 
 class OrphanLink(BaseModel):
@@ -29,16 +30,30 @@ class OrphansResponse(BaseModel):
     orphans: list[OrphanLink]
 
 
-@router.get("/vuln/links/orphans", response_model=OrphansResponse)
+@router.get("/orphans", response_model=OrphansResponse)
 def get_orphans(
-    db: Session = Depends(get_session),
     limit: int = Query(default=100, ge=1, le=500),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    db: Session = Depends(get_session),
 ) -> OrphansResponse:
-    rows: list[Any] = get_orphan_links(
+    result: Any = get_orphan_links(
         db,
         limit=limit,
         min_confidence=min_confidence,
     )
-    orphans = [OrphanLink.model_validate(row) for row in rows]
-    return OrphansResponse(count=len(orphans), orphans=orphans)
+
+    if isinstance(result, dict):
+        rows = result.get("orphans", [])
+        count = int(result.get("count", len(rows)))
+    elif isinstance(result, tuple):
+        rows = result[1]
+        count = int(result[0])
+    else:
+        rows = result
+        count = len(rows)
+
+    orphans = [
+        row if isinstance(row, OrphanLink) else OrphanLink.parse_obj(row)
+        for row in rows
+    ]
+    return OrphansResponse(count=count, orphans=orphans)

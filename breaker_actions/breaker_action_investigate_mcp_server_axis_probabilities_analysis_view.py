@@ -62,7 +62,7 @@ if __name__ == "__main__":
     session.commit()
 
     # Override the get_session dependency for the self-test
-    from app.dependency_overrides import get_session
+    # GR-10: get_session comes from app.db (imported above); app.dependency_overrides is not a module.
     app.dependency_overrides[get_session] = lambda: session
 
     # Run the self-test

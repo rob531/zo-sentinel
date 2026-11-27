@@ -109,7 +109,7 @@ if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.models import Base
-    from app.dependency_overrides import get_session
+    # GR-10: get_session comes from app.db (imported above); app.dependency_overrides is not a module.
 
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)

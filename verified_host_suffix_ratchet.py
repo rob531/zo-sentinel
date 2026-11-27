@@ -79,6 +79,15 @@ KNOWN_TENANT_PROVISIONABLE = frozenset({
     "azurewebsites.net",      # <app>.azurewebsites.net (App Service)
     # Atlassian cloud customer sites are self-serve provisionable:
     "atlassian.net",          # <site>.atlassian.net (free-tier Jira/Confluence)
+    # Azure/Databricks/GCS tenant namespaces demonstrated LIVE by the
+    # ARGON-REFEREE-CLAUDE-D1-74 cross-referee (each caps an attacker host
+    # CRITICAL->MEDIUM via verified_publisher:host today; the VERIFIED apexes
+    # .azure.com / .databricks.com / .googleapis.com sit on these subtrees):
+    "cloudapp.azure.com",     # <name>.<region>.cloudapp.azure.com (VM/public IP)
+    "openai.azure.com",       # <resource>.openai.azure.com (Azure OpenAI)
+    "documents.azure.com",    # <account>.documents.azure.com (Cosmos DB)
+    "cloud.databricks.com",   # <workspace>.cloud.databricks.com
+    "storage.googleapis.com", # <bucket>.storage.googleapis.com (virtual-hosted GCS)
     # Common self-serve PaaS / edge / tunnel namespaces:
     "workers.dev", "pages.dev", "r2.dev",     # Cloudflare tenant namespaces
     "vercel.app", "netlify.app", "herokuapp.com", "onrender.com",
@@ -117,6 +126,38 @@ def flag_overlaps(verified: Tuple[str, ...], tenant) -> Dict[str, List[str]]:
 
 # ----------------------------------------------------------------------------- source extraction
 
+_VNAME = "VERIFIED_HOST_SUFFIXES"
+_DNS_LABEL_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
+
+
+def _noncanonical_reason(s) -> Optional[str]:
+    """Return None iff ``s`` is a canonical VERIFIED host suffix, else a reason.
+    Canonical = exactly '.' + >=2 DNS labels, each label non-empty and composed
+    only of [a-z0-9-] (case-insensitive). This is deliberately STRICT so that a
+    degenerate entry the TOOL cannot reason about ('', '.', '   ', 'ssian.net',
+    '.com', '..a.b') is rejected as UNKNOWN rather than silently audited CLEAN
+    while ``trust_gating_override._host_verified`` (bare ``host.endswith(s)``,
+    no label boundary) still grants it verified_publisher:host. Control-(a)."""
+    if not isinstance(s, str):
+        return f"non-string entry {s!r}"
+    if s != s.strip() or any(c.isspace() for c in s):
+        return f"whitespace in suffix {s!r}"
+    if not s.startswith("."):
+        return f"missing leading dot {s!r}"
+    body = s[1:]
+    if not body:
+        return "empty after leading dot"
+    labels = body.split(".")
+    if len(labels) < 2:
+        return f"fewer than 2 DNS labels {s!r}"
+    for lab in labels:
+        if not lab:
+            return f"empty DNS label in {s!r}"
+        if any(c not in _DNS_LABEL_CHARS for c in lab.lower()):
+            return f"invalid DNS label char in {s!r}"
+    return None
+
+
 def _str_tuple_literal(node: ast.AST) -> Optional[Tuple[str, ...]]:
     """Return the string elements of a tuple/list literal, or None if ``node`` is
     not a sequence literal of string constants."""
@@ -133,26 +174,54 @@ def _str_tuple_literal(node: ast.AST) -> Optional[Tuple[str, ...]]:
 
 def extract_verified(source: str) -> Tuple[Optional[Tuple[str, ...]], Optional[str]]:
     """AST-extract the VERIFIED_HOST_SUFFIXES literal from ``source``.
-    Returns (suffixes, None) on success, or (None, reason) when the name is
-    absent / not a plain string tuple / empty -- all of which are UNKNOWN, never
-    treated as an empty-and-therefore-clean allow-list (Control-(a))."""
+    Returns (suffixes, None) on success, or (None, reason) -> UNKNOWN when the
+    name is absent / rebound / augmented / not a top-level plain string tuple /
+    empty / contains a non-canonical suffix. Every one of those is UNKNOWN, never
+    treated as an empty-or-degenerate-and-therefore-clean allow-list (Control-(a)).
+
+    Hardening vs the D1-74 cut (ARGON-REFEREE-CLAUDE-D1-74):
+      - read ONLY top-level ``tree.body`` bindings, so a function-local shadow of
+        the same name cannot overwrite the module constant (ast.walk did);
+      - an ``X += (...)`` augmented assignment or a ``del X`` at ANY scope makes
+        the static top-level literal untrustworthy -> UNKNOWN;
+      - more than one top-level binding (rebind) -> UNKNOWN;
+      - each surviving suffix must be canonical (``_noncanonical_reason``)."""
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
         return None, f"parse_error: {exc}"
-    found: Optional[Tuple[str, ...]] = None
+    # Any augmented assignment or deletion of the name, at ANY scope, means the
+    # final runtime value cannot be read statically from a single literal.
     for node in ast.walk(tree):
+        if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) \
+                and node.target.id == _VNAME:
+            return None, f"{_VNAME} is augmented (+=) -- not statically verifiable"
+        if isinstance(node, ast.Delete) and any(
+                isinstance(t, ast.Name) and t.id == _VNAME for t in node.targets):
+            return None, f"{_VNAME} is deleted -- not statically verifiable"
+    # Only top-level (module-body) bindings define the module constant.
+    literals: List[Optional[Tuple[str, ...]]] = []
+    for node in tree.body:
+        targets = []
         if isinstance(node, ast.Assign):
-            for tgt in node.targets:
-                if isinstance(tgt, ast.Name) and tgt.id == "VERIFIED_HOST_SUFFIXES":
-                    lit = _str_tuple_literal(node.value)
-                    if lit is None:
-                        return None, "VERIFIED_HOST_SUFFIXES is not a literal string tuple"
-                    found = lit
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        if any(isinstance(t, ast.Name) and t.id == _VNAME for t in targets):
+            literals.append(_str_tuple_literal(node.value))
+    if not literals:
+        return None, f"{_VNAME} not found"
+    if len(literals) > 1:
+        return None, f"{_VNAME} rebound at top level -- not statically verifiable"
+    found = literals[0]
     if found is None:
-        return None, "VERIFIED_HOST_SUFFIXES not found"
+        return None, f"{_VNAME} is not a literal string tuple"
     if not found:
-        return None, "VERIFIED_HOST_SUFFIXES is empty"
+        return None, f"{_VNAME} is empty"
+    for s in found:
+        reason = _noncanonical_reason(s)
+        if reason is not None:
+            return None, f"non-canonical suffix: {reason}"
     return found, None
 
 
@@ -169,15 +238,48 @@ def audit(source: str, tenant=KNOWN_TENANT_PROVISIONABLE) -> Dict:
 
 # ----------------------------------------------------------------------------- baseline
 
-def _load_baseline() -> Dict[str, Dict]:
+def _load_baseline() -> Tuple[Optional[Dict[str, Dict]], Optional[str]]:
+    """Return (reviewed, None) or (None, reason) -> UNKNOWN. A MISSING baseline
+    is an empty-reviewed set (legitimate: nothing reviewed yet, so every overlap
+    is NEW). A PRESENT-but-corrupt / non-dict / non-dict-``reviewed`` baseline is
+    UNKNOWN (rc=2), never silently {} -- that would fail OPEN, reading a corrupt
+    or ``{"reviewed": null}`` file as a clean bill (Control-(a) on the baseline)."""
     try:
         with open(BASELINE, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data.get("reviewed", {}) if isinstance(data, dict) else {}
+            raw = fh.read()
     except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+        return {}, None
+    except OSError as exc:
+        return None, f"baseline unreadable: {exc}"
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return None, f"baseline is not valid JSON: {exc}"
+    if not isinstance(data, dict):
+        return None, "baseline is not a JSON object"
+    reviewed = data.get("reviewed", {})
+    if not isinstance(reviewed, dict):
+        return None, "baseline.reviewed is not an object"
+    return reviewed, None
+
+
+def _new_overlaps(overlaps: Dict[str, List[str]], reviewed: Dict[str, Dict]) -> Dict[str, List[str]]:
+    """Overlaps NOT cleared by the reviewed baseline. An entry clears an overlap
+    ONLY if it is a dict with ``status == 'REVIEW_REQUIRED'`` AND its ``tenant_ns``
+    covers EVERY currently-overlapping namespace. A ``REJECTED`` status, a
+    malformed entry, or a namespace that newly appears under an already-baselined
+    suffix is NEW (surfaces rc=1) -- never silently suppressed by mere presence of
+    the suffix key."""
+    new: Dict[str, List[str]] = {}
+    for v, hits in overlaps.items():
+        entry = reviewed.get(v)
+        if not isinstance(entry, dict) or entry.get("status") != "REVIEW_REQUIRED":
+            new[v] = hits
+            continue
+        covered = entry.get("tenant_ns", [])
+        if not isinstance(covered, list) or not set(hits).issubset(set(covered)):
+            new[v] = hits
+    return new
 
 
 def _read_trust_source() -> Tuple[Optional[str], Optional[str]]:
@@ -199,11 +301,14 @@ def _cmd_report() -> int:
     if res["status"] == "UNKNOWN":
         print(f"UNKNOWN: {res['reason']}")
         return 2
-    reviewed = _load_baseline()
+    reviewed, breason = _load_baseline()
+    if reviewed is None:
+        print(f"UNKNOWN: {breason}")
+        return 2
     overlaps = res["overlaps"]
     print(f"verified-host-suffix ratchet: {len(res['verified'])} verified suffixes, "
           f"{len(overlaps)} overlap(s) with {len(KNOWN_TENANT_PROVISIONABLE)} denylisted namespaces")
-    new = {v: t for v, t in overlaps.items() if v not in reviewed}
+    new = _new_overlaps(overlaps, reviewed)
     for v in sorted(overlaps):
         status = "NEW" if v in new else "REVIEW (baselined)"
         print(f"  [{status}] {v}  <- tenant-provisionable: {', '.join(overlaps[v])}")
@@ -224,8 +329,11 @@ def _cmd_check() -> int:
     if res["status"] == "UNKNOWN":
         print(f"UNKNOWN: {res['reason']}")
         return 2
-    reviewed = _load_baseline()
-    new = {v: t for v, t in res["overlaps"].items() if v not in reviewed}
+    reviewed, breason = _load_baseline()
+    if reviewed is None:
+        print(f"UNKNOWN: {breason}")
+        return 2
+    new = _new_overlaps(res["overlaps"], reviewed)
     if new:
         print(f"REGRESSION: {len(new)} NEW verified suffix(es) overlap a tenant-provisionable namespace:")
         for v in sorted(new):
@@ -245,7 +353,8 @@ def _cmd_repin() -> int:
     if res["status"] == "UNKNOWN":
         print(f"UNKNOWN: {res['reason']}")
         return 2
-    reviewed = _load_baseline()
+    reviewed, _ = _load_baseline()  # repin OVERWRITES, so a corrupt prior baseline is not fatal here
+    reviewed = reviewed or {}
     out = {
         "_note": ("Reviewed VERIFIED_HOST_SUFFIXES entries that overlap a KNOWN_TENANT_PROVISIONABLE "
                   "namespace. Each is a candidate MOVE to SHARED_TENANT_SUFFIXES pending a demonstrated "
@@ -325,6 +434,44 @@ def _selftest() -> int:
     check("missing VERIFIED -> UNKNOWN", audit(_SRC_MISSING, _TENANT)["status"] == "UNKNOWN")
     check("broken source -> UNKNOWN", audit(_SRC_BROKEN, _TENANT)["status"] == "UNKNOWN")
     check("empty denylist -> UNKNOWN", audit(_SRC_OK, frozenset())["status"] == "UNKNOWN")
+
+    # Control-(a) HARDENING (ARGON-REFEREE-CLAUDE-D1-74 gaps 1 & 2): a degenerate
+    # suffix that trust_gate STILL trusts must be UNKNOWN here, never silent-CLEAN.
+    check("empty-string suffix -> UNKNOWN", audit('VERIFIED_HOST_SUFFIXES = ("",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("bare-dot suffix -> UNKNOWN", audit('VERIFIED_HOST_SUFFIXES = (".",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("whitespace suffix -> UNKNOWN", audit('VERIFIED_HOST_SUFFIXES = ("   ",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("missing-leading-dot suffix -> UNKNOWN", audit('VERIFIED_HOST_SUFFIXES = ("ssian.net",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("single-label suffix -> UNKNOWN", audit('VERIFIED_HOST_SUFFIXES = (".com",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("double-dot suffix -> UNKNOWN", audit('VERIFIED_HOST_SUFFIXES = ("..a.b",)\n', _TENANT)["status"] == "UNKNOWN")
+    # canonical multi-label entry still parses CLEAN (no over-fire of the validator)
+    check("canonical .cloud.google.com stays OK", audit('VERIFIED_HOST_SUFFIXES = (".cloud.google.com",)\n', _TENANT)["status"] == "OK")
+    # AST evasion: AugAssign / top-level rebind / del -> UNKNOWN; function-local shadow reads the MODULE constant
+    check("AugAssign (+=) -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\nVERIFIED_HOST_SUFFIXES += (".amazonaws.com",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("top-level rebind -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".stripe.com",)\nVERIFIED_HOST_SUFFIXES = (".azure.net",)\n', _TENANT)["status"] == "UNKNOWN")
+    check("del VERIFIED -> UNKNOWN",
+          audit('VERIFIED_HOST_SUFFIXES = (".azure.net",)\ndel VERIFIED_HOST_SUFFIXES\n', _TENANT)["status"] == "UNKNOWN")
+    shadow = audit('VERIFIED_HOST_SUFFIXES = (".amazonaws.com",)\ndef _l():\n    VERIFIED_HOST_SUFFIXES = (".stripe.com",)\n', _TENANT)
+    check("function-local shadow reads MODULE constant (flags .amazonaws.com)",
+          shadow["status"] == "OK" and ".amazonaws.com" in shadow["overlaps"])
+
+    # Control-(a) HARDENING (gap 3): baseline status-awareness via _new_overlaps.
+    ov = {".azure.net": ["vault.azure.net"]}
+    check("REVIEW_REQUIRED+covering clears overlap",
+          _new_overlaps(ov, {".azure.net": {"status": "REVIEW_REQUIRED", "tenant_ns": ["vault.azure.net"]}}) == {})
+    check("REJECTED status does NOT clear (NEW)",
+          _new_overlaps(ov, {".azure.net": {"status": "REJECTED", "tenant_ns": ["vault.azure.net"]}}) == ov)
+    check("uncovered new namespace does NOT clear (NEW)",
+          _new_overlaps({".azure.net": ["vault.azure.net", "openai.azure.net"]},
+                        {".azure.net": {"status": "REVIEW_REQUIRED", "tenant_ns": ["vault.azure.net"]}})
+          == {".azure.net": ["vault.azure.net", "openai.azure.net"]})
+    check("bare-key (no status) does NOT clear (NEW)", _new_overlaps(ov, {".azure.net": {}}) == ov)
+
+    # gap 4: the 5 live-demonstrated provider namespaces are in the denylist
+    for ns in ("cloudapp.azure.com", "openai.azure.com", "documents.azure.com",
+               "cloud.databricks.com", "storage.googleapis.com"):
+        check(f"denylist contains {ns}", ns in KNOWN_TENANT_PROVISIONABLE)
 
     # live module sanity: the real trust_gating_override must at least parse here
     src, err = _read_trust_source()

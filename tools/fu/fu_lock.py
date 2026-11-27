@@ -53,6 +53,23 @@ LOCK_TTL_S = 300          # a holder older than this is presumed dead
 ACQUIRE_TIMEOUT_S = 60
 POLL_S = 0.25
 
+# GR-30: declared shared core kept in parity across zo-sentinel tools/fu/fu_lock.py
+# and zo-fleet-tools fu_lock.py (checked by fu_twin_parity.py). Host/mount-specific
+# divergences outside SHARED_CORE (fleet FU-201 CRLF/detect_newline/_read_raw/
+# LedgerLockUnremovable; sentinel replace_with_fallback alias) stay tracked separately.
+SHARED_CORE = (
+    "LOCK_TTL_S",
+    "ACQUIRE_TIMEOUT_S",
+    "POLL_S",
+    "LedgerBusy",
+    "LedgerChanged",
+    "digest",
+    "acquire",
+    "release",
+    "ledger_txn",
+    "last_commit_strategy",
+)
+
 
 class LedgerBusy(RuntimeError):
     """Another process holds the lock and did not release it in time."""

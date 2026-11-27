@@ -265,3 +265,27 @@ def test_flipped_hosts_do_not_false_flag_masquerade():
                 "https://acct.blob.core.windows.net/mcp",
                 "https://proj.supabase.co/mcp"):
         assert _tgo.is_masquerade(url, "x") is False
+
+
+# --- CLAUDE-D1-77: .atlassian.net is a SaaS tenant platform, NOT a verified publisher ---
+# Control-(b) demonstrated-then-moved: <site>.atlassian.net Jira/Confluence clouds are
+# self-serve provisionable, so an attacker-registered tenant earned verified_publisher:host
+# and capped its own CRITICAL->MEDIUM (live-reproduced on ebec1301). Atlassian's own identity
+# stays verified via the distinct .atlassian.com corporate suffix (api/marketplace.atlassian.com).
+def test_atlassian_net_is_shared_tenant_not_verified():
+    assert ".atlassian.net" in _tgo.SHARED_TENANT_SUFFIXES, ".atlassian.net must be shared-tenant"
+    assert ".atlassian.net" not in _tgo.VERIFIED_HOST_SUFFIXES, ".atlassian.net must not be verified"
+
+
+def test_attacker_atlassian_tenant_not_trusted():
+    r = g("https://evil-tenant.atlassian.net/mcp", "evil", "CRITICAL")
+    assert not r["trusted"] and not r["capped"]
+    assert r["published_overall_risk"] == "CRITICAL"
+
+
+def test_official_atlassian_com_still_verified():
+    # Atlassian proves identity through its corporate .atlassian.com suffix, not tenant .atlassian.net.
+    for url in ("https://api.atlassian.com/mcp", "https://marketplace.atlassian.com/x"):
+        r = g(url, "Atlassian", "CRITICAL")
+        assert r["trusted"] and r["capped"] and r["published_overall_risk"] == "MEDIUM"
+        assert r["trust_basis"] == "verified_publisher:host"

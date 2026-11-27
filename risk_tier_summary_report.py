@@ -50,9 +50,12 @@ def generate_report(date: str) -> Dict[str, Dict[str, int]]:
         "TRUSTED_GENERAL": 0
     }
 
+    # Control-(a): calculate_risk_tier may return a tier this literal omits
+    # (INSUFFICIENT / KNOWN_THREAT / UNKNOWN); a bare `[tier] += 1` would
+    # KeyError the whole report. Accumulate tolerantly, never crash.
     for server in servers:
-        tier = calculate_risk_tier(server.server_id, session)
-        tier_counts[tier] += 1
+        tier = calculate_risk_tier(server.server_id, session) or "INSUFFICIENT"
+        tier_counts[tier] = tier_counts.get(tier, 0) + 1
 
     session.close()
 

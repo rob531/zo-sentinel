@@ -399,6 +399,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # gap-claim gate reads the register at the PR base
+
+      # QUEUE 0a (2026-11-27): a PR that claims a Gap Register fix must move the
+      # register -- "closes GR-n" below C4, a fix claim with no grade move, or a
+      # grade raised to C3/C4 with no cited evidence is red. Title/body arrive via
+      # env, never interpolated into the script. UNKNOWN (rc 2) fails too.
+      - name: Gap-claim gate (BLOCKING -- claims must move the register)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python tools/gap_claim_gate.py --base-ref "$BASE_SHA"
 
       - name: Set up Python
         uses: actions/setup-python@v7

@@ -16,7 +16,14 @@ backlog below for that session; they are the difference between an instruction
 set and an organism (chairman assessment, 2026-08-29 EOD).
 
 ## 0a. Enforcement predicates — the doctrine must be un-ignorable
-- grade C1 -> target C4 | class GC-3 (the doctrine itself is report-only today)
+- grade: claim-gate half **C4**, per-row-predicate half still C1 (2026-11-27) | class GC-3 — `tools/gap_claim_gate.py` runs BLOCKING in the required
+  `static-analysis` job: "closes GR-n" below C4 (R1), a fix claim whose row grade did not move (R2),
+  a grade raised to C3/C4 citing no existing path or PR link (R3), a claim on a missing row (R4) are red;
+  unreadable register is UNKNOWN and red. Acceptance met: `tests/test_gap_claim_gate.py` runs a
+  "closed at C1" claim on the real register (red) and a genuine move (green), and pins the step
+  (present, not continue-on-error, PR text via env, full-history checkout). Backtested GREEN on every
+  register-touching merge in history. Not yet built: FU-style per-row predicates with UNKNOWN age budgets.
+- was: grade C1 -> target C4 | class GC-3 (the doctrine itself is report-only today)
 - shape: FU-style machine-closeable predicates for Gap Register rows + a CI
   step (pr-gates or its own workflow) that fails when a PR claims a gap fix
   but moves no register grade, and greens when the register moves with

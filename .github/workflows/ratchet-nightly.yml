@@ -70,6 +70,67 @@ jobs:
           python tools/reachability_ratchet.py | tee reach.txt
           echo "verdict=$(grep -o 'verdict: [A-Z-]*' reach.txt | head -1 | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
 
+      # GR-5 (2026-11-27): the ratchet stops the deferral list GROWING but nothing
+      # aged it -- 26 of 27 entries had waited since July for a review that never ran.
+      # This ages every entry and escalates to ONE issue, edited in place, whenever an
+      # entry is aged/stale/reasonless or the active count is over the review cap.
+      - name: Deferral aging (observe; escalates via issue)
+        id: aging
+        run: |
+          set +e
+          python tools/deferred_aging_report.py --out artifacts/deferred_aging.json
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::deferred_aging_report rc=$rc (UNKNOWN) -- deferral list unreadable"
+            echo "escalate=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python tools/deferred_aging_report.py --markdown > aging.md
+          cat aging.md >> "$GITHUB_STEP_SUMMARY"
+          esc=$(python -c "import json;print('yes' if json.load(open('artifacts/deferred_aging.json'))['escalate'] else 'no')")
+          echo "escalate=$esc" >> "$GITHUB_OUTPUT"
+
+      - name: Escalate deferral aging
+        if: ${{ steps.aging.outputs.escalate == 'yes' && !inputs.dry_run }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('aging.md', 'utf8').slice(0, 60000) +
+              '\n\nUpdated in place by `ratchet-nightly` (GR-5). It closes itself when nothing escalates.';
+            const title = 'ratchet: deferred routers aged past review';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: 'ratchet',
+            });
+            const hit = open.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: hit.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['ratchet', 'needs-decision'],
+              });
+            }
+
+      - name: Close deferral-aging issue when clear
+        if: ${{ steps.aging.outputs.escalate == 'no' && !inputs.dry_run }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = 'ratchet: deferred routers aged past review';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: 'ratchet',
+            });
+            const hit = open.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: hit.number,
+                state: 'closed', state_reason: 'completed',
+              });
+            }
+
       - name: Spine strict census (how many active services are unshippable)
         id: spine
         run: |
@@ -202,6 +263,8 @@ jobs:
             spine.txt
             tighten.txt
             artifacts/reachability_ratchet.json
+            artifacts/deferred_aging.json
+            aging.md
           if-no-files-found: ignore
 
       # A held baseline must fail the job. A nightly that reports a regression

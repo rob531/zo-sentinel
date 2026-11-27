@@ -12,6 +12,8 @@
               "where": "relander drain: 9 builder PRs auto-merged unattended (#4247-#4259), queries 2026-08-30T00:10Z"},
     "GR-24": {"kind": "measured", "measured_on": "2026-10-04",
               "where": "tower: events store baseline tick + idempotent re-tick + check rc 0 (zo-fleet-tools#50)"},
+    "GR-14": {"kind": "sibling", "measured_on": "2026-11-27",
+              "where": "zo-fleet-tools tests/test_zo_call_tag.py (adopt / rotate / resume-from-registry poles, zo-fleet-tools#702) + the --tag census in the register row"},
     "GR-27": {"kind": "sibling", "measured_on": "2026-11-27",
               "where": "zo-fleet-tools ring_liveness.py in ring-liveness.yml, disarm-hardened by tests/test_gr_27_ring_liveness.py (zo-fleet-tools#683)"}
   }

@@ -66,6 +66,14 @@ def sql_assert(sql: str, py_test: str) -> str:
             % (ZO_PROBE, sql.replace('"', "'"), py_test.replace('"', "'")))
 
 
+# GR-30: declared shared core kept in parity across zo-sentinel tools/fu/fu_seed_predicates.py
+# and zo-fleet-tools fu_seed_predicates.py (checked by zo-fleet-tools/fu_twin_parity.py).
+# Intentional divergences (sentinel FLY_PROBE / FLY_PROBE_CMD) stay outside SHARED_CORE.
+SHARED_CORE = (
+    "PREDICATES",
+    "UNARTICULATED",
+)
+
 PREDICATES = {
     # ---- infrastructure / credentials -----------------------------------
     # A BARE `flyctl auth whoami` READS THE CLOCK, NOT THE CREDENTIAL. It exits 1

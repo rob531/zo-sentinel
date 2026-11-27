@@ -64,7 +64,7 @@ if __name__ == "__main__":
     from app.db import Base, engine
     from app.models import MCPServerRegistry
     from app.main import app
-    from app.dependency_overrides import get_session
+    # GR-10: get_session comes from app.db (imported above); app.dependency_overrides is not a module.
 
     # Create a test database session
     Base.metadata.create_all(bind=engine)
